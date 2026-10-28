@@ -13,9 +13,10 @@
 /* The topic */
 .main .docs-article { padding: 28px 32px 24px; }
 .docs-article h1 { font-size: 26px; }
-/* A link that lands on a heading or a glossary term gives it the focus: they aren't controls, so no ring; a term is tinted. */
-.docs-article [tabindex="-1"]:focus { outline: none; }
-.docs-glossary dt:focus { color: var(--primary); }
+/* A link that lands on a heading or a glossary term gives it the focus, and shows it: the focus ring when the keyboard
+   led there, and a section or term in the primary colour whichever way it was reached. */
+.docs-article [tabindex="-1"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+.docs-section h2:focus, .docs-article h3:focus, .docs-glossary dt:focus { color: var(--primary); }
 .docs-article h1, .docs-article h2, .docs-article h3, .docs-glossary dt { scroll-margin-top: calc(var(--topbar) + 16px); }
 .main .docs-article p, .docs-article li, .docs-article dd { color: var(--text-2); font-size: 14.5px; line-height: 1.65; }
 .main .docs-article p { margin: 0 0 12px; }

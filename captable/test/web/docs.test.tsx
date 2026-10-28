@@ -61,7 +61,9 @@ describe("the Docs entry", () => {
     expect(entry.getAttribute("aria-current")).toBeNull();
     fireEvent.click(entry);
     await waitFor(() => expect(router.state.location.pathname).toBe(DOCS));
-    expect(await title("Getting started")).toBeTruthy();
+    // Arriving by a link in the app: the focus goes to the topic's title.
+    const heading = await title("Getting started");
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(within(screen.getByRole("navigation", { name: "Help" })).getByRole("link", { name: "Docs" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toBe("Acme RoboticsDocsGetting started");
     expect(document.title).toBe("Getting started — Docs · Cap Table");
@@ -83,7 +85,8 @@ describe("the Docs entry", () => {
     expect(entry.getAttribute("href")).toBe(`${PORTFOLIO}/docs`);
     fireEvent.click(entry);
     await waitFor(() => expect(router.state.location.pathname).toBe(`${PORTFOLIO}/docs`));
-    expect(await title("For stakeholders")).toBeTruthy();
+    const heading = await title("For stakeholders");
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     // Inside the holder's own frame: their breadcrumb and the company contact, never an admin route.
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toBe("Acme RoboticsDocs");
     expect(await screen.findByText("equity@acmerobotics.example")).toBeTruthy();
@@ -197,18 +200,31 @@ describe("moving around the docs", () => {
     expect(document.activeElement?.textContent).toBe("Leaving the company: exercise windows");
   });
 
-  it("opens a deep link on its section or glossary term, and takes a malformed one as no section", async () => {
-    renderPage("docs/equity-basics#safes", []);
-    await title("Equity basics");
-    await waitFor(() => expect(document.activeElement?.id).toBe("safes"));
-    cleanup();
-    renderPage("docs/glossary#cliff", []);
-    await title("Glossary");
-    await waitFor(() => expect(document.activeElement?.textContent).toBe("Cliff"));
-    cleanup();
-    renderPage("docs/glossary#%E0%A4%A", []);
-    expect(await title("Glossary")).toBeTruthy();
+  it("leaves the focus where it is on a full page load, and scrolls a deep link to its section or glossary term", async () => {
+    const scrolled: string[] = [];
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value(this: Element) { scrolled.push(this.id); } });
+    try {
+      renderPage("docs", []);
+      await title("Getting started");
+      expect(document.activeElement).toBe(document.body);
+      cleanup();
+      renderPage("docs/equity-basics#safes", []);
+      await title("Equity basics");
+      await waitFor(() => expect(scrolled).toContain("safes"));
+      expect(document.activeElement).toBe(document.body);
+      cleanup();
+      renderPage("docs/glossary#cliff", []);
+      await title("Glossary");
+      await waitFor(() => expect(scrolled).toContain("cliff"));
+      expect(document.activeElement).toBe(document.body);
+      cleanup();
+      renderPage("docs/glossary#%E0%A4%A", []);
+      expect(await title("Glossary")).toBeTruthy();
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
   });
+
 });
 
 describe("a topic that doesn't exist", () => {
@@ -259,6 +275,8 @@ describe("the standalone docs", () => {
     await waitFor(() => expect(admin.router.state.location.pathname).toBe(`${DOCS}/equity-basics`));
     expect(admin.router.state.location.hash).toBe("#vesting");
     expect(await title("Equity basics")).toBeTruthy();
+    // A redirect while the page loads is still a page load: the focus stays put.
+    expect(document.activeElement).toBe(document.body);
     cleanup();
     const holder = renderAt("/docs", holderMe([NADIA]), portalHandlers());
     await waitFor(() => expect(holder.router.state.location.pathname).toBe(`${PORTFOLIO}/docs`));
@@ -273,7 +291,8 @@ describe("the setup page", () => {
     expect(link.getAttribute("href")).toBe("/docs");
     fireEvent.click(link);
     await waitFor(() => expect(router.state.location.pathname).toBe("/docs"));
-    expect(await title("Getting started")).toBeTruthy();
+    const heading = await title("Getting started");
+    await waitFor(() => expect(document.activeElement).toBe(heading));
   });
 
   it("offers the docs to everyone waiting for the company to be set up", async () => {

@@ -100,14 +100,16 @@ Cap Table uses the roles people have on the app in the Insulin console. There ar
 
 When a holder opens Cap Table they see:
 
-- their shares, options, warrants and converted SAFEs, with vesting progress and upcoming vesting dates;
+- their shares, options, warrants and SAFEs (each SAFE with its status and, once converted, the shares it became), with
+  vesting progress and upcoming vesting dates;
 - for each option: how much has vested, what they can exercise now and until when, and the exercise price;
 - **How to exercise**: your instructions, the form to use and how to pay;
 - the documents you have made visible to them, and the company resources you share with all holders;
 - **Docs**: what they see and how to read it, how exercising works, and the basics of equity.
 
 They never see the cap table, other holders or ownership percentages. Owners, admins and editors can open any stakeholder
-and choose **Preview as stakeholder** to see exactly what that person sees.
+and choose **Preview as stakeholder** to see that person's holdings, exercise instructions and documents as they see
+them; the holder's **Docs** entry isn't part of the preview.
 
 ## Guides
 

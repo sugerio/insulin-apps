@@ -295,10 +295,11 @@ Holders open Cap Table from the Insulin console like everyone else. To give some
 1. make sure their stakeholder record has, as their own address, the e-mail address of their Insulin console account;
 2. give them the **User** or **Viewer** role on the app in the console.
 
-They then see their shares, options, warrants and converted SAFEs; vesting progress and upcoming vesting dates; for each
-option what they can exercise now and until when; the **How to exercise** page; their documents and the company
-resources; and **Docs**, which opens for them on a topic written for holders. They never see the cap table, other holders or ownership percentages. One person can be matched to more than
-one stakeholder (for example someone who also manages an investing entity); they see all of them.
+They then see their shares, options, warrants and SAFEs (each SAFE with its status and, once converted, the shares it
+became); vesting progress and upcoming vesting dates; for each option what they can exercise now and until when; the
+**How to exercise** page; their documents and the company resources; and **Docs**, which opens for them on a topic
+written for holders. They never see the cap table, other holders or ownership percentages. One person can be matched to
+more than one stakeholder (for example someone who also manages an investing entity); they see all of them.
 
 **Stakeholder Portal** (under Hire and Retain) decides what holders see:
 
@@ -312,9 +313,10 @@ Profile & Settings**. Holders see them only inside the app; editors see them mas
 
 ## Previewing as a stakeholder
 
-Open any stakeholder and choose **Preview as stakeholder** to see exactly what they see, with a banner saying "You are
-previewing the portal as" their name; every portal action is disabled. It's the quickest way to check a holder's view
-after an import or a change.
+Open any stakeholder and choose **Preview as stakeholder** to see their holdings, exercise instructions and documents as
+they see them, with a banner saying "You are previewing the portal as" their name; every portal action is disabled. The
+holder's **Docs** entry isn't part of the preview. It's the quickest way to check a holder's view after an import or a
+change.
 
 ## Company settings
 

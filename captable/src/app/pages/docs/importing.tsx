@@ -48,7 +48,11 @@ export const importing: DocTopic = {
             <li><b>Import:</b> choose <b>Import</b> when no problem is left, and keep the page open until it finishes.</li>
             <li><b>Done:</b> "The cap table is imported" lists what came in, with <b>Open the cap table</b> and <b>Go to the dashboard</b>.</li>
           </ol>
-          <p>Nothing is added to the cap table until you import. Until then, your files stay in your browser tab.</p>
+          <p>
+            Nothing is added to the cap table until you choose <b>Import</b>. <b>Check the files</b> and <b>Import</b> send your
+            files to this app's server to be read, but the files themselves aren't kept: the app stores only a fingerprint of each
+            file and a record of the run.
+          </p>
         </>
       ),
     },
@@ -195,10 +199,10 @@ export const importing: DocTopic = {
           </p>
           <p>
             When Cap Table can't rebuild a holding's history step by step, it records the holding as an <b>opening balance</b>: the
-            right quantity, vesting and status, without inventing the steps in between. Your current cap table, ownership and
-            vesting are exactly right; only the history is shorter. If you look at the cap table as of an earlier date, it says that
-            the history before that date came in with the import as opening balances. The preview lists every opening balance with
-            its reason before you import.
+            quantity, vesting and status your files give, as Cap Table reads them on the import date, without inventing the steps
+            in between. Its history before that date is left out on purpose: if you look at the cap table as of an earlier date, it
+            says that the history before that date came in with the import as opening balances. The preview lists every opening
+            balance with its reason, so check each one's quantity, vesting and status, and the assumptions, before you import.
           </p>
         </>
       ),

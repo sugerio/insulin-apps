@@ -22,7 +22,7 @@ export const forStakeholders: DocTopic = {
             of your Insulin console account as your own address.
           </p>
           <ul>
-            <li><b>Portfolio</b> is your home page: a summary of your shares, options, warrants and converted SAFEs, your vesting status and upcoming vesting dates, a table of your grants and shares, and the company resources.</li>
+            <li><b>Portfolio</b> is your home page: a summary of your shares, options, warrants and SAFEs, your vesting status and upcoming vesting dates, a table of your grants and shares with each one's status, and the company resources. A SAFE shows its terms, and once it has converted, the shares it became.</li>
             <li><b>More than one record?</b> If you hold equity under more than one record (for example personally and through a trust), Portfolio lets you switch between them.</li>
             <li><b>If you have left the company,</b> a banner says how many vested options you can still exercise and until when, and when exercises start being taxed as NSOs if an ISO deadline applies.</li>
             <li><b>Something missing or wrong?</b> Only the company can change your records. If you see no holdings at all, ask the company to add your console e-mail address to your stakeholder record.</li>
@@ -41,7 +41,7 @@ export const forStakeholders: DocTopic = {
             <li><b>Exercised</b>: how many you have already bought. <b>Exercisable now</b>: how many you could exercise today, at the <b>exercise price</b> shown.</li>
             <li><b>Option type</b> (ISO or NSO) and the <b>expiration date</b>, after which the options can't be exercised.</li>
             <li><b>Vesting timeline</b>: a chart of how your options vest over time, and the full schedule, with each date's amount, the running total and its status: <b>Vested</b> or <b>Upcoming</b>, or, for dates after vesting stopped (for example when you left), <b>Cancelled</b> or <b>Won't vest</b>.</li>
-            <li><b>ISO/NSO split</b>, for ISOs: options that first become exercisable in the same year are ISOs only up to $100,000 (valued on the grant date); the rest are treated as NSOs.</li>
+            <li><b>ISO/NSO split</b>, for ISOs: only $100,000 worth of shares, valued on each grant date, can first become exercisable as ISOs in a calendar year, counting your ISOs in the order they were granted; the rest are treated as NSOs.</li>
             <li><b>Post-termination exercise periods</b>: how long you would have to exercise vested options after leaving, for each reason for leaving.</li>
             <li><b>Exercise history</b> and the <b>documents</b> that belong to the grant, such as your option agreement.</li>
           </ul>
@@ -77,7 +77,7 @@ export const forStakeholders: DocTopic = {
           <ul>
             <li><b>Deadlines matter.</b> Options can't be exercised after their deadline. After you leave, ISOs exercised after the ISO deadline are taxed as NSOs.</li>
             <li><b>Awaiting signatures:</b> a grant can be exercised once both you and the company have signed it.</li>
-            <li><b>Early exercise:</b> if your grant allows exercising before vesting, the page says so; contact the company to do it.</li>
+            <li><b>Early exercise:</b> a grant's page may show that it allows exercising before vesting, but Cap Table records only exercises of vested options.</li>
           </ul>
         </>
       ),

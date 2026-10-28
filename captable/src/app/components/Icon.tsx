@@ -39,6 +39,7 @@ const ICONS = {
   pie: <><path d="M12 3v9h9A9 9 0 1 1 12 3z" /><path d="M15 2.5a8 8 0 0 1 6.5 6.5H15z" /></>,
   help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8M12 16.8v.2" /></>,
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
+  book: <><path d="M3 5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H3z" /><path d="M21 5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H21z" /></>,
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICONS;

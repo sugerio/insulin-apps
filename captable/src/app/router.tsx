@@ -11,6 +11,7 @@ import { CompanyPage } from "./pages/CompanyPage.tsx";
 import { DashboardPage } from "./pages/DashboardPage.tsx";
 import { DocumentPage } from "./pages/DocumentPage.tsx";
 import { DocumentsPage } from "./pages/DocumentsPage.tsx";
+import { PortalDocsPage, StandaloneDocsPage, WorkspaceDocsPage } from "./pages/DocsPage.tsx";
 import { EquityPlanPage, EquityPlansPage } from "./pages/EquityPlansPage.tsx";
 import { ExpiryRunsPage } from "./pages/ExpiryRunsPage.tsx";
 import { ExerciseRequestPage, ExerciseRequestsPage } from "./pages/ExerciseRequestsPage.tsx";
@@ -83,6 +84,7 @@ const companyPages: [path: string, element: ReactNode][] = [
   ["stakeholder-portal", <PortalSettingsPage />],
   ["reports", <ReportsPage />],
   ["activity", <ActivityPage />],
+  ["docs/:topic?", <WorkspaceDocsPage />],
 ];
 // The portal pages a holder sees, and the same tree as the admin's "Preview as stakeholder" (the
 // exact portal view): every page reads through the portal scope, from the holder's routes or the preview's twins.
@@ -121,9 +123,12 @@ export const routes: RouteObject[] = [
             element: <RequirePortal />,
             children: [
               { path: "/portfolio", element: <PortfolioHome /> },
-              { path: "/portfolio/:orgId", element: <PortalWorkspace />, children: portalPages },
+              // The docs are the holder's own, not part of the portal view an admin previews.
+              { path: "/portfolio/:orgId", element: <PortalWorkspace />, children: [...portalPages, { path: "docs/:topic?", element: <PortalDocsPage /> }] },
             ],
           },
+          // The docs for someone with no workspace or portfolio yet (an owner setting up); anyone else is sent to theirs.
+          { path: "/docs/:topic?", element: <StandaloneDocsPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],
       },

@@ -86,6 +86,7 @@ export function SetupPage() {
           <BrandMark size={40} />
           <h1>Cap Table isn't set up yet</h1>
           <p>An owner or admin of this app sets up the company the first time they open it. Ask one of them to open Cap Table from the Insulin console; then come back here.</p>
+          <p className="setup-learn">Meanwhile, the docs explain what Cap Table does and the basics of equity: <Link to="/docs">Learn about cap tables</Link>.</p>
         </div>
       </div>
     );
@@ -117,6 +118,9 @@ function SetupChoices() {
             Fill in the Cap Table spreadsheet template with your stakeholders, share classes, equity plans and holdings, then upload it.
           </ChoiceCard>
         </ul>
+        <p className="setup-learn">
+          New to cap tables, or not sure which way to start? <Link to="/docs">Learn about cap tables</Link>: what Cap Table does, how the import works, and the basics of equity.
+        </p>
       </div>
     </div>
   );

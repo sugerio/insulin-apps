@@ -19,6 +19,7 @@
 .setup-choices .btn { width: auto; height: 36px; padding: 0 14px; gap: 6px; font-size: 13.5px; white-space: nowrap; }
 .setup-choices .btn-ghost { border-color: var(--border); }
 .setup-back { font-size: 13px; }
+.setup-card .setup-learn { font-size: 13.5px; }
 .setup-import { min-height: 100vh; background: var(--bg); }
 .setup-import-head { display: flex; align-items: center; gap: 10px; height: var(--topbar); padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .setup-import-head .muted { color: var(--muted); }

@@ -45,10 +45,15 @@ function freePort() {
   })
 }
 
-function identity(role = 'OWNER', email = 'owner@example.test', userId = `smoke-${role.toLowerCase()}`) {
+function identity(
+  role = 'OWNER',
+  email = 'owner@example.test',
+  userId = `smoke-${role.toLowerCase()}`,
+  organizationId = 'smoke-console-org',
+) {
   return {
     'x-suger-user-id': userId,
-    'x-suger-organization-id': 'smoke-console-org',
+    'x-suger-organization-id': organizationId,
     'x-suger-app-id': 'captable-workerd-smoke',
     'x-suger-app-role': role,
     'x-suger-user-email': email,
@@ -199,6 +204,8 @@ async function run() {
   if (setupMe.company !== null) throw new Error('owner setup state: expected no company')
   await response(base, '/companies/deep-link', {}, 200, 'SPA deep link')
   await response(base, '/api/__suger/version', { headers: owner }, 200, 'runtime version')
+  await response(base, '/api/__suger/app-builder/data', {}, 404, 'app builder data panel closed without identity')
+  await response(base, '/api/__suger/app-builder/data', { headers: owner }, 404, 'app builder data panel closed with identity')
 
   await response(base, '/api/orgs', {
     method: 'POST',
@@ -231,13 +238,46 @@ async function run() {
   if (preview.preview.counts.stakeholders !== 1 || preview.preview.counts.securities !== 1) {
     throw new Error(`template import preview had wrong counts: ${JSON.stringify(preview.preview.counts)}`)
   }
+  const secondIdentity = identity('OWNER', 'second.owner@example.test', 'smoke-second-owner', 'smoke-console-org-2')
+  const secondOwner = sameOriginHeaders(base, secondIdentity)
+  const secondSetup = await json(base, '/api/me', { headers: secondOwner }, 200, 'second organization setup state')
+  if (secondSetup.company !== null) throw new Error('second organization setup state: expected no company')
+  await response(base, `/api/orgs/${placeholder.id}/dashboard`, { headers: secondOwner }, 404, 'second organization cannot read first dashboard')
+  await response(base, `/api/import/runs/${preview.runId}/commit`, {
+    method: 'POST',
+    headers: sameOriginHeaders(base, { ...secondIdentity, 'Idempotency-Key': randomUUID() }),
+    body: multipartTemplate(workbook, true),
+  }, 404, 'second organization cannot commit first import')
+  await response(base, `/api/import/runs/${preview.runId}`, {
+    headers: secondOwner,
+  }, 404, 'second organization cannot read first import')
+  const secondCompany = await json(base, '/api/orgs', {
+    method: 'POST',
+    headers: sameOriginHeaders(base, {
+      ...secondIdentity, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(),
+    }),
+    body: JSON.stringify({ orgKey: 'smoke-example', legalName: 'Second Smoke Example, Inc.', displayName: 'Second Smoke Example',
+      timezone: 'UTC', jurisdiction: 'US-DE', currency: 'USD', fiscalYearEnd: '12-31' }),
+  }, 201, 'second organization company setup')
+  await response(base, `/api/orgs/${secondCompany.id}/dashboard`, { headers: secondOwner }, 200, 'second organization dashboard')
+  await response(base, `/api/admin/orgs/${placeholder.id}/verify-ledger`, {
+    method: 'POST',
+    headers: sameOriginHeaders(base, { ...secondIdentity, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }),
+    body: '{}',
+  }, 404, 'second organization cannot verify first ledger')
   const imported = await json(base, `/api/import/runs/${preview.runId}/commit`, {
     method: 'POST', headers: sameOriginHeaders(base, { 'Idempotency-Key': randomUUID() }), body: multipartTemplate(workbook, true),
   }, 200, 'template import commit')
   await response(base, `/api/orgs/${imported.orgId}/cap-table?asOf=${AS_OF}`, { headers: owner }, 200, 'cap table after import')
   await response(base, `/api/orgs/${imported.orgId}/dashboard`, { headers: owner }, 200, 'dashboard after import')
+  await response(base, `/api/orgs/${imported.orgId}/dashboard`, { headers: secondOwner }, 404, 'second organization remains isolated')
+  await response(base, `/api/orgs/${secondCompany.id}/dashboard`, { headers: owner }, 404, 'first organization remains isolated')
   const holderHeaders = sameOriginHeaders(base, identity('USER', 'smoke.holder@example.test', 'smoke-holder'))
-  await response(base, '/api/portal/overview', { headers: holderHeaders }, 200, 'matching holder view')
+  const holderOverview = await json(base, '/api/portal/overview', { headers: holderHeaders }, 200, 'matching holder view')
+  const secondHolderHeaders = sameOriginHeaders(base, identity(
+    'USER', 'smoke.holder@example.test', 'smoke-holder', 'smoke-console-org-2',
+  ))
+  await response(base, '/api/portal/overview', { headers: secondHolderHeaders }, 404, 'second organization holder remains isolated')
   await response(base, `/api/admin/orgs/${imported.orgId}/verify-ledger`, {
     method: 'POST', headers: sameOriginHeaders(base, { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }), body: '{}',
   }, 200, 'imported ledger verification')
@@ -255,14 +295,26 @@ async function run() {
   const uploaded = await json(base, `/api/orgs/${imported.orgId}/documents`, {
     method: 'POST',
     headers: sameOriginHeaders(base, {
-      'Content-Type': 'application/pdf', 'X-Filename': 'synthetic-smoke.pdf', 'X-Document-Kind': 'OTHER',
+      'Content-Type': 'application/pdf', 'X-Filename': 'synthetic-smoke.pdf', 'X-Document-Kind': 'GRANT_AGREEMENT',
       'X-Content-SHA256': sha256(documentBytes), 'Idempotency-Key': randomUUID(),
+      'X-Link-Target': 'stakeholder', 'X-Link-Id': holderOverview.holdings[0].stakeholderId, 'X-Link-Role': 'AGREEMENT',
     }),
     body: documentBytes,
   }, 201, 'chunked document upload')
+  await response(base, `/api/orgs/${imported.orgId}/documents/${uploaded.id}/holder-visibility`, {
+    method: 'POST',
+    headers: sameOriginHeaders(base, { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }),
+    body: JSON.stringify({ version: 1, visible: true }),
+  }, 200, 'holder document visibility')
   const editor = sameOriginHeaders(base, identity('EDITOR', 'editor@example.test', 'smoke-editor'))
   const downloaded = await response(base, `/api/orgs/${imported.orgId}/documents/${uploaded.id}/download`, { headers: editor }, 200, 'EDITOR document download')
   if (sha256(downloaded.body) !== sha256(documentBytes)) throw new Error('Document download bytes differed from the upload')
+  await response(base, `/api/portal/documents/${uploaded.id}/download`, {
+    headers: holderHeaders,
+  }, 200, 'matching holder document download')
+  await response(base, `/api/portal/documents/${uploaded.id}/download`, {
+    headers: secondHolderHeaders,
+  }, 404, 'second organization cannot download first holder document')
   const viewer = sameOriginHeaders(base, identity('VIEWER', 'unmatched@example.test', 'smoke-viewer'))
   await response(base, '/api/portal/overview', { headers: viewer }, 404, 'unmatched VIEWER refused')
 }

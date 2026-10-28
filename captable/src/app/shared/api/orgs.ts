@@ -115,7 +115,7 @@ const orgProfileShape = {
 };
 
 /**
- * `POST /api/orgs`: first-run setup for the app's active company. The slug is the org_key. Omitted
+ * `POST /api/orgs`: first-run setup for the Insulin organization's active company. The slug is the org_key. Omitted
  * fields take the schema's defaults (jurisdiction US-DE, USD, fiscal year end 12-31, share unit "1") and
  * DEFAULT_ORG_SETTINGS overlaid with `settings`.
  */

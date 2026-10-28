@@ -53,13 +53,19 @@ export async function commitWorkflow(
   const guard = options.expectHead !== undefined ? [headAssertion(scope, options.expectHead)] : [];
   try {
     await ctx.db.batch([
-      receiptInsert({ id: uuidv7(ctx.now), scope, actor: ctx.actor.receiptActor, route: receipt.route, key: receipt.key, requestSha256: receipt.hash, status, body: text, now: ctx.now }),
+      receiptInsert({
+        id: uuidv7(ctx.now), consoleOrganizationId: ctx.org.console_organization_id,
+        scope, actor: ctx.actor.receiptActor, route: receipt.route, key: receipt.key,
+        requestSha256: receipt.hash, status, body: text, now: ctx.now,
+      }),
       ...guard,
       ...statements,
     ].map((statement) => toPrepared(ctx.db, statement)));
   } catch (error) {
     const failure = classifyBatchFailure(error);
-    const raced = await findReceipt(ctx.db, scope, ctx.actor.receiptActor, receipt.route, receipt.key);
+    const raced = await findReceipt(
+      ctx.db, ctx.org.console_organization_id, scope, ctx.actor.receiptActor, receipt.route, receipt.key,
+    );
     if (raced) {
       if (raced.request_sha256 !== receipt.hash) throw conflict("idempotency_key_reused", "Idempotency-Key was already used for a different request");
       return { status: raced.response_status, body: JSON.parse(raced.response_body), replay: true };
@@ -77,7 +83,9 @@ export async function commitWorkflow(
 /** The stored response of a retried key (same request), or 409 for the key reused with another request. */
 export async function replayed(ctx: CommandContext, route: string, key: string | null, hash: string): Promise<StoredResponse | null> {
   if (key === null) return null;
-  const receipt = await findReceipt(ctx.db, ctx.org.id, ctx.actor.receiptActor, route, key);
+  const receipt = await findReceipt(
+    ctx.db, ctx.org.console_organization_id, ctx.org.id, ctx.actor.receiptActor, route, key,
+  );
   if (!receipt) return null;
   if (receipt.request_sha256 !== hash) throw conflict("idempotency_key_reused", "Idempotency-Key was already used for a different request");
   return { status: receipt.response_status, body: JSON.parse(receipt.response_body), replay: true };
@@ -232,16 +240,19 @@ interface ExpiryRunDetails {
 async function reserveExpiryRun(ctx: CommandContext, runId: number, confirmation: ExpiryConfirmation): Promise<void> {
   try {
     await ctx.db.batch([
-      ctx.db.prepare("UPDATE expiry_runs SET confirmation = ? WHERE id = ? AND confirmation IS NULL")
-        .bind(JSON.stringify(confirmation), runId),
+      ctx.db.prepare("UPDATE expiry_runs SET confirmation = ? WHERE org_id = ? AND org_seq = ? AND confirmation IS NULL")
+        .bind(JSON.stringify(confirmation), ctx.org.id, runId),
       ctx.db.prepare(
         `INSERT INTO batch_assertions (ok) SELECT json_extract(confirmation, '$.key') IS ? AND json_extract(confirmation, '$.actor') IS ?
-           AND json_extract(confirmation, '$.requestSha256') IS ? FROM expiry_runs WHERE id = ?`,
-      ).bind(confirmation.key, confirmation.actor, confirmation.requestSha256, runId),
+           AND json_extract(confirmation, '$.requestSha256') IS ?
+         FROM expiry_runs WHERE org_id = ? AND org_seq = ?`,
+      ).bind(confirmation.key, confirmation.actor, confirmation.requestSha256, ctx.org.id, runId),
     ]);
   } catch (error) {
     if (classifyBatchFailure(error)?.kind !== "conflict") throw error;
-    const row = await ctx.db.prepare("SELECT confirmation FROM expiry_runs WHERE id = ?").bind(runId).first<{ confirmation: string | null }>();
+    const row = await ctx.db.prepare(
+      "SELECT confirmation FROM expiry_runs WHERE org_id = ? AND org_seq = ?",
+    ).bind(ctx.org.id, runId).first<{ confirmation: string | null }>();
     const existing = row?.confirmation ? (JSON.parse(row.confirmation) as ExpiryConfirmation) : null;
     throw sameConfirmer(existing, confirmation)
       ? conflict("idempotency_key_reused", "Idempotency-Key was already used for a different request")
@@ -255,9 +266,11 @@ function sameConfirmer(existing: ExpiryConfirmation | null | undefined, confirma
 
 /** The run's proposals, checked to be report-only and this org's, and the chosen securities checked to be among them. */
 async function expiryRunFor(ctx: CommandContext, runId: number, securityIds: readonly string[]): Promise<ExpiryRunDetails> {
-  const run = await ctx.db.prepare("SELECT id, org_id, candidates, confirmation FROM expiry_runs WHERE id = ?").bind(runId)
+  const run = await ctx.db.prepare(
+    "SELECT org_seq AS id, org_id, candidates, confirmation FROM expiry_runs WHERE org_id = ? AND org_seq = ?",
+  ).bind(ctx.org.id, runId)
     .first<{ id: number; org_id: string; candidates: string; confirmation: string | null }>();
-  if (!run || run.org_id !== ctx.org.id) throw notFound("Expiry run not found");
+  if (!run) throw notFound("Expiry run not found");
   const details: ExpiryRunDetails = {
     candidates: JSON.parse(run.candidates) as ExpiryProposal[],
     confirmation: run.confirmation ? JSON.parse(run.confirmation) as ExpiryConfirmation : undefined,
@@ -328,7 +341,9 @@ export async function confirmExpiryRun(
   const results: api.CommandResult[] = [];
   for (const securityId of body.securityIds) {
     const key = expiryKey(request.key, securityId);
-    const receipt = await findReceipt(ctx.db, ctx.org.id, ctx.actor.receiptActor, request.route, key);
+    const receipt = await findReceipt(
+      ctx.db, ctx.org.console_organization_id, ctx.org.id, ctx.actor.receiptActor, request.route, key,
+    );
     if (!receipt && !still.has(securityId)) {
       throw invariantViolation([{ code: "NOT_EXPIRABLE", message: "That security is no longer past its last exercise day with something outstanding", securityId }]);
     }
@@ -349,9 +364,13 @@ export async function confirmExpiryRun(
     ctx = await loadCommandContext(input);
   }
   const statements: Stmt[] = [
-    stmt("UPDATE expiry_runs SET confirmed_at = ?, confirmed_by = ? WHERE id = ?", ctx.now, ctx.actor.userId, runId),
+    stmt(
+      "UPDATE expiry_runs SET confirmed_at = ?, confirmed_by = ? WHERE org_id = ? AND org_seq = ?",
+      ctx.now, ctx.actor.userId, ctx.org.id, runId,
+    ),
     auditInsert({
-      occurredAt: ctx.now, orgId: ctx.org.id, actorKind: ctx.actor.kind, actorUserId: ctx.actor.userId, actorEmail: ctx.actor.email,
+      occurredAt: ctx.now, consoleOrganizationId: ctx.org.console_organization_id, orgId: ctx.org.id,
+      actorKind: ctx.actor.kind, actorUserId: ctx.actor.userId, actorEmail: ctx.actor.email,
       authMethod: ctx.actor.authMethod, action: "system.expiry_run_confirmed", targetType: "expiry_run", targetId: String(runId), result: "success",
       ip: ctx.actor.ip ?? null, userAgent: ctx.actor.userAgent ?? null, requestId: ctx.actor.requestId ?? null,
       details: { summary: `Expiry run confirmed: ${results.length} expired`, expired: results.length, switchToAutomatic: body.switchToAutomatic },

@@ -73,7 +73,7 @@ describe('D1 document bytes', () => {
         if (!sql.startsWith('INSERT INTO document_upload_chunks')) return prepared
         return {
           bind(...values: unknown[]) {
-            stagingEvents.push(`bind:${String(values[2])}`)
+            stagingEvents.push(`bind:${String(values[3])}`)
             return prepared.bind(...values)
           },
         } as D1PreparedStatement
@@ -103,11 +103,14 @@ describe('D1 document bytes', () => {
 
     const orphan = 'failed-upload'
     const orphanBytes = new Uint8Array(600 * 1024)
-    await store.stage(ORG, orphan, orphanBytes, Date.now())
+    await store.stage('console-org-1', ORG, orphan, orphanBytes, Date.now())
     expect(stagingEvents.slice(-5)).toEqual(['bind:0', 'bind:1', 'batch:2', 'bind:2', 'batch:1'])
+    expect(await testDb.db.prepare(
+      'SELECT DISTINCT console_organization_id FROM document_upload_chunks WHERE document_id = ?',
+    ).bind(orphan).first('console_organization_id')).toBe('console-org-1')
     await expect(testDb.db.batch([
       documentStatement(testDb.db, orphan),
-      ...store.finalizeStatements(ORG, orphan, orphanBytes.byteLength, Date.now()),
+      ...store.finalizeStatements('console-org-1', ORG, orphan, orphanBytes.byteLength, Date.now()),
       testDb.db.prepare('INSERT INTO batch_assertions (ok) VALUES (0)'),
     ])).rejects.toThrow(/batch assertion failed/)
     expect(await testDb.db.prepare('SELECT COUNT(*) AS n FROM documents WHERE id = ?').bind(orphan).first<number>('n')).toBe(0)

@@ -3,6 +3,7 @@ import { api, engine } from "#shared";
 /** An `orgs` row as D1 returns it. */
 export interface OrgRow {
   id: string;
+  console_organization_id: string | null;
   org_key: string;
   slug: string;
   status: "active";
@@ -24,6 +25,9 @@ export interface OrgRow {
   updated_at: number;
   pulley_id: string | null;
 }
+
+/** An active company that can execute writes always has an immutable console owner. */
+export type OwnedOrgRow = OrgRow & { console_organization_id: string };
 
 export async function getOrgRow(db: D1Database, orgId: string): Promise<OrgRow | null> {
   return db.prepare(

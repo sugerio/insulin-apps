@@ -36,7 +36,7 @@ describe('append-only tables', () => {
   beforeEach(async () => {
     await appendCommand(db, issuance(1))
     await appendCommand(db, { ...issuance(2), dependsOn: ['cmd_1'] })
-    await run("INSERT INTO audit_events (occurred_at, org_id, actor_user_id, auth_method, action, result) VALUES (?, ?, ?, 'console', 'stakeholder.update', 'success')", T0, ORG, ADMIN)
+    await run("INSERT INTO audit_events (occurred_at, org_id, org_seq, actor_user_id, auth_method, action, result) VALUES (?, ?, 1, ?, 'console', 'stakeholder.update', 'success')", T0, ORG, ADMIN)
   })
 
   it.each([
@@ -96,13 +96,100 @@ describe('version = old + 1 on every update', () => {
   })
 })
 
-describe('the one-company invariant', () => {
-  it('rejects a second active company in the same app database', async () => {
+describe('the one-company-per-console-organization invariant', () => {
+  it('rejects a second active company for the same console organization', async () => {
     await expect(run(
-      "INSERT INTO orgs (id, org_key, slug, legal_name, display_name, created_at, updated_at) VALUES ('org_other', 'other', 'other', 'Other, Inc.', 'Other', ?, ?)",
+      "INSERT INTO orgs (id, console_organization_id, org_key, slug, status, legal_name, display_name, created_at, updated_at) VALUES ('org_other', 'console-org-1', 'other', 'other', 'active', 'Other, Inc.', 'Other', ?, ?)",
       T0,
       T0,
-    )).rejects.toThrow('UNIQUE constraint failed: orgs.status')
+    )).rejects.toThrow('UNIQUE constraint failed: orgs.console_organization_id')
+  })
+
+  it('allows one importing company beside the active company and rejects a second import', async () => {
+    await expect(run(
+      "INSERT INTO orgs (id, console_organization_id, org_key, slug, status, legal_name, display_name, created_at, updated_at) VALUES ('org_importing', 'console-org-1', 'importing', 'importing', 'importing', 'Importing, Inc.', 'Importing', ?, ?)",
+      T0,
+      T0,
+    )).resolves.toBeDefined()
+    await expect(run(
+      "INSERT INTO orgs (id, console_organization_id, org_key, slug, status, legal_name, display_name, created_at, updated_at) VALUES ('org_importing_2', 'console-org-1', 'importing-2', 'importing-2', 'importing', 'Importing Two, Inc.', 'Importing Two', ?, ?)",
+      T0,
+      T0,
+    )).rejects.toThrow('UNIQUE constraint failed: orgs.console_organization_id')
+  })
+
+  it('allows active companies with the same slug in different console organizations', async () => {
+    await expect(run(
+      "INSERT INTO orgs (id, console_organization_id, org_key, slug, legal_name, display_name, created_at, updated_at) VALUES ('org_other', 'console-org-2', 'acme', 'acme', 'Other, Inc.', 'Other', ?, ?)",
+      T0,
+      T0,
+    )).resolves.toBeDefined()
+  })
+})
+
+describe('console organization ownership', () => {
+  it('never changes after it is recorded on any owner-scoped table', async () => {
+    await run(
+      `INSERT INTO import_runs
+       (id, console_organization_id, source_system, status, file_hashes, plan_sha256, counts, created_by,
+        timezone, jurisdiction, fiscal_year_end, created_at, updated_at)
+       VALUES ('run_owner', 'console-org-1', 'template', 'previewed', '[]', ?, '{}', ?, 'UTC', 'US-DE', '12-31', ?, ?)`,
+      sha('owner-plan'), ADMIN, T0, T0,
+    )
+    await run(
+      `INSERT INTO document_upload_chunks
+       (console_organization_id, org_id, document_id, chunk_index, bytes, created_at)
+       VALUES ('console-org-1', 'staged-owner-org', 'staged-owner-document', 0, X'01', ?)`,
+      T0,
+    )
+    await run(
+      `INSERT INTO idempotency_keys
+       (id, console_organization_id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
+       VALUES ('idem_owner', 'console-org-1', 'global', 'owner-test', 'POST /owner-test', 'owner-test-key', ?, 200, '{}', ?)`,
+      sha('owner-receipt'), T0,
+    )
+    await run(
+      `INSERT INTO audit_events
+       (occurred_at, console_organization_id, org_id, org_seq, actor_kind, action, result)
+       VALUES (?, 'console-org-1', ?, 1, 'system', 'owner.test', 'success')`,
+      T0, ORG,
+    )
+
+    for (const [table, where] of [
+      ['orgs', `id = '${ORG}'`],
+      ['import_runs', "id = 'run_owner'"],
+      ['idempotency_keys', "id = 'idem_owner'"],
+      ['document_upload_chunks', "document_id = 'staged-owner-document'"],
+      ['audit_events', "action = 'owner.test'"],
+    ]) {
+      await expect(run(
+        `UPDATE ${table} SET console_organization_id = 'console-org-2' WHERE ${where}`,
+      ), table).rejects.toThrow('the owning organization never changes')
+    }
+  })
+
+  it('does not adopt a legacy ownerless company through an update', async () => {
+    await run(
+      `INSERT INTO orgs (id, org_key, slug, status, legal_name, display_name, created_at, updated_at)
+       VALUES ('legacy_ownerless', 'legacy-ownerless', 'legacy-ownerless', 'archived', 'Legacy, Inc.', 'Legacy', ?, ?)`,
+      T0, T0,
+    )
+    await expect(run(
+      "UPDATE orgs SET console_organization_id = 'console-org-2', version = version + 1 WHERE id = 'legacy_ownerless'",
+    )).rejects.toThrow('the owning organization never changes')
+  })
+})
+
+describe('company-local sequence ids', () => {
+  it('refuses company audit events and expiry runs without their sequence', async () => {
+    await expect(run(
+      "INSERT INTO audit_events (occurred_at, org_id, actor_kind, action, result) VALUES (?, ?, 'system', 'sequence.test', 'success')",
+      T0, ORG,
+    )).rejects.toThrow('company audit events require a company sequence')
+    await expect(run(
+      "INSERT INTO expiry_runs (org_id, local_date, candidates, created_at) VALUES (?, '2026-10-28', '[]', ?)",
+      ORG, T0,
+    )).rejects.toThrow('expiry runs require a company sequence')
   })
 })
 
@@ -216,7 +303,7 @@ describe('reversals', () => {
 describe('guarded statements (batch_assertions)', () => {
   const audit = () =>
     db
-      .prepare("INSERT INTO audit_events (occurred_at, org_id, actor_kind, action, result) VALUES (?, ?, 'system', 'stakeholder.merge', 'success')")
+      .prepare("INSERT INTO audit_events (occurred_at, org_id, org_seq, actor_kind, action, result) VALUES (?, ?, 1, 'system', 'stakeholder.merge', 'success')")
       .bind(T0, ORG)
 
   it('a false assertion aborts the whole batch', async () => {
@@ -325,14 +412,14 @@ describe('idempotency receipts', () => {
     await appendCommand(db, issuance(1))
     await expect(
       run(
-        "INSERT INTO idempotency_keys (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at) VALUES ('idem_again', ?, ?, 'POST /api/commands', 'idem-key-cmd_1', ?, 200, '{}', ?)",
+        "INSERT INTO idempotency_keys (id, console_organization_id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at) VALUES ('idem_again', 'console-org-1', ?, ?, 'POST /api/commands', 'idem-key-cmd_1', ?, 200, '{}', ?)",
         ORG,
         ADMIN,
         sha('again'),
         T0,
       ),
     ).rejects.toThrow(
-      'UNIQUE constraint failed: idempotency_keys.scope, idempotency_keys.actor, idempotency_keys.route, idempotency_keys.idem_key',
+      'UNIQUE constraint failed: idempotency_keys.console_organization_id, idempotency_keys.scope, idempotency_keys.actor, idempotency_keys.route, idempotency_keys.idem_key',
     )
   })
 })

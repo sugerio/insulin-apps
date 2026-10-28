@@ -81,9 +81,9 @@ describe('retained administrator API', () => {
   it('lists, details and confirms an empty report-only expiry run', async () => {
     harness = await readHarness()
     const inserted = await harness.db.prepare(
-      'INSERT INTO expiry_runs (org_id, local_date, candidates, created_at) VALUES (?, ?, ?, ?) RETURNING id',
-    ).bind(harness.orgId, '2026-10-21', '[]', Date.now()).first<{ id: number }>()
-    const runId = inserted!.id
+      'INSERT INTO expiry_runs (org_id, org_seq, local_date, candidates, created_at) VALUES (?, 1, ?, ?, ?) RETURNING org_seq',
+    ).bind(harness.orgId, '2026-10-21', '[]', Date.now()).first<{ org_seq: number }>()
+    const runId = inserted!.org_seq
     expect(await getJson<api.ExpiryRunList>(harness, harness.editor, '/expiry-runs')).toEqual({
       items: [{ runId, localDate: '2026-10-21', startedAt: Date.now(), state: 'pending', proposalCount: 0 }],
     })

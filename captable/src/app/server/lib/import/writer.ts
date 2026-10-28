@@ -87,6 +87,7 @@ function referenceStatements(
 
 function plannedLedger(
   plan: ImportWritePlan,
+  consoleOrganizationId: string,
   now: number,
   prefix: number,
   startSeq: number,
@@ -131,6 +132,7 @@ function plannedLedger(
     const units: Stmt[] = [
       receiptInsert({
         id: receiptId,
+        consoleOrganizationId,
         scope: plan.orgId,
         actor: `import:${plan.orgId}`,
         route: IMPORT_COMMAND_ROUTE,
@@ -211,7 +213,7 @@ function certificateUnits(plan: ImportWritePlan, existing: Set<string>, now: num
 /** The exact insert statements a fresh import will use, before D1 prepares or executes any of them. */
 export function importPlanStatementsForValidation(plan: ImportWritePlan): Stmt[] {
   const none = new Set<string>()
-  const ledger = plannedLedger(plan, 0, 0, 0, engine.genesisHash(plan.orgId))
+  const ledger = plannedLedger(plan, 'import-validation-organization', 0, 0, 0, engine.genesisHash(plan.orgId))
   return [
     ...referenceStatements(plan, {
       stakeholders: none, emails: none, classes: none, plans: none, vesting: none,
@@ -249,6 +251,7 @@ export async function writeImportPlan(
   db: D1Database,
   deps: AppDeps,
   plan: ImportWritePlan,
+  consoleOrganizationId: string,
   userId: string,
   now: number,
 ): Promise<ImportWriteResult> {
@@ -273,7 +276,7 @@ export async function writeImportPlan(
   if (head.seq !== expectedSeq || (head.seq === 0 ? head.head_hash !== null : head.head_hash === null)) {
     throw new Error('The interrupted import ledger is not at a complete command boundary')
   }
-  const ledger = plannedLedger(plan, now, prefix, head.seq, head.head_hash ?? head.genesis_hash)
+  const ledger = plannedLedger(plan, consoleOrganizationId, now, prefix, head.seq, head.head_hash ?? head.genesis_hash)
 
   const units = [
     ...referenceStatements(plan, { stakeholders, emails, classes, plans, vesting }, userId, now),

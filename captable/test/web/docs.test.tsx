@@ -184,6 +184,10 @@ describe("the topics", () => {
     expect(importing).toContain("The source file bytes are not retained. The app keeps each file's name and fingerprint, import-run metadata, and source locations such as sheet and row with imported ledger facts.");
     expect(importing).not.toMatch(/stay in your browser tab|exactly right|only a fingerprint|keeps only/);
     expect(importing).toContain("as Cap Table reads them on the import date");
+    const gettingStarted = textOf("getting-started");
+    expect(gettingStarted).toContain("one company's cap table for each Insulin organization");
+    expect(gettingStarted).toContain("The first owner or admin of each organization");
+    expect(gettingStarted).not.toContain("per app");
     const stakeholders = textOf("for-stakeholders");
     expect(stakeholders).toContain("Cap Table records only exercises of vested options.");
     expect(stakeholders).toContain("counting all your ISOs from the company and its parent or subsidiary companies in the order they were granted");

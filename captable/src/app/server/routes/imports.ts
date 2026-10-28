@@ -32,6 +32,7 @@ const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 interface ImportRunRow {
   id: string
+  console_organization_id: string | null
   source_system: api.ImportSource
   status: api.ImportRunStatus
   file_hashes: string
@@ -107,6 +108,7 @@ function audit(c: Context<AppEnv>, now: number, action: string, runId: string, o
   const auth = c.get('auth')
   return insertAudit(c.env.DB, {
     occurredAt: now,
+    consoleOrganizationId: auth.consoleOrganizationId,
     orgId,
     actorUserId: auth.user.id,
     actorEmail: auth.user.email,
@@ -125,7 +127,7 @@ function sameDigests(left: readonly ImportFileDigest[], right: readonly ImportFi
   return engine.canonicalJson(left) === engine.canonicalJson(right)
 }
 
-async function activeCompany(db: D1Database): Promise<ActiveCompany | null> {
+async function activeCompany(db: D1Database, consoleOrganizationId: string): Promise<ActiveCompany | null> {
   return db.prepare(
     `SELECT o.*,
        (SELECT COUNT(*) FROM stakeholders s WHERE s.org_id = o.id) AS stakeholders,
@@ -136,8 +138,8 @@ async function activeCompany(db: D1Database): Promise<ActiveCompany | null> {
        (SELECT COUNT(*) FROM org_signatories s WHERE s.org_id = o.id) AS signatories,
        (SELECT COUNT(*) FROM legends l WHERE l.org_id = o.id) AS legends,
        (SELECT COUNT(*) FROM valuations v WHERE v.org_id = o.id) AS valuations
-     FROM orgs o WHERE o.status = 'active' LIMIT 1`,
-  ).first<ActiveCompany>()
+     FROM orgs o WHERE o.console_organization_id = ? AND o.status = 'active' LIMIT 1`,
+  ).bind(consoleOrganizationId).first<ActiveCompany>()
 }
 
 function unavailableMessage(company: ActiveCompany): string | null {
@@ -165,26 +167,36 @@ function planSourceIds(plan: ImportWritePlan): string[] {
   ])]
 }
 
-async function sourceIdsAlreadyActive(db: D1Database, plan: ImportWritePlan): Promise<boolean> {
+async function sourceIdsAlreadyActive(
+  db: D1Database,
+  consoleOrganizationId: string,
+  plan: ImportWritePlan,
+): Promise<boolean> {
   const sourceIds = planSourceIds(plan)
   for (let offset = 0; offset < sourceIds.length; offset += 400) {
     const ids = JSON.stringify(sourceIds.slice(offset, offset + 400))
     const found = await db.prepare(
       `WITH wanted(value) AS (SELECT value FROM json_each(?1))
        SELECT
-         EXISTS (SELECT 1 FROM stakeholders s JOIN orgs o ON o.id = s.org_id AND o.status = 'active'
-                 JOIN wanted w ON w.value = s.pulley_id) OR
-         EXISTS (SELECT 1 FROM stock_classes c JOIN orgs o ON o.id = c.org_id AND o.status = 'active'
-                 JOIN wanted w ON w.value = c.pulley_id) OR
-         EXISTS (SELECT 1 FROM stock_plans p JOIN orgs o ON o.id = p.org_id AND o.status = 'active'
-                 JOIN wanted w ON w.value = p.pulley_id) OR
-         EXISTS (SELECT 1 FROM vesting_terms v JOIN orgs o ON o.id = v.org_id AND o.status = 'active'
-                 JOIN wanted w ON w.value = v.pulley_id) OR
-         EXISTS (SELECT 1 FROM securities s JOIN orgs o ON o.id = s.org_id AND o.status = 'active'
-                 JOIN wanted w ON w.value = s.pulley_id) OR
-         EXISTS (SELECT 1 FROM certificates c JOIN orgs o ON o.id = c.org_id AND o.status = 'active'
-                 JOIN wanted w ON w.value = c.pulley_id) AS found`,
-    ).bind(ids).first<number>('found')
+	         EXISTS (SELECT 1 FROM stakeholders s JOIN orgs o ON o.id = s.org_id AND o.status = 'active'
+	                 AND o.console_organization_id = ?2
+	                 JOIN wanted w ON w.value = s.pulley_id) OR
+	         EXISTS (SELECT 1 FROM stock_classes c JOIN orgs o ON o.id = c.org_id AND o.status = 'active'
+	                 AND o.console_organization_id = ?2
+	                 JOIN wanted w ON w.value = c.pulley_id) OR
+	         EXISTS (SELECT 1 FROM stock_plans p JOIN orgs o ON o.id = p.org_id AND o.status = 'active'
+	                 AND o.console_organization_id = ?2
+	                 JOIN wanted w ON w.value = p.pulley_id) OR
+	         EXISTS (SELECT 1 FROM vesting_terms v JOIN orgs o ON o.id = v.org_id AND o.status = 'active'
+	                 AND o.console_organization_id = ?2
+	                 JOIN wanted w ON w.value = v.pulley_id) OR
+	         EXISTS (SELECT 1 FROM securities s JOIN orgs o ON o.id = s.org_id AND o.status = 'active'
+	                 AND o.console_organization_id = ?2
+	                 JOIN wanted w ON w.value = s.pulley_id) OR
+	         EXISTS (SELECT 1 FROM certificates c JOIN orgs o ON o.id = c.org_id AND o.status = 'active'
+	                 AND o.console_organization_id = ?2
+	                 JOIN wanted w ON w.value = c.pulley_id) AS found`,
+	    ).bind(ids, consoleOrganizationId).first<number>('found')
     if (found === 1) return true
   }
   return false
@@ -205,11 +217,14 @@ async function prepareImportingCompany(
   attemptId: string,
   now: number,
 ): Promise<{ plan: ImportWritePlan; orgId: string }> {
+  const consoleOrganizationId = c.get('auth').consoleOrganizationId
   if (run.attempt_id && run.attempt_expires_at && run.attempt_expires_at > now) {
     throw new ApiError('conflict', 'This import is already running', undefined, { reason: 'state_changed' })
   }
   const prior = run.org_id
-    ? await c.env.DB.prepare('SELECT id, status FROM orgs WHERE id = ?').bind(run.org_id).first<OrgStatusRow>()
+    ? await c.env.DB.prepare(
+      'SELECT id, status FROM orgs WHERE id = ? AND console_organization_id = ?',
+    ).bind(run.org_id, consoleOrganizationId).first<OrgStatusRow>()
     : null
 
   let plan: ImportWritePlan
@@ -249,24 +264,25 @@ async function prepareImportingCompany(
   const statements: D1PreparedStatement[] = [
     c.env.DB.prepare(
       `UPDATE import_runs SET status = 'previewed', attempt_id = ?, attempt_expires_at = ?, error_message = NULL, updated_at = ?
-       WHERE id = ? AND status IN ('previewed', 'failed')
+       WHERE id = ? AND console_organization_id = ? AND status IN ('previewed', 'failed')
          AND (attempt_id IS NULL OR attempt_expires_at <= ?)`,
-    ).bind(attemptId, now + 10 * 60_000, now, run.id, now),
+    ).bind(attemptId, now + 10 * 60_000, now, run.id, consoleOrganizationId, now),
     c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
     c.env.DB.prepare(
       `UPDATE orgs SET status = 'archived', version = version + 1, updated_at = ?
-       WHERE status = 'importing' AND id <> ? AND EXISTS (
+       WHERE console_organization_id = ? AND status = 'importing' AND id <> ? AND EXISTS (
          SELECT 1 FROM import_runs r WHERE r.org_id = orgs.id
+           AND r.console_organization_id = ?
            AND (r.status = 'failed' OR (r.attempt_expires_at IS NOT NULL AND r.attempt_expires_at <= ?))
        )`,
-    ).bind(now, orgId, now),
+    ).bind(now, consoleOrganizationId, orgId, consoleOrganizationId, now),
   ]
   if (prior && prior.id !== orgId && prior.status === 'importing') {
     statements.push(
       c.env.DB.prepare(
         `UPDATE orgs SET status = 'archived', version = version + 1, updated_at = ?
-         WHERE id = ? AND status = 'importing'`,
-      ).bind(now, prior.id),
+         WHERE id = ? AND console_organization_id = ? AND status = 'importing'`,
+      ).bind(now, prior.id, consoleOrganizationId),
       c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
     )
   }
@@ -274,11 +290,11 @@ async function prepareImportingCompany(
     statements.push(
       c.env.DB.prepare(
         `INSERT INTO orgs
-         (id, org_key, slug, status, legal_name, display_name, entity_type, jurisdiction, incorporation_date,
+         (id, console_organization_id, org_key, slug, status, legal_name, display_name, entity_type, jurisdiction, incorporation_date,
           timezone, currency, fiscal_year_end, ein, address, share_unit, settings, version, created_at, updated_at, pulley_id)
-         VALUES (?, ?, ?, 'importing', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
+         VALUES (?, ?, ?, ?, 'importing', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
       ).bind(
-        orgId, orgKey, slug,
+        orgId, consoleOrganizationId, orgKey, slug,
         active?.legal_name ?? profile.legalName,
         active?.display_name ?? profile.displayName,
         active?.entity_type ?? 'C_CORPORATION',
@@ -300,15 +316,18 @@ async function prepareImportingCompany(
   }
   statements.push(
     c.env.DB.prepare(
-      `UPDATE import_runs SET org_id = ?, updated_at = ? WHERE id = ? AND attempt_id = ?`,
-    ).bind(orgId, now, run.id, attemptId),
+      `UPDATE import_runs SET org_id = ?, updated_at = ?
+       WHERE id = ? AND console_organization_id = ? AND attempt_id = ?`,
+    ).bind(orgId, now, run.id, consoleOrganizationId, attemptId),
     c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
   )
   try {
     await c.env.DB.batch(statements)
   } catch (error) {
-    const current = await c.env.DB.prepare('SELECT attempt_id, attempt_expires_at FROM import_runs WHERE id = ?')
-      .bind(run.id).first<{ attempt_id: string | null; attempt_expires_at: number | null }>()
+    const current = await c.env.DB.prepare(
+      `SELECT attempt_id, attempt_expires_at FROM import_runs
+       WHERE id = ? AND console_organization_id = ?`,
+    ).bind(run.id, consoleOrganizationId).first<{ attempt_id: string | null; attempt_expires_at: number | null }>()
     if (current?.attempt_id && current.attempt_id !== attemptId && (current.attempt_expires_at ?? 0) > now) {
       throw new ApiError('conflict', 'This import is already running', undefined, { reason: 'state_changed' })
     }
@@ -328,6 +347,12 @@ function failureCause(error: unknown): string {
 }
 
 function internalImportError(error: unknown, stage: string): ApiError {
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  if (message.includes('unique constraint failed: orgs.')) {
+    return new ApiError('conflict', 'Another import or setup changed the company. Check it and try again.', undefined, {
+      reason: 'state_changed',
+    })
+  }
   const cause = failureCause(error)
   if (cause === 'database_constraint' || cause === 'statement_limit') {
     return new ApiError('invariant_violation', 'The reviewed files contain a value that cannot be stored. Preview the files again.')
@@ -349,12 +374,15 @@ async function markFailed(
   cause: string,
   now: number,
 ) {
+  const consoleOrganizationId = c.get('auth').consoleOrganizationId
   const plain = message.slice(0, 1000) || 'The import could not be completed'
   const condition = attemptId === null ? 'attempt_id IS NULL' : 'attempt_id = ?'
-  const values = attemptId === null ? [plain, now, runId] : [plain, now, runId, attemptId]
+  const values = attemptId === null
+    ? [plain, now, runId, consoleOrganizationId]
+    : [plain, now, runId, consoleOrganizationId, attemptId]
   const result = await c.env.DB.prepare(
     `UPDATE import_runs SET status = 'failed', error_message = ?, attempt_id = NULL, attempt_expires_at = NULL, updated_at = ?
-     WHERE id = ? AND status <> 'committed' AND ${condition}`,
+     WHERE id = ? AND console_organization_id = ? AND status <> 'committed' AND ${condition}`,
   ).bind(...values).run()
   if (result.meta.changes === 1) {
     await audit(c, now, 'import.failed', runId, orgId, 'error', { reasonCode, stage, cause }).run()
@@ -374,20 +402,21 @@ async function finalize(
   mutation: Awaited<ReturnType<typeof prepareIdempotency>>,
   now: number,
 ): Promise<Response | null> {
+  const consoleOrganizationId = c.get('auth').consoleOrganizationId
   const statements: D1PreparedStatement[] = [
     c.env.DB.prepare(
       `INSERT INTO batch_assertions (ok)
        SELECT status = 'importing'
          AND (SELECT seq FROM ledger_heads WHERE org_id = orgs.id) = ?
          AND (SELECT head_hash FROM ledger_heads WHERE org_id = orgs.id) IS ?
-       FROM orgs WHERE id = ?`,
-    ).bind(expectedSeq, expectedHash, orgId),
+       FROM orgs WHERE id = ? AND console_organization_id = ?`,
+    ).bind(expectedSeq, expectedHash, orgId, consoleOrganizationId),
   ]
   if (activeId) {
     statements.push(
       c.env.DB.prepare(
         `UPDATE orgs SET status = 'archived', version = version + 1, updated_at = ?
-         WHERE id = ? AND status = 'active'
+         WHERE id = ? AND console_organization_id = ? AND status = 'active'
            AND NOT EXISTS (SELECT 1 FROM stakeholders WHERE org_id = orgs.id)
            AND NOT EXISTS (SELECT 1 FROM transactions WHERE org_id = orgs.id)
            AND NOT EXISTS (SELECT 1 FROM documents WHERE org_id = orgs.id)
@@ -396,17 +425,21 @@ async function finalize(
            AND NOT EXISTS (SELECT 1 FROM org_signatories WHERE org_id = orgs.id)
            AND NOT EXISTS (SELECT 1 FROM legends WHERE org_id = orgs.id)
            AND NOT EXISTS (SELECT 1 FROM valuations WHERE org_id = orgs.id)`,
-      ).bind(now, activeId),
+      ).bind(now, activeId, consoleOrganizationId),
       c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
     )
   }
   statements.push(
     c.env.DB.prepare(
       `UPDATE orgs SET status = 'active', version = version + 1, updated_at = ?
-       WHERE id = ? AND status = 'importing'`,
-    ).bind(now, orgId),
+       WHERE id = ? AND console_organization_id = ? AND status = 'importing'`,
+    ).bind(now, orgId, consoleOrganizationId),
     c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
-    c.env.DB.prepare("INSERT INTO batch_assertions (ok) SELECT COUNT(*) = 1 FROM orgs WHERE status = 'active'"),
+    c.env.DB.prepare(
+      `INSERT INTO batch_assertions (ok)
+       SELECT COUNT(*) = 1 FROM orgs
+       WHERE console_organization_id = ? AND status = 'active'`,
+    ).bind(consoleOrganizationId),
     c.env.DB.prepare(
       `INSERT INTO batch_assertions (ok)
        SELECT (SELECT COUNT(*) FROM stakeholders WHERE org_id = ?1) = ?2
@@ -426,8 +459,8 @@ async function finalize(
     c.env.DB.prepare(
       `UPDATE import_runs SET status = 'committed', org_id = ?, counts = ?, error_message = NULL,
          attempt_id = NULL, attempt_expires_at = NULL, updated_at = ?
-       WHERE id = ? AND status = 'previewed' AND org_id = ? AND attempt_id = ?`,
-    ).bind(orgId, JSON.stringify(counts), now, run.id, orgId, attemptId),
+       WHERE id = ? AND console_organization_id = ? AND status = 'previewed' AND org_id = ? AND attempt_id = ?`,
+    ).bind(orgId, JSON.stringify(counts), now, run.id, consoleOrganizationId, orgId, attemptId),
     c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
     audit(c, now, 'import.committed', run.id, orgId, 'success', {
       counts,
@@ -454,12 +487,13 @@ export function importRoutes(deps: AppDeps): Hono<AppEnv> {
   })
 
   app.post('/preview', async (c) => {
+    const auth = c.get('auth')
     const form = await readImportForm(c, api.importPreviewFormSchema)
     const files = await uploadedFiles(form.files)
     const digests = fileDigests(files)
     const runId = crypto.randomUUID()
     const now = deps.now()
-    const active = await activeCompany(c.env.DB)
+    const active = await activeCompany(c.env.DB, auth.consoleOrganizationId)
     const corePreview = buildCorePreview(form.source, files, {
       asOfDate: form.asOfDate,
       today: engine.orgToday(active?.timezone ?? form.timezone, now),
@@ -476,11 +510,12 @@ export function importRoutes(deps: AppDeps): Hono<AppEnv> {
     await c.env.DB.batch([
       c.env.DB.prepare(
         `INSERT INTO import_runs
-         (id, source_system, status, file_hashes, as_of_date, plan_sha256, counts, created_by, org_id,
+         (id, console_organization_id, source_system, status, file_hashes, as_of_date, plan_sha256, counts, created_by, org_id,
           error_message, timezone, jurisdiction, fiscal_year_end, created_at, updated_at)
-         VALUES (?, ?, 'previewed', ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)`,
-      ).bind(runId, form.source, JSON.stringify(digests), preview.plan?.asOfDate ?? preview.draft.asOfDate,
-        planSha256(preview.plan), JSON.stringify(counts), c.get('auth').user.id,
+         VALUES (?, ?, ?, 'previewed', ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)`,
+      ).bind(runId, auth.consoleOrganizationId, form.source, JSON.stringify(digests),
+        preview.plan?.asOfDate ?? preview.draft.asOfDate,
+        planSha256(preview.plan), JSON.stringify(counts), auth.user.id,
         form.timezone, form.jurisdiction, form.fiscalYearEnd, now, now),
       audit(c, now, 'import.previewed', runId, null, 'success', {
         source: form.source,
@@ -495,12 +530,15 @@ export function importRoutes(deps: AppDeps): Hono<AppEnv> {
 
   app.get('/runs/:runId', async (c) => {
     const runId = parseRunId(c, api.routes.getImportRun)
-    const row = await c.env.DB.prepare('SELECT * FROM import_runs WHERE id = ?').bind(runId).first<ImportRunRow>()
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM import_runs WHERE id = ? AND console_organization_id = ?',
+    ).bind(runId, c.get('auth').consoleOrganizationId).first<ImportRunRow>()
     if (!row) throw notFound('Import run not found')
     return c.json(runOutput(row))
   })
 
   app.post('/runs/:runId/commit', async (c) => {
+    const auth = c.get('auth')
     const runId = parseRunId(c, api.routes.commitImport)
     const form = await readImportForm(c, api.importCommitFormSchema)
     const files = await uploadedFiles(form.files)
@@ -513,7 +551,9 @@ export function importRoutes(deps: AppDeps): Hono<AppEnv> {
       fiscalYearEnd: form.fiscalYearEnd,
     })
     if (mutation.replay) return mutation.replay
-    const run = await c.env.DB.prepare('SELECT * FROM import_runs WHERE id = ?').bind(runId).first<ImportRunRow>()
+    const run = await c.env.DB.prepare(
+      'SELECT * FROM import_runs WHERE id = ? AND console_organization_id = ?',
+    ).bind(runId, auth.consoleOrganizationId).first<ImportRunRow>()
     if (!run) throw notFound('Import run not found')
     let failureOrgId = run.org_id
     let failureStage = 'validate'
@@ -535,7 +575,7 @@ export function importRoutes(deps: AppDeps): Hono<AppEnv> {
         const replay = await commitIdempotent(c.env.DB, mutation, [], 200, body, deps.now())
         return replay ?? c.json(body)
       }
-      const active = await activeCompany(c.env.DB)
+      const active = await activeCompany(c.env.DB, auth.consoleOrganizationId)
       const unavailable = active ? unavailableMessage(active) : null
       if (unavailable) {
         throw new ApiError('conflict', unavailable, undefined, { reason: 'state_changed' })
@@ -554,7 +594,7 @@ export function importRoutes(deps: AppDeps): Hono<AppEnv> {
           violations: [{ code: 'IMPORT_NOT_READY', message: 'The reviewed files still contain blocking problems' }],
         })
       }
-      if (await sourceIdsAlreadyActive(c.env.DB, preview.plan)) {
+      if (await sourceIdsAlreadyActive(c.env.DB, auth.consoleOrganizationId, preview.plan)) {
         throw new ApiError('conflict', 'These records have already been imported', undefined, { reason: 'state_changed' })
       }
 
@@ -565,7 +605,9 @@ export function importRoutes(deps: AppDeps): Hono<AppEnv> {
       failureOrgId = importing.orgId
       const counts = expectedDatabaseCounts(importing.plan)
       failureStage = 'write'
-      const written = await writeImportPlan(c.env.DB, deps, importing.plan, c.get('auth').user.id, startedAt)
+      const written = await writeImportPlan(
+        c.env.DB, deps, importing.plan, auth.consoleOrganizationId, auth.user.id, startedAt,
+      )
       const databaseCounts = expectedImportDatabaseCounts(importing.plan, written.expectedDependencies)
       failureStage = 'verify'
       const verification = await verifyOrgLedger(c.env.DB, importing.orgId, deps.now(), { asOf: importing.plan.asOfDate })

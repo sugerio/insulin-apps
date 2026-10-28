@@ -51,14 +51,20 @@ export function orgRoutes(deps: AppDeps) {
     const input = await readJson(c, api.createOrgRequestSchema)
     const mutation = await prepareIdempotency(c, 'global', 'POST /api/orgs', input)
     if (mutation.replay) return mutation.replay
-    const existing = await c.env.DB.prepare("SELECT id FROM orgs WHERE status = 'active' LIMIT 1").first()
-    if (existing) throw new ApiError('conflict', 'This app already has a company', undefined, { reason: 'state_changed' })
+    const consoleOrganizationId = c.get('auth').consoleOrganizationId
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM orgs WHERE console_organization_id = ? AND status = 'active' LIMIT 1",
+    ).bind(consoleOrganizationId).first()
+    if (existing) {
+      throw new ApiError('conflict', 'This app already has a company', undefined, { reason: 'state_changed' })
+    }
     const now = deps.now()
     const id = crypto.randomUUID()
     const settings = api.orgSettingsSchema.parse({ ...api.DEFAULT_ORG_SETTINGS, ...input.settings })
     const genesis = engine.genesisHash(id)
     const row: OrgRow = {
-      id, org_key: input.orgKey, slug: input.orgKey, status: 'active',
+      id, console_organization_id: consoleOrganizationId,
+      org_key: input.orgKey, slug: input.orgKey, status: 'active',
       legal_name: input.legalName, display_name: input.displayName, entity_type: 'C_CORPORATION',
       jurisdiction: input.jurisdiction ?? 'US-DE', incorporation_date: input.incorporationDate ?? null,
       timezone: input.timezone, currency: input.currency ?? 'USD', fiscal_year_end: input.fiscalYearEnd ?? '12-31',
@@ -72,21 +78,29 @@ export function orgRoutes(deps: AppDeps) {
       const replay = await commitIdempotent(c.env.DB, mutation, [
         c.env.DB.prepare(
           `UPDATE orgs SET status = 'archived', version = version + 1, updated_at = ?
-           WHERE status = 'importing'`,
-        ).bind(now),
+           WHERE console_organization_id = ? AND status = 'importing' AND EXISTS (
+             SELECT 1 FROM import_runs r WHERE r.org_id = orgs.id
+               AND r.console_organization_id = ?
+               AND (r.status = 'failed' OR (r.attempt_expires_at IS NOT NULL AND r.attempt_expires_at <= ?))
+           )`,
+        ).bind(now, consoleOrganizationId, consoleOrganizationId, now),
         c.env.DB.prepare(
           `INSERT INTO orgs
-           (id, org_key, slug, status, legal_name, display_name, entity_type, jurisdiction, incorporation_date,
+           (id, console_organization_id, org_key, slug, status, legal_name, display_name, entity_type, jurisdiction, incorporation_date,
             timezone, currency, fiscal_year_end, ein, address, share_unit, settings, version, created_at, updated_at)
-           SELECT ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
-           WHERE NOT EXISTS (SELECT 1 FROM orgs WHERE status = 'active')`,
-        ).bind(id, row.org_key, row.slug, row.legal_name, row.display_name, row.entity_type, row.jurisdiction,
+           SELECT ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM orgs WHERE console_organization_id = ? AND status <> 'archived'
+           )`,
+        ).bind(id, consoleOrganizationId, row.org_key, row.slug, row.legal_name, row.display_name, row.entity_type, row.jurisdiction,
           row.incorporation_date, row.timezone, row.currency, row.fiscal_year_end, row.ein, row.address,
-          row.share_unit, row.settings, now, now),
+          row.share_unit, row.settings, now, now, consoleOrganizationId),
         c.env.DB.prepare(
           `INSERT INTO batch_assertions (ok)
-           SELECT changes() = 1 AND (SELECT COUNT(*) FROM orgs WHERE status = 'active') = 1`,
-        ),
+           SELECT changes() = 1 AND (
+             SELECT COUNT(*) FROM orgs WHERE console_organization_id = ? AND status <> 'archived'
+           ) = 1`,
+        ).bind(consoleOrganizationId),
         c.env.DB.prepare(
           'INSERT INTO ledger_heads (org_id, seq, genesis_hash, head_hash, updated_at) VALUES (?, 0, ?, NULL, ?)',
         ).bind(id, genesis, now),
@@ -98,6 +112,18 @@ export function orgRoutes(deps: AppDeps) {
         error.message.toLowerCase().includes('unique constraint failed')
         || error.message.toLowerCase().includes('batch assertion failed')
       )) {
+        const importing = await c.env.DB.prepare(
+          `SELECT 1 FROM orgs WHERE console_organization_id = ? AND status = 'importing' AND EXISTS (
+             SELECT 1 FROM import_runs r WHERE r.org_id = orgs.id
+               AND r.console_organization_id = ? AND r.status <> 'failed'
+               AND (r.attempt_expires_at IS NULL OR r.attempt_expires_at > ?)
+           ) LIMIT 1`,
+        ).bind(consoleOrganizationId, consoleOrganizationId, now).first()
+        if (importing) {
+          throw new ApiError('conflict', 'A company import is already running. Wait for it to finish before setting up a company.', undefined, {
+            reason: 'state_changed',
+          })
+        }
         throw new ApiError('conflict', 'This app already has a company', undefined, { reason: 'state_changed' })
       }
       throw error

@@ -17,15 +17,23 @@ export class DocumentStore {
     documentId: string,
     bytes: Uint8Array,
     createdAt: number,
+    options?: { consoleOrganizationId: string },
   ): Promise<void> {
     if (bytes.byteLength > MAX_DOCUMENT_BYTES) throw new DocumentTooLargeError();
     let index = 0;
     for (let start = 0; start < bytes.byteLength; start += DOCUMENT_CHUNK_BYTES * CHUNKS_PER_WRITE_BATCH) {
       const statements: D1PreparedStatement[] = [];
       for (let offset = start; offset < bytes.byteLength && statements.length < CHUNKS_PER_WRITE_BATCH; offset += DOCUMENT_CHUNK_BYTES) {
-        statements.push(this.db.prepare(
-          `INSERT INTO ${table} (org_id, document_id, chunk_index, bytes, created_at) VALUES (?, ?, ?, ?, ?)`,
-        ).bind(orgId, documentId, index, bytes.slice(offset, offset + DOCUMENT_CHUNK_BYTES), createdAt));
+        const chunk = bytes.slice(offset, offset + DOCUMENT_CHUNK_BYTES);
+        statements.push(options
+          ? this.db.prepare(
+            `INSERT INTO document_upload_chunks
+             (console_organization_id, org_id, document_id, chunk_index, bytes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          ).bind(options.consoleOrganizationId, orgId, documentId, index, chunk, createdAt)
+          : this.db.prepare(
+            `INSERT INTO ${table} (org_id, document_id, chunk_index, bytes, created_at) VALUES (?, ?, ?, ?, ?)`,
+          ).bind(orgId, documentId, index, chunk, createdAt));
         index += 1;
       }
       await this.db.batch(statements);
@@ -36,11 +44,18 @@ export class DocumentStore {
     await this.writeChunks("document_blobs", orgId, documentId, bytes, Date.now());
   }
 
-  async stage(orgId: string, documentId: string, bytes: Uint8Array, createdAt: number): Promise<void> {
-    await this.writeChunks("document_upload_chunks", orgId, documentId, bytes, createdAt);
+  async stage(
+    consoleOrganizationId: string,
+    orgId: string,
+    documentId: string,
+    bytes: Uint8Array,
+    createdAt: number,
+  ): Promise<void> {
+    await this.writeChunks("document_upload_chunks", orgId, documentId, bytes, createdAt, { consoleOrganizationId });
   }
 
   finalizeStatements(
+    consoleOrganizationId: string,
     orgId: string,
     documentId: string,
     byteSize: number,
@@ -51,8 +66,8 @@ export class DocumentStore {
       this.db.prepare(
         `INSERT INTO document_blobs (org_id, document_id, chunk_index, bytes, created_at)
          SELECT org_id, document_id, chunk_index, bytes, ? FROM document_upload_chunks
-         WHERE org_id = ? AND document_id = ? ORDER BY chunk_index`,
-      ).bind(createdAt, orgId, documentId),
+         WHERE console_organization_id = ? AND org_id = ? AND document_id = ? ORDER BY chunk_index`,
+      ).bind(createdAt, consoleOrganizationId, orgId, documentId),
       this.db.prepare(
         `INSERT INTO batch_assertions (ok)
          SELECT COUNT(*) = ? AND COALESCE(SUM(length(bytes)), 0) = ?
@@ -60,8 +75,9 @@ export class DocumentStore {
          FROM document_blobs WHERE org_id = ? AND document_id = ?`,
       ).bind(expectedChunks, byteSize, expectedChunks - 1, orgId, documentId),
       this.db.prepare(
-        "DELETE FROM document_upload_chunks WHERE org_id = ? AND document_id = ?",
-      ).bind(orgId, documentId),
+        `DELETE FROM document_upload_chunks
+         WHERE console_organization_id = ? AND org_id = ? AND document_id = ?`,
+      ).bind(consoleOrganizationId, orgId, documentId),
     ];
   }
 

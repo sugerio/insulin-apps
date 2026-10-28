@@ -6,6 +6,7 @@ import type { Acme } from '../shared/engine/fixtures/acme.ts'
 import {
   OWNER,
   OWNER_USER_ID,
+  CONSOLE_ORGANIZATION_ID,
   addDocument,
   addStakeholder,
   commit,
@@ -89,9 +90,11 @@ const CONFIRM_ROUTE = 'POST /api/orgs/:orgId/expiry-runs/:runId/confirm'
 /** Another request holding an expiry's child key: the confirmation stops there with 409. */
 async function takeChildKey(l: LedgerHarness, key: string, securityId: string): Promise<void> {
   await l.db.prepare(
-    `INSERT INTO idempotency_keys (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 200, '{}', ?)`,
-  ).bind(crypto.randomUUID(), l.orgId, OWNER_USER_ID, CONFIRM_ROUTE, expiryKey(key, securityId), '0'.repeat(64), l.clock.time).run()
+    `INSERT INTO idempotency_keys
+     (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at, console_organization_id)
+     VALUES (?, ?, ?, ?, ?, ?, 200, '{}', ?, ?)`,
+  ).bind(crypto.randomUUID(), l.orgId, OWNER_USER_ID, CONFIRM_ROUTE, expiryKey(key, securityId),
+    '0'.repeat(64), l.clock.time, CONSOLE_ORGANIZATION_ID).run()
 }
 
 describe('due ledger work, processed on demand', () => {
@@ -264,15 +267,22 @@ describe('due ledger work, processed on demand', () => {
     const l = await ledgerHarness()
     const old = l.clock.time - 86_400_001
     await l.db.batch(Array.from({ length: 101 }, (_, index) => l.db.prepare(
-      'INSERT INTO document_upload_chunks (org_id, document_id, chunk_index, bytes, created_at) VALUES (?, ?, ?, ?, ?)',
-    ).bind(l.orgId, 'old-staging', index, new Uint8Array([index % 251]), old)))
+      `INSERT INTO document_upload_chunks
+       (org_id, document_id, chunk_index, bytes, created_at, console_organization_id) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(l.orgId, 'old-staging', index, new Uint8Array([index % 251]), old, CONSOLE_ORGANIZATION_ID)))
     await l.db.prepare(
-      'INSERT INTO document_upload_chunks (org_id, document_id, chunk_index, bytes, created_at) VALUES (?, ?, 0, ?, ?)',
-    ).bind(l.orgId, 'fresh-staging', new Uint8Array([1]), l.clock.time).run()
+      `INSERT INTO document_upload_chunks
+       (org_id, document_id, chunk_index, bytes, created_at, console_organization_id) VALUES (?, ?, 0, ?, ?, ?)`,
+    ).bind(l.orgId, 'fresh-staging', new Uint8Array([1]), l.clock.time, CONSOLE_ORGANIZATION_ID).run()
+    await l.db.prepare(
+      `INSERT INTO document_upload_chunks
+       (org_id, document_id, chunk_index, bytes, created_at, console_organization_id) VALUES (?, ?, 0, ?, ?, ?)`,
+    ).bind(l.orgId, 'foreign-staging', new Uint8Array([1]), old, 'console-org-2').run()
 
     await processDue(l)
     expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_upload_chunks WHERE document_id = 'old-staging'")).toBe(1)
     expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_upload_chunks WHERE document_id = 'fresh-staging'")).toBe(1)
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_upload_chunks WHERE document_id = 'foreign-staging'")).toBe(1)
   })
 
   it("binds a confirmation's key to the run before its first expiry, so a retry resumes and nothing else can", async () => {

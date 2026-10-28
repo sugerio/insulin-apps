@@ -17,7 +17,7 @@ import { useResource } from "../../lib/useResource.ts";
 // Portfolio: the exit-window banner for former employees, tiles,
 // vesting status, the next vest events, the holder's grants and shares, and company resources. Read-only.
 
-/** `/portfolio`: straight to the company's portfolio (one company per app). */
+/** `/portfolio`: straight to the Insulin organization's company portfolio. */
 export function PortfolioHome() {
   const me = useMe();
   const match = me.portal.matches[0];

@@ -93,6 +93,7 @@ export async function commandBatch(ctx: CommandContext, evaluation: Evaluation, 
   }
   statements.push(auditInsert({
     occurredAt: ctx.now,
+    consoleOrganizationId: ctx.org.console_organization_id,
     orgId,
     actorKind: ctx.actor.kind,
     actorUserId: ctx.actor.userId,

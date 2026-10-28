@@ -181,6 +181,17 @@ describe("first run: no company yet", () => {
     expect(callsTo(api.routes.createOrg)).toHaveLength(0);
   });
 
+  it("shows the server's conflict message when setup is blocked", async () => {
+    const message = "A company import is already running. Wait for it to finish before setting up a company.";
+    renderRoute("/setup?start=empty", me("admin_rw", { company: null }), [
+      ...workspaceHandlers(),
+      mock(api.routes.createOrg, apiError(409, "conflict", message, { reason: "state_changed" })),
+    ]);
+    fireEvent.change(await screen.findByLabelText(/Company name/), { target: { value: "Acme Robotics" } });
+    fireEvent.click(screen.getByRole("button", { name: "Set up company" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+  });
+
   it("marks preview mode on the setup page too, where the stand-in owner first writes", async () => {
     renderRoute("/setup", me("owner", { company: null, preview: true }), [...workspaceHandlers(), mock(api.routes.createOrg, () => org())]);
     expect(await screen.findByRole("link", { name: "Start with an empty company" })).toBeTruthy();

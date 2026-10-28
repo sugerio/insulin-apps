@@ -3,7 +3,7 @@ import { insertAudit } from "../audit.ts";
 import type { AppConfig } from "../config.ts";
 import { log, notFound } from "../http.ts";
 import { ledgerCache, loadLedger } from "../read/ledger.ts";
-import { getOrgRow, orgLocalDate, orgSettings } from "../read/org.ts";
+import { getOrgRow, orgLocalDate, orgSettings, type OwnedOrgRow } from "../read/org.ts";
 import { commandBatch, toPrepared } from "./batch.ts";
 import type { CommandDocuments } from "./documents.ts";
 import { classifyBatchFailure, conflict, extendedCode, invariantViolation, LedgerError, warningsUnacknowledged } from "./errors.ts";
@@ -27,15 +27,16 @@ export interface ContextInput {
 
 export async function loadCommandContext(input: ContextInput): Promise<CommandContext> {
   const org = await getOrgRow(input.db, input.orgId);
-  if (!org) throw notFound("Organization not found");
+  if (!org || org.console_organization_id === null) throw notFound("Organization not found");
+  const ownedOrg: OwnedOrgRow = { ...org, console_organization_id: org.console_organization_id };
   const ledger = await loadLedger(input.db, input.orgId);
   if (!ledger) throw notFound("Organization not found");
   return {
     db: input.db,
     config: input.config,
     deps: { now: () => input.now },
-    org,
-    settings: orgSettings(org.settings),
+    org: ownedOrg,
+    settings: orgSettings(ownedOrg.settings),
     ledger,
     now: input.now,
     today: orgLocalDate(org.timezone, input.now),
@@ -79,10 +80,18 @@ interface ReceiptRow {
   response_body: string;
 }
 
-export async function findReceipt(db: D1Database, scope: string, actor: string, route: string, key: string): Promise<ReceiptRow | null> {
+export async function findReceipt(
+  db: D1Database,
+  consoleOrganizationId: string,
+  scope: string,
+  actor: string,
+  route: string,
+  key: string,
+): Promise<ReceiptRow | null> {
   return db.prepare(
-    "SELECT id, request_sha256, response_status, response_body FROM idempotency_keys WHERE scope = ? AND actor = ? AND route = ? AND idem_key = ?",
-  ).bind(scope, actor, route, key).first<ReceiptRow>();
+    `SELECT id, request_sha256, response_status, response_body FROM idempotency_keys
+     WHERE console_organization_id = ? AND scope = ? AND actor = ? AND route = ? AND idem_key = ?`,
+  ).bind(consoleOrganizationId, scope, actor, route, key).first<ReceiptRow>();
 }
 
 /** SHA-256 over the method, the concrete path and the canonical body (the ledger rules). */
@@ -179,7 +188,9 @@ export async function runCommand(
   const scope = ctx.org.id;
   const hash = requestSha256(request.route, request.path, request.body);
   if (!request.dryRun && request.idempotencyKey !== null) {
-    const receipt = await findReceipt(ctx.db, scope, ctx.actor.receiptActor, request.route, request.idempotencyKey);
+    const receipt = await findReceipt(
+      ctx.db, ctx.org.console_organization_id, scope, ctx.actor.receiptActor, request.route, request.idempotencyKey,
+    );
     if (receipt) return { result: JSON.parse(receipt.response_body) as api.CommandResult, replay: compareReceipt(receipt, hash), evaluation: null };
   }
   const { plan, documents } = await build(ctx);
@@ -210,6 +221,7 @@ export async function runCommand(
   const batch = await commandBatch(ctx, evaluation, {
     receipt: {
       id: uuidv7(ctx.now),
+      consoleOrganizationId: ctx.org.console_organization_id,
       scope,
       actor: ctx.actor.receiptActor,
       route: request.route,
@@ -233,7 +245,9 @@ export async function runCommand(
     const failure = classifyBatchFailure(error);
     if (failure?.kind === "idempotency" || failure === null) {
       // A concurrent duplicate with the same key committed first: answer with its stored response.
-      const raced = await findReceipt(ctx.db, scope, ctx.actor.receiptActor, request.route, request.idempotencyKey);
+      const raced = await findReceipt(
+        ctx.db, ctx.org.console_organization_id, scope, ctx.actor.receiptActor, request.route, request.idempotencyKey,
+      );
       if (raced) return { result: JSON.parse(raced.response_body) as api.CommandResult, replay: compareReceipt(raced, hash), evaluation: null };
     }
     if (failure === null || failure.kind === "idempotency") {

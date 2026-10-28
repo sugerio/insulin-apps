@@ -74,6 +74,8 @@ export const CONSOLE_USER: ConsoleIdentity = {
   name: 'Owner Example',
 } as const
 
+export const CONSOLE_ORGANIZATION_ID = CONSOLE_USER.organizationId
+
 export function consoleHeaders(overrides: Partial<ConsoleIdentity> = {}): Record<string, string> {
   const user = { ...CONSOLE_USER, ...overrides }
   return {

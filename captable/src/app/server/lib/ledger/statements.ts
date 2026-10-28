@@ -35,6 +35,7 @@ export function prepare(db: D1Database, statement: Stmt): D1PreparedStatement {
 
 export interface ReceiptValues {
   id: string;
+  consoleOrganizationId: string;
   scope: string;
   actor: string;
   route: string;
@@ -47,9 +48,11 @@ export interface ReceiptValues {
 
 export function receiptInsert(values: ReceiptValues): Stmt {
   return stmt(
-    `INSERT INTO idempotency_keys (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values.id, values.scope, values.actor, values.route, values.key, values.requestSha256, values.status, values.body, values.now,
+    `INSERT INTO idempotency_keys
+     (id, console_organization_id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values.id, values.consoleOrganizationId, values.scope, values.actor, values.route, values.key,
+    values.requestSha256, values.status, values.body, values.now,
   );
 }
 
@@ -140,13 +143,17 @@ export function dependencyInsert(orgId: string, edge: engine.DependencyEdge, opt
 
 /** The same row `insertAudit` writes, as data. */
 export function auditInsert(entry: AuditEntry): Stmt {
+  const orgId = entry.orgId ?? null;
   return stmt(
-    `INSERT INTO audit_events (occurred_at, org_id, actor_kind, actor_user_id, actor_email, auth_method, action, target_type,
-       target_id, result, reason, ip, user_agent, request_id, details)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    entry.occurredAt, entry.orgId ?? null, entry.actorKind ?? "user", entry.actorUserId ?? null, entry.actorEmail ?? null,
+    `INSERT INTO audit_events (occurred_at, console_organization_id, org_id, actor_kind, actor_user_id, actor_email,
+       auth_method, action, target_type, target_id, result, reason, ip, user_agent, request_id, details, org_seq)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE
+       COALESCE((SELECT MAX(org_seq) + 1 FROM audit_events WHERE org_id = ?), 1) END)`,
+    entry.occurredAt, entry.consoleOrganizationId ?? null, entry.orgId ?? null,
+    entry.actorKind ?? "user", entry.actorUserId ?? null, entry.actorEmail ?? null,
     entry.authMethod ?? null, entry.action, entry.targetType ?? null, entry.targetId ?? null, entry.result, entry.reason ?? null,
     entry.ip ?? null, entry.userAgent ?? null, entry.requestId ?? null, entry.details ? JSON.stringify(entry.details) : null,
+    orgId, orgId,
   );
 }
 

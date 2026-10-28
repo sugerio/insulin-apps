@@ -4,6 +4,7 @@ import { expiryKey } from '../../src/app/server/lib/ledger/workflow.ts'
 import type { Acme } from '../shared/engine/fixtures/acme.ts'
 import {
   OWNER_USER_ID,
+  CONSOLE_ORGANIZATION_ID,
   addDocument,
   commit,
   getJson,
@@ -43,7 +44,7 @@ const holder = holderIdentity('s27.holder@example.test')
 async function runDaily(l: LedgerHarness): Promise<number> {
   const response = await l.api('POST', l.path('/process-due'), l.sa)
   expect(response.status).toBe(200)
-  return (await l.db.prepare('SELECT id FROM expiry_runs WHERE org_id = ? ORDER BY id DESC LIMIT 1').bind(l.orgId).first<number>('id'))!
+  return (await l.db.prepare('SELECT org_seq FROM expiry_runs WHERE org_id = ? ORDER BY org_seq DESC LIMIT 1').bind(l.orgId).first<number>('org_seq'))!
 }
 
 function attention(dashboard: api.DashboardResponse) {
@@ -201,9 +202,12 @@ describe('expiry runs', () => {
     const effects = Object.fromEntries(ids.map((id, index) => [id, preview.commands[index]!.effectSha256]))
     // The second expiry fails (another request holds its child key), after the first, OPT-9, has committed.
     await l.db.prepare(
-      `INSERT INTO idempotency_keys (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 200, '{}', ?)`,
-    ).bind(crypto.randomUUID(), l.orgId, OWNER_USER_ID, 'POST /api/orgs/:orgId/expiry-runs/:runId/confirm', expiryKey('partial-confirmation', ids[1]!), '0'.repeat(64), l.clock.time).run()
+      `INSERT INTO idempotency_keys
+       (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at, console_organization_id)
+       VALUES (?, ?, ?, ?, ?, ?, 200, '{}', ?, ?)`,
+    ).bind(crypto.randomUUID(), l.orgId, OWNER_USER_ID,
+      'POST /api/orgs/:orgId/expiry-runs/:runId/confirm', expiryKey('partial-confirmation', ids[1]!),
+      '0'.repeat(64), l.clock.time, CONSOLE_ORGANIZATION_ID).run()
     const stopped = await l.api('POST', l.path(`/expiry-runs/${runId}/confirm`), l.sa, {
       expectedLedgerSeq: preview.commands[0]!.ledgerSeq, securityIds: ids, expectedEffectSha256s: effects, switchToAutomatic: true,
     }, { 'Idempotency-Key': 'partial-confirmation' })

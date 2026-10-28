@@ -144,6 +144,60 @@ async function openDatabase() {
 }
 
 describe('company import routes', () => {
+  it('keeps preview runs and commits inside their console organization', async () => {
+    await openDatabase()
+    const file = templateFile()
+    const first = await preview('template', [file])
+    expect(first.response.status).toBe(201)
+    expect(await testDb!.db.prepare(
+      'SELECT console_organization_id FROM import_runs WHERE id = ?',
+    ).bind(first.body.runId).first('console_organization_id')).toBe('console-org-1')
+    expect(await testDb!.db.prepare(
+      "SELECT console_organization_id FROM audit_events WHERE target_type = 'import_run' AND target_id = ?",
+    ).bind(first.body.runId).first('console_organization_id')).toBe('console-org-1')
+    const secondOwner = consoleHeaders({
+      organizationId: 'console-org-2', userId: 'second-import-owner', role: 'OWNER',
+      email: 'second.import.owner@example.test', name: 'Second Import Owner',
+    })
+
+    expect((await appRequest(`/api/import/runs/${first.body.runId}`, {}, secondOwner)).status).toBe(404)
+    const foreignCommit = await appRequest(`/api/import/runs/${first.body.runId}/commit`, {
+      method: 'POST', headers: { 'Idempotency-Key': 'foreign-import-commit-key' }, body: commitForm([file]),
+    }, secondOwner)
+    expect(foreignCommit.status).toBe(404)
+    expect(await appRequest(`/api/import/runs/${first.body.runId}`)).toMatchObject({ status: 200 })
+
+    const secondPreview = await appRequest('/api/import/preview', {
+      method: 'POST', body: importForm('template', [file]),
+    }, secondOwner)
+    expect(secondPreview.status).toBe(201)
+    const secondRunId = (await secondPreview.json() as api.ImportPreviewResponse).runId
+    expect((await appRequest(`/api/import/runs/${secondRunId}`)).status).toBe(404)
+    expect((await appRequest(`/api/import/runs/${secondRunId}`, {}, secondOwner)).status).toBe(200)
+  })
+
+  it('never replays an import commit receipt into another console organization', async () => {
+    await openDatabase()
+    const userId = 'opaque-user-in-two-organizations'
+    const inFirst = consoleHeaders({
+      organizationId: 'console-org-1', userId, email: 'both@example.test', name: 'Both',
+    })
+    const inSecond = consoleHeaders({
+      organizationId: 'console-org-2', userId, email: 'both@example.test', name: 'Both',
+    })
+    const file = templateFile()
+    const previewed = await appRequest('/api/import/preview', {
+      method: 'POST', body: importForm('template', [file]),
+    }, inFirst)
+    const { runId } = await previewed.json() as api.ImportPreviewResponse
+    const send = (identity: Record<string, string>) => appRequest(`/api/import/runs/${runId}/commit`, {
+      method: 'POST', headers: { 'Idempotency-Key': 'same-user-same-key' }, body: commitForm([file]),
+    }, identity)
+    expect((await send(inFirst)).status).toBe(200)
+    expect((await send(inFirst)).headers.get('Idempotent-Replay')).toBe('true')
+    expect((await send(inSecond)).status).toBe(404)
+  })
+
   it('rejects a plan whose generated D1 statement exceeds the storage ceiling', () => {
     const core = buildTemplateImportPreview(templateFile(), {
       asOfDate: AS_OF,
@@ -478,7 +532,7 @@ describe('company import routes', () => {
     expect(await resumedDb.db.prepare('SELECT COUNT(*) AS n FROM orgs').first('n')).toBe(1)
   }, 90_000)
 
-  it('lets setup win against an in-flight invisible import without exposing both companies', async () => {
+  it('keeps setup from disturbing an in-flight invisible import', async () => {
     const db = await openDatabase()
     const file = templateFile(300)
     const ready = await preview('template', [file])
@@ -499,7 +553,6 @@ describe('company import routes', () => {
     const refused = await commit(ready.body.runId, [file], 'overlap-refused')
     expect(refused.response.status).toBe(409)
     expect(refused.body.error?.message).toContain('already running')
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     const setupDuringImport = await appRequest('/api/orgs', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orgKey: 'racing-setup', legalName: 'Racing Setup, Inc.',
@@ -507,13 +560,41 @@ describe('company import routes', () => {
     })
     release()
     const completed = await winner
-    expect(setupDuringImport.status, await setupDuringImport.clone().text()).toBe(201)
-    expect(completed.response.status).toBe(409)
-    expect(await db.db.prepare('SELECT status FROM import_runs WHERE id = ?').bind(ready.body.runId).first('status')).toBe('failed')
+    expect(setupDuringImport.status, await setupDuringImport.clone().text()).toBe(409)
+    expect(await setupDuringImport.json()).toMatchObject({
+      error: { message: expect.stringContaining('import is already running') },
+    })
+    expect(completed.response.status).toBe(200)
+    expect(await db.db.prepare('SELECT status FROM import_runs WHERE id = ?').bind(ready.body.runId).first('status')).toBe('committed')
     expect(await db.db.prepare("SELECT COUNT(*) AS n FROM orgs WHERE status = 'active'").first('n')).toBe(1)
     expect(await db.db.prepare("SELECT COUNT(*) AS n FROM orgs WHERE status = 'importing'").first('n')).toBe(0)
     expect(await db.db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE action = 'import.failed' AND target_id = ?")
-      .bind(ready.body.runId).first('n')).toBe(1)
-    logged.mockRestore()
+      .bind(ready.body.runId).first('n')).toBe(0)
+  }, 60_000)
+
+  it('reports a concurrent second import as a company race', async () => {
+    await openDatabase()
+    const file = templateFile(300)
+    const firstRun = await preview('template', [file])
+    const secondRun = await preview('template', [file])
+    let release!: () => void
+    let reached!: () => void
+    const paused = new Promise<void>((resolve) => { release = resolve })
+    const entered = new Promise<void>((resolve) => { reached = resolve })
+    let held = false
+    pauseImportBatchForTests(async (batchIndex) => {
+      if (batchIndex === 0 && !held) {
+        held = true
+        reached()
+        await paused
+      }
+    })
+    const first = commit(firstRun.body.runId, [file], 'concurrent-first-import')
+    await entered
+    const second = await commit(secondRun.body.runId, [file], 'concurrent-second-import')
+    expect(second.response.status).toBe(409)
+    expect(second.body.error?.message).toBe('Another import or setup changed the company. Check it and try again.')
+    release()
+    expect((await first).response.status).toBe(200)
   }, 60_000)
 })

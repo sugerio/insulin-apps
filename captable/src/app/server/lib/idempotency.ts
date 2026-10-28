@@ -4,6 +4,7 @@ import { findIdempotency, idempotencyInsert, requestHash, type IdempotencyRow } 
 import type { AppEnv } from "../types.ts";
 
 export interface IdempotencyContext {
+  consoleOrganizationId: string;
   scope: string;
   actor: string;
   route: string;
@@ -41,7 +42,7 @@ export async function recoverIdempotency(
   try {
     return await operation();
   } catch (error) {
-    const row = await findIdempotency(db, mutation.scope, mutation.actor, mutation.route, mutation.key);
+    const row = await findIdempotency(db, mutation.consoleOrganizationId, mutation.scope, mutation.actor, mutation.route, mutation.key);
     if (row) return compareReceipt(row, mutation.requestHash);
     throw error;
   }
@@ -57,10 +58,14 @@ export async function prepareIdempotency(
   if (key.length < 8 || key.length > 200) {
     throw new ApiError("validation_failed", "Idempotency-Key must be 8–200 characters");
   }
-  const actor = c.get("auth").user.id;
+  const auth = c.get("auth");
+  const actor = auth.user.id;
   const hash = await requestHash(c.req.method, c.req.path, [body]);
-  const previous = await findIdempotency(c.env.DB, scope, actor, route, key);
-  return { scope, actor, route, key, requestHash: hash, replay: previous ? compareReceipt(previous, hash) : null };
+  const previous = await findIdempotency(c.env.DB, auth.consoleOrganizationId, scope, actor, route, key);
+  return {
+    consoleOrganizationId: auth.consoleOrganizationId,
+    scope, actor, route, key, requestHash: hash, replay: previous ? compareReceipt(previous, hash) : null,
+  };
 }
 
 /** Adds the immutable receipt to the mutation batch and recovers a concurrent same-key winner as a replay. */
@@ -77,13 +82,14 @@ export async function commitIdempotent(
     await db.batch([
       ...statements,
       idempotencyInsert(db, {
-        id: crypto.randomUUID(), scope: mutation.scope, actor: mutation.actor, route: mutation.route,
+        id: crypto.randomUUID(), consoleOrganizationId: mutation.consoleOrganizationId,
+        scope: mutation.scope, actor: mutation.actor, route: mutation.route,
         key: mutation.key, requestHash: mutation.requestHash, status, body: responseBody, now,
       }),
     ]);
     return null;
   } catch (error) {
-    const raced = await findIdempotency(db, mutation.scope, mutation.actor, mutation.route, mutation.key);
+    const raced = await findIdempotency(db, mutation.consoleOrganizationId, mutation.scope, mutation.actor, mutation.route, mutation.key);
     if (raced) return compareReceipt(raced, mutation.requestHash);
     throw error;
   }
@@ -99,11 +105,11 @@ export async function commitIdempotentWithReceipt(
   try {
     await db.batch([...statements, receipt]);
   } catch (error) {
-    const raced = await findIdempotency(db, mutation.scope, mutation.actor, mutation.route, mutation.key);
+    const raced = await findIdempotency(db, mutation.consoleOrganizationId, mutation.scope, mutation.actor, mutation.route, mutation.key);
     if (raced) return compareReceipt(raced, mutation.requestHash);
     throw error;
   }
-  const stored = await findIdempotency(db, mutation.scope, mutation.actor, mutation.route, mutation.key);
+  const stored = await findIdempotency(db, mutation.consoleOrganizationId, mutation.scope, mutation.actor, mutation.route, mutation.key);
   if (!stored) throw new Error("Committed idempotency receipt was not found");
   return receiptResponse(stored, false);
 }

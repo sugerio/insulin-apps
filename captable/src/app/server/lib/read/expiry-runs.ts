@@ -29,14 +29,14 @@ interface RunMeta {
   proposal_count: number | null;
 }
 
-const RUN_META = `id, created_at AS started_at, local_date, confirmed_at,
+const RUN_META = `org_seq AS id, created_at AS started_at, local_date, confirmed_at,
   json_extract(confirmation, '$.reservedAt') AS reserved_at, confirmation IS NOT NULL AS reserved,
   json_array_length(candidates) AS proposal_count`;
 const REPORT_ONLY_RUNS = "org_id = ?1";
 
 /** The company's newest report-only run's metadata. */
 async function newestRun(ctx: ReadContext): Promise<RunMeta | null> {
-  return ctx.db.prepare(`SELECT ${RUN_META} FROM expiry_runs WHERE ${REPORT_ONLY_RUNS} ORDER BY id DESC LIMIT 1`).bind(ctx.org.id).first<RunMeta>();
+  return ctx.db.prepare(`SELECT ${RUN_META} FROM expiry_runs WHERE ${REPORT_ONLY_RUNS} ORDER BY org_seq DESC LIMIT 1`).bind(ctx.org.id).first<RunMeta>();
 }
 
 /**
@@ -81,10 +81,10 @@ export async function pendingExpiryRuns(ctx: ReadContext): Promise<number> {
  * today (the confirmation's dry run computes the same candidates: `engine.expiryCandidates` on today's state).
  */
 export async function expiryRunDetail(ctx: ReadContext, runId: number): Promise<api.ExpiryRunDetail> {
-  // One run by org and id (the primary key), plus the newest run's id for its state.
+  // One run by org and its tenant-local id, plus the newest run's local id for its state.
   const [found, newest] = await ctx.db.batch([
-    ctx.db.prepare(`SELECT ${RUN_META}, candidates, confirmed_by FROM expiry_runs WHERE ${REPORT_ONLY_RUNS} AND id = ?2`).bind(ctx.org.id, runId),
-    ctx.db.prepare(`SELECT id FROM expiry_runs WHERE ${REPORT_ONLY_RUNS} ORDER BY id DESC LIMIT 1`).bind(ctx.org.id),
+    ctx.db.prepare(`SELECT ${RUN_META}, candidates, confirmed_by FROM expiry_runs WHERE ${REPORT_ONLY_RUNS} AND org_seq = ?2`).bind(ctx.org.id, runId),
+    ctx.db.prepare(`SELECT org_seq AS id FROM expiry_runs WHERE ${REPORT_ONLY_RUNS} ORDER BY org_seq DESC LIMIT 1`).bind(ctx.org.id),
   ]);
   const row = ((found?.results ?? []) as (RunMeta & { candidates: string; confirmed_by: string | null })[])[0];
   if (!row) throw notFound("Expiry run not found");

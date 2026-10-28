@@ -587,6 +587,9 @@ export const election83bListSchema = listSchema(election83bSchema);
 // ---------------------------------------------------------------------------
 // Audit log
 
+/** Console and gateway user ids are opaque stable strings, not necessarily UUIDs. */
+export const opaqueUserIdSchema = z.string().min(1).max(128);
+
 /** An audit event: ids, field names and counts in `details`, never personal values (the ledger rules). */
 export const auditEventSchema = z.object({
   id: integerIdSchema,
@@ -594,7 +597,7 @@ export const auditEventSchema = z.object({
   orgId: uuidSchema.nullable(),
   actor: z.object({
     kind: auditActorKindSchema,
-    userId: uuidSchema.nullable(),
+    userId: opaqueUserIdSchema.nullable(),
     email: z.string().nullable(), // masked for RO admins outside readOnlyPii
     authMethod: authMethodSchema.nullable(),
   }),
@@ -614,7 +617,7 @@ export type AuditPage = z.infer<typeof auditPageSchema>;
 /** `GET …/audit?cursor=&limit=&action=&actorId=&targetId=&actorType=`: the org's audit log, newest first. */
 export const orgAuditQuerySchema = z.object({
   action: z.string().trim().min(1).max(64).optional(),
-  actorId: uuidSchema.optional(),
+  actorId: opaqueUserIdSchema.optional(),
   targetId: z.string().trim().min(1).max(64).optional(),
   actorType: auditActorKindSchema.optional(),
   ...pageQueryShape,

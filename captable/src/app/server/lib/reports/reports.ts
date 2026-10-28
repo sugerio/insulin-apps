@@ -2,7 +2,7 @@ import { api, engine } from "#shared";
 import { ApiError } from "../http.ts";
 import { holdingsView, replayed, type ReadContext } from "../read/context.ts";
 import { READ_HANDLERS, type ReadInput } from "../read/handlers.ts";
-import { auditJson } from "../read/records.ts";
+import { AUDIT_ROW_COLUMNS, auditJson } from "../read/records.ts";
 import { securityVesting } from "../read/securities.ts";
 import type { XlsxCell, XlsxSheet } from "./xlsx.ts";
 import { xlsxDate, xlsxDecimal } from "./xlsx.ts";
@@ -480,10 +480,10 @@ interface AuditDatabaseRow {
   details: string | null;
 }
 
-export const AUDIT_PAGE_SQL = `SELECT * FROM audit_events
-  WHERE org_id = ?1 AND occurred_at = ?3 AND occurred_at >= ?2 AND id <= ?4
+export const AUDIT_PAGE_SQL = `SELECT ${AUDIT_ROW_COLUMNS} FROM audit_events
+  WHERE org_id = ?1 AND occurred_at = ?3 AND occurred_at >= ?2 AND org_seq <= ?4
   UNION ALL
-  SELECT * FROM audit_events
+  SELECT ${AUDIT_ROW_COLUMNS} FROM audit_events
   WHERE org_id = ?1 AND occurred_at >= ?2 AND occurred_at < ?3
   ORDER BY occurred_at DESC, id DESC LIMIT 201`;
 export const AUDIT_FIRST_CURSOR_ID = Number.MAX_SAFE_INTEGER;
@@ -526,7 +526,7 @@ async function auditReport(ctx: ReadContext, query: ReportParameters): Promise<B
   let beforeId = AUDIT_FIRST_CURSOR_ID;
   let hasMore: boolean;
   do {
-    // The composite cursor matches audit_events_org_occurred, including when many events share one millisecond.
+    // The composite cursor matches audit_events_org_occurred_seq, including when many events share one millisecond.
     const response: D1Result<AuditDatabaseRow> = await ctx.db.prepare(
       AUDIT_PAGE_SQL,
     ).bind(ctx.org.id, start, beforeOccurredAt, beforeId).all<AuditDatabaseRow>();

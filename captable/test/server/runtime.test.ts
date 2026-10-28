@@ -62,7 +62,7 @@ describe('console identity and one-company setup', () => {
   })
 
   it('keeps the one-company invariant inside the setup batch', async () => {
-    await testDb.db.exec('DROP INDEX orgs_one_active')
+    await testDb.db.exec('DROP INDEX orgs_one_active_per_console_organization')
     const create = (orgKey: string, userId: string) => jsonRequest('/api/orgs', 'POST', {
       orgKey, legalName: `${orgKey} Example, Inc.`, displayName: orgKey, timezone: 'UTC',
     }, consoleHeaders({ userId, email: `${userId}@example.test` }))

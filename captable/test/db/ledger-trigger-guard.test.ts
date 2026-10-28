@@ -81,7 +81,7 @@ function triggersOn(table: string): string {
 describe('the ledger trigger guard', { timeout: 60_000 }, () => {
   it("passes the app's migrations", () => {
     const { status, output } = guard()
-    expect(output).toContain('keep all 74 triggers')
+    expect(output).toContain('keep all 81 triggers')
     expect(status).toBe(0)
   })
 
@@ -107,7 +107,7 @@ describe('the ledger trigger guard', { timeout: 60_000 }, () => {
 
   it('accepts a trigger removed on purpose with DROP TRIGGER', () => {
     const folder = migrationsWith({ tag: '0002_drop_guard', sql: 'DROP TRIGGER IF EXISTS "valuation_prices_immutable_delete";' })
-    expect(guard(folder)).toMatchObject({ status: 0, output: expect.stringContaining('keep all 73 triggers') })
+    expect(guard(folder)).toMatchObject({ status: 0, output: expect.stringContaining('keep all 80 triggers') })
   })
 
   it('refuses a rebuild that cannot apply, because another trigger refers to the table', () => {

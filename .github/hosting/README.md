@@ -92,10 +92,11 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
 5. Onboard the sending domain with Cloudflare Email Service. Set `EMAIL_FROM` to an approved sender, either as a bare
    address or `Display Name <address>`.
 
-6. Nothing to do in DNS. The deploy attaches the apex, `www`, `auth` and app hostnames to the gateway as Worker custom
-   domains, and Wrangler, running non-interactively, replaces any A, AAAA or CNAME records already on those exact
-   hostnames (leftover parking records, for example). MX and TXT records are left alone. Don't add DNS records for
-   these hostnames by hand.
+6. Before the first deployment, delete every A, AAAA and CNAME record on the apex, `www`, `auth` and app hostnames
+   (a registrar's parking records, for example). Cloudflare refuses to attach a Worker custom domain to a hostname
+   that has records it didn't create ("externally managed DNS records", code 100117). Keep MX and TXT records. The
+   deploy then attaches every hostname to the gateway and creates its DNS records; don't add records for these
+   hostnames by hand.
 
 Manually run the `Gateway` workflow on `main` once setup is complete, then manually run each app workflow on `main`.
 Step summaries link the affected public addresses.
@@ -141,8 +142,12 @@ matching push to `main` will otherwise deploy the current repository state.
 - **A workflow says the deploy is not configured:** add `CLOUDFLARE_API_TOKEN` to the `production` environment.
 - **App preflight lists a missing setting:** add `CLOUDFLARE_ACCOUNT_ID`. Gateway preflight also requires its
   Turnstile and email settings; a Google client ID requires its client secret.
-- **A custom domain fails:** check the token's permissions (Workers Scripts and, on the zone, Workers Routes and Zone
-  read) and that the hostname is not attached to another Worker. Do not create manual replacement records.
+- **A custom domain fails with "externally managed DNS records" (code 100117):** delete the A, AAAA or CNAME records
+  on that hostname, then run the `Gateway` workflow again. Otherwise check the token's permissions (Workers Scripts
+  and, on the zone, Workers Routes and Zone read) and that the hostname is not attached to another Worker. Do not
+  create manual replacement records.
+- **The first gateway deploy says an app Worker was not found (code 10143):** the gateway raced a new app's first
+  deploy. The app's own workflow refreshes the gateway once the app is deployed, or run `Gateway` again.
 - **An app deploy cannot prove the Worker is private:** check the account and zone permissions, the `SITE_DOMAIN`
   value, and the reported Cloudflare API error. The deploy deliberately stops if any lookup, removal, or verification
   is incomplete.

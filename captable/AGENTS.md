@@ -194,7 +194,8 @@ web sources for these, and for links or assets from other sites.
 
 ## Docs
 
-When behaviour changes, update the guide that describes it: `README.md`, `docs/using-cap-table.md`, `docs/importing.md`,
+The in-app Docs are required, as for every app in this repository: keep the **Docs** entry open to every role, before
+setup too. When behaviour changes, update the guide that describes it: `README.md`, `docs/using-cap-table.md`, `docs/importing.md`,
 `docs/architecture.md` or `src/app/db/README.md`, and the in-app Docs topic in `src/app/pages/docs/` that users read. The
 in-app Docs describe only what the app does, in plain words, and their equity topics stay general information, not
 advice.

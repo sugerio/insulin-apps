@@ -25,6 +25,19 @@ npm test
 npm run typecheck
 ```
 
+## Adding an app
+
+Each app is a top-level directory with its own `README.md` and `AGENTS.md`, and it must:
+
+- follow the Insulin app layout and pass `node .github/scripts/check-insulin-app.mjs <app>`;
+- ship **in-app Docs**, which are required by default: a **Docs** entry in the app's navigation that every role can
+  open, before setup too. It explains in plain words how to use the app and gives the background a business user needs
+  for its domain. Cap Table's `src/app/pages/docs/` shows the pattern: one static page per topic, describing only what
+  the app does, updated in the same change as the behaviour it describes, and covered by tests;
+- use synthetic data only, in code, tests and docs.
+
+Add the app to the table above, and read [`AGENTS.md`](AGENTS.md) for the full checklist.
+
 ## Checks
 
 They live in `.github/scripts/`, next to the workflow that runs them; CI runs them with each app's typecheck, tests,
@@ -43,8 +56,8 @@ migration check and Cloudflare build.
 
 ## Contributing
 
-Use synthetic data only (example.com or `.test` addresses, fictional people and companies), and read the app's
-`AGENTS.md` before changing it.
+Use synthetic data only (example.com or `.test` addresses, fictional people and companies), and read the repository's
+[`AGENTS.md`](AGENTS.md) and the app's own `AGENTS.md` before changing anything.
 
 ## License
 

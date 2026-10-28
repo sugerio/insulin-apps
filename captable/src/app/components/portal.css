@@ -1,0 +1,23 @@
+/* The holder portal, on the house tokens. The
+   portal is mobile-first: every grid collapses to one column on a phone. */
+.port-hero { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.port-hero h1 { margin: 2px 0 0; }
+.port-switch { margin-top: 10px; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.main .grid-2 > .card { margin-top: 0; }
+.main .card + .banner { margin-top: 16px; }
+.stack-8 { display: flex; flex-direction: column; gap: 8px; }
+ol.howto { padding-left: 22px; display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+ol.howto li { line-height: 1.5; }
+.howto-text { white-space: pre-line; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); }
+.portal-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.portal-page { min-width: 0; }
+.portal-foot .spacer { flex: 1; }
+.preview-banner { display: flex; gap: 12px; align-items: flex-start; padding: 16px 20px; border-radius: 8px; background: var(--info-soft); color: var(--info-text); border: 1px solid var(--info-border); margin-bottom: 18px; }
+.preview-frame { border: 1px dashed var(--border-strong); border-radius: 10px; padding: 16px; background: var(--bg); }
+.select-line { display: flex; flex-direction: column; gap: 4px; max-width: 260px; font-size: 13px; }
+@media (max-width: 720px) {
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  .port-hero { align-items: flex-start; }
+}
+.org-name .muted, .sidebar-foot .muted { color: var(--muted); font-weight: 500; }

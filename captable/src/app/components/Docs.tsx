@@ -1,6 +1,6 @@
 import "./docs.css";
 import { useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, NavigationType, useLocation, useNavigationType } from "react-router";
 import { DocsBaseContext, type DocTopic } from "../pages/docs/parts.tsx";
 import { DOC_TOPICS } from "../pages/docs/topics.ts";
 import { Banner } from "./Feedback.tsx";
@@ -8,7 +8,9 @@ import { Banner } from "./Feedback.tsx";
 // The in-app Docs, the same in every frame (the admin workspace, the holder's portfolio and the standalone pages): the
 // topic list beside the topic, which opens with its title, the "On this page" list of its sections and, on equity and
 // tax topics, the note that it is general information. Every heading has an id, so a section can be linked from another
-// topic (`…/docs/equity-basics#vesting`); arriving on one scrolls it into view and moves the focus to it.
+// topic (`…/docs/equity-basics#vesting`). Following a link in the app moves the focus to where it leads: the topic's
+// title, or the section it names. Loading the page leaves the focus where the browser put it, and only scrolls to the
+// section the address names.
 
 const GROUPS = [["app", "Using Cap Table"], ["equity", "Equity and cap tables"]] as const;
 
@@ -26,21 +28,24 @@ export function Docs({ base, topic }: { base: string; topic: DocTopic }) {
   const layout = useRef<HTMLDivElement>(null);
   const article = useRef<HTMLElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
-  // The topic shown before this render: a new topic takes the focus to its title, a first render leaves the focus alone.
-  const shown = useRef<string | null>(null);
+  // How the reader arrived: by a link in the app (a push), or by loading the page or being redirected on load.
+  const navigationType = useNavigationType();
+  const arrival = useRef<{ key: string; byLink: boolean } | null>(null);
+  if (arrival.current === null) arrival.current = { key: location.key, byLink: navigationType === NavigationType.Push };
   useEffect(() => {
-    const previous = shown.current;
-    shown.current = topic.slug;
+    const { key, byLink } = arrival.current!;
+    // Every move inside the docs moves the focus; on arrival, only a link in the app does.
+    const moveFocus = location.key !== key || byLink;
     const id = hashId(location.hash);
     const target = id ? document.getElementById(id) : null;
     if (target && article.current?.contains(target)) {
       target.scrollIntoView?.({ block: "start" });
-      target.focus({ preventScroll: true });
+      if (moveFocus) target.focus({ preventScroll: true });
       return;
     }
     // A topic chosen further down the page starts at its top.
     if ((layout.current?.getBoundingClientRect().top ?? 0) < 0) window.scrollTo?.(0, 0);
-    if (previous !== null && previous !== topic.slug) title.current?.focus({ preventScroll: true });
+    if (moveFocus) title.current?.focus({ preventScroll: true });
   }, [topic.slug, location.hash, location.key]);
 
   const index = DOC_TOPICS.indexOf(topic);

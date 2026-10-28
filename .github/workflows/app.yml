@@ -103,7 +103,7 @@ jobs:
     if: >-
       always() && inputs.deploy && needs.checks.result == 'success' &&
       (needs['workerd-smoke'].result == 'success' || needs['workerd-smoke'].result == 'skipped')
-    name: Deploy ${{ inputs.app }}
+    name: Deploy
     needs: [checks, workerd-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 20

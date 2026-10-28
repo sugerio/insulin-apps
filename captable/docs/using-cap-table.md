@@ -50,8 +50,8 @@ The sidebar:
 thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.
 Before anything is saved, Cap Table shows a review of exactly what will change, including any problem that stops it.
 
-Your name and role are in the menu at the top right. If you also hold equity, **My portfolio** there opens your own
-holder view.
+Your name and role are in the menu at the top right. If you also hold equity, you can't record changes to your own
+stakeholder record or holdings: another owner or admin has to.
 
 ## Processing due items
 

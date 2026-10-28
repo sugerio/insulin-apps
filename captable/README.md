@@ -91,8 +91,8 @@ Cap Table uses the roles people have on the app in the Insulin console. There ar
   console account as the person's own address (not as a contact for an institution); capitals don't matter. If someone
   sees no holdings, add their console e-mail address to their stakeholder record.
 - **Owners and admins need an e-mail address on their console profile** to make changes.
-- **Owners and admins who hold equity** see their own holdings too (**My portfolio** in the top-right menu), but can't
-  record changes to them: another owner or admin has to.
+- **Owners and admins who hold equity** can't record changes to their own stakeholder record or holdings: another
+  owner or admin has to. They see their holdings in the cap table itself; the holder view is for Users and Viewers.
 - **About the Editor role:** in the console, an editor can also publish the app from the AppBuilder, which is much more
   than viewing. Give it only to people you would trust with the whole cap table.
 

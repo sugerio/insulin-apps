@@ -65,6 +65,10 @@ export function AppLayout() {
   const current = activeNav(companyRest);
   const canWrite = company !== null && workspaceWrite?.orgId === company.id && workspaceWrite.canWrite;
   const portfolio = company && holdings.length ? `/portfolio/${company.id}` : null;
+  // The docs open inside the navigation they are chosen from: the portfolio's, the workspace's, or on their own pages
+  // for someone with neither (an owner setting up the company).
+  const docs = portal && portfolio ? `${portfolio}/docs` : !portal && companyBase ? `${companyBase}/docs` : "/docs";
+  const inDocs = location.pathname === docs || location.pathname.startsWith(`${docs}/`);
 
   function toggleTheme() {
     const root = document.documentElement;
@@ -95,7 +99,7 @@ export function AppLayout() {
         {navigationOpen ? <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setNavigationOpen(false)} /> : null}
         <aside className={`sidebar${navigationOpen ? " sidebar-open" : ""}`}>
           {canWrite && !portal ? <button className="new-button" type="button" onClick={() => { setNewPanel(true); setNavigationOpen(false); }}><Icon name="plus" /> New</button> : null}
-          {portal ? <PortalNav base={portfolio} onNavigate={() => setNavigationOpen(false)} /> : <div className="nav-title">ESSENTIALS</div>}
+          {portal ? <PortalNav base={portfolio} onNavigate={() => setNavigationOpen(false)} /> : companyBase ? <div className="nav-title">ESSENTIALS</div> : null}
           {portal || !companyBase ? null : <nav aria-label="Primary">
             {adminNav.map((item) => {
               const inGroup = current.group === item.key;
@@ -131,6 +135,13 @@ export function AppLayout() {
               );
             })}
           </nav>}
+          {/* Last, in its own section, for everyone: the guide to the app and to equity. */}
+          <div className="nav-title">HELP</div>
+          <nav aria-label="Help">
+            <Link className={inDocs ? "nav-item active" : "nav-item"} to={docs} aria-current={inDocs ? "page" : undefined} onClick={() => setNavigationOpen(false)}>
+              <Icon name="book" /><span>Docs</span>
+            </Link>
+          </nav>
           <div className="sidebar-foot">
             {portal ? (
               <>

@@ -1,0 +1,79 @@
+/* The in-app Docs: the topic list beside the topic, on the tokens in app.css and workspace.css (light and dark alike).
+   Long reading gets the darker body text and a comfortable line length. */
+.docs-layout { display: grid; grid-template-columns: 220px minmax(0, 880px); gap: 24px; align-items: start; }
+
+/* The topic list */
+.docs-topics { position: sticky; top: calc(var(--topbar) + 20px); display: flex; flex-direction: column; gap: 16px; }
+.main .docs-topic-label { margin: 0 0 4px; padding: 0 10px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.docs-topics ul { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.main .docs-topics a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--text-2); font-size: 13.5px; }
+.main .docs-topics a:hover { background: var(--surface); text-decoration: none; }
+.main .docs-topics a.active { background: var(--primary-soft); color: var(--primary); font-weight: 650; }
+
+/* The topic */
+.main .docs-article { padding: 28px 32px 24px; }
+.docs-article h1 { font-size: 26px; }
+/* A link that lands on a heading or a glossary term gives it the focus: they aren't controls, so no ring; a term is tinted. */
+.docs-article [tabindex="-1"]:focus { outline: none; }
+.docs-glossary dt:focus { color: var(--primary); }
+.docs-article h1, .docs-article h2, .docs-article h3, .docs-glossary dt { scroll-margin-top: calc(var(--topbar) + 16px); }
+.main .docs-article p, .docs-article li, .docs-article dd { color: var(--text-2); font-size: 14.5px; line-height: 1.65; }
+.main .docs-article p { margin: 0 0 12px; }
+.docs-article ul, .docs-article ol { margin: 0 0 12px; padding-left: 22px; }
+.docs-article li + li { margin-top: 6px; }
+.docs-article b { color: var(--text); font-weight: 650; }
+.main .docs-article .docs-lead { margin: 6px 0 18px; color: var(--muted); font-size: 15px; }
+.docs-article .banner { margin: 0 0 18px; }
+.docs-section h2 { margin: 28px 0 10px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 19px; }
+.main .docs-article h3 { margin: 20px 0 6px; font-size: 15.5px; }
+
+/* On this page */
+.docs-toc { margin: 0 0 4px; padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.main .docs-article .docs-toc-title { margin: 0 0 6px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.docs-article .docs-toc ul { margin: 0; padding-left: 18px; columns: 2; column-gap: 32px; }
+.docs-article .docs-toc li { break-inside: avoid; margin: 0; padding: 2px 0; font-size: 13.5px; }
+.docs-article .docs-toc.compact ul { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; columns: auto; list-style: none; }
+.main .docs-toc.compact a { display: inline-flex; min-width: 32px; height: 32px; align-items: center; justify-content: center; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-weight: 650; }
+.main .docs-toc.compact a:hover { border-color: var(--primary); text-decoration: none; }
+
+/* Tables, examples, "In Cap Table" and the glossary */
+.docs-table { margin: 4px 0 14px; border: 1px solid var(--border); }
+.docs-table table.tbl th, .docs-table table.tbl td { position: static; height: auto; padding: 10px 14px; vertical-align: top; white-space: normal; line-height: 1.5; font-size: 13.5px; }
+.docs-table table.tbl thead th { background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600; }
+.docs-table table.tbl tbody th { background: none; color: var(--text); font-weight: 600; text-align: left; border-bottom: 1px solid var(--border); }
+.docs-table table.tbl tbody tr:last-child th, .docs-table table.tbl tbody tr:last-child td { border-bottom: 0; }
+.docs-table table.tbl tbody tr:hover td { background: none; }
+.docs-example { margin: 4px 0 14px; padding: 14px 18px; border-left: 3px solid var(--primary-button); border-radius: 0 var(--radius) var(--radius) 0; background: var(--surface-2); }
+.main .docs-article .docs-example-t { margin: 0 0 6px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.main .docs-article .docs-example p:last-child { margin-bottom: 0; }
+.docs-example .docs-table { margin: 0; background: var(--surface); }
+.main .docs-article .docs-inapp { margin: 6px 0 0; padding: 12px 16px; border-radius: var(--radius); background: var(--primary-softer); }
+.docs-glossary { margin: 0; }
+.docs-glossary > div { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.docs-glossary > div:last-child { border-bottom: 0; }
+.docs-glossary dt { color: var(--text); font-size: 14.5px; font-weight: 650; }
+.docs-glossary dd { margin: 4px 0 0; }
+
+/* Previous and next */
+.docs-pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border); }
+.main .docs-pager a { display: flex; flex-direction: column; gap: 2px; max-width: 48%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); }
+.main .docs-pager a:hover { border-color: var(--primary); text-decoration: none; }
+.main .docs-pager .docs-pager-next { margin-left: auto; text-align: right; }
+.docs-pager-k { color: var(--muted); font-size: 12px; }
+.docs-pager-t { color: var(--link); font-weight: 650; }
+
+/* Narrow screens: the topic list above the topic, as rows of pills. */
+@media (max-width: 1024px) {
+  .docs-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .docs-topics { position: static; gap: 10px; }
+  .docs-topics ul { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .main .docs-topics a { padding: 5px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); font-size: 13px; }
+  .main .docs-topics a.active { border-color: transparent; }
+}
+@media (max-width: 760px) {
+  .main .docs-article { padding: 20px 16px; }
+  .docs-article h1 { font-size: 22px; }
+  .docs-article .docs-toc ul { columns: 1; }
+  .docs-pager { flex-direction: column; }
+  .main .docs-pager a { max-width: none; }
+}

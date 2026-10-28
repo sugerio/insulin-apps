@@ -41,7 +41,7 @@ export const equityBasics: DocTopic = {
             <li><b>Authorized shares</b> are the most shares of each class the company may issue. The number is set in the company's charter (for a US corporation, its certificate of incorporation), and raising it usually needs the approval of the board and the stockholders.</li>
             <li><b>Issued shares</b> are the shares the company has actually issued to someone.</li>
             <li><b>Outstanding shares</b> are issued shares that stockholders still hold. Shares the company has bought back aren't outstanding.</li>
-            <li><b>Fully diluted shares</b> add everything that could become shares: options and warrants as if they were exercised, preferred stock as if converted into common, and usually the shares still available to grant in the equity plan. A holder's fully diluted ownership is their share of that larger number. Definitions differ from one agreement to another, so check how a document defines it.</li>
+            <li><b>Fully diluted shares</b> also count shares that could be issued later. It is a convention, and agreements define it in different ways; usually it counts options and warrants as if they were exercised, preferred stock as if converted into common, and the shares still available to grant in the equity plan. A holder's fully diluted ownership is their share of that larger number, so check how a document defines it.</li>
           </ul>
           <Example>
             <DocTable
@@ -60,8 +60,9 @@ export const equityBasics: DocTopic = {
           </Example>
           <InApp>
             Issued and outstanding is one figure: the issued shares that stockholders still hold. Fully diluted counts those shares
-            (preferred as converted into common), outstanding options and warrants as if exercised, and the shares still available
-            in the equity plans. SAFEs aren't counted until they convert, because the number of shares they will become isn't known until then.
+            as converted into common (a share class can be marked to be left out), outstanding options and warrants as if exercised,
+            and the shares still available in the equity plans. SAFEs count only once they convert, because the number of shares they
+            will become isn't known until then.
           </InApp>
         </>
       ),
@@ -162,19 +163,21 @@ export const equityBasics: DocTopic = {
             (NSOs)</b>. The difference is mainly how they are taxed. At a high level:
           </p>
           <ul>
-            <li><b>NSOs</b> can be granted to employees, directors, advisors and consultants. When an NSO is exercised, the spread is generally taxed as ordinary income, and for employees the company usually withholds tax through payroll.</li>
-            <li><b>ISOs</b> can be granted only to employees. Exercising an ISO generally doesn't trigger regular income tax, but the spread can count toward the alternative minimum tax (AMT). If the shares are then kept long enough after the grant and the exercise, the gain when they are sold may be taxed as a long-term capital gain.</li>
+            <li><b>NSOs</b> can be granted to employees, directors, advisors and consultants. When an NSO is exercised for vested shares, the spread is generally taxed as ordinary income, and for employees the company usually withholds tax through payroll. Shares that are still unvested when received (after an early exercise), and the rare option with a readily determinable value of its own, follow different timing rules.</li>
+            <li><b>ISOs</b> can be granted only to employees. Exercising an ISO generally doesn't trigger regular income tax, but the spread can count toward the alternative minimum tax (AMT). If the shares are sold more than two years after the grant and more than one year after the exercise, the gain is generally a long-term capital gain. A sale before both dates is a <b>disqualifying disposition</b>: the gain, up to the spread at exercise, is generally taxed as ordinary income, and the rest of the gain or loss is a capital gain or loss.</li>
           </ul>
           <p>ISOs come with limits, including:</p>
           <ul>
-            <li><b>$100,000 a year.</b> Options are ISOs only for shares worth up to $100,000 (valued on the grant date) that first become exercisable in any one calendar year. Anything above that is treated as NSOs.</li>
-            <li><b>Three months after leaving.</b> To keep ISO treatment, an ISO generally has to be exercised within three months after employment ends (different rules apply after a disability or death). An ISO exercised later is treated as an NSO, even if the grant still allows exercising.</li>
-            <li><b>Large holders.</b> For someone who owns more than 10% of the company's voting power, an ISO needs an exercise price of at least 110% of fair market value and a term of no more than five years.</li>
+            <li><b>$100,000 a year.</b> Only $100,000 worth of shares, valued on each grant date, can first become exercisable as ISOs in one calendar year. The limit counts all of the employee's ISOs from the company and its parent or subsidiary companies, in the order they were granted; anything above it is treated as NSOs.</li>
+            <li><b>After leaving.</b> To keep ISO treatment, an ISO generally has to be exercised within three months after employment ends, or within one year if it ended because of a permanent and total disability. After the holder's death, special rules let the estate or heirs exercise it as an ISO for as long as the option itself allows. An ISO exercised outside these limits is treated as an NSO, even if the grant still allows exercising.</li>
+            <li><b>Large holders.</b> For someone who owns more than 10% of the voting power of all classes of stock of the company, or of its parent or a subsidiary (counting shares attributed to them, such as shares held by close family or by entities they own), an ISO needs an exercise price of at least 110% of fair market value and a term of no more than five years.</li>
           </ul>
+          <p>IRS Publication 525 explains these rules in more detail.</p>
           <InApp>
-            Each option grant is an ISO or an NSO. The ISO/NSO split shows how an ISO grant divides under the $100,000 limit, by
-            the year its options first become exercisable. After a termination, an option shows its ISO deadline next to its exercise
-            deadline, and ISO options exercised after the ISO deadline are recorded as NSO.
+            Each option grant is an ISO or an NSO. The ISO/NSO split applies the $100,000 limit to a holder's ISO grants in the order
+            they were granted, year by year. Recording an ISO asks whether the holder owns more than 10%, and applies the 110% and
+            five-year rules if so. After a termination, an option shows its ISO deadline next to its exercise deadline, and ISO
+            options exercised after the ISO deadline are recorded as NSO.
           </InApp>
         </>
       ),
@@ -186,20 +189,21 @@ export const equityBasics: DocTopic = {
         <>
           <p>
             <b>Restricted stock</b> is stock you own from the start but that vests over time. If you leave before it vests, the
-            company can usually buy back the unvested shares (see <DocLink to="equity-basics" section="repurchase-rights">Repurchase
-            rights</DocLink>). Founders often hold their shares this way, and exercising options before they vest (early exercise,
-            when a grant allows it) also gives you restricted stock.
+            unvested shares are usually forfeited or subject to a company repurchase right, as the grant or purchase agreement says
+            (see <DocLink to="equity-basics" section="repurchase-rights">Repurchase rights</DocLink>). Founders often hold their
+            shares this way, and exercising options before they vest (early exercise, when a grant allows it) also gives you
+            restricted stock.
           </p>
           <p>
-            In the US, restricted stock is normally taxed as it vests, on what the shares are worth at each vesting date. An{" "}
-            <b>83(b) election</b> lets you choose to be taxed when you receive the shares instead, on what they are worth then
-            minus what you paid. When the shares are bought at their fair market value, that difference is zero, and growth in
-            value after that isn't taxed as the shares vest.
+            In the US, restricted stock is normally taxed as it vests: on what the shares are worth at each vesting date, minus
+            what you paid for them. An <b>83(b) election</b> lets you choose to be taxed when the shares are transferred to you
+            instead, on what they are worth then minus what you paid. When you pay their full fair market value, that difference is
+            zero, and growth in value after that isn't taxed as the shares vest.
           </p>
           <p>
-            <b>The election must be filed with the IRS within 30 days</b> after you receive the shares: for example the grant date,
-            or the exercise date for an early exercise. The deadline is strict, and a missed election usually can't be made later,
-            so talk to a tax advisor straight away. The election has risks too: if you pay tax up front and then leave before the
+            <b>The election must be filed with the IRS no later than 30 days after the shares are transferred to you.</b> That
+            isn't always the grant date: for an early exercise, it is usually the exercise date. The deadline is strict, and a
+            missed election usually can't be made later, so talk to a tax advisor straight away. The election has risks too: if you pay tax up front and then leave before the
             shares vest, or the shares lose value, that tax generally isn't refunded.
           </p>
           <InApp>A share's page shows its vesting and any repurchase right. Cap Table doesn't file 83(b) elections; a copy of a filed election can be kept with the shares as a document.</InApp>
@@ -251,7 +255,8 @@ export const equityBasics: DocTopic = {
           <p>
             The window can depend on why someone left: for example, a plan may allow no time at all after a termination for
             cause. A company can also agree to extend a window, for example in a separation agreement. Remember that an ISO
-            exercised more than three months after employment ends is generally taxed as an NSO, even when the window is longer.
+            exercised more than three months after employment ends (one year after a permanent and total disability) is generally
+            taxed as an NSO, even when the window is longer.
           </p>
           <InApp>
             When someone is terminated, each option gets its exercise deadline and, for an ISO, its ISO deadline; Securities Status
@@ -299,19 +304,21 @@ export const equityBasics: DocTopic = {
           <ul>
             <li><b>Valuation cap:</b> the highest company valuation used to work out the SAFE's price. If the round values the company above the cap, the SAFE converts at the lower, capped price, so the investor gets more shares for their money.</li>
             <li><b>Discount:</b> a percentage off the price new investors pay in the round. With a 20% discount, the SAFE converts at 80% of the round's price. When a SAFE has both a cap and a discount, the investor generally gets whichever gives the lower price.</li>
-            <li><b>Post-money or pre-money:</b> a post-money SAFE's cap is the company's valuation including the SAFE money (and other SAFEs converting at the same time). That makes the investor's share easy to predict: just before the new round's money comes in, it is the amount invested divided by the cap. A pre-money SAFE's cap is the valuation before that money, so what each SAFE ends up owning depends more on how much other SAFE money converts alongside it.</li>
+            <li><b>Post-money or pre-money:</b> a post-money SAFE's cap is the company's valuation including the SAFE money (and other SAFEs converting at the same time). That makes the investor's share easy to predict: just before the new round's money comes in, it is roughly the amount invested divided by the cap. A pre-money SAFE's cap is the valuation before that money, so what each SAFE ends up owning depends more on how much other SAFE money converts alongside it.</li>
+            <li><b>Most favored nation (MFN):</b> some SAFEs let the holder take up better terms that the company gives a later SAFE investor. The agreement decides how that works.</li>
           </ul>
           <Example>
             <p>
               An investor puts $500,000 into a post-money SAFE with a $10,000,000 valuation cap. When it converts in a round that
-              values the company above the cap, the investor owns $500,000 ÷ $10,000,000 = 5% of the company just before the round's
-              new money comes in. The round then dilutes that 5%, as it does everyone's holdings.
+              values the company above the cap, the investor owns about $500,000 ÷ $10,000,000 = 5% of the company, measured before
+              the round's new money and before any option pool created or enlarged for the round. Both then dilute that 5%.
             </p>
           </Example>
           <InApp>
-            SAFEs come in with the import, with their principal, valuation cap, discount and post-money or pre-money type. The cap
-            table lists them on their own tab, and holders see their SAFEs and, once converted, the shares they became. Cap Table
-            doesn't convert SAFEs itself: it has no forms to issue shares, so conversions come in with the import.
+            SAFEs come in with the import, with their principal, valuation cap, discount and post-money or pre-money type. MFN
+            terms aren't imported, so upload the SAFE agreement and link it to the SAFE. The cap table lists SAFEs on their own
+            tab, and holders see their SAFEs with each one's status and, once converted, the shares it became. Cap Table doesn't
+            convert SAFEs itself: it has no forms to issue shares, so conversions come in with the import.
           </InApp>
         </>
       ),

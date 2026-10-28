@@ -14,7 +14,8 @@ import { PortalNotFoundPage } from "./portal/PortfolioPage.tsx";
 
 // The Docs, inside the frame of whoever reads them: the admin workspace (owners, admins and editors), the holder's
 // portfolio (users and viewers, where the docs open on the holders' topic), or pages of their own for someone with
-// neither, such as an owner who hasn't set up the company yet. An address naming no topic is that frame's "not found".
+// neither, such as an owner who hasn't set up the company yet. An address with no topic opens the frame's default topic;
+// one naming an unknown topic is that frame's "not found".
 
 function docsTitle(topic: DocTopic): string {
   return `${topic.title} — Docs`;

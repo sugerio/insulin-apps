@@ -219,8 +219,8 @@ Then fill in, or check, the details the preview needs:
   or GB; the fiscal year end is a month and day, such as 12-31. The company's name comes from the files. A currency
   stated in the files wins; otherwise Cap Table uses the empty company's currency, then USD.
 
-Choose **Check the files**. Nothing is added to the cap table until you import; until then the files stay in your
-browser tab.
+Choose **Check the files**. Checking, and later importing, sends the files to the app's server to be read; the server
+doesn't keep them. Nothing is added to the cap table until you import.
 
 ## Review the preview
 
@@ -272,10 +272,10 @@ there. For example, Pulley's exercise report may not say exactly which share cer
 template records how many options were exercised, but not when.
 
 When Cap Table can't rebuild a holding's history step by step, it records the holding as an **opening balance**: the
-right quantity, vesting and status, without inventing the steps in between. Your current cap table, ownership and
-vesting are exactly right. Only the history is shorter: the opening balance is dated where the source allows (for
-example at the first exercise it couldn't match), and if you look at the cap table as of an earlier date, it says that
-the history before that date came in with the import as opening balances.
+quantity, vesting and status your files give, as Cap Table reads them on the import date, without inventing the steps
+in between, so check them in the preview. Only the history is shorter: the opening balance is dated where the source
+allows (for example at the first exercise it couldn't match), and if you look at the cap table as of an earlier date,
+it says that the history before that date came in with the import as opening balances.
 
 The preview lists every opening balance with its reason before you import.
 
@@ -328,8 +328,9 @@ that already has stakeholders or records.
 
 - **Only to this app.** Cap Table reads the files you upload and stores what it imports in the app's own database.
   Nothing is sent to Pulley or to any other service.
-- **Your files aren't kept.** Your browser tab holds them until you import. The app keeps only a record of what you
-  reviewed (a fingerprint of each file, the as-of date and the counts), so that the import matches it exactly.
+- **Your files aren't kept.** Your browser tab holds them until you import, and each check or import sends them to the
+  app's server to be read. The app keeps only a record of what you reviewed (a fingerprint of each file, the as-of date
+  and the counts), so that the import matches it exactly.
 - **No extra encryption, keys or tokens.** Your browser talks to the app over its normal secure connection, and the
   imported records are protected like everything else in the app: only people with a role on the app in the Insulin
   console can open it.

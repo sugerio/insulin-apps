@@ -53,7 +53,7 @@ export const everydayTasks: DocTopic = {
             <li><b>The equity plan.</b> The form shows what's available; a grant can't exceed it.</li>
             <li><b>The stakeholder</b>, or add a new one on the spot, and <b>how many options</b>.</li>
             <li><b>Board approval:</b> the approval date and the signed board consent. The grant date is the approval date unless you give another one, with a reason.</li>
-            <li><b>ISO or NSO.</b> An ISO needs the holder to be an employee on the grant date. For someone holding more than 10% of the voting power, an ISO needs an exercise price of at least 110% of fair market value and a term of at most five years.</li>
+            <li><b>ISO or NSO.</b> An ISO needs the holder to be an employee on the grant date, and you confirm whether they own more than 10% of the voting power (of the company or its parent or a subsidiary, counting shares attributed to them). For such a holder, an ISO needs an exercise price of at least 110% of fair market value and a term of at most five years.</li>
             <li><b>Vesting:</b> a schedule or explicit tranches, the vesting start date, whether early exercise is allowed, and any acceleration terms. Tick that the table shown matches the signed agreement.</li>
             <li><b>Exercise price:</b> filled in from the 409A valuation valid on the grant date. Without a valid valuation, attach counsel's memo to go ahead. An ISO can't be priced below fair market value; an NSO priced below it also needs counsel's memo.</li>
             <li><b>Expiration:</b> ten years unless the agreement says otherwise (five for a 10% holder's ISO), and the exercise windows after leaving, from the plan or as the agreement says.</li>
@@ -234,10 +234,11 @@ export const everydayTasks: DocTopic = {
       title: "Previewing as a stakeholder",
       body: (
         <p>
-          Owners, admins and editors can see exactly what a holder sees: choose <b>Preview as stakeholder</b> (the eye icon) next to
-          a stakeholder in the list or on their page. A banner says "You are previewing the portal as" their name, and every portal
-          action is disabled. It's the quickest way to check a holder's view after an import or a change. To understand what they
-          see, read <DocLink to="for-stakeholders">For stakeholders</DocLink>.
+          Owners, admins and editors can check a holder's view: choose <b>Preview as stakeholder</b> (the eye icon) next to a
+          stakeholder in the list or on their page. The preview shows the holder's holdings, exercise instructions and documents
+          as they see them, with a banner saying "You are previewing the portal as" their name, and every portal action is
+          disabled. The holder's Docs entry isn't part of the preview. It's the quickest way to check a holder's view after an
+          import or a change; to understand what they see, read <DocLink to="for-stakeholders">For stakeholders</DocLink>.
         </p>
       ),
     },

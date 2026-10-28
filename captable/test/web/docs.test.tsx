@@ -122,15 +122,43 @@ describe("the topics", () => {
     expect(note.textContent).toContain("talk to the company's counsel or a tax advisor");
   });
 
-  it("states the facts it was written to state", async () => {
-    renderPage("docs/equity-basics", []);
-    const article = (await title("Equity basics")).closest("article")!;
-    const text = article.textContent ?? "";
-    expect(text).toContain("within 30 days after you receive the shares");
-    expect(text).toContain("Options are ISOs only for shares worth up to $100,000 (valued on the grant date)");
-    expect(text).toContain("within three months after employment ends");
-    expect(text).toContain("alternative minimum tax (AMT)");
-    expect(text).toContain("There are now 10,000,000 shares, and the founder's 2,000,000 are 20%.");
+  it("states the facts it was written to state", () => {
+    const textOf = (slug: string) => {
+      render(<MemoryRouter><Docs base="/docs" topic={DOC_TOPICS.find((topic) => topic.slug === slug)!} /></MemoryRouter>);
+      const text = screen.getByRole("article").textContent ?? "";
+      cleanup();
+      return text;
+    };
+    const basics = textOf("equity-basics");
+    // ISOs: the holding periods, the $100,000 rule as a whole, leaving, and large holders.
+    expect(basics).toContain("If the shares are sold more than two years after the grant and more than one year after the exercise, the gain is generally a long-term capital gain.");
+    expect(basics).toContain("A sale before both dates is a disqualifying disposition: the gain, up to the spread at exercise, is generally taxed as ordinary income");
+    expect(basics).toContain("The limit counts all of the employee's ISOs from the company and its parent or subsidiary companies, in the order they were granted");
+    expect(basics).toContain("within three months after employment ends, or within one year if it ended because of a permanent and total disability");
+    expect(basics).toContain("After the holder's death, special rules let the estate or heirs exercise it as an ISO for as long as the option itself allows.");
+    expect(basics).toContain("more than 10% of the voting power of all classes of stock of the company, or of its parent or a subsidiary");
+    expect(basics).toContain("alternative minimum tax (AMT)");
+    expect(basics).toContain("IRS Publication 525");
+    // NSOs, restricted stock and 83(b).
+    expect(basics).toContain("When an NSO is exercised for vested shares, the spread is generally taxed as ordinary income");
+    expect(basics).toContain("on what the shares are worth at each vesting date, minus what you paid for them");
+    expect(basics).toContain("The election must be filed with the IRS no later than 30 days after the shares are transferred to you. That isn't always the grant date");
+    expect(basics).toContain("the unvested shares are usually forfeited or subject to a company repurchase right");
+    // SAFEs: MFN, and the example's caveat.
+    expect(basics).toContain("Most favored nation (MFN)");
+    expect(basics).toContain("MFN terms aren't imported");
+    expect(basics).toContain("measured before the round's new money and before any option pool created or enlarged for the round");
+    expect(basics).toContain("There are now 10,000,000 shares, and the founder's 2,000,000 are 20%.");
+    // What the app does: files reach the server but aren't kept; opening balances are the files as read; vested exercises.
+    const importing = textOf("importing");
+    expect(importing).toContain("Check the files and Import send your files to this app's server to be read, but the files themselves aren't kept");
+    expect(importing).not.toMatch(/stay in your browser tab|exactly right/);
+    expect(importing).toContain("as Cap Table reads them on the import date");
+    expect(textOf("for-stakeholders")).toContain("Cap Table records only exercises of vested options.");
+    const glossary = textOf("glossary");
+    expect(glossary).toContain("the holder's Docs entry isn't part of it");
+    expect(glossary).not.toMatch(/exactly what a holder sees|are exact;/);
+    expect(textOf("everyday-tasks")).toContain("The holder's Docs entry isn't part of the preview.");
   });
 });
 

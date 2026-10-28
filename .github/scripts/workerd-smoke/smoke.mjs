@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { strToU8, unzipSync, zipSync } from 'fflate'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const root = resolve(here, '../..')
+const root = resolve(here, '../../..')
 const app = join(root, 'captable')
 const output = join(app, '.output')
 const wrangler = join(here, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler')

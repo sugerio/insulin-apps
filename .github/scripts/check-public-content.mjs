@@ -3,8 +3,8 @@
 // fails on anything that looks like real data rather than the synthetic fixtures. Run it from anywhere in the
 // repository; CI runs it, after its tests (check-public-content.test.mjs), before any app job:
 //
-//   node scripts/check-public-content.mjs
-//   node scripts/check-public-content.mjs --deny-list ../private/deny-list.txt
+//   node .github/scripts/check-public-content.mjs
+//   node .github/scripts/check-public-content.mjs --deny-list ../private/deny-list.txt
 //
 // Generic rules (safe to publish):
 //   email          an e-mail address outside the reserved example domains (example.com, example.org, example.net
@@ -93,7 +93,7 @@ const FIXES = {
   'aws-key': 'remove the access key id, and rotate the key if it was ever real',
 }
 
-const USAGE = 'usage: node scripts/check-public-content.mjs [--deny-list <file>]'
+const USAGE = 'usage: node .github/scripts/check-public-content.mjs [--deny-list <file>]'
 
 /**
  * Where the generic rules hit in a text: [{ rule, line, start, end, joined? }], start and end as offsets in the line.
@@ -285,7 +285,7 @@ export function run(args, { root = repositoryRoot(), allowed = ALLOWED } = {}) {
     err.push(`${where}: ${hit.rule}: ${fix}${hit.joined ? ' (it is split into strings joined with +)' : ''}`)
   }
   for (const entry of stale) {
-    err.push(`${entry.file}: allow-list: it ${entry.reason}; review it, then update or remove its ALLOWED entry in scripts/check-public-content.mjs`)
+    err.push(`${entry.file}: allow-list: it ${entry.reason}; review it, then update or remove its ALLOWED entry in .github/scripts/check-public-content.mjs`)
   }
   const counts = `${scanned} files scanned${skipped ? `, ${skipped} binary or unreadable skipped` : ''}${denyList.length ? `, ${denyList.length} deny-list entries` : ''}`
   if (problems.length || stale.length) {

@@ -27,17 +27,18 @@ npm run typecheck
 
 ## Checks
 
-CI runs these with each app's typecheck, tests, migration check and Cloudflare build.
+They live in `.github/scripts/`, next to the workflow that runs them; CI runs them with each app's typecheck, tests,
+migration check and Cloudflare build.
 
-- `node scripts/check-insulin-app.mjs <app>` checks that an app keeps the shape the platform expects: file limits, one
+- `node .github/scripts/check-insulin-app.mjs <app>` checks that an app keeps the shape the platform expects: file limits, one
   npm package with an exact lockfile, the platform entry points, no unsupported Cloudflare bindings.
-- `tools/workerd-smoke/` runs Cap Table's production build the way Cloudflare does: it builds the app, applies its
+- `.github/scripts/workerd-smoke/` runs Cap Table's production build the way Cloudflare does: it builds the app, applies its
   migrations to a local D1 database, starts it in workerd with `wrangler dev --local`, and checks the main paths with
-  synthetic data. Run `npm ci` in `captable/` and in `tools/workerd-smoke/`, then `node smoke.mjs` there (`--skip-build`
+  synthetic data. Run `npm ci` in `captable/` and in `.github/scripts/workerd-smoke/`, then `node smoke.mjs` there (`--skip-build`
   reuses the last build).
-- `node scripts/check-public-content.mjs` checks that nothing private is in this public repository: real e-mail
+- `node .github/scripts/check-public-content.mjs` checks that nothing private is in this public repository: real e-mail
   addresses, local paths, cloud ids and private keys, also when split into string literals joined with `+` (its own
-  tests: `node --test scripts/check-public-content.test.mjs`). Names, domains and other terms specific to an
+  tests: `node --test .github/scripts/check-public-content.test.mjs`). Names, domains and other terms specific to an
   organization go in a deny list that the maintainer keeps outside the repository and passes with `--deny-list <file>`.
 
 ## Contributing

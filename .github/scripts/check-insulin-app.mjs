@@ -2,8 +2,8 @@
 // Checks that an app directory keeps the shape Insulin's AppBuilder expects, so the
 // console can seed, preview and publish it. Run it from the repository root:
 //
-//   node scripts/check-insulin-app.mjs captable           # source checks
-//   node scripts/check-insulin-app.mjs captable --built   # also check `npm run build` output
+//   node .github/scripts/check-insulin-app.mjs captable           # source checks
+//   node .github/scripts/check-insulin-app.mjs captable --built   # also check `npm run build` output
 //
 // The limits mirror the platform's: at most 2,000 stored files of 1 MiB each and
 // 10 MiB in total, text files only, one npm package with an exact, registry-only
@@ -13,7 +13,7 @@ import { join, relative, sep } from 'node:path'
 
 const [appArg, ...flags] = process.argv.slice(2)
 if (!appArg) {
-  console.error('usage: node scripts/check-insulin-app.mjs <app-dir> [--built]')
+  console.error('usage: node .github/scripts/check-insulin-app.mjs <app-dir> [--built]')
   process.exit(64)
 }
 const app = appArg.replace(/\/+$/, '')

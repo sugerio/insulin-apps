@@ -1,0 +1,75 @@
+/* The company import: the setup page's ways to start, the wizard's drop zone and file list, the preview's problem lists
+   and totals. On the tokens in app.css and workspace.css. */
+
+/* Ways to start (setup) and sources (the wizard's first step) */
+.choice-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; width: 100%; }
+.choice { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); }
+.choice .choice-text { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.choice .choice-t { margin: 0; font-size: 15px; font-weight: 650; color: var(--text); }
+.choice .choice-s { margin: 0; font-size: 13px; color: var(--muted); }
+.choice .choice-a { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.template-download { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+/* The setup page outside the workspace shell: the choices card, and the wizard's page with the app's top bar */
+.setup-choices { width: min(100%, 860px); }
+/* One way per row on the setup card: what it is on the left, its actions on the right. */
+.setup-choices .choice-list { grid-template-columns: minmax(0, 1fr); }
+.setup-choices .choice { flex-direction: row; align-items: center; gap: 20px; }
+.setup-choices .choice-a { flex: none; justify-content: flex-end; }
+.setup-choices .btn { width: auto; height: 36px; padding: 0 14px; gap: 6px; font-size: 13.5px; white-space: nowrap; }
+.setup-choices .btn-ghost { border-color: var(--border); }
+.setup-back { font-size: 13px; }
+.setup-import { min-height: 100vh; background: var(--bg); }
+.setup-import-head { display: flex; align-items: center; gap: 10px; height: var(--topbar); padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.setup-import-head .muted { color: var(--muted); }
+.setup-import .page { margin: 0 auto; }
+
+/* Upload */
+.report-list { margin: 0 0 12px; padding-left: 20px; columns: 2; column-gap: 32px; font-size: 13.5px; }
+.dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 28px 16px; border: 2px dashed var(--border-strong); border-radius: 10px; background: var(--surface-2); text-align: center; color: var(--text-2); }
+.dropzone .icon { width: 24px; height: 24px; color: var(--muted); }
+.dropzone.over { border-color: var(--primary); background: var(--primary-softer); }
+.file-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.file-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: 13px; }
+.file-list .fl-name { font-weight: 600; overflow-wrap: anywhere; }
+.file-list .fl-bad { color: var(--danger-text); font-weight: 600; }
+.file-list .pill-x { margin-left: auto; }
+.import-date { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; max-width: 440px; margin: 16px 0; }
+.import-date .fld { width: 100%; }
+
+/* Preview */
+.import-summary { color: var(--text-2); }
+.import-files { display: flex; flex-direction: column; gap: 4px; margin: 0 0 16px; padding: 0; list-style: none; font-size: 13px; }
+.import-files li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.import-files .if-name { overflow-wrap: anywhere; }
+.import-files .if-kind { color: var(--muted); }
+.import-files li.ok .icon { color: var(--success); }
+.import-files li.bad { color: var(--danger-text); }
+.import-section { margin-top: 16px; }
+.import-section h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.import-section .cnt { margin-left: 0; }
+.problem-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.problem-list .problem { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 6px; font-size: 13px; }
+.problem-list.error .problem { background: var(--danger-soft); color: var(--danger-text); }
+.problem-list.warning .problem { background: var(--warning-soft); color: var(--warning-text); }
+.problem-list .p-where { font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.problem-list .p-what { color: var(--text); }
+.assumption-list { margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-2); }
+.assumption-list li + li { margin-top: 6px; }
+.import-counts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 0; }
+.import-counts div { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.import-counts dt { font-size: 12px; color: var(--muted); }
+.import-counts dd { margin: 4px 0 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* Importing */
+.import-progress { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.import-progress progress { width: 100%; height: 8px; accent-color: var(--primary-button); }
+.import-progress p { margin: 0; color: var(--text-2); }
+
+@media (max-width: 760px) {
+  .report-list { columns: 1; }
+  .setup-import-head { padding: 0 12px; }
+  .setup-choices .choice { flex-direction: column; align-items: stretch; gap: 12px; }
+  .setup-choices .choice-a { justify-content: flex-start; }
+  .setup-choices .btn { height: auto; min-height: 36px; padding: 8px 14px; white-space: normal; text-align: center; }
+}

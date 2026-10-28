@@ -148,12 +148,13 @@ describe("portfolio overview", () => {
     expect(within(rowOf(grants, "OPT-40")).getAllByRole("cell")[2]!.textContent).toBe("Outstanding Execution pending");
   });
 
-  it("shows an investor's vested shares and converted SAFEs as history", async () => {
+  it("shows an investor's vested shares, and their SAFEs counted with each one's status", async () => {
     renderPortal(PORTFOLIO, [MARCUS], { me: holderMe([MARCUS], { email: "marcus.oyelaran@kensington.example" }) });
     const tiles = await screen.findByRole("list", { name: "Holdings summary" });
     expect(within(tiles).getByText("Series Seed Preferred")).toBeTruthy();
     expect(within(tiles).getByText("91,145")).toBeTruthy();
     expect(within(tiles).getByText("2 records")).toBeTruthy();
+    expect(within(tiles).getByText("2 SAFEs")).toBeTruthy();
     expect(within(tiles).getByText("2 converted")).toBeTruthy();
     expect(screen.queryByText("Vesting status")).toBeNull();
     expect(screen.queryByText(/You can exercise/)).toBeNull();
@@ -162,6 +163,18 @@ describe("portfolio overview", () => {
     expect(within(rowOf(grants, "SAFE-3")).getByRole("link", { name: "SAFE-3" }).getAttribute("href")).toBe(`${PORTFOLIO}/convertibles/${MARCUS_SAFES[0]!.id}`);
     expect(within(rowOf(grants, "PS-3")).getAllByText("52,083")).toHaveLength(2);
     expectNoForbiddenFigures();
+  });
+
+  it("counts a SAFE that hasn't converted as outstanding, never as converted", async () => {
+    const open = portalSecurity({ id: uuid(6, 207), displayId: "SAFE-7", family: "CONVERTIBLE", className: null, issueDate: "2026-02-01", status: "OUTSTANDING" });
+    const marcus = { ...MARCUS, securities: [...MARCUS.securities, open] };
+    renderPortal(PORTFOLIO, [marcus], { me: holderMe([marcus], { email: "marcus.oyelaran@kensington.example" }) });
+    const tiles = await screen.findByRole("list", { name: "Holdings summary" });
+    expect(within(tiles).getByText("3 SAFEs")).toBeTruthy();
+    expect(within(tiles).getByText("1 outstanding · 2 converted")).toBeTruthy();
+    expect(within(tiles).queryByText(/^\d+ converted$/)).toBeNull();
+    const grants = screen.getByRole("table", { name: "My grants and shares" });
+    expect(within(rowOf(grants, "SAFE-7")).getByText("Outstanding")).toBeTruthy();
   });
 
   it("lists a current employee's next six vest events across grants, in date order", async () => {

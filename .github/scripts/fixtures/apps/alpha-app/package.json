@@ -1,0 +1,6 @@
+{
+  "name": "fixture-alpha-app",
+  "private": true,
+  "displayName": "Alpha App",
+  "description": "A fixture application used by the deployment script tests."
+}

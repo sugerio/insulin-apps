@@ -1,0 +1,152 @@
+name: App pipeline
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        type: string
+        required: true
+      deploy:
+        type: boolean
+        default: false
+      workerd-smoke:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: ${{ inputs.app }} checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ${{ inputs.app }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # The platform previews and publishes on Node 22.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ inputs.app }}/package-lock.json
+      - name: Install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Insulin compatibility (source)
+        working-directory: .
+        run: node .github/scripts/check-insulin-app.mjs ${{ inputs.app }}
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Migrations match the schema
+        # The same drizzle-kit and drizzle-orm the publish pipeline pins: publishing
+        # refuses an app whose `drizzle-kit generate` would write anything.
+        run: |
+          tools="$RUNNER_TEMP/drizzle-tools"
+          mkdir -p "$tools" && echo '{"private":true}' > "$tools/package.json"
+          npm install --prefix "$tools" --ignore-scripts --no-audit --no-fund drizzle-kit@0.31.11 drizzle-orm@0.45.3
+          "$tools/node_modules/.bin/drizzle-kit" generate
+          if [ -n "$(git status --porcelain -- src/app/db/migrations)" ]; then
+            git status --porcelain -- src/app/db/migrations
+            echo "::error::src/app/db/schema.ts and its migrations are out of step: run npm run db:generate and commit the result."
+            exit 1
+          fi
+      - name: Build for Cloudflare Workers
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NITRO_PRESET: cloudflare_module
+      - name: Insulin compatibility (build output)
+        working-directory: .
+        run: node .github/scripts/check-insulin-app.mjs ${{ inputs.app }} --built
+      - name: Pack build
+        if: inputs.deploy
+        working-directory: .
+        run: tar -czf "$RUNNER_TEMP/${{ inputs.app }}-build.tgz" "${{ inputs.app }}/.output"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.deploy
+        with:
+          name: ${{ inputs.app }}-build
+          path: ${{ runner.temp }}/${{ inputs.app }}-build.tgz
+          if-no-files-found: error
+          retention-days: 3
+
+  workerd-smoke:
+    if: inputs['workerd-smoke']
+    name: ${{ inputs.app }} workerd smoke
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            ${{ inputs.app }}/package-lock.json
+            .github/scripts/workerd-smoke/package-lock.json
+      - name: Install app
+        working-directory: ${{ inputs.app }}
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install smoke harness
+        working-directory: .github/scripts/workerd-smoke
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build, migrate, and run in workerd
+        working-directory: .github/scripts/workerd-smoke
+        run: node smoke.mjs
+
+  deploy:
+    if: >-
+      always() && inputs.deploy && needs.checks.result == 'success' &&
+      (needs['workerd-smoke'].result == 'success' || needs['workerd-smoke'].result == 'skipped')
+    name: Deploy ${{ inputs.app }}
+    needs: [checks, workerd-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: deploy-${{ inputs.app }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: .github/hosting/gateway/package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.app }}-build
+          path: ${{ runner.temp }}
+      - name: Unpack build
+        run: |
+          set -o pipefail
+          archive="$RUNNER_TEMP/${{ inputs.app }}-build.tgz"
+          members="$RUNNER_TEMP/${{ inputs.app }}-build.members"
+          tar --list --gzip --file "$archive" --quoting-style=literal | tee "$members"
+          node .github/scripts/check-build-archive.mjs "$members" "${{ inputs.app }}/.output"
+          if ! tar --list --verbose --gzip --file "$archive" | awk 'substr($1, 1, 1) != "-" && substr($1, 1, 1) != "d" { exit 1 }'; then
+            echo "::error::Build archive contains a link or special file."
+            exit 1
+          fi
+          tar --extract --gzip --file "$archive" --no-same-owner --no-same-permissions
+      - name: Install deployment tooling
+        run: npm ci --prefix .github/hosting/gateway --ignore-scripts --no-audit --no-fund
+      - name: Deploy app
+        run: node .github/scripts/deploy-apps.mjs --skip-build --only ${{ inputs.app }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulinapps.com' }}
+
+  gateway:
+    if: inputs.deploy
+    needs: deploy
+    uses: ./.github/workflows/gateway.yml
+    with:
+      deploy: true
+    secrets: inherit

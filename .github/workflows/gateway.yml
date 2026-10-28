@@ -1,0 +1,82 @@
+name: Gateway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/hosting/gateway/**
+      - .github/workflows/gateway.yml
+      - .github/scripts/deploy-apps.mjs
+      - .github/scripts/list-apps.mjs
+  pull_request:
+    paths:
+      - .github/hosting/gateway/**
+      - .github/workflows/gateway.yml
+      - .github/scripts/deploy-apps.mjs
+      - .github/scripts/list-apps.mjs
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      deploy:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Gateway tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: .github/hosting/gateway
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: .github/hosting/gateway/package-lock.json
+      - name: Install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+
+  deploy:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      inputs.deploy
+    name: Deploy gateway
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: gateway-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: .github/hosting/gateway/package-lock.json
+      - name: Install deployment tooling
+        run: npm ci --prefix .github/hosting/gateway --ignore-scripts --no-audit --no-fund
+      - name: Deploy gateway
+        run: node .github/scripts/deploy-apps.mjs --gateway-only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulinapps.com' }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}

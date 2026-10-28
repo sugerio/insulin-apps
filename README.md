@@ -8,6 +8,12 @@ D1 database.
 |---|---|
 | [`captable/`](captable/) | Cap table and equity management: stakeholders, share classes, equity plans, option grants, vesting, exercises, terminations, 409A valuations, documents and a holder view, set up by importing Pulley's reports or a spreadsheet template. |
 
+## Use the apps online
+
+Every app here also runs at its own address on insulinapps.com, for example [Cap Table](https://captable.insulinapps.com).
+Sign up with an e-mail address or Google, create an organization and invite your team. Maintainers run it with the
+[hosting runbook](.github/hosting/README.md).
+
 ## Using an app
 
 In the Insulin console, choose **New app**, then **Use template** on the app you want under **Or start from a
@@ -36,12 +42,13 @@ Each app is a top-level directory with its own `README.md` and `AGENTS.md`, and 
   the app does, updated in the same change as the behaviour it describes, and covered by tests;
 - use synthetic data only, in code, tests and docs.
 
-Add the app to the table above, and read [`AGENTS.md`](AGENTS.md) for the full checklist.
+Add the app to the table above. Copy `.github/workflows/captable.yml` to `.github/workflows/<app>.yml` and change its
+name, path filters and `app` input; CI checks this pairing. Read [`AGENTS.md`](AGENTS.md) for the full checklist.
 
 ## Checks
 
-They live in `.github/scripts/`, next to the workflow that runs them; CI runs them with each app's typecheck, tests,
-migration check and Cloudflare build.
+They live in `.github/scripts/`, next to the workflows that run them. Each app workflow runs that app's typecheck,
+tests, migration check and Cloudflare build, while repository-wide CI runs the public-content and workflow checks.
 
 - `node .github/scripts/check-insulin-app.mjs <app>` checks that an app keeps the shape the platform expects: file limits, one
   npm package with an exact lockfile, the platform entry points, no unsupported Cloudflare bindings.

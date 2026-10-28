@@ -27,7 +27,8 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
 - A top-level directory with `README.md`, `AGENTS.md` (including the Docs rule above), `NOTICE` when it bundles
   third-party material, and the in-app Docs.
 - A row in the app table of the root `README.md`.
-- CI runs its typecheck, tests, migration check and Cloudflare build: see `.github/workflows/ci.yml`.
+- A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name, paths and `app` input changed. The
+  shared pipeline runs its typecheck, tests, migration check and Cloudflare build.
 
 ## Before you finish
 

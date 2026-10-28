@@ -1,0 +1,1 @@
+CREATE TABLE fixture_beta (id TEXT PRIMARY KEY);

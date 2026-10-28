@@ -1,0 +1,33 @@
+name: captable
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - captable/**
+      - .github/workflows/captable.yml
+      - .github/workflows/app.yml
+      - .github/scripts/**
+  pull_request:
+    paths:
+      - captable/**
+      - .github/workflows/captable.yml
+      - .github/workflows/app.yml
+      - .github/scripts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: captable-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  app:
+    uses: ./.github/workflows/app.yml
+    with:
+      app: captable
+      deploy: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      workerd-smoke: true
+    secrets: inherit

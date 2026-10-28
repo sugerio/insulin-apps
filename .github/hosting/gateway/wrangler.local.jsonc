@@ -1,0 +1,44 @@
+// Local development only: `npm run dev` (see README.md). Production never reads this file: the deploy pipeline
+// generates the gateway's config from the binding table in .github/hosting/README.md.
+//
+// SITE_ENV=test stores mail in D1 instead of sending it (read it at /__insulin/dev/mail) and lets the cookies work on
+// http://*.localhost. The Turnstile keys are Cloudflare's public test keys: the widget always passes and its token is
+// checked locally, with no network call. Google sign-in is off (no client id).
+{
+  "name": "insulin-apps-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-13",
+  "workers_dev": false,
+  // A distinct local id: without one, wrangler names local D1 state after the binding, and the app's DB would share it.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "insulin-apps-gateway", "database_id": "local-insulin-apps-gateway", "migrations_dir": "migrations" }
+  ],
+  "ratelimits": [
+    { "name": "RL_AUTH", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_APP", "namespace_id": "1002", "simple": { "limit": 600, "period": 60 } }
+  ],
+  // The app Worker, from the second config: scripts/app-config.mjs writes it (the stub app or a built Cap Table).
+  "services": [
+    { "binding": "APP_CAPTABLE", "service": "insulin-apps-captable" }
+  ],
+  "send_email": [
+    { "name": "EMAIL" }
+  ],
+  "vars": {
+    "SITE_ENV": "test",
+    "SITE_DOMAIN": "insulinapps.localhost",
+    "SITE_APPS": [
+      {
+        "name": "captable",
+        "title": "Cap Table",
+        "summary": "Cap table and equity management: stakeholders, share classes, equity plans, grants, vesting and a holder view.",
+        "binding": "APP_CAPTABLE"
+      }
+    ],
+    "GOOGLE_CLIENT_ID": "",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA",
+    "EMAIL_FROM": "Insulin Apps (local) <no-reply@insulinapps.localhost>",
+    "SUPPORT_EMAIL": ""
+  }
+}

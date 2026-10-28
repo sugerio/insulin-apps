@@ -347,6 +347,11 @@ A new company is set up by importing Pulley's standard reports or the app's own 
   an import replaces the company the address names), and an admin's "Preview as stakeholder" at
   `/companies/:orgId/stakeholders/:stakeholderId/preview`, which renders the portal's pages. `/api/me` decides where a
   user lands; a 401 from any call shows the full-page "Open this app from the Insulin console".
+- The Docs render inside the reader's frame: `/companies/:orgId/docs/:topic?` in the workspace and
+  `/portfolio/:orgId/docs/:topic?` in the holder's portfolio (not in the admin's preview), with the Docs entry last in each
+  navigation, and `/docs/:topic?` for someone with neither, such as an owner before setup (anyone else is sent to theirs).
+  One component (`components/Docs.tsx`) shows the topic list and the topic; the topics are static TSX in `pages/docs/`,
+  with no markdown parser and nothing from the server, and an unknown topic is the frame's own "not found".
 - The import wizard (`components/ImportWizard.tsx`, `ImportPreview.tsx`, `lib/imports.ts`, `lib/useImportFiles.ts`)
   keeps the chosen files in memory only, never in browser storage, and checks the limits before sending anything. The
   server computes the preview; the browser parses nothing. The commit reuses one idempotency key per preview, so after

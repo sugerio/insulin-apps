@@ -50,8 +50,8 @@ export const importing: DocTopic = {
           </ol>
           <p>
             Nothing is added to the cap table until you choose <b>Import</b>. <b>Check the files</b> and <b>Import</b> send your
-            files to this app's server to be read, but the files themselves aren't kept: the app stores only a fingerprint of each
-            file and a record of the run.
+            files to this app's server to be read; the source file bytes are not retained (see <DocLink to="importing"
+            section="where-your-data-goes">Where your data goes</DocLink>).
           </p>
         </>
       ),
@@ -225,13 +225,15 @@ export const importing: DocTopic = {
             <li><b>Signatures</b>: Cap Table can't tell which agreements were still waiting for signatures, so imported grants count as signed.</li>
             <li><b>Workflow records</b> kept in Pulley, such as exercise requests, 83(b) elections and notes, and Pulley's own accounts and settings.</li>
           </ul>
-          <h3>Where your data goes</h3>
+          <h3 id="where-your-data-goes" tabIndex={-1}>Where your data goes</h3>
           <p>
             Only to this app. Cap Table reads the files you upload and stores what it imports in the app's own database; nothing is
-            sent to Pulley or any other service, and Cap Table never signs in to Pulley. Your files aren't kept: the app keeps only
-            a record of what you reviewed (a fingerprint of each file, the as-of date and the counts), so that the import matches
-            it exactly. Then follow <DocLink to="getting-started" section="after-setup">the checklist for after setup</DocLink>.
+            sent to Pulley or any other service, and Cap Table never signs in to Pulley. The source file bytes are not retained.
+            The app keeps each file's name and fingerprint, import-run metadata, and source locations such as sheet and row with
+            imported ledger facts. The fingerprints make the import match exactly what you reviewed, and the locations show where
+            each imported record came from.
           </p>
+          <p>Then follow <DocLink to="getting-started" section="after-setup">the checklist for after setup</DocLink>.</p>
         </>
       ),
     },

@@ -219,8 +219,9 @@ Then fill in, or check, the details the preview needs:
   or GB; the fiscal year end is a month and day, such as 12-31. The company's name comes from the files. A currency
   stated in the files wins; otherwise Cap Table uses the empty company's currency, then USD.
 
-Choose **Check the files**. Checking, and later importing, sends the files to the app's server to be read; the server
-doesn't keep them. Nothing is added to the cap table until you import.
+Choose **Check the files**. Checking, and later importing, sends the files to the app's server to be read; the source
+file bytes are not retained (see [Where your data goes](#where-your-data-goes)). Nothing is added to the cap table until
+you import.
 
 ## Review the preview
 
@@ -328,9 +329,10 @@ that already has stakeholders or records.
 
 - **Only to this app.** Cap Table reads the files you upload and stores what it imports in the app's own database.
   Nothing is sent to Pulley or to any other service.
-- **Your files aren't kept.** Your browser tab holds them until you import, and each check or import sends them to the
-  app's server to be read. The app keeps only a record of what you reviewed (a fingerprint of each file, the as-of date
-  and the counts), so that the import matches it exactly.
+- **What the app keeps.** Your browser tab holds the files until you import, and each check or import sends them to the
+  app's server to be read. The source file bytes are not retained. The app keeps each file's name and fingerprint,
+  import-run metadata, and source locations such as sheet and row with imported ledger facts. The fingerprints make the
+  import match exactly what you reviewed, and the locations show where each imported record came from.
 - **No extra encryption, keys or tokens.** Your browser talks to the app over its normal secure connection, and the
   imported records are protected like everything else in the app: only people with a role on the app in the Insulin
   console can open it.

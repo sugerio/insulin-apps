@@ -41,7 +41,7 @@ export const forStakeholders: DocTopic = {
             <li><b>Exercised</b>: how many you have already bought. <b>Exercisable now</b>: how many you could exercise today, at the <b>exercise price</b> shown.</li>
             <li><b>Option type</b> (ISO or NSO) and the <b>expiration date</b>, after which the options can't be exercised.</li>
             <li><b>Vesting timeline</b>: a chart of how your options vest over time, and the full schedule, with each date's amount, the running total and its status: <b>Vested</b> or <b>Upcoming</b>, or, for dates after vesting stopped (for example when you left), <b>Cancelled</b> or <b>Won't vest</b>.</li>
-            <li><b>ISO/NSO split</b>, for ISOs: only $100,000 worth of shares, valued on each grant date, can first become exercisable as ISOs in a calendar year, counting your ISOs in the order they were granted; the rest are treated as NSOs.</li>
+            <li><b>ISO/NSO split</b>, for ISOs: only $100,000 worth of shares, valued on each grant date, can first become exercisable as ISOs in a calendar year, counting all your ISOs from the company and its parent or subsidiary companies in the order they were granted; the rest are treated as NSOs. The split shown here counts only this company's grants.</li>
             <li><b>Post-termination exercise periods</b>: how long you would have to exercise vested options after leaving, for each reason for leaving.</li>
             <li><b>Exercise history</b> and the <b>documents</b> that belong to the grant, such as your option agreement.</li>
           </ul>

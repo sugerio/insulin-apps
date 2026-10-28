@@ -42,6 +42,9 @@ The sidebar:
 - **Stakeholders.**
 - **Company:** **Profile & Settings**, and under it **Documents**, **Reports** and **Recent Activity**.
 - **Certificates**, with **Legends** and **Terms**.
+- **Docs**, last, in a section of its own: how to use Cap Table, what holders see, and the basics of equity (vesting,
+  ISOs and NSOs, 409A valuations, SAFEs, dilution and more), with a glossary. Holders have **Docs** in their navigation
+  too, and the setup page links to it as **Learn about cap tables**.
 
 **+ New** at the top of the sidebar records a signed option grant. Most other changes are made from the page of the
 thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.
@@ -293,8 +296,8 @@ Holders open Cap Table from the Insulin console like everyone else. To give some
 2. give them the **User** or **Viewer** role on the app in the console.
 
 They then see their shares, options, warrants and converted SAFEs; vesting progress and upcoming vesting dates; for each
-option what they can exercise now and until when; the **How to exercise** page; and their documents and the company
-resources. They never see the cap table, other holders or ownership percentages. One person can be matched to more than
+option what they can exercise now and until when; the **How to exercise** page; their documents and the company
+resources; and **Docs**, which opens for them on a topic written for holders. They never see the cap table, other holders or ownership percentages. One person can be matched to more than
 one stakeholder (for example someone who also manages an investing entity); they see all of them.
 
 **Stakeholder Portal** (under Hire and Retain) decides what holders see:

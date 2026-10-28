@@ -35,6 +35,7 @@ README's "Database changes".
 |---|---|
 | `src/app/App.tsx`, `src/app/router.tsx` | React root and routes: the admin workspace (`/companies/:orgId/...`), the holder view (`/portfolio/:orgId/...`), first-run setup (`/setup`) |
 | `src/app/pages/`, `components/`, `lib/` | The React app; `components/flows/` holds the review-and-confirm dialogs |
+| `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic, shown by one component in the workspace, the portfolio and before setup |
 | `src/app/api/`, `src/app/auth/` | The typed API client; the console identity (`/api/me`), access helpers and route guards |
 | `src/app/server/router.ts` | `handleAppRequest(request)`: every app `/api/**` request, handed to `createApp()` in `server/app.ts` |
 | `src/app/server/routes/`, `middleware/` | The HTTP layer |
@@ -194,4 +195,6 @@ web sources for these, and for links or assets from other sites.
 ## Docs
 
 When behaviour changes, update the guide that describes it: `README.md`, `docs/using-cap-table.md`, `docs/importing.md`,
-`docs/architecture.md` or `src/app/db/README.md`.
+`docs/architecture.md` or `src/app/db/README.md`, and the in-app Docs topic in `src/app/pages/docs/` that users read. The
+in-app Docs describe only what the app does, in plain words, and their equity topics stay general information, not
+advice.

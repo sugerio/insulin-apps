@@ -28,6 +28,9 @@ and publish it. It brings its own database and needs no other service.
   log.
 - **A permanent history.** Every change is recorded with who made it and when. A mistake is corrected by reversing the
   change, never by rewriting history.
+- **Built-in Docs.** **Docs**, at the bottom of everyone's sidebar, explains how to use Cap Table and what holders see,
+  and covers the basics of equity in plain words (share counts, common and preferred stock, stock options and vesting,
+  ISOs and NSOs, 409A valuations, SAFEs, dilution), with a glossary.
 
 ## Who it's for
 
@@ -69,7 +72,8 @@ holdings.
    empty company**, **Import from Pulley**, or **Import from a spreadsheet** (with **Download the template**). An empty
    company asks for its name, legal name, state and date of incorporation, time zone (which decides when "today" starts
    for vesting and deadlines) and fiscal year end; you can still import into it later, as long as nothing has been added
-   to it. Everyone else sees that Cap Table isn't set up yet.
+   to it. Everyone else sees that Cap Table isn't set up yet. For anyone new to cap tables, the setup page links to the
+   built-in docs (**Learn about cap tables**).
 6. **Bring in your cap table.** Follow [Importing your cap table](docs/importing.md), then see
    [Using Cap Table](docs/using-cap-table.md) for everyday work.
 
@@ -99,7 +103,8 @@ When a holder opens Cap Table they see:
 - their shares, options, warrants and converted SAFEs, with vesting progress and upcoming vesting dates;
 - for each option: how much has vested, what they can exercise now and until when, and the exercise price;
 - **How to exercise**: your instructions, the form to use and how to pay;
-- the documents you have made visible to them, and the company resources you share with all holders.
+- the documents you have made visible to them, and the company resources you share with all holders;
+- **Docs**: what they see and how to read it, how exercising works, and the basics of equity.
 
 They never see the cap table, other holders or ownership percentages. Owners, admins and editors can open any stakeholder
 and choose **Preview as stakeholder** to see exactly what that person sees.
@@ -108,6 +113,7 @@ and choose **Preview as stakeholder** to see exactly what that person sees.
 
 | Guide | For |
 |---|---|
+| **Docs**, in the app | Everyone: getting started, importing, everyday tasks, the holder view, equity basics and a glossary. |
 | [Using Cap Table](docs/using-cap-table.md) | Owners and admins: everyday tasks. |
 | [Importing your cap table](docs/importing.md) | Whoever sets up the company: from Pulley or the spreadsheet template, step by step in the browser. |
 | [Architecture](docs/architecture.md) | Developers: how the app works. |
@@ -186,8 +192,9 @@ src/local-d1.ts                    the preview's D1-compatible database
 src/suger-app-builder-runtime.tsx  the AppBuilder's preview bridge (inert once published)
 vite.config.ts, drizzle.config.ts  build and migration settings
 src/app/                           Cap Table itself
-  App.tsx, router.tsx              React root and routes: the admin workspace, the holder view, first-run setup
+  App.tsx, router.tsx              React root and routes: the admin workspace, the holder view, first-run setup, the docs
   pages/, components/, lib/        the React app; api/ and auth/ hold its API client and the console identity
+  pages/docs/                      the in-app Docs: one topic per file, as static TSX
   server/router.ts                 handleAppRequest(request): hands every app request to the Hono API in server/
   db/                              the Drizzle schema, migrations and README
   shared/                          contracts (zod) and the cap table engine, imported as #shared

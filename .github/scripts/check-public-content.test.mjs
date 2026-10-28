@@ -1,4 +1,4 @@
-// Tests for check-public-content.mjs (node --test scripts/check-public-content.test.mjs).
+// Tests for check-public-content.mjs (node --test .github/scripts/check-public-content.test.mjs).
 //
 // Every sample is synthetic and assembled at run time: this file is scanned too, so it must not contain what it
 // tests for.

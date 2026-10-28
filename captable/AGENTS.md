@@ -23,8 +23,8 @@ Run from `captable/` unless noted.
 | After changing `src/app/db/schema.ts` | `npm run db:generate`, then `npm run build` (its first step checks the migrations) |
 | To check what publishing will build | `NODE_ENV=production NITRO_PRESET=cloudflare_module npm run build` |
 | To try it | `npm run dev` (port 3000; you are the "Preview admin", a stand-in owner) |
-| From the repository root, before you finish | `node scripts/check-insulin-app.mjs captable` and `node scripts/check-public-content.mjs` |
-| After server, database or build changes (developers; CI runs it) | `node smoke.mjs` in `tools/workerd-smoke/` at the repository root, after `npm ci` there and in `captable/`: the production build in workerd with a local D1 |
+| From the repository root, before you finish | `node .github/scripts/check-insulin-app.mjs captable` and `node .github/scripts/check-public-content.mjs` |
+| After server, database or build changes (developers; CI runs it) | `node smoke.mjs` in `.github/scripts/workerd-smoke/` at the repository root, after `npm ci` there and in `captable/`: the production build in workerd with a local D1 |
 
 `npm run db:generate` needs drizzle-kit 0.31.11 with drizzle-orm 0.45.3. The AppBuilder provides them; locally, see the
 README's "Database changes".
@@ -48,7 +48,7 @@ README's "Database changes".
 | `scripts/check-ledger-triggers.mjs` | The build's migration and trigger check |
 | `test/shared`, `test/server`, `test/db`, `test/import`, `test/web`, `test/support` | Tests by area (`web` runs under jsdom); `support` holds the server harness |
 | `docs/` | User and developer guides |
-| `../tools/workerd-smoke/` | The repository-level workerd harness (its own lockfile) |
+| `../.github/scripts/workerd-smoke/` | The repository-level workerd harness (its own lockfile) |
 
 `#shared` resolves to `src/app/shared/index.ts` (namespaces `api`, `engine`, `ocf`); `#platform` resolves to the runtime
 adapter.
@@ -170,7 +170,7 @@ particular:
 
 This code is public. Use synthetic data only: example.com, example.org, example.net or `.test` addresses, and fictional
 people and companies (the fixtures use Acme Robotics). Never add real names, e-mail addresses, company data, cloud account
-or database ids, keys, or local paths. `node scripts/check-public-content.mjs` (from the repository root) checks this, and
+or database ids, keys, or local paths. `node .github/scripts/check-public-content.mjs` (from the repository root) checks this, and
 CI runs it.
 
 ## User-facing text

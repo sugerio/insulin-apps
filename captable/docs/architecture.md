@@ -375,7 +375,7 @@ A new company is set up by importing Pulley's standard reports or the app's own 
 - `test/web`: the React app, including a walk through every admin page with each request held back or failing, and a
   scan of the web sources for unfinished-work markers, copy that promises a later version or an e-mail, and links or
   assets from other sites.
-- **workerd:** `tools/workerd-smoke/` at the repository root builds the app for Cloudflare, applies the migrations to a
+- **workerd:** `.github/scripts/workerd-smoke/` at the repository root builds the app for Cloudflare, applies the migrations to a
   local D1 database with a random synthetic id, starts the Worker with `wrangler dev --local` (Wrangler pinned in the
   harness's own lockfile), and drives it with console identity headers and synthetic data: health, a missing identity,
   setup, the SPA fallback, a refused cross-origin write, an empty company, the template download, an import preview and
@@ -417,5 +417,5 @@ test/                          shared/, server/, db/, import/, web/, support/
 docs/                          the guides
 ```
 
-At the repository root, outside the app: `tools/workerd-smoke/` (the workerd harness, with its own lockfile) and
-`scripts/` (the Insulin-shape and public-content checks).
+At the repository root, outside the app, in `.github/scripts/`: the workerd harness (`workerd-smoke/`, with its own
+lockfile) and the Insulin-shape and public-content checks.

@@ -25,9 +25,9 @@ jobs:
         with:
           node-version: 22
       - name: Scanner tests
-        run: node --test scripts/check-public-content.test.mjs
+        run: node --test .github/scripts/check-public-content.test.mjs
       - name: Scan tracked files
-        run: node scripts/check-public-content.mjs
+        run: node .github/scripts/check-public-content.mjs
 
   app:
     name: ${{ matrix.app }}
@@ -53,7 +53,7 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Insulin compatibility (source)
         working-directory: .
-        run: node scripts/check-insulin-app.mjs ${{ matrix.app }}
+        run: node .github/scripts/check-insulin-app.mjs ${{ matrix.app }}
       - name: Typecheck
         run: npm run typecheck
       - name: Test
@@ -78,7 +78,7 @@ jobs:
           NITRO_PRESET: cloudflare_module
       - name: Insulin compatibility (build output)
         working-directory: .
-        run: node scripts/check-insulin-app.mjs ${{ matrix.app }} --built
+        run: node .github/scripts/check-insulin-app.mjs ${{ matrix.app }} --built
 
   workerd-smoke:
     name: captable workerd smoke
@@ -93,13 +93,13 @@ jobs:
           cache: npm
           cache-dependency-path: |
             captable/package-lock.json
-            tools/workerd-smoke/package-lock.json
+            .github/scripts/workerd-smoke/package-lock.json
       - name: Install app
         working-directory: captable
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install smoke harness
-        working-directory: tools/workerd-smoke
+        working-directory: .github/scripts/workerd-smoke
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build, migrate, and run in workerd
-        working-directory: tools/workerd-smoke
+        working-directory: .github/scripts/workerd-smoke
         run: node smoke.mjs

@@ -140,13 +140,13 @@ NODE_ENV=production NITRO_PRESET=cloudflare_module npm run build   # what publis
 
 `npm run build` first runs `scripts/check-ledger-triggers.mjs`, which replays the migrations on an empty database and
 stops the build if a migration fails or a ledger trigger goes missing. From the repository root,
-`node scripts/check-insulin-app.mjs captable` checks that the app keeps the shape the platform expects (add `--built`
-after a build), and `node scripts/check-public-content.mjs` checks that nothing private has slipped into the repository.
+`node .github/scripts/check-insulin-app.mjs captable` checks that the app keeps the shape the platform expects (add `--built`
+after a build), and `node .github/scripts/check-public-content.mjs` checks that nothing private has slipped into the repository.
 CI runs all of them.
 
 ### Run it in workerd
 
-`tools/workerd-smoke/` at the repository root runs the production build the way Cloudflare does. It builds the app,
+`.github/scripts/workerd-smoke/` at the repository root runs the production build the way Cloudflare does. It builds the app,
 applies its migrations to a local D1 database, starts it with `wrangler dev --local`, and drives the main paths with
 synthetic data and console identities: health, identity and setup, an import from the spreadsheet template, the cap
 table and dashboard, a holder's view, ledger verification and a chunked document upload and download. It always stops
@@ -155,7 +155,7 @@ checks.
 
 ```bash
 npm ci                          # here, in captable/: the build uses the app's dependencies
-cd ../tools/workerd-smoke
+cd ../.github/scripts/workerd-smoke
 npm ci
 node smoke.mjs                  # add --skip-build to reuse the last build
 ```

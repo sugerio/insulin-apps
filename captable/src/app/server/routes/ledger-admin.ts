@@ -78,10 +78,11 @@ export function ledgerAdminRoutes(deps: AppDeps) {
     const key = idempotencyKey(c, true)!;
     const auth = c.get("auth");
     const db = c.env.DB;
+    if (!auth.orgAccess.has(orgId)) throw notFound("Organization not found");
     const template = `${route.method} ${route.path}`;
     const hash = requestSha256(template, c.req.path, {});
     const replay = async () => {
-      const receipt = await findReceipt(db, orgId, auth.user.id, template, key);
+      const receipt = await findReceipt(db, auth.consoleOrganizationId, orgId, auth.user.id, template, key);
       if (!receipt) return null;
       if (receipt.request_sha256 !== hash) throw conflict("idempotency_key_reused", "Idempotency-Key was already used for a different request");
       return storedResponse({ status: receipt.response_status, body: JSON.parse(receipt.response_body), replay: true });
@@ -93,7 +94,11 @@ export function ledgerAdminRoutes(deps: AppDeps) {
     const { report } = await verifyOrgLedger(db, orgId, now);
     try {
       await db.batch([
-        prepare(db, receiptInsert({ id: uuidv7(now), scope: orgId, actor: auth.user.id, route: template, key, requestSha256: hash, status: 200, body: JSON.stringify(report), now })),
+        prepare(db, receiptInsert({
+          id: uuidv7(now), consoleOrganizationId: auth.consoleOrganizationId,
+          scope: orgId, actor: auth.user.id, route: template, key,
+          requestSha256: hash, status: 200, body: JSON.stringify(report), now,
+        })),
         insertAudit(db, {
           occurredAt: now, orgId, actorUserId: auth.user.id, actorEmail: auth.user.email, authMethod: auth.authMethod,
           action: "ledger.verified", targetType: "org", targetId: orgId, result: report.ok ? "success" : "error",

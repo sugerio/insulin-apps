@@ -28,6 +28,8 @@ export async function resolveCurrentIdentity(
     && readAppEnv('SUGER_ACCESS_MODE') !== 'console'
   const current = consoleUser ?? (preview ? PREVIEW : null)
   if (!current) return null
+  if (current.userId.length < 3 || current.userId.length > 80
+    || current.organizationId.length < 1 || current.organizationId.length > 128) return null
 
   const storedEmail = storableEmail(current.email)
   const displayName = current.name?.slice(0, 200) ?? null
@@ -41,9 +43,14 @@ export async function resolveCurrentIdentity(
      WHERE users.display_name IS NOT excluded.display_name`,
   ).bind(current.userId, storedEmail, displayName, now, now).run()
 
-  const access = await resolveAccess(db, { role: current.role, email: current.email })
+  const access = await resolveAccess(db, {
+    role: current.role,
+    email: current.email,
+    organizationId: current.organizationId,
+  })
   return {
     user: { id: current.userId, email: current.email, displayName: current.name },
+    consoleOrganizationId: current.organizationId,
     consoleRole: current.role as AppRole,
     preview,
     authMethod: 'console',

@@ -23,8 +23,8 @@ async function seedHiddenCompany(status: 'importing' | 'archived') {
   await testDb.db.batch([
     testDb.db.prepare(
       `INSERT INTO orgs
-       (id, org_key, slug, status, legal_name, display_name, settings, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'Hidden Example, Inc.', 'Hidden Example', '{}', ?, ?)`,
+       (id, console_organization_id, org_key, slug, status, legal_name, display_name, settings, created_at, updated_at)
+       VALUES (?, 'console-org-1', ?, ?, ?, 'Hidden Example, Inc.', 'Hidden Example', '{}', ?, ?)`,
     ).bind(orgId, `hidden-${status}`, `hidden-${status}`, status, now, now),
     testDb.db.prepare(
       'INSERT INTO ledger_heads (org_id, seq, genesis_hash, head_hash, updated_at) VALUES (?, 0, ?, NULL, ?)',

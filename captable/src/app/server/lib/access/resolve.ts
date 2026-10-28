@@ -32,16 +32,17 @@ interface OrgRow {
   timezone: string
 }
 
-/** Resolve platform roles into the app's one-company access model. */
+/** Resolve platform roles inside the caller's one-company console organization. */
 export async function resolveAccess(
   db: D1Database,
-  identity: { role: AppRole; email: string | null },
+  identity: { role: AppRole; email: string | null; organizationId: string },
 ): Promise<AccessResolution> {
   const orgAccess = new Map<string, ResolvedOrg>()
   const org = await db.prepare(
     `SELECT id, org_key, slug, display_name, status, timezone
-     FROM orgs WHERE status = 'active' ORDER BY created_at, id LIMIT 1`,
-  ).first<OrgRow>()
+     FROM orgs WHERE console_organization_id = ? AND status = 'active'
+     ORDER BY created_at, id LIMIT 1`,
+  ).bind(identity.organizationId).first<OrgRow>()
 
   if (org && ['OWNER', 'ADMIN', 'EDITOR'].includes(identity.role)) {
     orgAccess.set(org.id, {
@@ -65,8 +66,9 @@ export async function resolveAccess(
        JOIN orgs o ON o.id = s.org_id
        WHERE lower(se.email) = lower(?) AND se.kind = 'self' AND se.removed_at IS NULL
          AND s.archived_at IS NULL AND s.portal_access <> 'closed' AND o.status = 'active'
+         AND o.console_organization_id = ?
        ORDER BY s.display_name, s.id`,
-    ).bind(identity.email).all<{ org_id: string; stakeholder_id: string; stakeholder_name: string }>()
+    ).bind(identity.email, identity.organizationId).all<{ org_id: string; stakeholder_id: string; stakeholder_name: string }>()
     portalMatches = results.map((row) => ({
       orgId: row.org_id,
       stakeholderId: row.stakeholder_id,

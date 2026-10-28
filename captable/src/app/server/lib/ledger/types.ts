@@ -2,7 +2,7 @@ import type { api, engine } from "#shared";
 import type { AppConfig } from "../config.ts";
 import type { DocumentLinkRole, DocumentRow } from "../documents/types.ts";
 import type { LoadedLedger } from "../read/ledger.ts";
-import type { OrgRow } from "../read/org.ts";
+import type { OwnedOrgRow } from "../read/org.ts";
 import type { AppDeps } from "../../types.ts";
 import type { ApiViolation, ApiWarning } from "./errors.ts";
 import type { Stmt } from "./statements.ts";
@@ -26,7 +26,7 @@ export interface CommandContext {
   db: D1Database;
   config: AppConfig | null;
   deps: Pick<AppDeps, "now">;
-  org: OrgRow;
+  org: OwnedOrgRow;
   settings: api.OrgSettings;
   ledger: LoadedLedger;
   now: number;

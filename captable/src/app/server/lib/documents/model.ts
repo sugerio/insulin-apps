@@ -99,22 +99,24 @@ export function linkInsert(
 
 export function idempotencyInsert(
   db: D1Database,
-  values: { id: string; scope: string; actor: string; route: string; key: string; requestHash: string; status: number; body: string; now: number },
+  values: { id: string; consoleOrganizationId: string; scope: string; actor: string; route: string; key: string; requestHash: string; status: number; body: string; now: number },
 ): D1PreparedStatement {
   return db.prepare(
     `INSERT INTO idempotency_keys
-      (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(values.id, values.scope, values.actor, values.route, values.key, values.requestHash, values.status, values.body, values.now);
+      (id, console_organization_id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(values.id, values.consoleOrganizationId, values.scope, values.actor, values.route, values.key,
+    values.requestHash, values.status, values.body, values.now);
 }
 
 export interface IdempotencyRow { request_sha256: string; response_status: number; response_body: string; }
 export function findIdempotency(
-  db: D1Database, scope: string, actor: string, route: string, key: string,
+  db: D1Database, consoleOrganizationId: string, scope: string, actor: string, route: string, key: string,
 ): Promise<IdempotencyRow | null> {
   return db.prepare(
-    "SELECT request_sha256, response_status, response_body FROM idempotency_keys WHERE scope = ? AND actor = ? AND route = ? AND idem_key = ?",
-  ).bind(scope, actor, route, key).first<IdempotencyRow>();
+    `SELECT request_sha256, response_status, response_body FROM idempotency_keys
+     WHERE console_organization_id = ? AND scope = ? AND actor = ? AND route = ? AND idem_key = ?`,
+  ).bind(consoleOrganizationId, scope, actor, route, key).first<IdempotencyRow>();
 }
 
 export async function requestHash(method: string, path: string, parts: unknown[]): Promise<string> {

@@ -41,7 +41,7 @@ import { SetupPage } from "./pages/SetupPage.tsx";
 
 function Home() {
   const me = useMe();
-  // One company per app: an owner or admin sets it up the first time the app opens.
+  // One company per Insulin organization: an owner or admin sets it up the first time this organization opens the app.
   if (me.company === null) return <Navigate to="/setup" replace />;
   if (hasAdminAccess(me)) return <Navigate to={`/companies/${me.company.id}/dashboard`} replace />;
   if (me.portal.matches.length > 0) return <Navigate to="/portfolio" replace />;

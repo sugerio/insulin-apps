@@ -91,7 +91,7 @@ async function load(db: D1Database, b: LedgerBuilder, now: number): Promise<void
   for (const command of b.reference.commands) {
     const receiptId = uuid(`perf:receipt:${command.id}`)
     const hash = engine.sha256Hex(command.id)
-    statements.push(receiptInsert({ id: receiptId, scope: orgId, actor: 'import:seed', route: 'POST /api/import', key: `perf:${command.id}`, requestSha256: hash, status: 200, body: '{}', now }))
+    statements.push(receiptInsert({ id: receiptId, consoleOrganizationId: 'performance-test-organization', scope: orgId, actor: 'import:seed', route: 'POST /api/import', key: `perf:${command.id}`, requestSha256: hash, status: 200, body: '{}', now }))
     statements.push(commandInsert({
       id: command.id, orgId, type: command.type, receiptId, requestSha256: hash, actorKind: 'import', actorUserId: null, authMethod: null, note: null,
       reversesCommandId: null, expectedLedgerSeq: null, declaredTxCount: command.declaredTxCount, firstSeq: command.firstSeq, lastSeq: command.lastSeq,

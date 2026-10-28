@@ -123,6 +123,7 @@ function uploadError(error: unknown): never {
 }
 
 interface Mutation {
+  consoleOrganizationId: string;
   scope: string;
   actor: string;
   route: string;
@@ -141,9 +142,10 @@ async function beginMutation(
   c: Context<AppEnv>, deps: AppDeps, scope: string, route: string, parts: unknown[],
 ): Promise<Mutation | Response> {
   const key = idempotencyKey(c);
-  const actor = c.get("auth").user.id;
+  const auth = c.get("auth");
+  const actor = auth.user.id;
   const hash = await requestHash(c.req.method, c.req.path, parts);
-  const previous = await findIdempotency(c.env.DB, scope, actor, route, key);
+  const previous = await findIdempotency(c.env.DB, auth.consoleOrganizationId, scope, actor, route, key);
   if (previous) {
     if (previous.request_sha256 !== hash) {
       throw new ApiError("conflict", "Idempotency-Key was already used for a different request", undefined, {
@@ -152,19 +154,22 @@ async function beginMutation(
     }
     return response(previous.response_body, previous.response_status, true);
   }
-  return { scope, actor, route, key, hash, now: deps.now() };
+  return { consoleOrganizationId: auth.consoleOrganizationId, scope, actor, route, key, hash, now: deps.now() };
 }
 
 async function commitMutation(
   c: Context<AppEnv>, mutation: Mutation, statements: D1PreparedStatement[], status: number, body: string,
 ): Promise<Response> {
   const receipt = idempotencyInsert(c.env.DB, {
-    id: crypto.randomUUID(), scope: mutation.scope, actor: mutation.actor, route: mutation.route,
+    id: crypto.randomUUID(), consoleOrganizationId: mutation.consoleOrganizationId,
+    scope: mutation.scope, actor: mutation.actor, route: mutation.route,
     key: mutation.key, requestHash: mutation.hash, status, body, now: mutation.now,
   });
   try { await c.env.DB.batch([...statements, receipt]); }
   catch (error) {
-    const raced = await findIdempotency(c.env.DB, mutation.scope, mutation.actor, mutation.route, mutation.key);
+    const raced = await findIdempotency(
+      c.env.DB, mutation.consoleOrganizationId, mutation.scope, mutation.actor, mutation.route, mutation.key,
+    );
     if (raced?.request_sha256 === mutation.hash) return response(raced.response_body, raced.response_status, true);
     if (raced) throw new ApiError("conflict", "Idempotency-Key was already used for a different request", undefined, {
       reason: "idempotency_key_reused",
@@ -260,7 +265,7 @@ async function uploadDocument(c: Context<AppEnv>, deps: AppDeps, supersedesDocum
   const labels = await documentActorLabels(c.env.DB, [row], links, grant.pii);
   const body = JSON.stringify(documentJson(row, links, labels));
   const store = new DocumentStore(c.env.DB);
-  await store.stage(orgId, documentId, upload.bytes, now);
+  await store.stage(auth.consoleOrganizationId, orgId, documentId, upload.bytes, now);
   const statements = [
     c.env.DB.prepare(
       "INSERT INTO batch_assertions (ok) SELECT EXISTS (SELECT 1 FROM orgs WHERE id = ? AND status = 'active')",
@@ -273,7 +278,9 @@ async function uploadDocument(c: Context<AppEnv>, deps: AppDeps, supersedesDocum
     ).bind(documentId, orgId, filename, upload.contentType, upload.bytes.byteLength, upload.sha256Hex, kindHeader,
       defaultVisible ? 1 : 0, collectionId, supersedesDocumentId, auth.user.id, now, now),
   ];
-  statements.push(...store.finalizeStatements(orgId, documentId, upload.bytes.byteLength, now));
+  statements.push(...store.finalizeStatements(
+    auth.consoleOrganizationId, orgId, documentId, upload.bytes.byteLength, now,
+  ));
   if (optionalLink) statements.push(linkInsert(c.env.DB, {
     id: optionalLink.id, orgId, documentId, role: optionalLink.role, target: optionalLink.target, userId: auth.user.id, now,
   }));
@@ -664,7 +671,10 @@ export function portalDocumentRoutes(deps: AppDeps) {
 
   routes.get("/documents/:id/download", async (c) => {
     if (!c.get("config").portalEnabled) throw notFound();
-    const row = await c.env.DB.prepare("SELECT * FROM documents WHERE id = ?").bind(c.req.param("id")!).first<DocumentRow>();
+    const orgIds = [...new Set(c.get("auth").portalMatches.map((match) => match.orgId))];
+    const row = await c.env.DB.prepare(
+      `SELECT * FROM documents WHERE id = ? AND org_id IN (SELECT value FROM json_each(?))`,
+    ).bind(c.req.param("id")!, JSON.stringify(orgIds)).first<DocumentRow>();
     if (!row) throw notFound();
     const ownIds = holderIds(c, row.org_id);
     if (!ownIds) throw notFound();

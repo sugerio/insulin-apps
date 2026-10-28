@@ -35,6 +35,22 @@ export const DASHBOARD_AUTOMATIC_EXPIRY_LIMIT = 10;
 const STAGING_CLEANUP_LIMIT = 100;
 const ONE_DAY_MS = 86_400_000;
 
+/** Upserts one company's report-only proposal with a public sequence that no other company can advance. */
+export async function upsertExpiryRun(
+  db: D1Database,
+  orgId: string,
+  localDate: string,
+  candidates: string,
+  createdAt: number,
+): Promise<void> {
+  await db.prepare(
+    `INSERT INTO expiry_runs (org_id, org_seq, local_date, candidates, created_at)
+     SELECT ?, COALESCE(MAX(org_seq) + 1, 1), ?, ?, ? FROM expiry_runs WHERE org_id = ?
+     ON CONFLICT (org_id, local_date) DO UPDATE SET candidates = excluded.candidates
+     WHERE expiry_runs.confirmed_at IS NULL AND expiry_runs.confirmation IS NULL`,
+  ).bind(orgId, localDate, candidates, createdAt, orgId).run();
+}
+
 /** The exact engine candidate check plus the only due work that lives outside the ledger replay. */
 export async function hasDueWork(
   db: D1Database,
@@ -74,12 +90,15 @@ export async function processDue(
   };
   const failures: { kind: string; id: string; code: string }[] = [];
   try {
+    const consoleOrganizationId = await db.prepare(
+      "SELECT console_organization_id FROM orgs WHERE id = ? AND status = 'active'",
+    ).bind(orgId).first<string>("console_organization_id");
     await db.prepare(
       `DELETE FROM document_upload_chunks WHERE rowid IN (
          SELECT rowid FROM document_upload_chunks
-         WHERE org_id = ? AND created_at < ? ORDER BY created_at, rowid LIMIT ?
+         WHERE console_organization_id IS ? AND org_id = ? AND created_at < ? ORDER BY created_at, rowid LIMIT ?
        )`,
-    ).bind(orgId, now - ONE_DAY_MS, STAGING_CLEANUP_LIMIT).run();
+    ).bind(consoleOrganizationId, orgId, now - ONE_DAY_MS, STAGING_CLEANUP_LIMIT).run();
   } catch (error) {
     log("document_staging_cleanup_failed", { orgId, code: error instanceof Error ? error.name : "unknown" });
   }
@@ -121,12 +140,7 @@ export async function processDue(
     const candidates = expiryCandidatesToday(ctx);
     if (candidates.length > 0 && ctx.settings.expiry.mode === "report_only") {
       const details = JSON.stringify(candidates.map((candidate) => proposalOf(ctx, candidate)));
-      await db.prepare(
-        `INSERT INTO expiry_runs (org_id, local_date, candidates, created_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT (org_id, local_date) DO UPDATE SET candidates = excluded.candidates
-         WHERE expiry_runs.confirmed_at IS NULL AND expiry_runs.confirmation IS NULL`,
-      ).bind(orgId, localDate, details, now).run();
+      await upsertExpiryRun(db, orgId, localDate, details, now);
       result.proposedExpirations = candidates.length;
     } else if (ctx.settings.expiry.mode === "automatic") {
       const limit = options.automaticExpiryLimit === undefined

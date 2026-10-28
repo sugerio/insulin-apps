@@ -79,10 +79,10 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Cap Table keeps one company's cap table: there is one company per app. To keep another company's cap table, create
-            another app from Cap Table in the Insulin console.
+            Cap Table keeps one company's cap table for each Insulin organization. Switching organizations in the Insulin
+            console switches the company Cap Table opens; each organization sets up or imports its own company independently.
           </p>
-          <p>The first owner or admin to open the published app chooses how to start:</p>
+          <p>The first owner or admin of each organization to open the published app chooses how to start:</p>
           <ul>
             <li><b>Start with an empty company.</b> Enter the company's name, legal name, state and date of incorporation, time zone and fiscal year end. The time zone decides when "today" starts for vesting and deadlines. You can import into the company later, as long as nothing has been added to it yet.</li>
             <li><b>Import from Pulley.</b> Upload Pulley's standard reports.</li>

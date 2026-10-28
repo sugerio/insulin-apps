@@ -4,6 +4,8 @@ import type { PortalMatch, ResolvedOrg } from './lib/access/resolve.ts'
 
 export interface AuthContext {
   user: { id: string; email: string | null; displayName: string | null }
+  /** The opaque organization id supplied by the Insulin console for this request. */
+  consoleOrganizationId: string
   consoleRole: AppRole
   preview: boolean
   authMethod: 'console'

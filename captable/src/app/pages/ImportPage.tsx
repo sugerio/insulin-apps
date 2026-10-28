@@ -25,7 +25,7 @@ export function ImportPage() {
   if (!imported) {
     if (me.company === null) return <Navigate to="/setup" replace />;
     if (!hasAdminAccess(me)) return <Navigate to="/no-access" replace />;
-    // One company per app: an address with another company's id (one an import retired) leads home.
+    // One company per Insulin organization: another id belongs to another organization or a retired import.
     if (me.company.id !== orgId) return <Navigate to="/" replace />;
   }
   const company = me.company;
@@ -42,7 +42,7 @@ function ReadOnly({ back }: { back: string }) {
   return (
     <Card>
       <Banner kind="info" title="Only owners and admins can import">
-        You can view this company's cap table. Setting it up from Pulley or a spreadsheet takes an owner or admin of the app.
+        You can view this company's cap table. Setting it up from Pulley or a spreadsheet takes an owner or admin of your Insulin organization.
       </Banner>
       <div className="row mt-12"><Link className="btn btn-ghost" to={back}>Back to the dashboard</Link></div>
     </Card>

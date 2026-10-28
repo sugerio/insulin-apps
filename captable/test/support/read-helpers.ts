@@ -16,6 +16,7 @@ import { uuid, type LedgerBuilder } from '../shared/engine/fixtures/builder.ts'
 import {
   appRequest,
   consoleHeaders,
+  CONSOLE_ORGANIZATION_ID,
   createLegacyTestDatabase,
   useAppNowForTests,
   type ConsoleIdentity,
@@ -67,13 +68,15 @@ export async function seedOrg(
   id = '00000000-0000-4000-8000-000000000001',
   key = 'acme-robotics',
   status: 'staging' | 'active' = 'active',
+  consoleOrganizationId = CONSOLE_ORGANIZATION_ID,
 ): Promise<string> {
   const now = Date.UTC(2026, 9, 19)
   await db.prepare(
-    `INSERT INTO orgs (id, org_key, slug, status, legal_name, display_name, settings, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'Acme Robotics, Inc.', 'Acme Robotics', ?, ?, ?)`,
+    `INSERT INTO orgs
+     (id, console_organization_id, org_key, slug, status, legal_name, display_name, settings, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'Acme Robotics, Inc.', 'Acme Robotics', ?, ?, ?)`,
   ).bind(
-    id, key, status === 'active' ? key : `${key}--r01`, status,
+    id, consoleOrganizationId, key, status === 'active' ? key : `${key}--r01`, status,
     JSON.stringify({ companyContact: { name: 'Acme Equity Team', email: 'equity@example.test' } }),
     now, now,
   ).run()
@@ -200,6 +203,7 @@ export async function seedAcme(
     const requestSha256 = engine.sha256Hex(`seed:${command.id}`)
     statements.push(receiptInsert({
       id: receiptId,
+      consoleOrganizationId: CONSOLE_ORGANIZATION_ID,
       scope: orgId,
       actor: imported ? `import:${batchId}` : user ? SEED_USER_ID : 'system:seed',
       route: imported ? 'POST /api/import/runs/:id/apply' : `POST /api/orgs/:orgId/commands/${command.type}`,
@@ -254,10 +258,10 @@ export async function recordCommittedImport(db: D1Database, orgId: string, sourc
   const now = ACME_NOW - 1_000
   await db.prepare(
     `INSERT INTO import_runs
-       (id, source_system, status, file_hashes, as_of_date, plan_sha256, counts, created_by, org_id,
+       (id, console_organization_id, source_system, status, file_hashes, as_of_date, plan_sha256, counts, created_by, org_id,
         error_message, timezone, jurisdiction, fiscal_year_end, created_at, updated_at)
-     VALUES (?, ?, 'committed', '[]', '2026-10-20', ?, '{}', ?, ?, NULL, 'UTC', 'US-DE', '12-31', ?, ?)`,
-  ).bind(crypto.randomUUID(), source, '0'.repeat(64), SEED_USER_ID, orgId, now, now).run()
+     VALUES (?, ?, ?, 'committed', '[]', '2026-10-20', ?, '{}', ?, ?, NULL, 'UTC', 'US-DE', '12-31', ?, ?)`,
+  ).bind(crypto.randomUUID(), CONSOLE_ORGANIZATION_ID, source, '0'.repeat(64), SEED_USER_ID, orgId, now, now).run()
 }
 
 export function withRsuAndSar(acme: Acme): void {

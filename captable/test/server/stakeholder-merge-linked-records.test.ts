@@ -102,10 +102,10 @@ describe('stakeholder merge linked-record safety', () => {
       lastExerciseDate: '2026-10-25', effectiveDate: '2026-10-26',
     }]
     const run = await l.db.prepare(
-      'INSERT INTO expiry_runs (org_id, local_date, candidates, created_at) VALUES (?, ?, ?, ?) RETURNING id',
-    ).bind(l.orgId, '2026-10-26', JSON.stringify(candidates), ACME_NOW).first<{ id: number }>()
+      'INSERT INTO expiry_runs (org_id, org_seq, local_date, candidates, created_at) VALUES (?, 1, ?, ?, ?) RETURNING org_seq',
+    ).bind(l.orgId, '2026-10-26', JSON.stringify(candidates), ACME_NOW).first<{ org_seq: number }>()
     const survivor = await getJson<api.StakeholderDetail>(l, l.sa, `/stakeholders/${l.id('S04')}`)
-    const expiry = await getJson<api.ExpiryRunDetail>(l, l.sa, `/expiry-runs/${run!.id}`)
+    const expiry = await getJson<api.ExpiryRunDetail>(l, l.sa, `/expiry-runs/${run!.org_seq}`)
     expect(expiry.proposals).toContainEqual(expect.objectContaining({
       displayId: 'OPT-2', holder: expect.objectContaining({ stakeholderId: l.id('S04'), name: survivor.displayName }),
     }))

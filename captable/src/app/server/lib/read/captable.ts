@@ -247,7 +247,7 @@ export async function dashboard(ctx: ReadContext, state: engine.LedgerState): Pr
   ];
   const labels = new ActorLabels(ctx);
   const { results: audit } = await ctx.db.prepare(
-    "SELECT id, occurred_at, actor_kind, actor_user_id, action, details FROM audit_events WHERE org_id = ? AND result = 'success' ORDER BY id DESC LIMIT 8",
+    "SELECT org_seq AS id, occurred_at, actor_kind, actor_user_id, action, details FROM audit_events WHERE org_id = ? AND result = 'success' ORDER BY org_seq DESC LIMIT 8",
   ).bind(ctx.org.id).all<{ id: number; occurred_at: number; actor_kind: string; actor_user_id: string | null; action: string; details: string | null }>();
   const recentActivity = [];
   for (const row of audit) {

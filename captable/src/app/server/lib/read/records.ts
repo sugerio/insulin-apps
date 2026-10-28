@@ -326,6 +326,10 @@ export interface AuditRow {
   details: string | null;
 }
 
+/** The tenant-local sequence is the only audit id returned outside the database. */
+export const AUDIT_ROW_COLUMNS = `org_seq AS id, occurred_at, org_id, actor_kind, actor_user_id, actor_email,
+  auth_method, action, target_type, target_id, result, reason, ip, user_agent, request_id, details`;
+
 export function auditJson(viewer: Pick<Viewer, "pii" | "fullAccess">, row: AuditRow): api.AuditEvent {
   const details = json(row.details);
   return {
@@ -352,9 +356,10 @@ export function auditJson(viewer: Pick<Viewer, "pii" | "fullAccess">, row: Audit
 export async function auditPage(ctx: ReadContext, query: { cursor?: string; limit: number; action?: string; actorId?: string; targetId?: string; actorType?: string }): Promise<api.AuditPage> {
   const before = decodeCursor(query.cursor);
   const { results } = await ctx.db.prepare(
-    `SELECT * FROM audit_events WHERE org_id = ?1 AND (?2 IS NULL OR id < ?2) AND (?3 IS NULL OR action = ?3)
+    `SELECT ${AUDIT_ROW_COLUMNS} FROM audit_events
+     WHERE org_id = ?1 AND (?2 IS NULL OR org_seq < ?2) AND (?3 IS NULL OR action = ?3)
        AND (?4 IS NULL OR actor_user_id = ?4) AND (?5 IS NULL OR target_id = ?5) AND (?6 IS NULL OR actor_kind = ?6)
-     ORDER BY id DESC LIMIT ?7`,
+     ORDER BY org_seq DESC LIMIT ?7`,
   ).bind(ctx.org.id, before, query.action ?? null, query.actorId ?? null, query.targetId ?? null, query.actorType ?? null, query.limit + 1).all<AuditRow>();
   const page = results.slice(0, query.limit);
   return { items: page.map((row) => auditJson(ctx.viewer, row)), nextCursor: results.length > query.limit ? encodeCursor(page[page.length - 1]!.id) : null };

@@ -43,7 +43,7 @@ export function RequireOrgAccess() {
   const me = useMe();
   if (me.company === null) return <Navigate to="/setup" replace />;
   if (!hasAdminAccess(me)) return <Navigate to="/no-access" replace />;
-  // One company per app: another id is one an import retired (an old link or a history entry), so an admin goes home.
+  // One company per Insulin organization: another id is foreign or retired, so an administrator goes home.
   return me.company.id === orgId ? <Outlet /> : <Navigate to="/" replace />;
 }
 

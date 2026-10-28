@@ -9,6 +9,7 @@ type Statement = ReturnType<LocalD1['prepare']>
 /** The fixtures' clock: 2026-01-05 09:00 UTC. */
 export const T0 = Date.UTC(2026, 0, 5, 9)
 export const ORG = 'org_acme'
+export const CONSOLE_ORG = 'console-org-1'
 export const ADMIN = 'user_admin'
 export const FREYA = 'sh_freya'
 export const COMMON = 'class_common'
@@ -28,9 +29,9 @@ export async function seedCompany(db: LocalD1): Promise<void> {
       .bind(ADMIN, T0, T0),
     db
       .prepare(
-        "INSERT INTO orgs (id, org_key, slug, status, legal_name, display_name, created_at, updated_at) VALUES (?, 'acme', 'acme', 'active', 'Acme Robotics, Inc.', 'Acme Robotics', ?, ?)",
+        "INSERT INTO orgs (id, console_organization_id, org_key, slug, status, legal_name, display_name, created_at, updated_at) VALUES (?, ?, 'acme', 'acme', 'active', 'Acme Robotics, Inc.', 'Acme Robotics', ?, ?)",
       )
-      .bind(ORG, T0, T0),
+      .bind(ORG, CONSOLE_ORG, T0, T0),
     db.prepare('INSERT INTO ledger_heads (org_id, genesis_hash, updated_at) VALUES (?, ?, ?)').bind(ORG, sha(`genesis:${ORG}`), T0),
     db
       .prepare(
@@ -136,10 +137,11 @@ export function commandStatements(db: LocalD1, head: Head, spec: CommandSpec): S
   const statements = [
     db
       .prepare(
-        `INSERT INTO idempotency_keys (id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
-         VALUES (?, ?, ?, 'POST /api/commands', ?, ?, 200, '{}', ?)`,
+        `INSERT INTO idempotency_keys
+         (id, console_organization_id, scope, actor, route, idem_key, request_sha256, response_status, response_body, created_at)
+         VALUES (?, ?, ?, ?, 'POST /api/commands', ?, ?, 200, '{}', ?)`,
       )
-      .bind(`idem_${spec.id}`, ORG, actor ?? `${actorKind}:fixtures`, `idem-key-${spec.id}`, sha(`request:${spec.id}`), T0),
+      .bind(`idem_${spec.id}`, CONSOLE_ORG, ORG, actor ?? `${actorKind}:fixtures`, `idem-key-${spec.id}`, sha(`request:${spec.id}`), T0),
     db
       .prepare(
         `INSERT INTO commands (id, org_id, type, idempotency_key_id, request_sha256, actor_kind, actor_user_id, auth_method, note,

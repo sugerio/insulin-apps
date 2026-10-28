@@ -825,7 +825,7 @@ export const ENDPOINT_EXAMPLES: Record<RouteId, EndpointExample> = {
     params: orgParams,
     query: { action: "command.grant-equity-compensation", actorType: "user" },
     response: { items: [auditEvent], nextCursor: null },
-    invalid: [{ query: { actorType: "robot" } }, { query: { actorId: "morgan" } }],
+    invalid: [{ query: { actorType: "robot" } }, { query: { actorId: "" } }, { query: { actorId: "u".repeat(129) } }],
   },
 
   // §8 ---------------------------------------------------------------------------------------------------------

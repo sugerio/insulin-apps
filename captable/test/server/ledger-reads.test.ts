@@ -158,9 +158,10 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     expect(detail.command.actor).toBe('Imported from the spreadsheet')
 
     await harness.db.prepare(
-      `INSERT INTO audit_events (occurred_at, org_id, actor_kind, action, target_type, target_id, result, details)
-       VALUES (?, ?, 'import', 'import.committed', 'import_run', ?, 'success', '{}')`,
-    ).bind(ACME_NOW, harness.orgId, crypto.randomUUID()).run()
+      `INSERT INTO audit_events (occurred_at, org_id, org_seq, actor_kind, action, target_type, target_id, result, details)
+       SELECT ?, ?, COALESCE(MAX(org_seq) + 1, 1), 'import', 'import.committed', 'import_run', ?, 'success', '{}'
+       FROM audit_events WHERE org_id = ?`,
+    ).bind(ACME_NOW, harness.orgId, crypto.randomUUID(), harness.orgId).run()
     const dashboard = await getJson<api.DashboardResponse>(harness, harness.owner, '/dashboard')
     expect(dashboard.recentActivity[0]?.actor).toBe('Imported from the spreadsheet')
   })

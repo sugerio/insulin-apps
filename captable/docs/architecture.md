@@ -71,7 +71,8 @@ hash they were reviewed against (see [Commands](#commands)).
 
 - **Identity comes from the console.** `getCurrentUser(request)` from `@fours/app/server` returns
   `{ userId, organizationId, appId, role, email, name }` (e-mail and name may be null), or `null`. The app never reads the
-  platform's identity headers itself and has no login of its own: no sessions, cookies or passwords.
+  platform's identity headers itself and has no login of its own: no sessions, cookies or passwords. Console user ids
+  are opaque strings of 3–80 characters; a request with an id outside that bound has no identity.
 - **The preview identity.** With no console user and `import.meta.env.DEV` true (the Vite dev server: local
   `npm run dev` and the AppBuilder preview), the app acts as a fixed "Preview admin" with role `OWNER` and the address
   `preview@example.test`, and `/api/me` reports `preview: true` (the web app shows a "Preview mode" strip). Server tests
@@ -98,11 +99,18 @@ hash they were reviewed against (see [Commands](#commands)).
 - **Self-dealing guard.** An owner or admin can't run a ledger command that touches a stakeholder linked to them: through
   an admin link (`admin_stakeholder_links`), or because their console e-mail is on that stakeholder. They also can't
   remove their own admin link.
-- **One company per app.** A company is `active`, `importing` or `archived`, and a partial unique index
-  (`orgs_one_active`) allows at most one active company. Only the active one is visible: every company list, read, ledger
-  load, access resolution and holder match filters on it. The first-run setup (`POST /api/orgs`, owners and admins, only
-  while no company exists) creates it, its ledger head and an audit row in one batch that also asserts it is the only
-  active company; an import creates it instead (see [The import](#the-import)).
+- **One company per Insulin organization.** `orgs.console_organization_id` stores the opaque organization id from the
+  console identity. A company is `active`, `importing` or `archived`. Separate partial unique indexes allow at most one
+  active company and at most one in-flight importing company for each console organization, while the final import
+  batch can atomically archive the empty active company and activate its replacement. Every access resolution and
+  holder match filters by that owner and by `active`; import runs,
+  idempotency receipts, staged upload chunks and pre-company audit events carry the same owner. Companies and related
+  rows created before this change belong to no Insulin organization and are not shown; there is no adoption rule. The
+  first-run setup (`POST /api/orgs`) creates the caller's company, ledger head and audit row in one batch; an import
+  creates it instead (see [The import](#the-import)). Setup is refused while that organization has a live import; an
+  import whose ten-minute attempt lease has expired is treated as dead and does not block setup. Once more than one
+  organization uses a deployment, rolling the app back below this version is unsafe because older code does not scope
+  company access by console organization.
 - **Holder responses are allowlisted.** Portal routes are separate handlers that query only the caller's matched
   stakeholders and answer with the allowlist schemas in `src/app/shared/api/portal/`: no cap table, no other holders, no
   fully diluted percentages. Tests compare the responses against the allowlist recursively.
@@ -124,7 +132,8 @@ hash they were reviewed against (see [Commands](#commands)).
 - **The triggers** make the ledger tables append-only, chain each transaction to the previous one, let a command claim
   only the next sequence numbers, allow only legal state transitions on workflow rows, require `version = old + 1` on
   every update of a versioned row, and keep records such as document bytes, certificates, valuations and audit events
-  immutable.
+  immutable. Audit events and expiry runs exposed to a company use per-company sequence ids, and insert triggers refuse
+  a company row without one.
 - **Additive changes only on tables with triggers.** For many changes, drizzle-kit rebuilds a SQLite table (create a copy,
   copy the rows, drop the original, rename), and dropping the original drops its triggers. `npm run build` runs
   `scripts/check-ledger-triggers.mjs` first: it replays every migration on an empty in-memory database and stops the
@@ -304,12 +313,13 @@ A new company is set up by importing Pulley's standard reports or the app's own 
   reviewed profile; never the files or the plan) and returns the preview without the plan or any internal code.
 - **Commit:**
   1. A receipt for the same `Idempotency-Key` replays its stored answer. Otherwise the run takes a ten-minute attempt
-     lease; an overlapping attempt gets 409 "This import is already running".
+     lease; an overlapping attempt gets 409 "This import is already running". At most one import can run for each
+     console organization; a different organization can import independently.
   2. The preview is rebuilt from the re-sent files and refused (422) unless the file digests, the as-of date, the profile
      and the plan's SHA-256 all equal the reviewed ones and the plan is still importable.
   3. It is refused (409) when the active company has stakeholders or ledger activity, or documents, document folders,
-     payment instructions, signatories, legends or valuations, or when a source id in the plan is already in an active
-     company's import provenance (`pulley_id`, `pulley_ref`).
+     payment instructions, signatories, legends or valuations, or when a source id in the plan is already in the
+     caller's organization's active-company import provenance (`pulley_id`, `pulley_ref`).
   4. It creates a company in the `importing` state with its genesis ledger head. Every company list, read, ledger load,
      access resolution and holder match sees only `active` companies, so nothing written there is visible.
   5. It writes the reference rows, then the commands in dependency order, through the ledger's own statement builders.

@@ -33,7 +33,8 @@ describe('the migrations', () => {
     const applied = await rows<{ hash: string }>('SELECT hash FROM __drizzle_migrations ORDER BY created_at')
     expect(applied).toHaveLength(readMigrations().length)
     expect(readMigrations().map((migration) => migration.tag)).toEqual([
-      '0000_init', '0001_ledger_triggers',
+      '0000_init', '0001_ledger_triggers', '0002_tenant_per_organization', '0003_freeze_owner',
+      '0004_require_company_sequences',
     ])
   })
 
@@ -45,8 +46,13 @@ describe('the migrations', () => {
   // The preview's D1 stand-in prepares each `--> statement-breakpoint` chunk as one statement and silently ignores
   // anything after the first, so a chunk holding two statements would lose one without an error.
   it('create every table, index and trigger they declare', async () => {
-    const declared = readMigrations()
+    const migrations = readMigrations()
+    const dropped = new Set(migrations
+      .flatMap((migration) => [...migration.sql.matchAll(/DROP INDEX (?:IF EXISTS )?`?(\w+)`?/g)])
+      .map((match) => match[1]))
+    const declared = migrations
       .flatMap((migration) => [...migration.sql.matchAll(/CREATE (?:UNIQUE )?(TABLE|INDEX|TRIGGER) (?:IF NOT EXISTS )?`?(\w+)`?/g)])
+      .filter((match) => match[1] !== 'INDEX' || !dropped.has(match[2]))
       .map((match) => `${match[1]!.toLowerCase()} ${match[2]}`)
       .sort()
     const created = (await schemaObjects())
@@ -55,7 +61,13 @@ describe('the migrations', () => {
       .sort()
     expect(created).toEqual(declared)
     expect(declared.filter((object) => object.startsWith('table '))).toHaveLength(36)
-    expect(declared.filter((object) => object.startsWith('trigger '))).toHaveLength(74)
+    expect(declared.filter((object) => object.startsWith('trigger '))).toHaveLength(81)
+  })
+
+  it('can replay the company-sequence triggers after a partial migration attempt', async () => {
+    const migration = readMigrations().find(({ tag }) => tag === '0004_require_company_sequences')!
+    for (const statement of migration.sql.split('--> statement-breakpoint')) await db.prepare(statement).run()
+    expect((await rows<MasterRow>("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger'"))).toHaveLength(81)
   })
 
   it('seed the transaction types', async () => {
@@ -90,13 +102,21 @@ describe('the migrations', () => {
     expect(await names('payment_instructions')).toEqual(['org_id', 'details', 'updated_by', 'updated_at', 'version'])
     expect(await names('expiry_runs')).toEqual([
       'id', 'org_id', 'local_date', 'candidates', 'created_at', 'confirmation', 'confirmed_at', 'confirmed_by',
+      'org_seq',
+    ])
+    expect(await names('audit_events')).toEqual([
+      'id', 'occurred_at', 'org_id', 'actor_kind', 'actor_user_id', 'actor_email', 'auth_method', 'action',
+      'target_type', 'target_id', 'result', 'reason', 'ip', 'user_agent', 'request_id', 'details',
+      'console_organization_id', 'org_seq',
     ])
     expect(await names('document_blobs')).toEqual(['org_id', 'document_id', 'chunk_index', 'bytes', 'created_at'])
-    expect(await names('document_upload_chunks')).toEqual(['org_id', 'document_id', 'chunk_index', 'bytes', 'created_at'])
+    expect(await names('document_upload_chunks')).toEqual([
+      'org_id', 'document_id', 'chunk_index', 'bytes', 'created_at', 'console_organization_id',
+    ])
     expect(await names('import_runs')).toEqual([
       'id', 'source_system', 'status', 'file_hashes', 'as_of_date', 'plan_sha256', 'counts', 'created_by',
       'org_id', 'error_message', 'timezone', 'jurisdiction', 'fiscal_year_end', 'attempt_id',
-      'attempt_expires_at', 'created_at', 'updated_at',
+      'attempt_expires_at', 'created_at', 'updated_at', 'console_organization_id',
     ])
   })
 })

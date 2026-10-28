@@ -416,7 +416,7 @@ export const routes = {
     method: "GET",
     path: "/api/orgs",
     section: "Company",
-    summary: "The app's active company, when one exists",
+    summary: "The Insulin organization's active company, when one exists",
     auth: "admin",
     permission: "At most one active company",
     response: json(orgListSchema),

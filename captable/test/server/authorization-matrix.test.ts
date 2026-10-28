@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { api } from '../../src/app/shared/index.ts'
 import { holderIdentity, readHarness, type ReadHarness } from '../support/read-helpers.ts'
+import { consoleHeaders } from '../support/server-harness.ts'
 
 let harness: ReadHarness | undefined
 afterEach(async () => { await harness?.close(); harness = undefined })
@@ -45,4 +46,23 @@ describe('authorization matrix over the pruned route table', () => {
     expect((await harness.api('GET', holderRoute.path, harness.owner)).status).toBe(404)
     expect((await harness.api('GET', holderRoute.path, holder)).status).toBe(200)
   })
+
+  it('hides every company-id contract route from another console organization', async () => {
+    harness = await readHarness({ emails: { S04: 'holder@example.test' } })
+    const foreign = consoleHeaders({
+      organizationId: 'console-org-2', userId: 'foreign-owner', role: 'OWNER',
+      email: 'foreign.owner@example.test', name: 'Foreign Owner',
+    })
+    const routes = api.ROUTE_TABLE.filter((route) => route.path.includes(':orgId'))
+    expect(routes.length).toBeGreaterThan(0)
+    for (const route of routes) {
+      const response = await harness.api(
+        route.method,
+        pathFor(route, harness.orgId),
+        foreign,
+        route.method === 'GET' ? undefined : {},
+      )
+      expect.soft(response.status, route.id).toBe(404)
+    }
+  }, 30_000)
 })

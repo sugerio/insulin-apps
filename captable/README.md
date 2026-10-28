@@ -52,7 +52,10 @@ holdings.
   dashboard, or chooses **Process due items** there.
 - **Not a valuation, tax or legal service.** It records 409A valuations but doesn't perform them, and it doesn't file tax
   forms or give advice.
-- **One company per app.**
+- **One company per Insulin organization.** Switching organizations in the Insulin console switches the company Cap
+  Table opens; each organization sets up or imports its own company independently.
+- **Companies created before organization ownership was added belong to no Insulin organization and are not shown.**
+  Cap Table does not assign or adopt them automatically.
 - **Not supported:** RSUs, SARs, phantom stock, convertible notes and profits interests.
 
 ## Getting started

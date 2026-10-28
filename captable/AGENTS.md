@@ -163,9 +163,10 @@ particular:
 - **No login of our own:** no sign-in screens, sessions, cookies or passwords. Use `getCurrentUser(request)` from
   `@fours/app/server`; never read the platform's identity headers directly. The fixed "Preview admin" exists only when
   `import.meta.env.DEV` is true.
-- **One company per app**, created by the first-run setup or by the import. A company is `active`, `importing` or
-  `archived`; keep the `active` filter in every query that lists or resolves companies, so that a company being imported,
-  or one an import replaced, stays invisible.
+- **One company per Insulin organization**, created by the first-run setup or by the import. `orgs.console_organization_id`
+  is the opaque console organization id, and every pre-company record is scoped by it. A company is `active`, `importing`
+  or `archived`; keep both the owner and `active` filters in every query that lists or resolves companies, so another
+  console organization's company, a company being imported, or one an import replaced stays invisible.
 
 ## Public repository
 

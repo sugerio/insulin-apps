@@ -51,7 +51,7 @@ export async function orgDetail(db: D1Database, orgId: string, fullAccess: boole
   return orgJson(row, head, fullAccess);
 }
 
-/** `GET /api/orgs`: the app's active company when the caller has access. */
+/** `GET /api/orgs`: the caller's Insulin organization's active company, when they have access. */
 export async function orgList(db: D1Database, orgAccess: ReadonlyMap<string, ResolvedOrg>): Promise<api.OrgList> {
   const ids = [...orgAccess.keys()];
   if (ids.length === 0) return { items: [] };

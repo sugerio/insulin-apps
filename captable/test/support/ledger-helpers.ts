@@ -15,7 +15,11 @@ import type { Actor } from '../../src/app/server/lib/ledger/types.ts'
 import { ledgerCache } from '../../src/app/server/lib/read/ledger.ts'
 import { buildAcme, VALUATIONS, VS_1, type Acme } from '../shared/engine/fixtures/acme.ts'
 import { uuid, type LedgerBuilder } from '../shared/engine/fixtures/builder.ts'
-import { appRequest, consoleHeaders, createTestDatabase, type ConsoleIdentity } from './server-harness.ts'
+import {
+  appRequest, consoleHeaders, CONSOLE_ORGANIZATION_ID, createTestDatabase, type ConsoleIdentity,
+} from './server-harness.ts'
+
+export { CONSOLE_ORGANIZATION_ID }
 
 /**
  * The synthetic "Acme Robotics, Inc." org of the engine's demo fixture (`buildAcme`), loaded into a fresh migrated test
@@ -205,9 +209,11 @@ export function holderName(label: string): string {
 export async function seedOrg(db: D1Database, id = '00000000-0000-4000-8000-000000000001', key = 'acme-robotics'): Promise<string> {
   const now = Date.UTC(2026, 9, 19)
   await db.prepare(
-    `INSERT INTO orgs (id, org_key, slug, status, legal_name, display_name, settings, created_at, updated_at)
-     VALUES (?, ?, ?, 'active', 'Acme Robotics, Inc.', 'Acme Robotics', ?, ?, ?)`,
-  ).bind(id, key, key, JSON.stringify({ companyContact: { name: 'Acme Equity Team', email: 'equity@example.test' } }), now, now).run()
+    `INSERT INTO orgs
+     (id, console_organization_id, org_key, slug, status, legal_name, display_name, settings, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'active', 'Acme Robotics, Inc.', 'Acme Robotics', ?, ?, ?)`,
+  ).bind(id, CONSOLE_ORGANIZATION_ID, key, key,
+    JSON.stringify({ companyContact: { name: 'Acme Equity Team', email: 'equity@example.test' } }), now, now).run()
   await db.prepare('INSERT INTO ledger_heads (org_id, seq, genesis_hash, head_hash, updated_at) VALUES (?, 0, ?, NULL, ?)')
     .bind(id, engine.genesisHash(id), now).run()
   return id
@@ -326,6 +332,7 @@ export async function seedAcme(
     const requestSha256 = engine.sha256Hex(`seed:${command.id}`)
     statements.push(receiptInsert({
       id: receiptId,
+      consoleOrganizationId: CONSOLE_ORGANIZATION_ID,
       scope: orgId,
       actor: imported ? IMPORT_ACTOR : user ? SEED_USER_ID : 'system:seed',
       route: imported ? IMPORT_ROUTE : `POST /api/orgs/:orgId/commands/${command.type}`,

@@ -13,7 +13,7 @@ import type { ImportSource } from "../lib/imports.ts";
 import { FISCAL_YEAR_ENDS, JURISDICTIONS, timezones } from "../lib/org.ts";
 import { useDocumentTitle } from "../lib/useDocumentTitle.ts";
 
-// First run (one company per app): until the company exists, owners and admins choose how to start and everyone else
+// First run (one company per Insulin organization): until the company exists, owners and admins choose how to start and everyone else
 // sees a note to wait for them. Three ways in: an empty company (the form below; its details can be changed later
 // under Company › Profile & Settings), or the import wizard with Pulley's exports or the Cap Table spreadsheet. The
 // choice is in the address (?start=), so the browser's Back returns to the three choices.
@@ -85,7 +85,7 @@ export function SetupPage() {
         <div className="card setup-card">
           <BrandMark size={40} />
           <h1>Cap Table isn't set up yet</h1>
-          <p>An owner or admin of this app sets up the company the first time they open it. Ask one of them to open Cap Table from the Insulin console; then come back here.</p>
+          <p>An owner or admin of your Insulin organization sets up the company the first time they open it. Ask one of them to open Cap Table from the Insulin console; then come back here.</p>
           <p className="setup-learn">Meanwhile, the docs explain what Cap Table does and the basics of equity: <Link to="/docs">Learn about cap tables</Link>.</p>
         </div>
       </div>
@@ -176,7 +176,7 @@ function SetupForm() {
       await refresh();
       navigate("/", { replace: true });
     } catch (error) {
-      setProblem(describeError(error, { conflict: "The company is already set up. Reload the app to open it." }));
+      setProblem(describeError(error));
     } finally {
       setBusy(false);
     }

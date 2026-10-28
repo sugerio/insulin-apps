@@ -102,14 +102,14 @@ export const users = sqliteTable(
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Organizations: import writes stay invisible until the final status flip. Archived rows preserve failed attempts and
-// the empty company an import replaces; the partial unique index still permits exactly one visible company.
+// the empty company an import replaces; the partial unique index permits one visible company per console organization.
 
 export const orgs = sqliteTable(
   'orgs',
   {
     id: text('id').primaryKey(),
     orgKey: text('org_key').notNull(),
-    slug: text('slug').notNull().unique(),
+    slug: text('slug').notNull(),
     status: text('status').notNull().default('active'),
     legalName: text('legal_name').notNull(),
     displayName: text('display_name').notNull(),
@@ -131,6 +131,9 @@ export const orgs = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
     pulleyId: text('pulley_id'),
+    // The opaque organization id from the Insulin console. Older companies have NULL here and deliberately belong
+    // to nobody; there is no automatic adoption path. Kept last because SQLite appends additive columns.
+    consoleOrganizationId: text('console_organization_id'),
   },
   (t) => [
     check(
@@ -156,7 +159,15 @@ export const orgs = sqliteTable(
     check('orgs_address_check', sql`address IS NULL OR json_valid(address)`),
     check('orgs_share_unit_check', decimal('share_unit', { nonZero: true })),
     check('orgs_settings_check', sql`json_valid(settings)`),
-    uniqueIndex('orgs_one_active').on(t.status).where(sql`status = 'active'`),
+    uniqueIndex('orgs_console_organization_slug')
+      .on(t.consoleOrganizationId, t.slug)
+      .where(sql`console_organization_id IS NOT NULL AND status <> 'archived'`),
+    uniqueIndex('orgs_one_active_per_console_organization')
+      .on(t.consoleOrganizationId)
+      .where(sql`console_organization_id IS NOT NULL AND status = 'active'`),
+    uniqueIndex('orgs_one_importing_per_console_organization')
+      .on(t.consoleOrganizationId)
+      .where(sql`console_organization_id IS NOT NULL AND status = 'importing'`),
   ],
 )
 
@@ -513,6 +524,8 @@ export const idempotencyKeys = sqliteTable(
     responseStatus: integer('response_status').notNull(),
     responseBody: text('response_body').notNull(),
     createdAt: integer('created_at').notNull(),
+    // Receipts created before a company exists still belong to the caller's console organization.
+    consoleOrganizationId: text('console_organization_id'),
   },
   (t) => [
     check('idempotency_keys_scope_check', sql`length(scope) BETWEEN 3 AND 64`),
@@ -525,7 +538,8 @@ export const idempotencyKeys = sqliteTable(
       'idempotency_keys_response_body_check',
       sql`json_valid(response_body) AND length(response_body) <= 65536`,
     ),
-    unique('idempotency_keys_scope_actor_route_idem_key_unique').on(t.scope, t.actor, t.route, t.idemKey),
+    unique('idempotency_keys_console_org_scope_actor_route_idem_key_unique')
+      .on(t.consoleOrganizationId, t.scope, t.actor, t.route, t.idemKey),
     index('idempotency_keys_created').on(t.createdAt),
   ],
 )
@@ -1073,6 +1087,7 @@ export const documentUploadChunks = sqliteTable(
     chunkIndex: integer('chunk_index').notNull(),
     bytes: bytes('bytes').notNull(),
     createdAt: integer('created_at').notNull(),
+    consoleOrganizationId: text('console_organization_id'),
   },
   (t) => [
     check('document_upload_chunks_chunk_index_check', sql`chunk_index >= 0`),
@@ -1395,6 +1410,8 @@ export const expiryRuns = sqliteTable(
     confirmation: text('confirmation'),
     confirmedAt: integer('confirmed_at'),
     confirmedBy: text('confirmed_by').references(() => users.id),
+    // Public ids count only this company. The global primary key remains internal so this is an additive migration.
+    orgSeq: integer('org_seq'),
   },
   (t) => [
     check('expiry_runs_local_date_check', isoDate('local_date')),
@@ -1402,6 +1419,7 @@ export const expiryRuns = sqliteTable(
     check('expiry_runs_confirmation_check', sql`confirmation IS NULL OR json_valid(confirmation)`),
     check('expiry_runs_confirmed_together_check', sql`(confirmed_at IS NULL) = (confirmed_by IS NULL)`),
     unique('expiry_runs_org_id_local_date_unique').on(t.orgId, t.localDate),
+    unique('expiry_runs_org_id_org_seq_unique').on(t.orgId, t.orgSeq),
   ],
 )
 
@@ -1429,6 +1447,7 @@ export const importRuns = sqliteTable(
     attemptExpiresAt: integer('attempt_expires_at'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
+    consoleOrganizationId: text('console_organization_id'),
   },
   (t) => [
     check('import_runs_source_system_check', sql`source_system IN ('pulley', 'template')`),
@@ -1492,6 +1511,9 @@ export const auditEvents = sqliteTable(
     requestId: text('request_id'),
     // Ids, field names and counts; for reference-data edits, field-level before and after values.
     details: text('details'),
+    consoleOrganizationId: text('console_organization_id'),
+    // Tenant-visible event ids count only this company; the global primary key is never returned.
+    orgSeq: integer('org_seq'),
   },
   (t) => [
     check('audit_events_actor_kind_check', sql`actor_kind IN ('user', 'system', 'anonymous', 'import')`),
@@ -1506,8 +1528,10 @@ export const auditEvents = sqliteTable(
     index('audit_events_actor').on(t.actorUserId, t.id),
     index('audit_events_target').on(t.targetId, t.id),
     index('audit_events_action').on(t.action, t.id),
+    uniqueIndex('audit_events_org_seq_unique').on(t.orgId, t.orgSeq),
     // Audit exports page by event time and id within one organization.
     index('audit_events_org_occurred').on(t.orgId, sql`occurred_at DESC`, sql`id DESC`),
+    index('audit_events_org_occurred_seq').on(t.orgId, sql`occurred_at DESC`, sql`org_seq DESC`),
   ],
 )
 

@@ -135,7 +135,8 @@ describe("the topics", () => {
     const basics = textOf("equity-basics");
     // ISOs: the holding periods, the $100,000 rule as a whole, leaving, and large holders.
     expect(basics).toContain("If the shares are sold more than two years after the grant and more than one year after the exercise, the gain is generally a long-term capital gain.");
-    expect(basics).toContain("A sale before both dates is a disqualifying disposition: the gain, up to the spread at exercise, is generally taxed as ordinary income");
+    expect(basics).toContain("A sale that does not meet both holding periods is a disqualifying disposition: the gain, up to the spread at exercise, is generally taxed as ordinary income");
+    expect(basics).toContain("It counts only this company's grants, because grants from a parent or subsidiary aren't entered in Cap Table");
     expect(basics).toContain("The limit counts all of the employee's ISOs from the company and its parent or subsidiary companies, in the order they were granted");
     expect(basics).toContain("within three months after employment ends, or within one year if it ended because of a permanent and total disability");
     expect(basics).toContain("After the holder's death, special rules let the estate or heirs exercise it as an ISO for as long as the option itself allows.");
@@ -154,11 +155,17 @@ describe("the topics", () => {
     expect(basics).toContain("There are now 10,000,000 shares, and the founder's 2,000,000 are 20%.");
     // What the app does: files reach the server but aren't kept; opening balances are the files as read; vested exercises.
     const importing = textOf("importing");
-    expect(importing).toContain("Check the files and Import send your files to this app's server to be read, but the files themselves aren't kept");
-    expect(importing).not.toMatch(/stay in your browser tab|exactly right/);
+    expect(importing).toContain("Check the files and Import send your files to this app's server to be read; the source file bytes are not retained");
+    expect(importing).toContain("The source file bytes are not retained. The app keeps each file's name and fingerprint, import-run metadata, and source locations such as sheet and row with imported ledger facts.");
+    expect(importing).not.toMatch(/stay in your browser tab|exactly right|only a fingerprint|keeps only/);
     expect(importing).toContain("as Cap Table reads them on the import date");
-    expect(textOf("for-stakeholders")).toContain("Cap Table records only exercises of vested options.");
+    const stakeholders = textOf("for-stakeholders");
+    expect(stakeholders).toContain("Cap Table records only exercises of vested options.");
+    expect(stakeholders).toContain("counting all your ISOs from the company and its parent or subsidiary companies in the order they were granted");
+    expect(stakeholders).toContain("The split shown here counts only this company's grants.");
     const glossary = textOf("glossary");
+    expect(glossary).toContain("which counts all of the holder's ISOs from the company and its parent or subsidiary companies");
+    expect(glossary).toContain("Cap Table's split counts only this company's grants.");
     expect(glossary).toContain("the holder's Docs entry isn't part of it");
     expect(glossary).not.toMatch(/exactly what a holder sees|are exact;/);
     expect(textOf("everyday-tasks")).toContain("The holder's Docs entry isn't part of the preview.");

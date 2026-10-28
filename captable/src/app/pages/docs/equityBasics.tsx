@@ -164,7 +164,7 @@ export const equityBasics: DocTopic = {
           </p>
           <ul>
             <li><b>NSOs</b> can be granted to employees, directors, advisors and consultants. When an NSO is exercised for vested shares, the spread is generally taxed as ordinary income, and for employees the company usually withholds tax through payroll. Shares that are still unvested when received (after an early exercise), and the rare option with a readily determinable value of its own, follow different timing rules.</li>
-            <li><b>ISOs</b> can be granted only to employees. Exercising an ISO generally doesn't trigger regular income tax, but the spread can count toward the alternative minimum tax (AMT). If the shares are sold more than two years after the grant and more than one year after the exercise, the gain is generally a long-term capital gain. A sale before both dates is a <b>disqualifying disposition</b>: the gain, up to the spread at exercise, is generally taxed as ordinary income, and the rest of the gain or loss is a capital gain or loss.</li>
+            <li><b>ISOs</b> can be granted only to employees. Exercising an ISO generally doesn't trigger regular income tax, but the spread can count toward the alternative minimum tax (AMT). If the shares are sold more than two years after the grant and more than one year after the exercise, the gain is generally a long-term capital gain. A sale that does not meet both holding periods is a <b>disqualifying disposition</b>: the gain, up to the spread at exercise, is generally taxed as ordinary income, and the rest of the gain or loss is a capital gain or loss.</li>
           </ul>
           <p>ISOs come with limits, including:</p>
           <ul>
@@ -175,8 +175,9 @@ export const equityBasics: DocTopic = {
           <p>IRS Publication 525 explains these rules in more detail.</p>
           <InApp>
             Each option grant is an ISO or an NSO. The ISO/NSO split applies the $100,000 limit to a holder's ISO grants in the order
-            they were granted, year by year. Recording an ISO asks whether the holder owns more than 10%, and applies the 110% and
-            five-year rules if so. After a termination, an option shows its ISO deadline next to its exercise deadline, and ISO
+            they were granted, year by year. It counts only this company's grants, because grants from a parent or subsidiary aren't
+            entered in Cap Table: check those separately. Recording an ISO asks whether the holder owns more than 10%, and applies the
+            110% and five-year rules if so. After a termination, an option shows its ISO deadline next to its exercise deadline, and ISO
             options exercised after the ISO deadline are recorded as NSO.
           </InApp>
         </>

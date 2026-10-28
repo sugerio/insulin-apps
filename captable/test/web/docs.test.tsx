@@ -8,7 +8,7 @@ import { Docs } from "../../src/app/components/Docs.tsx";
 import { TOPIC_SLUGS } from "../../src/app/pages/docs/parts.tsx";
 import { DOC_TOPICS } from "../../src/app/pages/docs/topics.ts";
 import { routes } from "../../src/app/router.tsx";
-import { dashboard, me, org, ORG_ID, stakeholderList, VALUATIONS } from "./support/acme.ts";
+import { dashboard, me, org, ORG_ID, VALUATIONS } from "./support/acme.ts";
 import { mock, mockApi, type MockHandler } from "./support/mockApi.ts";
 import { COMPANY_RESOURCES, NADIA, holderMe, howToExercise, overview } from "./support/portal.ts";
 import { base, renderPage } from "./support/render.tsx";
@@ -47,10 +47,23 @@ async function title(name: string): Promise<HTMLElement> {
   return screen.findByRole("heading", { level: 1, name });
 }
 
-describe("the Docs entry", () => {
-  it("is the last item of an owner's sidebar, in a section of its own, and opens the docs in the workspace", async () => {
-    const { router } = renderPage("dashboard", [mock(api.routes.getDashboard, dashboard()), mock(api.routes.listValuations, { items: VALUATIONS })]);
+// Every console role, as the app sees it: the workspace's (Owner, Admin, Editor) and the holder's (User, Viewer).
+const WORKSPACE_ROLES = [["an Owner", "owner", "Owner"], ["an Admin", "admin_rw", "Admin"], ["an Editor", "admin_ro", "Editor"]] as const;
+const HOLDER_ROLES = [["a User", "USER", "User"], ["a Viewer", "VIEWER", "Viewer"]] as const;
+// Before setup, owners and admins choose how to start (and come back to it); everyone else waits for them.
+const BEFORE_SETUP: readonly (readonly [who: string, session: Me, home: string])[] = [
+  ["an Owner", me("owner", { company: null }), "Set up your company"],
+  ["an Admin", me("admin_rw", { company: null }), "Set up your company"],
+  ["an Editor", me("admin_ro", { company: null }), "Home"],
+  ["a User", { ...holderMe([], { consoleRole: "USER" }), company: null }, "Home"],
+  ["a Viewer", { ...holderMe([], { consoleRole: "VIEWER" }), company: null }, "Home"],
+];
+
+describe("the Docs entry, for every role", () => {
+  it.each(WORKSPACE_ROLES)("is the last item of %s's sidebar, in a section of its own, and opens the docs in the workspace", async (_who, role, label) => {
+    const { router } = renderPage("dashboard", [mock(api.routes.getDashboard, dashboard()), mock(api.routes.listValuations, { items: VALUATIONS })], { role });
     const primary = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(screen.getByRole("banner")).getByText(label)).toBeTruthy();
     const help = screen.getByRole("navigation", { name: "Help" });
     expect(within(primary).queryByRole("link", { name: "Docs" })).toBeNull();
     // After every cap-table item, not among them.
@@ -69,15 +82,10 @@ describe("the Docs entry", () => {
     expect(document.title).toBe("Getting started — Docs · Cap Table");
   });
 
-  it("is in an editor's sidebar too", async () => {
-    renderPage("stakeholders", [mock(api.routes.listStakeholders, stakeholderList())], { role: "admin_ro" });
-    await screen.findByRole("navigation", { name: "Primary" });
-    expect(within(screen.getByRole("navigation", { name: "Help" })).getByRole("link", { name: "Docs" }).getAttribute("href")).toBe(DOCS);
-  });
-
-  it("follows a holder's portfolio navigation and opens the docs in the portfolio, on the holders' topic", async () => {
-    const { router, callsTo } = renderAt(PORTFOLIO, holderMe([NADIA]), portalHandlers());
+  it.each(HOLDER_ROLES)("follows the portfolio navigation of %s holder and opens the docs in the portfolio, on the holders' topic", async (_who, consoleRole, label) => {
+    const { router, callsTo } = renderAt(PORTFOLIO, holderMe([NADIA], { consoleRole }), portalHandlers());
     const portfolio = await screen.findByRole("navigation", { name: "Portfolio" });
+    expect(within(screen.getByRole("banner")).getByText(label)).toBeTruthy();
     expect(within(portfolio).getAllByRole("link").map((link) => link.textContent)).toEqual(["Portfolio", "How to exercise", "Documents"]);
     const help = screen.getByRole("navigation", { name: "Help" });
     expect(portfolio.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -90,6 +98,23 @@ describe("the Docs entry", () => {
     // Inside the holder's own frame: their breadcrumb and the company contact, never an admin route.
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toBe("Acme RoboticsDocs");
     expect(await screen.findByText("equity@acmerobotics.example")).toBeTruthy();
+    expect(callsTo(api.routes.getOrg)).toHaveLength(0);
+  });
+
+  it.each(BEFORE_SETUP)("reaches the docs before setup for %s: from the setup page, then from the sidebar", async (_who, session, home) => {
+    const { router, callsTo } = renderAt("/setup", session);
+    const link = await screen.findByRole("link", { name: "Learn about cap tables" });
+    expect(link.getAttribute("href")).toBe("/docs");
+    fireEvent.click(link);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/docs"));
+    const heading = await title("Getting started");
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    // The standalone pages: the docs are the sidebar's only section, and the way back is the setup page or home.
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+    const entry = within(screen.getByRole("navigation", { name: "Help" })).getByRole("link", { name: "Docs" });
+    expect(entry.getAttribute("href")).toBe("/docs");
+    expect(entry.getAttribute("aria-current")).toBe("page");
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("link", { name: home }).getAttribute("href")).toBe(home === "Home" ? "/" : "/setup");
     expect(callsTo(api.routes.getOrg)).toHaveLength(0);
   });
 });
@@ -271,12 +296,6 @@ describe("the standalone docs", () => {
     expect(callsTo(api.routes.getOrg)).toHaveLength(0);
   });
 
-  it("lead home for someone else without a company", async () => {
-    renderAt("/docs/equity-basics", { ...holderMe([]), company: null });
-    expect(await title("Equity basics")).toBeTruthy();
-    expect(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("link", { name: "Home" }).getAttribute("href")).toBe("/");
-  });
-
   it("send someone with a workspace or a portfolio to the docs there, section included", async () => {
     const admin = renderAt("/docs/equity-basics#vesting", me("admin_ro"), [mock(api.routes.getOrg, org())]);
     await waitFor(() => expect(admin.router.state.location.pathname).toBe(`${DOCS}/equity-basics`));
@@ -288,24 +307,6 @@ describe("the standalone docs", () => {
     const holder = renderAt("/docs", holderMe([NADIA]), portalHandlers());
     await waitFor(() => expect(holder.router.state.location.pathname).toBe(`${PORTFOLIO}/docs`));
     expect(await title("For stakeholders")).toBeTruthy();
-  });
-});
-
-describe("the setup page", () => {
-  it("links an owner setting up to the docs", async () => {
-    const { router } = renderAt("/setup", me("owner", { company: null }));
-    const link = await screen.findByRole("link", { name: "Learn about cap tables" });
-    expect(link.getAttribute("href")).toBe("/docs");
-    fireEvent.click(link);
-    await waitFor(() => expect(router.state.location.pathname).toBe("/docs"));
-    const heading = await title("Getting started");
-    await waitFor(() => expect(document.activeElement).toBe(heading));
-  });
-
-  it("offers the docs to everyone waiting for the company to be set up", async () => {
-    renderAt("/setup", { ...holderMe([]), company: null });
-    expect(await screen.findByRole("heading", { name: "Cap Table isn't set up yet" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Learn about cap tables" }).getAttribute("href")).toBe("/docs");
   });
 });
 

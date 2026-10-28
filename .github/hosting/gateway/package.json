@@ -1,0 +1,19 @@
+{
+  "name": "insulin-apps-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sign-in, organizations and app routing for Insulin Apps (a Cloudflare Worker).",
+  "license": "MIT",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node test/run.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261006.1",
+    "miniflare": "5.20261006.1-alpha",
+    "typescript": "6.0.3",
+    "wrangler": "4.149.0"
+  }
+}

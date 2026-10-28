@@ -1,5 +1,6 @@
 {
   "name": "insulin-captable",
+  "displayName": "Cap Table",
   "version": "0.1.0",
   "description": "Cap Table: an open-source equity management app for Insulin (Vite + React + Nitro on Cloudflare Workers and D1).",
   "license": "MIT",

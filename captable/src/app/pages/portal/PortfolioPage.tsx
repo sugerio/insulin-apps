@@ -9,7 +9,8 @@ import { Card } from "../../components/Page.tsx";
 import { DocumentCards, PortalLink, PortalPage, StatusBadge } from "../../components/PortalParts.tsx";
 import { usePortal } from "../../components/PortalWorkspace.tsx";
 import { Tiles, type Tile } from "../../components/Tiles.tsx";
-import { DASH, formatDate, formatDaysLeft } from "../../lib/format.ts";
+import { DASH, formatDate, formatDaysLeft, plural } from "../../lib/format.ts";
+import { SECURITY_STATUS_LABELS } from "../../lib/labels.ts";
 import { exitWindows, isPositive, securityPath, summarize, typeLabel, upcomingVests, type ExitWindow } from "../../lib/portal.ts";
 import { useResource } from "../../lib/useResource.ts";
 
@@ -55,7 +56,7 @@ function Overview({ record }: { record: api.PortalHolding }) {
       ? [{ label: "Options", value: format.shares(summary.options.outstanding), sub: `${format.shares(summary.options.vestedUnexercised)} vested and unexercised · ${format.shares(summary.options.unvested)} unvested` }]
       : []),
     ...(summary.warrants ? [{ label: "Warrants", value: format.shares(summary.warrants) }] : []),
-    ...(summary.safes.length ? [{ label: "SAFEs", value: `${summary.safes.length} converted`, sub: "History" }] : []),
+    ...(summary.safes.length ? [{ label: "SAFEs", value: plural(summary.safes.length, "SAFE"), sub: statusCounts(summary.safes) }] : []),
   ];
   if (tiles.length === 0) tiles.push({ label: "Holdings", value: "None outstanding" });
 
@@ -155,6 +156,15 @@ function ExitWindowBanner({ windows }: { windows: readonly ExitWindow[] }) {
       {how}
     </Banner>
   );
+}
+
+/** "1 outstanding · 1 converted": how many of the securities are in each status, in the labels' order. */
+function statusCounts(securities: readonly api.PortalSecurity[]): string {
+  return (Object.keys(SECURITY_STATUS_LABELS) as api.PortalSecurity["status"][])
+    .map((status) => [status, securities.filter((security) => security.status === status).length] as const)
+    .filter(([, count]) => count > 0)
+    .map(([status, count]) => `${count.toLocaleString("en-US")} ${SECURITY_STATUS_LABELS[status].toLowerCase()}`)
+    .join(" · ");
 }
 
 /** "You hold equity under 2 records" (an individual and their trust are separate stakeholders). */

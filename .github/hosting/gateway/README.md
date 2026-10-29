@@ -7,17 +7,23 @@ console identity headers. The apps need no hosting-specific code.
 
 | Host | What it serves |
 |---|---|
-| `SITE_DOMAIN` (e.g. `insulinapps.com`) | landing page, `/privacy`, `/terms` (public, indexable) |
+| `SITE_DOMAIN` (e.g. `insulinapps.com`) | landing page, `/privacy`, `/terms` (public, indexable), `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
-| `auth.SITE_DOMAIN` | accounts, organizations, members, invitations |
-| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, account bar, `me`, `switch-org`, `logout` |
+| `auth.SITE_DOMAIN` | accounts, organizations, members, invitations; `/favicon.ico`, `/apple-touch-icon.png` |
+| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included) |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout` |
 
 The operator runbook (setup, secrets, adding an app) is `.github/hosting/README.md`. This file is for developers.
 
 ## Code
 
-TypeScript with zero runtime dependencies (Web Crypto, `HTMLRewriter`, D1, fetch). The entry is `src/index.ts`.
+TypeScript on the Workers runtime (Web Crypto, `HTMLRewriter`, D1, fetch). The entry is `src/index.ts`.
+
+The pages are React components rendered to HTML on the server (`renderToStaticMarkup` from `react-dom/server`, the
+edge build wrangler picks for workerd), built from [shadcn/ui](https://ui.shadcn.com) components and styled with
+Tailwind CSS. There is no client-side React: no hydration and no script bundle, and every form is a plain HTML POST.
+The runtime dependencies are only `react`, `react-dom`, `class-variance-authority`, `clsx`, `tailwind-merge` and
+`lucide-react` (icons, rendered to inline SVG); wrangler bundles them.
 
 | Path | What |
 |---|---|
@@ -25,7 +31,7 @@ TypeScript with zero runtime dependencies (Web Crypto, `HTMLRewriter`, D1, fetch
 | `src/config.ts`, `src/env.ts` | the bindings and vars, checked once per isolate; anything missing fails closed (503) |
 | `src/context.ts` | per-request state: site, public scheme and origins, clock, form, cookies to set |
 | `src/crypto.ts` | random tokens and ids, SHA-256, PBKDF2 hashes, constant-time comparison |
-| `src/http/` | cookies, security headers, request parsing, responses, `return_to` |
+| `src/http/` | cookies, security headers, request parsing, responses, `return_to`, what is forwarded to apps |
 | `src/db/` | D1 queries, one module per table group; every race-sensitive rule is a single statement or batch |
 | `src/auth/` | sessions, email and password accounts, Google sign-in, the account page |
 | `src/orgs/` | organizations, roles and members; invitations |
@@ -33,8 +39,15 @@ TypeScript with zero runtime dependencies (Web Crypto, `HTMLRewriter`, D1, fetch
 | `src/reserved.ts` | `/__insulin/me`, `switch-org`, `logout`, and the local captured-mail page |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode) and the messages |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
-| `src/pages/` | server-rendered pages; `pages/html.ts` is the one place HTML is escaped |
-| `src/assets/` | the stylesheet and the account bar (script and stylesheet) as strings |
+| `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (top bar, footer, favicon links) |
+| `src/pages/html.ts` | the `html` tag, which escapes the HTML of the e-mails (React escapes the pages) |
+| `src/components/ui/` | shadcn/ui components (new-york style), as the shadcn CLI writes them; see "shadcn/ui" below |
+| `src/components/` | the gateway's own pieces: top bar, footer, `<details>` menus, form fields, brand marks |
+| `src/lib/utils.ts` | `cn()`, shadcn's class-name helper (`clsx` and `tailwind-merge`) |
+| `src/styles/gateway.css` | the Tailwind CSS source: shadcn's neutral theme tokens, light and dark |
+| `src/assets/` | what the Worker serves itself: the compiled stylesheet (`gateway-css.ts`, generated), the mark (`icon.ts`) and its PNG renderings (`icons.ts`, generated), and the account bar (script and stylesheet) |
+| `scripts/build-css.mjs`, `scripts/build-icons.mjs` | `npm run build:css` and `npm run build:icons`: regenerate those two modules |
+| `components.json` | the shadcn CLI's settings, for adding a component later |
 | `migrations/` | D1 migrations (wrangler format) |
 
 ## Configuration
@@ -73,7 +86,15 @@ npm ci
 npm run typecheck
 npm test                       # builds with wrangler, then runs the tests in Miniflare; offline
 npm run dev                    # the gateway with the stub app, on port 8787
+npm run build:css              # after changing a class in src/components or src/pages, or src/styles/gateway.css
+npm run check:css              # fails while src/assets/gateway-css.ts is stale (npm test checks it too)
+npm run build:icons            # after changing the mark in src/assets/icon.ts (renders the PNGs with resvg)
 ```
+
+The stylesheet is compiled ahead of time and committed as a module (`src/assets/gateway-css.ts`), so the deploy needs
+no CSS step: wrangler bundles it with everything else. Tailwind scans only `src/components` and `src/pages` for
+classes. The favicon PNGs are committed the same way (`src/assets/icons.ts`), because the Worker has no static-assets
+binding.
 
 `npm run dev` writes `.dev/app.wrangler.json` (the app Worker's config), applies the D1 migrations locally and runs
 `wrangler dev --local` with both configs. Open:
@@ -148,7 +169,28 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **One outer layer** (`src/http/secure.ts`) gives every response HSTS over https and the common security headers;
   app responses keep their own headers and gain only HSTS. Plain http on any non-`.localhost` host is redirected
   before anything else is served.
+- **Pages without scripts.** React renders each page once, on the server; the page itself runs no JavaScript (the
+  Turnstile widget on the forms that need it is the only script, from Cloudflare). The CSP is unchanged: no inline
+  script, no inline style or `style` attribute, and no outside fonts (the system font stack). React escapes every
+  value; `dangerouslySetInnerHTML` is never used, and a test checks it. The top bar's organization switcher and
+  account menu are `<details>`/`<summary>` menus styled like shadcn's DropdownMenu: keyboard-operable, exclusive
+  (`<details name>`), and closed by a click anywhere outside (the open trigger's `::before` covers the window).
 - **Logs** carry event names, ids, error class names and identifier-like codes; never exception messages.
 - **Retention.** Expired sessions, used or expired links and mail-log rows older than two days are deleted in batches
   of at most 200 per table after each POST (`src/housekeeping.ts`). The Worker also has a `scheduled` handler that
   runs the same cleanup in bigger batches if the deploy adds a cron trigger (optional).
+
+## shadcn/ui
+
+The components in `src/components/ui/` come from [shadcn/ui](https://ui.shadcn.com) (MIT License, copyright shadcn),
+new-york style, as `npx shadcn@4.23.0 add button card input label alert badge separator table avatar native-select
+field` wrote them. Two changes, for pages that render only on the server:
+
+- `cn` comes from `@/lib/utils` (clsx and tailwind-merge) rather than the young `cn` package the CLI now imports.
+- The Radix primitives, which need client-side React, are replaced by the elements they render: `<label>` (Label), a
+  `<div>` with the same role and orientation (Separator), `<span>`s (Avatar, without AvatarImage), and no `asChild`
+  on Button and Badge (links take `buttonVariants()` as their class instead).
+
+The theme in `src/styles/gateway.css` is shadcn's neutral base colour, with dark mode on `prefers-color-scheme`
+instead of a `.dark` class, and `--ring` set to the primary colour so focus rings keep a 3:1 contrast. Icons are from
+[Lucide](https://lucide.dev) (ISC). `NOTICE` has the licences.

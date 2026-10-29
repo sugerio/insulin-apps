@@ -11,8 +11,8 @@ import { bindingName, isAppName, issuesUrlFrom, parseSender, readConfig } from '
 import { safeReturnTo } from '../src/http/return-to.ts'
 import { createContext } from '../src/context.ts'
 import { escapeHtml, html } from '../src/pages/html.ts'
-import { checkIdToken, decodeJwtPayload } from '../src/auth/google.ts'
-import { forwardRequest, isNavigation } from '../src/proxy.ts'
+import { checkIdToken, decodeJwtPayload } from '../src/auth/id-token.ts'
+import { forwardRequest, isNavigation } from '../src/http/forward.ts'
 import { logError } from '../src/log.ts'
 
 test('e-mail addresses are trimmed, lower-cased and shape-checked', () => {

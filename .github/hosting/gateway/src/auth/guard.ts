@@ -1,8 +1,7 @@
 import type { Context } from '../context.ts'
 import { authUrl, withReturnTo } from '../context.ts'
 import { redirect } from '../http/response.ts'
-import { html } from '../pages/html.ts'
-import { messagePage } from '../pages/status.ts'
+import { confirmEmailFirstPage } from '../pages/status.tsx'
 import { loadSession, type Session } from './session.ts'
 
 /**
@@ -19,5 +18,5 @@ export async function requireSession(ctx: Context, back: string | null = null): 
 
 /** Sessions are only created for confirmed addresses; this covers an account whose address is somehow unconfirmed. */
 export function verifyNotice(ctx: Context, session: Session): Response {
-  return messagePage(ctx, 403, 'Confirm your email first', html`<p>Open the confirmation link we emailed to <strong>${session.user.email}</strong>, or <a href="${authUrl(ctx, '/resend-verification')}">ask for a new one</a>.</p>`, { user: session.user })
+  return confirmEmailFirstPage(ctx, session)
 }

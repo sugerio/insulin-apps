@@ -60,7 +60,7 @@ test('an admin can invite admins but not owners', async () => {
   await h.join(owner, orgId, admin, 'ADMIN')
   const asOwner = await invite(admin, orgId, uniqueEmail('would-be-owner'), 'OWNER')
   assert.equal(asOwner.status, 403)
-  assert.match(asOwner.text, /can&#39;t invite someone as Owner/)
+  assert.match(asOwner.text, /can&#x27;t invite someone as Owner/)
   assert.equal((await invite(admin, orgId, uniqueEmail('new-admin'), 'ADMIN')).status, 303)
   assert.equal((await invite(owner, orgId, uniqueEmail('new-owner'), 'OWNER')).status, 303)
 })
@@ -140,7 +140,7 @@ test('only the invited, confirmed address can accept; the link alone grants noth
 
   const anonymous = await h.client().get(link)
   assert.equal(anonymous.status, 200)
-  assert.match(anonymous.text, /<h1>You're invited<\/h1>/)
+  assert.match(anonymous.text, /<h1>You&#x27;re invited<\/h1>/)
   const signupHref = anonymous.text.match(/href="(\/signup\?[^"]+)"/)[1].replaceAll('&amp;', '&')
   const signupUrl = new URL(signupHref, h.url('auth'))
   assert.equal(signupUrl.searchParams.get('email'), email.toLowerCase())

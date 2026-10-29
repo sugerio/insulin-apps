@@ -16,9 +16,8 @@ import { sendMail, type SendOutcome } from '../mail/transport.ts'
 import {
   MAIL_FAILED, RATE_LIMITED, TURNSTILE_FAILED, checkInboxPage, confirmFirstPage, forgotPage, linkInvalidPage, loginPage,
   resendPage, resetPage, signupPage, verifyEmailPage,
-} from '../pages/auth.ts'
-import { html } from '../pages/html.ts'
-import { afterPost, home, messagePage, rateLimitedPage } from '../pages/status.ts'
+} from '../pages/auth.tsx'
+import { afterPost, credentialsChangedPage, home, rateLimitedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { TURNSTILE_FIELD, verifyTurnstile } from '../turnstile.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
@@ -50,11 +49,6 @@ async function sendTokenMail(ctx: Context, user: UserRow, purpose: TokenPurpose,
   if (outcome === 'sent') await commitToken(db, tokenHash, user.id, purpose)
   else await dropToken(db, tokenHash)
   return outcome
-}
-
-/** The credentials changed between verifying who someone is and creating their session: no session, sign in again. */
-function credentialsChanged(ctx: Context): Response {
-  return messagePage(ctx, 409, 'Please sign in again', html`<p>The sign-in details of this account changed while you were signing in, so we didn't sign you in. <a href="/login">Sign in again</a>.</p>`)
 }
 
 function prefilledEmail(ctx: Context): string | undefined {
@@ -151,7 +145,7 @@ export async function login(ctx: Context): Promise<Response> {
   }
   if (user.email_verified_at === null) return htmlResponse(confirmFirstPage(ctx, user.email, { returnTo }), { status: 403 })
   // The session is created only under the credential version whose password was just verified.
-  if (!(await startSession(ctx, user))) return credentialsChanged(ctx)
+  if (!(await startSession(ctx, user))) return credentialsChangedPage(ctx)
   log('login', { user: user.id })
   return afterPost(ctx, returnTo ?? home(ctx))
 }
@@ -176,7 +170,7 @@ export async function verifyEmail(ctx: Context): Promise<Response> {
   const user = row ? await findUserById(db, row.user_id) : null
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'verify'), { status: 400 })
   await markVerifiedStatement(db, user.id, ctx.now).run()
-  if (!(await startSession(ctx, user))) return credentialsChanged(ctx)
+  if (!(await startSession(ctx, user))) return credentialsChangedPage(ctx)
   log('email_verified', { user: user.id })
   return afterPost(ctx, safeReturnTo(ctx, row.return_to) ?? authUrl(ctx, '/?notice=verified'))
 }
@@ -259,7 +253,7 @@ export async function reset(ctx: Context): Promise<Response> {
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })
   // The inbox is proven, so the address counts as confirmed; the credential version rises and every session ends.
   const version = await resetPassword(db, user.id, await hashPassword(password), ctx.now)
-  if (version === null || !(await startSession(ctx, { id: user.id, credential_version: version }))) return credentialsChanged(ctx)
+  if (version === null || !(await startSession(ctx, { id: user.id, credential_version: version }))) return credentialsChangedPage(ctx)
   log('password_reset', { user: user.id })
   return redirect(authUrl(ctx, '/?notice=password-set'), 303)
 }

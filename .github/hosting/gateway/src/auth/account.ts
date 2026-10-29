@@ -1,16 +1,17 @@
 // The account page: change name, set or change the password, delete the account.
 import type { Context } from '../context.ts'
 import { hashPassword, verifyPassword } from '../crypto.ts'
+import { listMemberships } from '../db/orgs.ts'
 import { changePassword, deleteAccount as removeAccount, findUserById, orgsBlockingDeletion, setUserName } from '../db/users.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
 import { log } from '../log.ts'
-import { accountDeletedPage, accountPage } from '../pages/account.ts'
-import { RATE_LIMITED } from '../pages/auth.ts'
+import { accountDeletedPage, accountPage } from '../pages/account.tsx'
+import { RATE_LIMITED } from '../pages/auth.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
 import { requireSession } from './guard.ts'
-import { clearSessionCookie } from './session.ts'
+import { activeOrg, clearSessionCookie } from './session.ts'
 
 const ACCOUNT_NOTICES: Record<string, string> = {
   name: 'Your name is saved.',
@@ -20,7 +21,9 @@ const ACCOUNT_NOTICES: Record<string, string> = {
 export async function accountView(ctx: Context): Promise<Response> {
   const session = await requireSession(ctx)
   if (session instanceof Response) return session
-  return htmlResponse(accountPage(ctx, session, { notice: ACCOUNT_NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null }))
+  // The top bar's organization switcher lists every membership and shows the active one.
+  const [memberships] = await Promise.all([listMemberships(ctx.config.db, session.user.id), activeOrg(ctx, session)])
+  return htmlResponse(accountPage(ctx, session, { notice: ACCOUNT_NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null }, memberships))
 }
 
 export async function updateName(ctx: Context): Promise<Response> {

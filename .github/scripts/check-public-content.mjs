@@ -58,6 +58,11 @@ export const ALLOWED = [
     lineSha256: '6143bedbcdbd3360b5c6ab43de172ea2cb873f73cd0fb27fcd6266a67edc55f9',
     why: 'The copyright line of the MIT license, which names the copyright holder.',
   },
+  {
+    file: '.github/hosting/gateway/THIRD_PARTY_LICENSES',
+    lineSha256: '384d17b1d79699b14c3b5573bf11ff5f4b2cf41ca7f0bd52bf8238e7edcc517d',
+    why: "clsx's copyright notice, which its MIT license requires the bundled gateway to carry verbatim, author address included.",
+  },
 ]
 
 // Reserved for documentation and testing (RFC 2606, RFC 6761), so they never reach a real mailbox.

@@ -70,7 +70,7 @@ test('pages carry the strict CSP and the other security headers; only the apex p
   const me = await client.get(production.url('auth', '/__insulin/me'))
   assert.equal(me.headers.get('content-type'), 'application/json; charset=utf-8')
   assert.equal(me.headers.get('cache-control'), 'no-store')
-  assert.match((await client.get(production.url('auth', '/signup'))).text, /<script src="https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js" async defer><\/script>/)
+  assert.match((await client.get(production.url('auth', '/signup'))).text, /<script src="https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js" async="" defer=""><\/script>/)
   assert.doesNotMatch((await client.get(production.url('apex', '/terms'))).text, /challenges\.cloudflare\.com/, 'Turnstile only where a form needs it')
 })
 

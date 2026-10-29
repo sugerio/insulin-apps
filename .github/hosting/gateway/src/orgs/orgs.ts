@@ -5,16 +5,15 @@ import { newId } from '../crypto.ts'
 import { listInvitationsFor, listOrgInvitations } from '../db/invitations.ts'
 import {
   changeRole, countOwners, createOrg as insertOrg, deleteOrg as removeOrg, findMembership, leaveOrg as leaveMembership,
-  listMembers, removeMember as removeMembership, renameOrg as updateOrgName, type MembershipRow,
+  listMembers, listMemberships, removeMember as removeMembership, renameOrg as updateOrgName, type MembershipRow,
 } from '../db/orgs.ts'
 import { releaseOrgCreation, reserveOrgCreation } from '../db/users.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
 import { safeReturnTo } from '../http/return-to.ts'
 import { log } from '../log.ts'
-import { newOrgPage, orgPage } from '../pages/orgs.ts'
-import { afterPost, home, messagePage, notFoundPage } from '../pages/status.ts'
-import { html } from '../pages/html.ts'
+import { newOrgPage, orgPage } from '../pages/orgs.tsx'
+import { actorChangedPage, afterPost, home, notAllowedPage, notFoundPage } from '../pages/status.tsx'
 import {
   canChangeRole, canDeleteOrg, canManageMembers, canRemoveMember, canRenameOrg, canSeeMembers, isRole,
 } from '../roles.ts'
@@ -46,7 +45,7 @@ export async function memberOf(ctx: Context, orgId: string): Promise<{ session: 
 }
 
 export function notAllowed(ctx: Context, session: Session): Response {
-  return messagePage(ctx, 403, 'Not allowed', html`<p>Your role in this organization doesn't allow that.</p><p><a href="/">Back to your organizations</a></p>`, { user: session.user })
+  return notAllowedPage(ctx, session)
 }
 
 /**
@@ -57,18 +56,19 @@ export async function actorChanged(ctx: Context, session: Session, membership: M
   const current = await findMembership(ctx.config.db, membership.org_id, session.user.id)
   if (!current) return notFoundPage(ctx)
   if (current.role === membership.role) return null
-  return messagePage(ctx, 409, 'Nothing was changed', html`<p>Your role in this organization changed while you were working, so nothing was changed.</p><p><a href="/orgs/${membership.org_id}">Back to the organization</a></p>`, { user: session.user })
+  return actorChangedPage(ctx, session, membership.org_id)
 }
 
 /** The organization page, as the member's role allows; also used to show a problem with a submitted form. */
 export async function renderOrg(ctx: Context, session: Session, membership: MembershipRow, problem: { error: string; status: number } | null = null): Promise<Response> {
   const db = ctx.config.db
   const role = membership.role
-  const [members, invitations, ownerCount, active] = await Promise.all([
+  const [members, invitations, ownerCount, active, memberships] = await Promise.all([
     canSeeMembers(role) ? listMembers(db, membership.org_id) : Promise.resolve(null),
     canManageMembers(role) ? listOrgInvitations(db, membership.org_id) : Promise.resolve(null),
     countOwners(db, membership.org_id),
     activeOrg(ctx, session),
+    listMemberships(db, session.user.id),
   ])
   return htmlResponse(orgPage(ctx, session, {
     orgId: membership.org_id,
@@ -80,7 +80,7 @@ export async function renderOrg(ctx: Context, session: Session, membership: Memb
     ownerCount,
     notice: problem ? null : ORG_NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null,
     error: problem?.error ?? null,
-  }), { status: problem?.status ?? 200 })
+  }, memberships), { status: problem?.status ?? 200 })
 }
 
 export function backToOrg(ctx: Context, orgId: string, notice: string): Response {

@@ -3,6 +3,12 @@
 // builds a closed shadow root with DOM calls only (no innerHTML, no inline styles or style attributes), links its
 // stylesheet, and talks to /__insulin/* with same-origin fetch. It navigates with location.assign rather than submitting
 // forms, because form-action would block the cross-origin redirects of switching and signing out.
+//
+// The icons are drawn with createElementNS: the Insulin Apps mark (icon.ts) and a few Lucide icons (ISC licence).
+import { MARK_OFFSET, MARK_ORANGE, MARK_PATH, MARK_RADIUS, MARK_SIZE, MARK_TILE } from './icon.ts'
+
+const MARK = JSON.stringify({ size: MARK_SIZE, radius: MARK_RADIUS, tile: MARK_TILE, orange: MARK_ORANGE, offset: MARK_OFFSET, path: MARK_PATH })
+
 export const BAR_JS = String.raw`(() => {
   'use strict'
   if (window.top !== window.self || document.querySelector('insulin-account-bar')) return
@@ -16,6 +22,45 @@ export const BAR_JS = String.raw`(() => {
     }
     node.append(...children.filter(Boolean))
     return node
+  }
+
+  // SVG: [tag, attributes] pairs inside a decorative <svg>.
+  const SVG = 'http://www.w3.org/2000/svg'
+  const vector = (attributes, shapes) => {
+    const node = document.createElementNS(SVG, 'svg')
+    for (const [name, value] of Object.entries({ ...attributes, 'aria-hidden': 'true', focusable: 'false' })) node.setAttribute(name, value)
+    for (const [tag, shape] of shapes) {
+      const child = document.createElementNS(SVG, tag)
+      for (const [name, value] of Object.entries(shape)) child.setAttribute(name, value)
+      node.append(child)
+    }
+    return node
+  }
+  const icon = (shapes) => vector({
+    class: 'icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+    'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+  }, shapes)
+  const ICONS = {
+    chevrons: [['path', { d: 'm7 15 5 5 5-5' }], ['path', { d: 'm7 9 5-5 5 5' }]],
+    chevron: [['path', { d: 'm6 9 6 6 6-6' }]],
+    users: [['path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }], ['path', { d: 'M16 3.128a4 4 0 0 1 0 7.744' }],
+      ['path', { d: 'M22 21v-2a4 4 0 0 0-3-3.87' }], ['circle', { cx: '9', cy: '7', r: '4' }]],
+    apps: [['rect', { width: '7', height: '7', x: '3', y: '3', rx: '1' }], ['rect', { width: '7', height: '7', x: '14', y: '3', rx: '1' }],
+      ['rect', { width: '7', height: '7', x: '14', y: '14', rx: '1' }], ['rect', { width: '7', height: '7', x: '3', y: '14', rx: '1' }]],
+    account: [['circle', { cx: '12', cy: '8', r: '5' }], ['path', { d: 'M20 21a8 8 0 0 0-16 0' }]],
+    signOut: [['path', { d: 'm16 17 5-5-5-5' }], ['path', { d: 'M21 12H9' }], ['path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }]],
+    close: [['path', { d: 'M18 6 6 18' }], ['path', { d: 'm6 6 12 12' }]],
+  }
+  const MARK = ${MARK}
+  const mark = () => vector({ class: 'mark', viewBox: '0 0 ' + MARK.size + ' ' + MARK.size }, [
+    ['rect', { width: String(MARK.size), height: String(MARK.size), rx: String(MARK.radius), fill: MARK.tile }],
+    ['path', { fill: MARK.orange, transform: MARK.offset, d: MARK.path }],
+  ])
+
+  // Up to two initials: the first letters of the first two words of the name, else of the address.
+  const initials = (name, email) => {
+    const words = String(name).trim().split(/\s+/).filter(Boolean)
+    return (words.length ? words.slice(0, 2) : [String(email)]).map((word) => Array.from(word)[0] || '').join('').toLocaleUpperCase('en')
   }
 
   const httpUrl = (value) => {
@@ -50,11 +95,13 @@ export const BAR_JS = String.raw`(() => {
 
   const render = (me) => {
     const org = me.organization
-    const label = org ? org.name + ' · ' + org.roleLabel : 'No organization'
     const panel = make('section', { class: 'panel', id: 'account-panel', hidden: true, 'aria-label': 'Insulin Apps' })
     const pill = make('button', { class: 'pill', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'account-panel', title: 'Insulin Apps' }, [
-      make('span', { class: 'mark', text: 'Insulin' }),
-      make('span', { class: 'label', text: label }),
+      mark(),
+      make('span', { class: 'sr-only', text: 'Insulin Apps: ' }),
+      make('span', { class: 'label', text: org ? org.name : 'No organization' }),
+      org ? make('span', { class: 'badge', text: org.roleLabel }) : null,
+      icon(ICONS.chevrons),
     ])
     const status = make('p', { class: 'status', role: 'status', 'aria-live': 'polite' })
     const toggle = (open) => {
@@ -63,19 +110,27 @@ export const BAR_JS = String.raw`(() => {
       if (!open) status.textContent = ''
     }
     pill.addEventListener('click', () => toggle(panel.hidden))
+    const separator = () => make('div', { class: 'separator', role: 'none' })
 
     panel.append(make('h2', { text: 'Insulin Apps' }))
-    panel.append(make('p', {}, [
-      document.createTextNode('Signed in as '), make('strong', { text: me.user.name }), make('br'),
-      make('span', { class: 'muted', text: me.user.email }),
+    panel.append(make('div', { class: 'who' }, [
+      make('span', { class: 'avatar', 'aria-hidden': 'true', text: initials(me.user.name, me.user.email) }),
+      make('div', { class: 'who-text' }, [
+        make('p', { class: 'name' }, [make('span', { class: 'sr-only', text: 'Signed in as ' }), document.createTextNode(me.user.name)]),
+        make('p', { class: 'email', text: me.user.email }),
+      ]),
     ]))
+    panel.append(separator())
 
     if (me.organizations.length > 1) {
       const select = make('select', { id: 'account-org', name: 'org' }, me.organizations.map((item) =>
         make('option', { value: item.id, selected: item.active, text: item.name + ' (' + item.roleLabel + ')' })))
       const form = make('form', {}, [
         make('label', { for: 'account-org', text: 'Organization' }),
-        make('div', { class: 'switch' }, [select, make('button', { class: 'button', type: 'submit', text: 'Switch' })]),
+        make('div', { class: 'switch' }, [
+          make('span', { class: 'select' }, [select, icon(ICONS.chevron)]),
+          make('button', { class: 'button', type: 'submit', text: 'Switch' }),
+        ]),
       ])
       form.addEventListener('submit', async (event) => {
         event.preventDefault()
@@ -90,17 +145,22 @@ export const BAR_JS = String.raw`(() => {
       })
       panel.append(form)
     } else if (org) {
-      panel.append(make('p', {}, [
-        document.createTextNode('Organization: '), make('strong', { text: org.name }), document.createTextNode(' (' + org.roleLabel + ')'),
+      panel.append(make('p', { class: 'org' }, [
+        make('span', { class: 'sr-only', text: 'Organization: ' }),
+        make('span', { class: 'label', text: org.name }),
+        make('span', { class: 'badge', text: org.roleLabel }),
       ]))
     }
+    if (me.organizations.length || org) panel.append(separator())
 
-    const links = [['Members', me.links.members], ['All apps', me.links.apps], ['Account', me.links.account]]
-      .map(([text, href]) => [text, httpUrl(href)])
+    const links = [['Members', me.links.members, ICONS.users], ['All apps', me.links.apps, ICONS.apps], ['Account', me.links.account, ICONS.account]]
+      .map(([text, href, shapes]) => [text, httpUrl(href), shapes])
       .filter(([, href]) => href)
-    panel.append(make('ul', { class: 'links' }, links.map(([text, href]) => make('li', {}, [make('a', { href, text })]))))
+    panel.append(make('ul', { class: 'links' }, links.map(([text, href, shapes]) =>
+      make('li', {}, [make('a', { class: 'item', href }, [icon(shapes), document.createTextNode(text)])]))))
+    panel.append(separator())
 
-    const signOut = make('button', { class: 'button secondary', type: 'button', text: 'Sign out' })
+    const signOut = make('button', { class: 'item', type: 'button' }, [icon(ICONS.signOut), document.createTextNode('Sign out')])
     signOut.addEventListener('click', async () => {
       status.textContent = 'Signing out…'
       try {
@@ -111,7 +171,7 @@ export const BAR_JS = String.raw`(() => {
         status.textContent = 'Couldn’t sign out. Please try again.'
       }
     })
-    const close = make('button', { class: 'button secondary', type: 'button', text: 'Close' })
+    const close = make('button', { class: 'close', type: 'button', 'aria-label': 'Close', title: 'Close' }, [icon(ICONS.close)])
     close.addEventListener('click', () => { toggle(false); pill.focus() })
     panel.append(make('div', { class: 'row' }, [signOut, close]), status)
 

@@ -18,9 +18,9 @@ test('the landing page presents the hosted apps, with sign-in links, and links t
   assert.equal(page.status, 200)
   assert.match(page.text, /<title>Open-source apps, hosted · Insulin Apps<\/title>/)
   assert.match(page.text, /<h1>Insulin Apps<\/h1>/)
-  assert.match(page.text, /<h3>Cap Table<\/h3>\s*<p>Equity management for startups\.<\/p>/)
+  assert.match(page.text, /<h3>Cap Table<\/h3>[^<]*<\/div><div data-slot="card-description"[^>]*>Equity management for startups\.<\/div>/)
   assert.ok(page.text.includes('href="http://captable.insulinapps.localhost/">Open Cap Table</a>'))
-  assert.ok(page.text.includes('href="https://github.com/example/insulin-apps/tree/main/captable">Source</a>'))
+  assert.match(page.text, /href="https:\/\/github\.com\/example\/insulin-apps\/tree\/main\/captable"><svg[^>]*>[\s\S]*?<\/svg>Source<\/a>/)
   assert.match(page.text, /<h3>Ledger<\/h3>[\s\S]*?Not available right now/, 'an app whose Worker is missing')
   assert.ok(page.text.includes(`href="http://auth.insulinapps.localhost/signup?return_to=${encodeURIComponent('http://insulinapps.localhost/')}"`))
   assert.ok(page.text.includes(`href="${PRIVACY}"`))
@@ -34,7 +34,7 @@ test('signed in, the landing page shows the user and organization, and signs out
   await h.org(person.client, 'Landing Org')
   const page = await person.client.get(h.url('apex', '/'))
   assert.match(page.text, /Signed in as <strong>Landing Person<\/strong>, working in <strong>Landing Org<\/strong> as Owner/)
-  assert.match(page.text, /<form method="post" action="\/__insulin\/logout">/)
+  assert.match(page.text, /<form action="\/__insulin\/logout" method="post">/)
   const out = await person.client.post(h.url('apex', '/__insulin/logout'), {})
   assert.equal(out.status, 303)
   assert.equal(out.location, h.url('apex', '/'))
@@ -45,7 +45,7 @@ test('the privacy notice covers what is collected, why, processors, retention, d
   const page = await h.client().get(h.url('apex', '/privacy'))
   assert.equal(page.status, 200)
   assert.equal(page.headers.get('x-robots-tag'), null)
-  for (const heading of ['What we collect', 'Why we collect it', 'Who processes it', 'What we don\'t do', 'How long we keep it', 'Deleting your data', 'Children', 'Changes to this notice', 'Contact']) {
+  for (const heading of ['What we collect', 'Why we collect it', 'Who processes it', 'What we don&#x27;t do', 'How long we keep it', 'Deleting your data', 'Children', 'Changes to this notice', 'Contact']) {
     assert.ok(page.text.includes(`>${heading}</h2>`), heading)
   }
   for (const fact of ['insulin_session', '__Host-insulin_oauth', 'PBKDF2', 'Google account id', 'Cloudflare Turnstile', 'Cloudflare D1', 'Cloudflare Email Service',
@@ -54,14 +54,14 @@ test('the privacy notice covers what is collected, why, processors, retention, d
   }
   assert.ok(page.text.includes('href="http://auth.insulinapps.localhost/account"'))
   assert.ok(page.text.includes('href="https://github.com/example/insulin-apps/issues"'))
-  assert.match(page.text, /don&#39;t post personal data|don't post personal data/)
+  assert.match(page.text, /don(?:&#x27;|&#39;|')t post personal data/)
 })
 
 test('the terms cover the as-is service, acceptable use, suspension, the MIT license, liability, changes and contact', async () => {
   const page = await h.client().get(h.url('apex', '/terms'))
   assert.equal(page.status, 200)
   assert.equal(page.headers.get('x-robots-tag'), null)
-  for (const fact of ['"as is"', 'no guarantee of uptime', 'Acceptable use', 'invitations to people who don', 'Suspension and removal', 'MIT License',
+  for (const fact of ['&quot;as is&quot;', 'no guarantee of uptime', 'Acceptable use', 'invitations to people who don', 'Suspension and removal', 'MIT License',
     'Limitation of liability', 'Changes to these terms', '>Contact</h2>']) {
     assert.ok(page.text.includes(fact), fact)
   }
@@ -93,11 +93,13 @@ test('pages are accessible basics: language, title, labelled fields, a live regi
     assert.match(page.text, /<title>[^<]+ · Insulin Apps<\/title>/)
     assert.match(page.text, /<a class="skip" href="#main">Skip to content<\/a>/)
     assert.match(page.text, /aria-live=/)
-    for (const [, id] of page.text.matchAll(/<input id="([^"]+)"/g)) assert.ok(page.text.includes(`<label for="${id}">`), `${path}: label for ${id}`)
+    const ids = [...page.text.matchAll(/<input\b[^>]*\sid="([^"]+)"/g)].map(([, id]) => id)
+    assert.ok(ids.length, `${path}: has fields`)
+    for (const id of ids) assert.match(page.text, new RegExp(`<label\\b[^>]*\\sfor="${id}"`), `${path}: label for ${id}`)
   }
   const css = await h.client().get(h.url('auth', '/__insulin/gateway.css'))
   assert.match(css.headers.get('content-type'), /^text\/css/)
-  assert.match(css.text, /@media \(prefers-color-scheme: dark\)/)
+  assert.match(css.text, /@media \(prefers-color-scheme: ?dark\)/)
   assert.match(css.text, /:focus-visible/)
 })
 

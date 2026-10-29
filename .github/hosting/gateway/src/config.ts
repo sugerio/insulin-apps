@@ -33,6 +33,8 @@ export interface Config {
   supportEmail: string | null
   /** `https://github.com/<owner>/<repo>/issues`, from the apps' source links, or null. */
   issuesUrl: string | null
+  /** `https://github.com/<owner>/<repo>`, the repository those links point into, or null. */
+  repositoryUrl: string | null
   /** SITE_ENV=test: capture mail in D1 and relax cookie rules on http://*.localhost. Never set by the deploy. */
   testMode: boolean
   db: D1Database
@@ -85,15 +87,21 @@ function httpsUrl(value: unknown): string | null {
   }
 }
 
-/** The issue tracker of the GitHub repository the apps' source links point to. */
-export function issuesUrlFrom(apps: HostedApp[]): string | null {
+/** The GitHub repository the apps' source links point into. */
+export function repositoryUrlFrom(apps: HostedApp[]): string | null {
   for (const app of apps) {
     if (!app.source) continue
     const url = new URL(app.source)
     const [owner, repo] = url.pathname.split('/').filter(Boolean)
-    if (url.hostname === 'github.com' && owner && repo) return `https://github.com/${owner}/${repo}/issues`
+    if (url.hostname === 'github.com' && owner && repo) return `https://github.com/${owner}/${repo}`
   }
   return null
+}
+
+/** The issue tracker of that repository. */
+export function issuesUrlFrom(apps: HostedApp[]): string | null {
+  const repository = repositoryUrlFrom(apps)
+  return repository ? `${repository}/issues` : null
 }
 
 function hasMethod(value: unknown, method: string): boolean {
@@ -194,6 +202,7 @@ export function readConfig(env: Env): ConfigResult {
       mailFrom,
       supportEmail,
       issuesUrl: issuesUrlFrom(apps),
+      repositoryUrl: repositoryUrlFrom(apps),
       testMode,
       db: env.DB!,
       email: testMode ? null : env.EMAIL!,

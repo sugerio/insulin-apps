@@ -1,6 +1,6 @@
 // Host and path dispatch. Every POST to the auth host passes the Origin and content-type checks here before its
 // handler runs; /__insulin/* checks its own (reserved.ts). index.ts wraps all of it in the outer security layer.
-import { staticAsset } from './assets.ts'
+import { siteIcon, staticAsset } from './assets.ts'
 import { loadConfig } from './config.ts'
 import { createContext, type Context } from './context.ts'
 import { UUID_PATTERN } from './crypto.ts'
@@ -11,7 +11,7 @@ import { BodyTooLarge, FORM_LIMIT_BYTES, isFormBody, isSameOrigin, readText } fr
 import { redirect } from './http/response.ts'
 import { httpsUpgrade, isFromApp, markFromApp } from './http/secure.ts'
 import { log, logError } from './log.ts'
-import { badRequestPage, forbiddenPage, methodNotAllowed, notConfiguredResponse, notFoundPage } from './pages/status.ts'
+import { badRequestPage, forbiddenPage, methodNotAllowed, notConfiguredResponse, notFoundPage } from './pages/status.tsx'
 import { proxyToApp } from './proxy.ts'
 import { authHome, landing, privacy, terms } from './site.ts'
 import { accountView, deleteAccount, updateName, updatePassword } from './auth/account.ts'
@@ -42,13 +42,21 @@ function route(method: 'GET' | 'POST', path: string, handler: Handler): Route {
   return { method, pattern: new RegExp(`^${path}$`), handler }
 }
 
+// The favicon at the root of the gateway's own hosts (app hosts answer for their own).
+const ICON_ROUTES: Route[] = [
+  route('GET', '/favicon\\.ico', siteIcon),
+  route('GET', '/apple-touch-icon\\.png', siteIcon),
+]
+
 const APEX_ROUTES: Route[] = [
   route('GET', '/', landing),
   route('GET', '/privacy', privacy),
   route('GET', '/terms', terms),
+  ...ICON_ROUTES,
 ]
 
 const AUTH_ROUTES: Route[] = [
+  ...ICON_ROUTES,
   route('GET', '/', authHome),
   route('GET', '/signup', signupForm),
   route('POST', '/signup', signup),

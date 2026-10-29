@@ -163,7 +163,7 @@ test('unknown hosts are 404, an app without a deployed Worker is 503, and /__ins
   const person = await member()
   const unknown = await person.client.get(`http://nope.${h.domain}/`)
   assert.equal(unknown.status, 404)
-  assert.match(unknown.text, /There's no app at this address/)
+  assert.match(unknown.text, /There&#x27;s no app at this address/)
   const missing = await person.client.get(h.url('ledger', '/'))
   assert.equal(missing.status, 503)
   assert.equal((await person.client.get(h.url('ledger', '/api/x'))).status, 503)

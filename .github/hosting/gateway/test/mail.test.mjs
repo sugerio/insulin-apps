@@ -27,7 +27,7 @@ test('a failed send shows "couldn\'t send the email right now", logs only the co
   try {
     const page = await h.signUp(h.client(), { email })
     assert.equal(page.status, 503)
-    assert.match(page.text, /couldn&#39;t send the email right now|couldn't send the email right now/)
+    assert.match(page.text, /couldn(?:&#x27;|&#39;|')t send the email right now/)
     assert.equal((await h.sql('SELECT COUNT(*) AS n FROM users WHERE email = ?1', email))[0].n, 0, 'the half-made account is gone')
     assert.match(h.logText(), /"event":"mail_failed","kind":"verify_email","code":"E_SENDER_NOT_VERIFIED"/)
     assert.ok(!h.logText().includes(email))
@@ -51,7 +51,7 @@ test('a failed invitation email is reported and leaves no pending invitation', a
   try {
     const response = await owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email, role: 'USER' })
     assert.equal(response.status, 503)
-    assert.match(response.text, /couldn&#39;t send the email right now|couldn't send the email right now/)
+    assert.match(response.text, /couldn(?:&#x27;|&#39;|')t send the email right now/)
   } finally {
     await h.failMail(null)
   }

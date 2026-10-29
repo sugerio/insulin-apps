@@ -55,12 +55,12 @@ export function jsonHeaders(): Headers {
   return headers
 }
 
-/** The stylesheet and the account bar: same-origin static files, briefly cacheable. */
-export function assetHeaders(contentType: string): Headers {
+/** The stylesheet, the account bar and the icons: same-origin static files, cacheable (briefly, by default). */
+export function assetHeaders(contentType: string, cacheControl = 'public, max-age=300'): Headers {
   const headers = new Headers(COMMON)
   headers.set('Content-Type', contentType)
   headers.set('Content-Security-Policy', API_CSP)
-  headers.set('Cache-Control', 'public, max-age=300')
+  headers.set('Cache-Control', cacheControl)
   headers.set('Cross-Origin-Resource-Policy', 'same-origin')
   return headers
 }

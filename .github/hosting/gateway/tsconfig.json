@@ -1,11 +1,14 @@
 {
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "types": ["@cloudflare/workers-types"],
+
+    "jsx": "react-jsx",
+    "paths": { "@/*": ["./src/*"] },
 
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,

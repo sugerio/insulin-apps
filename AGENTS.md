@@ -19,7 +19,9 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
 
    Cap Table is the reference: `captable/src/app/pages/docs/` and `captable/src/app/components/Docs.tsx`. Repeat this
    rule in the app's own `AGENTS.md`, because the Insulin console copies only the app's directory into a new app.
-3. **Public repository.** Synthetic data only (example.com or `.test` addresses, fictional people and companies), in
+3. **UI.** New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default theme (the hosting gateway in
+   `.github/hosting/gateway/` follows it). Apps that already have their own design keep it until they are restyled.
+4. **Public repository.** Synthetic data only (example.com or `.test` addresses, fictional people and companies), in
    code, tests, fixtures and docs. No secrets, account ids or internal hostnames.
 
 ## A new app

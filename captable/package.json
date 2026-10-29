@@ -2,7 +2,7 @@
   "name": "insulin-captable",
   "displayName": "Cap Table",
   "version": "0.1.0",
-  "description": "Cap Table: an open-source equity management app for Insulin (Vite + React + Nitro on Cloudflare Workers and D1).",
+  "description": "An open-source equity management app as Pulley alternative",
   "license": "MIT",
   "private": true,
   "type": "module",

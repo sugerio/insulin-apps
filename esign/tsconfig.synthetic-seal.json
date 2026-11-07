@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "@cloudflare/workers-types"]
+  },
+  "include": ["scripts/synthetic-seal-*.ts", "scripts/upload-seal-verify.ts"]
+}

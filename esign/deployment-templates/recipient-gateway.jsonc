@@ -1,0 +1,10 @@
+{
+  // INERT REFERENCE ONLY: not deployment authorization. Paths are relative to this file.
+  "name": "example-disabled-recipient-gateway",
+  "main": "../src/recipient-gateway.ts",
+  "compatibility_date": "2026-01-01",
+  "workers_dev": false,
+  "preview_urls": false
+  // PRIVATE_RECIPIENT must target the candidate's named PrivateRecipient entrypoint.
+  // Configure RATE_LIMITER, LOCATION_RATE_LIMITER, TRUSTED_RECIPIENT_ORIGINS and RECIPIENT_GATEWAY_ENABLED only after approval.
+}

@@ -1,0 +1,6 @@
+CREATE TABLE tenant_page_origins (tenant_id TEXT NOT NULL REFERENCES tenants(id), origin TEXT NOT NULL, PRIMARY KEY (tenant_id, origin));
+CREATE TABLE recipient_page_codes (code_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), envelope_id TEXT NOT NULL REFERENCES envelopes(id), task_id TEXT NOT NULL REFERENCES tasks(id), origin TEXT NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER);
+CREATE TABLE recipient_page_sessions (token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), envelope_id TEXT NOT NULL REFERENCES envelopes(id), task_id TEXT NOT NULL REFERENCES tasks(id), origin TEXT NOT NULL, expires_at INTEGER NOT NULL);
+CREATE TABLE recipient_otp_challenges (task_id TEXT PRIMARY KEY REFERENCES tasks(id), session_hash TEXT NOT NULL REFERENCES recipient_page_sessions(token_hash), otp_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, consumed_by TEXT);
+CREATE TABLE recipient_otp_verifications (task_id TEXT PRIMARY KEY REFERENCES tasks(id), session_hash TEXT NOT NULL REFERENCES recipient_page_sessions(token_hash), verified_at INTEGER NOT NULL);
+CREATE TABLE recipient_auth_assertions (ok INTEGER NOT NULL CHECK (ok = 1));

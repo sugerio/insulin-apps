@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "esign-recipient-gateway",
+  "main": "src/recipient-gateway.ts",
+  "compatibility_date": "2026-01-01",
+  "workers_dev": false,
+  "preview_urls": false
+}

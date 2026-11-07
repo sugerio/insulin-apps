@@ -1,0 +1,9 @@
+{
+  // INERT REFERENCE ONLY. Build the paired worker and client directory first.
+  // No routes, asset binding, runtime origins, or HOST_ENABLED are configured.
+  "name": "example-disabled-candidate-page-host",
+  "main": "../dist-candidate-assets/worker.mjs",
+  "compatibility_date": "2026-01-01",
+  "workers_dev": false,
+  "preview_urls": false
+}

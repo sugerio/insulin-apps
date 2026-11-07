@@ -1,0 +1,4 @@
+# Synthetic local-test material only. Never deploy or use for real documents.
+LOCAL_TEST_MODE=true
+LOCAL_TEST_OTP_KEY=local-test-pepper-at-least-32-bytes
+LOCAL_TEST_SEAL_KEY=local-test-seal-key-at-least-32-bytes

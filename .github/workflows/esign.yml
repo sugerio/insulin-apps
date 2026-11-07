@@ -1,0 +1,179 @@
+name: E-sign CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - esign/**
+      - .github/workflows/esign.yml
+      - .github/scripts/**
+  pull_request:
+    paths:
+      - esign/**
+      - .github/workflows/esign.yml
+      - .github/scripts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: esign-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: esign
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+      ESIGN_TEST_CHROME: /usr/bin/google-chrome
+      DEPLOY_DEV: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.ESIGN_DEV_DEPLOY == 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: esign/package-lock.json
+      - name: Install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check browser availability
+        run: test -x "$ESIGN_TEST_CHROME" && "$ESIGN_TEST_CHROME" --version
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test all suites serially
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test --test-concurrency=1 --test-reporter=tap test/*.test.ts | tee "$RUNNER_TEMP/esign-tests.tap"
+          for title in \
+            'Chrome completes two typed positioned signatures' \
+            'isolated Chrome Ana then Marcus' \
+            'cross-origin browser embeds, saves and reopens' \
+            'candidate editor browser saves' \
+            'candidate page host enforces browser isolation' \
+            'Chrome uploads and signs' \
+            'candidate gateway real browser signs' \
+            'explicit isolated Node v3 demo restarts and signs' \
+            'page-target interception blocks' \
+            'synthetic staged manifest renders both pages' \
+            'local Wrangler migrations apply once'; do
+            grep -F 'ok ' "$RUNNER_TEMP/esign-tests.tap" | grep -F "$title" | grep -viE '# *skip|# *todo' > /dev/null
+          done
+      - name: Build the Worker bundle and pages (dry-run only)
+        run: npm run build
+      - name: Pack the build for the dev deployment
+        # Built here, without any credential; the deploy job treats the archive as untrusted.
+        if: env.DEPLOY_DEV == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/esign-build"
+          mkdir -p "$out/dist"
+          cp dist/worker.js "$out/dist/"
+          cp -R dist-ui "$out/dist-ui"
+          if find "$out" ! -type f ! -type d -print -quit | grep -q .; then echo 'Unexpected link or special file'; exit 1; fi
+          tar -czf "$RUNNER_TEMP/esign-build.tgz" -C "$RUNNER_TEMP" esign-build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: env.DEPLOY_DEV == 'true'
+        with:
+          name: esign-dev-build
+          path: ${{ runner.temp }}/esign-build.tgz
+          if-no-files-found: error
+          retention-days: 3
+      - name: Build paired consolidated Worker and client (synthetic origins)
+        run: npm run build:candidate-assets -- "$RUNNER_TEMP/esign-candidate"
+        env:
+          VITE_CANDIDATE_GATEWAY_ORIGIN: https://gateway.example.test
+          VITE_CANDIDATE_EDITOR_GATEWAY_ORIGIN: https://gateway.example.test
+      - name: Pack only candidate build outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/esign-candidate"
+          test -f consolidated-worker.mjs && test -f worker.mjs && test -f client/candidate.html && test -f client/candidate-editor.html
+          if find . ! -type f ! -type d -print -quit | grep -q .; then echo 'Unexpected link or special file'; exit 1; fi
+          find . -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/esign-candidate-SHA256.txt"
+          cd "$RUNNER_TEMP"
+          tar -czf esign-candidate.tgz esign-candidate
+          tar -tzf esign-candidate.tgz > esign-candidate.members
+          node "$GITHUB_WORKSPACE/.github/scripts/check-build-archive.mjs" esign-candidate.members esign-candidate
+          tar -tvzf esign-candidate.tgz | awk 'substr($1, 1, 1) != "-" && substr($1, 1, 1) != "d" { exit 1 }'
+          sha256sum "$RUNNER_TEMP/esign-candidate.tgz" > "$RUNNER_TEMP/esign-candidate-archive-SHA256.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: esign-candidate-ci-only
+          path: |
+            ${{ runner.temp }}/esign-candidate.tgz
+            ${{ runner.temp }}/esign-candidate-SHA256.txt
+            ${{ runner.temp }}/esign-candidate-archive-SHA256.txt
+          if-no-files-found: error
+          retention-days: 3
+      - name: Repository policy checks
+        working-directory: .
+        run: |
+          node --test .github/scripts/*.test.mjs
+          node .github/scripts/check-app-workflows.mjs
+          node .github/scripts/check-public-content.mjs
+
+  deploy-dev:
+    # The shared dev Worker esign-dev (esign/WORKER-MODE.md, "Deploy"). Opt-in: set the repository
+    # variable ESIGN_DEV_DEPLOY to true once the production environment holds the settings below.
+    # It deploys only what the credential-free job above built and tested.
+    name: Deploy esign-dev
+    needs: checks
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.ESIGN_DEV_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: deploy-esign-dev
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: esign
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: esign/package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: esign-dev-build
+          path: ${{ runner.temp }}
+      - name: Unpack build
+        shell: bash
+        working-directory: .
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/esign-build.tgz"
+          members="$RUNNER_TEMP/esign-build.members"
+          tar --list --gzip --file "$archive" --quoting-style=literal | tee "$members"
+          node .github/scripts/check-build-archive.mjs "$members" esign-build
+          if ! tar --list --verbose --gzip --file "$archive" | awk 'substr($1, 1, 1) != "-" && substr($1, 1, 1) != "d" { exit 1 }'; then
+            echo "::error::Build archive contains a link or special file."
+            exit 1
+          fi
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP" --no-same-owner --no-same-permissions
+          test -f "$RUNNER_TEMP/esign-build/dist/worker.js" && test -d "$RUNNER_TEMP/esign-build/dist-ui"
+      - name: Install deployment tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Migrate and deploy
+        run: node scripts/deploy.ts --target dev --bundle "$RUNNER_TEMP/esign-build/dist" --assets "$RUNNER_TEMP/esign-build/dist-ui"
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ESIGN_MAIL_FROM: ${{ vars.ESIGN_DEV_MAIL_FROM }}
+          ESIGN_MAIL_SINK: ${{ vars.ESIGN_DEV_MAIL_SINK }}
+          ESIGN_FRAME_ANCESTORS: ${{ vars.ESIGN_DEV_FRAME_ANCESTORS }}
+          ESIGN_KMS_KEY_ARN: ${{ vars.ESIGN_DEV_KMS_KEY_ARN }}
+          ESIGN_KMS_PUBLIC_KEY: ${{ vars.ESIGN_DEV_KMS_PUBLIC_KEY }}
+          ESIGN_AWS_ROLE_ARN: ${{ vars.ESIGN_DEV_AWS_ROLE_ARN }}

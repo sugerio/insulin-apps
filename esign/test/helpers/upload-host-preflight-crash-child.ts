@@ -1,0 +1,13 @@
+import {PDFDocument} from 'pdf-lib';
+import {once} from 'node:events';
+process.env.ESIGN_LOCAL_HOST='true';process.env.ESIGN_UPLOAD_SEAL='YES';delete process.env.ESIGN_SYNTHETIC_ALTERNATE_PORTS;
+const {startLocalHost}=await import('../../scripts/local-host.ts');
+const log=console.log;console.log=(...args:unknown[])=>{const value=args.join(' ');if(value.startsWith('Uploaded instance (retain for restart): '))process.stdout.write('INSTANCE '+value.slice(value.indexOf(': ')+2)+'\n');};
+const host=startLocalHost('local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz',{port:0,onUploadPreflight:async()=>{process.stdout.write('CHECKING\n');await new Promise(()=>{});}});await once(host,'listening');
+const port=(host.address() as import('node:net').AddressInfo).port;
+const pdf=await PDFDocument.create();pdf.addPage();
+const headers={host:`127.0.0.1:${port}`,origin:'http://127.0.0.1:5173','x-local-esign':'1'};
+const response=await fetch(`http://127.0.0.1:${port}/host/upload/create`,{method:'POST',headers:{...headers,'content-type':'application/pdf'},body:await pdf.save()});
+const value=await response.json() as {id:string};process.stdout.write('ENVELOPE '+value.id+'\n');
+void fetch(`http://127.0.0.1:${port}/host/upload/envelopes/${value.id}/complete`,{method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({authorizeDisclosure:true})});
+console.log=log;

@@ -1,0 +1,7 @@
+/** Fixed-order UTF-8 JSON event encodings. V1 must remain byte-compatible with existing evidence. */
+export type SignatureEvent = {envelopeId:string;sequence:number;previousHash:string;signatureId:string;taskId:string;recipientName:string;artifactId:string;artifactHash:string;otpVerifiedAt:number;consentedAt:number};
+export type PositionedSignatureEvent = {role:string;font:string;fontHash:string;templateFields:import('./template-fields.ts').TemplateField[];fields:{id:string;page:number;rect:{x:number;y:number;width:number;height:number};text:string;imageHash:string;geometry:import('./positioned-signature-geometry.ts').SignatureGeometry}[]};
+export function canonicalSignatureEvent(event:SignatureEvent, positioned?:PositionedSignatureEvent):string {
+ const common=[positioned?'esign-signature-event-v2':'esign-signature-event-v1',event.envelopeId,event.sequence,event.previousHash,event.signatureId,event.taskId,event.recipientName,event.artifactId,event.artifactHash,event.otpVerifiedAt,event.consentedAt];
+ return JSON.stringify(positioned?[...common,positioned.role,positioned.font,positioned.fontHash,positioned.templateFields.map(f=>[f.id,f.type,f.role,f.page,f.required,f.rect.x,f.rect.y,f.rect.width,f.rect.height]),positioned.fields.map(f=>[f.id,f.page,f.rect.x,f.rect.y,f.rect.width,f.rect.height,f.text,f.imageHash,...(f.geometry?[f.geometry.x,f.geometry.y,f.geometry.width,f.geometry.height]:[])])]:common);
+}

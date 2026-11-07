@@ -1,0 +1,12 @@
+{
+  // INERT REFERENCE ONLY: not deployment authorization. Paths are relative to this file.
+  "name": "example-disabled-candidate",
+  "main": "../src/candidate-worker.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["formdata_parser_supports_files"],
+  "workers_dev": false,
+  "preview_urls": false
+  // After separate approval, privately supply DB (D1), ARTIFACTS (R2), and
+  // the explicit candidate policy variables listed in DEPLOYMENT-RUNBOOK.md.
+  // Never attach a local mailbox, assets, Email Sending, routes or domains here.
+}

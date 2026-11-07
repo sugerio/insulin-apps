@@ -1,0 +1,60 @@
+{
+  "name": "esign",
+  "version": "1.0.0",
+  "description": "Experimental local e-sign service",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "dev": "wrangler dev --local",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.synthetic-seal.json",
+    "db:migrate:local": "wrangler d1 migrations apply esign-local --local",
+    "build": "vite build && wrangler deploy --dry-run --outdir dist",
+    "dev:ui": "vite",
+    "db:seed:local": "wrangler d1 execute esign-local --local --file scripts/seed-local.sql",
+    "dev:host": "node scripts/local-host.ts",
+    "dev:editor-url-demo": "node scripts/editor-local-demo.ts",
+    "test:kms:synthetic": "node scripts/kms-synthetic.ts",
+    "seal:synthetic": "node scripts/synthetic-seal-cli.ts",
+    "build:candidate-assets": "node scripts/build-candidate-assets.ts",
+    "check:deployment-review": "node scripts/check-deployment-review.ts",
+    "check:consolidated-deployment-review": "node scripts/check-consolidated-deployment-review.ts",
+    "deploy:dev": "npm run build && node scripts/deploy.ts --target dev --bundle dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261103.1",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/react-test-renderer": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0",
+    "react-test-renderer": "^19.3.1",
+    "typescript": "7.0.2",
+    "vite": "^8.3.5",
+    "wrangler": "4.156.2"
+  },
+  "overrides": {
+    "undici": "^7.30.1",
+    "sharp": "^0.35.5"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "3.1161.0",
+    "asn1js": "3.0.6",
+    "hono": "4.13.16",
+    "jose": "6.2.3",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "5.4.624",
+    "pkijs": "3.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "private": "true"
+}

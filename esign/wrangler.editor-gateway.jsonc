@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "esign-editor-gateway",
+  "main": "src/editor-gateway.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["streams_enable_constructors"],
+  "workers_dev": false,
+  "preview_urls": false
+}

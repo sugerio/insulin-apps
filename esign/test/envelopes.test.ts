@@ -8,7 +8,7 @@ test('envelope creation is tenant-isolated, role-bound, and idempotent', async (
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql']) {
+    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql', '0050_task_expiry.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8').catch(() => '');
       assert.ok(sql, `missing migration ${name}`);
       await db.batch(sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s)));

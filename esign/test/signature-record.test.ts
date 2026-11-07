@@ -14,7 +14,7 @@ test('signature atomically requires persisted verified session, consent and the 
     const pdf=await PDFDocument.create();pdf.addPage();const bytes=await pdf.save();
     const h0=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');
     await bucket.put('d0.pdf',bytes);
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signature_records.sql','0008_signature_events.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql','0029_recipient_session_revocations.sql','0030_recipient_code_revocations.sql','0026_signature_otp_recipient.sql','0011_signature_layout.sql','0012_signature_input_layouts.sql']) {
+    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signature_records.sql','0008_signature_events.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql','0029_recipient_session_revocations.sql','0030_recipient_code_revocations.sql','0026_signature_otp_recipient.sql','0011_signature_layout.sql','0012_signature_input_layouts.sql', '0050_task_expiry.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
       await db.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>db.prepare(s)));
     }

@@ -28,8 +28,11 @@ body { margin: 0; }
 .esign-editor button:focus-visible, .esign-recipient button:focus-visible, .esign-editor input:focus-visible, .esign-recipient input:focus-visible, .esign-editor select:focus-visible { outline: 2px solid var(--esign-primary); outline-offset: 2px; }
 .esign-editor button:disabled, .esign-recipient button:disabled { opacity: .5; cursor: not-allowed; }
 .esign-editor input[type=radio], .esign-editor input[type=checkbox], .esign-recipient input[type=checkbox] { accent-color: var(--esign-primary); }
-.esign-editor > button, .esign-recipient section > button:last-child { background: var(--esign-primary); color: white; border-color: var(--esign-primary); }
-.esign-editor > button:hover:not(:disabled), .esign-recipient section > button:last-child:hover:not(:disabled) { background: var(--esign-primary-hover); }
+.esign-editor > button, .esign-recipient section > button:last-child, .esign-recipient button.esign-sign { background: var(--esign-primary); color: white; border-color: var(--esign-primary); }
+.esign-editor > button:hover:not(:disabled), .esign-recipient section > button:last-child:hover:not(:disabled), .esign-recipient button.esign-sign:hover:not(:disabled) { background: var(--esign-primary-hover); }
+.esign-recipient .esign-decline { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; margin-top: .75rem; }
+.esign-recipient .esign-decline label { flex-basis: 100%; display: grid; gap: .25rem; }
+.esign-recipient .esign-decline textarea { min-height: 4rem; font: inherit; padding: .5rem; border: 1px solid var(--esign-border, #d1d5db); border-radius: 6px; }
 .esign-editor-workspace { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 16px; height: 70vh; min-height: 320px; align-items: stretch; margin-top: 20px; }
 .esign-document-surface { min-width: 0; min-height: 0; overflow: auto; background: #e9eaec; border: 1px solid var(--esign-border); border-radius: var(--esign-radius); padding: 24px; }
 .esign-document-surface canvas { max-width: 100%; height: auto; box-shadow: 0 2px 8px #0002; }

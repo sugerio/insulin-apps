@@ -18,6 +18,8 @@ import { completeEnvelopeOfSession, processEnvelopeStep } from './envelope-compl
 import { otpSink, type OtpSinkEnv } from './otp-mail-sink.ts';
 import { managedEvidenceFromEnv, type SealEnv } from './seal-config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
+import { expireIfDue } from './task-expiry.ts';
+import { intentStatement, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
 import { CONSENT_DISCLOSURE, consentDisclosure } from './disclosure.ts';
 import { finalizeManagedEvidence, hasManagedEvidence, managedDelivery, verifyManagedEvidence } from './managed-evidence.ts';
 import { isValidOtpEmailAddress } from './cloudflare-otp-mail.ts';
@@ -47,6 +49,12 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
   };
   app.use('/v1/page-sessions/*', local);
   app.use('/v1/signing/*', local);
+  // A passed sign-by deadline expires the envelope before the signer's request runs.
+  app.use('/v1/signing/*', async (c, next) => {
+    const session = await sessionContext(c.env.DB, tokenFrom(c.req.header('authorization')));
+    if (session) await expireIfDue(c.env.DB, session.envelopeId);
+    await next();
+  });
   app.use('/v1/page-sessions/*', bodyLimit({maxSize:4096}));
   app.use('/v1/signing/*', bodyLimit({maxSize:4096}));
   const cors = async (c: import('hono').Context<Env>, next: import('hono').Next) => {
@@ -60,6 +68,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
   app.use('/v1/page-sessions/*', cors);
   app.use('/v1/signing/*', cors);
   app.post('/v1/envelopes/:id/tasks/:taskId/recipient-view', local, bodyLimit({maxSize:4096}), async c => {
+    await expireIfDue(c.env.DB, c.req.param('id') ?? '');
     let body: {origin?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.origin !== 'string') return c.json({error:'invalid_request'},400);
     try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin:body.origin,now:Date.now()});
@@ -135,7 +144,29 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
     const all=raw.length?(v3&&v3TestOnly?positionedV3Fields(raw,JSON.parse(row.roles_json),100):positionedFields(row.fields_json,JSON.parse(row.roles_json),100)):[];assertNoOverlappingFields(all);
     return {task,all,fields:all.filter(f=>f.role===row.role),role:row.role,recipientName:row.recipient_name,v3,fieldsJson:row.fields_json,rolesJson:row.roles_json};
   }
-  app.get('/v1/signing/current', async c => {try {const a=await current(c),details=await fieldsFor(c);return c.json({id:a.id,sha256:a.sha256,disclosure:{version:CONSENT_DISCLOSURE.version,text:CONSENT_DISCLOSURE.text},...(details.fields.length?{fields:details.fields,role:details.role,recipientName:details.recipientName,...(details.v3?{v3:true}:{})}:{})});} catch {return c.json({error:'unavailable'},401);}});
+  app.get('/v1/signing/current', async c => {try {const a=await current(c),details=await fieldsFor(c);
+    // The signer's title and company (when the host named them) and the sentence they adopt.
+    const who=await signerContext(c.env.DB,details.task);
+    return c.json({id:a.id,sha256:a.sha256,disclosure:{version:CONSENT_DISCLOSURE.version,text:CONSENT_DISCLOSURE.text},intent:intentStatement(who.documentName,who.facts.onBehalfOf),...(who.facts.title||who.facts.onBehalfOf?{signer:who.facts}:{}),...(details.fields.length?{fields:details.fields,role:details.role,recipientName:details.recipientName,...(details.v3?{v3:true}:{})}:{})});} catch {return c.json({error:'unavailable'},401);}});
+  // The signer whose turn it is declines, after the code, with a reason: the envelope ends for
+  // everyone, and the audit trail records who declined, why, and from where.
+  app.post('/v1/signing/decline', async c => {
+    let body: {reason?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    const reason=typeof body?.reason==='string'?body.reason.trim():'';
+    if(!reason)return c.json({error:'reason_required'},422);
+    if(reason.length>1000)return c.json({error:'reason_too_long'},422);
+    try {await current(c);} catch {return c.json({error:'unavailable'},401);}
+    const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
+    if(!session)return c.json({error:'unavailable'},401);
+    const {ip,userAgent}=requestFacts(c.req.raw);
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE envelopes SET status='DECLINED' WHERE id=? AND status='IN_PROGRESS' AND EXISTS (SELECT 1 FROM tasks WHERE id=? AND envelope_id=? AND status='ACTIVE')").bind(session.envelopeId,session.taskId,session.envelopeId),
+      c.env.DB.prepare('INSERT INTO audit_events (envelope_id, task_id, type, occurred_at, ip, user_agent, detail_json) SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id=? AND status=\'DECLINED\') AND NOT EXISTS (SELECT 1 FROM audit_events WHERE envelope_id=? AND type=?)')
+        .bind(session.envelopeId,session.taskId,AUDIT.declined,Date.now(),ip,userAgent,JSON.stringify({reason}),session.envelopeId,session.envelopeId,AUDIT.declined),
+    ]);
+    const after=await c.env.DB.prepare('SELECT status FROM envelopes WHERE id=?').bind(session.envelopeId).first<{status:string}>();
+    return after?.status==='DECLINED'?c.json({status:'DECLINED'}):c.json({error:'unavailable'},409);
+  });
   app.post('/v1/signing/signature-preview',async c=>{try{
     const artifact=await current(c),{task,fields,all,fieldsJson,rolesJson}=await fieldsFor(c),body=await c.req.json() as {fieldId?:unknown;text?:unknown};
     const field=fields.find(f=>f.id===body.fieldId&&f.type==='Signature');if(!field||typeof body.text!=='string')throw new Error('Invalid signature');
@@ -182,11 +213,21 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
     try {c.executionCtx.waitUntil(work);} catch {/* No execution context in-process: the work continues on its own. */}
   });
   app.post('/v1/signing/sign', async c => {
-    let body: {artifactId?:unknown;artifactHash?:unknown;consent?:unknown;signatures?:unknown;datePreviewIds?:unknown;signaturePreviews?:unknown;textPreviews?:unknown;disclosureVersion?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    let body: {artifactId?:unknown;artifactHash?:unknown;consent?:unknown;signatures?:unknown;datePreviewIds?:unknown;signaturePreviews?:unknown;textPreviews?:unknown;disclosureVersion?:unknown;title?:unknown;authorityConfirmed?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.artifactId !== 'string' || typeof body.artifactHash !== 'string' || body.consent !== true) return c.json({error:'invalid_request'},400);
     // The signer consents to the disclosure the page showed; refuse consent to an older one.
     if (body.disclosureVersion !== undefined && body.disclosureVersion !== CONSENT_DISCLOSURE.version) return c.json({error:'disclosure_changed'},409);
     const token=tokenFrom(c.req.header('authorization'));
+    // Signing for a company: the signer gives a title and confirms they may bind it.
+    const who=await sessionContext(c.env.DB,token).then(s=>s?signerContext(c.env.DB,s.taskId):null).catch(()=>null);
+    const signerTitle=parseSignerTitle(body.title);
+    if(signerTitle==='invalid')return c.json({error:'invalid_request'},400);
+    if(who?.facts.onBehalfOf){
+      if(!signerTitle)return c.json({error:'title_required'},422);
+      if(body.authorityConfirmed!==true)return c.json({error:'authority_required'},422);
+    }
+    const intent=intentStatement(who?.documentName??null,who?.facts.onBehalfOf);
+    const authority={...(signerTitle?{title:signerTitle}:{}),...(who?.facts.onBehalfOf?{onBehalfOf:who.facts.onBehalfOf,authorityConfirmed:true}:{}),...(who?.facts.onBehalfOf||signerTitle?{intentSha256:await sha256Hex(intent)}:{})};
     const replay=async () => {
       if (!token) return null;
       const hash=await sha256(new TextEncoder().encode(token).buffer);
@@ -203,7 +244,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
       const {fields,v3}=await fieldsFor(c);const command={token,origin:requestOrigin(c),now:Date.now(),artifactId:a.id,artifactHash:a.sha256};
       const id=v3&&v3TestOnly?await recordPositionedV3Signature(c.env.DB,c.env.ARTIFACTS,{...command,values:body.signatures,datePreviewIds:body.datePreviewIds,signaturePreviews:body.signaturePreviews,textPreviews:body.textPreviews}):fields.length?await recordPositionedSignature(c.env.DB,c.env.ARTIFACTS,{...command,signatures:body.signatures,signaturePreviews:body.signaturePreviews}):body.signatures===undefined?await recordSignature(c.env.DB,c.env.ARTIFACTS,{...command,consent:true}):(()=>{throw new Error('Unexpected fields');})();
       const disclosure=await consentDisclosure(),session=await sessionContext(c.env.DB,token);
-      if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.signed,...requestFacts(c.req.raw),detail:{signatureId:id,artifactId:a.id,artifactSha256:a.sha256,consentDisclosureVersion:disclosure.version,consentDisclosureSha256:disclosure.sha256}});
+      if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.signed,...requestFacts(c.req.raw),detail:{signatureId:id,artifactId:a.id,artifactSha256:a.sha256,consentDisclosureVersion:disclosure.version,consentDisclosureSha256:disclosure.sha256,...authority}});
       return c.json({id},202);
     } catch {const raced=await replay();return raced ? c.json(raced,202) : c.json({error:'signature_rejected'},409);}
   });

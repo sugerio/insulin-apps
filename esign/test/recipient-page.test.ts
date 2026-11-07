@@ -327,3 +327,58 @@ test('the page shows the consent disclosure from the server and signs with its v
   await act(async()=>{renderer.unmount();});
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
+
+async function verifiedPage(current: Record<string, unknown>, onPost: (path: string, body: any) => Response | undefined) {
+ const {default:Renderer,act}=await import('react-test-renderer');
+ (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+ (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
+ globalThis.fetch=async (input:any,init?:RequestInit)=>{const path=new URL(String(input)).pathname;
+  if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
+  if(path==='/v1/signing/otp') return Response.json({messageId:'m'});
+  if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
+  if(path==='/v1/signing/current') return Response.json(current);
+  if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
+  const out=onPost(path,init?.body?JSON.parse(String(init.body)):undefined);if(out)return out;
+  throw new Error(path);};
+ let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+ const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
+ const labelled=(label:string)=>renderer.root.findAll((n:any)=>n.props?.['aria-label']===label)[0];
+ await act(async()=>{await button('Send test code').props.onClick();});await act(async()=>{await button('Verify').props.onClick();});
+ return {renderer,act,button,labelled};
+}
+
+test('signing for a company: the page shows the intent, needs a title and the authority confirmed, and sends both', async()=>{
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ try {
+  let signed:any;
+  const p=await verifiedPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting.',signer:{title:'Partner Manager',onBehalfOf:'Northbeam Consulting'}},(path,body)=>{if(path==='/v1/signing/sign'){signed=body;return new Response(null,{status:202});}return undefined;});
+  const text=JSON.stringify(p.renderer.toJSON());
+  assert.match(text,/I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting\./);
+  assert.equal(p.labelled('Your title').props.value,'Partner Manager');
+  await p.act(async()=>{p.labelled('Consent to sign').props.onChange({target:{checked:true}});});
+  assert.equal(p.button('Sign document').props.disabled,true,'authority not yet confirmed');
+  await p.act(async()=>{p.labelled('Your title').props.onChange({target:{value:'Head of Partnerships'}});});
+  await p.act(async()=>{p.labelled('Authorized to sign').props.onChange({target:{checked:true}});});
+  assert.equal(p.button('Sign document').props.disabled,false);
+  await p.act(async()=>{await p.button('Sign document').props.onClick();});
+  assert.equal(signed.title,'Head of Partnerships');assert.equal(signed.authorityConfirmed,true);
+  await p.act(async()=>{p.renderer.unmount();});
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});
+
+test('the signer may decline with a reason instead of signing', async()=>{
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ try {
+  let declined:any;
+  const p=await verifiedPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on this document.'},(path,body)=>{if(path==='/v1/signing/decline'){declined=body;return Response.json({status:'DECLINED'});}return undefined;});
+  await p.act(async()=>{await p.button('Decline to sign').props.onClick();});
+  assert.equal(p.button('Decline').props.disabled,true,'a reason comes first');
+  await p.act(async()=>{p.labelled('Reason for declining').props.onChange({target:{value:'Clause 4 needs changes.'}});});
+  await p.act(async()=>{await p.button('Decline').props.onClick();});
+  assert.deepEqual(declined,{reason:'Clause 4 needs changes.'});
+  const text=JSON.stringify(p.renderer.toJSON());
+  assert.match(text,/You declined to sign\. The sender has been told\./);
+  assert.equal(p.button('Sign document'),undefined);
+  await p.act(async()=>{p.renderer.unmount();});
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});

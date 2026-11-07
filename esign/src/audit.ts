@@ -15,6 +15,12 @@ export const AUDIT = {
   signed: 'SIGNED',
   completed: 'COMPLETED',
   copySent: 'COPY_SENT',
+  /** The sender voided the envelope before everyone had signed (management API). */
+  voided: 'VOIDED',
+  /** A recipient's sign-by deadline passed before they signed (src/task-expiry.ts). */
+  expired: 'EXPIRED',
+  /** The signer whose turn it was declined to sign, with a reason. */
+  declined: 'DECLINED',
 } as const;
 
 export type AuditEvent = {

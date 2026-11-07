@@ -9,7 +9,7 @@ test('preparation fixes a D0 hash, activates only the first task and is safe to 
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
   try {
     const db = await mf.getD1Database('DB'); const bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql']) {
+    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql', '0050_task_expiry.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
       await db.batch(sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s)));
     }
@@ -31,7 +31,7 @@ test('preparation rejects a missing first task without committing artifact metad
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
   try {
     const db = await mf.getD1Database('DB'); const bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql']) {
+    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql', '0050_task_expiry.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
       await db.batch(sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s)));
     }

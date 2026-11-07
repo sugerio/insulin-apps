@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { AUDIT, requestFacts } from './audit.ts';
+import { expireDueEnvelopes, expireIfDue, parseDeadline } from './task-expiry.ts';
+import { parseDocumentName, parseSignerFacts, type SignerFacts } from './signer-facts.ts';
 import { PDFDocument } from 'pdf-lib';
 import { assertNoOverlappingFields } from './template-fields.ts';
 import { positionedFields, validatePositionedPdf, validatePositionedPlacement } from './positioned-template.ts';
@@ -130,15 +133,28 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   let body: unknown;
   try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
-  const input = body as { templateId?: unknown; recipients?: unknown };
+  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown };
+  // The document's name, shown to the signer and named in the intent statement.
+  const documentName = parseDocumentName(input.documentName);
+  if (documentName === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
   if (typeof input.templateId !== 'string' || !Array.isArray(input.recipients) || input.recipients.length < 1 || input.recipients.length > 20) return context.json({ error: 'invalid_envelope' }, 422);
-  const recipients: { role: string; name: string; email: string }[] = [];
+  const recipients: { role: string; name: string; email: string; expiresAt?: string }[] = [];
+  const deadlines: (number | null)[] = [];
+  const signerFacts: SignerFacts[] = [];
   for (const recipient of input.recipients) {
     if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || typeof recipient.name !== 'string' || typeof recipient.email !== 'string' || !recipient.name.trim() || recipient.name.length > 200 || recipient.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email)) return context.json({ error: 'invalid_recipient' }, 422);
-    recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email });
+    // A sign-by deadline for this recipient (ISO 8601, future, within 400 days).
+    const deadline = parseDeadline((recipient as { expiresAt?: unknown }).expiresAt);
+    if (deadline === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    deadlines.push(deadline);
+    // The signer's title and the company they sign for (evidence of authority).
+    const facts = parseSignerFacts(recipient as { title?: unknown; onBehalfOf?: unknown });
+    if (facts === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    signerFacts.push(facts);
+    recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email, ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts });
   }
   const tenantId = context.get('tenantId');
-  const encoded = JSON.stringify({ templateId: input.templateId, recipients });
+  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
   const lookup = () => context.env.DB.prepare('SELECT request_hash, response_json FROM idempotency_keys WHERE tenant_id = ? AND idempotency_key = ?').bind(tenantId, `envelope:${key}`).first<{ request_hash: string; response_json: string }>();
   const existing = await lookup();
@@ -161,11 +177,15 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   }
   if (roles.length !== recipients.length || new Set(recipients.map((r) => r.role)).size !== roles.length || recipients.some((r) => !roles.includes(r.role))) return context.json({ error: 'invalid_roles' }, 422);
   const id = crypto.randomUUID();
+  const taskIds = recipients.map(() => crypto.randomUUID());
   const response = { id, status: 'PROCESSING' };
   const statements = [
     context.env.DB.prepare('INSERT INTO idempotency_keys (tenant_id, idempotency_key, request_hash, response_json) VALUES (?, ?, ?, ?)').bind(tenantId, `envelope:${key}`, hash, JSON.stringify(response)),
     context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at) VALUES (?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, 'PROCESSING', Date.now()),
-    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), id, recipient.role, recipient.name, recipient.email, index + 1, 'PENDING')),
+    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, 'PENDING')),
+    ...recipients.flatMap((_, index) => deadlines[index] === null ? [] : [context.env.DB.prepare('INSERT INTO task_deadlines (task_id, expires_at) VALUES (?, ?)').bind(taskIds[index], deadlines[index])]),
+    ...recipients.flatMap((_, index) => signerFacts[index].title || signerFacts[index].onBehalfOf ? [context.env.DB.prepare('INSERT INTO task_signer_facts (task_id, title, on_behalf_of) VALUES (?, ?, ?)').bind(taskIds[index], signerFacts[index].title ?? null, signerFacts[index].onBehalfOf ?? null)] : []),
+    ...(documentName ? [context.env.DB.prepare('INSERT INTO envelope_documents (envelope_id, document_name) VALUES (?, ?)').bind(id, documentName)] : []),
   ];
   try { await context.env.DB.batch(statements); }
   catch (error) {
@@ -179,10 +199,12 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
 app.get('/v1/envelopes/:id', async (context) => {
   const id = context.req.param('id');
   const tenantId = context.get('tenantId');
+  // A tenant's own envelope only (checked below); expiring a stranger's id is a no-op lookup.
+  if (await context.env.DB.prepare('SELECT 1 FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first()) await expireIfDue(context.env.DB, id);
   const envelope = await context.env.DB.prepare('SELECT id, template_id, status, created_at FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ id: string; template_id: string; status: string; created_at: number }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
-  const tasks = await context.env.DB.prepare('SELECT id, role, recipient_name, recipient_email, routing_order, status FROM tasks WHERE envelope_id = ? ORDER BY routing_order').bind(id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string }>();
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, tasks: tasks.results.map((task) => ({ id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status })) });
+  const tasks = await context.env.DB.prepare('SELECT t.id, t.role, t.recipient_name, t.recipient_email, t.routing_order, t.status, d.expires_at FROM tasks t LEFT JOIN task_deadlines d ON d.task_id = t.id WHERE t.envelope_id = ? ORDER BY t.routing_order').bind(id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null }>();
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, tasks: tasks.results.map((task) => ({ id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }) })) });
 });
 
 app.post('/v1/envelopes/:id/prepare', async (context) => {
@@ -195,6 +217,63 @@ app.post('/v1/envelopes/:id/prepare', async (context) => {
   return context.body(null, 204);
 });
 
+// The envelope's audit trail for its host: each event in order, with the signer it concerns. Only
+// detail that is safe to show is passed on (never a code, a message id or a key).
+const AUDIT_DETAIL_SHOWN = ['reason', 'title', 'onBehalfOf', 'authorityConfirmed', 'consentDisclosureVersion', 'to', 'delivery'];
+app.get('/v1/envelopes/:id/audit', async (context) => {
+  const id = context.req.param('id');
+  if (!await context.env.DB.prepare('SELECT 1 FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, context.get('tenantId')).first()) return context.json({ error: 'not_found' }, 404);
+  const rows = await context.env.DB.prepare('SELECT a.type, a.occurred_at, a.ip, a.user_agent, a.detail_json, t.role, t.recipient_name, t.recipient_email FROM audit_events a LEFT JOIN tasks t ON t.id = a.task_id WHERE a.envelope_id = ? ORDER BY a.id')
+    .bind(id).all<{ type: string; occurred_at: number; ip: string | null; user_agent: string | null; detail_json: string | null; role: string | null; recipient_name: string | null; recipient_email: string | null }>();
+  const events = rows.results.map(row => {
+    let detail: Record<string, unknown> | null = null;
+    try { detail = row.detail_json ? JSON.parse(row.detail_json) : null; } catch { detail = null; }
+    const shown = detail ? Object.fromEntries(Object.entries(detail).filter(([k]) => AUDIT_DETAIL_SHOWN.includes(k))) : {};
+    return {
+      type: row.type,
+      at: new Date(row.occurred_at).toISOString(),
+      ...(row.role ? { recipient: { role: row.role, name: row.recipient_name ?? '', email: row.recipient_email ?? '' } } : {}),
+      ...(row.ip ? { ip: row.ip } : {}),
+      ...(row.user_agent ? { userAgent: row.user_agent } : {}),
+      ...(Object.keys(shown).length ? { detail: shown } : {}),
+    };
+  });
+  return context.json({ events });
+});
+
+// Withdraws an envelope nobody has finished signing. Every signing path requires an envelope
+// IN_PROGRESS, so a VOIDED one can no longer be opened, verified or signed. Repeating it is a
+// no-op; an envelope already finishing or completed is refused.
+app.post('/v1/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context) => {
+  let reason = '';
+  const raw = await context.req.text();
+  if (raw.trim()) {
+    let body: unknown;
+    try { body = JSON.parse(raw); } catch { return context.json({ error: 'invalid_json' }, 400); }
+    const input = (body ?? {}) as { reason?: unknown };
+    if (typeof body !== 'object' || Array.isArray(body) || (input.reason !== undefined && typeof input.reason !== 'string')) return context.json({ error: 'invalid_void' }, 422);
+    reason = (input.reason as string | undefined)?.trim() ?? '';
+    if (reason.length > 500) return context.json({ error: 'invalid_void' }, 422);
+  }
+  const id = context.req.param('id');
+  const tenantId = context.get('tenantId');
+  const db = context.env.DB;
+  const read = () => db.prepare('SELECT status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ status: string }>();
+  const envelope = await read();
+  if (!envelope) return context.json({ error: 'not_found' }, 404);
+  if (envelope.status !== 'VOIDED') {
+    const { ip, userAgent } = requestFacts(context.req.raw);
+    // One batch: the status change and its audit event commit together, once.
+    await db.batch([
+      db.prepare("UPDATE envelopes SET status = 'VOIDED' WHERE id = ? AND tenant_id = ? AND status IN ('PROCESSING', 'IN_PROGRESS')").bind(id, tenantId),
+      db.prepare("INSERT INTO audit_events (envelope_id, task_id, type, occurred_at, ip, user_agent, detail_json) SELECT ?, NULL, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id = ? AND status = 'VOIDED') AND NOT EXISTS (SELECT 1 FROM audit_events WHERE envelope_id = ? AND type = ?)")
+        .bind(id, AUDIT.voided, Date.now(), ip, userAgent, JSON.stringify(reason ? { reason } : {}), id, id, AUDIT.voided),
+    ]);
+    if ((await read())?.status !== 'VOIDED') return context.json({ error: 'envelope_not_voidable' }, 409);
+  }
+  return context.json({ id, status: 'VOIDED' });
+});
+
 mountLocalSigningRoutes(app, v3TestOnly);
 return app;
 }
@@ -205,6 +284,7 @@ export const createV3TestApp = () => createApp(true);
 /** Cron trigger: finishes envelopes that the after-signature work did not (see envelope-completion.ts). */
 async function scheduled(_controller: ScheduledController, env: Bindings, ctx: ExecutionContext): Promise<void> {
   if (!localSigningEnabled(env)) return;
+  ctx.waitUntil(expireDueEnvelopes(env.DB).catch(() => console.error('E-sign: the expiry sweep failed; the next run retries it')));
   ctx.waitUntil(sweepEnvelopes(env).then((counts) => {
     if (counts.failed) console.error(`E-sign: ${counts.failed} envelope(s) could not be finished; the next run retries them`);
   }));

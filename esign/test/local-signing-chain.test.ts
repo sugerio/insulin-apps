@@ -11,7 +11,7 @@ test('local primitives chain Ana D0 to D1 and Marcus D1 to D2 without overwritin
   const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
   try {
     const db=await mf.getD1Database('DB'), bucket=await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signature_records.sql','0011_signature_layout.sql','0012_signature_input_layouts.sql','0008_signature_events.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql','0029_recipient_session_revocations.sql','0030_recipient_code_revocations.sql','0026_signature_otp_recipient.sql','0017_positioned_signatures.sql']) {
+    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signature_records.sql','0011_signature_layout.sql','0012_signature_input_layouts.sql','0008_signature_events.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql','0029_recipient_session_revocations.sql','0030_recipient_code_revocations.sql','0026_signature_otp_recipient.sql','0017_positioned_signatures.sql', '0050_task_expiry.sql']) {
       const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');
       await db.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>db.prepare(s)));
     }

@@ -3,7 +3,7 @@ import { finalizeLocalTestEvidence } from './local-test-evidence.ts';
 
 const hash = async (bytes: Uint8Array | ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes instanceof Uint8Array ? Uint8Array.from(bytes) : bytes)), n=>n.toString(16).padStart(2,'0')).join('');
 
-import type { AuditEvent } from './audit.ts';
+import { auditTrail, type AuditEvent } from './audit.ts';
 type DeliveryRow={task_id?:string;sequence:number;recipient_name:string;input_sha256:string;sha256:string;event_hash:string;otp_verified_at:number;consented_at:number;object_key:string};
 /** Verified evidence for the delivery PDF, and how its certificate pages describe the seal. */
 export type DeliveryEvidence={verify():Promise<{source:{id:string;sha256:string};signatures:DeliveryRow[];finalSha256:string;audit?:{sealed:AuditEvent[];afterSeal:AuditEvent[]}}|void>;banner:string;notes:string[];name:string;format:string};
@@ -15,6 +15,21 @@ const localDelivery=(db:D1Database,bucket:R2Bucket,tenantId:string,envelopeId:st
 });
 
 /** A separate delivery artifact; the original evidence manifest never includes it. Pass the local test seal key, or the evidence of another seal. */
+const AUDIT_SIGNED='SIGNED';
+
+/** The signer's title and company on a SIGNED event ("" for older signatures, which had none). */
+export function authorityFact(detail: Record<string, unknown> | null | undefined): string {
+  const title=typeof detail?.title==='string'?detail.title:'', company=typeof detail?.onBehalfOf==='string'?detail.onBehalfOf:'';
+  if(!title&&!company)return '';
+  return [title?`as ${title}`:'',company?`on behalf of ${company}${detail?.authorityConfirmed===true?' (authority confirmed)':''}`:''].filter(Boolean).join(', ');
+}
+
+/** The authority fact of a signer's own SIGNED event ("" when they signed for nobody, or for an older signature). */
+export function signerAuthority(events: readonly AuditEvent[], taskId: string | undefined): string {
+  if(!taskId)return '';
+  return authorityFact(events.find(event=>event.taskId===taskId&&event.type===AUDIT_SIGNED)?.detail);
+}
+
 export async function deliveryPdf(db:D1Database,bucket:R2Bucket,tenantId:string,envelopeId:string,source:Uint8Array|DeliveryEvidence) {
   const described=source instanceof Uint8Array?localDelivery(db,bucket,tenantId,envelopeId,source):source;
   const evidence=await described.verify();
@@ -72,14 +87,19 @@ export async function deliveryPdf(db:D1Database,bucket:R2Bucket,tenantId:string,
     field('Event SHA-256',row.event_hash);
   }
   heading('Events (UTC)');
+  // Without a sealed audit trail (local test evidence), each signer's title and company go with
+  // their events; SIGNED events never change, so a stored PDF stays reproducible.
+  const signedEvents=evidence.audit?[]:(await auditTrail(db,envelopeId)).filter(event=>event.type===AUDIT_SIGNED);
   for(const row of evidence.signatures) {
     // Keep the complete name and both event timestamps together on one page.
-    const eventHeight=Math.max(1,wrapLines(row.recipient_name,340).length)*15+3+2*18;
+    const authority=signerAuthority(signedEvents,row.task_id).replace(/[^\x20-\x7e]/g,'?');
+    const eventHeight=Math.max(1,wrapLines(row.recipient_name,340).length)*15+3+2*18+(authority?wrapLines(authority,340).length*15+3:0);
     if(eventHeight>680) throw new Error('Signer event group too large');
     ensure(eventHeight);
     field(`Signer ${row.sequence}`,row.recipient_name,340);
     field('OTP verified',new Date(row.otp_verified_at).toISOString());
     field('Consent / signed',new Date(row.consented_at).toISOString());
+    if(authority)field('Signed',authority,340);
   }
   if(evidence.audit) {
     heading('Audit trail (UTC)');
@@ -90,7 +110,7 @@ export async function deliveryPdf(db:D1Database,bucket:R2Bucket,tenantId:string,
     // Events recorded after sealing (such as the copies sent) are on the certificate.
     for(const event of evidence.audit.sealed) {
       const who=event.taskId?names.get(event.taskId):undefined;
-      const facts=[event.type.replace(/_/g,' ').toLowerCase()+(who?` · ${who}`:''),event.ip?`IP ${event.ip}`:'',event.userAgent?ascii(event.userAgent).slice(0,160):''].filter(Boolean);
+      const facts=[event.type.replace(/_/g,' ').toLowerCase()+(who?` · ${who}`:''),event.type===AUDIT_SIGNED?ascii(authorityFact(event.detail)):'',event.ip?`IP ${event.ip}`:'',event.userAgent?ascii(event.userAgent).slice(0,160):''].filter(Boolean);
       // Keep one event's rows together on a page.
       ensure(18*facts.length+18);
       facts.forEach((fact,i)=>field(i===0?new Date(event.occurredAt).toISOString().replace('.000Z','Z'):'',fact));

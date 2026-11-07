@@ -153,6 +153,20 @@ curl -fsS -X POST -H "Authorization: Bearer $KEY" "$API/v1/envelopes/$ENV/prepar
 curl -fsS -H "Authorization: Bearer $KEY" "$API/v1/envelopes/$ENV" | jq .
 ```
 
+A recipient may carry a sign-by deadline: `"expiresAt": "<ISO 8601>"` on its entry in `recipients` (in the future, within 400 days). Once it passes while that recipient has not signed, the envelope becomes `EXPIRED` for everyone: before any request touches it and at the latest on the next cron sweep, with one `EXPIRED` audit event. A recipient who has signed is past their deadline's reach, so a countersigner without one never makes the envelope expire. `GET /v1/envelopes/:id` shows each task's `expiresAt`.
+
+To withdraw an envelope nobody has finished signing, void it from the management side. Every signing path requires `IN_PROGRESS`, so a `VOIDED` envelope can no longer be opened, verified or signed; the audit trail records one `VOIDED` event with the optional reason (at most 500 characters). Repeating it is a no-op, and an envelope already `FINALIZING` or `COMPLETED` answers 409 `envelope_not_voidable`:
+
+```sh
+curl -fsS -X POST -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -d '{"reason":"Wrong version"}' "$API/v1/envelopes/$ENV/void"
+```
+
+A recipient who signs for a company may carry `"title"` (at most 128 characters) and `"onBehalfOf"` (the company, at most 200) on its entry in `recipients`, and the envelope may carry `"documentName"` (at most 200). The signing page then shows the intent statement ("I intend this to be my signature on <document> on behalf of <company>."), prefills the title for the signer to correct, and keeps **Sign document** disabled until the signer gives a title and confirms they are authorized to sign for that company. The `SIGNED` audit event records the title, the company, the confirmation and the SHA-256 of the intent statement shown, and the completion certificate prints them next to the signature.
+
+A signer who has passed the code may decline instead of signing, with a reason (at most 1000 characters): `POST /v1/signing/decline {"reason":"..."}`. The envelope becomes `DECLINED` for everyone, with one `DECLINED` audit event carrying the reason, the signer's IP address and user agent; nothing about it can be signed or voided afterwards.
+
+The management side reads an envelope's audit trail with `GET /v1/envelopes/:id/audit`: each event's type, time, recipient (role, name, email), IP address, user agent and a whitelisted detail (reason, title, company, authority confirmation, consent disclosure version, delivery). Codes and message ids are never returned. Another tenant's envelope answers 404.
+
 To test each recipient in order, obtain the current task id from the envelope response, then issue its view from the management side:
 
 ```sh

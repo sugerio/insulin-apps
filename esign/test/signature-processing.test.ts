@@ -10,7 +10,7 @@ test('processing preserves input, creates one signed PDF and activates the next 
   const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
   try {
     const db = await mf.getD1Database('DB'), bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signature_records.sql','0008_signature_events.sql','0011_signature_layout.sql','0017_positioned_signatures.sql']) {
+    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signature_records.sql','0008_signature_events.sql','0011_signature_layout.sql','0017_positioned_signatures.sql', '0050_task_expiry.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
       await db.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>db.prepare(s)));
     }

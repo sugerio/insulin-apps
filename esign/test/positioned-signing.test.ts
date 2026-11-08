@@ -35,7 +35,8 @@ test('positioned signatures bind each role and preserve a sequential PDF chain',
   const tasks=(await (await req(`/v1/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;
   for(let i=0;i<2;i++) {
    const view=await (await req(`/v1/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({origin},mgmt))).json();const session=await (await req('/v1/page-sessions/exchange',post({code:view.code},{origin}))).json();const headers={origin,authorization:`Bearer ${session.token}`};
-   assert.equal((await req('/v1/signing/current',{headers})).status,401);assert.equal((await req('/v1/signing/sign',post({artifactId:'missing',artifactHash:'0'.repeat(64),consent:true,signatures:{[fields[i].id]:'ANA'}},headers))).status,409);
+   // Before the code the signer may read the document, but not sign it.
+   const unverified=await (await req('/v1/signing/current',{headers})).json();assert.equal(unverified.verified,false);assert.equal((await req('/v1/signing/sign',post({artifactId:unverified.id,artifactHash:unverified.sha256,consent:true,signatures:{[fields[i].id]:'ANA'}},headers))).status,409);
    const sent=await (await req('/v1/signing/otp',post({},headers))).json();const otp=await (await env.TEST_MAIL.get(`test-mail/${sent.messageId}.json`))!.json() as {otp:string};assert.equal((await req('/v1/signing/otp/verify',post({otp:otp.otp},headers))).status,204);
    const current=await (await req('/v1/signing/current',{headers})).json();assert.deepEqual(current.fields,[fields[i]]);assert.equal(current.role,fields[i].role);assert.equal(current.recipientName,i?'Marcus':'Ana');
    const base={artifactId:current.id,artifactHash:current.sha256,consent:true};

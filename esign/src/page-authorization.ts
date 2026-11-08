@@ -1,5 +1,7 @@
 /** Internal, experimental primitives. Not an HTTP authorization boundary by themselves. */
 const encoder = new TextEncoder();
+/** How long an emailed code stays valid: 10 minutes, inside the 15-minute page session. */
+export const OTP_TTL_MS = 10 * 60 * 1000;
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), n => n.toString(16).padStart(2, '0')).join('');
 const digest = async (value: string) => hex(await crypto.subtle.digest('SHA-256', encoder.encode(value)));
 const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
@@ -58,7 +60,7 @@ export async function sendRecipientOtp(db: D1Database, token: string, origin: st
       next_send_at=excluded.next_send_at
     WHERE (recipient_otp_challenges.consumed_by IS NULL OR recipient_otp_challenges.session_hash <> excluded.session_hash) AND (recipient_otp_challenges.window_started_at + 900000 <= excluded.window_started_at OR
       (recipient_otp_challenges.attempts<5 AND recipient_otp_challenges.sends<3 AND recipient_otp_challenges.next_send_at<=excluded.window_started_at))`)
-    .bind(await otpHash(pepper, s.task_id, otp,s.recipient_email), now + 300000, now, now + 60000, sessionHash, origin, now,s.recipient_email).run();
+    .bind(await otpHash(pepper, s.task_id, otp,s.recipient_email), now + OTP_TTL_MS, now, now + 60000, sessionHash, origin, now,s.recipient_email).run();
   if (result.meta.changes !== 1) throw new Error('OTP unavailable');
   await send(s.recipient_email, otp);
 }

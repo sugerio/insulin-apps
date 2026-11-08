@@ -9,9 +9,45 @@ class RequestFailed extends Error {readonly status:number;readonly code:string;c
 type SignatureField = {id:string;type:'Signature'|'Title'|'Date signed';page:number;required:boolean;rect:{x:number;y:number;width:number;height:number}};
 /** The consent to sign electronically, as the server words it (src/disclosure.ts). */
 type Disclosure = {version:string;text:string};
-type Artifact = {id:string;sha256:string;fields?:SignatureField[];recipientName?:string;role?:string;disclosure?:Disclosure;signer?:{title?:string;onBehalfOf?:string};intent?:string};
+type Artifact = {id:string;sha256:string;verified?:boolean;fields?:SignatureField[];recipientName?:string;role?:string;disclosure?:Disclosure;signer?:{title?:string;onBehalfOf?:string};intent?:string;signerName?:string;documentName?:string;recipientEmail?:string};
+/** A file name for the downloaded copy: the document's name, else "document". */
+const pdfFileName=(name?:string)=>`${(name??'').replace(/[^A-Za-z0-9 ._-]+/g,'').trim().slice(0,100)||'document'}.pdf`;
+/** "Signed electronically by Ana Partner, Partner Manager, on behalf of Northbeam Consulting". */
+export function signedByLine(name:string,title:string,company?:string):string{return ['Signed electronically by '+(name.trim()||'you'),title.trim(),company?`on behalf of ${company}`:''].filter(Boolean).join(', ');}
 type RenderDocument = (blob:Blob, container:HTMLElement, signal:AbortSignal)=>Promise<void>;
 const defaultRender:RenderDocument=async (blob,container,signal)=>{const {renderPdf}=await import('./renderPdf');signal.throwIfAborted();return renderPdf(blob,container,signal);};
+/** A code lasts as long as the Worker keeps it (OTP_TTL_MS). */
+const CODE_TTL_MS=10*60*1000, CODE_LENGTH=6;
+/** "9:05": minutes and seconds left. */
+export function codeTimeLeft(ms:number):string{const s=Math.max(0,Math.ceil(ms/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;}
+/**
+ * The next code after typing `raw` into box `index`: one digit per box, filled left to right.
+ * More than two digits at once is a paste (or autofill) and fills from that box on.
+ */
+export function nextCode(code:string,index:number,raw:string):string{
+  const typed=raw.replace(/\D/g,''),at=Math.min(index,code.length);
+  if(!typed)return code.slice(0,at);
+  const current=code[at]??'';
+  const digit=typed.length===2&&current?(typed.replace(current,'')||typed.slice(-1)):typed;
+  return (code.slice(0,at)+(digit.length>2?digit:digit.slice(-1))+(digit.length>2?'':code.slice(at+1))).slice(0,CODE_LENGTH);
+}
+/** Six boxes, one digit each; typing moves on, Backspace moves back, a paste fills them all. */
+function CodeBoxes({value,onChange,disabled,onEnter}:{value:string;onChange:(code:string)=>void;disabled:boolean;onEnter:()=>void}){
+  const boxes=useRef<(HTMLInputElement|null)[]>([]);
+  const focus=(i:number)=>{const box=boxes.current[Math.max(0,Math.min(CODE_LENGTH-1,i))];if(typeof box?.focus==='function')box.focus();};
+  return h('div',{className:'esign-code-boxes',role:'group','aria-label':'Verification code'},...Array.from({length:CODE_LENGTH},(_,i)=>h('input',{
+    key:i,ref:(el:HTMLInputElement|null)=>{boxes.current[i]=el;},'aria-label':`Digit ${i+1} of ${CODE_LENGTH}`,value:value[i]??'',disabled,
+    inputMode:'numeric',autoComplete:i===0?'one-time-code':'off',
+    onFocus:(e:React.FocusEvent<HTMLInputElement>)=>{if(i>value.length){focus(value.length);return;}e.target.select();},
+    onChange:(e:React.ChangeEvent<HTMLInputElement>)=>{const next=nextCode(value,i,e.target.value);onChange(next);if(next.length>value.length)focus(next.length);},
+    onPaste:(e:React.ClipboardEvent<HTMLInputElement>)=>{e.preventDefault();const next=(value.slice(0,Math.min(i,value.length))+e.clipboardData.getData('text').replace(/\D/g,'')).slice(0,CODE_LENGTH);onChange(next);focus(next.length);},
+    onKeyDown:(e:React.KeyboardEvent<HTMLInputElement>)=>{
+      if(e.key==='Backspace'&&!value[i]&&i>0){e.preventDefault();onChange(value.slice(0,i-1));focus(i-1);}
+      else if(e.key==='ArrowLeft'){e.preventDefault();focus(i-1);}
+      else if(e.key==='ArrowRight'){e.preventDefault();focus(Math.min(i+1,value.length));}
+      else if(e.key==='Enter'&&value.length===CODE_LENGTH){e.preventDefault();onEnter();}},
+  })));
+}
 export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:RenderDocument} = {}) {
   const container=useRef<HTMLDivElement>(null), renderController=useRef<AbortController|null>(null), loadSequence=useRef(0),synthetic=useRef(false),uploadBase=useRef(''),api=useRef(''),signingLock=useRef(false),workerServed=useRef(false);
   useEffect(()=>()=>{loadSequence.current++;},[]);
@@ -23,10 +59,19 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const [signatureSizes,setSignatureSizes]=useState<Record<string,{width:number;height:number}>>({});
   const [signatures,setSignatures]=useState<Record<string,string>>({}),[previews,setPreviews]=useState<Record<string,string>>({}),[datePreviewVersion,setDatePreviewVersion]=useState(0);
   const [signing,setSigning]=useState(false),[verified,setVerified]=useState(false), [finished,setFinished]=useState(false), [messageId,setMessageId]=useState(''), [testOtp,setTestOtp]=useState('');
+  // When the code was sent (its expiry counts down from there), whether it went by email, and the clock.
+  const [sentAt,setSentAt]=useState(0),[emailed,setEmailed]=useState(false),[now,setNow]=useState(()=>Date.now()),autoSent=useRef(false);
   // Signing for a company: the signer's title (the host's, editable) and their confirmation of authority.
   const [signerTitle,setSignerTitle]=useState(''),[authority,setAuthority]=useState(false);
   // Declining instead of signing, with a reason.
   const [declining,setDeclining]=useState(false),[declineReason,setDeclineReason]=useState(''),[declineBusy,setDeclineBusy]=useState(false);
+  // What the signer is about to sign: how many pages, and the document itself to keep a copy before signing.
+  const [pageCount,setPageCount]=useState(0),[pdfUrl,setPdfUrl]=useState('');
+  // The three steps (review, confirm it's you, sign); a decline waiting for the code; pages viewed.
+  const [step,setStep]=useState<1|2|3>(1),[pendingDecline,setPendingDecline]=useState(false),[viewed,setViewed]=useState(0),[pageEls,setPageEls]=useState<Element[]>([]);
+  // The host refused the document before the code (it requires the code first), or loading failed.
+  const [docNeedsCode,setDocNeedsCode]=useState(false),[docFailed,setDocFailed]=useState(false);
+  useEffect(()=>{if(!pdf){setPdfUrl('');return;}const url=URL.createObjectURL(pdf);setPdfUrl(url);return ()=>URL.revokeObjectURL(url);},[pdf]);
   useEffect(()=>{setSignerTitle(artifact?.signer?.title??'');setAuthority(false);},[artifact?.id]);
   const forCompany=artifact?.signer?.onBehalfOf;
   const authorityReady=!forCompany||(signerTitle.trim()!==''&&authority);
@@ -43,7 +88,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     if (!api.current) {setMessage('Recipient demo unavailable on this origin.');return;}
     if (!code) {setMessage('No recipient code provided.');return;}
     fetch(`${uploadBase.current || (synthetic.current?'/host/synthetic':api.current)}/v1/page-sessions/exchange`,{method:'POST',headers:{'content-type':'application/json',...((synthetic.current||uploadBase.current)?{'x-local-esign':'1'}:{})},body:JSON.stringify({code})})
-      .then(async response=>{if(!response.ok) throw new Error();const value=await response.json() as {token:string};setToken(value.token);setMessage('Request a test email code.');})
+      .then(async response=>{if(!response.ok) throw new Error();const value=await response.json() as {token:string};setToken(value.token);setMessage('Loading document…');})
       .catch(()=>setMessage('Session unavailable or expired.'));
   },[]);
   useEffect(()=>{
@@ -52,40 +97,77 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     const controller=new AbortController();renderController.current=controller;target.replaceChildren();
     renderDocument(pdf,detached,controller.signal).then(()=>{
       if(active && !controller.signal.aborted) {
+        const pages=typeof detached.querySelectorAll==='function'?Array.from(detached.querySelectorAll('canvas')):[];
+        setPageCount(pages.length);setPageEls(pages);
         const fields=artifact?.fields??[];let hosts:HTMLElement[]=[];
         if(fields.length){
           const canvases=Array.from(detached.querySelectorAll('canvas'));
           if(!canvases.length||fields.some(f=>!f.rect||!Number.isInteger(f.page)||f.page<1||f.page>canvases.length||![f.rect.x,f.rect.y,f.rect.width,f.rect.height].every(Number.isFinite)||f.rect.x<0||f.rect.y<0||f.rect.width<=0||f.rect.height<=0||f.rect.x+f.rect.width>1||f.rect.y+f.rect.height>1))throw new Error('Invalid field layout');
           hosts=canvases.map((canvas,index)=>{const page=detached.ownerDocument.createElement('div');page.dataset.signaturePage=String(index+1);page.style.cssText='position:relative;display:table;max-width:100%;margin:0 auto 24px;line-height:0';canvas.replaceWith(page);page.appendChild(canvas);canvas.style.display='block';return page;});
         }
-        target.replaceChildren(detached);setPageHosts(hosts);setMessage('Review every page, then consent and sign.');setRendered(true);
+        target.replaceChildren(detached);setPageHosts(hosts);setMessage('Review every page, then continue.');setRendered(true);
       }
-    }).catch(()=>{if(active && !controller.signal.aborted) {target.replaceChildren();setPdf(null);setArtifact(null);setMessage('Document unavailable. Retry loading it, or request a new view if the session expired.');}});
+    }).catch(()=>{if(active && !controller.signal.aborted) {target.replaceChildren();setPdf(null);setArtifact(null);setDocFailed(true);setMessage('Document unavailable. Retry loading it, or request a new view if the session expired.');}});
     return ()=>{active=false;controller.abort();if(renderController.current===controller) renderController.current=null;target.replaceChildren();};
   },[pdf,renderDocument]);
   async function request(path:string, init:RequestInit={}) {
     const response=await fetch(`${uploadBase.current || (synthetic.current?'/host/synthetic':api.current)}${path}`,{...init,headers:{...init.headers,...((synthetic.current||uploadBase.current)?{'x-local-esign':'1'}:{}),authorization:`Bearer ${token}`}});
     if(!response.ok){let code='';try{const body=await response.json() as {error?:unknown};if(typeof body?.error==='string')code=body.error;}catch{}throw new RequestFailed(response.status,code);}return response;
   }
-  async function send() {try {
+  async function send(announce=true) {try {
     const result=await (await request('/v1/signing/otp',{method:'POST'})).json() as {messageId:string;testOtp?:string;emailed?:boolean};
-    setMessageId(result.messageId);setTestOtp(result.testOtp ?? '');setSent(true);setMessage(result.emailed?'Verification code sent by email.':'Test code sent to the local test mailbox.');
-  } catch {setMessage('Test code unavailable; retry after the cooldown.');}}
+    setMessageId(result.messageId);setTestOtp(result.testOtp ?? '');setSent(true);setSentAt(Date.now());setNow(Date.now());setOtp('');setEmailed(!!result.emailed);
+    if(announce)setMessage(result.emailed?'Verification code sent by email.':'Test code sent to the local test mailbox.');
+  } catch {setMessage('Could not send a code. Wait a minute, then resend.');}}
+  // Reaching "Confirm it's you" sends the code once; Resend asks for another.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: send once per page session
+  useEffect(()=>{if(!token||verified||finished||autoSent.current||(step!==2&&!docNeedsCode))return;autoSent.current=true;void send(docNeedsCode);},[token,step,docNeedsCode,verified,finished]);
+  // The countdown to the code's expiry, while one is waiting to be entered.
+  useEffect(()=>{if(!sent||verified)return;const timer=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(timer);},[sent,verified]);
   async function loadDocument() {
-    const sequence=++loadSequence.current;renderController.current?.abort();container.current?.replaceChildren();
+    const sequence=++loadSequence.current;renderController.current?.abort();container.current?.replaceChildren();setDocFailed(false);
     setRendered(false);setConsent(false);setSignatures({});setPreviews({});setPageHosts([]);setImageUrls({});setSignatureSizes({});setSignatureReceipts({});setTextReceipts({});setArtifact(null);setPdf(null);setMessage('Loading document…');
     try {
       const info=await (await request('/v1/signing/current')).json() as Artifact;
       if(sequence!==loadSequence.current) return;
       const blob=await (await request('/v1/signing/pdf')).blob();
       if(sequence!==loadSequence.current) return;
-      setArtifact(info);setPdf(blob);
-    } catch {if(sequence===loadSequence.current) setMessage('Document unavailable. Retry loading it, or request a new view if the session expired.');}
+      setArtifact(info);setPdf(blob);setDocNeedsCode(false);
+      if(info.verified)setVerified(true);
+    } catch (error) {
+      if(sequence!==loadSequence.current) return;
+      // A host that shows the document only after the code: confirm first, then read it.
+      if(error instanceof RequestFailed&&error.status===401&&!verified){setDocNeedsCode(true);setStep(2);setMessage("Confirm it's you to open the document.");return;}
+      setDocFailed(true);setMessage('Document unavailable. Retry loading it, or request a new view if the session expired.');
+    }
   }
-  async function verify() {try {
+  // The document opens as soon as the page session does: the signer reviews it first.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: load once per session token
+  useEffect(()=>{if(token&&!finished)void loadDocument();},[token]);
+  // Pages the signer looked at (at least half on screen for a second), recorded once each; never blocks signing.
+  useEffect(()=>{
+    if(!rendered||!pageEls.length||!token||typeof IntersectionObserver==='undefined')return;
+    const total=pageEls.length,pending=new Set<number>(),timers=new Map<number,ReturnType<typeof setTimeout>>();let sending=false,closed=false;
+    const flush=async():Promise<void>=>{
+      if(sending||closed||!pending.size)return;sending=true;const pages=[...pending];pending.clear();
+      try {const body=await (await request('/v1/signing/page-views',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pages,total})})).json() as {viewed?:unknown};if(typeof body.viewed==='number'&&!closed)setViewed(body.viewed);}
+      catch {/* Best-effort: the next view tries again. */for(const p of pages)pending.add(p);}
+      finally {sending=false;}
+    };
+    const observer=new IntersectionObserver(entries=>{for(const entry of entries){const page=pageEls.indexOf(entry.target)+1;if(page<1)continue;
+      if(entry.isIntersecting&&entry.intersectionRatio>=0.5){if(!timers.has(page))timers.set(page,setTimeout(()=>{pending.add(page);void flush();},1000));}
+      else {clearTimeout(timers.get(page));timers.delete(page);}}},{threshold:[0,0.5]});
+    for(const el of pageEls)observer.observe(el);
+    return ()=>{closed=true;observer.disconnect();for(const t of timers.values())clearTimeout(t);};
+  },[rendered,pageEls,token]);
+  async function verify() {if(otp.length!==CODE_LENGTH)return;try {
     await request('/v1/signing/otp/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({otp})});
-    setVerified(true);setOtp('');setTestOtp('');await loadDocument();
-  } catch {setMessage('Code verification unavailable. Retry the same code.');}}
+    setVerified(true);setOtp('');setTestOtp('');
+  } catch {setMessage('Code verification unavailable. Retry the same code.');return;}
+    // A host that needed the code first shows the document now.
+    if(docNeedsCode||!artifact){await loadDocument();setStep(1);return;}
+    if(pendingDecline){setPendingDecline(false);setStep(1);await decline();return;}
+    setStep(3);setMessage('Adopt your signature, then sign.');}
   const fields=artifact?.fields??[];
   const signaturesReady=fields.every(field=>{const value=signatures[field.id]??'';if(field.type==='Date signed')return /^[a-f0-9-]{36}$/.test(previews[field.id]??'');if(!field.required&&!value)return true;return (field.type==='Title'?value.length<=128&&value.length>0&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value):/^[A-Za-z]+(?: [A-Za-z]+)*$/.test(value)&&value.length<=64)&&previews[field.id]===value;});
   async function sign() {if(signingLock.current || !artifact || !consent || !rendered || !signaturesReady || !authorityReady)return;signingLock.current=true;setSigning(true);try {
@@ -96,32 +178,68 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     await request('/v1/signing/decline',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({reason:declineReason.trim()})});
     setArtifact(null);setPdf(null);setRendered(false);setFinished(true);setDeclining(false);setMessage('You declined to sign. The sender has been told.');
   } catch {setMessage('Declining did not go through. Try again.');} finally {setDeclineBusy(false);}}
+  const signingAs = artifact?.signerName ?? artifact?.recipientName ?? '';
+  const steps:[1|2|3,string][]=[[1,'Review'],[2,"Confirm it's you"],[3,'Sign']];
+  // Declining asks for the code first, like signing; after it, the decline goes through.
+  const declineControls = h('div',{className:'esign-decline'},
+    !declining&&h('button',{type:'button',disabled:signing,onClick:()=>setDeclining(true)},'Decline to sign'),
+    declining&&h('label',null,'Why are you declining? ',h('textarea',{'aria-label':'Reason for declining',value:declineReason,maxLength:1000,onChange:(event:React.ChangeEvent<HTMLTextAreaElement>)=>setDeclineReason(event.target.value)})),
+    declining&&h('button',{type:'button',disabled:declineBusy||!declineReason.trim(),onClick:()=>{if(verified)void decline();else{setPendingDecline(true);setStep(2);setMessage("Confirm it's you to decline.");}}},'Decline'),
+    declining&&h('button',{type:'button',disabled:declineBusy,onClick:()=>{setDeclining(false);setDeclineReason('');setPendingDecline(false);}},'Keep the document'));
+  const codeLeft=sentAt+CODE_TTL_MS-now, sentTo=artifact?.recipientEmail||'your email address';
+  const verification = h('div',{className:'esign-verification'},
+    h('h2',null,"Confirm it's you"),
+    verified?h('p',null,'Your email address is confirmed.'):h('div',{className:'esign-code','data-test-message-id':messageId||undefined},
+      h('p',null,sent?`Enter the 6-digit code we sent to ${sentTo}.`:`Sending a 6-digit code to ${sentTo}…`),
+      sent&&h('p',{className:'esign-code-note'},emailed?"Test environment: the code goes to this environment's test mailbox.":'Local test: the code is in the local test mailbox.'),
+      testOtp&&h('p',{className:'esign-code-note'},'Local test verification code: ',testOtp,' (test only)'),
+      h(CodeBoxes,{value:otp,onChange:setOtp,disabled:!sent,onEnter:()=>void verify()}),
+      h('p',{className:'esign-code-meta'},
+        sent&&(codeLeft>0?`Code expires in ${codeTimeLeft(codeLeft)}`:'This code has expired.'),sent&&' · ',
+        h('button',{type:'button',className:'esign-link',onClick:()=>void send()},'Resend code')),
+      h('p',{className:'esign-why'},h('strong',null,'Why we ask. '),"Your sign-in and the email code are recorded in the agreement's audit trail, with the time, your IP address and browser.")),
+    h('div',{className:'esign-step-actions'},
+      artifact&&h('button',{type:'button',onClick:()=>{setPendingDecline(false);setStep(1);}},'Back'),
+      !verified&&h('button',{type:'button',className:'esign-continue',disabled:otp.length!==CODE_LENGTH,onClick:()=>void verify()},'Verify code'),
+      verified&&artifact&&h('button',{type:'button',className:'esign-continue',onClick:()=>setStep(3)},'Continue')));
   return h('main',{className:'esign-recipient'},
     h('h1',null,'E-sign local test'),h('p',null,'Experimental synthetic documents only. Not a production signature service.'),h('p',{role:'status'},message),
-    token && !verified && !finished && h('section',{className:'esign-verification-card'},h('button',{onClick:send,type:'button'},'Send test code'),sent && h('div',null,
-      h('p',null,'Local test message ID: ',messageId),
-      testOtp && h('p',null,'Local test verification code: ',testOtp,' (test only)'),
-      h('label',null,'Test code ',h('input',{value:otp,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setOtp(event.target.value),inputMode:'numeric',maxLength:6})),h('button',{onClick:verify,type:'button'},'Verify'))),
-    verified && !artifact && !finished && h('button',{onClick:loadDocument,type:'button'},'Retry document'),
+    token && !finished && h('ol',{className:'esign-steps','aria-label':'Signing steps'},...steps.map(([n,label])=>h('li',{key:n,'aria-current':step===n?'step':undefined,className:step===n?'esign-step-current':step>n?'esign-step-done':undefined},`${n} ${label}`))),
+    // The document could not be opened before the code (a host that requires it first): confirm, then read it.
+    token && !finished && docNeedsCode && !verified && h('section',{className:'esign-verification-card'},verification),
+    token && !artifact && !finished && docFailed && h('button',{onClick:()=>void loadDocument(),type:'button'},'Retry document'),
     h('div',{className:'esign-signing-workspace'},
-    verified && !finished && h('div',{ref:container,'aria-label':'Document to sign',className:'esign-document-surface'}),
-    artifact && rendered && h('section',{className:'esign-signing-panel'},
+    token && !finished && (verified||!docNeedsCode) && h('div',{ref:container,'aria-label':'Document to sign',className:'esign-document-surface'}),
+    artifact && rendered && step===2 && h('section',{className:'esign-signing-panel'},verification),
+    artifact && rendered && step===1 && h('section',{className:'esign-signing-panel'},
+      // The document as it will be signed: its pages, its fingerprint, and a copy to keep.
+      h('div',{className:'esign-document-facts','aria-label':'Document details'},
+        h('p',null,h('strong',null,artifact.documentName||'Document'),pageCount>0?` · ${pageCount} ${pageCount===1?'page':'pages'}`:''),
+        h('p',{title:artifact.sha256},'SHA-256 fingerprint: ',h('code',null,`${artifact.sha256.slice(0,16)}…${artifact.sha256.slice(-8)}`)),
+        pdfUrl&&h('a',{href:pdfUrl,download:pdfFileName(artifact.documentName)},'Download PDF')),
+      h('div',{className:'esign-signing-as','aria-label':'Signing as'},
+        h('h2',null,'Signing as'),
+        signingAs&&h('p',null,signingAs),
+        (forCompany||artifact.signer?.title)&&h('label',null,'Your title ',h('input',{'aria-label':'Your title',value:signerTitle,maxLength:128,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setSignerTitle(event.target.value)})),
+        forCompany&&h('label',null,h('input',{type:'checkbox','aria-label':'Authorized to sign',checked:authority,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setAuthority(event.target.checked)}),` I am authorized to sign on behalf of ${forCompany}.`)),
+      pageCount>0&&h('p',{className:'esign-viewed','aria-label':'Pages viewed'},`Viewed ${Math.min(viewed,pageCount)} of ${pageCount} ${pageCount===1?'page':'pages'}`),
+      h('div',{className:'esign-step-actions'},
+        h('button',{type:'button',className:'esign-continue',disabled:!authorityReady,onClick:()=>{setStep(verified?3:2);if(!verified)setMessage("Confirm it's you with a code we email you.");}},'Continue')),
+      declineControls),
+    artifact && rendered && step===3 && h('section',{className:'esign-signing-panel'},
       fields.length>0 && artifact.recipientName && h('p',null,'Recipient: ',artifact.recipientName,' — role: ',artifact.role),
       fields.length>0 && h('p',null,'Type uppercase and lowercase Latin letters and single spaces. This text is separate from the recipient identity. Preview is generated by the server.'),
       ...fields.map((field,index)=>{const props={key:field.id,field,index,role:artifact.role,multiple:fields.length>1,value:signatures[field.id]??'',token,disabled:signing,onChange:(value:string)=>{if(signingLock.current)return;setSignatures(old=>({...old,[field.id]:value}));setPreviews(old=>({...old,[field.id]:''}));setImageUrls(old=>({...old,[field.id]:''}));},onReady:(value:string,url:string,receipt?:string)=>{setPreviews(old=>({...old,[field.id]:value}));setImageUrls(old=>({...old,[field.id]:url}));if(receipt&&field.type==='Title')setTextReceipts(old=>({...old,[field.id]:receipt}));}};return field.type==='Title'||field.type==='Date signed'?h(V3TextInput,{...props,onSize:(size:{width:number;height:number})=>setSignatureSizes(old=>({...old,[field.id]:size})),version:datePreviewVersion,preview:async(text:string)=>{const response=await request('/v1/signing/text-preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,...(field.type==='Title'?{text}:{})})});const width=Number(response.headers.get('X-Text-Width')),height=Number(response.headers.get('X-Text-Height'));if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),previewId:response.headers.get(field.type==='Title'?'X-Text-Preview':'X-Date-Preview-Id'),width,height};}}):h(TypedSignatureInput,{...props,preview:async(text:string)=>{const response=await request('/v1/signing/signature-preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,text})});const receipt=response.headers.get('X-Signature-Preview')??'',width=Number(response.headers.get('X-Signature-Width')),height=Number(response.headers.get('X-Signature-Height'));if(!/^[a-f0-9]{64}$/.test(receipt))throw new Error('Invalid preview receipt');if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),width,height,receipt};},onSize:(size:{width:number;height:number;receipt:string})=>{setSignatureSizes(old=>({...old,[field.id]:size}));setSignatureReceipts(old=>({...old,[field.id]:size.receipt}));}});}),
       fields.some(f=>f.type==='Date signed')&&h('button',{type:'button',disabled:signing,onClick:()=>{if(signingLock.current)return;const dates=fields.filter(f=>f.type==='Date signed');setPreviews(old=>{const next={...old};for(const f of dates)delete next[f.id];return next;});setImageUrls(old=>{const next={...old};for(const f of dates)delete next[f.id];return next;});setConsent(false);setDatePreviewVersion(v=>v+1);}},'Refresh date previews'),
-      forCompany&&h('label',null,'Your title ',h('input',{'aria-label':'Your title',value:signerTitle,maxLength:128,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setSignerTitle(event.target.value)})),
-      forCompany&&h('label',null,h('input',{type:'checkbox','aria-label':'Authorized to sign',checked:authority,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setAuthority(event.target.checked)}),` I am authorized to sign on behalf of ${forCompany}.`),
       artifact.disclosure&&h('section',{'aria-label':'Consent to use electronic records and signatures',style:{border:'1px solid #d0d7de',borderRadius:6,padding:'0.75rem 1rem',margin:'0.75rem 0',whiteSpace:'pre-line',fontSize:'0.9rem'}},artifact.disclosure.text),
       artifact.intent&&h('p',{className:'esign-intent'},artifact.intent),
+      h('p',{className:'esign-signed-by'},signedByLine(signingAs,signerTitle,forCompany)),
+      h('aside',{className:'esign-next','aria-label':'What happens next'},
+        h('strong',null,'What happens next'),
+        h('p',null,'Anyone else who needs to sign is asked next. Once everyone has signed, each signer is emailed the signed copy with its certificate, which records who signed, when, and how they were verified.')),
       h('label',null,h('input',{type:'checkbox','aria-label':'Consent to sign',checked:consent,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setConsent(event.target.checked);}}),' I agree to sign this document.'),
       h('button',{className:'esign-sign',onClick:sign,disabled:signing||!consent||!signaturesReady||!authorityReady,type:'button'},'Sign document'),
-      // Declining is the secondary path: its controls sit apart from Sign document.
-      h('div',{className:'esign-decline'},
-        !declining&&h('button',{type:'button',disabled:signing,onClick:()=>setDeclining(true)},'Decline to sign'),
-        declining&&h('label',null,'Why are you declining? ',h('textarea',{'aria-label':'Reason for declining',value:declineReason,maxLength:1000,onChange:(event:React.ChangeEvent<HTMLTextAreaElement>)=>setDeclineReason(event.target.value)})),
-        declining&&h('button',{type:'button',disabled:declineBusy||!declineReason.trim(),onClick:decline},'Decline'),
-        declining&&h('button',{type:'button',disabled:declineBusy,onClick:()=>{setDeclining(false);setDeclineReason('');}},'Keep the document')))),
+      h('div',{className:'esign-step-actions'},h('button',{type:'button',disabled:signing,onClick:()=>setStep(1)},'Back')))),
     rendered&&fields.map((field,index)=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${artifact?.role ? `${artifact.role} ${field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature'}${fields.length>1?` ${index+1}`:""}` : `${field.type||'Signature'} field ${index+1}`} on page ${field.page}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:'2px dashed #135c9b',outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},imageUrls[field.id]&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)));
 
 }

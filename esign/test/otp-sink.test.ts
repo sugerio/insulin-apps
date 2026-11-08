@@ -61,7 +61,7 @@ test('with a sink, a code for any address is emailed to the sink, says whom it i
   const {otp}=await (await w.req(`/v1/test-mail/${messageId}`,{headers:w.auth})).json() as {otp:string};
   assert.match(mail.text,new RegExp(`\\b${otp}\\b`));
   assert.match(mail.text,/ana\.partner@partner\.example/);
-  assert.match(mail.text,/5 minutes/);
+  assert.match(mail.text,/10 minutes/);
   assert.equal((await w.req('/v1/signing/otp/verify',w.json({otp},headers))).status,204);
  } finally {await w.mf.dispose();}
 });

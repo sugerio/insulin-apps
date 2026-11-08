@@ -3,13 +3,37 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 const page=await import('../ui/RecipientPage.ts').catch(()=>({}));
+/** Lets the requests a render starts (the document opens on its own) finish. */
+async function settle(act:any) {
+  await act(async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));});
+}
+
+/** Waits for the code the page sends by itself, then types one into the six boxes (as a paste fills them). */
+async function enterCode(renderer:any, act:any, code='123456') {
+  await settle(act);
+  await act(async()=>{renderer.root.findAllByProps({'aria-label':'Digit 1 of 6'}).find((n:any)=>n.type==='input').props.onChange({target:{value:code}});});
+}
+/** The text a person sees: rendered strings only, not attributes. */
+function visibleText(node:any):string {
+  if(node==null)return '';if(typeof node==='string')return node;if(Array.isArray(node))return node.map(visibleText).join(' ');
+  return visibleText(node.children);
+}
+
+/** From Review through the emailed code to the Sign step (the page's three steps). */
+async function toSignStep(renderer:any, act:any) {
+  const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
+  await act(async()=>{button('Continue').props.onClick();});
+  await enterCode(renderer,act);
+  await act(async()=>{await button('Verify code').props.onClick();});
+}
+
 test('recipient page identifies local-only signing and does not request a management key',()=>{
   assert.equal(typeof page.RecipientPage,'function','recipient page missing');
   const html=renderToStaticMarkup(React.createElement(page.RecipientPage));
   assert.match(html,/local test/i);assert.doesNotMatch(html,/api key/i);
 });
 
-test('recipient page independently retries document load after successful verification', async () => {
+test('recipient page opens the document before the code and retries its load on its own', async () => {
   const {default:Renderer,act}=await import('react-test-renderer');
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   const oldFetch=globalThis.fetch, oldWindow=(globalThis as any).window;
@@ -28,15 +52,17 @@ test('recipient page independently retries document load after successful verifi
         throw new Error(`Unexpected request ${path}`);
       };
       let renderer:any;
-      await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+      await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
       const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-      await act(async()=>{await button('Send test code').props.onClick();});
-      assert.match(JSON.stringify(renderer.toJSON()),/local-message-id/);
-      assert.match(JSON.stringify(renderer.toJSON()),/012345/);
-      await act(async()=>{renderer.root.findByType('input').props.onChange({target:{value:'123456'}});});
-      await act(async()=>{await button('Verify').props.onClick();});
       assert.ok(button('Retry document'),'document failure must offer a separate retry');
-      await act(async()=>{await button('Retry document').props.onClick();});
+      await act(async()=>{await button('Retry document').props.onClick();}); await settle(act);
+      assert.equal(verifies,0,'the document is read before the code');
+      await act(async()=>{button('Continue').props.onClick();});
+      await enterCode(renderer,act);
+      assert.doesNotMatch(visibleText(renderer.toJSON()),/local-message-id/,'the message id is not shown');
+      assert.match(visibleText(renderer.toJSON()),/012345/);
+      assert.equal(renderer.root.findAllByType('input').filter((n:any)=>/^Digit \d of 6$/.test(n.props['aria-label'])).length,6,'six code boxes');
+      await act(async()=>{await button('Verify code').props.onClick();});
       assert.equal(verifies,1);assert.ok(button('Sign document'));assert.equal(button('Sign document').props.disabled,true);
       await act(async()=>{renderer.unmount();});
     }
@@ -56,12 +82,12 @@ test('recipient page permits retry of verification after its response is lost', 
       if(path==='/v1/signing/current') return Response.json({id:'d0',sha256:'h0'});
       if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
       throw new Error('Unexpected request');};
-    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-    await act(async()=>{await button('Send test code').props.onClick();});
-    await act(async()=>{renderer.root.findByType('input').props.onChange({target:{value:'123456'}});});
-    await act(async()=>{await button('Verify').props.onClick();});
-    await act(async()=>{await button('Verify').props.onClick();});
+    await act(async()=>{button('Continue').props.onClick();});
+    await enterCode(renderer,act);
+    await act(async()=>{await button('Verify code').props.onClick();});
+    await act(async()=>{await button('Verify code').props.onClick();});
     assert.equal(attempts,2);assert.ok(button('Sign document'));assert.equal(button('Sign document').props.disabled,true);
     await act(async()=>{renderer.unmount();});
   } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
@@ -82,13 +108,12 @@ test('pixel-budget render failure never offers consent or signing and allows ret
       if(path==='/v1/signing/pdf') return new Response(new Blob(['bad pdf']));
       throw new Error('Unexpected request');};
     let attempts=0, renderer:any;
-    await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{if(++attempts===1) throw new Error('PDF pixel budget exceeded');}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+    await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{if(++attempts===1) throw new Error('PDF pixel budget exceeded');}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-    await act(async()=>{await button('Send test code').props.onClick();});
-    await act(async()=>{await button('Verify').props.onClick();});
-    assert.ok(button('Retry document'));assert.equal(button('Sign document'),undefined);
+    assert.ok(button('Retry document'));assert.equal(button('Continue'),undefined);assert.equal(button('Sign document'),undefined);
     assert.match(JSON.stringify(renderer.toJSON()),/Document unavailable/);
-    await act(async()=>{await button('Retry document').props.onClick();});
+    await act(async()=>{await button('Retry document').props.onClick();}); await settle(act);
+    await toSignStep(renderer,act);
     assert.ok(button('Sign document'));assert.equal(button('Sign document').props.disabled,true);
     await act(async()=>{renderer.unmount();});
   } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
@@ -113,13 +138,12 @@ test('superseded render cannot contaminate a later successful preview', async ()
     let release!:()=>void, oldSignal:AbortSignal|undefined;
     const oldRender=async (_blob:Blob,target:any,signal:AbortSignal)=>{oldSignal=signal;await new Promise<void>(resolve=>release=resolve);target.appendChild('old');};
     let renderCount=0;const render=async (blob:Blob,target:any,signal:AbortSignal)=>{if(++renderCount===1) return oldRender(blob,target,signal);target.appendChild('new');};
-    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:render}),{createNodeMock:()=>visible});});
+    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:render}),{createNodeMock:()=>visible});}); await settle(act);
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-    await act(async()=>{await button('Send test code').props.onClick();});
-    await act(async()=>{await button('Verify').props.onClick();});
     const retry=button('Retry document').props.onClick;
-    await act(async()=>{await retry();});
-    await act(async()=>{await retry();});
+    await act(async()=>{await retry();}); await settle(act);
+    await act(async()=>{await retry();}); await settle(act);
+    await toSignStep(renderer,act);
     assert.ok(button('Sign document'));
     await act(async()=>{release();await Promise.resolve();});
     assert.deepEqual(visible.children.map((node:any)=>node.children),[['new']]);assert.equal(oldSignal?.aborted,true);
@@ -142,13 +166,13 @@ test('older retry response cannot replace a newer document', async () => {
       if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
       if(path==='/v1/signing/sign') {signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
       throw new Error(path);};
-    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-    await act(async()=>{await button('Send test code').props.onClick();});await act(async()=>{await button('Verify').props.onClick();});
     const retry=button('Retry document').props.onClick;let old:Promise<void>;
     await act(async()=>{old=retry();await Promise.resolve();});
-    await act(async()=>{await retry();});
+    await act(async()=>{await retry();}); await settle(act);
     await act(async()=>{releaseOld(Response.json({id:'old',sha256:'oldhash'}));await old;});
+    await toSignStep(renderer,act);
     await act(async()=>{renderer.root.findByType('input').props.onChange({target:{checked:true}});});
     await act(async()=>{await button('Sign document').props.onClick();});
     assert.equal(signed.artifactId,'new');assert.equal(signed.artifactHash,'newhash');
@@ -161,10 +185,11 @@ test('synthetic recipient routes sessions and signing only through isolated same
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;const calls:{url:string;headers:HeadersInit|undefined}[]=[];
  try {
   (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=synthetic-code&synthetic=1',pathname:'/'},history:{replaceState(){}}};
-  globalThis.fetch=async(input:any,init:RequestInit={})=>{calls.push({url:String(input),headers:init.headers});return String(input).endsWith('/exchange')?Response.json({token:'t'}):Response.json({messageId:'x',testOtp:'123456'});};
+  // The synthetic host shows the document only after the code: the page asks for it first.
+  globalThis.fetch=async(input:any,init:RequestInit={})=>{calls.push({url:String(input),headers:init.headers});return String(input).endsWith('/exchange')?Response.json({token:'t'}):String(input).endsWith('/current')?new Response(null,{status:401}):Response.json({messageId:'x',testOtp:'123456'});};
   let r:any;await act(async()=>{r=Renderer.create(React.createElement(page.RecipientPage));});
-  await act(async()=>{await r.root.findByType('button').props.onClick();});
-  assert.deepEqual(calls.map(c=>c.url),['/host/synthetic/v1/page-sessions/exchange','/host/synthetic/v1/signing/otp']);
+  await settle(act);
+  assert.deepEqual(calls.map(c=>c.url),['/host/synthetic/v1/page-sessions/exchange','/host/synthetic/v1/signing/current','/host/synthetic/v1/signing/otp']);
   assert.ok(calls.every(c=>new Headers(c.headers).get('x-local-esign')==='1'));
   await act(async()=>r.unmount());
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
@@ -185,10 +210,9 @@ test('positioned signatures fail closed when a page marker cannot be rendered',a
    if(path.endsWith('/sign')){signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
    throw new Error(path);
   };
-  let r:any;await act(async()=>{r=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+  let r:any;await act(async()=>{r=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
   const button=(s:string)=>r.root.findAllByType('button').find((b:any)=>b.children.includes(s));
-  await act(async()=>{await button('Send test code').props.onClick();});await act(async()=>{await button('Verify').props.onClick();});
-  assert.equal(button('Sign document'),undefined);assert.ok(button('Retry document'));assert.equal(signed,undefined);await act(async()=>r.unmount());
+  assert.equal(button('Sign document'),undefined);assert.equal(button('Continue'),undefined);assert.ok(button('Retry document'));assert.equal(signed,undefined);await act(async()=>r.unmount());
  }finally{globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
@@ -215,7 +239,7 @@ test('recipient demo retains its configured local loopback endpoints',async()=>{
  try {
   for(const [origin,target] of [['http://127.0.0.1:5173','http://127.0.0.1:8787'],['http://127.0.0.1:5174','http://127.0.0.1:8787'],['http://127.0.0.1:5197','http://127.0.0.1:8797']]) {
    let url='';(globalThis as any).window={location:{origin,hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};
-   globalThis.fetch=async input=>{url=String(input);return Response.json({token:'test'});};
+   globalThis.fetch=async input=>{if(!url)url=String(input);return Response.json({token:'test'});};
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});
    assert.equal(url,`${target}/v1/page-sessions/exchange`);await act(async()=>renderer.unmount());
   }
@@ -241,7 +265,7 @@ test('recipient page served by the Worker exchanges the code with its own origin
    let url='',calls=0;
    (globalThis as any).window={location:{origin,hash:fragment,pathname:'/sign'},history:{replaceState(){}}};
    (globalThis as any).document={querySelector:(selector:string)=>selector==='meta[name="esign-api"]'&&declared?{getAttribute:(name:string)=>name==='content'?declared:null}:null};
-   globalThis.fetch=async input=>{calls++;url=String(input);return Response.json({token:'test'});};
+   globalThis.fetch=async input=>{calls++;if(!url)url=String(input);return Response.json({token:'test'});};
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});
    if(expected){assert.equal(url,expected,`${declared} ${fragment}`);}
    else {assert.equal(calls,0,`${declared} ${fragment}`);assert.match(JSON.stringify(renderer.toJSON()),/unavailable/i);}
@@ -269,9 +293,9 @@ test('after signing, a Worker-served page does not ask for processing the Worker
     if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
     if(path==='/v1/signing/sign') return new Response(null,{status:202});
     throw new Error(path);};
-   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
    const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-   await act(async()=>{await button('Send test code').props.onClick();});await act(async()=>{await button('Verify').props.onClick();});
+   await toSignStep(renderer,act);
    await act(async()=>{renderer.root.findByType('input').props.onChange({target:{checked:true}});});
    await act(async()=>{await button('Sign document').props.onClick();});
    const text=JSON.stringify(renderer.toJSON());
@@ -291,10 +315,11 @@ test('the page says a code was emailed when the Worker emailed it', async()=>{
    globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
     if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
     if(path==='/v1/signing/otp') return Response.json(otpResponse,{status:202});
+    if(path==='/v1/signing/current') return new Response(null,{status:401});
     throw new Error(path);};
-   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}));});
+   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}));}); await settle(act);
    const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-   await act(async()=>{await button('Send test code').props.onClick();});
+   await settle(act);
    assert.ok(JSON.stringify(renderer.toJSON()).includes(`"${expected}"`),expected);
    await act(async()=>{renderer.unmount();});
   }
@@ -316,9 +341,9 @@ test('the page shows the consent disclosure from the server and signs with its v
    if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
    if(path==='/v1/signing/sign') {signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
    throw new Error(path);};
-  let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+  let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
   const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-  await act(async()=>{await button('Send test code').props.onClick();});await act(async()=>{await button('Verify').props.onClick();});
+  await toSignStep(renderer,act);
   const text=JSON.stringify(renderer.toJSON());
   assert.match(text,/Consent to use electronic records and signatures/);assert.match(text,/paper copy/);
   await act(async()=>{renderer.root.findByType('input').props.onChange({target:{checked:true}});});
@@ -328,7 +353,8 @@ test('the page shows the consent disclosure from the server and signs with its v
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-async function verifiedPage(current: Record<string, unknown>, onPost: (path: string, body: any) => Response | undefined) {
+/** The page on its Review step, its document loaded; toSign takes it through the code. */
+async function reviewPage(current: Record<string, unknown>, onPost: (path: string, body: any) => Response | undefined) {
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
@@ -340,25 +366,26 @@ async function verifiedPage(current: Record<string, unknown>, onPost: (path: str
   if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
   const out=onPost(path,init?.body?JSON.parse(String(init.body)):undefined);if(out)return out;
   throw new Error(path);};
- let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});});
+ let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
  const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
  const labelled=(label:string)=>renderer.root.findAll((n:any)=>n.props?.['aria-label']===label)[0];
- await act(async()=>{await button('Send test code').props.onClick();});await act(async()=>{await button('Verify').props.onClick();});
- return {renderer,act,button,labelled};
+ return {renderer,act,button,labelled,toSign:()=>toSignStep(renderer,act)};
 }
 
-test('signing for a company: the page shows the intent, needs a title and the authority confirmed, and sends both', async()=>{
+test('signing for a company: the title and authority come first, on Review; the intent and the signature follow the code', async()=>{
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
   let signed:any;
-  const p=await verifiedPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting.',signer:{title:'Partner Manager',onBehalfOf:'Northbeam Consulting'}},(path,body)=>{if(path==='/v1/signing/sign'){signed=body;return new Response(null,{status:202});}return undefined;});
-  const text=JSON.stringify(p.renderer.toJSON());
-  assert.match(text,/I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting\./);
+  const p=await reviewPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting.',signer:{title:'Partner Manager',onBehalfOf:'Northbeam Consulting'}},(path,body)=>{if(path==='/v1/signing/sign'){signed=body;return new Response(null,{status:202});}return undefined;});
   assert.equal(p.labelled('Your title').props.value,'Partner Manager');
-  await p.act(async()=>{p.labelled('Consent to sign').props.onChange({target:{checked:true}});});
-  assert.equal(p.button('Sign document').props.disabled,true,'authority not yet confirmed');
+  assert.equal(p.button('Continue').props.disabled,true,'authority not yet confirmed');
   await p.act(async()=>{p.labelled('Your title').props.onChange({target:{value:'Head of Partnerships'}});});
   await p.act(async()=>{p.labelled('Authorized to sign').props.onChange({target:{checked:true}});});
+  assert.equal(p.button('Continue').props.disabled,false);
+  await p.toSign();
+  assert.match(JSON.stringify(p.renderer.toJSON()),/I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting\./);
+  assert.equal(p.button('Sign document').props.disabled,true,'consent comes first');
+  await p.act(async()=>{p.labelled('Consent to sign').props.onChange({target:{checked:true}});});
   assert.equal(p.button('Sign document').props.disabled,false);
   await p.act(async()=>{await p.button('Sign document').props.onClick();});
   assert.equal(signed.title,'Head of Partnerships');assert.equal(signed.authorityConfirmed,true);
@@ -366,19 +393,72 @@ test('signing for a company: the page shows the intent, needs a title and the au
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('the signer may decline with a reason instead of signing', async()=>{
+test('the signer may decline with a reason instead of signing: the code comes first, then the decline goes through', async()=>{
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
   let declined:any;
-  const p=await verifiedPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on this document.'},(path,body)=>{if(path==='/v1/signing/decline'){declined=body;return Response.json({status:'DECLINED'});}return undefined;});
+  const p=await reviewPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on this document.'},(path,body)=>{if(path==='/v1/signing/decline'){declined=body;return Response.json({status:'DECLINED'});}return undefined;});
   await p.act(async()=>{await p.button('Decline to sign').props.onClick();});
   assert.equal(p.button('Decline').props.disabled,true,'a reason comes first');
   await p.act(async()=>{p.labelled('Reason for declining').props.onChange({target:{value:'Clause 4 needs changes.'}});});
   await p.act(async()=>{await p.button('Decline').props.onClick();});
+  assert.equal(declined,undefined,'not before the code');
+  assert.match(JSON.stringify(p.renderer.toJSON()),/Confirm it's you to decline\./);
+  await enterCode(p.renderer,p.act);
+  await p.act(async()=>{await p.button('Verify code').props.onClick();});
   assert.deepEqual(declined,{reason:'Clause 4 needs changes.'});
   const text=JSON.stringify(p.renderer.toJSON());
   assert.match(text,/You declined to sign\. The sender has been told\./);
   assert.equal(p.button('Sign document'),undefined);
   await p.act(async()=>{p.renderer.unmount();});
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});
+
+test('Review names the document with its fingerprint and offers the PDF; Sign says how the signature reads and what happens next', async()=>{
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ try {
+  const sha='ab'.repeat(32);
+  const p=await reviewPage({id:'a1',sha256:sha,documentName:'Mutual NDA',signerName:'Ana Partner',intent:'I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting.',signer:{title:'Partner Manager',onBehalfOf:'Northbeam Consulting'}},()=>undefined);
+  assert.ok(p.labelled('Document details'));
+  assert.ok(p.labelled('Signing steps'));
+  assert.match(JSON.stringify(p.renderer.toJSON()),/Mutual NDA/);
+  assert.match(JSON.stringify(p.renderer.toJSON()),new RegExp(`${sha.slice(0,16)}…${sha.slice(-8)}`));
+  const link=p.renderer.root.findAll((n:any)=>n.type==='a'&&n.props.download)[0];
+  assert.equal(link.props.download,'Mutual NDA.pdf');assert.match(link.props.href,/^blob:/);
+  assert.match(JSON.stringify(p.renderer.toJSON()),/Ana Partner/);
+  // The signature line follows the title the signer gives on Review.
+  await p.act(async()=>{p.labelled('Your title').props.onChange({target:{value:'Head of Partnerships'}});});
+  await p.act(async()=>{p.labelled('Authorized to sign').props.onChange({target:{checked:true}});});
+  await p.toSign();
+  const out=JSON.stringify(p.renderer.toJSON());
+  assert.match(out,/Signed electronically by Ana Partner, Head of Partnerships, on behalf of Northbeam Consulting/);
+  assert.match(out,/What happens next/);
+  // Back returns to Review with what was entered.
+  await p.act(async()=>{p.button('Back').props.onClick();});
+  assert.equal(p.labelled('Your title').props.value,'Head of Partnerships');
+  await p.act(async()=>{p.renderer.unmount();});
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});
+
+test('signedByLine leaves out what is not known', ()=>{
+ assert.equal(page.signedByLine('Ana Partner','',undefined),'Signed electronically by Ana Partner');
+ assert.equal(page.signedByLine('','',undefined),'Signed electronically by you');
+});
+
+test('the code boxes take one digit each, move on, go back and take a paste', ()=>{
+  assert.equal(page.nextCode('',0,'4'),'4');
+  assert.equal(page.nextCode('4',1,'2'),'42');
+  assert.equal(page.nextCode('42',4,'7'),'427','a box past the end types into the next empty one');
+  assert.equal(page.nextCode('427',1,'27'),'477','typing over a filled box keeps the new digit');
+  assert.equal(page.nextCode('427',1,''),'4','clearing a box drops it and the ones after');
+  assert.equal(page.nextCode('',0,'123456'),'123456','a paste fills every box');
+  assert.equal(page.nextCode('9',1,'1 2-3 4567'),'912345','only digits, at most six');
+  assert.equal(page.nextCode('12',2,'x'),'12');
+});
+
+test('the code countdown shows minutes and seconds and stops at zero', ()=>{
+  assert.equal(page.codeTimeLeft(10*60*1000),'10:00');
+  assert.equal(page.codeTimeLeft(552_000),'9:12');
+  assert.equal(page.codeTimeLeft(4_200),'0:05');
+  assert.equal(page.codeTimeLeft(-1),'0:00');
 });

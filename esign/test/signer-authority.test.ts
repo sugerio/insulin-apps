@@ -152,3 +152,32 @@ test('the host reads the audit trail: each event with its signer, and no codes o
     assert.equal((await h.req(`/v1/envelopes/${s.id}/audit`, { headers: { authorization: `Bearer ${OTHER_KEY}` } })).status, 404);
   } finally { await h.mf.dispose(); }
 });
+
+test("the envelope read says when each recipient first opened the signing page", async () => {
+  const h = await harness();
+  try {
+    const before = Date.now();
+    const s = await h.open('o1', NAMED, {}, false);
+    const read = async () => (await (await h.req(`/v1/envelopes/${s.id}`, { headers: h.auth })).json() as { tasks: { id: string; openedAt?: string }[] }).tasks[0];
+    const opened = await read();
+    assert.ok(opened.openedAt, 'opened once the page session started');
+    assert.ok(Date.parse(opened.openedAt!) >= before - 1000);
+    // A second session keeps the first time.
+    const { code } = await (await h.req(`/v1/envelopes/${s.id}/tasks/${s.taskId}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).json() as { code: string };
+    await h.req('/v1/page-sessions/exchange', h.json({ code }, { origin: ORIGIN, ...SIGNER }));
+    assert.equal((await read()).openedAt, opened.openedAt);
+  } finally { await h.mf.dispose(); }
+});
+
+test("a recipient who never opened the page has no openedAt", async () => {
+  const h = await harness();
+  try {
+    const pdf = await PDFDocument.create(); pdf.addPage();
+    const form = new FormData(); form.set('file', new File([await pdf.save()], 'synthetic.pdf', { type: 'application/pdf' })); form.set('roles', '["partner"]');
+    const template = await (await h.req('/v1/templates', { method: 'POST', headers: h.auth, body: form })).json() as { id: string };
+    const created = await (await h.req('/v1/envelopes', h.json({ templateId: template.id, recipients: [{ role: 'partner', name: 'Ana Partner', email: 'ana@partner.test' }] }, { ...h.auth, 'idempotency-key': 'n1' }))).json() as { id: string };
+    await h.req(`/v1/envelopes/${created.id}/prepare`, { method: 'POST', headers: h.auth });
+    const env = await (await h.req(`/v1/envelopes/${created.id}`, { headers: h.auth })).json() as { tasks: Record<string, unknown>[] };
+    assert.equal('openedAt' in env.tasks[0], false);
+  } finally { await h.mf.dispose(); }
+});

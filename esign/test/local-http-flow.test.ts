@@ -33,7 +33,11 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
       const view=await req(`/v1/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,json({origin},management));assert.equal(view.status,201,await view.clone().text());const {code}=await view.json();
       const exchange=await req('/v1/page-sessions/exchange',json({code},{origin}));assert.equal(exchange.status,200);const {token}=await exchange.json();
       const headers={origin,authorization:`Bearer ${token}`};
-      assert.equal((await req('/v1/signing/pdf',{headers})).status,401);
+      // The document can be read before the code; signing it cannot (below, and in the record layer).
+      assert.equal((await req('/v1/signing/pdf',{headers})).status,200);
+      const early=await (await req('/v1/signing/current',{headers})).json();assert.equal(early.verified,false);
+      assert.equal((await req('/v1/signing/sign',json({artifactId:early.id,artifactHash:early.sha256,consent:true},headers))).status,409);
+      assert.equal((await req('/v1/signing/decline',json({reason:'No'},headers))).status,401);
       assert.equal((await req('/v1/signing/current',{headers:{origin,authorization:management.authorization}})).status,401);
       assert.equal((await req('/v1/signing/current',{headers:{...headers,origin:'https://wrong.example.com'}})).status,403);
       const send=await app.fetch(new Request('https://public.example.com/v1/signing/otp',json({},headers)),env);assert.equal(send.status,202);

@@ -19,7 +19,7 @@ import { otpSink, type OtpSinkEnv } from './otp-mail-sink.ts';
 import { managedEvidenceFromEnv, type SealEnv } from './seal-config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
 import { expireIfDue } from './task-expiry.ts';
-import { intentStatement, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
+import { intentStatement, lastHostAuthentication, parseHostAuthentication, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
 import { CONSENT_DISCLOSURE, consentDisclosure } from './disclosure.ts';
 import { finalizeManagedEvidence, hasManagedEvidence, managedDelivery, verifyManagedEvidence } from './managed-evidence.ts';
 import { isValidOtpEmailAddress } from './cloudflare-otp-mail.ts';
@@ -41,6 +41,17 @@ const requestOrigin = (c: import('hono').Context<any>) => c.req.header('origin')
 const sha256 = async (bytes: ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n=>n.toString(16).padStart(2,'0')).join('');
 
 /** Local experiment only; no external mail adapter and no production authorization claim. */
+/** The most pages a signer's views are recorded for (the PDF limit). */
+const MAX_VIEWED_PAGES = 100;
+
+/** The pages a task's recipient has viewed, from their PAGES_VIEWED audit events. */
+export async function viewedPages(db: D1Database, envelopeId: string, taskId: string): Promise<Set<number>> {
+  const rows = (await db.prepare('SELECT detail_json FROM audit_events WHERE envelope_id=? AND task_id=? AND type=?').bind(envelopeId, taskId, AUDIT.pagesViewed).all<{ detail_json: string | null }>()).results;
+  const seen = new Set<number>();
+  for (const row of rows) { try { for (const p of (JSON.parse(row.detail_json ?? '{}') as { pages?: unknown }).pages as number[] ?? []) if (Number.isSafeInteger(p)) seen.add(p); } catch { /* skip */ } }
+  return seen;
+}
+
 export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): void {
   const local = async (c: import('hono').Context<Env>, next: import('hono').Next) => {
     c.header('Cache-Control','no-store');
@@ -69,10 +80,13 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
   app.use('/v1/signing/*', cors);
   app.post('/v1/envelopes/:id/tasks/:taskId/recipient-view', local, bodyLimit({maxSize:4096}), async c => {
     await expireIfDue(c.env.DB, c.req.param('id') ?? '');
-    let body: {origin?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    let body: {origin?:unknown;hostAuthentication?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.origin !== 'string') return c.json({error:'invalid_request'},400);
+    // How the host signed the recipient in, recorded as the host's statement.
+    const hostAuthentication=parseHostAuthentication(body.hostAuthentication);
+    if (hostAuthentication==='invalid') return c.json({error:'invalid_request'},400);
     try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin:body.origin,now:Date.now()});
-      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:body.origin}});
+      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:body.origin,...(hostAuthentication?{hostAuthentication}:{})}});
       return c.json({code},201);}
     catch {return c.json({error:'recipient_unavailable'},404);}
   });
@@ -122,15 +136,24 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
     if (!body || typeof body.otp !== 'string') return c.json({error:'invalid_request'},400);
     try {const ok=await verifyRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),new TextEncoder().encode(c.env.LOCAL_TEST_OTP_KEY!),body.otp);
       if(!ok)return c.json({error:'invalid_otp'},401);
-      const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw)});
+      // Identity confirmed: the emailed code, and the host's sign-in from the link this signer was last given.
+      const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));if(session){const hostAuthentication=await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId);await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw),...(hostAuthentication?{detail:{hostAuthentication}}:{})});}
       return c.body(null,204);}
     catch {return c.json({error:'invalid_session'},401);}
   });
-  async function current(c: import('hono').Context<Env>): Promise<{id:string;sha256:string;object_key:string}> {
-    const task=await authorizeRecipientSession(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());
+  /** Whether this page session's recipient entered the emailed code. */
+  async function sessionVerified(c: import('hono').Context<Env>, task: string): Promise<boolean> {
     const token=tokenFrom(c.req.header('authorization'));
-    const verified=await c.env.DB.prepare('SELECT 1 FROM recipient_otp_verifications v JOIN tasks t ON t.id=v.task_id WHERE v.task_id=? AND v.session_hash=? AND v.recipient_email=t.recipient_email COLLATE BINARY').bind(task,await sha256(new TextEncoder().encode(token).buffer)).first();
-    if (!verified) throw new Error('OTP verification required');
+    return !!await c.env.DB.prepare('SELECT 1 FROM recipient_otp_verifications v JOIN tasks t ON t.id=v.task_id WHERE v.task_id=? AND v.session_hash=? AND v.recipient_email=t.recipient_email COLLATE BINARY').bind(task,await sha256(new TextEncoder().encode(token).buffer)).first();
+  }
+  /**
+   * The document the session's recipient signs now. Reading it needs only the page session (the
+   * host issued the link to its signed-in user): the signer reviews it before confirming it is
+   * them. Everything that acts on it (previews, declining, signing) also needs the emailed code.
+   */
+  async function current(c: import('hono').Context<Env>, opts: {verified: boolean} = {verified: true}): Promise<{id:string;sha256:string;object_key:string}> {
+    const task=await authorizeRecipientSession(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());
+    if (opts.verified && !await sessionVerified(c, task)) throw new Error('OTP verification required');
     const artifact=await c.env.DB.prepare(`SELECT so.artifact_id AS id, so.sha256, so.object_key FROM tasks t JOIN signature_records r ON r.envelope_id=t.envelope_id JOIN signature_jobs j ON j.signature_id=r.id AND j.status='DONE' JOIN signature_outputs so ON so.job_id=j.id WHERE t.id=? ORDER BY r.sequence DESC LIMIT 1`).bind(task).first<{id:string;sha256:string;object_key:string}>();
     if (artifact) return artifact;
     const d0=await c.env.DB.prepare(`SELECT a.id,a.sha256,a.object_key FROM tasks t JOIN artifacts a ON a.envelope_id=t.envelope_id WHERE t.id=? AND NOT EXISTS (SELECT 1 FROM signature_records r WHERE r.envelope_id=t.envelope_id)`).bind(task).first<{id:string;sha256:string;object_key:string}>();
@@ -138,16 +161,16 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
   }
   async function fieldsFor(c:import('hono').Context<Env>) {
     const task=await authorizeRecipientSession(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());
-    const row=await c.env.DB.prepare('SELECT t.role,t.recipient_name,p.roles_json,p.fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id WHERE t.id=?').bind(task).first<{role:string;recipient_name:string;roles_json:string;fields_json:string}>();
+    const row=await c.env.DB.prepare('SELECT t.role,t.recipient_name,t.recipient_email,p.roles_json,p.fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id WHERE t.id=?').bind(task).first<{role:string;recipient_name:string;recipient_email:string;roles_json:string;fields_json:string}>();
     if(!row)throw new Error('Missing template');const raw:unknown=JSON.parse(row.fields_json);if(!Array.isArray(raw))throw new Error('Invalid fields');
     const v3=raw.some((f:any)=>f.type==='Date signed'||f.type==='Title');
     const all=raw.length?(v3&&v3TestOnly?positionedV3Fields(raw,JSON.parse(row.roles_json),100):positionedFields(row.fields_json,JSON.parse(row.roles_json),100)):[];assertNoOverlappingFields(all);
-    return {task,all,fields:all.filter(f=>f.role===row.role),role:row.role,recipientName:row.recipient_name,v3,fieldsJson:row.fields_json,rolesJson:row.roles_json};
+    return {task,all,fields:all.filter(f=>f.role===row.role),role:row.role,recipientName:row.recipient_name,recipientEmail:row.recipient_email,v3,fieldsJson:row.fields_json,rolesJson:row.roles_json};
   }
-  app.get('/v1/signing/current', async c => {try {const a=await current(c),details=await fieldsFor(c);
+  app.get('/v1/signing/current', async c => {try {const a=await current(c,{verified:false}),details=await fieldsFor(c);
     // The signer's title and company (when the host named them) and the sentence they adopt.
     const who=await signerContext(c.env.DB,details.task);
-    return c.json({id:a.id,sha256:a.sha256,disclosure:{version:CONSENT_DISCLOSURE.version,text:CONSENT_DISCLOSURE.text},intent:intentStatement(who.documentName,who.facts.onBehalfOf),...(who.facts.title||who.facts.onBehalfOf?{signer:who.facts}:{}),...(details.fields.length?{fields:details.fields,role:details.role,recipientName:details.recipientName,...(details.v3?{v3:true}:{})}:{})});} catch {return c.json({error:'unavailable'},401);}});
+    return c.json({id:a.id,sha256:a.sha256,verified:await sessionVerified(c,details.task),disclosure:{version:CONSENT_DISCLOSURE.version,text:CONSENT_DISCLOSURE.text},intent:intentStatement(who.documentName,who.facts.onBehalfOf),signerName:details.recipientName,recipientEmail:details.recipientEmail,...(who.documentName?{documentName:who.documentName}:{}),...(who.facts.title||who.facts.onBehalfOf?{signer:who.facts}:{}),...(details.fields.length?{fields:details.fields,role:details.role,recipientName:details.recipientName,...(details.v3?{v3:true}:{})}:{})});} catch {return c.json({error:'unavailable'},401);}});
   // The signer whose turn it is declines, after the code, with a reason: the envelope ends for
   // everyone, and the audit trail records who declined, why, and from where.
   app.post('/v1/signing/decline', async c => {
@@ -199,9 +222,24 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
     if(field.type==='Date signed'){const imageHash=await sha256(image.buffer);const completed=await c.env.DB.prepare(`UPDATE positioned_v3_date_previews SET image_sha256=? WHERE session_hash=? AND field_id=? AND preview_id=? AND geometry_json=? AND expires_at>CAST(unixepoch('subsec')*1000 AS INTEGER)`).bind(imageHash,sessionHash,field.id,id,JSON.stringify(geometry)).run();if(completed.meta.changes!==1)throw new Error('Preview superseded');headers['X-Date-Preview-Id']=id;headers['Access-Control-Expose-Headers']='X-Date-Preview-Id, X-Preview-Text, X-Text-Width, X-Text-Height';}
     return c.body(image.buffer,200,headers);
   }catch(error){return c.json({error:error instanceof PositionedV3TextDoesNotFitError?'title_does_not_fit':'invalid_preview'},422);}});
-  app.get('/v1/signing/pdf', async c => {try {const a=await current(c), file=await c.env.ARTIFACTS.get(a.object_key);if (!file) throw new Error('Missing');const bytes=await file.arrayBuffer();if (await sha256(bytes)!==a.sha256) throw new Error('Mismatch');
+  app.get('/v1/signing/pdf', async c => {try {const a=await current(c,{verified:false}), file=await c.env.ARTIFACTS.get(a.object_key);if (!file) throw new Error('Missing');const bytes=await file.arrayBuffer();if (await sha256(bytes)!==a.sha256) throw new Error('Mismatch');
     const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.documentViewed,...requestFacts(c.req.raw),detail:{artifactId:a.id,artifactSha256:a.sha256}});
     return c.body(bytes,200,{'Content-Type':'application/pdf','X-Content-Type-Options':'nosniff'});} catch {return c.json({error:'unavailable'},401);}});
+  // Which pages the signer has looked at (CS-PRM-042: "Viewed 4 of 4 pages"). Each page is
+  // recorded once, in a PAGES_VIEWED audit event listing the pages seen for the first time; it
+  // never blocks signing. The page session is enough, as for reading the document.
+  app.post('/v1/signing/page-views', bodyLimit({maxSize:2048}), async c => {
+    let body: {pages?:unknown;total?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    const total=body?.total, pages=body?.pages;
+    if (!Number.isSafeInteger(total) || (total as number)<1 || (total as number)>MAX_VIEWED_PAGES || !Array.isArray(pages) || pages.length>MAX_VIEWED_PAGES || !pages.every(p=>Number.isSafeInteger(p) && p>=1 && p<=(total as number))) return c.json({error:'invalid_request'},400);
+    let task:string;try {task=await authorizeRecipientSession(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());} catch {return c.json({error:'unavailable'},401);}
+    const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
+    if (!session || session.taskId!==task) return c.json({error:'unavailable'},401);
+    const seen=await viewedPages(c.env.DB,session.envelopeId,task);
+    const fresh=[...new Set(pages as number[])].filter(p=>!seen.has(p)).sort((a,b)=>a-b);
+    if (fresh.length) await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:task,type:AUDIT.pagesViewed,...requestFacts(c.req.raw),detail:{pages:fresh,total}});
+    return c.json({viewed:seen.size+fresh.length,total});
+  });
   // COMPLETE_AFTER_SIGN: once a signature is accepted, process it and, after the last one,
   // seal the envelope, without waiting for the caller to request /process and /finalize.
   // The response does not wait; the cron sweep retries whatever this does not finish.

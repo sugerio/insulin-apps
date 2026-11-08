@@ -17,7 +17,7 @@ const routes: [string, RegExp][] = [
   ['GET', new RegExp(`^/host/upload/envelopes/${id}(/(final-pdf|delivery-pdf|existing-delivery-pdf|certificate))?$`)],
   ['POST', new RegExp(`^/host/upload/envelopes/${id}/(process|finalize|seal|complete)$`)],
   ['POST', new RegExp(`^/host/upload/envelopes/${id}/tasks/${id}/recipient-view$`)],
-  ['POST', new RegExp(`^/host/upload/envelopes/${id}/v1/(page-sessions/exchange|signing/(otp|otp/verify|sign))$`)],
+  ['POST', new RegExp(`^/host/upload/envelopes/${id}/v1/(page-sessions/exchange|signing/(otp|otp/verify|sign|page-views))$`)],
   ['GET', new RegExp(`^/host/upload/envelopes/${id}/v1/signing/(current|pdf)$`)],
   ['GET', new RegExp(`^/host/synthetic/envelopes/${id}(/(final-pdf|delivery-pdf|certificate))?$`)],
   ['POST', new RegExp(`^/host/synthetic/envelopes/${id}/(process|finalize|seal)$`)],

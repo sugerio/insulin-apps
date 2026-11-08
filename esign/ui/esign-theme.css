@@ -51,9 +51,33 @@ body { margin: 0; }
 .esign-signing-workspace { display: grid; grid-template-columns: minmax(0,2fr) minmax(260px,1fr); gap: 16px; margin-top: 20px; align-items: start; }
 .esign-signing-workspace .esign-document-surface { max-height: 70vh; }
 .esign-signing-panel input:not([type=checkbox]) { display: block; width: 100%; margin-top: 6px; }
+.esign-document-facts { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--esign-border); }
+.esign-document-facts p { margin: 0 0 4px; }
+.esign-document-facts code { font-size: 12px; overflow-wrap: anywhere; }
+.esign-signed-by { font-style: italic; }
+.esign-next { margin: 12px 0; padding: 10px 12px; border-left: 3px solid var(--esign-primary); background: #f6f8fa; font-size: .9rem; }
+.esign-next p { margin: 4px 0 0; }
 @media (max-width: 720px) {
   .esign-editor, .esign-recipient { padding: 16px; }
   .esign-editor-workspace, .esign-signing-workspace { grid-template-columns: minmax(0,1fr); height: auto; }
   .esign-editor-workspace .esign-document-surface, .esign-signing-workspace .esign-document-surface { height: 55vh; }
   .esign-editor-sidebar { max-height: 45vh; }
 }
+.esign-steps { display: flex; gap: 8px; list-style: none; margin: 12px 0 0; padding: 0; flex-wrap: wrap; }
+.esign-steps li { padding: 4px 10px; border: 1px solid var(--esign-border); border-radius: 999px; font-size: 13px; color: var(--esign-muted); }
+.esign-steps li.esign-step-current { border-color: var(--esign-primary); color: var(--esign-primary); font-weight: 600; }
+.esign-steps li.esign-step-done { color: inherit; }
+.esign-signing-as { margin: 12px 0; }
+.esign-signing-as h2, .esign-verification h2 { margin: 0 0 6px; }
+.esign-viewed { font-size: 13px; color: var(--esign-muted); }
+.esign-step-actions { display: flex; gap: .5rem; margin-top: 12px; }
+.esign-recipient button.esign-continue { background: var(--esign-primary); color: white; border-color: var(--esign-primary); }
+/* Confirm it's you: six code boxes, the countdown and Resend. */
+.esign-code-boxes { display: flex; gap: 8px; margin: 12px 0 8px; }
+.esign-signing-panel .esign-code-boxes input, .esign-verification-card .esign-code-boxes input { display: block; width: 44px; height: 52px; margin: 0; padding: 0; text-align: center; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.esign-code-boxes input:focus { border-color: var(--esign-primary); }
+.esign-code-meta, .esign-code-note, .esign-why { font-size: 13px; color: var(--esign-muted); }
+.esign-code-meta { margin: 0 0 12px; }
+.esign-recipient button.esign-link { border: 0; background: none; padding: 0; min-height: 0; color: var(--esign-primary); font-weight: 600; cursor: pointer; }
+.esign-recipient button.esign-link:hover:not(:disabled) { text-decoration: underline; }
+.esign-why { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--esign-border); }

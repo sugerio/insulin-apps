@@ -270,8 +270,8 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   for(const [i,role] of ['Partner','Seller'].entries()){
    const view=await (await req(`/v1/envelopes/${envelope.id}/tasks/${info.tasks[i].id}/recipient-view`,post({origin:'http://127.0.0.1:5175'},auth))).json();
    await call('Page.navigate',{url:`http://127.0.0.1:5175/?signer=${i}#code=${view.code}`});await wait(()=>evaluate("document.body.innerText.includes('Request a test email code.')"),'signing session');
-   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Send test code').click()");const otp=await wait(()=>evaluate("document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]"),'synthetic OTP');
-   await evaluate(`(()=>{const x=document.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(otp)});x.dispatchEvent(new Event('input',{bubbles:true}));[...document.querySelectorAll('button')].find(b=>b.textContent==='Verify').click();})()`);
+   const otp=await wait(()=>evaluate("document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]"),'synthetic OTP');
+   await evaluate(`(()=>{const x=document.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(otp)});x.dispatchEvent(new Event('input',{bubbles:true}));[...document.querySelectorAll('button')].find(b=>b.textContent==='Verify code').click();})()`);
    await wait(()=>evaluate("Boolean(document.querySelector('input[aria-label*=signature]'))"),'signing fields');
    await evaluate(`(()=>{const x=document.querySelector('input[aria-label*=signature]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(i?'Marcus':'Ana')});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);
    await wait(()=>evaluate("document.querySelectorAll('[data-signature-field] img').length===2"),'signature and date previews');

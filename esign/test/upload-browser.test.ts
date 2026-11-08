@@ -54,10 +54,10 @@ test('Chrome uploads and signs through same-origin GETs without injecting Origin
   for(let i=0;i<2;i++){
    await wait(`Boolean(document.querySelectorAll('li')[${i}]?.querySelector('button:not(:disabled)'))`,'recipient button');await evaluate(`document.querySelectorAll('li')[${i}].querySelector('button').click()`);
    const d="document.querySelector('iframe[title=\"Uploaded test recipient signing page\"]')?.contentDocument";
-   await wait(`${d}?.body?.innerText.includes('Request a test email code.')`,'recipient session');await click('Send test code',true);
+   await wait(`${d}?.body?.innerText.includes('Review every page, then continue.')`,'recipient session and document');await click('Continue',true);
    const otp=await wait(`${d}?.body?.innerText.match(/Local test verification code: (\\d{6})/)?.[1]`,'test OTP');
    await evaluate(`(()=>{const d=${d};const input=d.querySelector('input');Object.getOwnPropertyDescriptor(d.defaultView.HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(otp)});input.dispatchEvent(new d.defaultView.Event('input',{bubbles:true}));})()`);
-   await click('Verify',true);await wait(`[...(${d}?.querySelectorAll('button')||[])].some(b=>b.textContent==='Sign document')`,'PDF GET and render',60000);
+   await click('Verify code',true);await wait(`[...(${d}?.querySelectorAll('button')||[])].some(b=>b.textContent==='Sign document')`,'PDF GET and render',60000);
    await evaluate(`${d}.querySelector('input[type=checkbox]').click()`);await click('Sign document',true);await wait(`${d}?.body?.innerText.includes('Signature recorded.')`,'signature');
    await click('Process signature');await wait("!document.querySelector('iframe[title=\"Uploaded test recipient signing page\"]')",'processing');
   }

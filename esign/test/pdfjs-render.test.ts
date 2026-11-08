@@ -39,10 +39,10 @@ test('recipient page does not offer signing when actual PDF.js rejects a damaged
     const realRender=async (blob:Blob,target:HTMLElement,signal:AbortSignal)=>{try {await renderPdfDocument(blob,target,signal,data=>getDocument(strictPdfOptions(data)));} finally {complete();}};
     await act(async()=>{renderer=Renderer.create(React.createElement(RecipientPage,{renderDocument:realRender}),{createNodeMock:()=>visible});});
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-    await act(async()=>{await button('Send test code').props.onClick();});
-    await act(async()=>{await button('Verify').props.onClick();});
+    // The document opens before the code; a damaged one never offers Continue or signing.
+    await act(async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));});
     await act(async()=>{await rendered;});
-    assert.ok(button('Retry document'));assert.equal(button('Sign document'),undefined);
+    assert.ok(button('Retry document'));assert.equal(button('Continue'),undefined);assert.equal(button('Sign document'),undefined);
     assert.match(JSON.stringify(renderer.toJSON()),/Document unavailable/);assert.equal(visible.children.length,0);assert.equal(signRequests,0);
     await act(async()=>{renderer.unmount();});
   } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}

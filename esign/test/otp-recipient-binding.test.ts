@@ -68,3 +68,18 @@ test('migration leaves historical challenges and verifications unbound and untou
   assert.deepEqual(challenge,{...beforeChallenge,recipient_email:null});assert.deepEqual(verification,{...beforeVerification,recipient_email:null});
  }finally{await mf.dispose();}
 });
+
+test('an emailed code stays valid for 10 minutes and no longer',async()=>{
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
+ try{
+  const db=await mf.getD1Database('DB');for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
+  const origin='https://host.example.com';await db.exec(`INSERT INTO tenants VALUES ('a');INSERT INTO templates VALUES ('ta','a','src','["ana"]',1,'[]');INSERT INTO envelopes VALUES ('ea','a','ta','IN_PROGRESS',1);INSERT INTO tasks VALUES ('t1','ea','ana','Ana','ana@example.com',1,'ACTIVE');INSERT INTO tenant_page_origins VALUES ('a','${origin}');`);
+  const pepper=new TextEncoder().encode('synthetic-otp-secret-with-at-least-32-bytes'),minute=60_000;
+  const codeAt=async(now:number)=>{const code=await issueRecipientCode(db,{tenantId:'a',envelopeId:'ea',taskId:'t1',origin,now});const token=await exchangeRecipientCode(db,code,origin,now);let otp='';await sendRecipientOtp(db,token,origin,now,pepper,async(_to,value)=>{otp=value;});return {token,otp};};
+  const late=Date.now(),first=await codeAt(late);
+  assert.equal(await verifyRecipientOtp(db,first.token,origin,late+9*minute,pepper,first.otp),true,'nine minutes later it still verifies');
+  await db.exec('DELETE FROM recipient_otp_verifications;DELETE FROM recipient_otp_challenges;');
+  const second=await codeAt(late+20*minute);
+  assert.equal(await verifyRecipientOtp(db,second.token,origin,late+20*minute+11*minute,pepper,second.otp),false,'eleven minutes later it has expired');
+ }finally{await mf.dispose();}
+});

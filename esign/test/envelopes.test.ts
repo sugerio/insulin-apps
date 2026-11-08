@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import app from '../src/worker.ts';
+import { unstable_splitSqlQuery } from 'wrangler';
 
 test('envelope creation is tenant-isolated, role-bound, and idempotent', async () => {
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql', '0050_task_expiry.sql']) {
+    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql', '0049_audit_trail.sql', '0050_task_expiry.sql', '0052_signer_evidence.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8').catch(() => '');
       assert.ok(sql, `missing migration ${name}`);
-      await db.batch(sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s)));
+      await db.batch(unstable_splitSqlQuery(sql).map((s) => db.prepare(s)));
     }
     const secret = 'test-key-0123456789-abcdefghijklmnopqrstuvwxyz';
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret))), (n) => n.toString(16).padStart(2, '0')).join('');

@@ -12,6 +12,8 @@ export const AUDIT = {
   otpSent: 'OTP_SENT',
   otpVerified: 'OTP_VERIFIED',
   documentViewed: 'DOCUMENT_VIEWED',
+  /** The signer looked at these pages of the document for the first time (detail: pages, total). */
+  pagesViewed: 'PAGES_VIEWED',
   signed: 'SIGNED',
   completed: 'COMPLETED',
   copySent: 'COPY_SENT',

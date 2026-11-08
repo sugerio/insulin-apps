@@ -1,4 +1,5 @@
 import { isValidOtpEmailAddress } from './cloudflare-otp-mail.ts';
+import { OTP_TTL_MS } from './page-authorization.ts';
 
 /**
  * One-time codes emailed to one fixed mailbox instead of the recipient (test environments).
@@ -15,8 +16,8 @@ export type OtpSink = { send(recipient: string, otp: string): Promise<void> };
 /** Any message meant for `recipient`, delivered to the sink instead, saying whom it was for. */
 export type SinkMailer = { sink: string; send(recipient: string, subject: string, text: string, attachments?: MailAttachment[]): Promise<void> };
 
-/** Minutes a code stays valid; see sendRecipientOtp in page-authorization.ts. */
-const OTP_MINUTES = 5;
+/** Minutes a code stays valid (sendRecipientOtp). */
+const OTP_MINUTES = OTP_TTL_MS / 60_000;
 
 /** The configured sink, or null when any part of it is missing or not an email address. */
 export function sinkMailer(env: OtpSinkEnv): SinkMailer | null {

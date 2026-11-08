@@ -3,7 +3,34 @@ import { finalizeLocalTestEvidence } from './local-test-evidence.ts';
 
 const hash = async (bytes: Uint8Array | ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes instanceof Uint8Array ? Uint8Array.from(bytes) : bytes)), n=>n.toString(16).padStart(2,'0')).join('');
 
-import { auditTrail, type AuditEvent } from './audit.ts';
+import { AUDIT, auditTrail, type AuditEvent } from './audit.ts';
+import { describeHostAuthentication, parseHostAuthentication, sendFacts } from './signer-facts.ts';
+
+/**
+ * The certificate layout of new envelopes. Each envelope keeps the layout it was made with
+ * (envelope_certificate_versions; none means 1), because a stored certificate is rebuilt on
+ * every read and must come out byte for byte the same. Version 2 adds the document's name, the
+ * sender, who named each signer, how each signer was identified, their IP and device, and a
+ * summary of the events (opened, pages viewed, identity confirmed, signed).
+ */
+export const CERTIFICATE_VERSION = 2;
+
+async function certificateVersion(db: D1Database, envelopeId: string): Promise<number> {
+  const row = await db.prepare('SELECT version FROM envelope_certificate_versions WHERE envelope_id = ?').bind(envelopeId).first<{ version: number }>();
+  return row?.version ?? 1;
+}
+
+/**
+ * The events a version-2 certificate summarizes: none can happen after the last signature, so the
+ * summary is fixed. (COMPLETED is recorded only by the managed seal, after sealing.)
+ */
+const SUMMARY_EVENTS: ReadonlySet<string> = new Set([AUDIT.sessionOpened, AUDIT.pagesViewed, AUDIT.otpVerified, AUDIT.signed]);
+
+/** How a signer was identified, from their OTP_VERIFIED event: the host's sign-in, then the emailed code. */
+export function identification(detail: Record<string, unknown> | null | undefined): string {
+  const auth = parseHostAuthentication(detail?.hostAuthentication);
+  return auth && auth !== 'invalid' ? `${describeHostAuthentication(auth)}; email one-time code` : 'Email one-time code';
+}
 type DeliveryRow={task_id?:string;sequence:number;recipient_name:string;input_sha256:string;sha256:string;event_hash:string;otp_verified_at:number;consented_at:number;object_key:string};
 /** Verified evidence for the delivery PDF, and how its certificate pages describe the seal. */
 export type DeliveryEvidence={verify():Promise<{source:{id:string;sha256:string};signatures:DeliveryRow[];finalSha256:string;audit?:{sealed:AuditEvent[];afterSeal:AuditEvent[]}}|void>;banner:string;notes:string[];name:string;format:string};
@@ -76,15 +103,65 @@ export async function deliveryPdf(db:D1Database,bucket:R2Bucket,tenantId:string,
   y-=6;
   wrapped(`Envelope ${envelopeId}`,50,512,10,font,muted);
   y-=5;page.drawLine({start:{x:50,y},end:{x:562,y},thickness:2,color:ink});y-=8;
+  // The standard PDF font only has Latin-1; keep host and browser strings to printable ASCII.
+  const ascii=(value:string)=>value.replace(/[^\x20-\x7e]/g,'?');
+  const version=await certificateVersion(db,envelopeId);
+  // Version 2 facts: fixed at creation (sender, named by, document name) or recorded before completion.
+  const v2=version>=2?await (async()=>{
+    const facts=await sendFacts(db,envelopeId);
+    const doc=await db.prepare('SELECT document_name FROM envelope_documents WHERE envelope_id = ?').bind(envelopeId).first<{document_name:string}>();
+    const created=await db.prepare('SELECT created_at FROM envelopes WHERE id = ?').bind(envelopeId).first<{created_at:number}>();
+    const events=(evidence.audit?evidence.audit.sealed:await auditTrail(db,envelopeId)).filter(event=>SUMMARY_EVENTS.has(event.type));
+    return {...facts,documentName:doc?.document_name??null,createdAt:created?.created_at??null,events};
+  })():null;
   heading('Document');
+  if(v2?.documentName)field('Name',ascii(v2.documentName));
+  if(v2?.sender)field('Sent by',ascii(`${v2.sender.name}${v2.sender.email?` (${v2.sender.email})`:''}${v2.sender.organization?`, ${v2.sender.organization}`:''}`));
   field('Original SHA-256',evidence.source!.sha256);
   field('Signed SHA-256',evidence.finalSha256);
   heading('Signers');
   for(const row of evidence.signatures) {
     field(`Signer ${row.sequence}`,row.recipient_name);
+    if(v2) {
+      const own=(type:string)=>v2.events.find(event=>event.taskId===row.task_id&&event.type===type);
+      const named=row.task_id?v2.namedBy.get(row.task_id):undefined;
+      if(named)field('Named by',ascii(named));
+      field('Identified by',ascii(identification(own(AUDIT.otpVerified)?.detail)));
+      const signed=own(AUDIT.signed);
+      const device=[signed?.ip?`IP ${signed.ip}`:'',signed?.userAgent?ascii(signed.userAgent).slice(0,160):''].filter(Boolean).join(' · ');
+      if(device)field('IP / device',device);
+    }
     field('Input SHA-256',row.input_sha256);
     field('Output SHA-256',row.sha256);
     field('Event SHA-256',row.event_hash);
+  }
+  if(v2) {
+    // A plain-language summary of what happened, oldest first (CS-PRM-042's certificate).
+    heading('Events summary (UTC)');
+    const names=new Map(evidence.signatures.map(row=>[row.task_id,row.recipient_name]));
+    const time=(at:number)=>new Date(at).toISOString().replace(/\.\d{3}Z$/,'Z');
+    const opened=new Set<string>();
+    // Pages each signer viewed: one line, at the event that brought the count to its total for them.
+    const pagesSeen=new Map<string,Set<number>>(), lastViews=new Map<string,number>();
+    for(const event of v2.events) if(event.type===AUDIT.pagesViewed&&event.taskId) {
+      const seen=pagesSeen.get(event.taskId)??new Set<number>();
+      for(const p of Array.isArray(event.detail?.pages)?event.detail.pages as unknown[]:[]) if(Number.isSafeInteger(p)) seen.add(p as number);
+      pagesSeen.set(event.taskId,seen);lastViews.set(event.taskId,event.id);
+    }
+    if(v2.createdAt!==null)field(time(v2.createdAt),ascii(`Sent${v2.sender?` by ${v2.sender.name}`:''}`));
+    for(const event of v2.events) {
+      const who=event.taskId?names.get(event.taskId)??'':'';
+      if(event.type===AUDIT.sessionOpened) {
+        // The first time each signer opened it.
+        if(!event.taskId||opened.has(event.taskId))continue;
+        opened.add(event.taskId);field(time(event.occurredAt),ascii(`Opened by ${who}`));
+      } else if(event.type===AUDIT.pagesViewed) {
+        if(!event.taskId||lastViews.get(event.taskId)!==event.id)continue;
+        const total=Number(event.detail?.total);
+        field(time(event.occurredAt),ascii(`Viewed ${pagesSeen.get(event.taskId)?.size??0}${Number.isSafeInteger(total)?` of ${total}`:''} pages: ${who}`));
+      } else if(event.type===AUDIT.otpVerified)field(time(event.occurredAt),ascii(`Identity confirmed: ${who}`));
+      else if(event.type===AUDIT.signed)field(time(event.occurredAt),ascii(`Signed by ${who}${authorityFact(event.detail)?` ${authorityFact(event.detail)}`:''}`));
+    }
   }
   heading('Events (UTC)');
   // Without a sealed audit trail (local test evidence), each signer's title and company go with
@@ -104,8 +181,6 @@ export async function deliveryPdf(db:D1Database,bucket:R2Bucket,tenantId:string,
   if(evidence.audit) {
     heading('Audit trail (UTC)');
     const names=new Map(evidence.signatures.map(row=>[row.task_id,row.recipient_name]));
-    // The standard PDF font only has Latin-1; keep browser strings to printable ASCII.
-    const ascii=(value:string)=>value.replace(/[^\x20-\x7e]/g,'?');
     // Only the sealed events: they are fixed, so this PDF, once stored and sent, can be reproduced exactly.
     // Events recorded after sealing (such as the copies sent) are on the certificate.
     for(const event of evidence.audit.sealed) {

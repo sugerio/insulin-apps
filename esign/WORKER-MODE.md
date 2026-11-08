@@ -45,7 +45,8 @@ Before, a local harness did these outside the Worker:
   use the same code as `POST /v1/envelopes/:id/process` and `/finalize`, which still work.
 - **Hands back test one-time codes.** `GET /v1/test-mail/:messageId`, with the tenant's
   management key, returns `{to, otp}` for a code sent to one of that tenant's recipients (404
-  for any other tenant). The recipient page shows the message ID.
+  for any other tenant). The recipient page does not show the message ID; test scripts read it
+  from the code form's `data-test-message-id` attribute.
 - **Registers tenants.** `scripts/provision-tenant.ts` adds a tenant, a new management key (only
   its SHA-256 is stored; the key is written once to a 0600 file and never printed), the host
   origins allowed to embed the editor, and the signing page origin. Repeating it with a new key

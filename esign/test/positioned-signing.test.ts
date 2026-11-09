@@ -21,7 +21,8 @@ test('positioned signatures bind each role and preserve a sequential PDF chain',
   const template=await (await req('/v1/templates',{method:'POST',headers:mgmt,body:form})).json();
   const fields=[{id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.1,y:.2,width:.3,height:.1}},{id:'b',type:'Signature',role:'marcus',page:1,required:true,rect:{x:.5,y:.7,width:.3,height:.1}}];
   await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(fields),template.id).run();
-  for(const type of ['Text box','Date signed','Title']) for(const role of ['ana','marcus']) for(const required of [true,false]) {
+  // Date signed and Title are signed through the v3 chain (positioned-v3-http.test.ts); other types are refused.
+  for(const type of ['Text box','Initials']) for(const role of ['ana','marcus']) for(const required of [true,false]) {
    const extra={id:'unsupported',type,role,page:1,required,rect:{x:.1,y:.4,width:.3,height:.1}};
    await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify([...fields,extra]),template.id).run();
    const unsupported=await req('/v1/envelopes',post({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'},{role:'marcus',name:'Marcus',email:'marcus@example.com'}]},{...mgmt,'idempotency-key':`unsupported-${type.replaceAll(' ','-')}-${role}-${required}`}));assert.equal(unsupported.status,422,`${type} ${role} required=${required}`);
@@ -41,7 +42,7 @@ test('positioned signatures bind each role and preserve a sequential PDF chain',
    const current=await (await req('/v1/signing/current',{headers})).json();assert.deepEqual(current.fields,[fields[i]]);assert.equal(current.role,fields[i].role);assert.equal(current.recipientName,i?'Marcus':'Ana');
    const base={artifactId:current.id,artifactHash:current.sha256,consent:true};
    if(i===0){
-    const invalidTemplates=[ [fields[0],{...fields[1],rect:{...fields[0].rect,x:.2}}], ...['Date signed','Title'].flatMap(type=>['ana','marcus'].map(role=>[...fields,{id:'extra',type,role,page:1,required:true,rect:{x:.1,y:.4,width:.3,height:.1}}])) ];
+    const invalidTemplates=[ [fields[0],{...fields[1],rect:{...fields[0].rect,x:.2}}], ...['Text box','Initials'].flatMap(type=>['ana','marcus'].map(role=>[...fields,{id:'extra',type,role,page:1,required:true,rect:{x:.1,y:.4,width:.3,height:.1}}])) ];
     for(const invalid of invalidTemplates){await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(invalid),template.id).run();assert.equal((await req('/v1/signing/current',{headers})).status,401);assert.equal((await req('/v1/signing/sign',post({...base,signatures:{a:'ANA'}},headers))).status,409);assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_records').first())!.n,0);assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_events').first())!.n,0);assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_jobs').first())!.n,0);}
     await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(fields),template.id).run();
    }

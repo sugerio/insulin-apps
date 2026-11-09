@@ -22,7 +22,7 @@ test('isolated v3 HTTP flow binds role input, server date and exact retry',async
   const fields=[{id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.05,y:.1,width:.25,height:.08}},{id:'date',type:'Date signed',role:'ana',page:1,required:true,rect:{x:.35,y:.1,width:.4,height:.08}},{id:'title',type:'Title',role:'ana',page:1,required:true,rect:{x:.05,y:.3,width:.4,height:.08}},{id:'b',type:'Signature',role:'marcus',page:1,required:true,rect:{x:.05,y:.7,width:.25,height:.08}},{id:'title-b',type:'Title',role:'marcus',page:1,required:true,rect:{x:.35,y:.7,width:.4,height:.08}},{id:'date-b',type:'Date signed',role:'marcus',page:1,required:true,rect:{x:.05,y:.85,width:.4,height:.08}}];
   await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(fields),template.id).run();
   const body={templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'},{role:'marcus',name:'Marcus',email:'marcus@example.com'}]},headers={...mgmt,'idempotency-key':'v3-http'};
-  assert.equal((await req('/v1/envelopes',post(body,headers),app)).status,422,'default worker remains closed');
+  assert.equal((await req('/v1/envelopes',post(body,{...headers,'idempotency-key':'v3-http-entrypoint'}),app)).status,201,'the Worker entrypoint accepts Date signed and Title');
   const created=await req('/v1/envelopes',post(body,headers));assert.equal(created.status,201);const envelope=await created.json();assert.equal((await req(`/v1/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);
   const tasks=(await (await req(`/v1/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;let previous='';
   for(let i=0;i<2;i++){
@@ -44,20 +44,21 @@ test('isolated v3 HTTP flow binds role input, server date and exact retry',async
    if(!i){
     const shortDate=fields.map(f=>f.id==='date'?{...f,rect:{...f.rect,height:.02}}:f);await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(shortDate),template.id).run();
     assert.equal((await req('/v1/signing/text-preview',post({fieldId:'date'},h))).status,422,'fixed date must fit before preview');
-    assert.equal((await req('/v1/signing/sign',post({artifactId:current.id,artifactHash:current.sha256,consent:true,signatures:{a:'ANA',title:'Director'},datePreviewIds:{date:previewId}},h))).status,409,'date must fit before signing');
+    assert.equal((await req('/v1/signing/sign',post({artifactId:current.id,artifactHash:current.sha256,consent:true,title:'Director',signatures:{a:'ANA',title:'Director'},datePreviewIds:{date:previewId}},h))).status,409,'date must fit before signing');
     assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_records').first())!.n,0);await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(fields),template.id).run();
     const collision=fields.map(f=>f.id==='a'?{...f,rect:{...f.rect,width:.04}}:f.id==='date'?{...f,rect:{...f.rect,x:.12}}:f);
     await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(collision),template.id).run();
     assert.equal((await req('/v1/signing/signature-preview',post({fieldId:'a',text:'Alexander'},h))).status,422,'signature cannot cover date field');
-    assert.equal((await req('/v1/signing/sign',post({artifactId:current.id,artifactHash:current.sha256,consent:true,signatures:{a:'Alexander',title:'Director'},signaturePreviews:{a:'0'.repeat(64)},datePreviewIds:{date:previewId}},h))).status,409);
+    assert.equal((await req('/v1/signing/sign',post({artifactId:current.id,artifactHash:current.sha256,consent:true,title:'Director',signatures:{a:'Alexander',title:'Director'},signaturePreviews:{a:'0'.repeat(64)},datePreviewIds:{date:previewId}},h))).status,409);
     assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_records').first())!.n,0);
     const edge=fields.map(f=>f.id==='a'?{...f,rect:{...f.rect,x:.95,width:.05}}:f);
     await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(edge),template.id).run();
     assert.equal((await req('/v1/signing/signature-preview',post({fieldId:'a',text:'Alexander'},h))).status,422,'signature cannot cross page boundary');
     await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(fields),template.id).run();
    }
-   const signatureId=i?'b':'a',signaturePreview=await req('/v1/signing/signature-preview',post({fieldId:signatureId,text:i?'MARCUS':'ANA'},h));assert.equal(signaturePreview.status,200);const titleId=i?'title-b':'title',titlePreview=await req('/v1/signing/text-preview',post({fieldId:titleId,text:i?'Manager':'Director'},h));assert.equal(titlePreview.status,200);const base={artifactId:current.id,artifactHash:current.sha256,consent:true,signaturePreviews:{[signatureId]:signaturePreview.headers.get('X-Signature-Preview')},textPreviews:{[titleId]:titlePreview.headers.get('X-Text-Preview')}},values=i?{b:'MARCUS','title-b':'Manager'}:{a:'ANA',title:'Director'};
-   assert.equal((await req('/v1/signing/sign',post({...base,signatures:i?{b:'MARCUS','title-b':'Manager',title:'wrong'}:{a:'ANA'}},h))).status,409);
+   const signatureId=i?'b':'a',signaturePreview=await req('/v1/signing/signature-preview',post({fieldId:signatureId,text:i?'MARCUS':'ANA'},h));assert.equal(signaturePreview.status,200);const titleId=i?'title-b':'title',titlePreview=await req('/v1/signing/text-preview',post({fieldId:titleId,text:i?'Manager':'Director'},h));assert.equal(titlePreview.status,200);const base={artifactId:current.id,artifactHash:current.sha256,consent:true,title:i?'Manager':'Director',signaturePreviews:{[signatureId]:signaturePreview.headers.get('X-Signature-Preview')},textPreviews:{[titleId]:titlePreview.headers.get('X-Text-Preview')}},values=i?{b:'MARCUS','title-b':'Manager'}:{a:'ANA',title:'Director'};
+   assert.equal((await req('/v1/signing/sign',post({...base,signatures:i?{b:'MARCUS','title-b':'Manager',title:'wrong'}:{a:'ANA'}},h))).status,i?409:422,'a Title field must carry the Review title');
+   assert.equal((await req('/v1/signing/sign',post({...base,title:'Someone else',signatures:values},h))).status,422,'Title field and Review title must match');
    assert.equal((await req('/v1/signing/sign',post({...base,signatures:{...values,date:'client'}},h))).status,409);
    assert.equal((await req('/v1/signing/sign',post({...base,signatures:values},h))).status,409,'date preview identity required');assert.equal((await req('/v1/signing/sign',post({...base,signatures:values,datePreviewIds:{[i?'date-b':'date']:'forged'}},h))).status,409,'forged preview rejected');
    if(!i){

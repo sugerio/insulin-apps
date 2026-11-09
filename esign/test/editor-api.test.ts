@@ -46,7 +46,9 @@ test('editor sessions enforce scope and persist immutable template versions with
   assert.deepEqual(saves.map(r=>r.status).sort(),[201,409]);const one=(await saves.find(r=>r.status===201)!.json() as any).id;
   const confirmed=await req(`/v1/template-editing-sessions/${first.sessionId}`,{headers:{authorization:`Bearer ${a}`}});assert.equal((await confirmed.json() as any).templateId,one);
   assert.equal((await req(`/v1/template-editing-sessions/${first.sessionId}`,{headers:{authorization:`Bearer ${b}`}})).status,404);
-  const fieldInfo=await req(`/v1/templates/${one}`,{headers:{authorization:`Bearer ${a}`}});assert.equal((await fieldInfo.json() as any).hasPositionedFields,true);
+  const fieldInfo=await req(`/v1/templates/${one}`,{headers:{authorization:`Bearer ${a}`}});const fieldInfoBody=await fieldInfo.json() as any;assert.equal(fieldInfoBody.hasPositionedFields,true);
+  // The host previews the placed fields: type, role, page and box only.
+  assert.deepEqual(fieldInfoBody.fields,fields.map(f=>({type:f.type,role:f.role,page:f.page,rect:f.rect})));
   assert.equal((await req(`/v1/templates/${one}`,{headers:{authorization:`Bearer ${b}`}})).status,404);
   assert.equal((await req('/v1/envelopes',{...management(a,{templateId:one,recipients:[{role:'Partner',name:'Ana',email:'ana@example.com'},{role:'Seller',name:'Bo',email:'bo@example.com'},{role:'Legal',name:'Cam',email:'cam@example.com'}]}),headers:{...management(a,{}).headers,'idempotency-key':'fields-1'}})).status,201);
   assert.equal((await req('/v1/template-editing-sessions',management(b,{allowedParentOrigin:'https://other.example.com',sourceTemplateId:one}))).status,404);
@@ -58,7 +60,7 @@ test('editor sessions enforce scope and persist immutable template versions with
   const emptyInfo=await req(`/v1/templates/${two}`,{headers:{authorization:`Bearer ${a}`}});assert.equal((await emptyInfo.json() as any).hasPositionedFields,true);
   const old=await db.prepare('SELECT fields_json FROM templates WHERE id=?').bind(one).first() as any;assert.deepEqual(JSON.parse(old.fields_json),fields);
   const legacyForm=new FormData();legacyForm.set('file',new File([bytes],'legacy.pdf',{type:'application/pdf'}));legacyForm.set('roles','["Signer","signer"]');
-  const legacyResponse=await req('/v1/templates',{method:'POST',headers:{authorization:`Bearer ${a}`},body:legacyForm});assert.equal(legacyResponse.status,201);const legacy=(await legacyResponse.json() as any).id;const legacyBefore=await db.prepare('SELECT object_key,roles_json,fields_json FROM templates WHERE id=?').bind(legacy).first();
+  const legacyResponse=await req('/v1/templates',{method:'POST',headers:{authorization:`Bearer ${a}`},body:legacyForm});assert.equal(legacyResponse.status,201);const legacy=(await legacyResponse.json() as any).id;assert.deepEqual(((await (await req(`/v1/templates/${legacy}`,{headers:{authorization:`Bearer ${a}`}})).json()) as any).fields,[]);const legacyBefore=await db.prepare('SELECT object_key,roles_json,fields_json FROM templates WHERE id=?').bind(legacy).first();
   const legacySessionResponse=await req('/v1/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com',sourceTemplateId:legacy}));assert.equal(legacySessionResponse.status,201);const legacySession=await legacySessionResponse.json() as any;const legacyUrl=new URL(legacySession.url);
   const legacyExchange=await req('/v1/editor/exchange',{method:'POST',headers:{'content-type':'application/json',origin:'https://esign.example.com'},body:JSON.stringify({pageId:legacySession.sessionId,code:legacyUrl.hash.slice(1)})});const legacyToken=(await legacyExchange.json() as any).token;const legacyHeaders={authorization:`Bearer ${legacyToken}`,origin:'https://esign.example.com'};
   const legacyCurrent=await req('/v1/editor/current',{headers:legacyHeaders});assert.deepEqual((await legacyCurrent.json() as any).roles,['Signer','signer']);

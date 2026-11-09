@@ -42,8 +42,7 @@ test('editor offers only signature, date and title fields',async()=>{
  const {renderToStaticMarkup}=await import('react-dom/server');
  const html=renderToStaticMarkup(React.createElement(editor.FieldEditor,{initialRoles:['Partner']}));
  for(const label of ['Add Signature field','Add Date signed field','Add Title field']) assert.ok(html.includes(label), label);
- assert.match(html,/default Worker does not support signing Date signed or Title/);
- assert.match(html,/isolated local V3 demo/);
+ assert.match(html,/A Title field shows the title the signer confirms before signing/);
  assert.match(html,/not for production/);
  assert.ok(!html.includes('Add Initials field'));
  assert.ok(!html.includes('Horizontal position (%)'));

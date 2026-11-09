@@ -52,7 +52,7 @@ export async function viewedPages(db: D1Database, envelopeId: string, taskId: st
   return seen;
 }
 
-export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): void {
+export function mountLocalSigningRoutes(app: Hono<Env>, v3Enabled = false): void {
   const local = async (c: import('hono').Context<Env>, next: import('hono').Next) => {
     c.header('Cache-Control','no-store');
     if (!localSigningEnabled(c.env)) return c.json({error:'local_test_disabled'}, 404);
@@ -164,7 +164,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
     const row=await c.env.DB.prepare('SELECT t.role,t.recipient_name,t.recipient_email,p.roles_json,p.fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id WHERE t.id=?').bind(task).first<{role:string;recipient_name:string;recipient_email:string;roles_json:string;fields_json:string}>();
     if(!row)throw new Error('Missing template');const raw:unknown=JSON.parse(row.fields_json);if(!Array.isArray(raw))throw new Error('Invalid fields');
     const v3=raw.some((f:any)=>f.type==='Date signed'||f.type==='Title');
-    const all=raw.length?(v3&&v3TestOnly?positionedV3Fields(raw,JSON.parse(row.roles_json),100):positionedFields(row.fields_json,JSON.parse(row.roles_json),100)):[];assertNoOverlappingFields(all);
+    const all=raw.length?(v3&&v3Enabled?positionedV3Fields(raw,JSON.parse(row.roles_json),100):positionedFields(row.fields_json,JSON.parse(row.roles_json),100)):[];assertNoOverlappingFields(all);
     return {task,all,fields:all.filter(f=>f.role===row.role),role:row.role,recipientName:row.recipient_name,recipientEmail:row.recipient_email,v3,fieldsJson:row.fields_json,rolesJson:row.roles_json};
   }
   app.get('/v1/signing/current', async c => {try {const a=await current(c,{verified:false}),details=await fieldsFor(c);
@@ -200,7 +200,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
     return c.body(Uint8Array.from(image).buffer,200,{'Content-Type':'image/png','X-Content-Type-Options':'nosniff','X-Signature-Width':String(g.width/(field.rect.width*page.getWidth())),'X-Signature-Height':String(g.height/(field.rect.height*page.getHeight())),'X-Signature-Preview':await signaturePreviewHash(artifact.sha256,rolesJson,fieldsJson,field.id,body.text,await sha256(Uint8Array.from(image).buffer),g),'Access-Control-Expose-Headers':'X-Signature-Width, X-Signature-Height, X-Signature-Preview'});
   }catch{return c.json({error:'signature_does_not_fit'},422);}});
   app.post('/v1/signing/text-preview',async c=>{try{
-    if(!v3TestOnly)throw new Error('Disabled');const artifact=await current(c);const {task,all,fields,v3,fieldsJson,rolesJson}=await fieldsFor(c);if(!v3)throw new Error('Not v3');
+    if(!v3Enabled)throw new Error('Disabled');const artifact=await current(c);const {task,all,fields,v3,fieldsJson,rolesJson}=await fieldsFor(c);if(!v3)throw new Error('Not v3');
     const prior=(await c.env.DB.prepare(`SELECT p.payload_json FROM tasks t JOIN signature_records r ON r.envelope_id=t.envelope_id LEFT JOIN positioned_signature_inputs p ON p.signature_id=r.id WHERE t.id=?`).bind(task).all<{payload_json:string|null}>()).results;if(prior.some(p=>!p.payload_json||JSON.stringify(JSON.parse(p.payload_json).templateFields)!==JSON.stringify(all)))throw new Error('Template snapshot changed');
     const body=await c.req.json() as {fieldId?:unknown;text?:unknown};const field=fields.find(f=>f.id===body.fieldId);if(!field||!['Title','Date signed'].includes(field.type))throw new Error('Unauthorized field');
     const now=Date.now(),text=field.type==='Date signed'?new Date(now).toISOString().slice(0,10):body.text;
@@ -246,7 +246,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
   app.use('/v1/signing/sign', async (c, next) => {
     await next();
     if (c.res.status !== 202 || c.env.COMPLETE_AFTER_SIGN !== 'true') return;
-    const work=completeEnvelopeOfSession(c.env,tokenFrom(c.req.header('authorization')),v3TestOnly)
+    const work=completeEnvelopeOfSession(c.env,tokenFrom(c.req.header('authorization')),v3Enabled)
       .catch(() => console.error('E-sign: finishing the envelope after a signature failed; the cron sweep retries it'));
     try {c.executionCtx.waitUntil(work);} catch {/* No execution context in-process: the work continues on its own. */}
   });
@@ -273,14 +273,16 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
         .bind(hash,requestOrigin(c),Date.now(),body.artifactId,body.artifactHash).first<{id:string;event_version:number;payload_json:string|null}>();
       if(!found)return null;
       if(found.event_version===1)return body.signatures===undefined?{id:found.id}:null;
-      if(found.event_version===3 && v3TestOnly){const id=await retryPositionedV3Signature(c.env.DB,c.env.ARTIFACTS,{token,origin:requestOrigin(c),now:Date.now(),artifactId:body.artifactId as string,artifactHash:body.artifactHash as string,values:body.signatures,datePreviewIds:body.datePreviewIds});return id?{id}:null;}
+      if(found.event_version===3 && v3Enabled){const id=await retryPositionedV3Signature(c.env.DB,c.env.ARTIFACTS,{token,origin:requestOrigin(c),now:Date.now(),artifactId:body.artifactId as string,artifactHash:body.artifactHash as string,values:body.signatures,datePreviewIds:body.datePreviewIds});return id?{id}:null;}
       if(found.event_version!==2||!found.payload_json||!body.signatures||typeof body.signatures!=='object'||Array.isArray(body.signatures))return null;
       try{const payload=JSON.parse(found.payload_json) as {fields:{id:string;text:string}[]};const expected=Object.fromEntries(payload.fields.map(f=>[f.id,f.text]));const supplied=body.signatures as Record<string,unknown>;if(Object.keys(expected).length!==Object.keys(supplied).length||Object.keys(expected).some(k=>expected[k]!==supplied[k]))return null;return {id:found.id};}catch{return null;}
     };
     const existing=await replay();if (existing) return c.json(existing,202);
     try {const a=await current(c);if (a.id!==body.artifactId || a.sha256!==body.artifactHash) throw new Error('Stale artifact');const file=await c.env.ARTIFACTS.get(a.object_key);if (!file || await sha256(await file.arrayBuffer())!==a.sha256) throw new Error('Input mismatch');
       const {fields,v3}=await fieldsFor(c);const command={token,origin:requestOrigin(c),now:Date.now(),artifactId:a.id,artifactHash:a.sha256};
-      const id=v3&&v3TestOnly?await recordPositionedV3Signature(c.env.DB,c.env.ARTIFACTS,{...command,values:body.signatures,datePreviewIds:body.datePreviewIds,signaturePreviews:body.signaturePreviews,textPreviews:body.textPreviews}):fields.length?await recordPositionedSignature(c.env.DB,c.env.ARTIFACTS,{...command,signatures:body.signatures,signaturePreviews:body.signaturePreviews}):body.signatures===undefined?await recordSignature(c.env.DB,c.env.ARTIFACTS,{...command,consent:true}):(()=>{throw new Error('Unexpected fields');})();
+      // A Title field shows the title the signer gave on Review, nothing else.
+      if(v3&&fields.some(f=>f.type==='Title')){const values=body.signatures as Record<string,unknown>|undefined;if(!signerTitle||signerTitle==='invalid'||fields.some(f=>f.type==='Title'&&values?.[f.id]!==signerTitle))return c.json({error:'title_mismatch'},422);}
+      const id=v3&&v3Enabled?await recordPositionedV3Signature(c.env.DB,c.env.ARTIFACTS,{...command,values:body.signatures,datePreviewIds:body.datePreviewIds,signaturePreviews:body.signaturePreviews,textPreviews:body.textPreviews}):fields.length?await recordPositionedSignature(c.env.DB,c.env.ARTIFACTS,{...command,signatures:body.signatures,signaturePreviews:body.signaturePreviews}):body.signatures===undefined?await recordSignature(c.env.DB,c.env.ARTIFACTS,{...command,consent:true}):(()=>{throw new Error('Unexpected fields');})();
       const disclosure=await consentDisclosure(),session=await sessionContext(c.env.DB,token);
       if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.signed,...requestFacts(c.req.raw),detail:{signatureId:id,artifactId:a.id,artifactSha256:a.sha256,consentDisclosureVersion:disclosure.version,consentDisclosureSha256:disclosure.sha256,...authority}});
       return c.json({id},202);
@@ -339,7 +341,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>, v3TestOnly = false): voi
     catch {return c.json({error:'finalization_failed'},503);}
   });
   app.post('/v1/envelopes/:id/process', local, async c => {
-    const result=await processEnvelopeStep(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),c.req.param('id') ?? '',v3TestOnly);
+    const result=await processEnvelopeStep(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),c.req.param('id') ?? '',v3Enabled);
     if (result === 'processed') return c.body(null,204);
     if (result === 'job_unavailable') return c.json({error:'job_unavailable'},404);
     if (result === 'signature_input_layout_missing') return c.json({error:'signature_input_layout_missing'},409);

@@ -37,10 +37,12 @@ export const managementAuth = async (context: import('hono').Context<Env>, next:
   context.set('tenantId', row.tenant_id);
   await next();
 };
-function createApp(v3TestOnly: boolean) {
+function createApp(v3Enabled: boolean) {
 const app = new Hono<Env>();
 app.get('/health', (context) => context.json({ status: 'ok', service: 'esign', mode: 'experimental' }));
-const supportedFields=(raw:string,roles:string[],pages:number)=>v3TestOnly?positionedV3Fields(JSON.parse(raw),roles,pages):positionedFields(raw,roles,pages);
+// Date signed and Title fields are signed through the v3 chain; Signature-only templates keep v2.
+const hasV3Fields=(raw:string)=>{const fields:unknown=JSON.parse(raw);return Array.isArray(fields)&&fields.some((f:any)=>f?.type==='Date signed'||f?.type==='Title');};
+const supportedFields=(raw:string,roles:string[],pages:number)=>v3Enabled&&hasV3Fields(raw)?positionedV3Fields(JSON.parse(raw),roles,pages):positionedFields(raw,roles,pages);
 app.use('/v1/me', managementAuth);
 app.use('/v1/templates', managementAuth);
 app.use('/v1/templates/*', managementAuth);
@@ -125,8 +127,30 @@ app.get('/v1/templates/:id', async (context) => {
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
     const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validatePositionedPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validatePositionedPlacement(pdf,fields);positionedFieldsSupported=true;
   }catch{positionedFieldsSupported=false;}}
-  return context.json({ id: row.id, roles: JSON.parse(row.roles_json), hasPositionedFields, positionedFieldsSupported });
+  return context.json({ id: row.id, roles: JSON.parse(row.roles_json), hasPositionedFields, positionedFieldsSupported, fields: placedFields(row.fields_json) });
 });
+
+/**
+ * The placed fields as a host previews them: type, role, page (1-based) and the box in
+ * normalized coordinates of the displayed page (top-left origin). Ids and flags stay inside.
+ */
+function placedFields(raw: string | undefined): { type: string; role: string; page: number; rect: { x: number; y: number; width: number; height: number } }[] {
+  if (raw === undefined) return [];
+  let value: unknown;
+  try { value = JSON.parse(raw); } catch { return []; }
+  if (!Array.isArray(value)) return [];
+  const out: { type: string; role: string; page: number; rect: { x: number; y: number; width: number; height: number } }[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const f = item as { type?: unknown; role?: unknown; page?: unknown; rect?: { x?: unknown; y?: unknown; width?: unknown; height?: unknown } };
+    const r = f.rect;
+    if (typeof f.type !== 'string' || typeof f.role !== 'string' || !Number.isSafeInteger(f.page) || !r || typeof r !== 'object') continue;
+    const { x, y, width, height } = r;
+    if (![x, y, width, height].every((v) => typeof v === 'number' && Number.isFinite(v))) continue;
+    out.push({ type: f.type, role: f.role, page: f.page as number, rect: { x: x as number, y: y as number, width: width as number, height: height as number } });
+  }
+  return out;
+}
 
 app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const key = context.req.header('idempotency-key') ?? '';
@@ -290,22 +314,22 @@ app.post('/v1/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context)
   return context.json({ id, status: 'VOIDED' });
 });
 
-mountLocalSigningRoutes(app, v3TestOnly);
+mountLocalSigningRoutes(app, v3Enabled);
 return app;
 }
 
-// Explicit local loopback demo and in-process tests only; never the Worker entrypoint.
+// The app with Date signed and Title fields; the Worker entrypoint is the same app.
 export const createV3TestApp = () => createApp(true);
 
 /** Cron trigger: finishes envelopes that the after-signature work did not (see envelope-completion.ts). */
 async function scheduled(_controller: ScheduledController, env: Bindings, ctx: ExecutionContext): Promise<void> {
   if (!localSigningEnabled(env)) return;
   ctx.waitUntil(expireDueEnvelopes(env.DB).catch(() => console.error('E-sign: the expiry sweep failed; the next run retries it')));
-  ctx.waitUntil(sweepEnvelopes(env).then((counts) => {
+  ctx.waitUntil(sweepEnvelopes(env, true).then((counts) => {
     if (counts.failed) console.error(`E-sign: ${counts.failed} envelope(s) could not be finished; the next run retries them`);
   }));
 }
 
 // The Hono app stays the default export (scripts mount it with app.route); the Worker
 // runtime also finds the cron handler on it.
-export default Object.assign(createApp(false), { scheduled });
+export default Object.assign(createApp(true), { scheduled });

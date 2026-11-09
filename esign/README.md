@@ -67,7 +67,7 @@ Stop only processes you started. The BFF and editor service listen on loopback w
 
 ### Isolated Date/Title local V3 demo
 
-This is a **synthetic-data-only, trusted single-user Node loopback experiment**, not production signing. It enables the independently reviewed V3 candidate only in the explicitly opted-in Node demo process. The ordinary Worker and the separate Cloudflare candidate remain closed to Date/Title signing; no Worker environment variable enables this feature. Use new dedicated ports **5197, 8797 and 8798** and a fresh private state directory. Check that these ports are free; never stop another process. The V3 demo refuses an unmarked nonempty state directory and rejects the original demo ports. Do not point it at existing or retained evidence, run multiple instances against one state, or expose it through a network proxy.
+This is a **synthetic-data-only, trusted single-user Node loopback experiment**, not production signing. The ordinary Worker now signs Date signed and Title fields through the same V3 chain (a Title field shows the title the signer gives on Review, and signing refuses any other value); the separate Cloudflare candidate remains closed to Date/Title signing. This Node demo is kept for running the V3 chain on its own. Use new dedicated ports **5197, 8797 and 8798** and a fresh private state directory. Check that these ports are free; never stop another process. The V3 demo refuses an unmarked nonempty state directory and rejects the original demo ports. Do not point it at existing or retained evidence, run multiple instances against one state, or expose it through a network proxy.
 
 From the repository root, use a separate temporary copy and two shells. This installs no new dependencies and builds without deployment:
 

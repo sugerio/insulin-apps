@@ -51,6 +51,7 @@ jobs:
       WRANGLER_SEND_METRICS: 'false'
       ESIGN_TEST_CHROME: /usr/bin/google-chrome
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Choose the deployment
         # dev on a push (main or feat/esign-*) once ESIGN_DEV_DEPLOY is true; dev or prod by hand.
         id: target
@@ -69,7 +70,6 @@ jobs:
           case "$target" in ''|dev|prod) ;; *) echo "::error::Unknown target $target"; exit 1;; esac
           echo "target=$target" >> "$GITHUB_OUTPUT"
           echo "Deployment: ${target:-none}"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24

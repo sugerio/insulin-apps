@@ -35,6 +35,9 @@ test('esign deploys dev from main or an E-sign branch, prod only by hand from ma
   assert.match(checks, /\[ "\$target" = prod \] && \[ "\$REF" != refs\/heads\/main \]; then echo "::error::prod deploys only from main\."; exit 1/)
   assert.doesNotMatch(checks, /run: \|[^\n]*\n(?:[^\n]*\n)*?[^\n]*\$\{\{ inputs\./)
   assert.match(checks, /if: steps\.target\.outputs\.target != ''[\s\S]*name: esign-build/)
+  // The job's default working directory (esign) exists only after the checkout, so every run
+  // step comes after it.
+  assert.ok(checks.indexOf('actions/checkout@') < checks.indexOf('name: Choose the deployment'), 'checkout first')
 
   const deploy = job(text, 'deploy')
   assert.match(deploy, /needs: checks/)

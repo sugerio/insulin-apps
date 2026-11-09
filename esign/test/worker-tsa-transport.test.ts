@@ -1,12 +1,19 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
+import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {timestampQuery} from '../src/worker-tsa-transport.ts';
 
 test('the timestamp query is parseable by OpenSSL and binds the imprint and nonce', ()=>{
  const imprint=new Uint8Array(32).fill(0x2a),nonce=Uint8Array.from({length:16},(_,i)=>i===0?1:i);
  const query=timestampQuery(imprint,nonce);
- const output=execFileSync('openssl',['ts','-query','-text','-in','/dev/stdin'],{input:query,stdio:['pipe','pipe','pipe']}).toString();
+ // From a file: /dev/stdin cannot be opened for a piped child on every runner (GitHub's Ubuntu).
+ const dir=mkdtempSync(join(tmpdir(),'esign-tsq-')),file=join(dir,'query.tsq');
+ let output:string;
+ try {writeFileSync(file,query);output=execFileSync('openssl',['ts','-query','-text','-in',file],{stdio:['ignore','pipe','pipe']}).toString();}
+ finally {rmSync(dir,{recursive:true,force:true});}
  assert.match(output,/Hash Algorithm: sha256/);assert.match(output,/Certificate required: yes/);
  assert.ok(output.includes(Buffer.from(nonce).toString('hex').toUpperCase()));assert.ok(Buffer.from(query).includes(Buffer.from(imprint)));
 });

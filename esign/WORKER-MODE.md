@@ -75,7 +75,7 @@ never a silent fallback.
 How the seal works is in [README.md](README.md#evidence-hash-chain-and-seals). Operations:
 
 - The Worker cannot hold an AWS role, so it holds the key of an IAM user that may only assume one
-  role, and that role may only sign with the key (`src/aws-sts-credentials.ts`). The assumed-role
+  role, and that role may only sign with the key (`src/seal/kms.ts`). The assumed-role
   credentials are cached per Worker isolate. `scripts/aws-dev-signer.sh` creates the user and role
   for the signing key and, with `--create-access-key`, stores a new access key directly as the
   Worker's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` without printing it (one key per Worker;
@@ -83,7 +83,7 @@ How the seal works is in [README.md](README.md#evidence-hash-chain-and-seals). O
 - **Rotating the KMS key**: deploy the new key's ARN and public key, and add the old key's SPKI
   SHA-256 to `KMS_TRUSTED_KEY_SHA256` so envelopes sealed with it still verify.
 - **DigiCert rotating its TSA signer**: add the new signer's SPKI SHA-256 to
-  `TSA_SIGNER_SPKI_SHA256`. The TSA URL, root and policy are fixed in `src/tsa-trust.ts`.
+  `TSA_SIGNER_SPKI_SHA256`. The TSA URL, root and policy are fixed in `src/seal/tsa.ts`.
 - **Never change `TEST_SEAL_KEY`** while local envelopes sealed with it should stay verifiable: the
   certificate check recomputes the local seal with the current key.
 
@@ -121,8 +121,8 @@ npm run dev -- --test-scheduled      # 127.0.0.1:8787; /__scheduled runs the cro
 
 A host product's console then uses `http://127.0.0.1:8787` as the E-sign base URL and
 `http://127.0.0.1:8787/sign` as the signing page URL, with the key from the key file.
-`SIGNING_PAGE_FRAME_ANCESTORS` in `wrangler.jsonc` must list the host's origin. For the seeded
-synthetic tenant and a walkthrough with `curl`, see "Run locally" in [README.md](README.md#run-locally).
+`SIGNING_PAGE_FRAME_ANCESTORS` in `wrangler.jsonc` must list the host's origin. For a walkthrough
+with `curl`, see "Run locally" in [README.md](README.md#run-locally).
 
 ## Deploy
 

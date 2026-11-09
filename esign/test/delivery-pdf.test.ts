@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
-import { issueRecipientCode, exchangeRecipientCode, sendRecipientOtp, verifyRecipientOtp } from '../src/page-authorization.ts';
+import { issueRecipientCode, exchangeRecipientCode, sendRecipientOtp, verifyRecipientOtp } from '../src/otp.ts';
 import { recordSignature } from '../src/signature-record.ts';
 import { processSignature } from '../src/signature-processing.ts';
-import { finalizeLocalTestEvidence } from '../src/local-test-evidence.ts';
+import { finalizeLocalTestEvidence } from '../src/seal/local.ts';
 import { deliveryPdf } from '../src/delivery-pdf.ts';
 
 const sha=async (data:ArrayBuffer|Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data instanceof Uint8Array?Uint8Array.from(data):data)),n=>n.toString(16).padStart(2,'0')).join('');

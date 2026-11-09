@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {renderTypedSignature, TYPED_SIGNATURE_FONT, TYPED_SIGNATURE_FONT_HASH} from '../src/typed-signature-image.ts';
+import {renderTypedSignature, TYPED_SIGNATURE_FONT, TYPED_SIGNATURE_FONT_HASH} from '../src/field-render.ts';
 
 test('controlled signature text renders a deterministic bounded PNG',async()=>{
  const first=await renderTypedSignature('ANA SMITH');const again=await renderTypedSignature('ANA SMITH');

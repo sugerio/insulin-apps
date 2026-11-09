@@ -4,4 +4,5 @@ dist/
 dist-ui/
 
 .deploy/
-__pycache__/
+# The management key that provision-tenant.ts writes for the local walkthrough (README.md).
+.local-key

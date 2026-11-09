@@ -1,7 +1,7 @@
 /**
  * The audit trail of a signing: who did what, when and from where. Append-only (the table's
  * triggers refuse changes). The events up to completion are part of the managed seal
- * (managed-evidence.ts); later ones, such as the copies sent, are recorded after it.
+ * (seal/managed.ts); later ones, such as the copies sent, are recorded after it.
  */
 import { RECIPIENT_SESSION_FROM } from './access.ts';
 

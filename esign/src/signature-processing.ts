@@ -1,8 +1,6 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { fieldImageKey, fieldRenderer, type Box } from './field-renderers.ts';
-import { validatePositionedPdf } from './positioned-template.ts';
-import { assertRenderableRecipientNames } from './recipient-name.ts';
-import { SIGNATURE_NAME_FONT_SIZE, SIGNATURE_PAGE_MARGIN, SIGNATURE_PAGE_SIZE, signatureNameLine } from './signature-page-layout.ts';
+import { assertRenderableRecipientNames, fieldImageKey, fieldRenderer, SIGNATURE_NAME_FONT_SIZE, SIGNATURE_PAGE_MARGIN, SIGNATURE_PAGE_SIZE, signatureNameLine, type Box } from './field-render.ts';
+import { validateFieldsPdf } from './fields.ts';
 import { canonicalJson } from './canonical-json.ts';
 import { artifactObjectKey, digestHex, outputArtifactId, verifySignatureRecord, type AppendedPageRender, type FieldsRender, type SignatureRender, type SignatureRow } from './signatures.ts';
 
@@ -107,7 +105,7 @@ const sameBox = (a: Box, b: Box) => a.x === b.x && a.y === b.y && a.width === b.
 
 /** Each field's stored image at its recorded place; the image must be what the renderer makes of the value. */
 async function drawFields(pdf: PDFDocument, bucket: R2Bucket, row: SignatureRow, render: FieldsRender): Promise<void> {
-  validatePositionedPdf(pdf);
+  validateFieldsPdf(pdf);
   for (const field of render.fields) {
     const renderer = fieldRenderer(field.type);
     if (await digestHex(await renderer.render(field.value)) !== field.imageSha256) throw new Error('Image does not match its value');

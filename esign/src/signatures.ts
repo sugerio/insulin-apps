@@ -1,7 +1,6 @@
 import { canonicalJson } from './canonical-json.ts';
-import { fieldRenderer, type Box } from './field-renderers.ts';
-import { positionedV3Fields } from './positioned-v3-snapshot.ts';
-import type { TemplateField } from './template-fields.ts';
+import { fieldRenderer, type Box } from './field-render.ts';
+import { validateFields, type TemplateField } from './fields.ts';
 
 /**
  * The stored form of a signature (table `signatures`, migrations/0007_signatures.sql).
@@ -144,7 +143,7 @@ export function parseRender(value: unknown, facts: SignatureFacts): SignatureRen
   if (r.role !== facts.role || !Array.isArray(r.template) || !Array.isArray(r.fields)) throw new Error('Invalid field rendering');
   const roles = [...new Set(r.template.map(f => (f as { role?: unknown })?.role))];
   if (roles.some(role => !isString(role))) throw new Error('Invalid field rendering');
-  const template = positionedV3Fields(r.template, roles as string[], r.inputPageCount);
+  const template = validateFields(r.template, roles as string[], r.inputPageCount);
   if (canonicalJson(template) !== canonicalJson(r.template)) throw new Error('Invalid field rendering');
   const owned = template.filter(f => f.role === r.role), seen = new Set<string>(), date = signingDate(facts.consentedAt);
   for (const field of r.fields) {

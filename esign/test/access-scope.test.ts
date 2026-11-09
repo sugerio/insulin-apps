@@ -6,7 +6,7 @@ import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import app from '../src/worker.ts';
 import {authorizeAccess,exchangeAccessCode,issueAccessCode} from '../src/access.ts';
-import {authorizeRecipientSession,exchangeRecipientCode,issueRecipientCode,sendRecipientOtp,verifyRecipientOtp} from '../src/page-authorization.ts';
+import {authorizeRecipientSession,exchangeRecipientCode,issueRecipientCode,sendRecipientOtp,verifyRecipientOtp} from '../src/otp.ts';
 import {editorPageContext,exchangeEditorPage} from '../src/editor-session.ts';
 import {setEditorOrigins} from './helpers/editor-origins.ts';
 

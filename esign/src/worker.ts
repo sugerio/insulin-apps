@@ -6,12 +6,10 @@ import { parseDocumentName, parseNamedBy, parseSender, parseSignerFacts, type Si
 import { CERTIFICATE_VERSION } from './delivery-pdf.ts';
 import type { EnvelopeDetails, TaskDetails } from './details.ts';
 import { PDFDocument } from 'pdf-lib';
-import { assertNoOverlappingFields } from './template-fields.ts';
-import { validatePositionedPdf, validatePositionedPlacement } from './positioned-template.ts';
-import {positionedV3Fields} from './positioned-v3-snapshot.ts';
-import { assertRenderableRecipientNames } from './recipient-name.ts';
+import { assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf } from './fields.ts';
+import { assertRenderableRecipientNames } from './field-render.ts';
 import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './prepare.ts';
-import { mountLocalSigningRoutes } from './local-signing-routes.ts';
+import { mountSigningRoutes } from './signing-routes.ts';
 import { environmentOf, isProd, prodProblems, signingEnabled, type EnvironmentEnv } from './environment.ts';
 import { mountEditorRoutes } from './editor-routes.ts';
 import { demoPage, EMBEDDABLE_HEADERS, signingPage } from './signing-page.ts';
@@ -45,7 +43,7 @@ const app = new Hono<Env>();
 // The deployment environment (ESIGN_ENV, `dev` or `prod`); no other configuration is disclosed.
 app.get('/health', (context) => context.json({ status: 'ok', service: 'esign', environment: environmentOf(context.env ?? {}) }));
 // The placed fields a document can be signed with: Signature, Date signed and Title.
-const supportedFields=(raw:string,roles:string[],pages:number)=>positionedV3Fields(JSON.parse(raw),roles,pages);
+const supportedFields=(raw:string,roles:string[],pages:number)=>validateFields(JSON.parse(raw),roles,pages);
 app.use('/v1/me', managementAuth);
 app.use('/v1/templates', managementAuth);
 app.use('/v1/templates/*', managementAuth);
@@ -109,18 +107,19 @@ app.get('/v1/templates/:id', async (context) => {
   const row = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?')
     .bind(context.req.param('id'), context.get('tenantId')).first<{ id: string; roles_json: string; fields_json?: string }>();
   if (!row) return context.json({ error: 'not_found' }, 404);
-  let hasPositionedFields = false;
+  // The response names keep the word "positioned": hosts read them.
+  let hasFields = false;
   if (row.fields_json !== undefined) {
-    try { const fields: unknown = JSON.parse(row.fields_json); hasPositionedFields = !Array.isArray(fields) || fields.length > 0; }
-    catch { hasPositionedFields = true; }
+    try { const fields: unknown = JSON.parse(row.fields_json); hasFields = !Array.isArray(fields) || fields.length > 0; }
+    catch { hasFields = true; }
   }
-  let positionedFieldsSupported=false;
-  if(hasPositionedFields){try{
+  let fieldsSupported=false;
+  if(hasFields){try{
     const source=await context.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(row.id,context.get('tenantId')).first<{object_key:string}>();
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
-    const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validatePositionedPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validatePositionedPlacement(pdf,fields);positionedFieldsSupported=true;
-  }catch{positionedFieldsSupported=false;}}
-  return context.json({ id: row.id, roles: JSON.parse(row.roles_json), hasPositionedFields, positionedFieldsSupported, fields: placedFields(row.fields_json) });
+    const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);fieldsSupported=true;
+  }catch{fieldsSupported=false;}}
+  return context.json({ id: row.id, roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json) });
 });
 
 /**
@@ -208,7 +207,7 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
       if(raw.length){
         const source=await context.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(input.templateId,tenantId).first<{object_key:string}>();
         const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Source unavailable');
-        const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validatePositionedPdf(pdf);const fields=supportedFields(template.fields_json,roles,pdf.getPageCount());assertNoOverlappingFields(fields);validatePositionedPlacement(pdf,fields);
+        const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(template.fields_json,roles,pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);
       }
     } catch { return context.json({ error: 'positioned_fields_not_supported' }, 422); }
   }
@@ -324,7 +323,7 @@ app.post('/v1/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context)
   return context.json({ id, status: 'VOIDED' });
 });
 
-mountLocalSigningRoutes(app);
+mountSigningRoutes(app);
 return app;
 }
 

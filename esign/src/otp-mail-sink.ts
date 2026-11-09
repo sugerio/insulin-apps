@@ -1,6 +1,6 @@
 import { isValidOtpEmailAddress } from './cloudflare-otp-mail.ts';
 import { isProd } from './environment.ts';
-import { OTP_TTL_MS } from './page-authorization.ts';
+import { OTP_TTL_MS } from './otp.ts';
 
 /**
  * Email from the Worker: one-time codes and signed copies, through a `send_email` binding

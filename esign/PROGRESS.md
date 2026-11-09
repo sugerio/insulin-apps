@@ -2503,3 +2503,65 @@ to `ui/CompletionCertificate.ts`. Their tests went with them; `isValidOtpEmailAd
 `prod`) instead of `mode: "experimental"`. Nothing in `scripts/` or `.github/` read it. README.md
 and WORKER-MODE.md were updated and the "Leftover code" open item removed. No cloud resource was
 changed.
+
+## File and identifier names follow the current design
+
+A behaviour-preserving rename: no SQL, migration, stored format or HTTP field changed. There have
+been no v1/v2/v3 signing formats for a while (one `signatures` table, `render_json` kind
+`appended-page` or `fields`), but file and identifier names still said `positioned`, `v3`, `local`
+and `worker-`.
+
+- **Fields and rendering.** Thirteen small modules became two plus the font data:
+  `src/fields.ts` (template field validation, overlap, the editor's per-role rule, the PDF and
+  placement checks, the signable fields and their capture at signing; from `template-fields.ts`,
+  `positioned-template.ts`, `positioned-v3-snapshot.ts`) and `src/field-render.ts` (the Caveat and
+  Liberation bitmap renderers, signature and text geometry and fit, the preview receipt, the
+  renderer table, the appended signature page's layout and the recipient-name check; from
+  `field-renderers.ts`, `typed-signature-image.ts`, `positioned-v3-text-render.ts`,
+  `positioned-v3-text-fit.ts`, `positioned-signature-geometry.ts`,
+  `positioned-signature-preview.ts`, `signature-page-layout.ts`, `recipient-name.ts`), with the
+  atlases in `src/fonts/signature-atlas.ts` and `src/fonts/text-atlas.ts`. The two renderers now
+  share one bitmap-to-PNG function; their output is byte-identical (the pinned image hashes and a
+  before/after comparison over every printable character agree). Renamed: `positionedV3Fields` →
+  `validateFields`, `capturePositionedV3` → `captureFields`, `InvalidPositionedV3Input` →
+  `InvalidFieldInput`, `validatePositionedPdf` → `validateFieldsPdf`,
+  `validatePositionedPlacement` → `validateFieldPlacement`, `renderPositionedV3Text` →
+  `renderText`, `positionedV3TextGeometry` → `textGeometry`, `assertPositionedV3TextFits` →
+  `assertTextFits`, `PositionedV3TextDoesNotFitError` → `TextDoesNotFitError`, `V3_TEXT_RENDERER`,
+  `V3_TEXT_ATLAS_HASH`, `V3_TEXT_ATLAS_BASE64`, `V3_TEXT_HEIGHT` → `TEXT_*`, and in the UI
+  `V3TextInput` → `TextInput`. The renderer names and hashes stored in `render_json`
+  (`caveat-bitmap-v2`, `liberation-sans-bitmap-v2`) are unchanged.
+  `scripts/generate-v3-text-atlas.swift` is now `scripts/generate-text-atlas.swift`.
+- **Seals** moved to `src/seal/`: `evidence.ts` (the evidence manifest and the seal commit, which
+  both seals use), `local.ts` (the HMAC test seal), `managed.ts` (`managed-seal.ts` and
+  `managed-evidence.ts`), `kms.ts` (`worker-kms-evidence.ts`, `aws-kms-sign-provider.ts`,
+  `aws-sts-credentials.ts`, `p256-der-signature.ts`), `tsa.ts` (`worker-rfc3161-verifier.ts`,
+  `worker-tsa-transport.ts`, `tsa-trust.ts`) and `config.ts` (`seal-config.ts`). The evidence
+  domain separator `esign-worker-evidence-candidate-v1` is unchanged.
+- **Routes.** `src/local-signing-routes.ts` is `src/signing-routes.ts` (`mountLocalSigningRoutes` →
+  `mountSigningRoutes`; its middleware `local` → `whenSigningEnabled`, the template flag `v3` →
+  `hasTextFields`), and `src/page-authorization.ts` is `src/otp.ts`. The API keeps its names:
+  `hasPositionedFields`, `positionedFieldsSupported`, `positioned_fields_not_supported` and the
+  `v3` field of `GET /v1/signing/current`.
+- **UI.** `ui/renderPdf.ts`, `ui/renderPdfDocument.ts` and `ui/pdfOptions.ts` are one `ui/pdf.ts`.
+  The pages still import it lazily; `renderPdf` now loads PDF.js and its worker URL with dynamic
+  imports, so the module has no bundler-only import and the Node tests use it directly (the build
+  has one more small chunk, the worker URL). The editor host test page (`ui/editor-host.html`,
+  `ui/editor-host-main.ts`) moved to `test/fixtures/`; `test/editor-browser.test.ts` builds it
+  separately, `vite.config.ts` lost its `/host/` proxy and the port switches that served it, and
+  `tsconfig.json` type-checks `test/fixtures/`.
+- **Scripts removed.** `scripts/prepare_management_key.py` (superseded by
+  `scripts/provision-tenant.ts`) with `test/management_key_prepare_test.py`,
+  `test/management-key-provision.test.ts`, `test/first-tenant-provision.test.ts` and its helper
+  `test/first-tenant-provision.ts` (which existed only for that procedure); `scripts/local-controller.mjs`
+  and `test/local-controller.test.ts` (nothing used it); `scripts/seed-local.sql` and the
+  `db:seed:local` npm script. The local walkthrough in README.md now runs
+  `node scripts/provision-tenant.ts --tenant local --console-origin http://localhost:3000 --key-file .local-key --local`
+  and reads the key with `KEY=$(cat .local-key)`; `.local-key` is ignored. DEPLOYMENT-RUNBOOK.md's
+  sections on the Python helper, the first-tenant fixture and the controller became one short
+  "Management credentials" section that points to `provision-tenant.ts`.
+- **Tests** renamed with the modules (`positioned-*.test.ts`, `positioned-v3-*.test.ts`,
+  `worker-kms-evidence*.test.ts`, `worker-rfc3161-verifier.test.ts`,
+  `worker-tsa-transport.test.ts`, `page-authorization.test.ts`, `local-http-flow.test.ts`,
+  `local-signing-chain.test.ts`). The four titles CI checks are unchanged; two titles lost "v3".
+  The suite has 217 tests: the 233 before, minus the 16 that tested the removed scripts.

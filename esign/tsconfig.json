@@ -17,6 +17,7 @@
   },
   "include": [
     "src/**/*.ts",
-    "ui/**/*.ts"
+    "ui/**/*.ts",
+    "test/fixtures/**/*.ts"
   ]
 }

@@ -3,7 +3,7 @@ import {bodyLimit} from 'hono/body-limit';
 import {PDFDocument} from 'pdf-lib';
 import {issueEditorPage,editorPageParent,exchangeEditorPage,editorPageContext,editorCodeOpen} from './editor-session.ts';
 import {editorOriginAllowed} from './access.ts';
-import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFields} from './template-fields.ts';
+import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFields} from './fields.ts';
 import type {Hono,MiddlewareHandler} from 'hono';
 
 type Env={Bindings:{DB:D1Database;ARTIFACTS:R2Bucket;ASSETS?:Fetcher};Variables:{tenantId:string}};
@@ -59,8 +59,8 @@ export function mountEditorRoutes(app:Hono<Env>,managementAuth:MiddlewareHandler
    if(!Array.isArray(sourceRoles)||!roles.every((role,index)=>roles.slice(0,index).every(previous=>previous.toLowerCase()!==role.toLowerCase()||(sourceRoles.includes(previous)&&sourceRoles.includes(role)))))return c.json({error:'invalid_roles'},422);
   }
   let bytes:Uint8Array;if(session.stagedObjectKey&&session.stagedSha256){if(form.has('file'))return c.json({error:'source_immutable'},422);try{bytes=await stagedBytes(c.env.ARTIFACTS,session.stagedObjectKey,session.stagedSha256);}catch{return c.json({error:'source_unavailable'},409);}}else if(session.sourceTemplateId){if(form.has('file'))return c.json({error:'source_immutable'},422);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string}>();if(!row)throw new Error('Source unavailable');bytes=await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256);}catch{return c.json({error:'source_unavailable'},409);}}else{const file=form.get('file');if(!(file instanceof File)||file.size<1||file.size>limit)return c.json({error:'invalid_file'},422);bytes=new Uint8Array(await file.arrayBuffer());}
-  try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./template-fields.ts').TemplateField[]);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
-  try{assertEditorSigningFields(fields as import('./template-fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
+  try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./fields.ts').TemplateField[]);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
+  try{assertEditorSigningFields(fields as import('./fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
   const id=crypto.randomUUID(),key=`templates/${id}/source.pdf`;const stored=await c.env.ARTIFACTS.put(key,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/pdf'}});if(!stored)return c.json({error:'storage_conflict'},503);
   // The template row first: nothing references it and its id is returned only after the commit
   // point, a compare-and-set that records it as this page's result while the page is still unsaved

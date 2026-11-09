@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import { finalizeLocalTestEvidence } from './local-test-evidence.ts';
+import { finalizeLocalTestEvidence } from './seal/local.ts';
 
 const hash = async (bytes: Uint8Array | ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes instanceof Uint8Array ? Uint8Array.from(bytes) : bytes)), n=>n.toString(16).padStart(2,'0')).join('');
 

@@ -14,7 +14,7 @@ documents. Use synthetic documents and identities only, and do not deploy or cha
 without authorization.
 
 Related documents: [WORKER-MODE.md](WORKER-MODE.md) (configuration, dev and prod, deployment),
-[DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) (migrations, first credentials, stop and rollback),
+[DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) (migrations, management credentials, stop and rollback),
 [CI.md](CI.md) (the workflow), [PROGRESS.md](PROGRESS.md) (history).
 
 ## Architecture
@@ -22,7 +22,7 @@ Related documents: [WORKER-MODE.md](WORKER-MODE.md) (configuration, dev and prod
 - **One Worker**, `src/worker.ts` (Hono). It serves the management API, the signing API, the editor
   API, the recipient signing page (`/sign`), the editor page (`/editor/page/:id`), a demo page
   (`/demo`) and the built page assets (`dist-ui`, through the `ASSETS` binding). Signing routes are
-  in `src/local-signing-routes.ts`, editor routes in `src/editor-routes.ts`.
+  in `src/signing-routes.ts`, editor routes in `src/editor-routes.ts`.
 - **Storage**: D1 (`DB`) holds every record (14 tables, below); R2 (`ARTIFACTS`) holds PDFs,
   rendered field images, seals and delivery PDFs. Only dev binds a second bucket, the test mailbox
   (`TEST_MAIL`).
@@ -40,7 +40,12 @@ Related documents: [WORKER-MODE.md](WORKER-MODE.md) (configuration, dev and prod
   There is no endpoint to request any of these steps.
 - **Pages** (`ui/`, built by Vite into `dist-ui`): the recipient page (`index.html`,
   `RecipientPage.ts`), the field editor (`editor.html`, `FieldEditor.ts`) and the demo
-  (`demo.html`, `DemoPage.ts`).
+  (`demo.html`, `DemoPage.ts`). Both the recipient page and the editor draw PDFs with `ui/pdf.ts`.
+- **Code layout** (`src/`): placed fields in `fields.ts` (validation, PDF checks, capture at
+  signing) and `field-render.ts` (field images, geometry, preview receipts, the renderer table and
+  the appended signature page), with the bitmap font atlases in `fonts/`; the seals in `seal/`
+  (`evidence.ts`, `local.ts`, `managed.ts`, `kms.ts`, `tsa.ts`, `config.ts`; see "Evidence, hash
+  chain and seals"); the emailed code in `otp.ts`.
 
 ## The signing lifecycle
 
@@ -106,7 +111,7 @@ the image and its geometry. The sign request sends back the receipts and the dat
 (`signature_does_not_fit`, `title_does_not_fit` or `invalid_preview`). Clients never send images.
 The receipts show what the server rendered, not that a person looked at it.
 
-A signature records each field's renderer name and atlas hash (`src/field-renderers.ts`);
+A signature records each field's renderer name and atlas hash (`src/field-render.ts`);
 rendering and every later re-verification fail closed if the running renderer differs.
 
 ### Signing for a company, deadlines and certificates
@@ -284,7 +289,7 @@ drawn value, renderer and image hash. The rendered PDF's hash is recorded on the
 rendered. Rendering uses only the saved row and the saved images, verifying their hashes, the event
 hash and the input PDF before drawing.
 
-At sealing, `buildEvidenceManifest` (`src/local-test-evidence.ts`) checks the whole chain: the D0
+At sealing, `buildEvidenceManifest` (`src/seal/evidence.ts`) checks the whole chain: the D0
 hash, every signature's sequence, link, input and event hash, every rendered PDF rendered again
 byte for byte, and every stored file's hash. It then builds the manifest
 (`esign-evidence-manifest-v1`) with each signature's facts and rendering. The same checks run
@@ -294,18 +299,18 @@ again on every certificate and delivery PDF read, so a changed record, image or 
 | --- | --- | --- |
 | Used | dev without `KMS_KEY_ARN` (locally) | whenever `KMS_KEY_ARN` is set; prod allows nothing else |
 | Covers | The manifest | The manifest and the audit trail up to sealing (`esign-sealed-evidence-v2`); later events are listed as recorded after sealing |
-| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An AWS KMS ECDSA P-256 signature over a SHA-256 digest of a domain-separated message, verified against the pinned `KMS_PUBLIC_KEY`; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, signer and policy pinned in `src/tsa-trust.ts` and within five minutes of the Worker's clock |
+| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An AWS KMS ECDSA P-256 signature over a SHA-256 digest of a domain-separated message, verified against the pinned `KMS_PUBLIC_KEY`; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, signer and policy pinned in `src/seal/tsa.ts` and within five minutes of the Worker's clock |
 | Stored | `envelopes/<id>/local-test-evidence.json` | `envelopes/<id>/managed-evidence.json`, made once; a retry reuses it |
 | Verified | Recomputed with the current key on each read, so changing the key breaks old seals | Signature and timestamp checked on each read, as of the timestamp's time; earlier keys stay trusted through `KMS_TRUSTED_KEY_SHA256` |
 | Certificate | `mode: LOCAL TEST ONLY` | `mode: KMS_TSA`; records a `COMPLETED` audit event |
 
-The managed seal's code: `src/managed-seal.ts`, `src/managed-evidence.ts`, `src/seal-config.ts`,
-`src/aws-kms-sign-provider.ts` (the KMS `Sign` call, converting its DER signature with
-`src/p256-der-signature.ts`), `src/worker-kms-evidence.ts` (the signed message and local
-verification), `src/aws-sts-credentials.ts` (the Worker holds an IAM user key that may only assume
-one role, and that role may only sign with this key), `src/worker-tsa-transport.ts` (the RFC 3161
-query) and `src/worker-rfc3161-verifier.ts` (the response check). Revocation of the TSA
-certificates is not checked, and the certificate says so.
+The seals' code is in `src/seal/`: `evidence.ts` (the manifest and the seal commit), `local.ts`
+(the local test seal), `managed.ts` (the managed seal and its envelope flow), `config.ts` (which seal
+is configured), `kms.ts` (the signed message and local verification, the KMS `Sign` call and the
+conversion of its DER signature, and the assumed-role credentials: the Worker holds an IAM user key
+that may only assume one role, and that role may only sign with this key) and `tsa.ts` (the RFC 3161
+query, the response check and the pinned DigiCert trust). Revocation of the TSA certificates is not
+checked, and the certificate says so.
 
 **Audit trail** (`src/audit.ts`): the signing link issued, the page opened, each code sent, the
 code verified, the document fetched, pages viewed (the page posts `POST /v1/signing/page-views`
@@ -416,21 +421,23 @@ Node 24 and `jq`. These commands use only local Wrangler resources:
 ```sh
 npm ci
 npm run db:migrate:local
-npm run db:seed:local             # one synthetic tenant and management key
+# One tenant, `local`, with a new management key in .local-key (ignored by git, never overwritten).
+node scripts/provision-tenant.ts --tenant local --console-origin http://localhost:3000 --key-file .local-key --local
 cp -n .dev.vars.example .dev.vars # synthetic OTP_KEY, TEST_SEAL_KEY and SIGNING_PAGE_ORIGINS
 npx vite build                    # dist-ui, for /sign, /demo and the editor
 npm run dev                       # terminal 1: Worker on 127.0.0.1:8787
 npm run dev:ui                    # terminal 2 (optional): page development on 127.0.0.1:5173
 ```
 
-The seed's synthetic management key is `local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz`; use
-it only locally. To try the whole flow in a browser, open `http://127.0.0.1:8787/demo` and paste
-the key (placing fields in the editor also needs the Worker's origin in the tenant's
-`editor_origins_json`; see WORKER-MODE.md). With the API:
+`provision-tenant.ts` refuses to overwrite an existing `.local-key`; to start over, delete
+`.wrangler/state` and `.local-key`. Use the key only locally. To try the whole flow in a browser,
+open `http://127.0.0.1:8787/demo` and paste the key from `.local-key` (placing fields in the editor
+also needs the Worker's origin in the tenant's `editor_origins_json`; see WORKER-MODE.md). With the
+API:
 
 ```sh
 node --input-type=module -e "import {PDFDocument} from 'pdf-lib';import{writeFile}from 'node:fs/promises';const p=await PDFDocument.create();p.addPage();await writeFile('/tmp/esign-sample.pdf',await p.save())"
-KEY=local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz
+KEY=$(cat .local-key)
 API=http://127.0.0.1:8787
 TPL=$(curl -fsS -H "Authorization: Bearer $KEY" -F file=@/tmp/esign-sample.pdf -F 'roles=["ana","marcus"]' "$API/v1/templates" | jq -r .id)
 ENV=$(curl -fsS -X POST "$API/v1/envelopes" -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -H 'Idempotency-Key: sample-1' -d "{\"templateId\":\"$TPL\",\"recipients\":[{\"role\":\"ana\",\"name\":\"Ana\",\"email\":\"ana@example.com\"},{\"role\":\"marcus\",\"name\":\"Marcus\",\"email\":\"marcus@example.com\"}]}" | jq -r .id)

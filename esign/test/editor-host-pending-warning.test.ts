@@ -4,7 +4,7 @@ import {build} from 'esbuild';
 import vm from 'node:vm';
 
 test('abandoned pending save warning survives repeated editor opens and status checks',async()=>{
- const result=await build({entryPoints:['ui/editor-host-main.ts'],bundle:true,platform:'browser',format:'iife',write:false});
+ const result=await build({entryPoints:['test/fixtures/editor-host-main.ts'],bundle:true,platform:'browser',format:'iife',write:false});
  const elements=new Map<string,any>();
  for(const id of ['editor','status','roles','source','file','synthetic-confirmation','continue','open','check'])elements.set(id,{value:'',checked:false,disabled:false,files:[],textContent:'',handlers:{},addEventListener(name:string,fn:unknown){this.handlers[name]=fn;},removeAttribute(){}});
  elements.get('roles').value='Signer';elements.get('source').value='template';elements.get('synthetic-confirmation').checked=true;

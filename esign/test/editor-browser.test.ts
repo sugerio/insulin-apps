@@ -11,8 +11,8 @@ import {once} from 'node:events';
 import {build,createServer as createViteServer} from 'vite';
 import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
-import {signatureGeometry} from '../src/positioned-signature-geometry.ts';
-import {renderTypedSignature} from '../src/typed-signature-image.ts';
+import {signatureGeometry} from '../src/field-render.ts';
+import {renderTypedSignature} from '../src/field-render.ts';
 import app from '../src/worker.ts';
 import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 import {signedPdf} from './helpers/signed-pdf.ts';
@@ -27,7 +27,9 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
  const vite=await createViteServer({configFile:false,root:resolve('ui'),appType:'spa',server:{middlewareMode:true,hmr:false}});
  let browser:ReturnType<typeof spawn>|undefined,ws:WebSocket|undefined,proxy:ReturnType<typeof createServer>|undefined;
  try{
-  await build({configFile:false,root:resolve('ui'),logLevel:'silent',build:{outDir:output,rollupOptions:{input:{editor:resolve('ui/editor.html'),host:resolve('ui/editor-host.html'),recipient:resolve('ui/index.html')}}}});
+  await build({configFile:false,root:resolve('ui'),logLevel:'silent',build:{outDir:output,rollupOptions:{input:{editor:resolve('ui/editor.html'),recipient:resolve('ui/index.html')}}}});
+  // The test host page that embeds the editor is a fixture, built next to the pages it embeds.
+  await build({configFile:false,root:resolve('test/fixtures'),logLevel:'silent',build:{outDir:output,emptyOutDir:false,rollupOptions:{input:{host:resolve('test/fixtures/editor-host.html')}}}});
   const db=await mf.getD1Database('DB');for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
   const key='local-test-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants (id) VALUES ('tenant')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?, 'tenant')").bind(digest).run();await setEditorOrigins(db,'tenant',['http://127.0.0.1:5173']);
@@ -288,7 +290,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   assert.equal(await finalizeEnvelopeStep(env,'tenant',envelope.id),'finalized');const finalBytes=new Uint8Array(await signedPdf(env.DB,env.ARTIFACTS,envelope.id));
   // Render both PDFs with the page's own renderer, loaded from the UI source on the Vite origin.
   await call('Page.navigate',{url:'http://127.0.0.1:5175/'});await wait(()=>evaluate("document.readyState==='complete'"),'renderer origin');
-  const renderAsset='renderPdf.ts';
+  const renderAsset='pdf.ts';
   const metrics=await evaluate(`(async()=>{const {renderPdf}=await import('/${renderAsset}'),decode=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)),make=async b=>{const d=document.createElement('div');await renderPdf(new Blob([decode(b)],{type:'application/pdf'}),d,new AbortController().signal);return d.querySelector('canvas');},a=await make(${JSON.stringify(varied64)}),b=await make(${JSON.stringify(Buffer.from(finalBytes).toString('base64'))}),base=a.getContext('2d',{willReadFrequently:true}).getImageData(0,0,a.width,a.height).data,out=b.getContext('2d',{willReadFrequently:true}).getImageData(0,0,b.width,b.height).data,fields=${JSON.stringify(savedFields)};let originalChanged=0;for(let y=0;y<${visualEvidence.bottom}/800.63*a.height+2;y++)for(let x=0;x<a.width;x++){const k=(y*a.width+x)*4;if(base[k]<150&&base[k+1]<150&&base[k+2]<150&&Math.max(Math.abs(base[k]-out[k]),Math.abs(base[k+1]-out[k+1]),Math.abs(base[k+2]-out[k+2]))>40)originalChanged++;}const metrics=fields.map(f=>{const r=f.rect;let left=Infinity,top=Infinity,right=-1,bottom=-1,count=0;for(let y=Math.floor(r.y*a.height);y<Math.ceil((r.y+r.height)*a.height);y++)for(let x=Math.floor(r.x*a.width);x<Math.ceil((r.x+r.width)*a.width);x++){const k=(y*a.width+x)*4;if(Math.max(Math.abs(base[k]-out[k]),Math.abs(base[k+1]-out[k+1]),Math.abs(base[k+2]-out[k+2]))>40&&out[k]<120&&out[k+1]<120&&out[k+2]<120){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);count++;}}return {id:f.id,count,left:left/a.width*600.37,right:right/a.width*600.37,top:top/a.height*800.63,bottom:bottom/a.height*800.63};});return {metrics,originalChanged};})()`);
   assert.equal(metrics.originalChanged,0,'final PDF must not alter visible original text ink');for(const m of metrics.metrics){assert.ok(m.count>8&&m.top>visualEvidence.bottom,`final PDF ink below original: ${JSON.stringify(m)}`);for(const p of observed[m.id])for(const side of ['left','top','right','bottom'] as const)assert.ok(Math.abs(m[side]-p[side])<4,`preview and final PDF visible ${side}: ${JSON.stringify({m,p})}`);}
   console.log('synthetic end-to-end ink evidence',JSON.stringify(metrics.metrics));

@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
-import {strictPdfOptions} from '../ui/pdfOptions.ts';
-import {renderPdfDocument} from '../ui/renderPdfDocument.ts';
+import {strictPdfOptions} from '../ui/pdf.ts';
+import {renderPdfDocument} from '../ui/pdf.ts';
 import {fakePreviewNode,syntheticInlineImagePdf} from './helpers/pdf-fixture.ts';
 
 test('actual PDF.js rejects a damaged inline image while rendering',async()=>{

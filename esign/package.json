@@ -13,7 +13,6 @@
     "db:migrate:local": "wrangler d1 migrations apply esign-local --local",
     "build": "vite build && wrangler deploy --dry-run --outdir dist",
     "dev:ui": "vite",
-    "db:seed:local": "wrangler d1 execute esign-local --local --file scripts/seed-local.sql",
     "deploy:dev": "npm run build && node scripts/deploy.ts --target dev --bundle dist"
   },
   "keywords": [],

@@ -1,11 +1,8 @@
 import { PDFDocument } from 'pdf-lib';
 import { RECIPIENT_SESSION_FROM } from './access.ts';
 import { canonicalJson } from './canonical-json.ts';
-import { fieldImageKey, fieldRenderer } from './field-renderers.ts';
-import { signaturePreviewHash } from './positioned-signature-preview.ts';
-import { validatePositionedPdf, validatePositionedPlacement } from './positioned-template.ts';
-import { capturePositionedV3, InvalidPositionedV3Input } from './positioned-v3-snapshot.ts';
-import { assertRenderableRecipientNames } from './recipient-name.ts';
+import { assertRenderableRecipientNames, fieldImageKey, fieldRenderer, signaturePreviewHash } from './field-render.ts';
+import { captureFields, InvalidFieldInput, validateFieldPlacement, validateFieldsPdf } from './fields.ts';
 import { processSignature } from './signature-processing.ts';
 import {
   APPENDED_PAGE_RENDERER, SIGNATURE_PAGE_SLOTS, artifactObjectKey, digestHex, signatureEventHash, verifySignatureRecord,
@@ -138,15 +135,15 @@ async function appendedPageRender(db: D1Database, signer: Signer, pdf: PDFDocume
 
 /** A document with placed fields: each of the signer's fields, rendered now and stored before the record. */
 async function fieldsRender(bucket: R2Bucket, signer: Signer, pdf: PDFDocument, prior: VerifiedSignature | null, signatureId: string, cmd: SignCommand): Promise<FieldsRender> {
-  validatePositionedPdf(pdf);
+  validateFieldsPdf(pdf);
   const roles: unknown = JSON.parse(signer.roles_json);
   if (!Array.isArray(roles) || roles.some(role => typeof role !== 'string')) throw new Error('Invalid roles');
-  const draft = capturePositionedV3(JSON.parse(signer.fields_json), roles, pdf.getPageCount(), signer.role, cmd.now, cmd.values);
+  const draft = captureFields(JSON.parse(signer.fields_json), roles, pdf.getPageCount(), signer.role, cmd.now, cmd.values);
   // Every signer signs against the same placed fields.
   if (prior && (prior.render.kind !== 'fields' || canonicalJson(prior.render.template) !== canonicalJson(draft.templateFields))) throw new Error('Template snapshot changed');
-  validatePositionedPlacement(pdf, draft.templateFields);
+  validateFieldPlacement(pdf, draft.templateFields);
   for (const [previews, type] of [[cmd.signaturePreviews, 'Signature'], [cmd.textPreviews, 'Title'], [cmd.datePreviews, 'Date signed']] as const) {
-    if (isObject(previews) && Object.keys(previews).some(id => !draft.fields.some(f => f.id === id && f.type === type))) throw new InvalidPositionedV3Input('Unexpected preview');
+    if (isObject(previews) && Object.keys(previews).some(id => !draft.fields.some(f => f.id === id && f.type === type))) throw new InvalidFieldInput('Unexpected preview');
   }
   const fields: RenderedField[] = [], images: { key: string; image: Uint8Array }[] = [];
   for (const field of draft.fields) {
@@ -154,7 +151,7 @@ async function fieldsRender(bucket: R2Bucket, signer: Signer, pdf: PDFDocument, 
     if (field.type === 'Date signed') {
       // The date is the server's (UTC); a page that showed another date must refresh its preview.
       const shown = isObject(cmd.datePreviews) ? cmd.datePreviews[field.id] : undefined;
-      if (typeof shown !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(shown)) throw new InvalidPositionedV3Input('Missing date preview');
+      if (typeof shown !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(shown)) throw new InvalidFieldInput('Missing date preview');
       if (shown !== field.text) throw new DateChanged('The date changed');
     }
     const image = await renderer.render(field.text), geometry = renderer.geometry(page, placed, image), imageSha256 = await digestHex(image);

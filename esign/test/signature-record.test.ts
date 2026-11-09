@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { unstable_splitSqlQuery } from 'wrangler';
 import { PDFDocument } from 'pdf-lib';
-import * as auth from '../src/page-authorization.ts';
+import * as auth from '../src/otp.ts';
 const signing = await import('../src/signature-record.ts').catch(() => ({}));
 
 test('signature atomically requires persisted verified session, consent and the current artifact', async () => {

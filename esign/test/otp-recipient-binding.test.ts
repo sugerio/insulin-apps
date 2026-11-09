@@ -4,7 +4,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
-import {issueRecipientCode,exchangeRecipientCode,verifyRecipientOtp,sendRecipientOtp} from '../src/page-authorization.ts';
+import {issueRecipientCode,exchangeRecipientCode,verifyRecipientOtp,sendRecipientOtp} from '../src/otp.ts';
 
 /** Recipient sessions marked as having entered the emailed code. */
 const verifiedSessions=async(db:D1Database)=>(await db.prepare('SELECT COUNT(*) AS n FROM access_sessions WHERE otp_verified_at IS NOT NULL').first<{n:number}>())!.n;

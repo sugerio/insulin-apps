@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { p256DerToP1363 } from '../src/p256-der-signature.ts';
+import { p256DerToP1363 } from '../src/seal/kms.ts';
 
 const der = (r: number[], s: number[]) => Uint8Array.from([0x30, r.length + s.length + 4, 2, r.length, ...r, 2, s.length, ...s]);
 const order = Array.from(Buffer.from('ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551', 'hex'));

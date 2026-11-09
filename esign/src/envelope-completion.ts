@@ -1,11 +1,11 @@
 import { RECIPIENT_SESSION_FROM } from './access.ts';
 import { advanceStatements, processSignature } from './signature-processing.ts';
-import { finalizeLocalTestEvidence } from './local-test-evidence.ts';
-import { finalizeManagedEvidence, managedDelivery } from './managed-evidence.ts';
+import { finalizeLocalTestEvidence } from './seal/local.ts';
+import { finalizeManagedEvidence, managedDelivery } from './seal/managed.ts';
 import { envelopesOwingCopies, sendSignedCopies } from './signed-copies.ts';
 import { mailerFor, type MailEnv } from './otp-mail-sink.ts';
 import { testSealKey, type EnvironmentEnv } from './environment.ts';
-import { managedEvidenceFromEnv, type SealEnv } from './seal-config.ts';
+import { managedEvidenceFromEnv, type SealEnv } from './seal/config.ts';
 
 /**
  * Finishing envelopes: rendering each accepted signature's PDF (signature-processing.ts), then

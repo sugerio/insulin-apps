@@ -7,9 +7,9 @@ import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { unstable_splitSqlQuery } from 'wrangler';
 import app from '../src/worker.ts';
-import { finalizeManagedEvidence, verifyManagedEvidence, managedDelivery, managedEvidenceKey, type ManagedEvidenceConfig } from '../src/managed-evidence.ts';
+import { finalizeManagedEvidence, verifyManagedEvidence, managedDelivery, managedEvidenceKey, type ManagedEvidenceConfig } from '../src/seal/managed.ts';
 import { deliveryPdf } from '../src/delivery-pdf.ts';
-import { evidenceMessage } from '../src/worker-kms-evidence.ts';
+import { evidenceMessage } from '../src/seal/kms.ts';
 import { startOpensslTsa } from './helpers/openssl-tsa.ts';
 import {processEnvelopeStep} from '../src/envelope-completion.ts';
 

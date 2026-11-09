@@ -4,13 +4,6 @@ import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
 const editor = await import('../ui/FieldEditor.ts').catch(() => ({}));
 
-test('repeated role parameters supply initial dynamic roles', () => {
-  assert.equal(typeof editor.rolesFromSearch, 'function', 'role configuration is not implemented');
-  assert.deepEqual(editor.rolesFromSearch('?role=Partner&role=Seller'), ['Partner','Seller']);
-  assert.deepEqual(editor.rolesFromSearch('?role=%20Partner%20&role=partner&role='), ['Partner']);
-  assert.deepEqual(editor.rolesFromSearch(''), ['First signer','Second signer']);
-});
-
 test('host roles are a labeled selectable list without role creation controls', async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   let renderer:any;

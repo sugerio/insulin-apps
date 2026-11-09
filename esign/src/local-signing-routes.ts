@@ -44,7 +44,6 @@ const tokenFrom = (header: string | undefined) => /^Bearer ([a-f0-9]{64})$/.exec
 const requestOrigin = (c: import('hono').Context<any>) => c.req.header('origin') ?? (c.req.header('sec-fetch-site') === 'same-origin' ? new URL(c.req.url).origin : '');
 const sha256 = async (bytes: ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n=>n.toString(16).padStart(2,'0')).join('');
 
-/** Local experiment only; no external mail adapter and no production authorization claim. */
 /** The most pages a signer's views are recorded for (the PDF limit). */
 const MAX_VIEWED_PAGES = 100;
 
@@ -120,7 +119,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>): void {
           return;
         }
         if (mailer ? !isValidOtpEmailAddress(to) : !/^[^@\s]+@(?:example\.com|[a-z0-9.-]+\.test)$/i.test(to)) throw new Error('Synthetic test email required');
-        const session=await c.env.DB.prepare('SELECT tenant_id FROM recipient_page_sessions WHERE token_hash=?').bind(await sha256(new TextEncoder().encode(tokenFrom(c.req.header('authorization'))).buffer)).first<{tenant_id:string}>();
+        const session=await c.env.DB.prepare("SELECT tenant_id FROM access_sessions WHERE scope='recipient' AND token_hash=?").bind(await sha256(new TextEncoder().encode(tokenFrom(c.req.header('authorization'))).buffer)).first<{tenant_id:string}>();
         if (!session) throw new Error('Session unavailable');
         const stored=await c.env.TEST_MAIL!.put(`test-mail/${messageId}.json`,JSON.stringify({to,otp,tenantId:session.tenant_id}),{onlyIf:{etagDoesNotMatch:'*'}});
         if (!stored) throw new Error('Test mailbox collision');
@@ -158,7 +157,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>): void {
   /** Whether this page session's recipient entered the emailed code. */
   async function sessionVerified(c: import('hono').Context<Env>, task: string): Promise<boolean> {
     const token=tokenFrom(c.req.header('authorization'));
-    return !!await c.env.DB.prepare('SELECT 1 FROM recipient_otp_verifications v JOIN tasks t ON t.id=v.task_id WHERE v.task_id=? AND v.session_hash=? AND v.recipient_email=t.recipient_email COLLATE BINARY').bind(task,await sha256(new TextEncoder().encode(token).buffer)).first();
+    return !!await c.env.DB.prepare("SELECT 1 FROM access_sessions WHERE scope='recipient' AND subject_id=? AND token_hash=? AND otp_verified_at IS NOT NULL").bind(task,await sha256(new TextEncoder().encode(token).buffer)).first();
   }
   /**
    * The document the session's recipient signs now. Reading it needs only the page session (the

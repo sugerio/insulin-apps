@@ -2,7 +2,8 @@
  * Preparing an envelope when it is created (POST /v1/envelopes): its id is derived from the
  * creation request, and the template's source is copied once to the envelope's own initial
  * document (D0). A retried creation (same tenant, same Idempotency-Key) gets the same id and so
- * finds and reuses that copy instead of making a second one.
+ * finds the envelope (src/worker.ts compares its request_sha256) or, after a failed attempt,
+ * reuses that copy instead of making a second one.
  */
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (n) => n.toString(16).padStart(2, '0')).join('');

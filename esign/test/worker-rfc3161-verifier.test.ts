@@ -5,12 +5,12 @@ import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash as sha} from 'node:crypto';
-import {syntheticTimestampQuery} from '../src/worker-tsa-transport.ts';
-const candidate=await import('../src/worker-rfc3161-verifier.ts').catch(()=>({}));
+import {timestampQuery} from '../src/worker-tsa-transport.ts';
+const verifier=await import('../src/worker-rfc3161-verifier.ts').catch(()=>({}));
 const run=(args:string[],cwd:string)=>execFileSync('openssl',args,{cwd,stdio:'pipe'});
 
-test('Worker RFC3161 candidate binds synthetic response to imprint, nonce, signer, root and explicit policy',async()=>{
- assert.equal(typeof candidate.verifyRfc3161Candidate,'function');
+test('Worker RFC3161 verifier binds synthetic response to imprint, nonce, signer, root and explicit policy',async()=>{
+ assert.equal(typeof verifier.verifyRfc3161Timestamp,'function');
  const dir=await mkdtemp(join(tmpdir(),'esign-worker-tsa-'));
  try{
   run(['req','-x509','-newkey','rsa:2048','-nodes','-keyout','root.key','-out','root.pem','-subj','/CN=Synthetic Root','-days','2','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign'],dir);
@@ -19,12 +19,12 @@ test('Worker RFC3161 candidate binds synthetic response to imprint, nonce, signe
   run(['x509','-req','-in','tsa.csr','-CA','root.pem','-CAkey','root.key','-set_serial','1','-days','1','-extfile','extensions.cnf','-out','tsa.pem'],dir);
   run(['x509','-in','root.pem','-outform','DER','-out','root.der'],dir);
   await writeFile(join(dir,'serial'),'01\n');await writeFile(join(dir,'tsa.cnf'),'[tsa]\ndefault_tsa=server\n[server]\nserial=serial\nsigner_cert=tsa.pem\nsigner_key=tsa.key\nsigner_digest=sha256\ndefault_policy=1.2.3.4\ndigests=sha256\naccuracy=secs:1\nordering=no\ntsa_name=yes\ness_cert_id_chain=no\ness_cert_id_alg=sha256\n');
-  const input=Buffer.from('synthetic signature'),nonce=Buffer.from('0102030405060708090a0b0c0d0e0f10','hex');await writeFile(join(dir,'query'),Buffer.from(syntheticTimestampQuery(sha('sha256').update(input).digest(),nonce)));await new Promise(resolve=>setTimeout(resolve,2100));run(['ts','-reply','-config','tsa.cnf','-queryfile','query','-out','response'],dir);
+  const input=Buffer.from('synthetic signature'),nonce=Buffer.from('0102030405060708090a0b0c0d0e0f10','hex');await writeFile(join(dir,'query'),Buffer.from(timestampQuery(sha('sha256').update(input).digest(),nonce)));await new Promise(resolve=>setTimeout(resolve,2100));run(['ts','-reply','-config','tsa.cnf','-queryfile','query','-out','response'],dir);
   const response=await readFile(join(dir,'response')),root=await readFile(join(dir,'root.der'));
   const {X509Certificate,createHash}=await import('node:crypto');const signerCert=new X509Certificate(await readFile(join(dir,'tsa.pem')));const signerPin=createHash('sha256').update(signerCert.publicKey.export({format:'der',type:'spki'})).digest('hex');
   const policy={roots:[root],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:[signerPin],checkRevocation:async()=>true};
-  const verify=(bytes:Uint8Array=response,p=policy,data:Uint8Array=input,n:Uint8Array=nonce)=>candidate.verifyRfc3161Candidate!(bytes,data,n,p);
-  const result=await verify();assert.equal(result.status,'VERIFIED_TEST_CANDIDATE');
+  const verify=(bytes:Uint8Array=response,p=policy,data:Uint8Array=input,n:Uint8Array=nonce)=>verifier.verifyRfc3161Timestamp!(bytes,data,n,p);
+  const result=await verify();assert.equal(result.status,'VERIFIED');
   await assert.rejects(()=>verify(response,{...policy,now:result.time,maxFutureSkewMs:0}),'TSA accuracy must fit the allowed time window');
   await writeFile(join(dir,'no-usage.cnf'),'basicConstraints=critical,CA:FALSE\nextendedKeyUsage=critical,timeStamping\n');run(['x509','-req','-in','tsa.csr','-CA','root.pem','-CAkey','root.key','-set_serial','2','-days','1','-extfile','no-usage.cnf','-out','tsa-no-usage.pem'],dir);
   const tsaConfig=await readFile(join(dir,'tsa.cnf'),'utf8');await writeFile(join(dir,'tsa-no-usage.cnf'),tsaConfig.replace('signer_cert=tsa.pem','signer_cert=tsa-no-usage.pem'));await new Promise(resolve=>setTimeout(resolve,2100));run(['ts','-reply','-config','tsa-no-usage.cnf','-queryfile','query','-out','no-usage-response'],dir);
@@ -72,7 +72,7 @@ test('Worker RFC3161 candidate binds synthetic response to imprint, nonce, signe
   for(const name of ['intermediate-good','intermediate-bad','critical-root'])run(['ts','-reply','-config',`tsa-${name}.cnf`,'-queryfile','query','-out',`response-${name}`],dir);
   const goodIntermediate=await readFile(join(dir,'response-intermediate-good')),badIntermediate=await readFile(join(dir,'response-intermediate-bad')),badRoot=await readFile(join(dir,'response-critical-root')),criticalRoot=await readFile(join(dir,'critical-root.der'));
   let pathLength=0;const chainPolicy={...policy,now:Date.now(),checkRevocation:async(chain:Uint8Array[])=>{pathLength=chain.length;return true;}};
-  assert.equal((await verify(goodIntermediate,chainPolicy)).status,'VERIFIED_TEST_CANDIDATE');assert.equal(pathLength,3,'test must exercise an intermediate, not a direct root');
+  assert.equal((await verify(goodIntermediate,chainPolicy)).status,'VERIFIED');assert.equal(pathLength,3,'test must exercise an intermediate, not a direct root');
   // Re-sign a signer and an intermediate with duplicated non-critical extensions.
   // Use a harmless private OID so rejection cannot be explained by the existing KU/EKU checks.
   const {Certificate,Extension}=await import('pkijs');
@@ -104,9 +104,9 @@ test('Worker RFC3161 candidate binds synthetic response to imprint, nonce, signe
   pathLength=0;await assert.rejects(()=>verify(badRoot,{...chainPolicy,roots:[criticalRoot]}),/critical/i,'unknown critical root extension is rejected');assert.equal(pathLength,0,'invalid root must not reach revocation approval');
   const {build}=await import('esbuild'),{Miniflare}=await import('miniflare');
   const workerNegatives=[unknown,doubleDigest,wrongDigestType,unsorted,badIntermediate,badRoot,duplicateSigner,duplicateIntermediate].map(b=>Buffer.from(b).toString('base64'));
-  const source=`import {verifyRfc3161Candidate} from './src/worker-rfc3161-verifier.ts'; const dec=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)); export default {async fetch(){try{const policy={roots:[dec('${root.toString('base64')}')],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:['${signerPin}'],checkRevocation:async()=>true};const verify=(bytes,p=policy)=>verifyRfc3161Candidate(dec(bytes),dec('${input.toString('base64')}'),dec('${nonce.toString('base64')}'),p);const r=await verify('${response.toString('base64')}');const negatives=${JSON.stringify(workerNegatives)};let rejected=0;for(let i=0;i<negatives.length;i++){try{await verify(negatives[i],i===5?{...policy,roots:[dec('${criticalRoot.toString('base64')}')]}:policy);}catch{rejected++;}}return Response.json({status:r.status,rejected});}catch(e){return new Response(String(e),{status:500});}}}`;
+  const source=`import {verifyRfc3161Timestamp} from './src/worker-rfc3161-verifier.ts'; const dec=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)); export default {async fetch(){try{const policy={roots:[dec('${root.toString('base64')}')],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:['${signerPin}'],checkRevocation:async()=>true};const verify=(bytes,p=policy)=>verifyRfc3161Timestamp(dec(bytes),dec('${input.toString('base64')}'),dec('${nonce.toString('base64')}'),p);const r=await verify('${response.toString('base64')}');const negatives=${JSON.stringify(workerNegatives)};let rejected=0;for(let i=0;i<negatives.length;i++){try{await verify(negatives[i],i===5?{...policy,roots:[dec('${criticalRoot.toString('base64')}')]}:policy);}catch{rejected++;}}return Response.json({status:r.status,rejected});}catch(e){return new Response(String(e),{status:500});}}}`;
   const built=await build({stdin:{contents:source,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'browser'});const mf=new Miniflare({modules:true,script:built.outputFiles[0].text,compatibilityDate:'2026-01-01'});
-  try{const workerResponse=await mf.dispatchFetch('https://local.test/');const text=await workerResponse.text();assert.equal(workerResponse.status,200,text);assert.deepEqual(JSON.parse(text),{status:'VERIFIED_TEST_CANDIDATE',rejected:8});}finally{await mf.dispose();}
+  try{const workerResponse=await mf.dispatchFetch('https://local.test/');const text=await workerResponse.text();assert.equal(workerResponse.status,200,text);assert.deepEqual(JSON.parse(text),{status:'VERIFIED',rejected:8});}finally{await mf.dispose();}
   await assert.rejects(()=>verify(response,{...policy,checkRevocation:undefined} as any));
   await assert.rejects(()=>verify(response,{...policy,checkRevocation:async()=>false}));
   await assert.rejects(()=>verify(response,{...policy,roots:[]}));
@@ -131,10 +131,10 @@ test('a real DigiCert timestamp verifies against the pinned root, signer and pol
   const dir='test/fixtures/digicert-tsa-2026-11-06/';
   const [response,input,nonce]=await Promise.all(['response.der','input.bin','nonce.bin'].map(async f=>new Uint8Array(await readFile(dir+f))));
   const policy={roots:trust.digicertRoots(),now:Date.parse('2026-11-06T16:05:43Z'),maxAgeMs:300000,maxFutureSkewMs:300000,allowedPolicies:[trust.DIGICERT_TSA_POLICY],allowedSignerSpkiSha256:trust.DIGICERT_TSA_SIGNERS,missingAccuracyMs:trust.DIGICERT_MISSING_ACCURACY_MS,checkRevocation:async()=>true};
-  const result=await candidate.verifyRfc3161Candidate!(response,input,nonce,policy);
+  const result=await verifier.verifyRfc3161Timestamp!(response,input,nonce,policy);
   assert.equal(result.time,Date.parse('2026-11-06T16:05:43Z'));
-  await assert.rejects(()=>candidate.verifyRfc3161Candidate!(response,input,nonce,{...policy,missingAccuracyMs:undefined}),/accuracy/,'without missingAccuracyMs a token lacking accuracy is refused');
+  await assert.rejects(()=>verifier.verifyRfc3161Timestamp!(response,input,nonce,{...policy,missingAccuracyMs:undefined}),/accuracy/,'without missingAccuracyMs a token lacking accuracy is refused');
   const other=Uint8Array.from(input);other[0]^=1;
-  await assert.rejects(()=>candidate.verifyRfc3161Candidate!(response,other,nonce,policy),undefined,'another input');
-  await assert.rejects(()=>candidate.verifyRfc3161Candidate!(response,input,nonce,{...policy,allowedSignerSpkiSha256:['0'.repeat(64)]}),/Unauthorized TSA signer/);
+  await assert.rejects(()=>verifier.verifyRfc3161Timestamp!(response,other,nonce,policy),undefined,'another input');
+  await assert.rejects(()=>verifier.verifyRfc3161Timestamp!(response,input,nonce,{...policy,allowedSignerSpkiSha256:['0'.repeat(64)]}),/Unauthorized TSA signer/);
 });

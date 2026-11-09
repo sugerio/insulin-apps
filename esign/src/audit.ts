@@ -3,6 +3,7 @@
  * triggers refuse changes). The events up to completion are part of the managed seal
  * (managed-evidence.ts); later ones, such as the copies sent, are recorded after it.
  */
+import { RECIPIENT_SESSION_FROM } from './access.ts';
 
 export const AUDIT = {
   /** A signing link was issued for a recipient (by the host's backend). */
@@ -59,6 +60,6 @@ export async function auditTrail(db: D1Database, envelopeId: string): Promise<Au
 export async function sessionContext(db: D1Database, token: string): Promise<{ tenantId: string; envelopeId: string; taskId: string } | null> {
   if (!/^[a-f0-9]{64}$/.test(token)) return null;
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))), b => b.toString(16).padStart(2, '0')).join('');
-  const row = await db.prepare('SELECT tenant_id,envelope_id,task_id FROM recipient_page_sessions WHERE token_hash=?').bind(hash).first<{ tenant_id: string; envelope_id: string; task_id: string }>();
+  const row = await db.prepare(`SELECT s.tenant_id,e.id AS envelope_id,t.id AS task_id FROM ${RECIPIENT_SESSION_FROM} WHERE s.scope='recipient' AND s.token_hash=?`).bind(hash).first<{ tenant_id: string; envelope_id: string; task_id: string }>();
   return row ? { tenantId: row.tenant_id, envelopeId: row.envelope_id, taskId: row.task_id } : null;
 }

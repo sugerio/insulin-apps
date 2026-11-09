@@ -32,10 +32,11 @@ export type SignatureFacts = {
   taskId: string;
   role: string;
   recipientName: string;
-  /** The address the one-time code was sent to and verified for. */
+  /** The task's email (immutable, migration 0027): the address the one-time code was sent to and verified for. */
   recipientEmail: string;
   /** SHA-256 of the recipient page session token the signer signed with. */
   sessionHash: string;
+  /** When that session entered the emailed code (access_sessions.otp_verified_at). */
   otpVerifiedAt: number;
   /** When the signer consented and the signature was accepted (epoch ms, server clock). */
   consentedAt: number;

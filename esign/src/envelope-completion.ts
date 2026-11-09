@@ -1,3 +1,4 @@
+import { RECIPIENT_SESSION_FROM } from './access.ts';
 import { advanceStatements, processSignature } from './signature-processing.ts';
 import { finalizeLocalTestEvidence } from './local-test-evidence.ts';
 import { finalizeManagedEvidence, managedDelivery } from './managed-evidence.ts';
@@ -99,7 +100,7 @@ async function sendCopies(env: CompletionEnv, tenantId: string, envelopeId: stri
 export async function completeEnvelopeOfSession(env: CompletionEnv, token: string): Promise<Completion> {
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
   const tokenHash=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
-  const session=await env.DB.prepare('SELECT envelope_id,tenant_id FROM recipient_page_sessions WHERE token_hash=?').bind(tokenHash).first<{envelope_id:string;tenant_id:string}>();
+  const session=await env.DB.prepare(`SELECT e.id AS envelope_id,s.tenant_id FROM ${RECIPIENT_SESSION_FROM} WHERE s.scope='recipient' AND s.token_hash=?`).bind(tokenHash).first<{envelope_id:string;tenant_id:string}>();
   if (!session) return 'failed';
   return completeEnvelope(env,session.tenant_id,session.envelope_id);
 }

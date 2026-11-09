@@ -7,6 +7,7 @@ import {build} from 'esbuild';
 import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import {unstable_splitSqlQuery} from 'wrangler';
+import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 test('original Worker editor preload and management contract in workerd with local signing disabled', {timeout:120000}, async()=>{
  const dir=await mkdtemp(join(tmpdir(),'esign-original-contract-'));
@@ -20,7 +21,7 @@ test('original Worker editor preload and management contract in workerd with loc
   const key='a'.repeat(64),hash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))).toString('hex');
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(hash).run();
-  await db.prepare("INSERT INTO editor_allowed_origins VALUES ('tenant','https://host.example.test')").run();
+  await setEditorOrigins(db,'tenant',['https://host.example.test']);
   const request=(path:string,init:RequestInit={})=>mf!.dispatchFetch('https://esign.example.test'+path,init as any);
   const auth={authorization:`Bearer ${key}`};
   assert.deepEqual(await (await request('/v1/me',{headers:auth})).json(),{tenantId:'tenant'});

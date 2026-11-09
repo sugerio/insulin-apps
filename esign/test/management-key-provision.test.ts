@@ -21,7 +21,7 @@ test('offline management key preparation is private and SQL provisions only once
   assert.equal(run().status,1); assert.equal(readFileSync(join(dir,'management-key'),'utf8'),token);
   const db=new DatabaseSync(':memory:');
   db.exec('CREATE TABLE tenants (id TEXT PRIMARY KEY NOT NULL); CREATE TABLE api_keys (key_hash TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES tenants(id), revoked_at INTEGER);');
-  assert.throws(()=>db.exec(sql)); db.exec("INSERT INTO tenants VALUES ('tenant_test')"); db.exec(sql);
+  assert.throws(()=>db.exec(sql)); db.exec("INSERT INTO tenants (id) VALUES ('tenant_test')"); db.exec(sql);
   assert.throws(()=>db.exec(sql)); db.exec('UPDATE api_keys SET revoked_at=1'); assert.throws(()=>db.exec(sql));
   assert.equal((db.prepare('SELECT count(*) AS n FROM api_keys').get() as {n:number}).n,1); db.close();
  } finally {rmSync(dir,{recursive:true,force:true});}

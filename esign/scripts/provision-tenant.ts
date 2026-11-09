@@ -1,6 +1,7 @@
 // Registers a tenant with the E-sign Worker: the tenant (typically the host's organization id),
 // a new management API key (only its SHA-256 is stored) and the host origins allowed to embed
-// the editor. The recipient signing page is the Worker's own, the same for every tenant.
+// the editor (merged into tenants.editor_origins_json). The recipient signing page is the
+// Worker's own, the same for every tenant.
 //
 //   node scripts/provision-tenant.ts --tenant <id> --console-origin <origin> [--console-origin ...]
 //     --key-file <path> (--local [--persist-to <dir>] | --remote --config <file>) [--dry-run]
@@ -14,23 +15,28 @@ import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {frameAncestors} from '../src/signing-page.ts';
+import {validEditorOrigin} from '../src/access.ts';
 
 export type ProvisionPlan = {tenantId:string;keyHash:string;consoleOrigins:string[]};
 
-const bareOrigin=(value:string)=>frameAncestors(value).length===1;
-
-/** Idempotent SQL; a second run with a new key adds that key next to the existing ones. */
+/**
+ * Idempotent SQL; a second run with a new key adds that key next to the existing ones. Each console
+ * origin is appended to the tenant's `editor_origins_json` unless the list already has it, so
+ * existing entries and their order are kept and nothing is duplicated (the column's CHECK keeps
+ * the list a JSON array). The key comes last, so a run that fails on an origin does not register it.
+ */
 export function provisioningSql(plan:ProvisionPlan):string {
   if(!/^[A-Za-z0-9_-]{1,64}$/.test(plan.tenantId))throw new Error('invalid tenant id');
   if(!/^[0-9a-f]{64}$/.test(plan.keyHash))throw new Error('invalid key hash');
-  if(!plan.consoleOrigins.length||!plan.consoleOrigins.every(bareOrigin))throw new Error('invalid console origin');
-  // Every value is validated above to contain no quote, so quoting is enough.
-  const q=(value:string)=>`'${value}'`;
+  if(!plan.consoleOrigins.length||!plan.consoleOrigins.every(validEditorOrigin))throw new Error('invalid console origin');
+  // Every value is validated above and holds no quote or backslash (validEditorOrigin allows only
+  // lowercase letters, digits and . - : / [ ]). Doubling quotes is a second guard.
+  const q=(value:string)=>`'${value.replaceAll("'","''")}'`;
+  const tenant=q(plan.tenantId);
   return [
-    `INSERT OR IGNORE INTO tenants (id) VALUES (${q(plan.tenantId)});`,
-    `INSERT OR IGNORE INTO api_keys (key_hash,tenant_id) VALUES (${q(plan.keyHash)},${q(plan.tenantId)});`,
-    ...plan.consoleOrigins.map(origin=>`INSERT OR IGNORE INTO editor_allowed_origins (tenant_id,origin) VALUES (${q(plan.tenantId)},${q(origin)});`),
+    `INSERT OR IGNORE INTO tenants (id) VALUES (${tenant});`,
+    ...[...new Set(plan.consoleOrigins)].map(origin=>`UPDATE tenants SET editor_origins_json=json_insert(editor_origins_json,'$[#]',${q(origin)}) WHERE id=${tenant} AND NOT EXISTS (SELECT 1 FROM json_each(tenants.editor_origins_json) WHERE type='text' AND value=${q(origin)});`),
+    `INSERT OR IGNORE INTO api_keys (key_hash,tenant_id) VALUES (${q(plan.keyHash)},${tenant});`,
   ].join('\n')+'\n';
 }
 

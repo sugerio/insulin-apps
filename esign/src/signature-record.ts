@@ -1,4 +1,5 @@
 import { PDFDocument } from 'pdf-lib';
+import { RECIPIENT_SESSION_FROM } from './access.ts';
 import { canonicalJson } from './canonical-json.ts';
 import { fieldImageKey, fieldRenderer } from './field-renderers.ts';
 import { signaturePreviewHash } from './positioned-signature-preview.ts';
@@ -41,11 +42,9 @@ const isObject = (value: unknown): value is Record<string, unknown> => !!value &
 export async function recordSignature(db: D1Database, bucket: R2Bucket, cmd: SignCommand): Promise<string> {
   if (cmd.consent !== true || !/^[a-f0-9]{64}$/.test(cmd.token) || !Number.isSafeInteger(cmd.now)) throw new Error('Invalid signing request');
   const sessionHash = await digestHex(cmd.token);
-  const signer = await db.prepare(`SELECT s.envelope_id,t.id AS task_id,t.role,t.recipient_name,t.recipient_email,v.verified_at,p.roles_json,p.fields_json
-    FROM recipient_page_sessions s JOIN tasks t ON t.id=s.task_id AND t.envelope_id=s.envelope_id
-    JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id
-    JOIN recipient_otp_verifications v ON v.task_id=t.id AND v.session_hash=s.token_hash AND v.recipient_email=t.recipient_email COLLATE BINARY
-    WHERE s.token_hash=?`).bind(sessionHash).first<Signer>();
+  const signer = await db.prepare(`SELECT e.id AS envelope_id,t.id AS task_id,t.role,t.recipient_name,t.recipient_email,s.otp_verified_at AS verified_at,p.roles_json,p.fields_json
+    FROM ${RECIPIENT_SESSION_FROM} JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id
+    WHERE s.scope='recipient' AND s.token_hash=? AND s.otp_verified_at IS NOT NULL`).bind(sessionHash).first<Signer>();
   if (!signer) throw new Error('Unverified session');
 
   // The chain so far: the new signature signs the latest one's rendered PDF, or the source.
@@ -81,9 +80,10 @@ export async function recordSignature(db: D1Database, bucket: R2Bucket, cmd: Sig
   const eventHash = await signatureEventHash({ previousHash, envelopeId: signer.envelope_id, sequence, inputSha256: cmd.artifactHash }, facts, render);
 
   // The commit point: one INSERT that adds the signature only while everything read above still
-  // holds (a single statement is atomic). The session, its verified code, the task's turn, the
-  // envelope IN_PROGRESS (so a void or an expiry cannot race it) and the template are as read,
-  // nobody signed in between, and the input is the current one. UNIQUE (task_id) and
+  // holds (a single statement is atomic). The session and when it entered the emailed code
+  // (otp_verified_at), the task's email and turn, the envelope IN_PROGRESS (so a void or an
+  // expiry cannot race it) and the template are as read, nobody signed in between, and the
+  // input is the current one. UNIQUE (task_id) and
   // UNIQUE (envelope_id, sequence) back this up. Images stored in R2 above are unreachable until
   // this row names them; a request that fails here leaves them as harmless orphans.
   const input = sequence === 1
@@ -98,11 +98,9 @@ export async function recordSignature(db: D1Database, bucket: R2Bucket, cmd: Sig
     : { sql: '', binds: [] };
   const [inserted] = await db.batch([
     db.prepare(`INSERT INTO signatures (id,envelope_id,task_id,sequence,status,input_artifact_id,input_sha256,previous_hash,event_hash,facts_json,render_json)
-      SELECT ?,e.id,t.id,?,'PENDING',?,?,?,?,?,? FROM recipient_page_sessions s
-      JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id
+      SELECT ?,e.id,t.id,?,'PENDING',?,?,?,?,?,? FROM ${RECIPIENT_SESSION_FROM}
       JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id
-      JOIN recipient_otp_verifications v ON v.task_id=t.id AND v.session_hash=s.token_hash AND v.recipient_email=t.recipient_email COLLATE BINARY
-      WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND v.verified_at=? AND v.verified_at<=? AND t.recipient_email=? COLLATE BINARY
+      WHERE s.scope='recipient' AND s.token_hash=? AND s.origin=? AND s.expires_at>? AND s.otp_verified_at=? AND s.otp_verified_at<=? AND t.recipient_email=? COLLATE BINARY
       AND e.id=? AND t.id=? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND t.role=? AND t.recipient_name=? AND p.roles_json=? AND p.fields_json=?
       AND COALESCE((SELECT MAX(sequence) FROM signatures WHERE envelope_id=e.id),0)=?
       AND (SELECT event_hash FROM signatures WHERE envelope_id=e.id ORDER BY sequence DESC LIMIT 1) IS ?
@@ -183,15 +181,13 @@ export async function retrySignature(db: D1Database, bucket: R2Bucket, cmd: Omit
   try {
     if (!/^[a-f0-9]{64}$/.test(cmd.token) || !Number.isSafeInteger(cmd.now)) return null;
     const sessionHash = await digestHex(cmd.token);
-    const found = await db.prepare(`SELECT g.*,t.role AS task_role,v.verified_at AS verified_at,v.recipient_email AS verified_email FROM recipient_page_sessions s
-      JOIN tasks t ON t.id=s.task_id AND t.envelope_id=s.envelope_id JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id
+    const found = await db.prepare(`SELECT g.*,t.role AS task_role,s.otp_verified_at AS verified_at,t.recipient_email AS task_email FROM ${RECIPIENT_SESSION_FROM}
       JOIN signatures g ON g.task_id=t.id AND g.envelope_id=t.envelope_id
-      JOIN recipient_otp_verifications v ON v.task_id=t.id AND v.session_hash=s.token_hash AND v.recipient_email=t.recipient_email COLLATE BINARY
-      WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND g.input_artifact_id=? AND g.input_sha256=?`)
-      .bind(sessionHash, cmd.origin, cmd.now, cmd.artifactId, cmd.artifactHash).first<SignatureRow & { task_role: string; verified_at: number; verified_email: string }>();
+      WHERE s.scope='recipient' AND s.token_hash=? AND s.origin=? AND s.expires_at>? AND s.otp_verified_at IS NOT NULL AND g.input_artifact_id=? AND g.input_sha256=?`)
+      .bind(sessionHash, cmd.origin, cmd.now, cmd.artifactId, cmd.artifactHash).first<SignatureRow & { task_role: string; verified_at: number; task_email: string }>();
     if (!found) return null;
     const { facts, render } = await verifySignatureRecord(found);
-    if (facts.sessionHash !== sessionHash || facts.role !== found.task_role || facts.otpVerifiedAt !== found.verified_at || facts.recipientEmail !== found.verified_email) return null;
+    if (facts.sessionHash !== sessionHash || facts.role !== found.task_role || facts.otpVerifiedAt !== found.verified_at || facts.recipientEmail !== found.task_email) return null;
     if (render.kind === 'appended-page') {
       if (cmd.values !== undefined) return null;
     } else {

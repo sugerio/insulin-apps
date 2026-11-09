@@ -6,13 +6,6 @@ const h=React.createElement;
 export type Field={id:string;type:string;role:string;page:number;required:boolean;rect:Rect};
 const types=['Signature','Date signed','Title'];
 const defaultRoles=['First signer','Second signer'];
-const MAX_ROLES=20;
-function cleanRoles(values:string[]):string[] {
-  const result:string[]=[];
-  for(const value of values){const name=value.trim();if(name && name.length<=64 && !result.some(role=>role.toLocaleLowerCase()===name.toLocaleLowerCase()))result.push(name);if(result.length===MAX_ROLES)break;}
-  return result.length?result:[...defaultRoles];
-}
-export function rolesFromSearch(search:string):string[] {return cleanRoles(new URLSearchParams(search).getAll('role'));}
 
 export type EditorSaveResult = {ok:true;templateId:string}|{ok:false;message:string};
 export type EditorHandle = { save:()=>Promise<EditorSaveResult> };

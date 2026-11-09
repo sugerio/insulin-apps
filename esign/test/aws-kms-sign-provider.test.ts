@@ -4,7 +4,7 @@ import { generateKeyPairSync, sign, createHash, createHmac, timingSafeEqual } fr
 import { build } from 'esbuild';
 import { Miniflare } from 'miniflare';
 import { createAwsKmsSignProvider } from '../src/aws-kms-sign-provider.ts';
-import { createKmsEvidenceCandidate } from '../src/worker-kms-evidence.ts';
+import { signKmsEvidence } from '../src/worker-kms-evidence.ts';
 import { TEMPORARY_KEY_ID } from './helpers/synthetic-aws.ts';
 
 const arn = 'arn:aws:kms:us-east-1:000000000000:key/11111111-1111-4111-8111-111111111111';
@@ -35,8 +35,8 @@ test('sends only bounded digest via injected signed AWS request and locally veri
     assert.deepEqual(Object.keys(body).sort(), ['KeyId', 'Message', 'MessageType', 'SigningAlgorithm']);
     return reply();
   }));
-  const candidate = await createKmsEvidenceCandidate(input, spki, provider);
-  assert.equal(candidate.signature.length, 64);
+  const result = await signKmsEvidence(input, spki, provider);
+  assert.equal(result.signature.length, 64);
   assert.equal(calls, 1);
 });
 
@@ -94,7 +94,7 @@ test('independently verifies fixed-time SigV4 and rejects tampering offline', as
     for (const changed of tampered) assert.equal(await verify(changed), false, 'tampered SigV4 request accepted');
     return reply();
   }), credentials: fixedCredentials });
-  await createKmsEvidenceCandidate(input, spki, provider);
+  await signKmsEvidence(input, spki, provider);
   assert.equal(calls, 1);
 });
 
@@ -106,7 +106,7 @@ test('rejects incorrect identity, algorithm, DER, HTTP and provider failures wit
   const provider = createAwsKmsSignProvider(config(async () => { throw new Error('synthetic-secret synthetic-session digest'); }));
   await assert.rejects(() => provider.signDigest(new Uint8Array(32)), { message: 'KMS signing failed' });
   const other = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ type: 'spki', format: 'der' });
-  await assert.rejects(() => createKmsEvidenceCandidate(input, other, createAwsKmsSignProvider(config(async () => reply()))), { message: 'KMS candidate failed' });
+  await assert.rejects(() => signKmsEvidence(input, other, createAwsKmsSignProvider(config(async () => reply()))), { message: 'KMS signing failed' });
 });
 
 test('requires bounded temporary credential metadata and matching explicit key ARN and region', async () => {
@@ -127,8 +127,8 @@ test('requires bounded temporary credential metadata and matching explicit key A
 });
 
 test('browser-bundled provider signs in workerd with an injected response and no network', async () => {
-  const source = `import {createAwsKmsSignProvider} from './src/aws-kms-sign-provider.ts'; import {createKmsEvidenceCandidate} from './src/worker-kms-evidence.ts';
-export default {async fetch(){let calls=0;const provider=createAwsKmsSignProvider({region:'us-east-1',keyArn:${JSON.stringify(arn)},credentials:{accessKeyId:${JSON.stringify(TEMPORARY_KEY_ID)},secretAccessKey:'synthetic-secret',sessionToken:'synthetic-session',expiration:new Date(Date.now()+3600000)},fetch:async req=>{calls++;if(req.url!=='https://kms.us-east-1.amazonaws.com/'||req.redirect!=='manual')throw Error('invalid');return new Response(${JSON.stringify(JSON.stringify({ KeyId: arn, SigningAlgorithm: 'ECDSA_SHA_256', Signature: signature.toString('base64') }))},{headers:{'content-type':'application/x-amz-json-1.1'}})}});try {const result=await createKmsEvidenceCandidate(new Uint8Array(${JSON.stringify([...input])}),new Uint8Array(${JSON.stringify([...spki])}),provider);return Response.json({calls,length:result.signature.length});} catch(e) {return Response.json({error:e.message,calls},{status:500});}}};`;
+  const source = `import {createAwsKmsSignProvider} from './src/aws-kms-sign-provider.ts'; import {signKmsEvidence} from './src/worker-kms-evidence.ts';
+export default {async fetch(){let calls=0;const provider=createAwsKmsSignProvider({region:'us-east-1',keyArn:${JSON.stringify(arn)},credentials:{accessKeyId:${JSON.stringify(TEMPORARY_KEY_ID)},secretAccessKey:'synthetic-secret',sessionToken:'synthetic-session',expiration:new Date(Date.now()+3600000)},fetch:async req=>{calls++;if(req.url!=='https://kms.us-east-1.amazonaws.com/'||req.redirect!=='manual')throw Error('invalid');return new Response(${JSON.stringify(JSON.stringify({ KeyId: arn, SigningAlgorithm: 'ECDSA_SHA_256', Signature: signature.toString('base64') }))},{headers:{'content-type':'application/x-amz-json-1.1'}})}});try {const result=await signKmsEvidence(new Uint8Array(${JSON.stringify([...input])}),new Uint8Array(${JSON.stringify([...spki])}),provider);return Response.json({calls,length:result.signature.length});} catch(e) {return Response.json({error:e.message,calls},{status:500});}}};`;
   const built = await build({ stdin: { contents: source, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser' });
   const mf = new Miniflare({ modules: true, script: built.outputFiles[0].text });
   try { const response = await mf.dispatchFetch('http://local.test/'); assert.equal(response.status, 200, await response.clone().text()); assert.deepEqual(await response.json(), { calls: 1, length: 64 }); } finally { await mf.dispose(); }

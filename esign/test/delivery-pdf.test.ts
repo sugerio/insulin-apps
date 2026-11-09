@@ -21,7 +21,7 @@ test('delivery retries concurrent creation and completed finalization with long 
       await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
     }
     const pdf=await PDFDocument.create();pdf.addPage();pdf.addPage();const d0=await pdf.save();
-    await db.exec(`INSERT INTO tenants VALUES ('tenant'); INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','tenant','template.pdf','[]',1); INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('env','tenant','template','IN_PROGRESS',1);`);
+    await db.exec(`INSERT INTO tenants (id) VALUES ('tenant'); INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','tenant','template.pdf','[]',1); INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env','tenant','template','IN_PROGRESS',1,'hash');`);
     const names=Array.from({length:11},(_,i)=>`${'i'.repeat(i===7?160:100)}${i}`);
     for(const [i,name] of names.entries()) await db.prepare('INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES (?,?,?,?,?,?,?)').bind(`task-${i}`,'env',`role-${i}`,name,`signer${i}@example.com`,i+1,i===0?'ACTIVE':'PENDING').run();
     await bucket.put('source.pdf',d0);let inputId='d0',inputHash=await sha(d0);

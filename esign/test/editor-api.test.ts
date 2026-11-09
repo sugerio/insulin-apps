@@ -5,6 +5,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import app from '../src/worker.ts';
+import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 test('editor sessions enforce scope and persist immutable template versions with field signing blocked',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
@@ -17,7 +18,7 @@ test('editor sessions enforce scope and persist immutable template versions with
   const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants(id) VALUES ('a'),('b')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?, 'a'), (?, 'b')").bind(await digest(a),await digest(b)).run();
-  await db.prepare("INSERT INTO editor_allowed_origins VALUES ('a','https://host.example.com'),('b','https://other.example.com')").run();
+  await setEditorOrigins(db,'a',['https://host.example.com']);await setEditorOrigins(db,'b',['https://other.example.com']);
   const env={DB:db,ARTIFACTS:await mf.getR2Bucket('ARTIFACTS'),ASSETS:{fetch:async()=>new Response('<html>editor</html>',{headers:{'content-type':'text/html'}})}};
   const req=(path:string,options:RequestInit={})=>app.fetch(new Request('https://esign.example.com'+path,options),env);
   const management=(key:string,body:unknown)=>({method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify(body)});

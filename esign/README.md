@@ -1,108 +1,432 @@
-# E-sign local experiment
+# E-sign
 
-This is an **experimental local-only service for synthetic data**, not a production e-sign service. The local Worker supports one-PDF templates, tenant API keys, envelopes, sequential recipient sessions with email OTP, explicit consent, and D0 → D1 → D2 signing. The React recipient page is separate from management API calls. How it signs depends on one switch, `ESIGN_ENV` (`dev` locally and on esign-dev, `prod` on esign-prod; see [WORKER-MODE.md](WORKER-MODE.md)). In dev, signing routes need a test mailbox bucket and the code pepper `OTP_KEY`; codes are kept in the test mailbox and, on esign-dev, emailed only to one sink mailbox; locally only `example.com` or `.test` recipient addresses can receive test codes. Test mailbox contents are plaintext and must never be used with real data. In prod, codes and signed copies are emailed to their recipients, nothing is kept in a test mailbox, and envelopes are sealed with KMS and TSA only.
+E-sign is an independent electronic signature service: one Cloudflare Worker with D1, R2 and
+Email Sending. A host product (for example Suger's backend) creates templates and envelopes with a
+tenant management key, embeds the template editor and the recipient signing page in its own pages,
+and polls envelopes for their status. The Worker verifies each signer by an emailed one-time code,
+records the signature, renders the signed PDF, seals the finished envelope and emails each signer a
+copy.
 
-**Finishing envelopes:** the Worker processes each accepted signature and seals the envelope after the last one on its own (`COMPLETE_AFTER_SIGN`, on in `wrangler.jsonc`), and a cron sweep every five minutes retries anything that did not finish; there is no endpoint to request either step (see [WORKER-MODE.md](WORKER-MODE.md)). The caller polls the envelope for changes and is responsible for reminders. If an object write succeeds but the database fails, a retry checks the existing object; unreferenced objects can still remain (see "How writes commit" below). Do not delete an object on an ambiguous database failure.
+**Status: experimental.** It is not yet an Insulin AppBuilder app (see the repository's
+`AGENTS.md`). It runs locally and deploys as `esign-dev` and `esign-prod`
+([WORKER-MODE.md](WORKER-MODE.md)), but the open items at the end of this page block real
+documents. Use synthetic documents and identities only, and do not deploy or change cloud resources
+without authorization.
 
-OTP challenges and verifications bind the exact task email stored when the code was issued; signing also records that address in the signature's facts and rechecks it in the single conditional insert that commits the signature, and on signer retry. The local path preserves address bytes exactly. Challenges and verifications with no address snapshot cannot authorize a new signature or signer replay. Existing facts and artifacts are not rewritten. Migrations `0025`–`0027` have been exercised only on isolated synthetic databases; do not apply them to retained or running user data without review and authorization. Migration `0027` rejects changes to an existing task's email, including case-only changes, so an ordinary UPDATE cannot change it away and back. It does not reconstruct earlier changes, prevent privileged schema changes, or make task deletion/replacement or role changes impossible; there is no immutable recipient revision or production identity boundary.
+Related documents: [WORKER-MODE.md](WORKER-MODE.md) (configuration, dev and prod, deployment),
+[DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) (migrations, first credentials, stop and rollback),
+[CI.md](CI.md) (the workflow), [PROGRESS.md](PROGRESS.md) (history).
 
-A standalone candidate Cloudflare Email Sending adapter exists in `src/cloudflare-otp-mail.ts`. It requires an explicit `enabled: 'true'`, a sender address and a `SendEmail` binding. The public Worker cannot send mail or enable signing. Its binding integration and delivery have not been tested on Cloudflare. Before any future integration, the deployment trust boundary, authorization, sender verification, delivery failures and production security must be independently resolved; do not deploy or send mail without authorization. The Worker never includes plaintext OTPs in its response, even when `LOCAL_TEST_MODE` is enabled; it writes them to the separate local test mailbox. The isolated Node loopback demo reads the freshly created mailbox message and adds the code to the recipient response for display. The generated/uploaded Node loopback experiments do likewise. These adapters must never be exposed publicly or mounted in a Worker. Loopback, Host and Origin checks are not user authentication: local processes, other users and browser extensions can access or impersonate the demo. Use only a trusted single-user machine with synthetic data.
+## Architecture
 
-The `COMPLETED` state means **local test completion only**: finalization checks hashes and signing-event links and writes a local manifest with fake HMAC-based test KMS/TSA tags. They use a software test key; the synthetic timestamp is derived from the last signing time, not an independent clock. They are not a managed KMS or external timestamp authority and provide no independent time, retention or legal proof. Local R2 conditional writes are not WORM and privileged mutation remains possible. Real KMS/TSA, verified immutable storage, real email, safe wrong-recipient termination and independent security/legal review are unresolved production blockers. PDF handling is preliminary. Names unsupported by the local Helvetica font or too wide for the signature page at its fixed font size are rejected at envelope creation with `unsupported_recipient_name`. Width is calculated from unadjusted glyph advances, matching the PDF renderer rather than assuming kerning. Before a signature on a document without fields is accepted, all recipient names are checked again; a pending signature with an unrenderable name fails safely instead of producing a clipped PDF.
+- **One Worker**, `src/worker.ts` (Hono). It serves the management API, the signing API, the editor
+  API, the recipient signing page (`/sign`), the editor page (`/editor/page/:id`), a demo page
+  (`/demo`) and the built page assets (`dist-ui`, through the `ASSETS` binding). Signing routes are
+  in `src/local-signing-routes.ts`, editor routes in `src/editor-routes.ts`.
+- **Storage**: D1 (`DB`) holds every record (14 tables, below); R2 (`ARTIFACTS`) holds PDFs,
+  rendered field images, seals and delivery PDFs. Only dev binds a second bucket, the test mailbox
+  (`TEST_MAIL`).
+- **One switch**, `ESIGN_ENV` (`src/environment.ts`): `dev` locally and on `esign-dev`, `prod` on
+  `esign-prod`. It decides where mail goes, whether codes are kept in the test mailbox, which seals
+  are allowed and which origins may host or embed the signing page. The table is in
+  [WORKER-MODE.md](WORKER-MODE.md#dev-and-prod-one-switch). Signing (the signing API and page,
+  `/demo`, recipient views, certificates and the cron) is on only once the environment is fully
+  configured (`signingEnabled`); otherwise those routes answer 404 and the cron does nothing.
+- **Background work**: a signature is saved first and its PDF rendered afterwards. With
+  `COMPLETE_AFTER_SIGN=true` (set locally and by the deploy) the Worker renders it in the
+  background after the response (`waitUntil`) and seals the envelope after the last one. A cron
+  trigger every five minutes expires envelopes past a deadline, finishes any envelope the
+  background work did not (25 at random per run), and retries signed copies that were not sent.
+  There is no endpoint to request any of these steps.
+- **Pages** (`ui/`, built by Vite into `dist-ui`): the recipient page (`index.html`,
+  `RecipientPage.ts`), the field editor (`editor.html`, `FieldEditor.ts`) and the demo
+  (`demo.html`, `DemoPage.ts`).
 
-For fieldless templates, each signer gets a block on a shared signature page appended to the document, eight blocks to a page. The block (its slot, the input page count, the name and the signing time) is decided when the signature is accepted and saved with it; rendering draws exactly that, never something inferred from the PDF. Before accepting a signature the service reads and hash-checks the input PDF and checks its page count against the previous signature's saved block. Each signing input is hash-checked and each output is a separate artifact. This is a local integrity boundary, not protection against privileged database or storage mutation. Storage can change after the pre-signature read: a later hash mismatch blocks rendering but cannot roll back an already recorded signature. Local R2 is not WORM.
+## The signing lifecycle
 
-### Local typed positioned signatures: support matrix
+1. **Template.** The host uploads a PDF (`POST /v1/templates`, multipart `file` and `roles`), or
+   opens the embedded editor to place fields on one (see "Embedded editor"). A template without
+   placed fields is signed on an appended signature page; one with placed fields is signed in those
+   fields.
+2. **Envelope.** `POST /v1/envelopes` with an `Idempotency-Key` header names the template and one
+   recipient per role (name, email, optional deadline, title, company, who named them), plus an
+   optional document name and sender. It prepares the envelope in the same request: the template's
+   source is copied to the envelope's initial document (D0, `envelopes/<id>/d0.pdf`), the first
+   recipient's task becomes `ACTIVE`, and the envelope is created `IN_PROGRESS`. Recipients sign in
+   routing order.
+3. **Recipient view.** For the active task the host calls
+   `POST /v1/envelopes/:id/tasks/:taskId/recipient-view` and embeds
+   `<worker origin>/sign#code=<code>`. The page exchanges the code for a page session.
+4. **Review, confirm, sign.** The page has three steps: **Review** (the document, its fingerprint,
+   page count and download, and the signer's title and authority when the host named a company),
+   **Confirm it's you** (a six-digit code emailed for the task) and **Sign** (the fields, the
+   consent disclosure and the intent statement). Reading the document needs only the page session;
+   previews, declining and signing also need the code.
+5. **Rendering.** The signature row is saved `PENDING`; rendering draws the input PDF with exactly
+   what the row records, stores the output and marks the row `DONE`. The next recipient's task then
+   becomes `ACTIVE`, so each signer signs the previous signer's rendered PDF.
+6. **Sealing.** After the last signature is rendered the envelope becomes `FINALIZING`, is sealed
+   and becomes `COMPLETED`; each signer is then emailed the delivery PDF (the signed PDF followed by
+   its certificate of completion).
 
-Signature artwork uses a fixed 30-point bitmap height, extends to the right when necessary, and is rejected before signing if it would cross the page or another role's field. Date signed and Title use upright, compact 27-point text that must fit inside its field. Preview and PDF placement use the same image and geometry; a preview receipt binds Signature and Title inputs to the current artifact and template. Every field is previewed through one endpoint, `POST /v1/signing/preview` with `{fieldId, text}` (no `text` for Date signed): a PNG with `X-Signature-Width`, `X-Signature-Height` and the `X-Signature-Preview` receipt for a Signature field, or with `X-Text-Width`, `X-Text-Height`, `X-Preview-Text` and, for a Title, the `X-Text-Preview` receipt. A refused preview is `422` (`signature_does_not_fit`, `title_does_not_fit` or `invalid_preview`). These checks do not prove that a person actually saw the preview. Renderer changes are not backwards compatible: a signature records the renderer name and atlas hash of every field, and fails closed when the running renderer differs.
+Envelope statuses: `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, and the three ends before completion:
+`VOIDED` (the host voided it), `DECLINED` (the active signer declined, with a reason) and `EXPIRED`
+(a recipient's deadline passed before they signed; a recipient who has signed is past their
+deadline's reach). Every signing path requires `IN_PROGRESS`. Task statuses: `PENDING`, `ACTIVE`,
+`SIGNED`.
 
-| Capability | Local support |
+### Fields and rendering
+
+Two ways to sign:
+
+- **Without placed fields**: each signer gets a block (name and signing time) on a shared
+  signature page appended to the document, eight blocks to a page, drawn in Helvetica. Recipient
+  names that Helvetica cannot draw, or that are too wide at the fixed size, are refused when the
+  envelope is created (`422 unsupported_recipient_name`) and checked again before each signature.
+- **With placed fields**: Signature, Date signed and Title only, at most 20 fields per template,
+  and every role needs a Signature field (the editor requires exactly one per role). Envelope
+  creation refuses other field types and overlapping fields (`422
+  positioned_fields_not_supported`). The PDF must have unrotated, uncropped pages with a zero
+  media-box origin, default units, no annotations and no form; each field is at least 20 × 10
+  points.
+
+| Field | What is drawn |
 | --- | --- |
-| Fieldless templates | `POST /v1/templates` without placed fields: a block per signer on an appended shared signature page |
-| Positioned Signature fields | Editor saves require exactly one per role; templates with several are signed with required fields enforced |
-| Date signed | The server's UTC date when the signature is accepted. The signing page previews it (`POST /v1/signing/preview`) and sends the date it showed with the sign request (`datePreviews`); a different date, as after midnight UTC, is refused with `409 date_changed` and the page shows the new date |
-| Title | The title the signer gave on Review, with a preview receipt (`textPreviews`) |
-| Initials, text, checkboxes and other positioned fields | Not supported; envelope creation fails closed |
-| Signature input | Latin letters and single spaces, 1–64 characters; server-rendered from a bundled bitmap atlas. Typed text is not the authenticated recipient name |
-| PDF geometry | Unrotated, uncropped pages with zero media-box origin, default units, no annotations or PDF forms; minimum 20 × 10 points per field |
-| Evidence | Each signature's event hash binds the chain link, the input PDF hash, the signer facts and every drawn value, renderer and image hash; the rendered PDF hash is recorded when it is rendered. The local HMAC seal and the managed KMS + TSA seal both cover the manifest built from these |
+| Signature | The typed text (Latin letters and single spaces, 1–64 characters) rendered on the server from a bundled Caveat bitmap atlas (`caveat-bitmap-v2`), 30 points high. It may extend to the right of its box but not off the page or over another field. Typed text is not the authenticated recipient name |
+| Title | The title the signer gave on Review (printable ASCII, at most 128 characters), 27-point text that must fit its box |
+| Date signed | The server's UTC date when the signature is accepted, 27-point text that must fit its box |
 
-The recipient must verify the test OTP, review the document, type a signature for each required field, inspect the server-generated preview at its marked position and size on the PDF page, and consent. Markers and inputs show the role and field with page-specific accessible labels; the fixed-height image starts at the top left of each rectangle, as in the final PDF. An optional empty field is omitted. Only the active recipient's own fields are exposed and accepted. The same text and font are rendered on the server; arbitrary client images are never accepted. A successful retry must come from the same session with the same input artifact, the exact field values and the dates that were drawn; an expired session cannot replay. Concurrent attempts can leave unreferenced image objects; keep them for investigation. The rendered images are conditionally written to R2 before the signature is saved in one D1 batch. Rendering uses the saved image bytes, not a later client request, and verifies their hashes, the saved record, the event hash and the input PDF hash before placing each image at its saved geometry. Output PDFs are separately created without overwriting inputs. It is not WORM, independent time, legal proof or production protection. Storage mutation between acceptance and rendering can still block rendering after a signature has been recorded; preserve all objects and facts for investigation.
+Every field is previewed through `POST /v1/signing/preview` with `{fieldId, text}` (no `text` for
+Date signed). It returns the PNG that will be drawn, with its size relative to the box
+(`X-Signature-Width`/`-Height` or `X-Text-Width`/`-Height`) and, for Signature and Title, a receipt
+(`X-Signature-Preview`, `X-Text-Preview`) that binds the input, the template, the field, the text,
+the image and its geometry. The sign request sends back the receipts and the dates the page showed
+(`datePreviews`); a date that changed in between (after midnight UTC) is refused with
+`409 date_changed` and the page shows the new date. A refused preview is `422`
+(`signature_does_not_fit`, `title_does_not_fit` or `invalid_preview`). Clients never send images.
+The receipts show what the server rendered, not that a person looked at it.
 
-## How a signature is stored
+A signature records each field's renderer name and atlas hash (`src/field-renderers.ts`);
+rendering and every later re-verification fail closed if the running renderer differs.
 
-All signing state is one table, `signatures` (`migrations/0007_signatures.sql`, `src/signatures.ts`): a row per accepted signature with its envelope, task, sequence in the envelope, input artifact and hash, the previous signature's event hash, its own event hash and two JSON documents:
+### Signing for a company, deadlines and certificates
 
-- `facts_json` (`"version": 1`): who signed and how they were identified: the task, role, recipient name, the email address the code was verified for, the page session hash, when the code was verified, when the signer consented, the consent disclosure version and hash, and the title and company they signed with, if any.
-- `render_json` (`"version": 1`): what is drawn and where. `"kind": "appended-page"` gives the block on the shared signature page (slot, input page count, the name and time printed, the renderer). `"kind": "fields"` gives every placed field of the document at signing and, for each of the signer's fields, its type, page, box, value, renderer name and atlas hash, the rendered image hash and where it is drawn. A new field type needs a renderer in `src/field-renderers.ts`, not a schema change.
+- A recipient may carry `title` (at most 128 characters), `onBehalfOf` (the company, at most 200)
+  and `namedBy` (at most 300, who named this signer); the envelope may carry `documentName` (at
+  most 200) and `sender` (`{name, email?, organization?}`). With `onBehalfOf`, the page shows the
+  intent statement ("I intend this to be my signature on <document> on behalf of <company>."),
+  prefills the title, and the sign request needs a title and `authorityConfirmed: true`.
+- A recipient may carry `expiresAt` (ISO 8601, in the future, within 400 days). Expiry is applied
+  before any request touches the envelope and by the cron, with one `EXPIRED` audit event.
+- A recipient-view request may carry `hostAuthentication` (`{method, provider?, domain?,
+  signedInAt?}`, `method` an upper-case word such as `SSO`): how the host signed the recipient in.
+  E-sign cannot check it; it is recorded and printed as the host's statement.
+- Certificates are versioned per envelope (`certificateVersion` in `envelopes.details_json`, now 2;
+  none means 1). A certificate is rebuilt on every read and must come out the same, so each
+  envelope keeps the layout it was created with. Change the layout only by adding a version.
 
-`event_hash` is the SHA-256 of the canonical JSON (sorted keys, no whitespace) of `{previousHash, envelopeId, sequence, inputSha256, facts, render}`; `previous_hash` links each signature to the one before it. The row is written once, when the signer signs. Database triggers then allow only the rendering state to change: `status` (`PENDING`, then `DONE`), the output artifact and its hash, set once, and `attempts` and `last_error`, which count rendering failures. Any other change, and any delete, is refused. Rendering (after each signature, and by the cron sweep) draws the PDF from the row alone; a rendered signature is rendered again whenever the envelope is sealed or its certificate is read, and must come out byte for byte as stored.
+## Data model
 
-### How writes commit
+Migrations are in `migrations/` (applied in name order; the numbering has gaps). A fresh database
+has these 14 tables:
 
-Each step that changes what a caller can see commits with **one conditional statement**, a compare-and-set: the statement carries its own preconditions (`UPDATE ... WHERE <conditions>` or `INSERT ... SELECT ... WHERE <conditions>`) and the code checks that it changed exactly one row. A single SQLite statement is atomic, and UNIQUE constraints back it up (`signatures` has `UNIQUE (task_id)` and `UNIQUE (envelope_id, sequence)`). Everything a step needs is written **before** that commit point, where nobody can reach it yet; the steps **after** it are idempotent conditional updates that read only the current state.
+| Table | Migration | Holds |
+| --- | --- | --- |
+| `tenants` | 0001 | A tenant id, typically the host's organization id, and `editor_origins_json`: the host origins allowed to frame the editor |
+| `api_keys` | 0001 | SHA-256 of each management key, its tenant and `revoked_at` |
+| `templates` | 0002, 0016 | The source PDF's R2 key, `roles_json` and `fields_json` (placed fields; `[]` for none) |
+| `envelopes` | 0003 | Tenant, template, status, creation time, `request_sha256`, `details_json` |
+| `tasks` | 0003, 0027 | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
+| `artifacts` | 0004 | Each envelope's initial document (D0): R2 key and SHA-256 |
+| `access_codes` | 0005 | One-time page codes (hashed) with scope, tenant, subject, origin, expiry, `used_at` |
+| `access_sessions` | 0005 | Page sessions (hashed tokens) with the same fields and `otp_verified_at` |
+| `otp_challenges` | 0006 | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
+| `signatures` | 0007 | One row per accepted signature (below) |
+| `seals` | 0010 | One per completed envelope: `mode` (`LOCAL_TEST` or `KMS_TSA`), the seal's R2 key and hash, and for `KMS_TSA` the key ARN and timestamp time |
+| `editor_sessions` | 0015 | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the saved template |
+| `audit_events` | 0049 | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
+| `copy_deliveries` | 0049 | One per signer of a completed envelope: when its signed copy was reserved and sent |
 
-- **Signing**: the field images go to R2 first; the commit point is the one `INSERT INTO signatures ... SELECT ... WHERE` that requires the page session to be live, the code verified for the task's current email, the envelope `IN_PROGRESS`, the task `ACTIVE` with the role, name and template read, the input to be the current one (D0, or the previous signature's rendered PDF) and nobody to have signed in between. A void or an expiry therefore either happens before the insert, which then adds nothing, or after it. The task is then marked `SIGNED`.
-- **Rendering**: the output PDF goes to R2 first; the commit point moves the signature from `PENDING` to `DONE` naming that output. The envelope then moves on: a task whose signature exists becomes `SIGNED`, the next task becomes `ACTIVE` once every signature so far is rendered and no task is active, and the envelope becomes `FINALIZING` once every task is signed and rendered (only while it is `IN_PROGRESS`).
-- **Sealing** (local test and managed): the seal goes to R2 first; a row is inserted in `seals` only while the envelope is `FINALIZING`, then the envelope moves from `FINALIZING` to `COMPLETED` only with that seal.
-- **Recipient code exchange** and **editor page exchange**: the new session or token row is written first, and the commit point marks the one-time code used (`used_at IS NULL` plus the code's validity); the token is returned only when that changed one row, so a code is exchanged once even under concurrency.
-- **Editor save**: the template row is written first, and the commit point records it as the page's result while the page is still unsaved and has a live token.
-- **OTP sends and attempts** were already single conditional statements: the 5-attempt and send budgets are part of their `WHERE`.
+JSON columns. A new optional fact about an envelope or task needs no new table or column: readers
+of `details_json` keep only known keys of the expected types. A fact that queries filter on is a
+real column (`tasks.expires_at`).
 
-Envelope creation still writes its rows (idempotency record, envelope, tasks, D0 artifact) in one D1 batch, which commits all of them or none. Where a commit point and its follow-up updates are sent together they go in one batch too, but nothing relies on a batch aborting itself.
+- `envelopes.details_json`: `documentName`, `sender`, `certificateVersion` (`src/details.ts`).
+- `tasks.details_json`: `title`, `onBehalfOf`, `namedBy`.
+- `signatures.facts_json` (`"version": 1`): who signed and how they were identified: the task,
+  role, recipient name, the email the code was verified for (the task's), the page session hash,
+  when the code was entered, when the signer consented, the input artifact, the consent
+  disclosure's version and SHA-256, and the title, company and intent hash, if any.
+- `signatures.render_json` (`"version": 1`): what is drawn and where. `"kind": "appended-page"`:
+  the slot, input page count, name, printed time and renderer. `"kind": "fields"`: every placed
+  field of the document at signing and, for each of the signer's fields, its value, renderer name
+  and hash, image hash and geometry.
+- `tenants.editor_origins_json`: a JSON array of the bare origins (https, or http on `localhost`
+  or `127.0.0.1`) allowed to frame the editor, `[]` by default; a CHECK refuses anything but a
+  JSON array. `scripts/provision-tenant.ts` validates each origin and appends it unless already
+  listed. Every statement that relies on an origin checks it with `json_each` inside that
+  statement (`editorOriginAllowed` in `src/access.ts`), matching only string elements exactly, so
+  other entries are ignored and removing an origin takes effect at its next check.
+- `templates.roles_json`, `templates.fields_json`, `editor_sessions.preset_roles_json`,
+  `audit_events.detail_json`.
 
-Completion (after each signature) and the cron sweep finish any envelope left **half-advanced** by a lost or interrupted write: a signature whose task is still `ACTIVE`, a rendered signature whose next task is still `PENDING`, every task signed and rendered but the envelope still `IN_PROGRESS`, or a seal recorded while the envelope is still `FINALIZING` (completed with that same seal, never a new one). A recipient whose signature exists counts as signed for deadlines even before the task is marked.
+**Signatures.** A row holds as columns only what is filtered, joined, constrained or chained: the
+envelope, task, sequence, status (`PENDING` or `DONE`), input artifact and hash, output artifact and
+hash, previous and own event hash, `attempts` and `last_error`. `event_hash` is the SHA-256 of the
+canonical JSON (`src/canonical-json.ts`: sorted keys, no whitespace) of `{previousHash, envelopeId,
+sequence, inputSha256, facts, render}`, and `previous_hash` links each signature to the one before
+it. Triggers allow only the rendering state to change after the insert (status, the output once,
+`attempts`, `last_error`) and refuse deletes. `UNIQUE (task_id)` and `UNIQUE (envelope_id,
+sequence)` back the commit point.
 
-A failure before a commit point can leave **harmless orphans** that nothing references and nobody can reach: R2 field images, output PDFs or seal objects, a template's source object and template row from an editor save that lost, and a recipient page session or editor token whose code exchange lost (its token was never returned). They are not cleaned up automatically.
+**Envelope ids and idempotency.** The envelope id is the first 16 bytes of the SHA-256 of
+`["esign-envelope-id-v1", tenant id, Idempotency-Key]` (as JSON), shaped as a version 8 UUID
+(`src/prepare.ts`). The envelope keeps `request_sha256`, the hash of the validated request. A
+creation first looks the derived id up: the same request answers `201 {"id", "status":
+"IN_PROGRESS"}` again, whatever the envelope's status is now; another request with the same key
+answers `409 idempotency_conflict`. A retry after a failure reuses the D0 object the failed attempt
+stored; a D0 object with other bytes is a conflict. Two concurrent creations cannot both insert, as
+the id is the primary key; the loser re-reads and answers by the same rules.
 
-A signature that keeps failing to render stays `PENDING` and the cron sweep keeps retrying it. From `esign/`, this **read-only local** query lists them with their last error:
+## How writes commit
+
+Each step a caller can observe commits at **one point**: a single conditional statement, a
+compare-and-set (`UPDATE ... WHERE <conditions>` or `INSERT ... SELECT ... WHERE <conditions>`),
+whose result the code checks for exactly one changed row (envelope creation instead writes one
+all-or-nothing batch). Everything a step needs is written **before** that commit point,
+where nothing references it; the steps **after** it are idempotent conditional updates that read
+only the current state.
+
+| Step | Written first | Commit point |
+| --- | --- | --- |
+| Envelope creation | D0 in R2 | One D1 batch: the envelope, its tasks and the D0 row, all or none |
+| Code exchange (both pages) | The `access_sessions` row | Marking the code used (`used_at IS NULL`, scope and validity); the token is returned only then |
+| Editor session start | The `editor_sessions` row | Inserting its `editor` code, which requires the session and an allowed parent |
+| Editor save | The source object and the template row | Recording the template as the session's result, while unsaved and while this request's token is live |
+| OTP send | — | One `INSERT ... ON CONFLICT DO UPDATE ... WHERE` holding the budget; the mail goes out only if it changed one row |
+| OTP entry | — | One batch: count the entry and mark the code used; mark this session verified only if that just happened; clear the mark from the task's other sessions |
+| Signing | Field images in R2 | One `INSERT INTO signatures ... SELECT ... WHERE` (below); then the task is marked `SIGNED` |
+| Rendering | The output PDF in R2 | `PENDING` → `DONE` naming that output; then the envelope moves on |
+| Sealing (both seals) | The seal object in R2 | A `seals` row only while `FINALIZING`, then `FINALIZING` → `COMPLETED` only with that seal |
+| Void, decline, expiry | — | The status change from `IN_PROGRESS`, with its single audit event in the same batch |
+
+The signing insert requires the page session to be live at its origin and verified, the task's
+current email to be the one read, the envelope `IN_PROGRESS`, the task `ACTIVE` with the role, name
+and template read, nobody to have signed in between and the input to be the current one (D0, or the
+previous signature's rendered PDF); for a document without fields, the envelope's tasks and names
+must be the ones checked to fit. A void or an expiry is therefore ordered entirely before or after
+it.
+
+**Repair.** After rendering, the envelope moves on through idempotent updates
+(`advanceStatements` in `src/signature-processing.ts`): a task whose signature exists becomes
+`SIGNED`; with no task active and every signature rendered, the next task becomes `ACTIVE`; with
+every task signed and rendered, the envelope becomes `FINALIZING` (only while `IN_PROGRESS`).
+Completion runs them first, and the cron also picks envelopes left half-advanced by a lost write: a
+signature whose task is still `ACTIVE`, a rendered signature whose next task is still `PENDING`,
+every task signed but the envelope still `IN_PROGRESS`, or a seal recorded while the envelope is
+still `FINALIZING` (completed with that same seal, never a new one). For deadlines, a recipient
+whose signature exists counts as signed even before the task is marked.
+
+**Acceptable orphans.** A failure before a commit point can leave records nothing references and
+nobody can reach: R2 field images, output PDFs, seal and delivery objects, staged editor sources, a
+template's source and row from an editor save that lost, an `access_sessions` row whose exchange
+lost (its token was never returned), an `editor_sessions` row whose code was not issued, and a
+template source object whose D1 insert failed. Nothing deletes them; keep them, because a lost
+response does not show whether a write committed.
+
+A signature that keeps failing to render stays `PENDING`, with `attempts` and `last_error`, and the
+cron keeps retrying it. There is no repair or termination endpoint. To list them locally:
 
 ```sh
 npx wrangler d1 execute esign-local --local --command "SELECT envelope_id, id, sequence, attempts, last_error FROM signatures WHERE status='PENDING' AND attempts>0 ORDER BY envelope_id, sequence"
 ```
 
-Preserve the D1 database and the related R2 objects for investigation; there is no repair or termination endpoint.
+## Access codes, sessions and OTP
 
-## Embedded template editor (local experiment)
+Both browser pages open the same way (`src/access.ts`, `migrations/0005_access.sql`): the host's
+backend obtains a one-time **code** (64 hex characters, valid for two minutes, used once), and the
+page exchanges it for a **session token** (64 hex characters, valid for fifteen minutes), its
+bearer credential. Only SHA-256 hashes are stored. Each row has a scope and a subject:
 
-Fields are normalized to the displayed page's top-left, independent of display scale. PDFs with rotated pages are rejected on save, rather than risking incorrectly positioned fields. Limit: 5 MiB, 100 pages, 20 unique roles, 200 fields, and valid in-page geometry. Each preview renders in a separate detached container and becomes visible and saveable only after every page finishes. The embedded editor fixes its source for the session. Rendering also has pixel budgets; an unrenderable PDF cannot be saved in the UI. These are local resource limits, not a hardened PDF sandbox. **Worker positioned signing supports Signature, Date signed and Title fields**, with a Signature field for each role and at most 20 fields per template. Templates containing any other field type or overlapping fields are rejected when starting an envelope, rather than silently ignoring fields. Existing overlapping template versions remain stored and readable but cannot start a new signing flow. Rotated or cropped pages, nonzero media-box origins, custom page units, annotations, PDF forms and fields smaller than 20 × 10 PDF points are rejected for this flow. Existing fieldless templates and templates created by the legacy compatibility API retain the append-only signature page flow. Role-based display names are derived from existing role data and are not new evidence fields.
+| Scope | Subject | Origin | Issued by | Exchanged at | Accepted by |
+| --- | --- | --- | --- | --- | --- |
+| `recipient` | A task | The signing page origin; the request's must match at exchange and on every call | `POST /v1/envelopes/:id/tasks/:taskId/recipient-view` | `POST /v1/page-sessions/exchange` | `/v1/signing/*` |
+| `editor` | An editor session | The parent origin allowed to frame the editor | `POST /v1/template-editing-sessions` | `POST /v1/editor/exchange` (with the page id) | `/v1/editor/*` |
 
-### Staged editor source (local demo)
+Every statement names the scope, so a code or token of one scope is never accepted by the other.
+Exchange and authorization also require the subject to be open: the task `ACTIVE` in an
+`IN_PROGRESS` envelope of the tenant, or the editor session's parent still allowed for the tenant.
+A recipient session therefore loses its authority once its task is no longer active or its envelope
+leaves `IN_PROGRESS`, and an editor session once its parent origin is removed from the tenant's
+`editor_origins_json`.
 
-For a new document the management backend creates an editing session and posts PDF bytes, not a URL, to `POST /v1/template-editing-sessions/:sessionId/source` with `Content-Type: application/pdf`. The source is scoped to the management tenant and session, can be bound only once before exchange and before the two-minute page expiry, is capped at 5 MiB/100 pages and parsed as a PDF. It is stored under a unique conditional-create object key; its SHA-256 is bound in D1 and checked both when the iframe reads `/v1/editor/pdf` and when the server saves. An attempted file replacement in a staged or existing-template session is rejected. The editor sends only fields; the server uses the bound bytes. Staged objects are not templates. Concurrent or failed uploads can leave unreferenced objects; there is no automatic cleanup or recovery. Preserve ambiguous objects for investigation. On upload failure or timeout, start a new session; do not assume the first upload did not commit. Existing blank-session API behavior is retained for old clients, but the embedded UI refuses an unbound source.
+**Signing page origins.** The recipient-view code is for the Worker's own origin unless the request
+names another allowed one; in dev, `SIGNING_PAGE_ORIGINS` adds origins for local UI development. The
+page served at `/sign` carries `<meta name="esign-api">` with the Worker's origin, and calls the API
+only when that matches its own origin; otherwise it talks only to the local Worker from
+`http://127.0.0.1:5173` and on any other origin stops before sending the code anywhere. Browsers
+send no `Origin` on same-origin GETs, so the signing API then takes the origin from
+`Sec-Fetch-Site: same-origin`.
 
-The session API takes no URL: the source is either an existing template of the tenant (`sourceTemplateId`) or the PDF bytes posted to the session's `/source`. The Worker never downloads a document itself.
+**Emailed code (OTP).** Six digits, valid for ten minutes, used once. Only an HMAC is stored, keyed
+by `OTP_KEY` over the task, the task's email and the code, so it verifies only while the task has
+the address it was sent to (a task's email cannot change, migration 0027). Per task, across all its
+sessions: at most three sends and five entries per 15-minute window, and 60 seconds between sends;
+a new page session does not reset the budget. Only the session the code was sent for can enter it,
+and only the session that entered the task's latest code can sign (`access_sessions.otp_verified_at`).
+A refused send is `429 otp_unavailable`. Where the code goes depends on `ESIGN_ENV`
+([WORKER-MODE.md](WORKER-MODE.md#dev-and-prod-one-switch)).
 
-Existing-template sessions bind a SHA-256 of the tenant-owned source bytes when the session is issued. Both preview and save re-read the source and verify that same hash; missing, changed, oversized or unreadable bytes fail closed. A source object changed after one successful read cannot cause a later read to accept different bytes. No original template or historical evidence is rewritten. Sessions issued by older versions without the hash cannot preview or save; open a new session instead. Privileged mutation of both storage and D1 remains outside this local integrity boundary.
+## Evidence, hash chain and seals
 
-### Editor integration and trust boundary
+Each signature's event hash binds the chain link, the input PDF hash, the signer facts and every
+drawn value, renderer and image hash. The rendered PDF's hash is recorded on the row when it is
+rendered. Rendering uses only the saved row and the saved images, verifying their hashes, the event
+hash and the input PDF before drawing.
 
-The tenant backend calls `POST /v1/template-editing-sessions` with its management bearer key and `{allowedParentOrigin, roles?, sourceTemplateId?}`. Origin must already be in that tenant's `editor_allowed_origins`. The response contains a random session/page ID and URL with a one-use, two-minute code in its **fragment**; never log, forward in a Referer, or persist it. The page ID alone is not an authorization credential. The dynamic page response looks up the tenant-bound parent and sets `Content-Security-Policy: frame-ancestors` to that exact origin, `no-store`, and `Referrer-Policy: no-referrer`. The iframe removes the fragment from browser history before exchanging it at `POST /v1/editor/exchange`. A 15-minute editor-only bearer token stays in iframe memory and authorizes only `/v1/editor/*`; the management key never enters the browser. The iframe's same-origin API requests have the **E-sign** origin, not their parent's origin. Do not infer a parent from that header or from a message. Revoking the allowlist entry invalidates the editor session.
+At sealing, `buildEvidenceManifest` (`src/local-test-evidence.ts`) checks the whole chain: the D0
+hash, every signature's sequence, link, input and event hash, every rendered PDF rendered again
+byte for byte, and every stored file's hash. It then builds the manifest
+(`esign-evidence-manifest-v1`) with each signature's facts and rendering. The same checks run
+again on every certificate and delivery PDF read, so a changed record, image or PDF makes them fail.
 
-The editor posts a ready notification, save notification, or request-ID-bound save result only to the bound parent origin. The host checks **both** the message origin and the current iframe window source; even a valid message is only a prompt. Its authenticated backend must call `GET /v1/template-editing-sessions/:sessionId` with the tenant management key and use the returned `templateId`, not a client-supplied ID. One session permits one committed save. A concurrent or lost-response save can leave an unreferenced object; do not delete it, because a database result may be ambiguous. A new session is required for another version.
+| | Local test seal (`LOCAL_TEST`) | Managed seal (`KMS_TSA`) |
+| --- | --- | --- |
+| Used | dev without `KMS_KEY_ARN` (locally) | whenever `KMS_KEY_ARN` is set; prod allows nothing else |
+| Covers | The manifest | The manifest and the audit trail up to sealing (`esign-sealed-evidence-v2`); later events are listed as recorded after sealing |
+| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An AWS KMS ECDSA P-256 signature over a SHA-256 digest of a domain-separated message, verified against the pinned `KMS_PUBLIC_KEY`; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, signer and policy pinned in `src/tsa-trust.ts` and within five minutes of the Worker's clock |
+| Stored | `envelopes/<id>/local-test-evidence.json` | `envelopes/<id>/managed-evidence.json`, made once; a retry reuses it |
+| Verified | Recomputed with the current key on each read, so changing the key breaks old seals | Signature and timestamp checked on each read, as of the timestamp's time; earlier keys stay trusted through `KMS_TRUSTED_KEY_SHA256` |
+| Certificate | `mode: LOCAL TEST ONLY` | `mode: KMS_TSA`; records a `COMPLETED` audit event |
 
-CSP constrains compatible browsers, not arbitrary HTTP clients or user identity: **a stolen code is a bearer credential and can be redeemed outside a browser**. A malicious same-origin host script can also observe its own iframe URL. Protect the host, isolate untrusted scripts, use HTTPS in any non-loopback experiment, and never put codes or tokens in logs or query strings. This local implementation has no production rate limiting, user login, key rotation, CSP deployment review, PDF isolation or operational recovery and is not approved for deployment or real documents.
+The managed seal's code: `src/managed-seal.ts`, `src/managed-evidence.ts`, `src/seal-config.ts`,
+`src/aws-kms-sign-provider.ts` (the KMS `Sign` call, converting its DER signature with
+`src/p256-der-signature.ts`), `src/worker-kms-evidence.ts` (the signed message and local
+verification), `src/aws-sts-credentials.ts` (the Worker holds an IAM user key that may only assume
+one role, and that role may only sign with this key), `src/worker-tsa-transport.ts` (the RFC 3161
+query) and `src/worker-rfc3161-verifier.ts` (the response check). Revocation of the TSA
+certificates is not checked, and the certificate says so.
+
+**Audit trail** (`src/audit.ts`): the signing link issued, the page opened, each code sent, the
+code verified, the document fetched, pages viewed (the page posts `POST /v1/signing/page-views`
+for pages at least half on screen for a second; each page is recorded once), the signature, a void,
+decline or expiry, completion and each signed copy sent. Signer steps record the IP Cloudflare saw
+(`CF-Connecting-IP`) and the user agent.
+
+**Consent** (`src/disclosure.ts`): the page shows the server's consent text; signing sends its
+version, an old version is refused (`409 disclosure_changed`), and the signature facts and audit
+event record the version and its SHA-256.
+
+**Delivery PDF.** `GET /v1/envelopes/:id/delivery-pdf` returns the final signed PDF, page for page,
+with certificate pages appended. It is created on the first request (`envelopes/<id>/delivery-v1.pdf`
+for the managed seal, `local-delivery-v3.pdf` for the local one) with a conditional create; later
+requests rebuild it and check the stored bytes match. The seal covers the signed PDF, not the
+delivery PDF. There is no endpoint for the signed PDF alone. After completion each signer is
+emailed this PDF once (`src/signed-copies.ts`); a failed send is retried by the cron for envelopes
+created in the last seven days.
+
+## API
+
+Management routes take `Authorization: Bearer <management key>` and see only their tenant's data
+(another tenant's ids answer 404). Routes marked † are available only while signing is enabled.
+
+**Management**
+
+| Route | Purpose |
+| --- | --- |
+| `GET /v1/me` | The key's tenant id |
+| `POST /v1/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`); returns `{id, roles}` |
+| `GET /v1/templates/:id` | Roles, the placed fields (type, role, page, normalized box) and whether they can be signed (`positionedFieldsSupported`) |
+| `POST /v1/envelopes` | Creates and prepares an envelope (lifecycle step 2); `Idempotency-Key` required |
+| `GET /v1/envelopes/:id` | Status and tasks (role, name, email, order, status, `expiresAt`, `openedAt`) |
+| `POST /v1/envelopes/:id/void` | Optional `{reason}` (at most 500 characters); a repeat is a no-op; any status other than `IN_PROGRESS` answers `409 envelope_not_voidable` |
+| `GET /v1/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
+| `POST /v1/envelopes/:id/tasks/:taskId/recipient-view` † | `{origin?, hostAuthentication?}`; returns `{code}` for the active task |
+| `GET /v1/envelopes/:id/delivery-pdf` † | The signed PDF with its certificate, for a `COMPLETED` envelope |
+| `GET /v1/envelopes/:id/certificate` † | The completion certificate as JSON (used by `/demo`), verified on every read |
+| `GET /v1/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the tenant's recipients |
+| `POST /v1/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the tenant's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
+
+**Signing page** (†, recipient session token, page origin checked)
+
+`POST /v1/page-sessions/exchange` `{code}` → `{token}`; `GET /v1/signing/current` (the document,
+fields, disclosure, intent, whether verified); `GET /v1/signing/pdf`; `POST /v1/signing/page-views`;
+`POST /v1/signing/otp` → `202 {messageId}`; `POST /v1/signing/otp/verify` `{otp}`;
+`POST /v1/signing/preview`; `POST /v1/signing/decline` `{reason}` (at most 1000 characters);
+`POST /v1/signing/sign`. Reading (`current`, `pdf`, `page-views`) needs only the session; preview,
+decline and sign also need the entered code. A sign request that lost its response can be repeated
+by the same live session with the same input and values, and returns the same signature id.
+
+**Embedded editor**
+
+| Route | Auth | Purpose |
+| --- | --- | --- |
+| `POST /v1/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?}`; returns `{sessionId, url}`, the code in the URL fragment |
+| `POST /v1/template-editing-sessions/:id/source` | Management | The PDF bytes (`Content-Type: application/pdf`, at most 5 MiB and 100 pages), once, before the page is opened |
+| `GET /v1/template-editing-sessions/:id` | Management | `{templateId}` once saved, else null |
+| `GET /editor/page/:id` | — | The editor page, framable only by the session's parent origin |
+| `POST /v1/editor/exchange` | Same origin | `{pageId, code}` → `{token}` |
+| `GET /v1/editor/current`, `GET /v1/editor/pdf`, `POST /v1/editor/save` | Editor token, same origin | The session, its source PDF, and one save |
+
+**Pages and other routes**: `GET /sign` †, `GET /demo` †, `GET /editor/page/:id`, `GET /assets/*`,
+`GET /health` (`{"status": "ok", "service": "esign", "environment": "dev"}`, or `"prod"`: the
+`ESIGN_ENV` the Worker runs with).
+
+## Embedded editor
+
+The source is either an existing template of the tenant (`sourceTemplateId`; its SHA-256 is bound
+when the session starts) or PDF bytes posted to `/source` (bound once, before the page is opened).
+The Worker never downloads a document. Every preview and the save re-read the source and check
+that hash; missing, changed or oversized bytes fail closed. The editor sends only fields and roles;
+the server uses the bound bytes and refuses a replacement file. The embedded UI refuses a session
+without a source.
+
+The host's parent origin must be in the tenant's `editor_origins_json` (https, or http on
+`localhost` or `127.0.0.1`). The page response sets `frame-ancestors` to that origin, `no-store` and
+`Referrer-Policy: no-referrer`; the iframe removes the code from its URL before the exchange and
+keeps its token in memory. It posts `esign.editor.ready`, and answers the parent's
+`esign.editor.save` (with a request id) with `esign.editor.saved` or `esign.editor.save-error`, only
+to the parent origin. A message is only a prompt: the host's backend reads the result with
+`GET /v1/template-editing-sessions/:id`. One session saves once; another version needs a new
+session.
+
+Saved fields use coordinates normalized to the displayed page's top-left. A save allows at most 20
+roles and 200 fields, refuses rotated pages and overlapping fields, and requires exactly one
+Signature field per role and no field types other than Signature, Date signed and Title.
+
+A code is a bearer credential and can be redeemed outside a browser; CSP constrains browsers only.
+Never log codes or tokens or put them in query strings.
+
+## Recipient page PDF display
+
+The page renders every PDF page to canvas with PDF.js (pinned 5.4.624, `stopAtErrors: true`)
+instead of the browser's PDF viewer, which can be blocked inside a sandboxed frame. Signing is
+offered only after every page has rendered; a failure clears the document and offers **Retry
+document**. Canvases are limited to 16,777,216 pixels per page, 50,331,648 in total and 8,192 per
+side. Because this PDF.js version can report success after an operator-list error, the page also
+requires the final operator-list chunk, through an internal hook; recheck this on any PDF.js
+upgrade. The canvas has no selectable text and is not an accessible reader. None of this proves a
+person read the document; the server checks the session, code, consent and current input, not the
+display.
 
 ## Run locally
 
-The same Worker can also serve the recipient signing page itself, finish envelopes on its own and run on Cloudflare (still in local test mode): see [WORKER-MODE.md](WORKER-MODE.md).
-
-Node 24 and `jq` are needed for the examples. These commands only use local Wrangler resources:
+Node 24 and `jq`. These commands use only local Wrangler resources:
 
 ```sh
 npm ci
 npm run db:migrate:local
-npm run db:seed:local             # adds one synthetic tenant, key and UI origin
-cp -n .dev.vars.example .dev.vars # fixed synthetic test material; never deploy it
-npm run dev                       # terminal 1: 127.0.0.1:8787
-npm run dev:ui                    # terminal 2: 127.0.0.1:5173
+npm run db:seed:local             # one synthetic tenant and management key
+cp -n .dev.vars.example .dev.vars # synthetic OTP_KEY, TEST_SEAL_KEY and SIGNING_PAGE_ORIGINS
+npx vite build                    # dist-ui, for /sign, /demo and the editor
+npm run dev                       # terminal 1: Worker on 127.0.0.1:8787
+npm run dev:ui                    # terminal 2 (optional): page development on 127.0.0.1:5173
 ```
 
-### Embedded PDF display and local security boundary
-
-Chrome can block its built-in PDF viewer when the PDF is nested under the sandboxed recipient frame. The observed failure occurs after a successful authenticated PDF fetch; an iframe `load` event cannot establish that the viewer actually displayed the document. The recipient page instead renders every page to canvas with PDF.js, keeping the existing outer sandbox (`allow-scripts allow-same-origin allow-forms`) unchanged. Consent and signing are offered only after all pages render successfully; a fetch, parse or render error clears the partial document and offers **Retry document**. Each render uses a private container; a newer load or page exit cancels the PDF.js loading/render task and prevents an older result from replacing the preview. Page canvases keep the exact PDF viewport aspect ratio in CSS, including at responsive widths; only their bitmap dimensions are rounded, and the render transform fills that bitmap so positioned signature previews stay aligned. Canvas allocation is limited to 16,777,216 pixels per page, 50,331,648 pixels total, and 8,192 pixels per dimension; exceeding a limit fails the preview and blocks signing. These limits cover output canvases, not all PDF parser, decoded-image, network or input-buffer memory; reading an already-started Blob into memory cannot be cancelled. PDF.js is configured with `stopAtErrors: true`. In the pinned PDF.js 5.4.624, a render can nevertheless resolve after an operator-stream error, so the preview also requires an actual final operator-list chunk; if this internal completion hook is unavailable, preview fails closed. This is a version-specific workaround that must be revalidated on any PDF.js upgrade. Neither the option nor the workaround detects all damaged or incompletely rendered PDFs; a successful preview is not a guarantee of complete or accurate parsing. This is not proof that a person read or understood the pages, and a malicious or broken client can bypass UI checks. The server checks the verified session, consent assertion and current artifact, not visual display. Canvas display also lacks selectable text and is not an accessible PDF reader; do not use it for real signing.
-
-The seed's **public synthetic local-only** management key is `local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz`. Never use it outside this experiment. It belongs in the calling backend, not in the recipient page. Replace the sample PDF with a synthetic PDF if desired:
+The seed's synthetic management key is `local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz`; use
+it only locally. To try the whole flow in a browser, open `http://127.0.0.1:8787/demo` and paste
+the key (placing fields in the editor also needs the Worker's origin in the tenant's
+`editor_origins_json`; see WORKER-MODE.md). With the API:
 
 ```sh
 node --input-type=module -e "import {PDFDocument} from 'pdf-lib';import{writeFile}from 'node:fs/promises';const p=await PDFDocument.create();p.addPage();await writeFile('/tmp/esign-sample.pdf',await p.save())"
@@ -110,132 +434,59 @@ KEY=local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz
 API=http://127.0.0.1:8787
 TPL=$(curl -fsS -H "Authorization: Bearer $KEY" -F file=@/tmp/esign-sample.pdf -F 'roles=["ana","marcus"]' "$API/v1/templates" | jq -r .id)
 ENV=$(curl -fsS -X POST "$API/v1/envelopes" -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -H 'Idempotency-Key: sample-1' -d "{\"templateId\":\"$TPL\",\"recipients\":[{\"role\":\"ana\",\"name\":\"Ana\",\"email\":\"ana@example.com\"},{\"role\":\"marcus\",\"name\":\"Marcus\",\"email\":\"marcus@example.com\"}]}" | jq -r .id)
-curl -fsS -H "Authorization: Bearer $KEY" "$API/v1/envelopes/$ENV" | jq .
+TASK=$(curl -fsS -H "Authorization: Bearer $KEY" "$API/v1/envelopes/$ENV" | jq -r '.tasks[] | select(.status=="ACTIVE") | .id')
+CODE=$(curl -fsS -X POST -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -d '{}' "$API/v1/envelopes/$ENV/tasks/$TASK/recipient-view" | jq -r .code)
+printf 'Open %s/sign#code=%s\n' "$API" "$CODE"
 ```
 
-Creating the envelope prepares it in the same request: the template's source is copied to the envelope's initial document (`envelopes/<id>/d0.pdf`, D0), the first signer's task becomes `ACTIVE`, and the envelope is created `IN_PROGRESS` (there is no `PROCESSING` state any more). The envelope, its tasks, its D0 artifact row and the idempotency record are written in one D1 batch, so a failed creation leaves no envelope behind. The envelope id is not random: it is the first 16 bytes of the SHA-256 of `["esign-envelope-id-v1", tenant id, Idempotency-Key]` (as JSON), shaped as a version 8 UUID. A retry with the same `Idempotency-Key` therefore names the same envelope and the same D0 key, and reuses a D0 object a failed attempt already stored instead of storing a second one; a D0 object holding other bytes is refused (`409 idempotency_conflict`). A missing template source fails the creation with `503 preparation_failed`. `POST /v1/envelopes/:id/prepare` is **deprecated**: it does nothing and answers 204 for an envelope of the tenant (every envelope is prepared), 404 otherwise. It is kept only for callers that still call it after creating an envelope.
-
-A recipient may carry a sign-by deadline: `"expiresAt": "<ISO 8601>"` on its entry in `recipients` (in the future, within 400 days). Once it passes while that recipient has not signed, the envelope becomes `EXPIRED` for everyone: before any request touches it and at the latest on the next cron sweep, with one `EXPIRED` audit event. A recipient who has signed is past their deadline's reach, so a countersigner without one never makes the envelope expire. `GET /v1/envelopes/:id` shows each task's `expiresAt`.
-
-To withdraw an envelope nobody has finished signing, void it from the management side. Every signing path requires `IN_PROGRESS`, so a `VOIDED` envelope can no longer be opened, verified or signed; the audit trail records one `VOIDED` event with the optional reason (at most 500 characters). Repeating it is a no-op, and an envelope already `FINALIZING` or `COMPLETED` answers 409 `envelope_not_voidable`:
+Locally, without a mail sink, codes go only to `example.com` or `.test` addresses and are kept in
+the local test mailbox. The page does not show the message id; the code form carries it in
+`data-test-message-id`. Read the code with the key:
 
 ```sh
-curl -fsS -X POST -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -d '{"reason":"Wrong version"}' "$API/v1/envelopes/$ENV/void"
+curl -fsS -H "Authorization: Bearer $KEY" "$API/v1/test-mail/<message-id>" | jq -r .otp
 ```
 
-A recipient who signs for a company may carry `"title"` (at most 128 characters) and `"onBehalfOf"` (the company, at most 200) on its entry in `recipients`, and the envelope may carry `"documentName"` (at most 200). The signing page then shows the intent statement ("I intend this to be my signature on <document> on behalf of <company>."), prefills the title for the signer to correct, and keeps **Sign document** disabled until the signer gives a title and confirms they are authorized to sign for that company. The `SIGNED` audit event records the title, the company, the confirmation and the SHA-256 of the intent statement shown, and the completion certificate prints them next to the signature.
+After Ana signs, poll the envelope, issue Marcus's view and repeat. After Marcus the Worker seals the
+envelope with the local test seal; `GET /v1/envelopes/$ENV/delivery-pdf` then returns the signed
+PDF with its certificate. To run the cron once, start the Worker with `npm run dev -- --test-scheduled` and request
+`/__scheduled`. To serve the page from the Vite server instead, pass
+`{"origin":"http://127.0.0.1:5173"}` to recipient-view and open `http://127.0.0.1:5173/#code=<code>`.
 
-For the certificate, the envelope may also carry `"sender"` (`{"name", "email"?, "organization"?}`, who sent it) and each recipient `"namedBy"` (at most 300 characters, who named that signer, for example the applicant who put them on a partner application). Both are part of the idempotent request. A recipient-view request may carry `"hostAuthentication"` (`{"method", "provider"?, "domain"?, "signedInAt"?}`, `method` an upper-case word such as `SSO` or `PASSWORD`): how the host signed the recipient in before asking for the link. E-sign cannot check it; it is recorded on `RECIPIENT_VIEW_ISSUED`, copied onto `OTP_VERIFIED` when the code is entered, returned by the audit read, and printed as the host's statement. `GET /v1/envelopes/:id` gives each task `openedAt`, when the recipient first opened the signing page.
-
-The signing page goes in three steps: **Review** (the document, its fingerprint and page count, a PDF download, the signer's title and authority), **Confirm it's you** (the emailed code) and **Sign** (the signature fields, the consent disclosure, the intent statement and how the signature will read). `GET /v1/signing/current` and `GET /v1/signing/pdf` need only the page session, so the signer reads the document before the code; previews, declining and signing still need the code (and the signature record layer checks it again). `current` says whether the session is `verified`; a host that refuses the document before the code still works: the page asks for the code first. While the signer reads, the page posts `POST /v1/signing/page-views` (`{"pages": [1, 2], "total": 4}`) for pages at least half on screen for a second; each page is recorded once, in a `PAGES_VIEWED` audit event listing the pages seen for the first time. It never blocks signing.
-
-Certificates are versioned per envelope (`certificateVersion` in `envelopes.details_json`): a stored certificate is rebuilt on every read and must come out byte for byte the same, so each envelope keeps the layout it was created with. Envelopes created before versions existed keep the original layout. Version 2 adds the document's name, the sender, who named each signer, how each was identified, the IP and device each signed from, and a summary of the events. Change the layout only by adding a new version.
-
-A signer who has passed the code may decline instead of signing, with a reason (at most 1000 characters): `POST /v1/signing/decline {"reason":"..."}`. The envelope becomes `DECLINED` for everyone, with one `DECLINED` audit event carrying the reason, the signer's IP address and user agent; nothing about it can be signed or voided afterwards.
-
-The management side reads an envelope's audit trail with `GET /v1/envelopes/:id/audit`: each event's type, time, recipient (role, name, email), IP address, user agent and a whitelisted detail (reason, title, company, authority confirmation, consent disclosure version, delivery). Codes and message ids are never returned. Another tenant's envelope answers 404.
-
-To test each recipient in order, obtain the current task id from the envelope response, then issue its view from the management side:
-
-```sh
-TASK=<current-active-task-id>
-CODE=$(curl -fsS -X POST -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -d '{"origin":"http://127.0.0.1:5173"}' "$API/v1/envelopes/$ENV/tasks/$TASK/recipient-view" | jq -r .code)
-printf 'Open http://127.0.0.1:5173/#code=%s\n' "$CODE"
-```
-
-The code is one-use and short-lived. The page removes it from the address bar and loads the PDF; reaching **Confirm it's you** requests a test OTP (once; **Resend code** asks for another), entered in six one-digit boxes with a countdown to its 10-minute expiry. The page does not show the message ID. The Worker OTP-send API returns only a message ID, never the OTP. The isolated Node loopback demo separately displays the test code; with ordinary local Wrangler retrieve the **test-only** OTP from its local R2 bucket using the unique `messageId` in the code form's `data-test-message-id` attribute:
-
-```sh
-MESSAGE_ID=<message-id-shown-on-recipient-page>
-npx wrangler r2 object get "esign-local-test-mail/test-mail/$MESSAGE_ID.json" --local --pipe
-```
-
-Messages are separate even when two envelopes target the same address. They contain plaintext test OTPs and are not automatically deleted. If document loading fails after verification, use **Retry document**; if the verification response was lost, retry the same OTP in the same still-valid session.
-After signing, poll the envelope, then repeat view/OTP/sign for Marcus. The Worker processes each signature and, after Marcus, seals the envelope on its own:
-
-```sh
-curl -fsS -H "Authorization: Bearer $KEY" "$API/v1/envelopes/$ENV" | jq .
-```
-
-OTP sends are limited per task with a cooldown and five attempts per 15-minute window. Re-entering after session expiry requires a new view and OTP, without resetting that budget. The present single-template data model does not reuse verification across multiple tasks for the same recipient. A successful HTTP sign can be retried with the same session and document while the session is valid. There is no general queue scanner.
+The test mailbox holds plaintext codes and is never cleaned up; never use it with real data.
 
 ## Validation
 
-`npm test`, `npm run typecheck`, and `npm run build` run local tests, type checking, the Vite build and a Wrangler **dry-run** bundle respectively. The HTTP integration test exercises synthetic Ana and Marcus through independent OTP and consent, verifies the PDF chain and fake seal, and tests tampering and retries. React interaction tests simulate verification-response loss and document-load failures. The host has automated React interaction tests and the BFF route gate is tested. A headless Chrome 156 local harness rendered a synthetic two-page PDF inside the same sandbox and confirmed malformed PDF rejection; it did not exercise the complete OTP/signing flow, and is not production infrastructure validation.
+From `esign/`: `npm run typecheck`, `npm test` (or serially, as CI does:
+`node --test --test-concurrency=1 test/*.test.ts`) and `npm run build` (the Vite build and a
+Wrangler **dry-run** bundle, not a deployment). Browser tests need Chrome (`ESIGN_TEST_CHROME`) and
+skip when no Chrome is found; CI requires them to run ([CI.md](CI.md)). Tests use synthetic data,
+Miniflare D1 and R2, and fakes for mail, KMS and the TSA (a recorded DigiCert response and locally generated
+OpenSSL responses). From the repository root: `node .github/scripts/check-public-content.mjs`.
 
-## Local completion certificate
+## Known limitations and open items
 
-The management-authenticated, tenant-scoped `GET /v1/envelopes/{id}/certificate` is available only for completed local envelopes. It reconstructs the existing manifest from stored signing records, checks its local HMAC and stored evidence hash by comparison, validates event links and checks source and every output file hash before returning the view. It reports stored consent and OTP verification times and event hashes, signing inputs and outputs, and the final hash. The server signing time is the recorded `consented_at` at signature acceptance; it is not an independent timestamp. Envelope metadata and current recipient task details are shown separately and are **not bound by the existing manifest**. The original template filename is not stored. No send, read, IP, identity, SSO or trust-link facts are asserted. The downloadable JSON is a snapshot, not separately sealed; validate afresh through the endpoint. LOCAL TEST ONLY: the HMAC uses a local software key, not real KMS or TSA, and is not a legal guarantee. Privileged database/key/storage modification remains outside this local integrity boundary.
-
-## Local delivery PDF
-
-After local completion, management-authenticated, tenant-scoped `GET /v1/envelopes/{id}/delivery-pdf` verifies the original local evidence and all signed artifacts and appends certificate pages to a **new** delivery PDF. D0, each intermediate PDF and the final signed PDF are not replaced, and the separate `certificate` remains available. There is no endpoint for the signed PDF alone: the delivery PDF is that PDF, page for page, with the certificate pages appended. Only facts bound in the existing evidence are included. Certificate pages display the final signed PDF hash, not their own delivery hash. The pre-existing local evidence manifest does not include or protect the delivery PDF or its metadata; these are local integrity checks, not production sealing or independent timestamps.
-
-The current certificate layout uses `local-delivery-v3.pdf` and `local-delivery-v3.json` (metadata format `esign-local-delivery-v3`). Earlier unversioned and v2 delivery objects are left untouched; the endpoints return v3, not a reconstruction of those earlier objects. Each signer’s Events group stays together on one certificate page, including wrapped names. The final signed PDF (D2) is unchanged. The certificate lists only verified bound names, hashes and recorded UTC times; it does not assert unrecorded identity or delivery events. A synthetic multipage v3 PDF was rendered with macOS PDFKit and inspected as images; the v3 layout has not been checked in a real browser or interactive PDF viewer.
-
-The first request creates the delivery PDF and metadata with conditional object creation; D3 does not add a D1 row or change completed signing facts. D1 is read to revalidate the original evidence on each request. The preceding finalization writes its evidence object before its D1 batch; retry finalization after a failed or ambiguous response before requesting delivery. Retries reproduce and check both objects; a conflicting or corrupted object fails closed. A failure between writes can leave an unreferenced PDF, which the next retry checks and reuses. No automatic deletion occurs: investigate ambiguous failures manually and do not delete objects that another request may be using. Requests recheck local evidence and hashes; privileged local storage or database mutation remains possible. These endpoints create local artifacts on GET and are intended only for this single-user experiment, not a production interface.
-
-## Worker KMS/TSA candidate boundary
-
-`src/worker-kms-evidence.ts` is an unmounted Worker-compatible candidate, not a seal or completion path. It hashes `esign-worker-evidence-candidate-v1` followed by a NUL byte and the exact nonempty input bytes (maximum 1 MiB), asks an injected provider to sign that SHA-256 digest with P-256, and verifies the returned 64-byte P1363 signature locally against a caller-pinned SPKI. The unmounted AWS KMS provider candidate below strictly converts returned DER signatures; callers must separately invoke this local verification boundary. The input is not automatically a validated manifest. The caller must independently establish the authorized KMS identity and key pin; a key returned by the same provider is not independent identity proof. No provider, credentials or network policy is configured in the running service.
-
-The TSA entry point always fails: RFC3161 parsing, request/nonce/imprint binding, token signature, certificate chain, trust anchors, time and revocation policy are not implemented or approved. No token or HTTP success can be accepted as timestamp evidence. R2 conditional creation is not verified immutable retention; retention policy, durable publication, retries and ambiguous remote outcomes remain unresolved. This candidate does not write evidence, call external services or alter local or production completion. These issues and independent security/legal review block production integration.
-
-The separate, unmounted `src/p256-der-signature.ts` converts strictly encoded P-256 ECDSA DER signatures to the 64-byte P1363 representation expected by WebCrypto. It checks canonical DER and scalar range; conversion alone does not verify a signature or establish its curve or key identity. DER does not identify a curve, so a signature's origin cannot be inferred from fitting P-256 scalar bounds; callers must independently establish the key and verify the signature. The unmounted AWS KMS Sign provider candidate uses this converter; the separate local verification boundary must still be called to verify the signature.
-
-### Unmounted AWS KMS Sign provider candidate
-
-`src/aws-kms-sign-provider.ts` uses the AWS SDK for JavaScript v3 to send a SHA-256 digest with `MessageType=DIGEST` and `ECDSA_SHA_256`, and converts a strictly parsed DER signature to P1363 for the existing locally verifying candidate. It requires injected fetch, a commercial AWS-region key UUID ARN (not an alias or multi-region key), and caller-supplied session credentials with an `ASIA` access-key prefix, session token and expiration between one minute and twelve hours away. These are fail-closed input checks, **not proof** that credentials were issued by STS, that their expiration is genuine, or that the caller, account, key or independently pinned SPKI is authorized. AWS validates credentials only when an actual request is made; no real request has been made here. Independently establish credential provenance, authorized account/key/region, public-key pin and signing policy before any future integration.
-
-The SDK signs a fixed HTTPS KMS endpoint. Injected fetch must itself be trusted; it receives the credential-bearing signed request and digest and must not log them, redirect, alter the destination, or expose them to untrusted code. Requests use manual redirects and reject non-200 responses, including redirects; responses are bounded to 4 KiB, base64/DER are checked and the returned key ARN and algorithm must match. One request attempt is made: a failed or lost response can nevertheless mean KMS signed, and no remote retry or recovery guarantee is claimed. The raw provider only converts a signature; callers must use the independently pinned local verification boundary, not treat the provider result as a seal. It is not mounted or connected to completion. No TSA validation, WORM, IAM/STS integration, credential refresh, network policy, real KMS identity verification or cloud deployment is supplied.
-
-An isolated evaluation of `@aws-sdk/client-kms` 3.1161.0 installed 24 packages (about 15 MiB in node_modules); a browser-targeted probe bundle was about 387 KiB uncompressed and ran in local workerd with a stub request handler. The repository pins that SDK and directly declares esbuild for the local bundle test. The automated workerd test injects a response and makes no real network request. This is compatibility evidence for the tested build, not proof of an authorized cloud integration.
-
-### Signature artwork
-
-Signature artwork uses a bundled Caveat bitmap atlas (renderer `caveat-bitmap-v2`);
-no font is downloaded at runtime. The fixed atlas SHA-256 is recorded in
-`src/typed-signature-image.ts`; `scripts/generate-signature-atlas.swift` builds
-the atlas from `fonts/Caveat-wght.ttf` using macOS CoreText. This development change does not migrate or
-modify existing evidence or generated objects. Signatures created with former renderers may no longer replay or verify; retain the old source
-version if historical verification is needed. Date and Title use the existing
-regular text renderer.
-
-Existing stored artifacts are not rewritten. This local experiment does not guarantee replay of historical positioned renderings after the text sizing change; preserve old evidence and use fresh synthetic state for a new demo. Do not restart or replace a running demo without its owner’s approval.
-
-### Worker TSA request adapter (unmounted)
-
-`src/worker-tsa-transport.ts` is an unmounted request adapter for an **independently authorized synthetic SHA-256 imprint** rather than the fixed fixture. It constructs an RFC3161 query with a random nonce and accepts only an explicitly allowlisted HTTPS endpoint, an injected authorization callback and injected fetch. The callback must independently establish synthetic provenance **and** prior endpoint terms and disclosure authorization; caller assertion or the callback's existence cannot prove either. The injected fetch must enforce its own network/DNS policy; an exact URL list alone does not prevent SSRF or rebinding. Nothing configures this adapter to make a real request. Tests use synthetic data and injected fetch only. It snapshots input, rejects shared memory, bounds response and timeout, and refuses redirects. A timed-out operation can still have reached the service and produced a timestamp; never infer non-issuance.
-
-Its result is always `UNVERIFIED`. It does not parse or validate the response, check its nonce/imprint, verify CMS signature or signer certificate, apply roots, algorithm/time/revocation policy, or create evidence. Do not connect it to finalization or use it with real content. The separate Node/OpenSSL synthetic verifier and the old fixed-fixture transport are not Worker trust verification. No approved TSA roots or revocation policy is configured; the Worker evidence TSA function remains fail-closed.
-
-### Unmounted RFC3161 test verifier candidate
-
-`src/worker-rfc3161-verifier.ts` is an independently exercised Worker-compatible **test candidate**, not connected to a route, the TSA transport, finalization or the `createTsaEvidence` fail-closed entry point. It uses PKI.js/ASN1.js for CMS signature and certificate-chain validation and supports only a deliberately narrow profile: granted RFC3161 response, SHA-256 imprint, a 16-byte positive nonce in the format generated by the test transport, one RSA SHA-256 signer, RSA keys of at least 2048 bits, a pinned signer SPKI, critical exclusive timeStamping EKU, signing key usage, a non-CA signer, SHA-256 ESS certificate binding, explicit TSA policy OIDs and explicit trust roots. It bounds data, chain size and ASN.1 traversal; the DER screen is a deliberately restrictive rejection screen, **not a demonstrated complete DER validator**. It requires a timestamp accuracy and checks the entire asserted accuracy window against the configured test clock and certificate validity.
-
-The verifier requires an injected revocation checker to return true for the validated chain and full timestamp window. That checker, roots, pins, clock and policy must come from trusted infrastructure, never a browser, request or end user. The test checker returns true for generated synthetic certificates; it performs **no real revocation check**. There is no configured production trust anchor, revocation mechanism, legal policy or production-authorized call path. The candidate result `VERIFIED_TEST_CANDIDATE` is test-only, not production evidence. PKI.js chain validation is explicitly enabled; it is invoked with `passedWhenNotRevValues` because the separate injected checker is mandatory. This is safe only if that checker is itself trustworthy and covers every non-root certificate and relevant time; neither property is established here.
-
-Locally generated OpenSSL TSA responses were tested in Node and browser-bundled workerd against explicit synthetic roots, with selected bad nonce/imprint, signer pin, root, status, time, key usage, DER and signature cases. This does not establish comprehensive ASN.1/CMS correctness, full RFC3161 interoperability, independent PKI.js security, actual revocation or legal validity. The profile intentionally rejects other valid TSA configurations, including unsupported algorithms and unapproved optional forms. Obtain independent cryptographic review and adversarial interoperability tests before any binding to a real service. No real TSA call was made.
-
-Independent-review regression fixes narrow this test profile further: every certificate in the selected validated path, including the signer, intermediates and trust anchor, must have no duplicate extensions and no critical extension outside the candidate's explicitly handled set. For a signer this set is key usage, basic constraints and extended key usage; for CA path certificates it is key usage and basic constraints. Other critical extensions fail closed, even where another verifier could support them. The signed `messageDigest` attribute must contain exactly one 32-byte OCTET STRING. The CMS signed-attributes value is separately screened as a DER SET for canonical ordering; unrelated context-specific tags are not treated as sets. These checks do not make the DER screen complete or authorize production use. The revocation callback remains an injected trusted dependency, and tests use a synthetic allow callback rather than real revocation evidence.
-
-### Recipient demo origin safety
-
-The recipient page, when not served by the Worker, accepts only the local UI
-development origin `http://127.0.0.1:5173` (with the local Worker on
-`http://127.0.0.1:8787`). On other origins it removes the page fragment and
-stops before exchanging the code; in particular, an HTTPS page will not send a
-fragment code to a service on the user's loopback interface. This is a
-fail-closed local-demo restriction, **not user authentication** and not cloud
-support. The allowed loopback host, Worker and local mailbox are for a trusted
-single-user local environment only; other local processes are not trusted by
-this check. A cloud demo requires a separately reviewed verified-user boundary,
-recipient authorization, OTP handling and asset/API hosting before this
-restriction can be safely replaced. Do not expose the local-test Worker or OTP
-mailbox remotely.
-
-The one exception is the page the Worker serves itself at `/sign`
-([WORKER-MODE.md](WORKER-MODE.md)): the Worker declares its own origin in a
-`<meta name="esign-api">` tag, and only when that matches the page's origin does
-the page exchange the code there. A copy of the page on another origin, with or
-without the tag, still stops before sending the code anywhere.
+- **Mail per environment.** dev emails every code and signed copy to one sink mailbox (the binding
+  is pinned to it on `esign-dev`). prod emails each recipient through an unpinned `send_email`
+  binding; that Cloudflare Email Sending delivers to any address from `MAIL_FROM` is not yet
+  confirmed. `/demo` is on in prod too, where its envelopes are real and mail their signers.
+- **Legal review.** The consent text (`src/disclosure.ts`) is marked a draft for counsel; the
+  evidence, certificate and intent wording also need legal review. Legal effect under ESIGN and
+  UETA is not established.
+- **TSA.** Revocation of DigiCert's TSA certificates is not checked; DigiCert's terms for its free
+  TSA are not confirmed for production; the request goes over plain HTTP (the response is signed and
+  verified). The signed PDF carries no embedded (PAdES) signature.
+- **Rate limiting.** The Worker has none of its own beyond the OTP budget. Put Cloudflare rate
+  limiting rules on `/v1/signing/otp*` and `/v1/page-sessions/exchange` before anyone outside the
+  team signs.
+- **Deprecated endpoint.** Delete `POST /v1/envelopes/:id/prepare` once Suger's backend is deployed
+  without the call.
+- **Retention and integrity.** No retention policy; R2 conditional writes are not WORM; privileged
+  changes to D1, R2 or keys remain possible and are detected only where the checks above re-verify.
+  Orphans are never cleaned up. A recorded signature cannot be rolled back if its input changes in
+  storage before rendering; rendering then fails and the row stays `PENDING`.
+- **Credentials.** Management keys are added with `scripts/provision-tenant.ts` and revoked by
+  setting `api_keys.revoked_at`; there is no API for either. No user login, key rotation tooling or
+  independent security review yet.
+- **Blank editor sessions.** `POST /v1/editor/save` still accepts a file for a session without a
+  bound source, for older clients; the embedded UI does not.

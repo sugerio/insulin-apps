@@ -1,5 +1,5 @@
 import { createAwsKmsSignProvider } from './aws-kms-sign-provider.ts';
-import { createKmsEvidenceCandidate } from './worker-kms-evidence.ts';
+import { signKmsEvidence } from './worker-kms-evidence.ts';
 import { cachedRoleCredentials, type TemporaryCredentials } from './aws-sts-credentials.ts';
 import { DIGICERT_MISSING_ACCURACY_MS, DIGICERT_TSA_POLICY, DIGICERT_TSA_SIGNERS, DIGICERT_TSA_URL, digicertRoots } from './tsa-trust.ts';
 import type { ManagedEvidenceConfig } from './managed-evidence.ts';
@@ -50,7 +50,7 @@ export async function managedEvidenceFromEnv(env: SealEnv, fetcher: typeof fetch
       keyArn, publicKeySpki: spki, tsa, fetch: fetcher,
       async signEvidence(input) {
         const provider = createAwsKmsSignProvider({ region, keyArn, credentials: await getCredentials(), fetch: fetcher });
-        return (await createKmsEvidenceCandidate(input, spki, provider)).signature;
+        return (await signKmsEvidence(input, spki, provider)).signature;
       },
     },
     trust: { publicKeySha256: [hex(await crypto.subtle.digest('SHA-256', Uint8Array.from(spki))), ...hashes(env.KMS_TRUSTED_KEY_SHA256)], tsa },

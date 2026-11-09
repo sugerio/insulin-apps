@@ -3,7 +3,7 @@
 // embedded here (/sign). The Worker processes and seals envelopes on its own. The key is kept
 // only in this tab's sessionStorage; every request goes straight to this origin's API.
 import React,{useEffect,useRef,useState} from 'react';
-import {CompletionCertificate} from './HostPage.ts';
+import {CompletionCertificate} from './CompletionCertificate.ts';
 import {readSaveResult} from './editor-save-protocol.ts';
 const h=React.createElement;
 

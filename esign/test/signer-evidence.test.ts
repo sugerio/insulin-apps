@@ -24,7 +24,7 @@ async function harness() {
     await db.batch(unstable_splitSqlQuery(await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8')).map(s => db.prepare(s)));
   }
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SECRET))).toString('hex');
-  await db.prepare("INSERT INTO tenants VALUES ('a')").run();
+  await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();
   await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
   const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, SIGNING_PAGE_ORIGINS: ORIGIN, OTP_KEY: 'local-test-pepper-at-least-32-bytes', TEST_SEAL_KEY: 'local-test-seal-key-at-least-32-bytes' };
   const auth = { authorization: `Bearer ${SECRET}` };

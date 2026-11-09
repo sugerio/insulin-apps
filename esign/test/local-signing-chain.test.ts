@@ -13,15 +13,15 @@ test('local primitives chain Ana D0 to D1 and Marcus D1 to D2 without overwritin
   const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
   try {
     const db=await mf.getD1Database('DB'), bucket=await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signatures.sql','0009_otp_lifecycle.sql','0013_editor_allowed_origins.sql','0015_editor_page_sessions.sql','0016_editor_template_integration.sql','0025_otp_recipient_binding.sql']) {
+    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0005_access.sql','0006_otp_challenges.sql','0007_signatures.sql','0015_editor_sessions.sql','0016_editor_template_integration.sql']) {
       const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');
       await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
     }
     const pdf=await PDFDocument.create();pdf.addPage().drawText('Electronic signature - forged layout');const d0=await pdf.save();
     const h0=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',d0)),n=>n.toString(16).padStart(2,'0')).join('');
-    await db.exec(`INSERT INTO tenants VALUES ('a');
+    await db.exec(`INSERT INTO tenants (id) VALUES ('a');
 INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','a','source','["ana","marcus"]',1);
-INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('env','a','template','IN_PROGRESS',1);
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env','a','template','IN_PROGRESS',1,'hash');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','env','ana','Ana','ana@example.com',1,'ACTIVE');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus','env','marcus','Marcus','marcus@example.com',2,'PENDING');
 `);

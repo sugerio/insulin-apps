@@ -1,6 +1,6 @@
 import { evidenceMessage } from './worker-kms-evidence.ts';
-import { syntheticTimestampQuery } from './worker-tsa-transport.ts';
-import { verifyRfc3161Candidate } from './worker-rfc3161-verifier.ts';
+import { timestampQuery } from './worker-tsa-transport.ts';
+import { verifyRfc3161Timestamp } from './worker-rfc3161-verifier.ts';
 
 /**
  * The managed seal of a completed envelope: an ECDSA P-256 signature by a KMS key over the
@@ -70,8 +70,8 @@ export async function sealManifest(manifest: string, sealer: Sealer, now: () => 
   const signature = await sealer.signEvidence(input);
   if (signature.length !== 64 || !await verifySignature(sealer.publicKeySpki, signature, input)) throw new Error('KMS signature rejected');
   const nonce = crypto.getRandomValues(new Uint8Array(16)); nonce[0] = 1;
-  const response = await requestTimestamp(sealer.tsa.url, syntheticTimestampQuery(await sha256(signature), nonce), sealer.fetch);
-  const { time } = await verifyRfc3161Candidate(response, signature, nonce, tsaPolicy(sealer.tsa, now()));
+  const response = await requestTimestamp(sealer.tsa.url, timestampQuery(await sha256(signature), nonce), sealer.fetch);
+  const { time } = await verifyRfc3161Timestamp(response, signature, nonce, tsaPolicy(sealer.tsa, now()));
   return {
     format: 'esign-managed-seal-v1',
     manifest,
@@ -91,7 +91,7 @@ export async function verifyManagedSeal(seal: ManagedSeal, manifest: string, tru
   if (publicKeySha256 !== seal.signature.publicKeySha256 || !trust.publicKeySha256.includes(publicKeySha256)) throw new Error('Untrusted seal key');
   if (signature.length !== 64 || !await verifySignature(spki, signature, text.encode(manifest))) throw new Error('Invalid seal signature');
   if (seal.timestamp?.tsaUrl !== trust.tsa.url || !/^[0-9a-f]{32}$/.test(seal.timestamp.nonce) || !Number.isSafeInteger(seal.timestamp.time)) throw new Error('Invalid seal timestamp');
-  const { time } = await verifyRfc3161Candidate(unb64(seal.timestamp.response), signature, unhex(seal.timestamp.nonce), tsaPolicy(trust.tsa, seal.timestamp.time));
+  const { time } = await verifyRfc3161Timestamp(unb64(seal.timestamp.response), signature, unhex(seal.timestamp.nonce), tsaPolicy(trust.tsa, seal.timestamp.time));
   if (time !== seal.timestamp.time) throw new Error('Invalid seal timestamp');
   return { keyArn: seal.signature.keyArn, publicKeySha256, timestampTime: time, tsaUrl: seal.timestamp.tsaUrl };
 }

@@ -12,7 +12,7 @@ import {positionedV3Fields} from './positioned-v3-snapshot.ts';
 import { assertRenderableRecipientNames } from './recipient-name.ts';
 import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './prepare.ts';
 import { mountLocalSigningRoutes } from './local-signing-routes.ts';
-import { isProd, prodProblems, signingEnabled, type EnvironmentEnv } from './environment.ts';
+import { environmentOf, isProd, prodProblems, signingEnabled, type EnvironmentEnv } from './environment.ts';
 import { mountEditorRoutes } from './editor-routes.ts';
 import { demoPage, EMBEDDABLE_HEADERS, signingPage } from './signing-page.ts';
 import { sweepEnvelopes } from './envelope-completion.ts';
@@ -42,7 +42,8 @@ export const managementAuth = async (context: import('hono').Context<Env>, next:
 };
 function createApp() {
 const app = new Hono<Env>();
-app.get('/health', (context) => context.json({ status: 'ok', service: 'esign', mode: 'experimental' }));
+// The deployment environment (ESIGN_ENV, `dev` or `prod`); no other configuration is disclosed.
+app.get('/health', (context) => context.json({ status: 'ok', service: 'esign', environment: environmentOf(context.env ?? {}) }));
 // The placed fields a document can be signed with: Signature, Date signed and Title.
 const supportedFields=(raw:string,roles:string[],pages:number)=>positionedV3Fields(JSON.parse(raw),roles,pages);
 app.use('/v1/me', managementAuth);
@@ -144,6 +145,11 @@ function placedFields(raw: string | undefined): { type: string; role: string; pa
   return out;
 }
 
+/** A created envelope starts IN_PROGRESS: its first signer's task is active. */
+const CREATED_STATUS = 'IN_PROGRESS';
+/** The response to POST /v1/envelopes, for the first creation and for every retry of it alike. */
+const createdResponse = (id: string) => ({ id, status: CREATED_STATUS });
+
 app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const key = context.req.header('idempotency-key') ?? '';
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(key)) return context.json({ error: 'idempotency_key_required' }, 400);
@@ -181,9 +187,15 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const tenantId = context.get('tenantId');
   const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(sender ? { sender } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
-  const lookup = () => context.env.DB.prepare('SELECT request_hash, response_json FROM idempotency_keys WHERE tenant_id = ? AND idempotency_key = ?').bind(tenantId, `envelope:${key}`).first<{ request_hash: string; response_json: string }>();
+  // Idempotency is by the envelope itself: its id comes from the tenant and the Idempotency-Key, and
+  // it keeps the hash of the request that created it. A retry of that request gets the response a
+  // first creation returns (always IN_PROGRESS, whatever the envelope's status is now), and the
+  // same key with another request is a conflict.
+  const id = await envelopeIdFor(tenantId, key);
+  const lookup = () => context.env.DB.prepare('SELECT request_sha256 FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ request_sha256: string }>();
+  const replay = (existing: { request_sha256: string }) => existing.request_sha256 === hash ? context.json(createdResponse(id), 201) : context.json({ error: 'idempotency_conflict' }, 409);
   const existing = await lookup();
-  if (existing) return existing.request_hash === hash ? context.json(JSON.parse(existing.response_json), 201) : context.json({ error: 'idempotency_conflict' }, 409);
+  if (existing) return replay(existing);
   try { await assertRenderableRecipientNames(recipients.map((recipient) => recipient.name)); }
   catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
   const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string }>();
@@ -204,32 +216,31 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   // The envelope is prepared here, in the same request: its initial document (D0) is the template's
   // source, and the first signer's task is active. The id comes from the tenant and the
   // Idempotency-Key, so a retry after a failure reuses the D0 object stored by the failed attempt.
-  const id = await envelopeIdFor(tenantId, key);
   let d0: { id: string; objectKey: string; sha256: string };
   try { d0 = await storeInitialDocument(context.env.ARTIFACTS, template.object_key, id); }
   catch (error) {
     if (!(error instanceof InitialDocumentConflict)) return context.json({ error: 'preparation_failed' }, 503);
     // Another request with this key stored a different document: it is a different request.
     const raced = await lookup();
-    return raced && raced.request_hash === hash ? context.json(JSON.parse(raced.response_json), 201) : context.json({ error: 'idempotency_conflict' }, 409);
+    return raced ? replay(raced) : context.json({ error: 'idempotency_conflict' }, 409);
   }
   const taskIds = recipients.map(() => crypto.randomUUID());
-  const response = { id, status: 'IN_PROGRESS' };
-  // One batch: the envelope, its tasks and its D0 artifact commit together or not at all.
+  // One batch: the envelope (with the request's hash), its tasks and its D0 artifact commit together
+  // or not at all.
   const statements = [
-    context.env.DB.prepare('INSERT INTO idempotency_keys (tenant_id, idempotency_key, request_hash, response_json) VALUES (?, ?, ?, ?)').bind(tenantId, `envelope:${key}`, hash, JSON.stringify(response)),
     // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
-    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, details_json) VALUES (?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, 'IN_PROGRESS', Date.now(), JSON.stringify({ ...(documentName ? { documentName } : {}), ...(sender ? { sender } : {}), certificateVersion: CERTIFICATE_VERSION } satisfies EnvelopeDetails)),
+    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(sender ? { sender } : {}), certificateVersion: CERTIFICATE_VERSION } satisfies EnvelopeDetails)),
     ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
   ];
   try { await context.env.DB.batch(statements); }
   catch (error) {
+    // A concurrent creation with this key committed first (the envelope id is the primary key).
     const raced = await lookup();
-    if (raced) return raced.request_hash === hash ? context.json(JSON.parse(raced.response_json), 201) : context.json({ error: 'idempotency_conflict' }, 409);
+    if (raced) return replay(raced);
     throw error;
   }
-  return context.json(response, 201);
+  return context.json(createdResponse(id), 201);
 });
 
 app.get('/v1/envelopes/:id', async (context) => {

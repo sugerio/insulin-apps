@@ -25,8 +25,13 @@ function screenDer(bytes:Uint8Array):void {
 }
 const parse=(bytes:Uint8Array<ArrayBuffer>)=>{screenDer(bytes);const p=asn1.fromBER(bytes.buffer);if(p.offset!==bytes.length||!(p.result instanceof asn1.Sequence))throw new Error('Invalid ASN.1');return p.result;};
 const der=(c:Certificate)=>new Uint8Array(c.toSchema().toBER(false));
-/** Unmounted test candidate: injected policy is a trusted infrastructure boundary, not an end-user assertion. */
-export async function verifyRfc3161Candidate(response:Uint8Array,input:Uint8Array,nonce:Uint8Array,policy:Policy):Promise<{status:'VERIFIED_TEST_CANDIDATE';time:number}>{
+/**
+ * Verifies an RFC 3161 timestamp response over SHA-256(`input`) with `nonce`, and returns the
+ * token's time. The managed seal (managed-seal.ts) calls it when sealing and on every later
+ * verification, with the policy built from tsa-trust.ts. The policy (roots, accepted TSA policies
+ * and signers, clock window, revocation check) is trusted configuration, never request input.
+ */
+export async function verifyRfc3161Timestamp(response:Uint8Array,input:Uint8Array,nonce:Uint8Array,policy:Policy):Promise<{status:'VERIFIED';time:number}>{
  const bytes=copy(response,65536),data=copy(input,4096),expectedNonce=copy(nonce,16);
  if(expectedNonce.length!==16||!policy||!Array.isArray(policy.roots)||!policy.roots.length||policy.roots.length>5||typeof policy.checkRevocation!=='function'||!Number.isSafeInteger(policy.now)||!Number.isSafeInteger(policy.maxAgeMs)||policy.maxAgeMs<0||policy.maxAgeMs>86400000||!Number.isSafeInteger(policy.maxFutureSkewMs)||policy.maxFutureSkewMs<0||policy.maxFutureSkewMs>300000||!Array.isArray(policy.allowedPolicies)||!policy.allowedPolicies.length||!Array.isArray(policy.allowedSignerSpkiSha256)||!policy.allowedSignerSpkiSha256.length||policy.allowedSignerSpkiSha256.some(x=>typeof x!=='string'||!/^[a-f0-9]{64}$/.test(x)))throw new Error('Timestamp policy missing');
  const roots=policy.roots.map(x=>new Certificate({schema:parse(copy(x,16384))}));
@@ -68,5 +73,5 @@ export async function verifyRfc3161Candidate(response:Uint8Array,input:Uint8Arra
   const seen=new Set<string>();for(const ext of c.extensions??[]){if(seen.has(ext.extnID))throw new Error('Duplicate certificate extension');seen.add(ext.extnID);const allowed=index===0?['2.5.29.15','2.5.29.19','2.5.29.37']:['2.5.29.15','2.5.29.19'];if(ext.critical&&!allowed.includes(ext.extnID))throw new Error('Unsupported critical certificate extension');}
   if(at-uncertainty<c.notBefore.value.getTime()||at+uncertainty>c.notAfter.value.getTime())throw new Error('Certificate outside timestamp window');if(!(c.signatureAlgorithm.algorithmId===SHA256_RSA||(index>0&&c.signatureAlgorithm.algorithmId===SHA384_RSA))||c.subjectPublicKeyInfo.algorithm.algorithmId!==RSA)throw new Error('Unsupported certificate algorithm');const key=await crypto.subtle.importKey('spki',new Uint8Array(c.subjectPublicKeyInfo.toSchema().toBER(false)),{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},true,['verify']);if((key.algorithm as RsaKeyAlgorithm).modulusLength<2048)throw new Error('Weak RSA key');}
  if(await checkRevocation(verified.certificatePath.map(der),{earliest:at-uncertainty,latest:at+uncertainty,checkedAt:now})!==true)throw new Error('Revocation policy failed');
- return {status:'VERIFIED_TEST_CANDIDATE',time:at};
+ return {status:'VERIFIED',time:at};
 }

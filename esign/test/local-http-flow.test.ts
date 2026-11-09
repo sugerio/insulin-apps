@@ -18,7 +18,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     }
     const secret='test-key-0123456789-abcdefghijklmnopqrstuvwxyz';
     const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(secret))),n=>n.toString(16).padStart(2,'0')).join('');
-    await db.prepare("INSERT INTO tenants VALUES ('a')").run();
+    await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();
     await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
     const origin='https://host.example.com';
     const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:mail,SIGNING_PAGE_ORIGINS:origin,OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
@@ -94,7 +94,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     await bucket.put(deliveryKey,deliveryBytes);
 
     const otherSecret='other-test-key-0123456789-abcdefghijklmnopqrstuvwxyz';const otherHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(otherSecret))),n=>n.toString(16).padStart(2,'0')).join('');
-    await db.prepare("INSERT INTO tenants VALUES ('b')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'b')").bind(otherHash).run();
+    await db.prepare("INSERT INTO tenants (id) VALUES ('b')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'b')").bind(otherHash).run();
     assert.equal((await req(`/v1/envelopes/${envelope.id}/certificate`,{headers:{authorization:`Bearer ${otherSecret}`}})).status,404);
     assert.equal((await req(`/v1/envelopes/${envelope.id}/delivery-pdf`,{headers:{authorization:`Bearer ${otherSecret}`}})).status,404);
     await bucket.put(finalOutput!.object_key,'tampered');assert.equal((await req(`/v1/envelopes/${envelope.id}/certificate`,{headers:management})).status,503);assert.equal((await req(`/v1/envelopes/${envelope.id}/delivery-pdf`,{headers:management})).status,503);await bucket.put(finalOutput!.object_key,original);

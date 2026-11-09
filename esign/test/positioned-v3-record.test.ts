@@ -27,7 +27,7 @@ test('a fields signature captures only the verified current role, time and image
   /** A privileged edit that goes around the immutability trigger, as an operator with database access could. */
   const privileged=async(edit:()=>Promise<unknown>)=>{await db.prepare('DROP TRIGGER signatures_facts_immutable').run();try{await edit();}finally{await db.prepare(immutability).run();}};
   const key='local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz',origin='https://host.example.com';
-  await db.batch([db.prepare("INSERT INTO tenants VALUES ('tenant')"),db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(await sha(new TextEncoder().encode(key)))]);
+  await db.batch([db.prepare("INSERT INTO tenants (id) VALUES ('tenant')"),db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(await sha(new TextEncoder().encode(key)))]);
   const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:mail,SIGNING_PAGE_ORIGINS:origin,OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
   const req=(path:string,init:RequestInit={})=>app.fetch(new Request('http://localhost'+path,init),env),mgmt={authorization:`Bearer ${key}`};
   const post=(body:unknown,headers:Record<string,string>)=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
@@ -59,21 +59,20 @@ test('a fields signature captures only the verified current role, time and image
   await assert.rejects(()=>recordSignature(db,bucket,{...base,datePreviews:{'date-a':'2000-01-01'},values}),/date changed/,'another day\'s preview is refused');
   await assert.rejects(()=>recordSignature(db,bucket,{...base,signaturePreviews:{'sig-a':'0'.repeat(64)},values}),/preview changed/);
   assert.equal(await count(),0);
-  await db.prepare('UPDATE recipient_otp_verifications SET recipient_email=NULL WHERE task_id=?').bind(tasks[0].id).run();
-  await assert.rejects(()=>recordSignature(db,bucket,{...base,values}),'an unbound verification must not authorize signing');
-  await db.prepare('UPDATE recipient_otp_verifications SET recipient_email=? WHERE task_id=?').bind('ana@example.com',tasks[0].id).run();
-  await db.prepare('UPDATE tasks SET recipient_email=? WHERE id=?').bind('other@example.test',tasks[0].id).run();
-  await assert.rejects(()=>recordSignature(db,bucket,{...base,values}),'a changed recipient must not use an earlier OTP verification');
+  const verified=(await db.prepare("SELECT otp_verified_at FROM access_sessions WHERE scope='recipient' AND subject_id=?").bind(tasks[0].id).first<{otp_verified_at:number}>())!.otp_verified_at;
+  const setVerified=(value:number|null)=>db.prepare("UPDATE access_sessions SET otp_verified_at=? WHERE scope='recipient' AND subject_id=?").bind(value,tasks[0].id).run();
+  await setVerified(null);
+  await assert.rejects(()=>recordSignature(db,bucket,{...base,values}),'a session that has not entered the code must not sign');
+  await setVerified(verified);
   assert.equal(await count(),0);
-  await db.prepare('UPDATE tasks SET recipient_email=? WHERE id=?').bind('ana@example.com',tasks[0].id).run();
-  let changedRecipient=false;const recipientRace=new Proxy(db,{get(target,key){if(key==='batch')return async (statements:D1PreparedStatement[])=>{if(!changedRecipient){changedRecipient=true;await target.prepare('UPDATE tasks SET recipient_email=? WHERE id=?').bind('other@example.test',tasks[0].id).run();await target.prepare('UPDATE recipient_otp_verifications SET recipient_email=? WHERE task_id=?').bind('other@example.test',tasks[0].id).run();}return target.batch(statements);};const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;}});
+  // Changing the task's email afterwards is refused by migration 0027 (task-recipient-immutable.test.ts),
+  // which this fixture omits: here the change lands between reading the signer and the commit.
+  let changedRecipient=false;const recipientRace=new Proxy(db,{get(target,key){if(key==='batch')return async (statements:D1PreparedStatement[])=>{if(!changedRecipient){changedRecipient=true;await target.prepare('UPDATE tasks SET recipient_email=? WHERE id=?').bind('other@example.test',tasks[0].id).run();}return target.batch(statements);};const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;}});
   await assert.rejects(()=>recordSignature(recipientRace,bucket,{...base,values}),'recipient changed before signing commit must be rejected');assert.equal(changedRecipient,true);assert.equal(await count(),0);
   await db.prepare('UPDATE tasks SET recipient_email=? WHERE id=?').bind('ana@example.com',tasks[0].id).run();
-  await db.prepare('UPDATE recipient_otp_verifications SET recipient_email=? WHERE task_id=?').bind('ana@example.com',tasks[0].id).run();
-  const verified=(await db.prepare('SELECT verified_at FROM recipient_otp_verifications WHERE task_id=?').bind(tasks[0].id).first<{verified_at:number}>())!.verified_at;
-  await db.prepare('UPDATE recipient_otp_verifications SET verified_at=? WHERE task_id=?').bind(now+1,tasks[0].id).run();await assert.rejects(()=>recordSignature(db,bucket,{...base,values}));await db.prepare('UPDATE recipient_otp_verifications SET verified_at=? WHERE task_id=?').bind(verified,tasks[0].id).run();
-  const expiry=(await db.prepare('SELECT expires_at FROM recipient_page_sessions WHERE task_id=?').bind(tasks[0].id).first<{expires_at:number}>())!.expires_at;
-  await db.prepare('UPDATE recipient_page_sessions SET expires_at=? WHERE task_id=?').bind(now,tasks[0].id).run();await assert.rejects(()=>recordSignature(db,bucket,{...base,values}));await db.prepare('UPDATE recipient_page_sessions SET expires_at=? WHERE task_id=?').bind(expiry,tasks[0].id).run();
+  await setVerified(now+1);await assert.rejects(()=>recordSignature(db,bucket,{...base,values}),'a code entered after consent is refused');await setVerified(verified);
+  const expiry=(await db.prepare("SELECT expires_at FROM access_sessions WHERE scope='recipient' AND subject_id=?").bind(tasks[0].id).first<{expires_at:number}>())!.expires_at;
+  await db.prepare("UPDATE access_sessions SET expires_at=? WHERE scope='recipient' AND subject_id=?").bind(now,tasks[0].id).run();await assert.rejects(()=>recordSignature(db,bucket,{...base,values}));await db.prepare("UPDATE access_sessions SET expires_at=? WHERE scope='recipient' AND subject_id=?").bind(expiry,tasks[0].id).run();
   // The images go to R2 before the record; a template changed meanwhile rolls the record back.
   let changedOnce=false,writes=0;const changingBucket=new Proxy(bucket,{get(target,prop){if(prop==='put')return async (...args:Parameters<R2Bucket['put']>)=>{const result=await (target.put as any)(...args);writes++;if(!changedOnce){changedOnce=true;await setFields(updated.map(f=>f.id==='title-a'?{...f,rect:{...f.rect,y:.31}}:f));}return result;};const value=Reflect.get(target,prop);return typeof value==='function'?value.bind(target):value;}}) as R2Bucket;
   await assert.rejects(()=>recordSignature(db,changingBucket,{...base,values}),'template changed before commit');assert.equal(changedOnce,true);assert.ok(writes>0,'rejection can leave pre-commit images');assert.equal(await count(),0);
@@ -92,10 +91,10 @@ test('a fields signature captures only the verified current role, time and image
   assert.equal(await retrySignature(db,bucket,{...base,values}),id);
   await db.prepare('UPDATE tasks SET recipient_email=? WHERE id=?').bind('other@example.test',tasks[0].id).run();
   assert.equal(await retrySignature(db,bucket,{...base,values}),null,'a changed recipient cannot replay a signature');
-  await db.prepare('UPDATE recipient_otp_verifications SET recipient_email=? WHERE task_id=?').bind('other@example.test',tasks[0].id).run();
-  assert.equal(await retrySignature(db,bucket,{...base,values}),null,'replacing verification cannot retarget an already recorded signature');
   await db.prepare('UPDATE tasks SET recipient_email=? WHERE id=?').bind('ana@example.com',tasks[0].id).run();
-  await db.prepare('UPDATE recipient_otp_verifications SET recipient_email=? WHERE task_id=?').bind('ana@example.com',tasks[0].id).run();
+  await setVerified(verified+1);
+  assert.equal(await retrySignature(db,bucket,{...base,values}),null,'a session verified at another time cannot replay the signature');
+  await setVerified(verified);
   const source=await db.prepare('SELECT object_key FROM artifacts WHERE id=?').bind(current.id).first<{object_key:string}>();const sourceBytes=await (await bucket.get(source!.object_key))!.arrayBuffer();await bucket.put(source!.object_key,'tampered');assert.equal(await retrySignature(db,bucket,{...base,values}),null);await bucket.put(source!.object_key,sourceBytes);
   assert.equal(await retrySignature(db,bucket,{...base,values:{...values,'title-a':'Changed'}}),null);
   assert.equal(await retrySignature(db,bucket,{...base,values:{...values,'date-a':date}}),null);

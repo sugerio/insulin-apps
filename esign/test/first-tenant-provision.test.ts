@@ -45,7 +45,7 @@ test('local first synthetic tenant rejects an existing different tenant',async()
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response()}}',d1Databases:['DB']});
  try {
   const db=await mf.getD1Database('DB');await db.batch(unstable_splitSqlQuery(schema).map(s=>db.prepare(s)));
-  await db.prepare('INSERT INTO tenants VALUES (?)').bind('other_test').run();
+  await db.prepare('INSERT INTO tenants (id) VALUES (?)').bind('other_test').run();
   await assert.rejects(createFirstSyntheticTenant(db));
   assert.deepEqual((await db.prepare('SELECT id FROM tenants').all()).results,[{id:'other_test'}]);
  } finally {await mf.dispose();}
@@ -88,7 +88,7 @@ test('generated first-key SQL guards the complete tenant and key state at insert
   const otherSql=readFileSync(join(dir2,'management-key.sql'),'utf8');
   const keys=async()=> (await db.prepare('SELECT key_hash,tenant_id,revoked_at FROM api_keys').all()).results;
   const reset=async()=>{await db.exec('DELETE FROM api_keys; DELETE FROM tenants;');};
-  const tenant=async(id:string)=>{await db.prepare('INSERT INTO tenants VALUES (?)').bind(id).run();};
+  const tenant=async(id:string)=>{await db.prepare('INSERT INTO tenants (id) VALUES (?)').bind(id).run();};
   await assert.rejects(db.exec(sql),'zero tenants');
   assert.deepEqual(await keys(),[]);
   await tenant('other_test');

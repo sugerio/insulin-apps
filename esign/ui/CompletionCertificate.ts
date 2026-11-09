@@ -1,8 +1,10 @@
-import React, {useEffect, useRef, useState} from 'react';
-import {TemplateLaunch} from './TemplateLaunch.ts';
+import React from 'react';
+/**
+ * The completion certificate as the demo page shows it (DemoPage.ts), from
+ * `GET /v1/envelopes/:id/certificate`: the seal, the envelope and document, each signer's recorded
+ * events and the audit trail.
+ */
 const h=React.createElement;
-type Task={id:string;recipientName:string;recipientEmail:string;status:string;routingOrder:number};
-type Envelope={id:string;templateId?:string;status:string;tasks:Task[]};
 type Certificate={
   mode:string;
   /** Present for envelopes completed with the managed seal (mode KMS_TSA). */
@@ -49,34 +51,4 @@ export function CompletionCertificate({certificate:c}:{certificate:Certificate})
           ...[utc(e.occurredAt),AUDIT_LABELS[e.type]??e.type,c.recipients.find(r=>r.id===e.taskId)?.recipient_name??'',e.ip??'',e.userAgent??'',sealed||c.mode!=='KMS_TSA'?'':'recorded after sealing'].map((v,i)=>h('td',{key:i,style:{padding:'0.25rem',verticalAlign:'top',overflowWrap:'anywhere'}},v)))))))
     :h('p',null,'Sending, reading, IP address and identity verification beyond the local test OTP are not recorded or established.'),
     h('a',{href:`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(c,null,2))}`,download:c.mode==='KMS_TSA'?'certificate.json':'local-test-certificate.json'},'Download certificate JSON'));
-}
-const headers={'x-local-esign':'1'};
-async function request(path:string,init:RequestInit={}) {
-  const response=await fetch(`/host${path}`,{...init,headers:{...headers,...init.headers}});
-  if(!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
-  return response;
-}
-export function HostPage() {
-  const [envelope,setEnvelope]=useState<Envelope|null>(null),[frame,setFrame]=useState(''),[pdf,setPdf]=useState(''),[message,setMessage]=useState(''),[certificate,setCertificate]=useState<Certificate|null>(null);
-  const certificateRequest=useRef(0);
-  const selectedId=useRef(''), pdfRequest=useRef(0), viewRequest=useRef(0), createRequest=useRef(0), refreshRequest=useRef(0);
-  async function refresh(id:string) {const requestId=++refreshRequest.current;const data=await (await request(`/envelopes/${id}`)).json() as Envelope;if(selectedId.current===id && refreshRequest.current===requestId) {setEnvelope(data);if(data.status!=='COMPLETED'){certificateRequest.current++;setCertificate(null);}}return data;}
-  useEffect(()=>{const id=localStorage.getItem('esign-local-envelope');if(id) {selectedId.current=id;const sequence=createRequest.current;refresh(id).catch(()=>{if(selectedId.current===id && createRequest.current===sequence) setMessage('Could not restore envelope. Check local services, then refresh.');});} return ()=>{selectedId.current='';certificateRequest.current++;pdfRequest.current++;viewRequest.current++;createRequest.current++;refreshRequest.current++;};},[]);
-  useEffect(()=>()=>{if(pdf) URL.revokeObjectURL(pdf);},[pdf]);
-  async function run(fn:()=>Promise<void>, isCurrent?:()=>boolean) {const id=selectedId.current, sequence=createRequest.current;try {setMessage('');await fn();} catch(error) {if(isCurrent ? isCurrent() : selectedId.current===id && createRequest.current===sequence) setMessage(`Local request failed: ${error instanceof Error ? error.message : 'unknown error'}`);}}
-  async function action(name:string) {if(!envelope)return;const id=envelope.id, sequence=createRequest.current;viewRequest.current++;setFrame('');await request(`/envelopes/${id}/${name}`,{method:'POST'});if(selectedId.current===id && createRequest.current===sequence){viewRequest.current++;setFrame('');await refresh(id);}}
-  async function view(task:Task) {if(!envelope)return;const id=envelope.id, requestId=++viewRequest.current;setFrame('');const result=await (await request(`/envelopes/${id}/tasks/${task.id}/recipient-view`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({origin:window.location.origin})})).json() as {code:string};if(selectedId.current!==id || viewRequest.current!==requestId)return;setFrame(`/#code=${encodeURIComponent(result.code)}`);}
-  async function deliveryPdf() {if(!envelope)return;const id=envelope.id, requestId=++pdfRequest.current;const blob=await (await request(`/envelopes/${id}/delivery-pdf`)).blob();if(selectedId.current!==id || pdfRequest.current!==requestId)return;setPdf(URL.createObjectURL(blob));}
-  async function viewCertificate() {if(!envelope || envelope.status!=='COMPLETED')return;const id=envelope.id, requestId=++certificateRequest.current;const data=await (await request(`/envelopes/${id}/certificate`)).json() as Certificate;if(selectedId.current!==id || certificateRequest.current!==requestId)return;setCertificate(data);}
-  return h('main',null,h('h1',null,'Local e-sign test host'),h('p',null,'Synthetic data only. Local simulation, not production, legal evidence, or real email. Templates can use supported positioned Signature fields or the legacy appended signature page.'),
-    h('p',{role:'status'},message),
-    h(TemplateLaunch,{request,onBegin:()=>{const sequence=++createRequest.current;return ()=>sequence===createRequest.current;},onCreated:async(id:string)=>{const sequence=createRequest.current;selectedId.current=id;pdfRequest.current++;viewRequest.current++;certificateRequest.current++;refreshRequest.current++;setEnvelope({id,status:'IN_PROGRESS',tasks:[]});localStorage.setItem('esign-local-envelope',id);setFrame('');setPdf('');setCertificate(null);if(selectedId.current===id&&createRequest.current===sequence)await refresh(id);}}),
-    envelope && h('section',null,h('h2',null,'Envelope ',envelope.id),h('p',null,'Status: ',envelope.status),h('p',null,'Template ID: ',envelope.templateId??'Checking…'),h('p',null,'Existing envelopes do not change when a template is edited. Compare this ID with the confirmed saved template ID; create a new envelope to use a new version.'),h('button',{onClick:()=>run(async()=>{await refresh(envelope.id);}),type:'button'},'Refresh status'),
-      h('ol',null,...envelope.tasks.map(task=>h('li',{key:task.id},`${task.recipientName} (${task.recipientEmail}): ${task.status} `,h('button',{type:'button',onClick:()=>run(()=>view(task))},'Open signing view')))),
-      h('button',{type:'button',onClick:()=>run(()=>action('process'))},'Process signature'),h('button',{type:'button',onClick:()=>run(()=>action('finalize'))},'Finalize'),
-      envelope.status==='COMPLETED' && h(React.Fragment,null,h('button',{type:'button',onClick:()=>run(deliveryPdf)},'View delivery PDF with certificate'),h('button',{type:'button',onClick:()=>run(viewCertificate)},'View completion certificate'))),
-    h('p',null,'In the signing page, send a test code. Copy its message ID and retrieve it locally using the README mailbox command. After signing, click Process signature and refresh; repeat for each remaining signer, then finalize.'),
-    frame && h('iframe',{title:'Recipient signing page',src:frame,width:'100%',height:'800',sandbox:'allow-scripts allow-same-origin allow-forms'}),
-    certificate && envelope?.status==='COMPLETED' && h(CompletionCertificate,{certificate}),
-    pdf && h('section',null,h('a',{href:pdf,download:'delivery-local-test.pdf'},'Download delivery PDF'),h('iframe',{title:'Delivery PDF',src:pdf,width:'100%',height:'700'})));
 }

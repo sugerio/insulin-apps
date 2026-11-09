@@ -12,7 +12,7 @@ async function database() {
   for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`, 'utf8')).map(s => db.prepare(s)));
   await db.prepare("INSERT INTO tenants(id) VALUES ('t')").run();
   await db.prepare("INSERT INTO templates(id,tenant_id,object_key,roles_json,created_at) VALUES ('tpl','t','k','[\"a\"]',0)").run();
-  await db.prepare("INSERT INTO envelopes(id,tenant_id,template_id,status,created_at) VALUES ('e1','t','tpl','IN_PROGRESS',0)").run();
+  await db.prepare("INSERT INTO envelopes(id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('e1','t','tpl','IN_PROGRESS',0,'hash')").run();
   return { mf, db };
 }
 

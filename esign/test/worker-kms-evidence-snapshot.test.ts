@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createKmsEvidenceCandidate } from '../src/worker-kms-evidence.ts';
+import { signKmsEvidence } from '../src/worker-kms-evidence.ts';
 
 const domain = new TextEncoder().encode('esign-worker-evidence-candidate-v1\0');
 const shared = (bytes: Uint8Array) => { const value = new Uint8Array(new SharedArrayBuffer(bytes.length)); value.set(bytes); return value; };
@@ -13,9 +13,9 @@ for (const sharedPart of ['input', 'spki', 'signature'] as const) test(`rejects 
   const signature = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, message(input)));
   let calls = 0;
   const provider = { signDigest: async () => { calls++; return signature; } };
-  if (sharedPart === 'input') await assert.rejects(() => createKmsEvidenceCandidate(shared(input), spki, provider));
-  if (sharedPart === 'spki') await assert.rejects(() => createKmsEvidenceCandidate(input, shared(spki), provider));
-  if (sharedPart === 'signature') await assert.rejects(() => createKmsEvidenceCandidate(input, spki, { signDigest: async () => shared(signature) }));
+  if (sharedPart === 'input') await assert.rejects(() => signKmsEvidence(shared(input), spki, provider));
+  if (sharedPart === 'spki') await assert.rejects(() => signKmsEvidence(input, shared(spki), provider));
+  if (sharedPart === 'signature') await assert.rejects(() => signKmsEvidence(input, spki, { signDigest: async () => shared(signature) }));
   assert.equal(calls, 0);
 });
 
@@ -30,9 +30,9 @@ for (const sharedPart of ['input', 'spki', 'signature'] as const) test(`rejects 
   const signature = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, message(input)));
   let calls = 0;
   const provider = { signDigest: async () => { calls++; return signature; } };
-  if (sharedPart === 'input') await assert.rejects(() => createKmsEvidenceCandidate(forged(input), spki, provider));
-  if (sharedPart === 'spki') await assert.rejects(() => createKmsEvidenceCandidate(input, forged(spki), provider));
-  if (sharedPart === 'signature') await assert.rejects(() => createKmsEvidenceCandidate(input, spki, { signDigest: async () => forged(signature) }));
+  if (sharedPart === 'input') await assert.rejects(() => signKmsEvidence(forged(input), spki, provider));
+  if (sharedPart === 'spki') await assert.rejects(() => signKmsEvidence(input, forged(spki), provider));
+  if (sharedPart === 'signature') await assert.rejects(() => signKmsEvidence(input, spki, { signDigest: async () => forged(signature) }));
   assert.equal(calls, 0);
 });
 
@@ -49,9 +49,9 @@ for (const part of ['input', 'spki', 'signature'] as const) test(`uses actual ${
   const input = new Uint8Array([1]);
   const signature = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, message(input)));
   const provider = { signDigest: async () => signature };
-  if (part === 'input') assert.deepEqual((await createKmsEvidenceCandidate(forged(input), spki, provider)).signature, signature);
-  if (part === 'spki') assert.deepEqual((await createKmsEvidenceCandidate(input, forged(spki), provider)).signature, signature);
-  if (part === 'signature') assert.deepEqual((await createKmsEvidenceCandidate(input, spki, { signDigest: async () => forged(signature) })).signature, signature);
+  if (part === 'input') assert.deepEqual((await signKmsEvidence(forged(input), spki, provider)).signature, signature);
+  if (part === 'spki') assert.deepEqual((await signKmsEvidence(input, forged(spki), provider)).signature, signature);
+  if (part === 'signature') assert.deepEqual((await signKmsEvidence(input, spki, { signDigest: async () => forged(signature) })).signature, signature);
 });
 
 test('rejects signature over zero padding introduced by a forged input length', async () => {
@@ -59,7 +59,7 @@ test('rejects signature over zero padding introduced by a forged input length', 
   const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
   const signature = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, message(new Uint8Array([1, 0]))));
-  await assert.rejects(() => createKmsEvidenceCandidate(new Long([1]), spki, { signDigest: async () => signature }));
+  await assert.rejects(() => signKmsEvidence(new Long([1]), spki, { signDigest: async () => signature }));
 });
 
 test('rejects oversized true lengths even when subclass length is forged', async () => {
@@ -68,8 +68,8 @@ test('rejects oversized true lengths even when subclass length is forged', async
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
   let calls = 0;
   const provider = { signDigest: async () => { calls++; return new Uint8Array(64); } };
-  await assert.rejects(() => createKmsEvidenceCandidate(new Short(1024 * 1024 + 1), spki, provider));
-  await assert.rejects(() => createKmsEvidenceCandidate(new Uint8Array([1]), new Short(1025), provider));
+  await assert.rejects(() => signKmsEvidence(new Short(1024 * 1024 + 1), spki, provider));
+  await assert.rejects(() => signKmsEvidence(new Uint8Array([1]), new Short(1025), provider));
   assert.equal(calls, 0);
 });
 
@@ -78,14 +78,14 @@ test('snapshots ordinary input and key before async work, and enforces limits', 
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
   const input = new Uint8Array(1024 * 1024).fill(1);
   const signature = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, message(input)));
-  const promise = createKmsEvidenceCandidate(input, spki, { signDigest: async () => signature });
+  const promise = signKmsEvidence(input, spki, { signDigest: async () => signature });
   input.fill(2); spki.fill(0);
   assert.deepEqual((await promise).signature, signature);
   const goodSpki = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
   let calls = 0;
   const provider = { signDigest: async () => { calls++; return new Uint8Array(63); } };
-  await assert.rejects(() => createKmsEvidenceCandidate(new Uint8Array(1024 * 1024 + 1), goodSpki, provider));
+  await assert.rejects(() => signKmsEvidence(new Uint8Array(1024 * 1024 + 1), goodSpki, provider));
   assert.equal(calls, 0);
-  await assert.rejects(() => createKmsEvidenceCandidate(new Uint8Array([1]), goodSpki, provider));
+  await assert.rejects(() => signKmsEvidence(new Uint8Array([1]), goodSpki, provider));
   assert.equal(calls, 1);
 });

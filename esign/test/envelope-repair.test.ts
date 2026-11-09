@@ -36,9 +36,9 @@ test('the cron sweep finishes an envelope left half-advanced after signing, rend
       await db.batch(unstable_splitSqlQuery(await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8')).map(s => db.prepare(s)));
     const pdf = await PDFDocument.create(); pdf.addPage(); const d0 = await pdf.save(), d0Hash = await sha(d0);
     await bucket.put('envelopes/env/d0.pdf', d0);
-    await db.exec(`INSERT INTO tenants VALUES ('a');
+    await db.exec(`INSERT INTO tenants (id) VALUES ('a');
 INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','a','source','["ana","marcus"]',1);
-INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('env','a','template','IN_PROGRESS',1);
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env','a','template','IN_PROGRESS',1,'hash');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','env','ana','Ana','ana@example.com',1,'ACTIVE');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus','env','marcus','Marcus','marcus@example.com',2,'PENDING');`);
     await db.prepare("INSERT INTO artifacts VALUES ('d0','env','envelopes/env/d0.pdf',?)").bind(d0Hash).run();

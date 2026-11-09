@@ -1,3 +1,9 @@
+/**
+ * The KMS half of the managed seal (managed-seal.ts, seal-config.ts): the exact message the seal
+ * signs and the call that has KMS sign its digest, checked against the pinned public key.
+ */
+// The domain separator is part of every stored seal's signed message. Its text predates the
+// managed seal and is kept as is, because changing it would break verification of existing seals.
 const DOMAIN = new TextEncoder().encode('esign-worker-evidence-candidate-v1\0');
 const MAX_INPUT_BYTES = 1024 * 1024;
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
@@ -19,12 +25,16 @@ export interface KmsDigestProvider {
   signDigest(digest: Uint8Array): Promise<Uint8Array>;
 }
 
-/** Unmounted candidate only. The caller must independently establish and pin the KMS public key. */
-export async function createKmsEvidenceCandidate(input: Uint8Array, pinnedSpki: Uint8Array, provider: KmsDigestProvider): Promise<{ signature: Uint8Array }> {
-  if (!isUnsharedBytes(input) || !isUnsharedBytes(pinnedSpki) || !provider || typeof provider.signDigest !== 'function') throw new Error('Invalid KMS candidate input');
+/**
+ * Has `provider` (aws-kms-sign-provider.ts) sign evidenceMessage(input) and returns the signature
+ * only once it verifies against `pinnedSpki`, the configured public key (KMS_PUBLIC_KEY). Inputs
+ * are copied first, so a caller cannot change them while the signature is pending.
+ */
+export async function signKmsEvidence(input: Uint8Array, pinnedSpki: Uint8Array, provider: KmsDigestProvider): Promise<{ signature: Uint8Array }> {
+  if (!isUnsharedBytes(input) || !isUnsharedBytes(pinnedSpki) || !provider || typeof provider.signDigest !== 'function') throw new Error('Invalid KMS signing input');
   const inputLength = typedArrayLength.call(input) as number;
   const spkiLength = typedArrayLength.call(pinnedSpki) as number;
-  if (inputLength === 0 || inputLength > MAX_INPUT_BYTES || spkiLength === 0 || spkiLength > 1024) throw new Error('Invalid KMS candidate input');
+  if (inputLength === 0 || inputLength > MAX_INPUT_BYTES || spkiLength === 0 || spkiLength > 1024) throw new Error('Invalid KMS signing input');
   const message = new Uint8Array(DOMAIN.length + inputLength);
   message.set(DOMAIN);
   message.set(input, DOMAIN.length);
@@ -38,11 +48,6 @@ export async function createKmsEvidenceCandidate(input: Uint8Array, pinnedSpki: 
     if (!await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, signature, message)) throw new Error();
     return { signature };
   } catch {
-    throw new Error('KMS candidate failed');
+    throw new Error('KMS signing failed');
   }
-}
-
-/** No RFC3161 parser, trust policy or revocation policy is approved yet. */
-export async function createTsaEvidence(): Promise<never> {
-  throw new Error('RFC3161 verification and trust are not configured');
 }

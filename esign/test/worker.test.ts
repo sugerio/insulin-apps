@@ -6,7 +6,11 @@ test('health is available but unimplemented signing routes are closed', async ()
   assert.ok(worker.default, 'worker is not implemented');
   const health = await worker.default.fetch(new Request('http://localhost/health'));
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { status: 'ok', service: 'esign', mode: 'experimental' });
+  assert.deepEqual(await health.json(), { status: 'ok', service: 'esign', environment: 'dev' });
+  for (const [ESIGN_ENV, environment] of [['prod', 'prod'], ['dev', 'dev'], ['staging', 'dev']]) {
+    const answer = await worker.default.fetch(new Request('http://localhost/health'), { ESIGN_ENV });
+    assert.deepEqual(await answer.json(), { status: 'ok', service: 'esign', environment }, ESIGN_ENV);
+  }
   const signing = await worker.default.fetch(new Request('http://localhost/v1/signing-sessions/a/tasks/b/sign', { method: 'POST' }));
   assert.equal(signing.status, 404);
 });

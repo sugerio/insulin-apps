@@ -15,7 +15,7 @@ test('positioned signatures bind each role and preserve a sequential PDF chain',
   for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()) {const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
   const key='local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz',origin='https://host.example.com';
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
-  await db.prepare("INSERT INTO tenants VALUES ('a')").run();await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
+  await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
   const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:await mf.getR2Bucket('TEST_MAIL'),SIGNING_PAGE_ORIGINS:origin,OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
   const req=(path:string,init:RequestInit={})=>app.fetch(new Request('http://localhost'+path,init),env),mgmt={authorization:`Bearer ${key}`};
   const post=(body:unknown,headers:Record<string,string>)=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
@@ -70,7 +70,7 @@ test('positioned signatures bind each role and preserve a sequential PDF chain',
    assert.equal(await processEnvelopeStep(env.DB,env.ARTIFACTS,'a',envelope.id),'processing_failed');await bucket.put(imageKey,imageBytes);
    const processRace=await Promise.all([processEnvelopeStep(env.DB,env.ARTIFACTS,'a',envelope.id),processEnvelopeStep(env.DB,env.ARTIFACTS,'a',envelope.id)]);assert.deepEqual(processRace,['processed','processed']);
    await assert.rejects(()=>db.prepare('UPDATE signatures SET render_json=? WHERE id=?').bind('{}',id).run(),/immutable/,'what is drawn never changes after signing');
-   await db.prepare('UPDATE recipient_page_sessions SET expires_at=0 WHERE task_id=?').bind(tasks[i].id).run();assert.equal((await req('/v1/signing/sign',post(body,headers))).status,409);
+   await db.prepare("UPDATE access_sessions SET expires_at=0 WHERE scope='recipient' AND subject_id=?").bind(tasks[i].id).run();assert.equal((await req('/v1/signing/sign',post(body,headers))).status,409);
   }
   assert.equal(await finalizeEnvelopeStep(env,'a',envelope.id),'finalized');
   const finalBytes=await signedPdf(db,bucket,envelope.id);assert.equal((await PDFDocument.load(finalBytes.slice(0))).getPageCount(),1);

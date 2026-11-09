@@ -17,5 +17,10 @@ test('migration persists scoped tenant credentials with globally unique hashes',
     const key = await db.prepare("SELECT tenant_id, revoked_at FROM api_keys WHERE key_hash = ?").bind('hash-a').first();
     assert.equal(key!.tenant_id, 'tenant-a');
     assert.equal(key!.revoked_at, null);
+    // Each tenant's editor origin list starts empty and must stay a JSON array.
+    assert.equal((await db.prepare("SELECT editor_origins_json FROM tenants WHERE id = 'tenant-a'").first())!.editor_origins_json, '[]');
+    await assert.rejects(() => db.prepare("UPDATE tenants SET editor_origins_json = 'not json' WHERE id = 'tenant-a'").run(), /CHECK/);
+    await assert.rejects(() => db.prepare(`UPDATE tenants SET editor_origins_json = '{"origin":"https://a.example.test"}' WHERE id = 'tenant-a'`).run(), /CHECK/);
+    await assert.rejects(() => db.prepare("UPDATE tenants SET editor_origins_json = NULL WHERE id = 'tenant-a'").run(), /NOT NULL/);
   } finally { await mf.dispose(); }
 });

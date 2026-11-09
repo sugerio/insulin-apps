@@ -33,7 +33,13 @@ async function boundedResponse(response: Response): Promise<Uint8Array> {
   return bytes;
 }
 
-/** Unmounted candidate: credentials, key ARN and SPKI pin must be independently trusted by the caller. */
+/**
+ * The managed seal's KMS signer (seal-config.ts): calls KMS `Sign` (ECDSA_SHA_256 over a digest)
+ * with the key `keyArn` and the assumed-role credentials from aws-sts-credentials.ts, sending the
+ * request only to the region's KMS endpoint through `fetch`, and returns the signature as P1363.
+ * The key ARN and credentials are trusted configuration; signKmsEvidence (worker-kms-evidence.ts)
+ * checks each signature against the pinned public key.
+ */
 export function createAwsKmsSignProvider(config: Config): KmsDigestProvider {
   const region = config?.region, arn = config?.keyArn, credentials = config?.credentials, fetchRequest = config?.fetch;
   const match = typeof arn === 'string' && /^arn:aws:kms:([a-z]{2}-[a-z]+-\d):\d{12}:key\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.exec(arn);

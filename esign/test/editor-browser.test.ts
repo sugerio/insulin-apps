@@ -17,6 +17,7 @@ import app from '../src/worker.ts';
 import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 import {signedPdf} from './helpers/signed-pdf.ts';
 import {processEnvelopeStep,finalizeEnvelopeStep} from '../src/envelope-completion.ts';
+import {setEditorOrigins} from './helpers/editor-origins.ts';
 const chrome=process.env.ESIGN_TEST_CHROME??['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium'].find(existsSync);
 const sleep=(n:number)=>new Promise(r=>setTimeout(r,n));
 test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed messages fail',{skip:!chrome,timeout:120000},async()=>{
@@ -29,7 +30,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await build({configFile:false,root:resolve('ui'),logLevel:'silent',build:{outDir:output,rollupOptions:{input:{editor:resolve('ui/editor.html'),host:resolve('ui/editor-host.html'),recipient:resolve('ui/index.html')}}}});
   const db=await mf.getD1Database('DB');for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
   const key='local-test-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
-  await db.prepare("INSERT INTO tenants VALUES ('tenant')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?, 'tenant')").bind(digest).run();await db.prepare("INSERT INTO editor_allowed_origins VALUES ('tenant','http://127.0.0.1:5173')").run();
+  await db.prepare("INSERT INTO tenants (id) VALUES ('tenant')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?, 'tenant')").bind(digest).run();await setEditorOrigins(db,'tenant',['http://127.0.0.1:5173']);
   const asset=async(path:string)=>{try{if(!/^\/(editor\.html|index\.html|assets\/[a-zA-Z0-9_.-]+)$/.test(path))return new Response(null,{status:404});const data=await readFile(join(output,path));const content=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')||path.endsWith('.mjs')?'text/javascript':'application/octet-stream';return new Response(data,{headers:{'content-type':content}});}catch{return new Response(null,{status:404});}};
   const env={DB:db,ARTIFACTS:await mf.getR2Bucket('ARTIFACTS'),TEST_MAIL:await mf.getR2Bucket('TEST_MAIL'),OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes',ASSETS:{fetch:(request:Request)=>asset(new URL(request.url).pathname)}};
   const signingApp=app;

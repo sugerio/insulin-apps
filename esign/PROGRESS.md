@@ -2279,3 +2279,227 @@ nothing signs until prod is fully configured; `SIGNING_PAGE_ORIGINS` ignored); `
 adds the prod configuration. Not yet verified on Cloudflare: that Email Sending delivers to any
 address from an unpinned binding (check on the first prod deployment). esign-dev must be redeployed
 with the new secret name `OTP_KEY`. No cloud resource was changed.
+
+## One credential mechanism for the signing page and the editor
+
+The signing page and the embedded editor each had their own "one-time code, then a short-lived
+bearer token" tables and code: `recipient_page_codes` and `recipient_page_sessions`
+(`src/page-authorization.ts`), and `editor_page_entries` (credential and editing state mixed) and
+`editor_page_tokens` (`src/editor-session.ts`). They are now one module, `src/access.ts`, and two
+tables, `access_codes` and `access_sessions` (`migrations/0005_access.sql`), each row with a
+`scope` (`recipient` or `editor`), the tenant, a `subject_id` (the task, or the editor session)
+and the origin (the signing page origin, or the allowed parent).
+
+- `issueAccessCode`, `exchangeAccessCode` and `authorizeAccess` each take the scope explicitly and
+  every statement requires it. The exchange keeps its compare-and-set: the session row first, then
+  the commit point that marks the code used (`used_at IS NULL`). Each also requires the subject to
+  be open (the task `ACTIVE` in an `IN_PROGRESS` envelope of the tenant, or the editor session's
+  parent still allowed for the tenant). A recipient credential no longer stores the envelope: it
+  is the task's.
+- `page-authorization.ts` and `editor-session.ts` are thin wrappers that name their scope. The
+  OTP statements, the signature commit and retry, the audit and completion lookups join
+  `access_sessions` with `scope='recipient'`; the editor's page, staging and save queries use
+  `scope='editor'`. The editor save's commit point now requires the request's own token to be
+  live, not any token of the session.
+- `editor_page_entries` is now `editor_sessions` (0015), editing state only, keyed by the same
+  page/session id. Starting a session writes its row (with the source template, its hash and the
+  preset roles, previously a separate update after the code) and then, as the commit point, its
+  code, in one batch. The page is served while the code is within its lifetime, and a source can be
+  staged while the code is unused and unexpired, as before.
+- Migrations, edited in place since nothing is deployed: 0005 is new; 0006 keeps only the OTP
+  tables, whose `session_hash` now references `access_sessions`; 0015 creates `editor_sessions`
+  with all its columns; 0016 keeps only the templates' `fields_json`; 0018, 0019 and 0028 (expiry
+  indexes nothing queried) are removed. A fresh database has 17 tables.
+
+No API path, request or response, link format, iframe message, lifetime, OTP limit or
+signing/seal behaviour changed. Tests: the new `access-scope.test.ts` proves cross-use is refused
+in both directions, for codes and tokens, both on the module (with a task and an editor session
+sharing one id, tenant and origin, so only the scope tells them apart) and over HTTP (an editor code
+at `/v1/page-sessions/exchange`, a recipient code at `/v1/editor/exchange`, an editor token on
+`/v1/signing/*`, a recipient token on `/v1/editor/*`). Existing tests now name the new tables and
+migration files; their one-time, expiry, origin-binding and concurrency checks are unchanged.
+README.md ("Page access codes and sessions", "How writes commit"), WORKER-MODE.md and
+DEPLOYMENT-RUNBOOK.md (17 tables) were updated. No cloud resource was changed.
+
+## One OTP table; the verification lives on the recipient session
+
+Nothing had been deployed, so the migrations were edited in place again: a fresh database now has
+16 tables instead of 17. `recipient_otp_challenges` and `recipient_otp_verifications` (0006, with
+columns added by 0009 and 0025) are one table, `otp_challenges`
+(`migrations/0006_otp_challenges.sql`, renamed from `0006_page_authorization.sql`); 0009 and 0025
+were deleted.
+
+- `otp_challenges`: one row per task (`task_id` primary key), `session_hash` (the recipient
+  session the code was sent for, referencing `access_sessions`), `otp_hash`, `expires_at`,
+  `used_at`, `attempts` (0 to 5), `sends` (1 to 3), `window_started_at` and `last_sent_at`.
+  `next_send_at` became `last_sent_at` (the cooldown is `last_sent_at + 60 s`), and the nonce
+  `consumed_by` became `used_at`: the batch that uses a code now recognises it by
+  `used_at = now` instead of a random nonce.
+- "Verified" moved onto the session: `access_sessions.otp_verified_at` (0005), with a CHECK that
+  it is NULL for the editor scope. Signing (`recordSignature`, its commit `INSERT`, and
+  `retrySignature`) and the signing routes' `sessionVerified` read it there. `facts_json` still
+  records `otpVerifiedAt` (that column) and `recipientEmail`, now taken from the task.
+- The email snapshots (`recipient_email` on both tables) are gone: a task's email cannot change
+  (0027). The code's HMAC is still over the task, the task's email and the code, and entering it
+  still requires the task's current email to be the one the entry was hashed with, in the same
+  statement that uses the code, so a change racing the entry is still refused.
+
+How each rule is enforced (`src/page-authorization.ts`): a send is one
+`INSERT ... ON CONFLICT(task_id) DO UPDATE ... WHERE` that applies only to a live recipient session
+at its origin whose task is ACTIVE in an IN_PROGRESS envelope with the hashed email, and only when
+the window is new (opened 15 minutes ago or more: attempts and sends reset) or there were fewer than
+5 entries and 3 sends in it and 60 seconds since `last_sent_at`, and never to a code the same
+session already used; the mail goes out only when it changed one row. An entry is one batch of
+three compare-and-set updates: count the entry and set `used_at` when the hash matches (only while
+it is this session's code, unexpired, unused and under 5 entries); set this session's
+`otp_verified_at` only if the task's code was used for it at this instant (`meta.changes` decides
+the answer); clear the mark from the task's other recipient sessions once this one used the task's
+latest code, so, as before, only the session that entered the latest code can sign. A lost
+response is retried by the same live, verified session with the same code. No API path, response,
+audit event, limit, lifetime, `ESIGN_ENV` mail behaviour or test mailbox changed.
+
+Tests: migration lists name `0006_otp_challenges.sql` and no longer 0009 or 0025; table and column
+names follow the schema. Removed: the 0025 migration test (historical challenges without an email
+snapshot) and the checks that rewrote or nulled a snapshot. `signature-record.test.ts` now applies
+0027 and shows that the email change it used to make is refused; `positioned-v3-record.test.ts`
+clears and shifts `otp_verified_at` instead of the old verification row, and keeps the email race
+between reading the signer and the commit. Added: a test of the send rules (60 seconds apart, 3 per
+window per task across sessions, five concurrent sends from two sessions of which only one fits,
+the window reset, concurrent entries of the right code using it once, a used code not replaced by
+its own session and only the latest session verified), and a check in `access-scope.test.ts` that
+an editor session cannot be marked verified. README.md, WORKER-MODE.md and DEPLOYMENT-RUNBOOK.md
+(16 tables) were updated. No cloud resource was changed.
+
+## The envelope is its own idempotency record
+
+Nothing had been deployed, so `migrations/0003_envelopes.sql` was edited in place: the
+`idempotency_keys` table is gone and `envelopes` has a new column, `request_sha256 TEXT NOT NULL`,
+the SHA-256 (hex) of the validated `POST /v1/envelopes` request that created it (the same
+normalized template, recipients, document name and sender that were hashed before). A fresh
+database now has 15 tables instead of 16.
+
+The column is `NOT NULL`: `POST /v1/envelopes` is the only code that creates envelopes, so every
+real envelope has a creating request. Tests that insert envelopes directly now give it a
+placeholder value (`'hash'`) instead of the schema allowing envelopes without one.
+
+Creation (`src/worker.ts`), with the header check, validation and request hash unchanged:
+
+1. Derive the id with `envelopeIdFor(tenant, Idempotency-Key)` and look up
+   `SELECT request_sha256 FROM envelopes WHERE id = ? AND tenant_id = ?`.
+2. If it exists: the same hash answers `201 {id, status: 'IN_PROGRESS'}`, another hash
+   `409 idempotency_conflict`.
+3. Otherwise validate names and the template, store D0 with the conditional R2 create (a D0 holding
+   other bytes re-reads and applies step 2, or answers 409 when no envelope exists), and write the
+   envelope (now with `request_sha256`), its tasks and its D0 artifact in one D1 batch.
+4. If the batch fails (a concurrent creation with the same key won on the envelope's primary key),
+   re-read and apply step 2; with no envelope found the error is rethrown, as before.
+
+The response is no longer stored: it is rebuilt from the id and the constant creation status
+(`createdResponse`), so a retry gets exactly what a first creation returns, `IN_PROGRESS`, even
+after the envelope was voided or completed (before, the stored JSON had the same effect). No API
+path, request, response, status code or `POST /v1/envelopes/:id/prepare` behaviour changed.
+
+Tests: the `idempotency_keys` count checks in `envelopes.test.ts` were removed; it now also checks
+the stored `request_sha256`, the 409 body, and that a retry after a status change still answers
+`IN_PROGRESS`. A new test sends three identical creations at once (one envelope, three equal
+responses), two different requests with one key at once (one 201, one 409, one envelope), and
+forces the lost race by hiding the first lookup, so the batch fails on the primary key and the
+re-read answers 201 for the same request and 409 for another. README.md, WORKER-MODE.md and
+DEPLOYMENT-RUNBOOK.md (15 tables) were updated. No cloud resource was changed.
+
+## Documentation consolidated
+
+README.md was rewritten as one current design reference (architecture, the signing lifecycle, the
+15 tables and their JSON columns, how writes commit, access codes and OTP, evidence and seals, the
+API with what is deprecated, running locally, and open items), replacing the sections each earlier
+change had patched. Obsolete framing was dropped: the "local experiment" and "unmounted candidate"
+descriptions of modules the managed seal now uses, the Node loopback demos and harnesses that were
+removed, and the history of earlier delivery layouts and renderers. WORKER-MODE.md keeps
+configuration, dev and prod, the cron, managed seal operations and deployment, and links to the
+README for the design; its CI description now matches the workflow (dev from `main` or
+`feat/esign-*`, prod by hand from `main`, GitHub environments `esign-dev` and `production`). CI.md
+was corrected the same way, and DEPLOYMENT-RUNBOOK.md now points to the deploy for remote
+migrations. No code, test, migration or configuration changed. No cloud resource was changed.
+
+## Editor origins are a JSON list on the tenant
+
+Nothing had been deployed, so the migrations were edited in place: `tenants` (0001) has a new
+column, `editor_origins_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(editor_origins_json))`,
+and `migrations/0013_editor_allowed_origins.sql`, which held only the `editor_allowed_origins`
+table, was deleted. A fresh database now has 14 tables instead of 15. `api_keys` is unchanged.
+
+Every statement that joined `editor_allowed_origins` now checks the origin with `json_each` over the
+tenant's list inside the same statement, through one SQL fragment, `editorOriginAllowed(tenant,
+origin)` in `src/access.ts`. It matches only string elements of a JSON array that equal the origin
+exactly, so any other entry is ignored and a list that is not an array allows nothing. The
+statements are the same ones as before, so the compare-and-set behaviour is unchanged: removing an
+origin from the list stops that origin's codes, pages and tokens at their next check, as deleting
+the row did.
+
+- Starting a session (`issueEditorPage`): the `editor_sessions` insert is
+  `INSERT ... SELECT <bound values> WHERE <origin listed>` instead of a select from the table, and
+  the `editor` code insert after it still requires the session and a listed origin.
+- Exchange and authorization of `editor` codes and tokens (`subjectOpen` in `src/access.ts`).
+- The editor page and its `frame-ancestors` (`editorPageParent`).
+- Staging a source: the read and the conditional update.
+- The save's compare-and-set that records the result.
+
+Origins are validated in code wherever they are written. `validEditorOrigin` (`src/access.ts`) is
+`validAccessOrigin` restricted to lowercase host characters, digits, dots, hyphens, a bracketed IPv6
+literal and a port. URL parsing alone accepts hosts with a quote, a double quote or a semicolon
+(`https://a'b.example.test` was a valid origin for the old provisioning check, which relied on it
+holding no quote), so the restriction keeps the generated SQL, the JSON and the CSP header safe. The
+same check now guards the origin a session is started for. `http://[::1]` origins, which
+provisioning used to accept but a session could never use, are now refused at provisioning.
+
+`scripts/provision-tenant.ts` keeps `--console-origin` (repeatable). For each distinct origin it
+emits one `UPDATE tenants SET editor_origins_json=json_insert(..., '$[#]', origin)` guarded by
+`NOT EXISTS` over `json_each`, so existing entries and their order are kept, new ones are appended
+once and a repeated run changes nothing. A list that is not a JSON array makes the statement set
+NULL and fail on `NOT NULL` instead of being overwritten. The key insert now comes last, so a run
+that fails on an origin does not register its key.
+
+Tests: tests that inserted into `editor_allowed_origins` call `test/helpers/editor-origins.ts`
+(`setEditorOrigins`, which validates every origin and replaces the tenant's list), tests that listed
+0013 no longer do, and every `INSERT INTO tenants VALUES (...)` names its `id` column. Added: a test
+that removing one origin from a two-origin list makes an unused code, the editor page, staging, a
+live token and the save fail and refuses new sessions for it, while the other origin keeps working,
+and that non-string entries and a non-array list allow nothing; provisioning tests for the merge
+(order, no duplicates, entries it did not write kept), the non-array refusal without registering
+the key, and origins with a quote, a double quote or a semicolon; and checks in
+`migrations.test.ts` of the `[]` default and the JSON and NOT NULL constraints. README.md,
+WORKER-MODE.md (provisioning) and DEPLOYMENT-RUNBOOK.md (14 tables) were updated. No cloud resource
+was changed.
+
+## Cleanup: array-only editor origins, current comments, dead code, /health
+
+`tenants.editor_origins_json` now has `CHECK (json_valid(editor_origins_json) AND
+json_type(editor_origins_json) = 'array')` (migration 0001, edited in place: nothing is deployed
+with data to keep). With a non-array list impossible, `editorOriginAllowed` (`src/access.ts`) no
+longer checks `json_type`, and `scripts/provision-tenant.ts` appends with a plain `json_insert`
+instead of setting NULL for a non-array list. Non-string entries are still ignored. Tests that wrote
+a non-array list now assert the CHECK refuses it (`migrations.test.ts`, `provision-tenant.test.ts`,
+`editor-page-session.test.ts`).
+
+Comments and strings that still called used code "unmounted", "candidate" or "experimental" now say
+what it does and who calls it: `aws-kms-sign-provider.ts`, `worker-kms-evidence.ts`,
+`worker-rfc3161-verifier.ts`, `worker-tsa-transport.ts`, `cloudflare-otp-mail.ts`,
+`page-authorization.ts`, and a stray comment in `local-signing-routes.ts`. Renamed with them:
+`createKmsEvidenceCandidate` to `signKmsEvidence` (errors `KMS signing failed`, `Invalid KMS signing
+input`), `verifyRfc3161Candidate` to `verifyRfc3161Timestamp` (status `VERIFIED`, which nothing
+stores), `syntheticTimestampQuery` to `timestampQuery`. The evidence domain separator
+`esign-worker-evidence-candidate-v1` is unchanged: every stored managed seal signs it.
+
+Removed, as nothing outside tests used them: `createTsaEvidence`,
+`requestAuthorizedSyntheticTimestamp` (and its transport options), `createCloudflareOtpMailer`,
+`authorizeEditorPage` (`editorPageContext` is what the routes use; its tests now use that),
+`rolesFromSearch` with its helper in `ui/FieldEditor.ts`, and the old local host page
+(`HostPage` and `ui/TemplateLaunch.ts`, which called `/host/.../process` and `/finalize` routes that
+no longer exist; no page entry rendered them). `CompletionCertificate`, which the demo uses, moved
+to `ui/CompletionCertificate.ts`. Their tests went with them; `isValidOtpEmailAddress` and
+`timestampQuery` got direct tests in place of the ones that covered them through removed code.
+
+`GET /health` returns `{status: "ok", service: "esign", environment}`, the `ESIGN_ENV` (`dev` or
+`prod`) instead of `mode: "experimental"`. Nothing in `scripts/` or `.github/` read it. README.md
+and WORKER-MODE.md were updated and the "Leftover code" open item removed. No cloud resource was
+changed.

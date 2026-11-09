@@ -43,7 +43,7 @@ async function finishedEnvelope() {
   for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`, 'utf8')).map(s => db.prepare(s)));
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex')).run();
-  const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, LOCAL_TEST_MODE: 'true', LOCAL_TEST_OTP_KEY: 'managed-evidence-otp-pepper-32-bytes-long' };
+  const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, OTP_KEY: 'managed-evidence-otp-pepper-32-bytes-long' };
   const auth = { authorization: `Bearer ${KEY}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);
   const json = (body: unknown, headers: Record<string, string> = {}) => ({ method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -160,7 +160,7 @@ test('once completed, each signer is sent one copy: the signed PDF with its cert
     const { sinkMailer } = await import('../src/otp-mail-sink.ts');
     const { auditTrail, AUDIT } = await import('../src/audit.ts');
     const sent: { to: string; subject: string; text: string; attachments?: { filename: string; type: string; content: Uint8Array }[] }[] = [];
-    const mailer = sinkMailer({ SEND_EMAIL: { send: async (m: (typeof sent)[number]) => { sent.push(m); } }, OTP_MAIL_FROM: 'esign-dev@sender.example.test', OTP_MAIL_SINK: 'inbox@sink.example.test' })!;
+    const mailer = sinkMailer({ SEND_EMAIL: { send: async (m: (typeof sent)[number]) => { sent.push(m); } }, MAIL_FROM: 'esign-dev@sender.example.test', MAIL_SINK: 'inbox@sink.example.test' })!;
     await assert.rejects(sendSignedCopies(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust), mailer), /not completed/);
     await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
     const result = await sendSignedCopies(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust), mailer);
@@ -194,7 +194,7 @@ test('a copy that could not be sent is tried again later, not lost', async () =>
     const { sinkMailer } = await import('../src/otp-mail-sink.ts');
     await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
     let fail = true, sent = 0;
-    const mailer = sinkMailer({ SEND_EMAIL: { send: async () => { if (fail) throw new Error('mail outage'); sent++; } }, OTP_MAIL_FROM: 'esign-dev@sender.example.test', OTP_MAIL_SINK: 'inbox@sink.example.test' })!;
+    const mailer = sinkMailer({ SEND_EMAIL: { send: async () => { if (fail) throw new Error('mail outage'); sent++; } }, MAIL_FROM: 'esign-dev@sender.example.test', MAIL_SINK: 'inbox@sink.example.test' })!;
     const delivery = () => managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust);
     assert.deepEqual(await sendSignedCopies(e.db, e.bucket, 'tenant', e.id, delivery(), mailer), { sent: 0, skipped: 0 });
     fail = false;

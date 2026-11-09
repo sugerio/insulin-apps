@@ -28,7 +28,7 @@ test('a fields signature captures only the verified current role, time and image
   const privileged=async(edit:()=>Promise<unknown>)=>{await db.prepare('DROP TRIGGER signatures_facts_immutable').run();try{await edit();}finally{await db.prepare(immutability).run();}};
   const key='local-test-key-0123456789-abcdefghijklmnopqrstuvwxyz',origin='https://host.example.com';
   await db.batch([db.prepare("INSERT INTO tenants VALUES ('tenant')"),db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(await sha(new TextEncoder().encode(key)))]);
-  const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:mail,LOCAL_TEST_MODE:'true',SIGNING_PAGE_ORIGINS:origin,LOCAL_TEST_OTP_KEY:'local-test-pepper-at-least-32-bytes',LOCAL_TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
+  const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:mail,SIGNING_PAGE_ORIGINS:origin,OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
   const req=(path:string,init:RequestInit={})=>app.fetch(new Request('http://localhost'+path,init),env),mgmt={authorization:`Bearer ${key}`};
   const post=(body:unknown,headers:Record<string,string>)=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
   const count=async()=>(await db.prepare('SELECT count(*) AS n FROM signatures').first<{n:number}>())!.n;
@@ -153,7 +153,7 @@ test('a fields signature captures only the verified current role, time and image
   const alteredHash=await signatureEventHash({previousHash:row.event_hash,envelopeId:envelope.id,sequence:2,inputSha256:output.sha256},JSON.parse(secondRow.facts_json),altered);
   await privileged(()=>db.prepare('UPDATE signatures SET render_json=?,event_hash=? WHERE id=?').bind(canonicalJson(altered),alteredHash,second).run());await assert.rejects(()=>processSignature(db,bucket,second),/Template snapshot mismatch/);assert.equal(await retrySignature(db,bucket,secondCommand),null);
   await privileged(()=>db.prepare('UPDATE signatures SET render_json=?,event_hash=? WHERE id=?').bind(secondRow.render_json,secondRow.event_hash,second).run());
-  const sealKey=new TextEncoder().encode(env.LOCAL_TEST_SEAL_KEY);await finalizeLocalTestEvidence(db,bucket,'tenant',envelope.id,sealKey);await finalizeLocalTestEvidence(db,bucket,'tenant',envelope.id,sealKey,true);
+  const sealKey=new TextEncoder().encode(env.TEST_SEAL_KEY);await finalizeLocalTestEvidence(db,bucket,'tenant',envelope.id,sealKey);await finalizeLocalTestEvidence(db,bucket,'tenant',envelope.id,sealKey,true);
   const seal=await (await bucket.get(`envelopes/${envelope.id}/local-test-evidence.json`))!.json() as {manifest:string};const manifest=JSON.parse(seal.manifest);assert.equal(manifest.format,'esign-evidence-manifest-v1');assert.deepEqual(manifest.records.map((r:any)=>r.render.kind),['fields','fields']);
   await bucket.put(imageKey,'tampered');await assert.rejects(()=>finalizeLocalTestEvidence(db,bucket,'tenant',envelope.id,sealKey,true));await bucket.put(imageKey,saved);
   await finalizeLocalTestEvidence(db,bucket,'tenant',envelope.id,sealKey,true);

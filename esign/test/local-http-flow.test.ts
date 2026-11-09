@@ -21,7 +21,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     await db.prepare("INSERT INTO tenants VALUES ('a')").run();
     await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
     const origin='https://host.example.com';
-    const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:mail,LOCAL_TEST_MODE:'true',SIGNING_PAGE_ORIGINS:origin,LOCAL_TEST_OTP_KEY:'local-test-pepper-at-least-32-bytes',LOCAL_TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
+    const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:mail,SIGNING_PAGE_ORIGINS:origin,OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
     const management={authorization:`Bearer ${secret}`};
     const req=(path:string,init:RequestInit={})=>app.fetch(new Request('http://localhost'+path,init),env);
     const json=(body:unknown,headers:Record<string,string>={})=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
@@ -50,7 +50,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
       const send=await app.fetch(new Request('https://public.example.com/v1/signing/otp',json({},headers)),env);assert.equal(send.status,202);
       const shown=await send.json();assert.deepEqual(Object.keys(shown),['messageId']);
       const objects=await mail.list();const item=objects.objects[0];assert.ok(item);const message=await (await mail.get(item.key))!.json() as {to:string;otp:string};assert.equal(message.to,task.recipientEmail);assert.equal(item.key,`test-mail/${shown.messageId}.json`);await mail.delete(item.key);
-      const disabled=await app.fetch(new Request('http://localhost/v1/signing/otp',json({},headers)),{...env,LOCAL_TEST_MODE:'false'});assert.equal(disabled.status,404);assert.equal((await disabled.text()).includes(message.otp),false);
+      const disabled=await app.fetch(new Request('http://localhost/v1/signing/otp',json({},headers)),{...env,OTP_KEY:''});assert.equal(disabled.status,404);assert.equal((await disabled.text()).includes(message.otp),false);
       assert.equal((await req('/v1/signing/otp/verify',json({otp:message.otp},headers))).status,204);
       assert.equal((await req('/v1/signing/otp/verify',json({otp:message.otp},headers))).status,204);
       const current=await req('/v1/signing/current',{headers});assert.equal(current.status,200);const artifact=await current.json();
@@ -105,7 +105,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     // A privileged edit past the trigger still fails the event hash check.
     await db.prepare('DROP TRIGGER signatures_facts_immutable').run();await db.prepare('UPDATE signatures SET event_hash=? WHERE envelope_id=? AND sequence=1').bind('0'.repeat(64),envelope.id).run();assert.equal((await req(`/v1/envelopes/${envelope.id}/certificate`,{headers:management})).status,503);
     const seal=await (await bucket.get(evidence!.object_key))!.json() as import('../src/local-test-evidence.ts').LocalTestSeal;assert.equal(seal.mode,'LOCAL_TEST_ONLY');assert.equal(typeof seal.syntheticTimestampMs,'number');
-    const key=new TextEncoder().encode(env.LOCAL_TEST_SEAL_KEY);
+    const key=new TextEncoder().encode(env.TEST_SEAL_KEY);
     assert.equal(await verifyLocalTestSeal(seal,key),true);
     assert.equal(await verifyLocalTestSeal({...seal,manifest:seal.manifest+' '},key),false);
     assert.equal(await verifyLocalTestSeal({...seal,testTsaMac:'0'.repeat(64)},key),false);

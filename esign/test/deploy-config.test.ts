@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { databaseIdFrom, deployConfig, parseJsonc, resourceNames, settingsFromEnv } from '../scripts/deploy.ts';
+import { databaseIdFrom, deployConfig, environmentOfTarget, parseJsonc, REQUIRED_SECRETS, resourceNames, settingsFromEnv } from '../scripts/deploy.ts';
 
 const ENV = {
   ESIGN_MAIL_FROM: 'sign@sender.example',
@@ -31,12 +31,36 @@ test('the generated configuration names every resource after the target and keep
   assert.deepEqual(config.d1_databases, [{ binding: 'DB', database_name: 'esign-dev', database_id: 'db-uuid', migrations_dir: '/m' }]);
   assert.deepEqual(config.r2_buckets.map(b => b.bucket_name), ['esign-dev-artifacts', 'esign-dev-test-mail']);
   assert.deepEqual(config.send_email, [{ name: 'SEND_EMAIL', destination_address: 'inbox@sink.example' }]);
-  assert.equal(config.vars.OTP_MAIL_SINK, 'inbox@sink.example');
-  assert.equal(config.vars.LOCAL_TEST_MODE, 'true');
+  assert.equal(config.vars.MAIL_SINK, 'inbox@sink.example');
+  assert.equal(config.vars.ESIGN_ENV, 'dev');
+  assert.equal('LOCAL_TEST_MODE' in config.vars, false);
   assert.deepEqual(config.assets, { directory: '/a', binding: 'ASSETS', run_worker_first: true });
   assert.deepEqual(config.triggers, { crons: ['*/5 * * * *'] });
   assert.equal('account_id' in config, false);
   assert.equal(deployConfig(base, settingsFromEnv(ENV, 'dev'), 'db-uuid', { assets: '/a', migrations: '/m' }).no_bundle, undefined);
+});
+
+test('prod is the prod target only: no test mailbox, no sink, mail to recipients, https framing', () => {
+  assert.equal(environmentOfTarget('prod'), 'prod');
+  assert.equal(environmentOfTarget('dev'), 'dev');
+  assert.equal(environmentOfTarget('staging'), 'dev');
+  const { ESIGN_MAIL_SINK: _sink, ...prodEnv } = { ...ENV, ESIGN_FRAME_ANCESTORS: 'https://console.example' };
+  const settings = settingsFromEnv(prodEnv, 'prod');
+  assert.equal(settings.environment, 'prod');
+  assert.equal(settings.mailSink, '');
+  // A sink, or http framing even on a loopback host, is refused for prod.
+  assert.throws(() => settingsFromEnv({ ...prodEnv, ESIGN_MAIL_SINK: 'inbox@sink.example' }, 'prod'), /ESIGN_MAIL_SINK must not be set/);
+  assert.throws(() => settingsFromEnv({ ...prodEnv, ESIGN_FRAME_ANCESTORS: 'https://console.example http://localhost:3000' }, 'prod'), /ESIGN_FRAME_ANCESTORS is invalid/);
+  const base = parseJsonc(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+  const config = deployConfig(base, settings, 'db-uuid', { assets: '/a', migrations: '/m' });
+  assert.equal(config.name, 'esign-prod');
+  assert.deepEqual(config.r2_buckets.map(b => b.bucket_name), ['esign-prod-artifacts']);
+  assert.deepEqual(config.send_email, [{ name: 'SEND_EMAIL' }]);
+  assert.equal(config.vars.ESIGN_ENV, 'prod');
+  assert.equal('MAIL_SINK' in config.vars, false);
+  assert.equal(config.vars.MAIL_FROM, 'sign@sender.example');
+  // Deployed Workers seal with KMS and TSA, so neither needs the HMAC test seal's key.
+  assert.deepEqual(REQUIRED_SECRETS, ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'OTP_KEY']);
 });
 
 test('the D1 database is found by its exact name', () => {

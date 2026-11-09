@@ -26,7 +26,7 @@ async function harness() {
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SECRET))).toString('hex');
   await db.prepare("INSERT INTO tenants VALUES ('a')").run();
   await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
-  const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, LOCAL_TEST_MODE: 'true', SIGNING_PAGE_ORIGINS: ORIGIN, LOCAL_TEST_OTP_KEY: 'local-test-pepper-at-least-32-bytes', LOCAL_TEST_SEAL_KEY: 'local-test-seal-key-at-least-32-bytes' };
+  const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, SIGNING_PAGE_ORIGINS: ORIGIN, OTP_KEY: 'local-test-pepper-at-least-32-bytes', TEST_SEAL_KEY: 'local-test-seal-key-at-least-32-bytes' };
   const auth = { authorization: `Bearer ${SECRET}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request('http://localhost' + path, init), env);
   const json = (body: unknown, headers: Record<string, string> = {}) => ({ method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });

@@ -2245,3 +2245,37 @@ still `PENDING`; a voided envelope, which is not moved; every task signed but th
 reusing the stored seal. The existing race, retry and tamper tests pass unchanged.
 README.md ("How writes commit"), WORKER-MODE.md and DEPLOYMENT-RUNBOOK.md (18 tables) were
 updated. No cloud resource was changed.
+
+## One switch for dev and prod: ESIGN_ENV
+
+`ESIGN_ENV` (`src/environment.ts`) replaces `LOCAL_TEST_MODE` and `SEAL_MODE` as the one switch.
+It is `dev` locally (`wrangler.jsonc`) and on esign-dev, `prod` on esign-prod; `scripts/deploy.ts`
+derives it from the target (`--target prod` is prod, any other target is dev), and unset is dev.
+
+- **Mail** (`src/otp-mail-sink.ts`): dev emails every code and signed copy to the sink
+  (`MAIL_SINK`, pinned on the binding), naming the intended recipient; prod emails each one to its
+  recipient (new `recipientMailer`), without the dev markings. `mailerFor` picks one; neither
+  falls back to the other.
+- **Test mailbox**: dev keeps every code in `TEST_MAIL` for tests; prod has no such bucket, never
+  writes a code anywhere, and `GET /v1/test-mail/:id` is 404.
+- **Seal**: the managed seal is used whenever `KMS_KEY_ARN` is set (`SEAL_MODE` is gone; an
+  incomplete configuration is still an error). The HMAC test seal is dev only (`testSealKey` is
+  null in prod whatever is configured), so prod never completes an envelope any other way.
+- **Origins**: `SIGNING_PAGE_ORIGINS` is honoured in dev only; prod lets only https origins embed
+  `/sign` (`frameAncestors(raw, httpsOnly)`), and the deploy refuses http ones for prod.
+- **Enabled**: signing, `/demo` and the cron run in both. dev needs `OTP_KEY` and the test mailbox;
+  prod needs `OTP_KEY`, `SEND_EMAIL`, `MAIL_FROM`, `KMS_KEY_ARN`, no `MAIL_SINK` and no `TEST_MAIL`
+  (`prodProblems`, which the cron logs by name, never by value). The disabled error is now
+  `signing_disabled`.
+- **Renamed**: `LOCAL_TEST_OTP_KEY` → `OTP_KEY`, `LOCAL_TEST_SEAL_KEY` → `TEST_SEAL_KEY`,
+  `OTP_MAIL_FROM` / `OTP_MAIL_SINK` → `MAIL_FROM` / `MAIL_SINK`. A deployed Worker needs only
+  `OTP_KEY` and the AWS credentials as secrets: it seals with KMS, so no `TEST_SEAL_KEY`.
+- **Deploy**: prod binds no test mailbox bucket, does not pin `send_email`, sets no sink, refuses
+  `ESIGN_MAIL_SINK` and http frame ancestors.
+
+Tests: `environment.test.ts` (the switch, prod's checks, the test seal, both mailers, https
+framing); `otp-sink.test.ts` adds prod over HTTP (a code emailed to its recipient, kept nowhere;
+nothing signs until prod is fully configured; `SIGNING_PAGE_ORIGINS` ignored); `deploy-config.test.ts`
+adds the prod configuration. Not yet verified on Cloudflare: that Email Sending delivers to any
+address from an unpinned binding (check on the first prod deployment). esign-dev must be redeployed
+with the new secret name `OTP_KEY`. No cloud resource was changed.

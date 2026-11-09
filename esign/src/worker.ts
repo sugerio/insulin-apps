@@ -11,15 +11,16 @@ import { validatePositionedPdf, validatePositionedPlacement } from './positioned
 import {positionedV3Fields} from './positioned-v3-snapshot.ts';
 import { assertRenderableRecipientNames } from './recipient-name.ts';
 import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './prepare.ts';
-import { localSigningEnabled, mountLocalSigningRoutes } from './local-signing-routes.ts';
+import { mountLocalSigningRoutes } from './local-signing-routes.ts';
+import { isProd, prodProblems, signingEnabled, type EnvironmentEnv } from './environment.ts';
 import { mountEditorRoutes } from './editor-routes.ts';
 import { demoPage, EMBEDDABLE_HEADERS, signingPage } from './signing-page.ts';
 import { sweepEnvelopes } from './envelope-completion.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
-type Bindings = {
+/** ESIGN_ENV (dev or prod) and the rest of the environment: see environment.ts. */
+type Bindings = Omit<EnvironmentEnv, 'SEND_EMAIL'> & {
   DB: D1Database; ARTIFACTS: R2Bucket; TEST_MAIL?: R2Bucket; ASSETS?: Fetcher;
-  LOCAL_TEST_MODE?: string; LOCAL_TEST_OTP_KEY?: string; LOCAL_TEST_SEAL_KEY?: string;
   /** "true": finish each envelope after every accepted signature (see envelope-completion.ts). */
   COMPLETE_AFTER_SIGN?: string;
   /** Space-separated origins allowed to embed the signing page at /sign. */
@@ -63,13 +64,14 @@ app.get('/assets/*', async (context) => {
 
 // The recipient signing page, for the host to embed: <origin>/sign#code=<recipient-view code>.
 app.get('/sign', async (context) => {
-  if (!localSigningEnabled(context.env)) return context.notFound();
-  return (await signingPage(context.req.raw, context.env.ASSETS, context.env.SIGNING_PAGE_FRAME_ANCESTORS)) ?? context.notFound();
+  if (!signingEnabled(context.env)) return context.notFound();
+  return (await signingPage(context.req.raw, context.env.ASSETS, context.env.SIGNING_PAGE_FRAME_ANCESTORS, isProd(context.env))) ?? context.notFound();
 });
 
-// A page to try the whole flow with a tenant key: upload, sign, download (ui/DemoPage.ts).
+// A page to try the whole flow with a tenant key: upload, sign, download (ui/DemoPage.ts). In
+// dev and prod alike: in prod its envelopes are real ones, and their emails go to the signers.
 app.get('/demo', async (context) => {
-  if (!localSigningEnabled(context.env)) return context.notFound();
+  if (!signingEnabled(context.env)) return context.notFound();
   return (await demoPage(context.req.raw, context.env.ASSETS)) ?? context.notFound();
 });
 
@@ -317,7 +319,10 @@ return app;
 
 /** Cron trigger: finishes envelopes that the after-signature work did not (see envelope-completion.ts). */
 async function scheduled(_controller: ScheduledController, env: Bindings, ctx: ExecutionContext): Promise<void> {
-  if (!localSigningEnabled(env)) return;
+  if (!signingEnabled(env)) {
+    if (isProd(env)) console.error(`E-sign: prod is not fully configured, so nothing can be signed: ${prodProblems(env).join('; ')}`);
+    return;
+  }
   ctx.waitUntil(expireDueEnvelopes(env.DB).catch(() => console.error('E-sign: the expiry sweep failed; the next run retries it')));
   ctx.waitUntil(sweepEnvelopes(env).then((counts) => {
     if (counts.failed) console.error(`E-sign: ${counts.failed} envelope(s) could not be finished; the next run retries them`);

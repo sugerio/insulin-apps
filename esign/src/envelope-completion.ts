@@ -2,7 +2,8 @@ import { advanceStatements, processSignature } from './signature-processing.ts';
 import { finalizeLocalTestEvidence } from './local-test-evidence.ts';
 import { finalizeManagedEvidence, managedDelivery } from './managed-evidence.ts';
 import { envelopesOwingCopies, sendSignedCopies } from './signed-copies.ts';
-import { sinkMailer, type OtpSinkEnv } from './otp-mail-sink.ts';
+import { mailerFor, type MailEnv } from './otp-mail-sink.ts';
+import { testSealKey, type EnvironmentEnv } from './environment.ts';
 import { managedEvidenceFromEnv, type SealEnv } from './seal-config.ts';
 
 /**
@@ -31,7 +32,7 @@ export async function processEnvelopeStep(db: D1Database, bucket: R2Bucket, tena
   }
 }
 
-export type CompletionEnv = { DB: D1Database; ARTIFACTS: R2Bucket; LOCAL_TEST_SEAL_KEY?: string } & SealEnv & OtpSinkEnv;
+export type CompletionEnv = { DB: D1Database; ARTIFACTS: R2Bucket } & Omit<EnvironmentEnv, 'SEND_EMAIL'> & SealEnv & MailEnv;
 export type Completion = 'completed' | 'waiting' | 'failed';
 
 /** Signatures are processed one at a time, in signing order; an envelope has at most a few. */
@@ -61,8 +62,10 @@ export async function completeEnvelope(env: CompletionEnv, tenantId: string, env
   // The managed seal when configured; otherwise the local test seal, if there is a key for it.
   const managed = await managedEvidenceFromEnv(env);
   if (managed) { await finalizeManagedEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,managed); await sendCopies(env,tenantId,envelopeId); return 'completed'; }
-  if ((env.LOCAL_TEST_SEAL_KEY?.length ?? 0) < 32) return 'waiting';
-  await finalizeLocalTestEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,new TextEncoder().encode(env.LOCAL_TEST_SEAL_KEY!));
+  // The HMAC test seal: dev only (testSealKey is null in prod, which seals with KMS and TSA only).
+  const testKey = testSealKey(env);
+  if (!testKey) return 'waiting';
+  await finalizeLocalTestEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,testKey);
   await sendCopies(env,tenantId,envelopeId);
   return 'completed';
 }
@@ -75,19 +78,20 @@ export async function finalizeEnvelopeStep(env: CompletionEnv, tenantId: string,
     const managed = await managedEvidenceFromEnv(env);
     if (managed) { await finalizeManagedEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,managed); return 'finalized'; }
   } catch { return 'finalization_failed'; }
-  if ((env.LOCAL_TEST_SEAL_KEY?.length ?? 0) < 32) return 'local_test_disabled';
-  try { await finalizeLocalTestEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,new TextEncoder().encode(env.LOCAL_TEST_SEAL_KEY!)); return 'finalized'; }
+  const testKey = testSealKey(env);
+  if (!testKey) return 'local_test_disabled';
+  try { await finalizeLocalTestEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,testKey); return 'finalized'; }
   catch { return 'finalization_failed'; }
 }
 
 /** Emails each signer the signed copy, when mail is configured; failures are retried by the cron. */
 async function sendCopies(env: CompletionEnv, tenantId: string, envelopeId: string): Promise<void> {
-  const mailer = sinkMailer(env);
+  const mailer = mailerFor(env);
   if (!mailer) return;
   const managed = await managedEvidenceFromEnv(env);
   try {
     if (managed) await sendSignedCopies(env.DB,env.ARTIFACTS,tenantId,envelopeId,managedDelivery(env.DB,env.ARTIFACTS,tenantId,envelopeId,managed.trust),mailer);
-    else if ((env.LOCAL_TEST_SEAL_KEY?.length ?? 0) >= 32) await sendSignedCopies(env.DB,env.ARTIFACTS,tenantId,envelopeId,new TextEncoder().encode(env.LOCAL_TEST_SEAL_KEY!),mailer);
+    else { const testKey = testSealKey(env); if (testKey) await sendSignedCopies(env.DB,env.ARTIFACTS,tenantId,envelopeId,testKey,mailer); }
   } catch { console.error(`E-sign: sending the signed copies of envelope ${envelopeId} failed; the cron retries it`); }
 }
 
@@ -118,6 +122,6 @@ export async function sweepEnvelopes(env: CompletionEnv): Promise<Record<Complet
     catch { counts.failed++; }
   }
   // Completed envelopes whose signed copies were not all sent.
-  if (sinkMailer(env)) for (const row of await envelopesOwingCopies(env.DB)) await sendCopies(env,row.tenant_id,row.id);
+  if (mailerFor(env)) for (const row of await envelopesOwingCopies(env.DB)) await sendCopies(env,row.tenant_id,row.id);
   return counts;
 }

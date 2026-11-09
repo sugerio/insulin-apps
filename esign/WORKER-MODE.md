@@ -7,23 +7,39 @@ The original Worker (`src/worker.ts`) runs unchanged in three places, configured
 | In-process (tests, local harnesses) | `app.fetch(request, env)` with Miniflare bindings | the `env` object passed in |
 | Locally on workerd | `npm run dev` (`wrangler dev --local`) | `wrangler.jsonc` top level + `.dev.vars` |
 | Cloudflare, shared dev | `node scripts/deploy.ts --target dev` (CI on `main`) | generated from the environment + `wrangler secret` (see Deploy) |
+| Cloudflare, prod | `node scripts/deploy.ts --target prod` | the same, for `esign-prod` |
 
 The API, the editor page and the recipient page, and the way a host embeds them in an iframe,
-are the same in all three.
+are the same everywhere.
 
-**This is still LOCAL TEST MODE, wherever it runs.** Only synthetic documents; the seal is the
-local HMAC test seal and the certificate says `LOCAL TEST ONLY`. It provides no production
-evidence protection. One-time codes are stored in the `TEST_MAIL` bucket, and:
+## dev and prod: one switch
 
-* without a sink (local default), only `example.com` / `*.test` addresses get a code, and
-  nothing is emailed;
-* with a sink (`OTP_MAIL_SINK`, the dev deployment), a code is accepted for **any** address and
-  really emailed, but **only to the sink mailbox**, never to the recipient. The email names the
-  intended recipient. The `send_email` binding is pinned to the sink with `destination_address`,
-  so the Worker cannot mail anyone else even by mistake.
+`ESIGN_ENV` (`src/environment.ts`) is the one switch: `dev` locally (`wrangler.jsonc`) and on
+`esign-dev`, `prod` on `esign-prod`. `scripts/deploy.ts` sets it from the target: `--target prod`
+is prod, any other target is dev. Unset means dev. Everything else is a value for the
+environment (addresses, origins, keys), never a second switch.
 
-Email to real recipients, a KMS/TSA seal and a reviewed verified-user boundary are separate
-work (see the README).
+| | dev | prod |
+|---|---|---|
+| One-time codes and signed copies | to the sink mailbox (`MAIL_SINK`), naming the intended recipient; without a sink, codes only for `example.com` / `*.test` addresses and nothing is emailed | to their recipients |
+| Test mailbox (`TEST_MAIL` bucket, `GET /v1/test-mail/:id`) | every code is kept there, for tests to read | not bound; never written or read |
+| Seal | KMS + TSA when `KMS_KEY_ARN` is set (`esign-dev`), else the HMAC test seal (`TEST_SEAL_KEY`, local), whose certificate says `LOCAL TEST ONLY` | KMS + TSA only; no fallback |
+| Pages that may call the signing API | the Worker's own `/sign`, plus `SIGNING_PAGE_ORIGINS` (local UI development) | the Worker's own `/sign` only |
+| Origins that may embed `/sign` | https, or http on a loopback host | https only |
+| Signing, `/demo` and the cron | on, once `OTP_KEY` is set and the test mailbox is bound | on, once fully configured; otherwise off, and the cron logs what is missing (`prodProblems`) |
+
+On `esign-dev` the `send_email` binding is pinned to the sink with `destination_address`, so the
+Worker cannot mail anyone else even by mistake. On `esign-prod` it is not pinned; confirm on the
+first prod deployment that Cloudflare Email Sending delivers to any address from `MAIL_FROM`.
+
+Secrets: `OTP_KEY` (the one-time codes' pepper, both environments), `TEST_SEAL_KEY` (the HMAC test
+seal; local only, never needed where KMS is configured), and the AWS credentials of the managed
+seal.
+
+prod still needs, outside this switch: counsel's review of the consent wording
+(`src/disclosure.ts`), a retention decision, Cloudflare rate limiting on `/v1/signing/otp*` and
+`/v1/page-sessions/exchange`, a TSA whose terms allow production use with revocation checking,
+and an independent security review (see the README).
 
 ## What the Worker does itself
 
@@ -69,8 +85,8 @@ Before, a local harness did these outside the Worker:
 
 ## Managed seal (KMS + TSA)
 
-With `SEAL_MODE=KMS_TSA` (the dev deployment), an envelope is completed with a managed seal
-instead of the local HMAC test seal (`src/managed-seal.ts`, `src/managed-evidence.ts`):
+With `KMS_KEY_ARN` set (both deployments; required in prod), an envelope is completed with a
+managed seal instead of the local HMAC test seal (`src/managed-seal.ts`, `src/managed-evidence.ts`):
 
 1. The evidence manifest is rebuilt from the stored signatures after checking the whole chain
    (source, every signature's event hash and its link to the one before, every rendered PDF
@@ -144,21 +160,23 @@ A host product's console then uses `http://127.0.0.1:8787` as the E-sign base UR
 Deployments are not described in this repository. `scripts/deploy.ts` generates the Wrangler
 configuration of `esign-<target>` for one run (into `.deploy/`, ignored) from the environment:
 every resource is named after the target (`esign-dev`: Worker, D1 database, R2 buckets
-`esign-dev-artifacts` and `esign-dev-test-mail`), the D1 id is looked up by name, and the
-settings below come from environment variables. It refuses to deploy while a required secret is
+`esign-dev-artifacts` and `esign-dev-test-mail`; `esign-prod` has no test mailbox bucket), the D1
+id is looked up by name, and the settings below come from environment variables. The target
+decides `ESIGN_ENV` (see "dev and prod: one switch"). It refuses to deploy while a required secret is
 missing on the Worker, applies new migrations, then deploys.
 
 | Setting | Environment variable (CI: repository or `production` environment variable) |
 |---|---|
 | Cloudflare account and token | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (CI: the same as the apps) |
 | Sender of every message (a Cloudflare Email Sending domain) | `ESIGN_MAIL_FROM` (`ESIGN_DEV_MAIL_FROM`) |
-| The one mailbox that receives every message | `ESIGN_MAIL_SINK` (`ESIGN_DEV_MAIL_SINK`) |
-| Origins allowed to embed `/sign` (space-separated) | `ESIGN_FRAME_ANCESTORS` (`ESIGN_DEV_FRAME_ANCESTORS`) |
+| dev only: the one mailbox that receives every message (refused for prod) | `ESIGN_MAIL_SINK` (`ESIGN_DEV_MAIL_SINK`) |
+| Origins allowed to embed `/sign` (space-separated; https only for prod) | `ESIGN_FRAME_ANCESTORS` (`ESIGN_DEV_FRAME_ANCESTORS`) |
 | Managed seal: KMS key ARN, its public key (base64 SPKI), the signing role | `ESIGN_KMS_KEY_ARN`, `ESIGN_KMS_PUBLIC_KEY`, `ESIGN_AWS_ROLE_ARN` (`ESIGN_DEV_*`) |
 
-Secrets stay on the Worker and never pass through the deploy: `LOCAL_TEST_OTP_KEY` and
-`LOCAL_TEST_SEAL_KEY` (random, set once with `wrangler secret put <name> --name esign-dev`), and
-`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (set by `scripts/aws-dev-signer.sh`).
+Secrets stay on the Worker and never pass through the deploy: `OTP_KEY` (random, set once with
+`wrangler secret put OTP_KEY --name esign-<target>`) and `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` (set by `scripts/aws-dev-signer.sh` for dev). A deployed Worker seals with
+KMS and TSA, so it needs no `TEST_SEAL_KEY`.
 
 * **CI:** `.github/workflows/esign.yml` deploys `esign-dev` on a push to `main` (or a manual run on
   `main`) once the repository variable `ESIGN_DEV_DEPLOY` is `true`. The checks job builds the

@@ -29,7 +29,7 @@ async function startWorker({autoComplete=true,testMode=true}:{autoComplete?:bool
  const mf=new Miniflare({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-01-01',unsafeTriggerHandlers:true,
   d1Databases:['DB'],r2Buckets:['ARTIFACTS','TEST_MAIL'],
   assets:{directory:dir,binding:'ASSETS',routerConfig:{invoke_user_worker_ahead_of_assets:true,has_user_worker:true}},
-  bindings:{LOCAL_TEST_MODE:testMode?'true':'false',LOCAL_TEST_OTP_KEY:'worker-mode-otp-pepper-at-least-32-bytes',LOCAL_TEST_SEAL_KEY:'worker-mode-seal-key-at-least-32-bytes',
+  bindings:{...(testMode?{OTP_KEY:'worker-mode-otp-pepper-at-least-32-bytes'}:{}),TEST_SEAL_KEY:'worker-mode-seal-key-at-least-32-bytes',
    COMPLETE_AFTER_SIGN:autoComplete?'true':'false',SIGNING_PAGE_FRAME_ANCESTORS:`${CONSOLE} not-an-origin https://evil.example.test/path`}});
  const db=await mf.getD1Database('DB');
  for(const name of (await readdir('migrations')).filter(n=>n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`,'utf8')).map(s=>db.prepare(s)));

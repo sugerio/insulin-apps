@@ -21,7 +21,7 @@ async function harness() {
   for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`, 'utf8')).map(s => db.prepare(s)));
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex')).run();
-  const env = { DB: db, ARTIFACTS: await mf.getR2Bucket('ARTIFACTS'), TEST_MAIL: await mf.getR2Bucket('TEST_MAIL'), LOCAL_TEST_MODE: 'true', LOCAL_TEST_OTP_KEY: 'task-expiry-otp-pepper-at-least-32-bytes' };
+  const env = { DB: db, ARTIFACTS: await mf.getR2Bucket('ARTIFACTS'), TEST_MAIL: await mf.getR2Bucket('TEST_MAIL'), OTP_KEY: 'task-expiry-otp-pepper-at-least-32-bytes' };
   const auth = { authorization: `Bearer ${KEY}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);
   const json = (body: unknown, headers: Record<string, string> = {}) => ({ method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });

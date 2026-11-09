@@ -86,7 +86,7 @@ INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_or
     assert.equal(await status(), 'FINALIZING');
 
     // With the local test seal key, the sweep seals and completes it.
-    const sealing = { ...env, LOCAL_TEST_SEAL_KEY: SEAL_KEY };
+    const sealing = { ...env, TEST_SEAL_KEY: SEAL_KEY };
     assert.deepEqual(await sweepEnvelopes(sealing), { ...none, completed: 1 });
     assert.equal(await status(), 'COMPLETED');
     const seal = await db.prepare("SELECT mode,object_key,sha256 FROM seals WHERE envelope_id='env'").first<{ mode: string; object_key: string; sha256: string }>();

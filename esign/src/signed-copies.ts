@@ -1,6 +1,6 @@
 import { deliveryPdf, type DeliveryEvidence } from './delivery-pdf.ts';
 import { AUDIT, recordAuditQuietly } from './audit.ts';
-import type { SinkMailer } from './otp-mail-sink.ts';
+import type { Mailer } from './otp-mail-sink.ts';
 
 /**
  * Once an envelope is completed, every signer is emailed one copy of the record: the signed PDF
@@ -14,7 +14,7 @@ const RETRY_AFTER_MS = 15 * 60 * 1000;
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 
-export async function sendSignedCopies(db: D1Database, bucket: R2Bucket, tenantId: string, envelopeId: string, evidence: Uint8Array | DeliveryEvidence, mailer: SinkMailer, now = Date.now()): Promise<{ sent: number; skipped: number }> {
+export async function sendSignedCopies(db: D1Database, bucket: R2Bucket, tenantId: string, envelopeId: string, evidence: Uint8Array | DeliveryEvidence, mailer: Mailer, now = Date.now()): Promise<{ sent: number; skipped: number }> {
   const envelope = await db.prepare('SELECT status FROM envelopes WHERE id=? AND tenant_id=?').bind(envelopeId, tenantId).first<{ status: string }>();
   if (envelope?.status !== 'COMPLETED') throw new Error('Envelope not completed');
   const tasks = (await db.prepare("SELECT id,recipient_name,recipient_email FROM tasks WHERE envelope_id=? AND status='SIGNED' ORDER BY routing_order").bind(envelopeId).all<{ id: string; recipient_name: string; recipient_email: string }>()).results;

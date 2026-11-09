@@ -10,12 +10,12 @@ const ARN = 'arn:aws:kms:us-west-2:123456789012:key/00000000-0000-4000-8000-0000
 const ROLE = 'arn:aws:iam::123456789012:role/esign-dev-signer';
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const spki = publicKey.export({ type: 'spki', format: 'der' });
-const env = { SEAL_MODE: 'KMS_TSA', KMS_KEY_ARN: ARN, KMS_PUBLIC_KEY: spki.toString('base64'), AWS_ROLE_ARN: ROLE, AWS_ACCESS_KEY_ID: LONG_TERM_KEY_ID, AWS_SECRET_ACCESS_KEY: 'synthetic-secret' };
+const env = { KMS_KEY_ARN: ARN, KMS_PUBLIC_KEY: spki.toString('base64'), AWS_ROLE_ARN: ROLE, AWS_ACCESS_KEY_ID: LONG_TERM_KEY_ID, AWS_SECRET_ACCESS_KEY: 'synthetic-secret' };
 
-test('without SEAL_MODE the local test seal stays in use; an unknown or incomplete KMS_TSA setup is refused', async () => {
+test('without KMS_KEY_ARN there is no managed seal; an incomplete KMS_TSA setup is refused', async () => {
   assert.equal(await managedEvidenceFromEnv({}), null);
-  await assert.rejects(managedEvidenceFromEnv({ SEAL_MODE: 'HMAC' }), /Unknown SEAL_MODE/);
-  for (const missing of ['KMS_KEY_ARN', 'KMS_PUBLIC_KEY', 'AWS_ROLE_ARN', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] as const)
+  assert.equal(await managedEvidenceFromEnv({ ...env, KMS_KEY_ARN: '' }), null);
+  for (const missing of ['KMS_PUBLIC_KEY', 'AWS_ROLE_ARN', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] as const)
     await assert.rejects(managedEvidenceFromEnv({ ...env, [missing]: '' }), /not fully configured/, missing);
   await assert.rejects(managedEvidenceFromEnv({ ...env, TSA_SIGNER_SPKI_SHA256: 'nope' }), /Invalid SHA-256 list/);
 });

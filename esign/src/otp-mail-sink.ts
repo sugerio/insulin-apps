@@ -1,30 +1,39 @@
 import { isValidOtpEmailAddress } from './cloudflare-otp-mail.ts';
+import { isProd } from './environment.ts';
 import { OTP_TTL_MS } from './page-authorization.ts';
 
 /**
- * One-time codes emailed to one fixed mailbox instead of the recipient (test environments).
- * Configured by a `send_email` binding SEND_EMAIL (on Cloudflare, pinned to the same address
- * with `destination_address`, so the Worker cannot mail anyone else), OTP_MAIL_FROM (an address
- * on a domain onboarded to Cloudflare Email Sending) and OTP_MAIL_SINK. With a sink, a code is
- * accepted for any recipient address, because none of them ever receives it.
+ * Email from the Worker: one-time codes and signed copies, through a `send_email` binding
+ * SEND_EMAIL and MAIL_FROM (an address on a domain onboarded to Cloudflare Email Sending).
+ *
+ * - dev (ESIGN_ENV, see environment.ts): every message goes to one fixed mailbox, MAIL_SINK,
+ *   saying whom it was for. On Cloudflare the binding itself is pinned to that address with
+ *   `destination_address`, so the Worker cannot mail anyone else. A code is then accepted for any
+ *   recipient address, because none of them ever receives it.
+ * - prod: every message goes to its recipient.
  */
 
 export type MailAttachment = { disposition: 'attachment'; filename: string; type: string; content: Uint8Array };
 type SendEmail = { send(message: { from: string; to: string; subject: string; text: string; attachments?: MailAttachment[] }): Promise<unknown> };
-export type OtpSinkEnv = { SEND_EMAIL?: SendEmail; OTP_MAIL_FROM?: string; OTP_MAIL_SINK?: string };
-export type OtpSink = { send(recipient: string, otp: string): Promise<void> };
-/** Any message meant for `recipient`, delivered to the sink instead, saying whom it was for. */
-export type SinkMailer = { sink: string; send(recipient: string, subject: string, text: string, attachments?: MailAttachment[]): Promise<void> };
+export type MailEnv = { ESIGN_ENV?: string; SEND_EMAIL?: SendEmail; MAIL_FROM?: string; MAIL_SINK?: string };
+export type OtpMailer = { send(recipient: string, otp: string): Promise<void> };
+/** Sends a message meant for `recipient`: to them (prod), or to the sink saying it was for them (dev). */
+export type Mailer = { send(recipient: string, subject: string, text: string, attachments?: MailAttachment[]): Promise<void> };
 
 /** Minutes a code stays valid (sendRecipientOtp). */
 const OTP_MINUTES = OTP_TTL_MS / 60_000;
 
-/** The configured sink, or null when any part of it is missing or not an email address. */
-export function sinkMailer(env: OtpSinkEnv): SinkMailer | null {
-  const binding = env.SEND_EMAIL, from = env.OTP_MAIL_FROM ?? '', sink = env.OTP_MAIL_SINK ?? '';
-  if (!binding || typeof binding.send !== 'function' || !isValidOtpEmailAddress(from) || !isValidOtpEmailAddress(sink)) return null;
+const usableBinding = (env: MailEnv) => {
+  const binding = env.SEND_EMAIL, from = env.MAIL_FROM ?? '';
+  return binding && typeof binding.send === 'function' && isValidOtpEmailAddress(from) ? { binding, from } : null;
+};
+
+/** dev: the sink, or null when any part of it is missing or not an email address. Never in prod. */
+export function sinkMailer(env: MailEnv): Mailer | null {
+  const configured = usableBinding(env), sink = env.MAIL_SINK ?? '';
+  if (isProd(env) || !configured || !isValidOtpEmailAddress(sink)) return null;
+  const { binding, from } = configured;
   return {
-    sink,
     async send(recipient, subject, text, attachments) {
       await binding.send({
         from, to: sink,
@@ -36,9 +45,25 @@ export function sinkMailer(env: OtpSinkEnv): SinkMailer | null {
   };
 }
 
-/** One-time codes through the sink. */
-export function otpSink(env: OtpSinkEnv): OtpSink | null {
-  const mailer = sinkMailer(env);
+/** prod: each message to its own recipient, or null when mail is not configured. Never in dev. */
+export function recipientMailer(env: MailEnv): Mailer | null {
+  const configured = usableBinding(env);
+  if (!isProd(env) || !configured) return null;
+  const { binding, from } = configured;
+  return {
+    async send(recipient, subject, text, attachments) {
+      if (!isValidOtpEmailAddress(recipient)) throw new Error('Invalid recipient address');
+      await binding.send({ from, to: recipient, subject, text, ...(attachments?.length ? { attachments } : {}) });
+    },
+  };
+}
+
+/** The environment's mailer: the recipient in prod, the sink in dev; null when not configured. */
+export const mailerFor = (env: MailEnv): Mailer | null => (isProd(env) ? recipientMailer(env) : sinkMailer(env));
+
+/** One-time codes through the environment's mailer. */
+export function otpMailer(env: MailEnv): OtpMailer | null {
+  const mailer = mailerFor(env);
   if (!mailer) return null;
-  return { send: (recipient, otp) => mailer.send(recipient, `Verification code for ${recipient}`, `Verification code: ${otp}\n\nIt expires in ${OTP_MINUTES} minutes.`) };
+  return { send: (recipient, otp) => mailer.send(recipient, 'Your verification code', `Verification code: ${otp}\n\nIt expires in ${OTP_MINUTES} minutes. If you did not ask to sign a document, ignore this email.`) };
 }

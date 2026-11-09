@@ -11,6 +11,8 @@
   "d1_databases": [{ "binding": "DB", "database_name": "esign-local", "database_id": "local-only", "migrations_dir": "migrations" }],
   "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "esign-local-artifacts" }, { "binding": "TEST_MAIL", "bucket_name": "esign-local-test-mail" }],
   "vars": {
+    // The one switch (src/environment.ts): local runs are dev; deployments get theirs from scripts/deploy.ts.
+    "ESIGN_ENV": "dev",
     // Finish each envelope after every accepted signature: process it, then seal after the last.
     "COMPLETE_AFTER_SIGN": "true",
     // Origins allowed to embed /sign in an iframe (space-separated).

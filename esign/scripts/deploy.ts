@@ -6,26 +6,39 @@
 //
 //   node scripts/deploy.ts [--target dev] [--bundle dist] [--assets dist-ui] [--config-only] [--dry-run]
 //
+// The target decides the environment (ESIGN_ENV, src/environment.ts): `prod` deploys esign-prod in
+// prod; any other target (`dev`) deploys in dev. dev binds the test mailbox bucket and pins the
+// send_email binding to the sink; prod has no test mailbox, no sink, and mails recipients.
+//
 // --bundle deploys an already built bundle (dist/worker.js from `npm run build`) as is, which is how
 // CI deploys what its unprivileged job built; without it Wrangler bundles src/worker.ts.
 //
 // Required environment: CLOUDFLARE_ACCOUNT_ID (and CLOUDFLARE_API_TOKEN outside an interactive
-// login), ESIGN_MAIL_FROM, ESIGN_MAIL_SINK, ESIGN_FRAME_ANCESTORS, ESIGN_KMS_KEY_ARN,
-// ESIGN_KMS_PUBLIC_KEY, ESIGN_AWS_ROLE_ARN.
+// login), ESIGN_MAIL_FROM, ESIGN_FRAME_ANCESTORS (https only in prod), ESIGN_KMS_KEY_ARN,
+// ESIGN_KMS_PUBLIC_KEY, ESIGN_AWS_ROLE_ARN, and in dev ESIGN_MAIL_SINK.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { frameAncestors } from '../src/signing-page.ts';
+import type { EsignEnvironment } from '../src/environment.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Secrets the deployed Worker needs; they are set on the Worker, never passed through here. */
-export const REQUIRED_SECRETS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'LOCAL_TEST_OTP_KEY', 'LOCAL_TEST_SEAL_KEY'];
+/**
+ * Secrets the deployed Worker needs; they are set on the Worker, never passed through here. A
+ * deployed Worker seals with KMS and TSA, so it needs no TEST_SEAL_KEY.
+ */
+export const REQUIRED_SECRETS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'OTP_KEY'];
+
+/** The environment a target deploys in: only `prod` is prod. */
+export const environmentOfTarget = (target: string): EsignEnvironment => (target === 'prod' ? 'prod' : 'dev');
 
 export type DeploySettings = {
   target: string;
+  environment: EsignEnvironment;
   mailFrom: string;
+  /** dev only: the one mailbox every message goes to. Empty in prod. */
   mailSink: string;
   frameAncestors: string;
   kmsKeyArn: string;
@@ -44,11 +57,14 @@ export function settingsFromEnv(env: Record<string, string | undefined>, target:
   const problems: string[] = [];
   const check = (name: string, ok: (v: string) => boolean) => { const v = read(name); if (!v) problems.push(`${name} is not set`); else if (!ok(v)) problems.push(`${name} is invalid`); return v; };
   if (!/^[a-z][a-z0-9-]{0,20}$/.test(target)) problems.push('the target must be a short lowercase name');
+  const environment = environmentOfTarget(target), prod = environment === 'prod';
+  if (prod && read('ESIGN_MAIL_SINK')) problems.push('ESIGN_MAIL_SINK must not be set for prod, which emails recipients');
   const settings = {
     target,
+    environment,
     mailFrom: check('ESIGN_MAIL_FROM', v => EMAIL.test(v)),
-    mailSink: check('ESIGN_MAIL_SINK', v => EMAIL.test(v)),
-    frameAncestors: check('ESIGN_FRAME_ANCESTORS', v => frameAncestors(v).length === v.split(/\s+/).length),
+    mailSink: prod ? '' : check('ESIGN_MAIL_SINK', v => EMAIL.test(v)),
+    frameAncestors: check('ESIGN_FRAME_ANCESTORS', v => frameAncestors(v, prod).length === v.split(/\s+/).length),
     kmsKeyArn: check('ESIGN_KMS_KEY_ARN', v => KMS_KEY_ARN.test(v)),
     kmsPublicKey: check('ESIGN_KMS_PUBLIC_KEY', v => BASE64.test(v)),
     awsRoleArn: check('ESIGN_AWS_ROLE_ARN', v => ROLE_ARN.test(v)),
@@ -71,7 +87,7 @@ export function parseJsonc(text: string): Record<string, unknown> {
   return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1')) as Record<string, unknown>;
 }
 
-/** Resource names of a target: one Worker, one D1 database and two R2 buckets, all named after it. */
+/** Resource names of a target: one Worker, one D1 database and R2 buckets, all named after it (dev also has the test mailbox). */
 export const resourceNames = (target: string) => ({
   worker: `esign-${target}`,
   database: `esign-${target}`,
@@ -81,7 +97,7 @@ export const resourceNames = (target: string) => ({
 
 /** The Wrangler configuration of one deployment, from the repository's local configuration and the settings. */
 export function deployConfig(base: Record<string, unknown>, s: DeploySettings, databaseId: string, paths: { bundle?: string; assets: string; migrations: string }) {
-  const names = resourceNames(s.target);
+  const names = resourceNames(s.target), prod = s.environment === 'prod';
   const assets = base.assets as Record<string, unknown>;
   return {
     name: names.worker,
@@ -92,17 +108,20 @@ export function deployConfig(base: Record<string, unknown>, s: DeploySettings, d
     preview_urls: false,
     assets: { ...assets, directory: paths.assets },
     d1_databases: [{ binding: 'DB', database_name: names.database, database_id: databaseId, migrations_dir: paths.migrations }],
-    r2_buckets: [{ binding: 'ARTIFACTS', bucket_name: names.artifacts }, { binding: 'TEST_MAIL', bucket_name: names.testMail }],
-    // The binding itself can only ever send to the sink (src/otp-mail-sink.ts).
-    send_email: [{ name: 'SEND_EMAIL', destination_address: s.mailSink }],
+    r2_buckets: [
+      { binding: 'ARTIFACTS', bucket_name: names.artifacts },
+      // dev keeps every code in a test mailbox for tests to read; prod keeps none.
+      ...(prod ? [] : [{ binding: 'TEST_MAIL', bucket_name: names.testMail }]),
+    ],
+    // dev: the binding itself can only ever send to the sink (src/otp-mail-sink.ts). prod: to recipients.
+    send_email: [prod ? { name: 'SEND_EMAIL' } : { name: 'SEND_EMAIL', destination_address: s.mailSink }],
     vars: {
-      SEAL_MODE: 'KMS_TSA',
+      ESIGN_ENV: s.environment,
       KMS_KEY_ARN: s.kmsKeyArn,
       KMS_PUBLIC_KEY: s.kmsPublicKey,
       AWS_ROLE_ARN: s.awsRoleArn,
-      OTP_MAIL_FROM: s.mailFrom,
-      OTP_MAIL_SINK: s.mailSink,
-      LOCAL_TEST_MODE: 'true',
+      MAIL_FROM: s.mailFrom,
+      ...(prod ? {} : { MAIL_SINK: s.mailSink }),
       COMPLETE_AFTER_SIGN: 'true',
       SIGNING_PAGE_FRAME_ANCESTORS: s.frameAncestors,
     },

@@ -14,7 +14,8 @@ import { artifactObjectKey } from './signatures.ts';
 import {renderPositionedV3Text} from './positioned-v3-text-render.ts';
 import { renderTypedSignature } from './typed-signature-image.ts';
 import { completeEnvelopeOfSession } from './envelope-completion.ts';
-import { otpSink, type OtpSinkEnv } from './otp-mail-sink.ts';
+import { otpMailer, type MailEnv } from './otp-mail-sink.ts';
+import { isProd, otpKey, signingEnabled, testSealKey, type EnvironmentEnv } from './environment.ts';
 import { managedEvidenceFromEnv, type SealEnv } from './seal-config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
 import { expireIfDue } from './task-expiry.ts';
@@ -25,16 +26,15 @@ import { isValidOtpEmailAddress } from './cloudflare-otp-mail.ts';
 import { deliveryPdf } from './delivery-pdf.ts';
 import { finalizeLocalTestEvidence } from './local-test-evidence.ts';
 
-type Bindings = { DB: D1Database; ARTIFACTS: R2Bucket; TEST_MAIL?: R2Bucket; LOCAL_TEST_MODE?: string; LOCAL_TEST_OTP_KEY?: string; LOCAL_TEST_SEAL_KEY?: string; COMPLETE_AFTER_SIGN?: string; SIGNING_PAGE_ORIGINS?: string } & OtpSinkEnv & SealEnv;
+type Bindings = { DB: D1Database; ARTIFACTS: R2Bucket; TEST_MAIL?: R2Bucket; COMPLETE_AFTER_SIGN?: string; SIGNING_PAGE_ORIGINS?: string } & Omit<EnvironmentEnv, 'SEND_EMAIL' | 'TEST_MAIL'> & MailEnv & SealEnv;
 /**
- * Origins the signing page may run on: the Worker's own (/sign), plus SIGNING_PAGE_ORIGINS
- * (space-separated) for local UI development. Every tenant uses the same signing origin.
+ * Origins the signing page may run on: the Worker's own (/sign), plus, in dev only,
+ * SIGNING_PAGE_ORIGINS (space-separated) for local UI development. Every tenant uses the same
+ * signing origin.
  */
-const pageOrigins = (c: import('hono').Context<any>): Set<string> => new Set([new URL(c.req.url).origin, ...(c.env.SIGNING_PAGE_ORIGINS ?? '').split(/\s+/).filter(Boolean)]);
+const pageOrigins = (c: import('hono').Context<any>): Set<string> => new Set([new URL(c.req.url).origin, ...(isProd(c.env) ? [] : (c.env.SIGNING_PAGE_ORIGINS ?? '').split(/\s+/).filter(Boolean))]);
 type Env = { Bindings: Bindings; Variables: { tenantId: string } };
 
-/** Local test signing: recipient pages, OTP to the test mailbox, processing and the local test seal. */
-export const localSigningEnabled = (env: Partial<Bindings>) => env.LOCAL_TEST_MODE === 'true' && !!env.TEST_MAIL && (env.LOCAL_TEST_OTP_KEY?.length ?? 0) >= 32;
 const tokenFrom = (header: string | undefined) => /^Bearer ([a-f0-9]{64})$/.exec(header ?? '')?.[1] ?? '';
 /**
  * The origin of the page a request comes from, which recipient sessions are bound to.
@@ -59,7 +59,7 @@ export async function viewedPages(db: D1Database, envelopeId: string, taskId: st
 export function mountLocalSigningRoutes(app: Hono<Env>): void {
   const local = async (c: import('hono').Context<Env>, next: import('hono').Next) => {
     c.header('Cache-Control','no-store');
-    if (!localSigningEnabled(c.env)) return c.json({error:'local_test_disabled'}, 404);
+    if (!signingEnabled(c.env)) return c.json({error:'signing_disabled'}, 404);
     await next();
   };
   app.use('/v1/page-sessions/*', local);
@@ -106,28 +106,36 @@ export function mountLocalSigningRoutes(app: Hono<Env>): void {
   });
   app.post('/v1/signing/otp', async c => {
     const messageId=crypto.randomUUID();
-    // With a sink every code is really emailed, to the sink only; without one, codes for
-    // synthetic test addresses are only stored in the test mailbox.
-    const sink=otpSink(c.env);
+    // prod: the code is emailed to the recipient and kept nowhere. dev: every code is kept in the
+    // test mailbox; with a sink it is also really emailed, to the sink only; without one, only
+    // synthetic test addresses get a code.
+    const prod=isProd(c.env), mailer=otpMailer(c.env);
     let sentTo='';
     try {
-      await sendRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),new TextEncoder().encode(c.env.LOCAL_TEST_OTP_KEY!),async (to,otp)=>{
-        if (sink ? !isValidOtpEmailAddress(to) : !/^[^@\s]+@(?:example\.com|[a-z0-9.-]+\.test)$/i.test(to)) throw new Error('Synthetic test email required');
+      await sendRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),otpKey(c.env)!,async (to,otp)=>{
+        if (prod) {
+          if (!mailer || !isValidOtpEmailAddress(to)) throw new Error('Mail unavailable');
+          await mailer.send(to,otp);
+          sentTo=to;
+          return;
+        }
+        if (mailer ? !isValidOtpEmailAddress(to) : !/^[^@\s]+@(?:example\.com|[a-z0-9.-]+\.test)$/i.test(to)) throw new Error('Synthetic test email required');
         const session=await c.env.DB.prepare('SELECT tenant_id FROM recipient_page_sessions WHERE token_hash=?').bind(await sha256(new TextEncoder().encode(tokenFrom(c.req.header('authorization'))).buffer)).first<{tenant_id:string}>();
         if (!session) throw new Error('Session unavailable');
         const stored=await c.env.TEST_MAIL!.put(`test-mail/${messageId}.json`,JSON.stringify({to,otp,tenantId:session.tenant_id}),{onlyIf:{etagDoesNotMatch:'*'}});
         if (!stored) throw new Error('Test mailbox collision');
-        if (sink) await sink.send(to,otp);
+        if (mailer) await mailer.send(to,otp);
         sentTo=to;
       });
       const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
-      if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpSent,...requestFacts(c.req.raw),detail:{to:sentTo,delivery:sink?'email':'test-mailbox',messageId}});
-      return c.json(sink?{messageId,emailed:true}:{messageId},202);
+      if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpSent,...requestFacts(c.req.raw),detail:{to:sentTo,delivery:mailer?'email':'test-mailbox',messageId}});
+      return c.json(mailer?{messageId,emailed:true}:{messageId},202);
     } catch {return c.json({error:'otp_unavailable'},429);}
   });
-  // The local test mailbox, read back by the tenant whose recipient was sent the code.
-  // Management-key authenticated (see worker.ts); only synthetic test addresses are ever stored.
+  // The test mailbox (dev only), read back by the tenant whose recipient was sent the code.
+  // Management-key authenticated (see worker.ts). prod keeps no codes.
   app.get('/v1/test-mail/:messageId', local, async c => {
+    if (isProd(c.env) || !c.env.TEST_MAIL) return c.json({error:'not_found'},404);
     const id=c.req.param('messageId') ?? '';
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return c.json({error:'not_found'},404);
     const object=await c.env.TEST_MAIL!.get(`test-mail/${id}.json`);
@@ -140,7 +148,7 @@ export function mountLocalSigningRoutes(app: Hono<Env>): void {
   app.post('/v1/signing/otp/verify', async c => {
     let body: {otp?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.otp !== 'string') return c.json({error:'invalid_request'},400);
-    try {const ok=await verifyRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),new TextEncoder().encode(c.env.LOCAL_TEST_OTP_KEY!),body.otp);
+    try {const ok=await verifyRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),otpKey(c.env)!,body.otp);
       if(!ok)return c.json({error:'invalid_otp'},401);
       // Identity confirmed: the emailed code, and the host's sign-in from the link this signer was last given.
       const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));if(session){const hostAuthentication=await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId);await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw),...(hostAuthentication?{detail:{hostAuthentication}}:{})});}
@@ -304,8 +312,8 @@ export function mountLocalSigningRoutes(app: Hono<Env>): void {
         const managed=await managedEvidenceFromEnv(c.env);if(!managed)throw new Error('Managed seal not configured');
         result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managedDelivery(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managed.trust));
       } else {
-        if((c.env.LOCAL_TEST_SEAL_KEY?.length ?? 0)<32) return c.json({error:'local_test_disabled'},404);
-        result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,new TextEncoder().encode(c.env.LOCAL_TEST_SEAL_KEY!));
+        const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
+        result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey);
       }
       return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${result.metadata.format==='esign-local-delivery-v3'?'delivery-local-test':'delivery'}.pdf"`,'X-Content-Type-Options':'nosniff'});
     } catch {return c.json({error:'unavailable'},503);}
@@ -321,8 +329,8 @@ export function mountLocalSigningRoutes(app: Hono<Env>): void {
         const verified=await verifyManagedEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managed.trust);
         return c.json({mode:'KMS_TSA',notice:'Sealed with an AWS KMS signature (ECDSA P-256) over the evidence and an RFC 3161 timestamp over that signature. Revocation of the time-stamping authority certificates is not checked. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the sealed manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by the seal.',envelope,recipients:await recipients(),...verified});
       }
-      if ((c.env.LOCAL_TEST_SEAL_KEY?.length ?? 0)<32) return c.json({error:'local_test_disabled'},404);
-      const verified=await finalizeLocalTestEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,new TextEncoder().encode(c.env.LOCAL_TEST_SEAL_KEY!),true);
+      const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
+      const verified=await finalizeLocalTestEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey,true);
       return c.json({mode:'LOCAL TEST ONLY',notice:'Not a legal guarantee. Local HMAC is not a real KMS or TSA; the synthetic timestamp is not independent. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the existing local HMAC manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by that manifest.',envelope,recipients:await recipients(),...verified,audit:{sealed:[],afterSeal:await auditTrail(c.env.DB,id)}});
     } catch {return c.json({error:'unavailable'},503);}
   });

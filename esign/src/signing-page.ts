@@ -10,15 +10,16 @@ const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
  * The origins allowed to frame the page, from a space-separated list. Anything that is not a
- * bare https origin, or http on a loopback host, is dropped.
+ * bare https origin, or http on a loopback host, is dropped; with `httpsOnly` (prod), http on a
+ * loopback host is dropped too.
  */
-export function frameAncestors(raw: string | undefined): string[] {
+export function frameAncestors(raw: string | undefined, httpsOnly = false): string[] {
   const out: string[] = [];
   for (const value of (raw ?? '').split(/\s+/)) {
     if (!value) continue;
     let url: URL;
     try { url = new URL(value); } catch { continue; }
-    const secure = url.protocol === 'https:' || (url.protocol === 'http:' && LOOPBACK.has(url.hostname));
+    const secure = url.protocol === 'https:' || (!httpsOnly && url.protocol === 'http:' && LOOPBACK.has(url.hostname));
     if (!secure || url.origin !== value || out.includes(value)) continue;
     out.push(value);
     if (out.length === MAX_ANCESTORS) break;
@@ -36,7 +37,7 @@ export const EMBEDDABLE_HEADERS = {
 } as const;
 
 /** Builds the page from the built recipient UI (index.html). Null when it is unavailable. */
-export async function signingPage(request: Request, assets: Fetcher | undefined, rawAncestors: string | undefined): Promise<Response | null> {
+export async function signingPage(request: Request, assets: Fetcher | undefined, rawAncestors: string | undefined, httpsOnly = false): Promise<Response | null> {
   if (!assets) return null;
   const source = await assets.fetch(new Request(new URL('/index.html', request.url)));
   if (!source.ok) return null;
@@ -45,7 +46,7 @@ export async function signingPage(request: Request, assets: Fetcher | undefined,
   const origin = new URL(request.url).origin;
   // Declares that this page's own origin serves the signing API (see ui/RecipientPage.ts).
   const page = html.replace('<head>', `<head><meta name="esign-api" content="${origin}">`);
-  const ancestors = ["'self'", ...frameAncestors(rawAncestors)].join(' ');
+  const ancestors = ["'self'", ...frameAncestors(rawAncestors, httpsOnly)].join(' ');
   return new Response(page, {
     status: 200,
     headers: {

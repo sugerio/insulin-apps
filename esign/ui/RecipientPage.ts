@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {createPortal} from 'react-dom';
 const h = React.createElement;
-const localApis=new Map([['http://127.0.0.1:5173','http://127.0.0.1:8787'],['http://127.0.0.1:5174','http://127.0.0.1:8787'],['http://127.0.0.1:5197','http://127.0.0.1:8797']]);
+// Local UI development (npm run dev:ui) talks to the local Worker (npm run dev).
+const localApis=new Map([['http://127.0.0.1:5173','http://127.0.0.1:8787']]);
 /** The origin the Worker declared, when it served this page itself (src/signing-page.ts). */
 const workerApiOrigin=()=>{try{return typeof document==='undefined'?'':document.querySelector('meta[name="esign-api"]')?.getAttribute('content')??'';}catch{return '';}};
 class RequestFailed extends Error {readonly status:number;readonly code:string;constructor(status:number,code=''){super('Request failed');this.status=status;this.code=code;}}
@@ -51,7 +52,7 @@ function CodeBoxes({value,onChange,disabled,onEnter}:{value:string;onChange:(cod
 /** Shown inside a host's frame: the host's dialog already titles it, so the page header is compact. */
 const embedded=(()=>{try{return typeof window!=='undefined'&&window.self!==window.top;}catch{return true;}})();
 export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:RenderDocument} = {}) {
-  const container=useRef<HTMLDivElement>(null), renderController=useRef<AbortController|null>(null), loadSequence=useRef(0),synthetic=useRef(false),uploadBase=useRef(''),api=useRef(''),signingLock=useRef(false),workerServed=useRef(false);
+  const container=useRef<HTMLDivElement>(null), renderController=useRef<AbortController|null>(null), loadSequence=useRef(0),api=useRef(''),signingLock=useRef(false),workerServed=useRef(false);
   useEffect(()=>()=>{loadSequence.current++;},[]);
   const [token,setToken]=useState(''), [otp,setOtp]=useState(''), [message,setMessage]=useState('Opening local test session…');
   const [artifact,setArtifact]=useState<Artifact|null>(null), [pdf,setPdf]=useState<Blob|null>(null), [consent,setConsent]=useState(false), [sent,setSent]=useState(false);
@@ -85,17 +86,13 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     setSignatures(old=>titleFieldIds.every(id=>old[id]===title)?old:{...old,...Object.fromEntries(titleFieldIds.map(id=>[id,title]))});},[signerTitle,titleFieldIds.join()]);
   useEffect(()=>{
     const params=new URLSearchParams(window.location.hash.slice(1));const code=params.get('code');
-    synthetic.current=params.get('synthetic')==='1';
-    const upload=params.get('upload');
-    if(upload && /^[a-f0-9-]{36}$/.test(upload))uploadBase.current=`/host/upload/envelopes/${upload}`;
     window.history.replaceState(null,'',window.location.pathname);
     // Served by the Worker: its API is this page's own origin, and only when the Worker said so.
     const served=workerApiOrigin()===window.location.origin;workerServed.current=served;
-    if(served){synthetic.current=false;uploadBase.current='';}
     api.current=served?window.location.origin:localApis.get(window.location.origin)??'';
     if (!api.current) {setMessage('Recipient demo unavailable on this origin.');return;}
     if (!code) {setMessage('No recipient code provided.');return;}
-    fetch(`${uploadBase.current || (synthetic.current?'/host/synthetic':api.current)}/v1/page-sessions/exchange`,{method:'POST',headers:{'content-type':'application/json',...((synthetic.current||uploadBase.current)?{'x-local-esign':'1'}:{})},body:JSON.stringify({code})})
+    fetch(`${api.current}/v1/page-sessions/exchange`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code})})
       .then(async response=>{if(!response.ok) throw new Error();const value=await response.json() as {token:string};setToken(value.token);setMessage('Loading document…');})
       .catch(()=>setMessage('Session unavailable or expired.'));
   },[]);
@@ -119,7 +116,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     return ()=>{active=false;controller.abort();if(renderController.current===controller) renderController.current=null;target.replaceChildren();};
   },[pdf,renderDocument]);
   async function request(path:string, init:RequestInit={}) {
-    const response=await fetch(`${uploadBase.current || (synthetic.current?'/host/synthetic':api.current)}${path}`,{...init,headers:{...init.headers,...((synthetic.current||uploadBase.current)?{'x-local-esign':'1'}:{}),authorization:`Bearer ${token}`}});
+    const response=await fetch(`${api.current}${path}`,{...init,headers:{...init.headers,authorization:`Bearer ${token}`}});
     if(!response.ok){let code='';try{const body=await response.json() as {error?:unknown};if(typeof body?.error==='string')code=body.error;}catch{}throw new RequestFailed(response.status,code);}return response;
   }
   async function send(announce=true) {try {

@@ -180,21 +180,6 @@ test('older retry response cannot replace a newer document', async () => {
   } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('synthetic recipient routes sessions and signing only through isolated same-origin BFF',async()=>{
- const {default:Renderer,act}=await import('react-test-renderer');(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
- const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;const calls:{url:string;headers:HeadersInit|undefined}[]=[];
- try {
-  (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=synthetic-code&synthetic=1',pathname:'/'},history:{replaceState(){}}};
-  // The synthetic host shows the document only after the code: the page asks for it first.
-  globalThis.fetch=async(input:any,init:RequestInit={})=>{calls.push({url:String(input),headers:init.headers});return String(input).endsWith('/exchange')?Response.json({token:'t'}):String(input).endsWith('/current')?new Response(null,{status:401}):Response.json({messageId:'x',testOtp:'123456'});};
-  let r:any;await act(async()=>{r=Renderer.create(React.createElement(page.RecipientPage));});
-  await settle(act);
-  assert.deepEqual(calls.map(c=>c.url),['/host/synthetic/v1/page-sessions/exchange','/host/synthetic/v1/signing/current','/host/synthetic/v1/signing/otp']);
-  assert.ok(calls.every(c=>new Headers(c.headers).get('x-local-esign')==='1'));
-  await act(async()=>r.unmount());
- } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
-});
-
 test('positioned signatures fail closed when a page marker cannot be rendered',async()=>{
  const {default:Renderer,act}=await import('react-test-renderer');(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;let signed:any;
@@ -232,12 +217,12 @@ test('recipient demo never sends a fragment code from an untrusted non-local pag
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('recipient demo retains its configured local loopback endpoints',async()=>{
+test('recipient demo keeps only its local development endpoint',async()=>{
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
-  for(const [origin,target] of [['http://127.0.0.1:5173','http://127.0.0.1:8787'],['http://127.0.0.1:5174','http://127.0.0.1:8787'],['http://127.0.0.1:5197','http://127.0.0.1:8797']]) {
+  for(const [origin,target] of [['http://127.0.0.1:5173','http://127.0.0.1:8787']]) {
    let url='';(globalThis as any).window={location:{origin,hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};
    globalThis.fetch=async input=>{if(!url)url=String(input);return Response.json({token:'test'});};
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});

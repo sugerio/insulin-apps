@@ -14,7 +14,7 @@ import {Miniflare} from 'miniflare';
 import {PDFDocument,rgb} from 'pdf-lib';
 import app from '../src/worker.ts';
 import {renderTypedSignature} from '../src/typed-signature-image.ts';
-import {withLocalTestOtp} from '../scripts/local-otp-display.ts';
+import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 const chrome=process.env.ESIGN_TEST_CHROME ?? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 

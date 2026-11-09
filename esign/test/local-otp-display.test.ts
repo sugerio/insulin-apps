@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {withLocalTestOtp} from '../scripts/local-otp-display.ts';
+import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 
 const id='12345678-1234-4123-8123-123456789abc';
 test('Node local mailbox display only decorates a successful matching OTP response',async()=>{

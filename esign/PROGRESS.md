@@ -2014,3 +2014,48 @@ OTP tests still pass with explicitly configured strict mode. D1 and provider
 acceptance remain non-atomic, Access verified-email guarantees and JWKS
 rotation are not established, and no browser/signing/completion path is
 implemented. The original recipient UI remains unavailable in cloud.
+
+## One Worker: candidate topology and internal demo removed
+
+E-sign keeps a single entrypoint, `src/worker.ts`, which `scripts/deploy.ts`
+deploys (see WORKER-MODE.md). Removed, because nothing deployed or imported by
+that Worker uses them: the candidate Worker and its named private entrypoints,
+the management, recipient and editor gateways, the consolidated router and
+Worker, the candidate page host and paired asset build, the isolated Cloudflare
+OTP service, the Access-protected internal demo Worker and its helpers, the
+candidate browser pages, their Wrangler files and `deployment-templates/`, the
+deployment-review and workers.dev topology checkers, the staged browser smoke,
+the synthetic operator client, and the tests that only exercised them. Modules
+the Worker still imports (for example `candidate-signing-authorization.ts`,
+`candidate-verified-predecessor.ts`) keep their names and tests. The OTP
+recipient-binding test now issues its challenge through `sendRecipientOtp`
+instead of the removed isolated sender; its assertions are unchanged.
+
+All migrations are kept: they are forward-only and were already applied to
+existing databases. The candidate-era and internal-demo tables are now unused
+and are not dropped. CI no longer builds, packs or uploads the candidate
+artifact, and its required browser cases are the ones that still exist. The
+README, deployment runbook and CI notes were updated. No cloud resource was
+changed.
+
+## Local harnesses and unmounted experiments removed
+
+The Worker serves the signing page, the editor page and `/demo` itself, and seals
+with KMS + TSA (WORKER-MODE.md), so the local stand-ins for those were removed:
+the Node host BFF (`scripts/local-host.ts`) with its template, synthetic and
+uploaded-PDF pages; the editor URL demo and the isolated Date/Title Node demo
+(`scripts/editor-local-demo.ts`); the fixed-fixture KMS/TSA seal CLI, its
+probes, verifier and protocol note; and thirteen `src` modules nothing imported
+(the synchronous local-test slices, the synthetic TSA transports and
+composition, R2 retention screening, the session exchange and pure signing
+prototypes, the Cloudflare OTP fixture, the artifact store and D1 batch
+helpers). Tests that only exercised them went with them. The recipient page no
+longer has the synthetic and upload modes, and outside the Worker it now
+accepts only the local UI development origin `127.0.0.1:5173`.
+
+The editor browser test keeps its cross-origin host (`ui/editor-host.html`,
+no longer built into `dist-ui`) and now signs through the Worker's `/sign`. The
+two helpers only tests still use moved to `test/helpers/`. The RFC3161
+verifier test builds its query with the kept `syntheticTimestampQuery`. CI
+requires the four browser and migration cases that remain. No cloud resource
+was changed.

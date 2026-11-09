@@ -9,12 +9,12 @@ test('editor demo accepts the configured local Worker or same-origin HTTPS Worke
  const id = 'a'.repeat(64), code = 'b'.repeat(64);
  const link = (origin: string) => `${origin}/editor/page/${id}#${code}`;
  assert.equal(editorDemoURL('http://127.0.0.1:5173', link('http://127.0.0.1:8787'), id), link('http://127.0.0.1:8787'));
- assert.equal(editorDemoURL('http://127.0.0.1:5197', link('http://127.0.0.1:8797'), id), link('http://127.0.0.1:8797'));
  assert.equal(editorDemoURL('https://demo.example.test', link('https://demo.example.test'), id), link('https://demo.example.test'));
  for (const [host, url, session] of [
   ['https://demo.example.test', link('https://other.example.test'), id],
   ['http://demo.example.test', link('http://demo.example.test'), id],
   ['http://127.0.0.1:5173', link('http://127.0.0.1:8797'), id],
+  ['http://127.0.0.1:5197', link('http://127.0.0.1:8797'), id],
   ['https://demo.example.test', `https://user@demo.example.test/editor/page/${id}#${code}`, id],
   ['https://demo.example.test', `https://demo.example.test/editor/page/${id}?secret=1#${code}`, id],
   ['https://demo.example.test', link('https://demo.example.test'), 'c'.repeat(64)],

@@ -55,13 +55,6 @@ jobs:
             'Chrome completes two typed positioned signatures' \
             'isolated Chrome Ana then Marcus' \
             'cross-origin browser embeds, saves and reopens' \
-            'candidate editor browser saves' \
-            'candidate page host enforces browser isolation' \
-            'Chrome uploads and signs' \
-            'candidate gateway real browser signs' \
-            'explicit isolated Node v3 demo restarts and signs' \
-            'page-target interception blocks' \
-            'synthetic staged manifest renders both pages' \
             'local Wrangler migrations apply once'; do
             grep -F 'ok ' "$RUNNER_TEMP/esign-tests.tap" | grep -F "$title" | grep -viE '# *skip|# *todo' > /dev/null
           done
@@ -84,34 +77,6 @@ jobs:
         with:
           name: esign-dev-build
           path: ${{ runner.temp }}/esign-build.tgz
-          if-no-files-found: error
-          retention-days: 3
-      - name: Build paired consolidated Worker and client (synthetic origins)
-        run: npm run build:candidate-assets -- "$RUNNER_TEMP/esign-candidate"
-        env:
-          VITE_CANDIDATE_GATEWAY_ORIGIN: https://gateway.example.test
-          VITE_CANDIDATE_EDITOR_GATEWAY_ORIGIN: https://gateway.example.test
-      - name: Pack only candidate build outputs
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP/esign-candidate"
-          test -f consolidated-worker.mjs && test -f worker.mjs && test -f client/candidate.html && test -f client/candidate-editor.html
-          if find . ! -type f ! -type d -print -quit | grep -q .; then echo 'Unexpected link or special file'; exit 1; fi
-          find . -type f -print0 | sort -z | xargs -0 sha256sum > "$RUNNER_TEMP/esign-candidate-SHA256.txt"
-          cd "$RUNNER_TEMP"
-          tar -czf esign-candidate.tgz esign-candidate
-          tar -tzf esign-candidate.tgz > esign-candidate.members
-          node "$GITHUB_WORKSPACE/.github/scripts/check-build-archive.mjs" esign-candidate.members esign-candidate
-          tar -tvzf esign-candidate.tgz | awk 'substr($1, 1, 1) != "-" && substr($1, 1, 1) != "d" { exit 1 }'
-          sha256sum "$RUNNER_TEMP/esign-candidate.tgz" > "$RUNNER_TEMP/esign-candidate-archive-SHA256.txt"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: esign-candidate-ci-only
-          path: |
-            ${{ runner.temp }}/esign-candidate.tgz
-            ${{ runner.temp }}/esign-candidate-SHA256.txt
-            ${{ runner.temp }}/esign-candidate-archive-SHA256.txt
           if-no-files-found: error
           retention-days: 3
       - name: Repository policy checks

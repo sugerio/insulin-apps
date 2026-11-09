@@ -16,8 +16,10 @@ test('esign workflow is pinned and its checks job is credential-free and runs th
   const text = await workflow()
   const checks = job(text, 'checks')
   for (const pattern of [/pull_request:/, /push:[\s\S]*branches: \[main\]/, /workflow_dispatch:/, /esign\/\*\*/, /\.github\/scripts\/\*\*/, /contents: read/, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/]) assert.match(text, pattern)
-  for (const pattern of [/node-version: 24/, /npm ci --ignore-scripts/, /npm run typecheck/, /test-concurrency=1/, /ESIGN_TEST_CHROME/, /build:candidate-assets/, /check-public-content\.mjs/, /check-app-workflows\.mjs/, /local Wrangler migrations apply once/, /check-build-archive\.mjs/, /sha256sum/, /upload-artifact@[a-f0-9]{40}/, /retention-days: 3/, /! -type f ! -type d/]) assert.match(checks, pattern)
+  for (const pattern of [/node-version: 24/, /npm ci --ignore-scripts/, /npm run typecheck/, /test-concurrency=1/, /ESIGN_TEST_CHROME/, /check-public-content\.mjs/, /check-app-workflows\.mjs/, /local Wrangler migrations apply once/, /upload-artifact@[a-f0-9]{40}/, /retention-days: 3/, /! -type f ! -type d/]) assert.match(checks, pattern)
   assert.doesNotMatch(checks, /secrets\.|environment:|wrangler (?:deploy(?! --dry-run)|versions|d1)|scripts\/deploy\.ts/)
+  // Only the single Worker is built: the candidate/consolidated topology was removed.
+  assert.doesNotMatch(text, /candidate|consolidated/)
   assert.doesNotMatch(text, /pull_request_target/)
   for (const match of text.matchAll(/uses:\s*([^\s]+)/g)) assert.match(match[1], /^[\w.-]+\/[\w.-]+@[a-f0-9]{40}$/)
 })

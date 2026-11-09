@@ -3,6 +3,5 @@
 dist/
 dist-ui/
 
-dist-candidate-assets/
 .deploy/
 __pycache__/

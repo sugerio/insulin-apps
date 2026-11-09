@@ -14,7 +14,7 @@ import {PDFDocument,PDFDict,PDFName,PDFRawStream,decodePDFRawStream,rgb} from 'p
 import {inflateSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {createV3TestApp} from '../src/worker.ts';
-import {withLocalTestOtp} from '../scripts/local-otp-display.ts';
+import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 import {renderPositionedV3Text} from '../src/positioned-v3-text-render.ts';
 import {renderTypedSignature} from '../src/typed-signature-image.ts';
 const chrome=process.env.ESIGN_TEST_CHROME??['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);

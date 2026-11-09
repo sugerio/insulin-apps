@@ -6,7 +6,7 @@ export function consumeEditorFragment(location:{hash:string;pathname:string;sear
 }
 // The demo uses its fixed loopback Workers locally and its own HTTPS origin in the cloud.
 export function editorDemoURL(hostOrigin:string,rawURL:string,sessionId:string):string {
-  const localWorkers:Record<string,string>={'http://127.0.0.1:5173':'http://127.0.0.1:8787','http://127.0.0.1:5197':'http://127.0.0.1:8797'};
+  const localWorkers:Record<string,string>={'http://127.0.0.1:5173':'http://127.0.0.1:8787'};
   const host=new URL(hostOrigin);
   const expected=localWorkers[hostOrigin] ?? (host.protocol==='https:' && host.origin===hostOrigin ? hostOrigin : '');
   const url=new URL(rawURL);

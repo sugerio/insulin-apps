@@ -1,4 +1,4 @@
-/** Node-only adapter for the trusted loopback demo; never mount on a Worker. */
+/** Test helper: shows the test mailbox code in the OTP response, for browser tests only; never mount on a Worker. */
 export async function withLocalTestOtp(response:Response,mailbox:{get(key:string):Promise<{json():Promise<unknown>}|null>}):Promise<Response> {
  if(response.status!==202)return response;
  try {

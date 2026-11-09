@@ -4,7 +4,8 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {makeTimestampRequest} from '../scripts/synthetic-seal-tsa.ts';
+import {createHash as sha} from 'node:crypto';
+import {syntheticTimestampQuery} from '../src/worker-tsa-transport.ts';
 const candidate=await import('../src/worker-rfc3161-verifier.ts').catch(()=>({}));
 const run=(args:string[],cwd:string)=>execFileSync('openssl',args,{cwd,stdio:'pipe'});
 
@@ -18,7 +19,7 @@ test('Worker RFC3161 candidate binds synthetic response to imprint, nonce, signe
   run(['x509','-req','-in','tsa.csr','-CA','root.pem','-CAkey','root.key','-set_serial','1','-days','1','-extfile','extensions.cnf','-out','tsa.pem'],dir);
   run(['x509','-in','root.pem','-outform','DER','-out','root.der'],dir);
   await writeFile(join(dir,'serial'),'01\n');await writeFile(join(dir,'tsa.cnf'),'[tsa]\ndefault_tsa=server\n[server]\nserial=serial\nsigner_cert=tsa.pem\nsigner_key=tsa.key\nsigner_digest=sha256\ndefault_policy=1.2.3.4\ndigests=sha256\naccuracy=secs:1\nordering=no\ntsa_name=yes\ness_cert_id_chain=no\ness_cert_id_alg=sha256\n');
-  const input=Buffer.from('synthetic signature'),nonce=Buffer.from('0102030405060708090a0b0c0d0e0f10','hex');await writeFile(join(dir,'query'),makeTimestampRequest(input,nonce));await new Promise(resolve=>setTimeout(resolve,2100));run(['ts','-reply','-config','tsa.cnf','-queryfile','query','-out','response'],dir);
+  const input=Buffer.from('synthetic signature'),nonce=Buffer.from('0102030405060708090a0b0c0d0e0f10','hex');await writeFile(join(dir,'query'),Buffer.from(syntheticTimestampQuery(sha('sha256').update(input).digest(),nonce)));await new Promise(resolve=>setTimeout(resolve,2100));run(['ts','-reply','-config','tsa.cnf','-queryfile','query','-out','response'],dir);
   const response=await readFile(join(dir,'response')),root=await readFile(join(dir,'root.der'));
   const {X509Certificate,createHash}=await import('node:crypto');const signerCert=new X509Certificate(await readFile(join(dir,'tsa.pem')));const signerPin=createHash('sha256').update(signerCert.publicKey.export({format:'der',type:'spki'})).digest('hex');
   const policy={roots:[root],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:[signerPin],checkRevocation:async()=>true};
@@ -101,47 +102,11 @@ test('Worker RFC3161 candidate binds synthetic response to imprint, nonce, signe
   pathLength=0;await assert.rejects(()=>verify(duplicateIntermediate,chainPolicy),/Duplicate certificate extension/);assert.equal(pathLength,0,'duplicate intermediate must not reach revocation');
   pathLength=0;await assert.rejects(()=>verify(badIntermediate,chainPolicy),/critical/i,'unknown critical intermediate extension is rejected');assert.equal(pathLength,0,'invalid path must not reach revocation approval');
   pathLength=0;await assert.rejects(()=>verify(badRoot,{...chainPolicy,roots:[criticalRoot]}),/critical/i,'unknown critical root extension is rejected');assert.equal(pathLength,0,'invalid root must not reach revocation approval');
-  const syntheticComposition=await import('../src/worker-synthetic-tsa-candidate.ts').catch(()=>({}));
-  assert.equal(typeof syntheticComposition.verifyAuthorizedSyntheticTimestampCandidate,'function','unmounted transport/verification composition is missing');
   const {build}=await import('esbuild'),{Miniflare}=await import('miniflare');
   const workerNegatives=[unknown,doubleDigest,wrongDigestType,unsorted,badIntermediate,badRoot,duplicateSigner,duplicateIntermediate].map(b=>Buffer.from(b).toString('base64'));
   const source=`import {verifyRfc3161Candidate} from './src/worker-rfc3161-verifier.ts'; const dec=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)); export default {async fetch(){try{const policy={roots:[dec('${root.toString('base64')}')],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:['${signerPin}'],checkRevocation:async()=>true};const verify=(bytes,p=policy)=>verifyRfc3161Candidate(dec(bytes),dec('${input.toString('base64')}'),dec('${nonce.toString('base64')}'),p);const r=await verify('${response.toString('base64')}');const negatives=${JSON.stringify(workerNegatives)};let rejected=0;for(let i=0;i<negatives.length;i++){try{await verify(negatives[i],i===5?{...policy,roots:[dec('${criticalRoot.toString('base64')}')]}:policy);}catch{rejected++;}}return Response.json({status:r.status,rejected});}catch(e){return new Response(String(e),{status:500});}}}`;
   const built=await build({stdin:{contents:source,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'browser'});const mf=new Miniflare({modules:true,script:built.outputFiles[0].text,compatibilityDate:'2026-01-01'});
   try{const workerResponse=await mf.dispatchFetch('https://local.test/');const text=await workerResponse.text();assert.equal(workerResponse.status,200,text);assert.deepEqual(JSON.parse(text),{status:'VERIFIED_TEST_CANDIDATE',rejected:8});}finally{await mf.dispose();}
-  // This second Worker uses only in-memory email and local Miniflare R2. Its injected TSA
-  // creates a new signed response for the actual request nonce; no external fetch occurs.
-  const syntheticKey=(await import('node:crypto')).createPrivateKey(await readFile(join(dir,'tsa.key'))).export({format:'der',type:'pkcs8'}).toString('base64');
-  const compositionSource=`
-   import {verifyAuthorizedSyntheticTimestampCandidate} from './src/worker-synthetic-tsa-candidate.ts';
-   import {createCloudflareOtpMailer} from './src/cloudflare-otp-mail.ts';
-   import {putArtifact} from './src/artifact-store.ts';
-   import {TimeStampReq,TimeStampResp,SignedData,TSTInfo} from 'pkijs';import * as asn1 from 'asn1js';
-   const dec=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-   export default {async fetch(_request,env){try{
-    const data=dec('${input.toString('base64')}'),root=dec('${root.toString('base64')}');let mails=0,tsaCalls=0;
-    const mail=createCloudflareOtpMailer({enabled:'true',from:'sender@example.com',binding:{send:async m=>{if(m.to!=='ana@example.com'||!m.text.includes('123456'))throw Error('unexpected synthetic email');mails++;}}});
-    await mail('ana@example.com','123456');const saved=await putArtifact(env.ARTIFACTS,'synthetic/fixture',data);let collision=false;try{await putArtifact(env.ARTIFACTS,'synthetic/fixture',data);}catch{collision=true;}
-    const stored=await env.ARTIFACTS.get('synthetic/fixture'),same=Array.from(new Uint8Array(await stored.arrayBuffer())).join(',')===Array.from(data).join(',');
-    const key=await crypto.subtle.importKey('pkcs8',dec('${syntheticKey}'),{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
-    const respond=async(req)=>{tsaCalls++;const query=TimeStampReq.fromBER(await req.arrayBuffer()),timestamp=TimeStampResp.fromBER(dec('${response.toString('base64')}'));
-     const signed=new SignedData({schema:timestamp.timeStampToken.content}),info=TSTInfo.fromBER(Uint8Array.from(signed.encapContentInfo.eContent.valueBlock.valueHexView));info.nonce=query.nonce;
-     const infoBytes=info.toSchema().toBER(false);signed.encapContentInfo.eContent=new asn1.OctetString({valueHex:infoBytes});
-     const attrs=signed.signerInfos[0].signedAttrs,digest=attrs.attributes.find(a=>a.type==='1.2.840.113549.1.9.4');digest.values=[new asn1.OctetString({valueHex:await crypto.subtle.digest('SHA-256',infoBytes)})];
-     const compare=(a,b)=>{const x=new Uint8Array(a.toSchema().toBER(false)),y=new Uint8Array(b.toSchema().toBER(false));for(let i=0;i<Math.min(x.length,y.length);i++)if(x[i]!==y[i])return x[i]-y[i];return x.length-y.length;};
-     attrs.attributes.sort(compare);attrs.encodedValue=new ArrayBuffer(0);await signed.sign(key,0,'SHA-256');timestamp.timeStampToken.content=signed.toSchema(true);
-     return new Response(timestamp.toSchema().toBER(false),{headers:{'content-type':'application/timestamp-reply'}});};
-    const transport={endpoint:'https://tsa.example.test/rfc3161',allowedEndpoints:['https://tsa.example.test/rfc3161'],timeoutMs:1000,authorizeSynthetic:async(_e,imprint)=>Array.from(imprint).join(',')===Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data))).join(','),fetch:respond};
-    const policy={roots:[root],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:['${signerPin}'],checkRevocation:async()=>true};
-    const ok=await verifyAuthorizedSyntheticTimestampCandidate(data,transport,policy);let nonceRejected=false,revocationRejected=false,missingPolicyRejected=false;
-    const mutableInput=Uint8Array.from(data),mutableRoot=Uint8Array.from(root),mutableTransport={...transport},pending=verifyAuthorizedSyntheticTimestampCandidate(mutableInput,mutableTransport,{...policy,roots:[mutableRoot]});mutableInput.fill(0);mutableRoot.fill(0);mutableTransport.fetch=async()=>{throw Error('mutated transport');};const snapshotOk=(await pending).status==='VERIFIED_SYNTHETIC_TEST_CANDIDATE';
-    try{await verifyAuthorizedSyntheticTimestampCandidate(data,{...transport,fetch:async()=>new Response(dec('${response.toString('base64')}'),{headers:{'content-type':'application/timestamp-reply'}})},policy);}catch{nonceRejected=true;}
-    try{await verifyAuthorizedSyntheticTimestampCandidate(data,transport,{...policy,checkRevocation:async()=>false});}catch{revocationRejected=true;}
-    const before=tsaCalls;try{await verifyAuthorizedSyntheticTimestampCandidate(data,transport,{...policy,roots:[]});}catch{missingPolicyRejected=true;}
-    return Response.json({status:ok.status,mails,tsaCalls,preflightNoFetch:tsaCalls===before,nonceRejected,revocationRejected,missingPolicyRejected,snapshotOk,collision,same,hash:saved.sha256});
-   }catch(e){return new Response(String(e),{status:500});}}};`;
-  const compositionBuilt=await build({stdin:{contents:compositionSource,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'browser'});
-  const compositionMf=new Miniflare({modules:true,script:compositionBuilt.outputFiles[0].text,compatibilityDate:'2026-01-01',r2Buckets:['ARTIFACTS']});
-  try{const r=await compositionMf.dispatchFetch('https://local.test/'),text=await r.text();assert.equal(r.status,200,text);const value=JSON.parse(text);assert.deepEqual(value,{status:'VERIFIED_SYNTHETIC_TEST_CANDIDATE',mails:1,tsaCalls:3,preflightNoFetch:true,nonceRejected:true,revocationRejected:true,missingPolicyRejected:true,snapshotOk:true,collision:true,same:true,hash:createHash('sha256').update(input).digest('hex')});}finally{await compositionMf.dispose();}
   await assert.rejects(()=>verify(response,{...policy,checkRevocation:undefined} as any));
   await assert.rejects(()=>verify(response,{...policy,checkRevocation:async()=>false}));
   await assert.rejects(()=>verify(response,{...policy,roots:[]}));

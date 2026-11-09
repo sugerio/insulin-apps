@@ -6,7 +6,7 @@ import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { issueRecipientCode, exchangeRecipientCode, sendRecipientOtp, verifyRecipientOtp } from '../src/page-authorization.ts';
 import { recordSignature } from '../src/signature-record.ts';
-import { processSignatureJob } from '../src/signature-processing.ts';
+import { processSignature } from '../src/signature-processing.ts';
 import { finalizeLocalTestEvidence } from '../src/local-test-evidence.ts';
 import { deliveryPdf } from '../src/delivery-pdf.ts';
 
@@ -21,9 +21,9 @@ test('delivery retries concurrent creation and completed finalization with long 
       await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
     }
     const pdf=await PDFDocument.create();pdf.addPage();pdf.addPage();const d0=await pdf.save();
-    await db.exec(`INSERT INTO tenants VALUES ('tenant'); INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','tenant','template.pdf','[]',1); INSERT INTO envelopes VALUES ('env','tenant','template','IN_PROGRESS',1); INSERT INTO tenant_page_origins VALUES ('tenant','https://host.example.com');`);
+    await db.exec(`INSERT INTO tenants VALUES ('tenant'); INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','tenant','template.pdf','[]',1); INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('env','tenant','template','IN_PROGRESS',1);`);
     const names=Array.from({length:11},(_,i)=>`${'i'.repeat(i===7?160:100)}${i}`);
-    for(const [i,name] of names.entries()) await db.prepare('INSERT INTO tasks VALUES (?,?,?,?,?,?,?)').bind(`task-${i}`,'env',`role-${i}`,name,`signer${i}@example.com`,i+1,i===0?'ACTIVE':'PENDING').run();
+    for(const [i,name] of names.entries()) await db.prepare('INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES (?,?,?,?,?,?,?)').bind(`task-${i}`,'env',`role-${i}`,name,`signer${i}@example.com`,i+1,i===0?'ACTIVE':'PENDING').run();
     await bucket.put('source.pdf',d0);let inputId='d0',inputHash=await sha(d0);
     await db.prepare('INSERT INTO artifacts VALUES (?,?,?,?)').bind(inputId,'env','source.pdf',inputHash).run();
     const originalObjects=new Map<string,ArrayBuffer>([['source.pdf',await (await bucket.get('source.pdf'))!.arrayBuffer()]]);
@@ -35,9 +35,8 @@ test('delivery retries concurrent creation and completed finalization with long 
       await sendRecipientOtp(db,token,origin,now+2,pepper,async (_email,value)=>{otp=value;});
       assert.equal(await verifyRecipientOtp(db,token,origin,now+3,pepper,otp),true);
       const signature=await recordSignature(db,bucket,{token,origin,now:now+4,artifactId:inputId,artifactHash:inputHash,consent:true});
-      const job=(await db.prepare('SELECT id FROM signature_jobs WHERE signature_id=?').bind(signature).first<{id:string}>())!;
-      await processSignatureJob(db,bucket,job.id);
-      const output=(await db.prepare('SELECT artifact_id,object_key,sha256 FROM signature_outputs WHERE job_id=?').bind(job.id).first<{artifact_id:string;object_key:string;sha256:string}>())!;
+      await processSignature(db,bucket,signature);
+      const output=(await db.prepare("SELECT output_artifact_id AS artifact_id,'envelopes/env/'||output_artifact_id||'.pdf' AS object_key,output_sha256 AS sha256 FROM signatures WHERE id=?").bind(signature).first<{artifact_id:string;object_key:string;sha256:string}>())!;
       inputId=output.artifact_id;inputHash=output.sha256;originalObjects.set(output.object_key,await (await bucket.get(output.object_key))!.arrayBuffer());
     }
     const signed=await pdfjsSigned(inputId);
@@ -57,7 +56,7 @@ test('delivery retries concurrent creation and completed finalization with long 
       const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');
       return pdfjs.getDocument({data:new Uint8Array((await (await bucket.get(objectKey))!.arrayBuffer()).slice(0)),useSystemFonts:true}).promise;
     }
-    const facts=await db.prepare('SELECT * FROM signature_records ORDER BY sequence').all();
+    const facts=await db.prepare("SELECT id,sequence,status,previous_hash,event_hash,facts_json,render_json,output_sha256,json_extract(facts_json,'$.otpVerifiedAt') AS otp_verified_at,json_extract(facts_json,'$.consentedAt') AS consented_at,json_extract(facts_json,'$.recipientName') AS recipient_name FROM signatures ORDER BY sequence").all();
     // The evidence R2 write precedes the finalization D1 batch. Test both rollback and lost response after commit.
     let batches=0;
     const faultDb=new Proxy(db,{get(target,prop){if(prop==='batch')return async (statements:any[])=>{batches++;if(batches===1)throw new Error('D1 unavailable before commit');await target.batch(statements);throw new Error('D1 response lost after commit');};const value=Reflect.get(target,prop,target);return typeof value==='function'?value.bind(target):value;}});
@@ -153,7 +152,7 @@ test('delivery retries concurrent creation and completed finalization with long 
     assert.ok(longEventPage>=0);
     assert.ok(certificatePages[longEventPage].includes(names[7]),'wrapped name must be complete on the event page');
     assert.ok(!certificateItems[longEventPage].some(item=>item.str?.includes(names[7])),'long event name must actually wrap');
-    const events=await db.prepare('SELECT event_hash FROM signature_events ORDER BY sequence').all<{event_hash:string}>();
+    const events=await db.prepare('SELECT event_hash FROM signatures ORDER BY sequence').all<{event_hash:string}>();
     for(const event of events.results) assert.ok(content.includes(event.event_hash));
     assert.ok(content.includes(await sha(d0)));
     for(const forbidden of ['Sent by','SSO','IP / device','verify.fours.com']) assert.ok(!content.includes(forbidden));
@@ -164,6 +163,6 @@ test('delivery retries concurrent creation and completed finalization with long 
     assert.equal(deliveries[0].metadata.format,'esign-local-delivery-v3');
     assert.ok(content.includes(inputHash));assert.ok(!content.includes(deliveries[0].metadata.sha256));
     for(const [objectKey,bytes] of originalObjects) assert.deepEqual(await (await bucket.get(objectKey))!.arrayBuffer(),bytes,objectKey);
-    assert.deepEqual((await db.prepare('SELECT * FROM signature_records ORDER BY sequence').all()).results,facts.results);
+    assert.deepEqual((await db.prepare("SELECT id,sequence,status,previous_hash,event_hash,facts_json,render_json,output_sha256,json_extract(facts_json,'$.otpVerifiedAt') AS otp_verified_at,json_extract(facts_json,'$.consentedAt') AS consented_at,json_extract(facts_json,'$.recipientName') AS recipient_name FROM signatures ORDER BY sequence").all()).results,facts.results);
   } finally {await mf.dispose();}
 });

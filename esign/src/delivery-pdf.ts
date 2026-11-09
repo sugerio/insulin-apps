@@ -5,10 +5,11 @@ const hash = async (bytes: Uint8Array | ArrayBuffer) => Array.from(new Uint8Arra
 
 import { AUDIT, auditTrail, type AuditEvent } from './audit.ts';
 import { describeHostAuthentication, parseHostAuthentication, sendFacts } from './signer-facts.ts';
+import { envelopeDetails } from './details.ts';
 
 /**
  * The certificate layout of new envelopes. Each envelope keeps the layout it was made with
- * (envelope_certificate_versions; none means 1), because a stored certificate is rebuilt on
+ * (`certificateVersion` in envelopes.details_json; none means 1), because a stored certificate is rebuilt on
  * every read and must come out byte for byte the same. Version 2 adds the document's name, the
  * sender, who named each signer, how each signer was identified, their IP and device, and a
  * summary of the events (opened, pages viewed, identity confirmed, signed).
@@ -16,8 +17,8 @@ import { describeHostAuthentication, parseHostAuthentication, sendFacts } from '
 export const CERTIFICATE_VERSION = 2;
 
 async function certificateVersion(db: D1Database, envelopeId: string): Promise<number> {
-  const row = await db.prepare('SELECT version FROM envelope_certificate_versions WHERE envelope_id = ?').bind(envelopeId).first<{ version: number }>();
-  return row?.version ?? 1;
+  const row = await db.prepare('SELECT details_json FROM envelopes WHERE id = ?').bind(envelopeId).first<{ details_json: string }>();
+  return envelopeDetails(row?.details_json).certificateVersion ?? 1;
 }
 
 /**
@@ -109,10 +110,9 @@ export async function deliveryPdf(db:D1Database,bucket:R2Bucket,tenantId:string,
   // Version 2 facts: fixed at creation (sender, named by, document name) or recorded before completion.
   const v2=version>=2?await (async()=>{
     const facts=await sendFacts(db,envelopeId);
-    const doc=await db.prepare('SELECT document_name FROM envelope_documents WHERE envelope_id = ?').bind(envelopeId).first<{document_name:string}>();
-    const created=await db.prepare('SELECT created_at FROM envelopes WHERE id = ?').bind(envelopeId).first<{created_at:number}>();
+    const created=await db.prepare('SELECT created_at,details_json FROM envelopes WHERE id = ?').bind(envelopeId).first<{created_at:number;details_json:string}>();
     const events=(evidence.audit?evidence.audit.sealed:await auditTrail(db,envelopeId)).filter(event=>SUMMARY_EVENTS.has(event.type));
-    return {...facts,documentName:doc?.document_name??null,createdAt:created?.created_at??null,events};
+    return {...facts,documentName:envelopeDetails(created?.details_json).documentName??null,createdAt:created?.created_at??null,events};
   })():null;
   heading('Document');
   if(v2?.documentName)field('Name',ascii(v2.documentName));

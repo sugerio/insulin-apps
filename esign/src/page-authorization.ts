@@ -24,27 +24,29 @@ export async function issueRecipientCode(db: D1Database, view: View): Promise<st
   const code = randomToken();
   const result = await db.prepare(`INSERT INTO recipient_page_codes (code_hash, tenant_id, envelope_id, task_id, origin, expires_at)
     SELECT ?, e.tenant_id, e.id, t.id, ?, ? FROM envelopes e JOIN tasks t ON t.envelope_id=e.id
-    JOIN tenant_page_origins o ON o.tenant_id=e.tenant_id AND o.origin=?
-    WHERE e.id=? AND e.tenant_id=? AND t.id=? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND NOT EXISTS (SELECT 1 FROM recipient_code_revocations WHERE code_hash=?)`)
-    .bind(await digest(code), view.origin, view.now + 120000, view.origin, view.envelopeId, view.tenantId, view.taskId, await digest(code)).run();
+    WHERE e.id=? AND e.tenant_id=? AND t.id=? AND e.status='IN_PROGRESS' AND t.status='ACTIVE'`)
+    .bind(await digest(code), view.origin, view.now + 120000, view.envelopeId, view.tenantId, view.taskId).run();
   if (result.meta.changes !== 1) throw new Error('Recipient unavailable');
   return code;
 }
 export async function exchangeRecipientCode(db: D1Database, code: string, origin: string, now: number): Promise<string> {
   if (!validOrigin(origin) || !/^[a-f0-9]{64}$/.test(code)) throw new Error('Invalid code');
   const hash = await digest(code), token = randomToken(), tokenHash = await digest(token);
-  await db.batch([
-    db.prepare(`INSERT INTO recipient_auth_assertions SELECT CASE WHEN EXISTS (SELECT 1 FROM recipient_page_codes c JOIN envelopes e ON e.id=c.envelope_id AND e.tenant_id=c.tenant_id JOIN tasks t ON t.id=c.task_id AND t.envelope_id=e.id JOIN tenant_page_origins o ON o.tenant_id=c.tenant_id AND o.origin=c.origin WHERE c.code_hash=? AND c.origin=? AND c.used_at IS NULL AND NOT EXISTS (SELECT 1 FROM recipient_code_revocations r WHERE r.code_hash=c.code_hash) AND c.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE') THEN 1 ELSE 0 END`).bind(hash, origin, now),
-    db.prepare('INSERT INTO recipient_page_sessions SELECT ?, tenant_id, envelope_id, task_id, origin, ? FROM recipient_page_codes WHERE code_hash=?').bind(tokenHash, now + 900000, hash),
-    db.prepare('UPDATE recipient_page_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL AND NOT EXISTS (SELECT 1 FROM recipient_code_revocations r WHERE r.code_hash=recipient_page_codes.code_hash)').bind(now, hash),
-    db.prepare('INSERT INTO recipient_auth_assertions SELECT CASE WHEN changes()=1 AND NOT EXISTS (SELECT 1 FROM recipient_session_revocations WHERE token_hash=?) AND NOT EXISTS (SELECT 1 FROM recipient_code_revocations WHERE code_hash=?) THEN 1 ELSE 0 END').bind(tokenHash,hash),
-    db.prepare('DELETE FROM recipient_auth_assertions'),
+  // The session row is written first: its token is returned only if the code is then marked used.
+  // The commit point is that compare-and-set on used_at, so a code is exchanged at most once even
+  // under concurrency; a session row whose CAS lost is an unreachable, harmless orphan.
+  const valid = `c.code_hash=? AND c.origin=? AND c.used_at IS NULL AND c.expires_at>? AND EXISTS (SELECT 1 FROM envelopes e JOIN tasks t ON t.envelope_id=e.id
+    WHERE e.id=c.envelope_id AND e.tenant_id=c.tenant_id AND t.id=c.task_id AND e.status='IN_PROGRESS' AND t.status='ACTIVE')`;
+  const [, used] = await db.batch([
+    db.prepare(`INSERT INTO recipient_page_sessions SELECT ?, c.tenant_id, c.envelope_id, c.task_id, c.origin, ? FROM recipient_page_codes c WHERE ${valid}`).bind(tokenHash, now + 900000, hash, origin, now),
+    db.prepare(`UPDATE recipient_page_codes AS c SET used_at=? WHERE ${valid} AND EXISTS (SELECT 1 FROM recipient_page_sessions WHERE token_hash=?)`).bind(now, hash, origin, now, tokenHash),
   ]);
+  if (used.meta.changes !== 1) throw new Error('Invalid code');
   return token;
 }
 async function session(db: D1Database, token: string, origin: string, now: number): Promise<{task_id:string; recipient_email:string}> {
   if (!validOrigin(origin) || !/^[a-f0-9]{64}$/.test(token)) throw new Error('Invalid session');
-  const row = await db.prepare(`SELECT t.id AS task_id, t.recipient_email FROM recipient_page_sessions s JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id JOIN tenant_page_origins o ON o.tenant_id=s.tenant_id AND o.origin=s.origin WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE'`).bind(await digest(token), origin, now).first<{task_id:string;recipient_email:string}>();
+  const row = await db.prepare(`SELECT t.id AS task_id, t.recipient_email FROM recipient_page_sessions s JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE'`).bind(await digest(token), origin, now).first<{task_id:string;recipient_email:string}>();
   if (!row) throw new Error('Invalid session');
   return row;
 }
@@ -52,7 +54,7 @@ export async function authorizeRecipientSession(db: D1Database, token: string, o
 export async function sendRecipientOtp(db: D1Database, token: string, origin: string, now: number, pepper: Uint8Array, send: (email:string, otp:string) => Promise<void>): Promise<void> {
   const s = await session(db, token, origin, now), otp = otpCode(), sessionHash = await digest(token);
   const result = await db.prepare(`INSERT INTO recipient_otp_challenges (task_id, session_hash, otp_hash, expires_at, window_started_at, next_send_at, sends, recipient_email)
-    SELECT t.id, s.token_hash, ?, ?, ?, ?, 1, t.recipient_email FROM recipient_page_sessions s JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id JOIN tenant_page_origins o ON o.tenant_id=s.tenant_id AND o.origin=s.origin WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND t.recipient_email=? COLLATE BINARY
+    SELECT t.id, s.token_hash, ?, ?, ?, ?, 1, t.recipient_email FROM recipient_page_sessions s JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND t.recipient_email=? COLLATE BINARY
     ON CONFLICT(task_id) DO UPDATE SET session_hash=excluded.session_hash, otp_hash=excluded.otp_hash, expires_at=excluded.expires_at, recipient_email=excluded.recipient_email, consumed_by=NULL,
       attempts=CASE WHEN recipient_otp_challenges.window_started_at + 900000 <= excluded.window_started_at THEN 0 ELSE recipient_otp_challenges.attempts END,
       sends=CASE WHEN recipient_otp_challenges.window_started_at + 900000 <= excluded.window_started_at THEN 1 ELSE recipient_otp_challenges.sends+1 END,
@@ -69,7 +71,7 @@ export async function verifyRecipientOtp(db: D1Database, token: string, origin: 
   const s = await session(db, token, origin, now), sessionHash = await digest(token), nonce = randomToken();
   const hash = await otpHash(pepper, s.task_id, otp,s.recipient_email);
   const results = await db.batch([
-    db.prepare(`UPDATE recipient_otp_challenges SET attempts=attempts+1, consumed_by=CASE WHEN otp_hash=? THEN ? ELSE NULL END WHERE task_id=? AND session_hash=? AND expires_at>? AND attempts<5 AND consumed_by IS NULL AND recipient_email=? COLLATE BINARY AND EXISTS (SELECT 1 FROM recipient_page_sessions s JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id JOIN tenant_page_origins o ON o.tenant_id=s.tenant_id AND o.origin=s.origin WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND t.recipient_email=recipient_otp_challenges.recipient_email COLLATE BINARY)`).bind(hash, nonce, s.task_id, sessionHash, now, s.recipient_email, sessionHash, origin, now),
+    db.prepare(`UPDATE recipient_otp_challenges SET attempts=attempts+1, consumed_by=CASE WHEN otp_hash=? THEN ? ELSE NULL END WHERE task_id=? AND session_hash=? AND expires_at>? AND attempts<5 AND consumed_by IS NULL AND recipient_email=? COLLATE BINARY AND EXISTS (SELECT 1 FROM recipient_page_sessions s JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id WHERE s.token_hash=? AND s.origin=? AND s.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND t.recipient_email=recipient_otp_challenges.recipient_email COLLATE BINARY)`).bind(hash, nonce, s.task_id, sessionHash, now, s.recipient_email, sessionHash, origin, now),
     db.prepare('INSERT INTO recipient_otp_verifications (task_id, session_hash, verified_at, recipient_email) SELECT c.task_id, c.session_hash, ?, c.recipient_email FROM recipient_otp_challenges c JOIN tasks t ON t.id=c.task_id WHERE c.task_id=? AND c.consumed_by=? AND c.recipient_email IS NOT NULL AND c.recipient_email=t.recipient_email COLLATE BINARY ON CONFLICT(task_id) DO UPDATE SET session_hash=excluded.session_hash, verified_at=excluded.verified_at, recipient_email=excluded.recipient_email').bind(now, s.task_id, nonce),
   ]);
   if (results[1].meta.changes === 1) return true;
@@ -79,7 +81,6 @@ export async function verifyRecipientOtp(db: D1Database, token: string, origin: 
     JOIN recipient_page_sessions s ON s.token_hash=v.session_hash AND s.task_id=v.task_id
     JOIN envelopes e ON e.id=s.envelope_id AND e.tenant_id=s.tenant_id
     JOIN tasks t ON t.id=s.task_id AND t.envelope_id=e.id
-    JOIN tenant_page_origins o ON o.tenant_id=s.tenant_id AND o.origin=s.origin
     WHERE c.task_id=? AND c.session_hash=? AND c.otp_hash=? AND c.consumed_by IS NOT NULL
       AND s.origin=? AND s.expires_at>? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND c.recipient_email IS NOT NULL AND c.recipient_email=t.recipient_email COLLATE BINARY AND v.recipient_email=t.recipient_email COLLATE BINARY`)
     .bind(s.task_id,sessionHash,hash,origin,now).first();

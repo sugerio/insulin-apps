@@ -21,7 +21,6 @@ async function harness() {
   for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`, 'utf8')).map(s => db.prepare(s)));
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex')).run();
-  await db.prepare("INSERT INTO tenant_page_origins(tenant_id,origin) VALUES ('tenant',?)").bind(ORIGIN).run();
   const env = { DB: db, ARTIFACTS: await mf.getR2Bucket('ARTIFACTS'), TEST_MAIL: await mf.getR2Bucket('TEST_MAIL'), LOCAL_TEST_MODE: 'true', LOCAL_TEST_OTP_KEY: 'task-expiry-otp-pepper-at-least-32-bytes' };
   const auth = { authorization: `Bearer ${KEY}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);
@@ -76,7 +75,7 @@ test('past the deadline the envelope expires: no link, no code, and one EXPIRED 
     const signer = { origin: ORIGIN, authorization: `Bearer ${token}`, ...SIGNER };
 
     // The deadline passes while the signing page is open.
-    await h.db.prepare('UPDATE task_deadlines SET expires_at=? WHERE task_id=?').bind(Date.now() - 1000, task.id).run();
+    await h.db.prepare('UPDATE tasks SET expires_at=? WHERE id=?').bind(Date.now() - 1000, task.id).run();
     assert.notEqual((await h.req('/v1/signing/otp', h.json({}, signer))).status, 200, 'no code after the deadline');
     assert.equal((await h.read(id!)).status, 'EXPIRED');
     assert.notEqual((await h.req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).status, 201, 'no new link');
@@ -93,7 +92,7 @@ test('reading the envelope expires it too, and the sweep expires every due one o
     const a = await h.envelope('k3', new Date(Date.now() + DAY).toISOString());
     const b = await h.envelope('k4', new Date(Date.now() + DAY).toISOString());
     const c = await h.envelope('k5');
-    await h.db.prepare("UPDATE task_deadlines SET expires_at=? WHERE task_id IN (SELECT id FROM tasks WHERE envelope_id IN (?,?) AND role='partner')").bind(Date.now() - 1000, a.id, b.id).run();
+    await h.db.prepare("UPDATE tasks SET expires_at=? WHERE envelope_id IN (?,?) AND role='partner'").bind(Date.now() - 1000, a.id, b.id).run();
     assert.equal((await h.read(a.id!)).status, 'EXPIRED');
     assert.equal(await expireDueEnvelopes(h.db), 1, 'only b was still open');
     assert.equal(await expireDueEnvelopes(h.db), 0);
@@ -109,7 +108,7 @@ test('once the partner has signed, their deadline no longer applies (countersign
     const [partner, isv] = (await h.read(id!)).tasks;
     await h.db.batch([
       h.db.prepare("UPDATE tasks SET status='SIGNED' WHERE id=?").bind(partner.id),
-      h.db.prepare('UPDATE task_deadlines SET expires_at=? WHERE task_id=?').bind(Date.now() - 1000, partner.id),
+      h.db.prepare('UPDATE tasks SET expires_at=? WHERE id=?').bind(Date.now() - 1000, partner.id),
       h.db.prepare("UPDATE tasks SET status='ACTIVE' WHERE id=?").bind(isv.id),
     ]);
     assert.equal(await expireDueEnvelopes(h.db), 0);

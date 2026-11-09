@@ -1,11 +1,11 @@
-import { buildEvidenceManifest } from './local-test-evidence.ts';
+import { buildEvidenceManifest, commitSeal } from './local-test-evidence.ts';
 import { sealManifest, verifyManagedSeal, type ManagedSeal, type Sealer, type SealTrust, type VerifiedSeal } from './managed-seal.ts';
 import type { DeliveryEvidence } from './delivery-pdf.ts';
 import { AUDIT, auditTrail, recordAudit, type AuditEvent } from './audit.ts';
 
 /**
  * Completing an envelope with the managed seal (managed-seal.ts). The seal is made once,
- * stored in R2 and recorded in managed_evidence; a retry after a failure reuses the stored
+ * stored in R2 and recorded in seals (mode KMS_TSA); a retry after a failure reuses the stored
  * seal rather than signing and timestamping again. Every read verifies it against the
  * evidence rebuilt from the records.
  */
@@ -51,17 +51,8 @@ export async function finalizeManagedEvidence(db: D1Database, bucket: R2Bucket, 
     if (!stored) throw new Error('Evidence conflict');
   }
   const verified = (await verifyStoredSeal(db, envelopeId, stored.seal, built.manifest, config.trust)).seal;
-  const wasCompleted = (await db.prepare('SELECT status FROM envelopes WHERE id=?').bind(envelopeId).first<{ status: string }>())?.status === 'COMPLETED';
-  await db.batch([
-    db.prepare("INSERT OR IGNORE INTO managed_evidence (envelope_id,object_key,sha256,key_arn,timestamp_time) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status IN ('FINALIZING','COMPLETED'))")
-      .bind(envelopeId, objectKey, stored.sha256, verified.keyArn, verified.timestampTime, envelopeId, tenantId),
-    db.prepare("UPDATE envelopes SET status='COMPLETED' WHERE id=? AND tenant_id=? AND status='FINALIZING' AND EXISTS (SELECT 1 FROM managed_evidence WHERE envelope_id=? AND object_key=? AND sha256=?)")
-      .bind(envelopeId, tenantId, envelopeId, objectKey, stored.sha256),
-    db.prepare("INSERT INTO recipient_auth_assertions SELECT CASE WHEN EXISTS (SELECT 1 FROM envelopes e JOIN managed_evidence v ON v.envelope_id=e.id WHERE e.id=? AND e.tenant_id=? AND e.status='COMPLETED' AND v.object_key=? AND v.sha256=?) THEN 1 ELSE 0 END")
-      .bind(envelopeId, tenantId, objectKey, stored.sha256),
-    db.prepare('DELETE FROM recipient_auth_assertions'),
-  ]);
-  if (!wasCompleted) await recordAudit(db, { envelopeId, type: AUDIT.completed, detail: { seal: 'KMS_TSA', timestampTime: verified.timestampTime } });
+  const completed = await commitSeal(db, tenantId, envelopeId, { mode: 'KMS_TSA', objectKey, sha256: stored.sha256, keyArn: verified.keyArn, timestampTime: verified.timestampTime });
+  if (completed) await recordAudit(db, { envelopeId, type: AUDIT.completed, detail: { seal: 'KMS_TSA', timestampTime: verified.timestampTime } });
   return verified;
 }
 
@@ -79,7 +70,7 @@ async function verifyStoredSeal(db: D1Database, envelopeId: string, seal: Manage
 /** The verified evidence of a completed envelope with a managed seal; throws if anything does not hold. */
 export async function verifyManagedEvidence(db: D1Database, bucket: R2Bucket, tenantId: string, envelopeId: string, trust: SealTrust) {
   const built = await buildEvidenceManifest(db, bucket, tenantId, envelopeId);
-  const row = await db.prepare('SELECT object_key,sha256 FROM managed_evidence WHERE envelope_id=?').bind(envelopeId).first<{ object_key: string; sha256: string }>();
+  const row = await db.prepare("SELECT object_key,sha256 FROM seals WHERE envelope_id=? AND mode='KMS_TSA'").bind(envelopeId).first<{ object_key: string; sha256: string }>();
   const stored = row && await readStoredSeal(bucket, row.object_key);
   if (!row || !stored || row.object_key !== managedEvidenceKey(envelopeId) || stored.sha256 !== row.sha256) throw new Error('Evidence integrity failure');
   const { seal, sealed, afterSeal } = await verifyStoredSeal(db, envelopeId, stored.seal, built.manifest, trust);
@@ -88,7 +79,7 @@ export async function verifyManagedEvidence(db: D1Database, bucket: R2Bucket, te
 
 /** Whether an envelope was completed with the managed seal (and not the local test seal). */
 export async function hasManagedEvidence(db: D1Database, envelopeId: string): Promise<boolean> {
-  return !!await db.prepare('SELECT 1 FROM managed_evidence WHERE envelope_id=?').bind(envelopeId).first();
+  return !!await db.prepare("SELECT 1 FROM seals WHERE envelope_id=? AND mode='KMS_TSA'").bind(envelopeId).first();
 }
 
 /** The delivery PDF's evidence and certificate notes for a managed seal. */

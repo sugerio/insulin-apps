@@ -37,7 +37,6 @@ async function startWorker({autoComplete=true,testMode=true}:{autoComplete?:bool
   await db.prepare('INSERT INTO tenants(id) VALUES (?)').bind(tenant).run();
   await db.prepare('INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,?)').bind(await hashHex(key),tenant).run();
  }
- await db.prepare("INSERT INTO tenant_page_origins(tenant_id,origin) VALUES ('tenant',?)").bind(WORKER).run();
  const request=(path:string,init:RequestInit={})=>mf.dispatchFetch(WORKER+path,init as any) as unknown as Promise<Response>;
  const auth={authorization:`Bearer ${KEY}`};
  const json=(body:unknown,headers:Record<string,string>={})=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
@@ -136,9 +135,9 @@ test('Worker mode finishes each signature and the envelope on its own, without p
   const second=await w.waitFor('the countersigner to become active',()=>w.envelopeOf(id),e=>e.tasks[1].status==='ACTIVE');
   assert.equal(await w.sign(id,second.tasks[1].id),'marcus@seller.test');
   await w.waitFor('the envelope to complete',()=>w.envelopeOf(id),e=>e.status==='COMPLETED');
-  const finalPdf=await w.request(`/v1/envelopes/${id}/final-pdf`,{headers:w.auth});
-  assert.equal(finalPdf.status,200);
-  assert.equal((await PDFDocument.load(await finalPdf.arrayBuffer())).getPageCount(),2);
+  const delivery=await w.request(`/v1/envelopes/${id}/delivery-pdf`,{headers:w.auth});
+  assert.equal(delivery.status,200);
+  assert.ok((await PDFDocument.load(await delivery.arrayBuffer())).getPageCount()>2,'the two signed pages and the certificate');
   assert.equal((await w.request(`/v1/envelopes/${id}/certificate`,{headers:w.auth})).status,200);
  } finally {await w.cleanup();}
 });

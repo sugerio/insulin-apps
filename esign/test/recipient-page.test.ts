@@ -191,7 +191,7 @@ test('positioned signatures fail closed when a page marker cannot be rendered',a
    if(path.endsWith('/verify'))return new Response(null,{status:204});
    if(path.endsWith('/current'))return Response.json({id:'d0',sha256:'hash',fields:[{id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:0,y:0,width:.3,height:.1}}]});
    if(path.endsWith('/pdf'))return new Response(new Blob(['pdf']));
-   if(path.endsWith('/signature-preview'))return new Response(new Blob(['image'],{type:'image/png'}));
+   if(path.endsWith('/v1/signing/preview'))return new Response(new Blob(['image'],{type:'image/png'}));
    if(path.endsWith('/sign')){signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
    throw new Error(path);
   };

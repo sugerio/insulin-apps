@@ -22,7 +22,6 @@ async function setup(extra:Record<string,unknown>){
  const hash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(KEY))).toString('hex');
  await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
  await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(hash).run();
- await db.prepare("INSERT INTO tenant_page_origins(tenant_id,origin) VALUES ('tenant',?)").bind(ORIGIN).run();
  const env={DB:db,ARTIFACTS:await mf.getR2Bucket('ARTIFACTS'),TEST_MAIL:await mf.getR2Bucket('TEST_MAIL'),LOCAL_TEST_MODE:'true',LOCAL_TEST_OTP_KEY:'otp-sink-pepper-at-least-32-bytes-long',LOCAL_TEST_SEAL_KEY:'otp-sink-seal-key-at-least-32-bytes-long',...extra};
  const auth={authorization:`Bearer ${KEY}`};
  const req=(path:string,init:RequestInit={})=>app.fetch(new Request(ORIGIN+path,init),env);

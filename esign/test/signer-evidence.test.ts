@@ -10,6 +10,7 @@ import { unstable_splitSqlQuery } from 'wrangler';
 import app from '../src/worker.ts';
 import { auditTrail } from '../src/audit.ts';
 import { describeHostAuthentication, parseHostAuthentication, parseSender } from '../src/signer-facts.ts';
+import {processEnvelopeStep,finalizeEnvelopeStep} from '../src/envelope-completion.ts';
 
 const ORIGIN = 'https://host.example.com';
 const SECRET = 'test-key-0123456789-abcdefghijklmnopqrstuvwxyz';
@@ -25,8 +26,7 @@ async function harness() {
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SECRET))).toString('hex');
   await db.prepare("INSERT INTO tenants VALUES ('a')").run();
   await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
-  await db.prepare("INSERT INTO tenant_page_origins VALUES ('a',?)").bind(ORIGIN).run();
-  const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, LOCAL_TEST_MODE: 'true', LOCAL_TEST_OTP_KEY: 'local-test-pepper-at-least-32-bytes', LOCAL_TEST_SEAL_KEY: 'local-test-seal-key-at-least-32-bytes' };
+  const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, LOCAL_TEST_MODE: 'true', SIGNING_PAGE_ORIGINS: ORIGIN, LOCAL_TEST_OTP_KEY: 'local-test-pepper-at-least-32-bytes', LOCAL_TEST_SEAL_KEY: 'local-test-seal-key-at-least-32-bytes' };
   const auth = { authorization: `Bearer ${SECRET}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request('http://localhost' + path, init), env);
   const json = (body: unknown, headers: Record<string, string> = {}) => ({ method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -50,8 +50,8 @@ async function harness() {
     assert.equal((await req('/v1/signing/otp/verify', json({ otp }, headers))).status, 204);
     const current = await (await req('/v1/signing/current', { headers })).json() as { id: string; sha256: string; disclosure: { version: string } };
     assert.equal((await req('/v1/signing/sign', json({ artifactId: current.id, artifactHash: current.sha256, consent: true, disclosureVersion: current.disclosure.version, title: 'Partner Manager', authorityConfirmed: true }, headers))).status, 202);
-    assert.equal((await req(`/v1/envelopes/${envelopeId}/process`, { method: 'POST', headers: auth })).status, 204);
-    assert.equal((await req(`/v1/envelopes/${envelopeId}/finalize`, { method: 'POST', headers: auth })).status, 204);
+    assert.equal(await processEnvelopeStep(env.DB,env.ARTIFACTS,'a',envelopeId,true), 'processed');
+    assert.equal(await finalizeEnvelopeStep(env,'a',envelopeId), 'finalized');
     return task.id;
   };
   const certificateText = async (envelopeId: string) => {
@@ -161,7 +161,7 @@ test('an envelope made before keeps its original certificate layout', async () =
   try {
     const { id } = await (await h.create('o1', { sender: { name: 'Dana Seller' } })).json() as { id: string };
     // As an envelope created before certificate versions existed.
-    await h.db.prepare('DELETE FROM envelope_certificate_versions WHERE envelope_id = ?').bind(id).run();
+    await h.db.prepare("UPDATE envelopes SET details_json = json_remove(details_json, '$.certificateVersion') WHERE id = ?").bind(id).run();
     await h.signAll(id, AUTH);
     const { text } = await h.certificateText(id);
     assert.ok(!text.includes('Events summary'), 'no version-2 sections');

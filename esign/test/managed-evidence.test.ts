@@ -11,6 +11,7 @@ import { finalizeManagedEvidence, verifyManagedEvidence, managedDelivery, manage
 import { deliveryPdf } from '../src/delivery-pdf.ts';
 import { evidenceMessage } from '../src/worker-kms-evidence.ts';
 import { startOpensslTsa } from './helpers/openssl-tsa.ts';
+import {processEnvelopeStep} from '../src/envelope-completion.ts';
 
 const ORIGIN = 'https://esign.example.test';
 const KEY = 'm'.repeat(64);
@@ -42,7 +43,6 @@ async function finishedEnvelope() {
   for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`, 'utf8')).map(s => db.prepare(s)));
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex')).run();
-  await db.prepare("INSERT INTO tenant_page_origins(tenant_id,origin) VALUES ('tenant',?)").bind(ORIGIN).run();
   const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, LOCAL_TEST_MODE: 'true', LOCAL_TEST_OTP_KEY: 'managed-evidence-otp-pepper-32-bytes-long' };
   const auth = { authorization: `Bearer ${KEY}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);
@@ -62,7 +62,7 @@ async function finishedEnvelope() {
     await req('/v1/signing/otp/verify', json({ otp }, headers));
     const current = await (await req('/v1/signing/current', { headers })).json() as { id: string; sha256: string };
     assert.equal((await req('/v1/signing/sign', json({ artifactId: current.id, artifactHash: current.sha256, consent: true }, headers))).status, 202);
-    assert.equal((await req(`/v1/envelopes/${id}/process`, { method: 'POST', headers: auth })).status, 204);
+    assert.equal(await processEnvelopeStep(env.DB,env.ARTIFACTS,'tenant',id,true), 'processed');
   }
   const status = async () => ((await (await req(`/v1/envelopes/${id}`, { headers: auth })).json()) as { status: string }).status;
   assert.equal(await status(), 'FINALIZING');
@@ -77,7 +77,7 @@ test('a finished envelope is sealed once, completed, and verified on every read'
     assert.equal(await e.status(), 'COMPLETED');
     assert.deepEqual(counts, { sign: 1, tsa: 1 });
     assert.equal(sealed.keyArn, config.sealer.keyArn);
-    const row = await e.db.prepare('SELECT object_key,key_arn,timestamp_time FROM managed_evidence WHERE envelope_id=?').bind(e.id).first();
+    const row = await e.db.prepare("SELECT object_key,key_arn,timestamp_time FROM seals WHERE envelope_id=? AND mode='KMS_TSA'").bind(e.id).first();
     assert.deepEqual(row, { object_key: managedEvidenceKey(e.id), key_arn: config.sealer.keyArn, timestamp_time: sealed.timestampTime });
     const verified = await verifyManagedEvidence(e.db, e.bucket, 'tenant', e.id, config.trust);
     assert.equal(verified.signatures.length, 2);

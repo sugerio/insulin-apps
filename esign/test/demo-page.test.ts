@@ -59,11 +59,10 @@ test('sending adds a signature page, signs in order through the embedded signing
  const h=await harness(c=>{
   if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});
   if(c.path==='/v1/templates'&&c.method==='POST')return json({id:'tpl-1',roles:['signer-1','signer-2']},201);
-  if(c.path==='/v1/envelopes'&&c.method==='POST')return json({id:ENV_ID,status:'PROCESSING'},201);
-  if(c.path===`/v1/envelopes/${ENV_ID}/prepare`)return new Response(null,{status:204});
+  if(c.path==='/v1/envelopes'&&c.method==='POST')return json({id:ENV_ID,status:'IN_PROGRESS'},201);
   if(c.path===`/v1/envelopes/${ENV_ID}`)return json(state);
   if(c.path===`/v1/envelopes/${ENV_ID}/tasks/task-0/recipient-view`)return json({code:'c0de'},201);
-  if(c.path===`/v1/envelopes/${ENV_ID}/final-pdf`)return new Response(new Blob(['%PDF-final']),{status:200});
+  if(c.path===`/v1/envelopes/${ENV_ID}/delivery-pdf`)return new Response(new Blob(['%PDF-delivery']),{status:200});
  },{storedKey:KEY});
  try {
   await h.act(async()=>{await new Promise(r=>setTimeout(r,0));});
@@ -77,7 +76,7 @@ test('sending adds a signature page, signs in order through the embedded signing
   const send=h.calls.find(c=>c.path==='/v1/envelopes')!;
   assert.match(send.headers['idempotency-key'],/^[0-9a-f-]{36}$/);
   assert.deepEqual(JSON.parse(String(send.body)),{templateId:'tpl-1',recipients:[{role:'signer-1',name:'Ana',email:'ana@partner.example'},{role:'signer-2',name:'Marcus',email:'marcus@seller.example'}]});
-  assert.ok(h.calls.some(c=>c.path===`/v1/envelopes/${ENV_ID}/prepare`&&c.method==='POST'));
+  assert.ok(!h.calls.some(c=>c.path.endsWith('/prepare')),'creating the envelope prepares it');
   assert.deepEqual(JSON.parse(h.local.getItem('esign-demo-envelopes')!),[ENV_ID]);
   await h.click("Open Ana's signing page");
   const view=h.calls.find(c=>c.path.endsWith('/recipient-view'))!;
@@ -89,7 +88,8 @@ test('sending adds a signature page, signs in order through the embedded signing
   await h.click('Close the signing page');
   await h.act(async()=>{h.renderer.root.findAllByType('button').find((b:any)=>JSON.stringify(b.children).includes(ENV_ID)).props.onClick();await new Promise(r=>setTimeout(r,0));});
   assert.match(h.text(),/COMPLETED/);
-  await h.click('View signed PDF');
+  await h.click('View signed PDF with certificate');
+  assert.ok(h.calls.some(c=>c.path===`/v1/envelopes/${ENV_ID}/delivery-pdf`));
   assert.ok(h.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signed PDF'));
  } finally {await h.unmount();}
 });
@@ -100,7 +100,6 @@ test('one signer, and a send that fails is retried with the same idempotency key
   if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});
   if(c.path==='/v1/templates')return json({id:'tpl-1'},201);
   if(c.path==='/v1/envelopes'&&c.method==='POST'){if(fail){fail=false;return json({error:'unavailable'},503);}return json({id:ENV_ID},201);}
-  if(c.path===`/v1/envelopes/${ENV_ID}/prepare`)return new Response(null,{status:204});
   if(c.path===`/v1/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE']]));
  },{storedKey:KEY});
  try {
@@ -126,7 +125,6 @@ test('placing fields opens the editor on this origin, saves through it, and send
   if(c.path===`/v1/template-editing-sessions/${SESSION}/source`)return json({},201);
   if(c.path===`/v1/template-editing-sessions/${SESSION}`)return json({templateId:TEMPLATE});
   if(c.path==='/v1/envelopes'&&c.method==='POST')return json({id:ENV_ID},201);
-  if(c.path===`/v1/envelopes/${ENV_ID}/prepare`)return new Response(null,{status:204});
   if(c.path===`/v1/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]));
  },{storedKey:KEY});
  try {

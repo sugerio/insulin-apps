@@ -8,7 +8,7 @@ test('page identifier is not a credential; code is bound to page, tenant and all
   const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql','0013_editor_sessions.sql','0015_editor_page_sessions.sql','0041_candidate_editor_sessions.sql']) {
+    for (const name of ['0001_tenants.sql','0013_editor_allowed_origins.sql','0015_editor_page_sessions.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');
       await db.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>db.prepare(s)));
     }

@@ -2,3 +2,5 @@
 LOCAL_TEST_MODE=true
 LOCAL_TEST_OTP_KEY=local-test-pepper-at-least-32-bytes
 LOCAL_TEST_SEAL_KEY=local-test-seal-key-at-least-32-bytes
+# The local UI dev server (npm run dev:ui) may also host the signing page.
+SIGNING_PAGE_ORIGINS=http://127.0.0.1:5173

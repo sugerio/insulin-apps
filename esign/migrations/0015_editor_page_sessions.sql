@@ -11,4 +11,3 @@ CREATE TABLE editor_page_tokens (
   page_id TEXT NOT NULL REFERENCES editor_page_entries(page_id),
   expires_at INTEGER NOT NULL
 );
-CREATE TABLE editor_page_assertions (ok INTEGER NOT NULL CHECK (ok = 1));

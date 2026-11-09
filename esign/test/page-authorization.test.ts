@@ -9,20 +9,20 @@ test('recipient code and OTP are origin-bound, scoped, one-time and persistently
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0006_page_authorization.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql','0029_recipient_session_revocations.sql','0030_recipient_code_revocations.sql', '0050_task_expiry.sql']) {
+    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0006_page_authorization.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
       await db.batch(sql.split(';').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
     }
     await db.exec(`INSERT INTO tenants VALUES ('a'), ('b');
 INSERT INTO templates VALUES ('template', 'a', 'source', '["ana","marcus"]', 1);
-INSERT INTO envelopes VALUES ('env', 'a', 'template', 'IN_PROGRESS', 1);
-INSERT INTO tasks VALUES ('ana', 'env', 'ana', 'Ana', 'ana@example.com', 1, 'ACTIVE');
-INSERT INTO tasks VALUES ('marcus', 'env', 'marcus', 'Marcus', 'marcus@example.com', 2, 'PENDING');
-INSERT INTO tenant_page_origins VALUES ('a', 'https://host.example.com');`);
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('env', 'a', 'template', 'IN_PROGRESS', 1);
+INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana', 'env', 'ana', 'Ana', 'ana@example.com', 1, 'ACTIVE');
+INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus', 'env', 'marcus', 'Marcus', 'marcus@example.com', 2, 'PENDING');
+`);
     const view = {tenantId:'a', envelopeId:'env', taskId:'ana', origin:'https://host.example.com', now:1000};
     await assert.rejects(() => auth.issueRecipientCode(db, {...view, tenantId:'b'}));
     await assert.rejects(() => auth.issueRecipientCode(db, {...view, taskId:'marcus'}));
-    await assert.rejects(() => auth.issueRecipientCode(db, {...view, origin:'https://wrong.example.com'}));
+    // Which page origins may be named is the route's check (the Worker's own and SIGNING_PAGE_ORIGINS).
     const code = await auth.issueRecipientCode(db, view);
     await assert.rejects(() => auth.exchangeRecipientCode(db, code, 'https://wrong.example.com', 1001));
     const exchanges = await Promise.allSettled([auth.exchangeRecipientCode(db, code, view.origin, 1001), auth.exchangeRecipientCode(db, code, view.origin, 1001)]);
@@ -68,15 +68,15 @@ test('OTP resend recovers after cooldown without resetting the task attempt budg
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0006_page_authorization.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql','0029_recipient_session_revocations.sql','0030_recipient_code_revocations.sql', '0050_task_expiry.sql']) {
+    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0006_page_authorization.sql','0009_otp_lifecycle.sql','0025_otp_recipient_binding.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
       await db.batch(sql.split(';').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
     }
     await db.exec(`INSERT INTO tenants VALUES ('a');
 INSERT INTO templates VALUES ('t','a','source','["ana"]',1);
-INSERT INTO envelopes VALUES ('e','a','t','IN_PROGRESS',1);
-INSERT INTO tasks VALUES ('ana','e','ana','Ana','ana@example.com',1,'ACTIVE');
-INSERT INTO tenant_page_origins VALUES ('a','https://host.example.com');`);
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('e','a','t','IN_PROGRESS',1);
+INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','e','ana','Ana','ana@example.com',1,'ACTIVE');
+`);
     const origin='https://host.example.com', pepper=new TextEncoder().encode('local-test-pepper-at-least-32-bytes');
     const code=await auth.issueRecipientCode(db,{tenantId:'a',envelopeId:'e',taskId:'ana',origin,now:1000});
     const token=await auth.exchangeRecipientCode(db,code,origin,1001);

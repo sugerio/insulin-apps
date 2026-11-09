@@ -4,6 +4,7 @@
  * needs a title and the signer's confirmation that they may bind it, and the intent statement
  * names the document and the company. All of it is recorded on the SIGNED audit event.
  */
+import { envelopeDetails, taskDetails } from './details.ts';
 
 const MAX_TITLE = 128;
 const MAX_ORGANIZATION = 200;
@@ -82,11 +83,11 @@ export function describeHostAuthentication(auth: HostAuthentication): string {
 
 /** The sender of an envelope and who named one of its signers, when the host said. */
 export async function sendFacts(db: D1Database, envelopeId: string): Promise<{ sender: Sender | null; namedBy: Map<string, string> }> {
-  const sender = await db.prepare('SELECT name, email, organization FROM envelope_senders WHERE envelope_id = ?').bind(envelopeId).first<{ name: string; email: string | null; organization: string | null }>();
-  const named = await db.prepare('SELECT n.task_id, n.named_by FROM task_named_by n JOIN tasks t ON t.id = n.task_id WHERE t.envelope_id = ?').bind(envelopeId).all<{ task_id: string; named_by: string }>();
+  const envelope = await db.prepare('SELECT details_json FROM envelopes WHERE id = ?').bind(envelopeId).first<{ details_json: string }>();
+  const tasks = await db.prepare('SELECT id, details_json FROM tasks WHERE envelope_id = ?').bind(envelopeId).all<{ id: string; details_json: string }>();
   return {
-    sender: sender ? { name: sender.name, ...(sender.email ? { email: sender.email } : {}), ...(sender.organization ? { organization: sender.organization } : {}) } : null,
-    namedBy: new Map(named.results.map((r) => [r.task_id, r.named_by])),
+    sender: envelopeDetails(envelope?.details_json).sender ?? null,
+    namedBy: new Map(tasks.results.flatMap((t) => { const named = taskDetails(t.details_json).namedBy; return named ? [[t.id, named] as const] : []; })),
   };
 }
 
@@ -95,11 +96,12 @@ export const parseSignerTitle = (value: unknown) => text(value, MAX_TITLE);
 
 /** The host's facts about the task's signer, and the document's name. */
 export async function signerContext(db: D1Database, taskId: string): Promise<{ facts: SignerFacts; documentName: string | null }> {
-  const row = await db.prepare('SELECT f.title, f.on_behalf_of, d.document_name FROM tasks t LEFT JOIN task_signer_facts f ON f.task_id = t.id LEFT JOIN envelope_documents d ON d.envelope_id = t.envelope_id WHERE t.id = ?')
-    .bind(taskId).first<{ title: string | null; on_behalf_of: string | null; document_name: string | null }>();
+  const row = await db.prepare('SELECT t.details_json AS task, e.details_json AS envelope FROM tasks t JOIN envelopes e ON e.id = t.envelope_id WHERE t.id = ?')
+    .bind(taskId).first<{ task: string; envelope: string }>();
+  const { title, onBehalfOf } = taskDetails(row?.task);
   return {
-    facts: { ...(row?.title ? { title: row.title } : {}), ...(row?.on_behalf_of ? { onBehalfOf: row.on_behalf_of } : {}) },
-    documentName: row?.document_name ?? null,
+    facts: { ...(title ? { title } : {}), ...(onBehalfOf ? { onBehalfOf } : {}) },
+    documentName: envelopeDetails(row?.envelope).documentName ?? null,
   };
 }
 

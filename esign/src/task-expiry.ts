@@ -1,5 +1,5 @@
 /**
- * Sign-by deadlines. A recipient may carry a deadline (task_deadlines); once it passes while
+ * Sign-by deadlines. A recipient may carry a deadline (tasks.expires_at); once it passes while
  * that recipient has not signed, the envelope EXPIRES for everyone. Every signing path requires
  * an envelope IN_PROGRESS, so an expired envelope can no longer be opened, verified or signed.
  * A recipient who has signed is past their deadline's reach: a countersigner without a
@@ -21,16 +21,18 @@ export function parseDeadline(value: unknown, now = Date.now()): number | null |
   return at;
 }
 
-const DUE = "EXISTS (SELECT 1 FROM tasks t JOIN task_deadlines d ON d.task_id = t.id WHERE t.envelope_id = envelopes.id AND d.expires_at <= ?1 AND t.status <> 'SIGNED')";
+// A recipient whose signature exists has signed, even before the task is marked SIGNED.
+const UNSIGNED = "t.status <> 'SIGNED' AND NOT EXISTS (SELECT 1 FROM signatures g WHERE g.task_id = t.id)";
+const DUE = `EXISTS (SELECT 1 FROM tasks t WHERE t.envelope_id = envelopes.id AND t.expires_at <= ?1 AND ${UNSIGNED})`;
 
 /** Expires the envelope if a recipient's deadline passed unsigned. True when it is EXPIRED now. */
 export async function expireIfDue(db: D1Database, envelopeId: string, now = Date.now()): Promise<boolean> {
-  const task = await db.prepare("SELECT t.id FROM tasks t JOIN task_deadlines d ON d.task_id = t.id JOIN envelopes e ON e.id = t.envelope_id WHERE t.envelope_id = ?1 AND e.status IN ('PROCESSING','IN_PROGRESS') AND d.expires_at <= ?2 AND t.status <> 'SIGNED' ORDER BY t.routing_order LIMIT 1")
+  const task = await db.prepare(`SELECT t.id FROM tasks t JOIN envelopes e ON e.id = t.envelope_id WHERE t.envelope_id = ?1 AND e.status = 'IN_PROGRESS' AND t.expires_at <= ?2 AND ${UNSIGNED} ORDER BY t.routing_order LIMIT 1`)
     .bind(envelopeId, now).first<{ id: string }>();
   if (!task) return false;
   // One batch: the status change and its audit event commit together, once.
   await db.batch([
-    db.prepare(`UPDATE envelopes SET status = 'EXPIRED' WHERE id = ?2 AND status IN ('PROCESSING','IN_PROGRESS') AND ${DUE}`).bind(now, envelopeId),
+    db.prepare(`UPDATE envelopes SET status = 'EXPIRED' WHERE id = ?2 AND status = 'IN_PROGRESS' AND ${DUE}`).bind(now, envelopeId),
     db.prepare("INSERT INTO audit_events (envelope_id, task_id, type, occurred_at, ip, user_agent, detail_json) SELECT ?1, NULL, ?2, ?3, NULL, NULL, ?4 WHERE EXISTS (SELECT 1 FROM envelopes WHERE id = ?1 AND status = 'EXPIRED') AND NOT EXISTS (SELECT 1 FROM audit_events WHERE envelope_id = ?1 AND type = ?2)")
       .bind(envelopeId, AUDIT.expired, now, JSON.stringify({ taskId: task.id })),
   ]);
@@ -39,7 +41,7 @@ export async function expireIfDue(db: D1Database, envelopeId: string, now = Date
 
 /** The cron sweep: expires every envelope with a passed deadline. Returns how many it expired. */
 export async function expireDueEnvelopes(db: D1Database, now = Date.now()): Promise<number> {
-  const due = await db.prepare(`SELECT id FROM envelopes WHERE status IN ('PROCESSING','IN_PROGRESS') AND ${DUE} LIMIT 200`).bind(now).all<{ id: string }>();
+  const due = await db.prepare(`SELECT id FROM envelopes WHERE status = 'IN_PROGRESS' AND ${DUE} LIMIT 200`).bind(now).all<{ id: string }>();
   let expired = 0;
   for (const { id } of due.results) if (await expireIfDue(db, id, now)) expired++;
   return expired;

@@ -1,7 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {PDFDocument,PDFName,PDFNumber,degrees} from 'pdf-lib';
-import {positionedFields,validatePositionedPdf,validatePositionedPlacement} from '../src/positioned-template.ts';
+import {validatePositionedPdf,validatePositionedPlacement} from '../src/positioned-template.ts';
+import {positionedV3Fields} from '../src/positioned-v3-snapshot.ts';
+
+const positionedFields=(raw:string,roles:string[],pages:number)=>positionedV3Fields(JSON.parse(raw),roles,pages);
 
 const signature={id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.1,y:.1,width:.3,height:.1}};
 test('positioned templates reject unsupported fields, geometry and PDFs',async()=>{
@@ -25,9 +28,3 @@ test('overlap validation rejects same-page intersections for any role, but permi
  assert.doesNotThrow(()=>assertNoOverlappingFields([a,{...a,id:'b',page:2}]));
 });
 
-test('previously captured overlapping v2 snapshot remains verifiable without authorizing new use',async()=>{
- const {validatePositionedSnapshot}=await import('../src/positioned-signature-snapshot.ts');const {TYPED_SIGNATURE_FONT,TYPED_SIGNATURE_FONT_HASH}=await import('../src/typed-signature-image.ts');
- const a={id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.1,y:.1,width:.25,height:.1}},b={...a,id:'b',role:'marcus',rect:{...a.rect,x:.2}};
- const snapshot={role:'ana',font:TYPED_SIGNATURE_FONT,fontHash:TYPED_SIGNATURE_FONT_HASH,templateFields:[a,b],fields:[{id:'a',page:1,rect:a.rect,text:'ANA',imageHash:'a'.repeat(64)}]};
- assert.deepEqual(validatePositionedSnapshot(snapshot,1),snapshot);
-});

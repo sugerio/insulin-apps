@@ -1,44 +1,36 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
-const preparation = await import('../src/prepare.ts').catch(() => ({ prepareEnvelope: undefined }));
+import { envelopeIdFor, initialDocumentKey, InitialDocumentConflict, storeInitialDocument } from '../src/prepare.ts';
 
-test('preparation fixes a D0 hash, activates only the first task and is safe to retry', async () => {
-  assert.equal(typeof preparation.prepareEnvelope, 'function', 'envelope preparation is missing');
-  const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
-  try {
-    const db = await mf.getD1Database('DB'); const bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql', '0050_task_expiry.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s)));
-    }
-    await db.exec("INSERT INTO tenants VALUES ('tenant');\nINSERT INTO templates VALUES ('template', 'tenant', 'source', '[\"ana\",\"marcus\"]', 1);\nINSERT INTO envelopes VALUES ('env', 'tenant', 'template', 'PROCESSING', 1);\nINSERT INTO tasks VALUES ('t1', 'env', 'ana', 'Ana', 'ana@example.com', 1, 'PENDING');\nINSERT INTO tasks VALUES ('t2', 'env', 'marcus', 'Marcus', 'marcus@example.com', 2, 'PENDING');");
-    await bucket.put('source', 'document');
-    await assert.rejects(() => preparation.prepareEnvelope!(db, bucket, 'other', 'env'));
-    await Promise.all([preparation.prepareEnvelope!(db, bucket, 'tenant', 'env'), preparation.prepareEnvelope!(db, bucket, 'tenant', 'env')]);
-    assert.equal((await db.prepare('SELECT status FROM envelopes').first())!.status, 'IN_PROGRESS');
-    assert.equal((await db.prepare("SELECT status FROM tasks WHERE id = 't1'").first())!.status, 'ACTIVE');
-    assert.equal((await db.prepare("SELECT status FROM tasks WHERE id = 't2'").first())!.status, 'PENDING');
-    const artifact = await db.prepare('SELECT object_key, sha256 FROM artifacts').first();
-    assert.equal(artifact!.sha256, '43cc23fa52b87b4cc1d02b5b114154151d6adddb17c9fddc06b027fa99e24008');
-    assert.equal(await (await bucket.get(artifact!.object_key as string))!.text(), 'document');
-    assert.equal((await db.prepare('SELECT count(*) AS n FROM artifacts').first())!.n, 1);
-  } finally { await mf.dispose(); }
+test('the envelope id is a version 8 UUID fixed by the tenant and the idempotency key', async () => {
+  const id = await envelopeIdFor('tenant', 'request-1');
+  assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(await envelopeIdFor('tenant', 'request-1'), id);
+  assert.notEqual(await envelopeIdFor('tenant', 'request-2'), id);
+  assert.notEqual(await envelopeIdFor('other', 'request-1'), id);
+  // The parts are encoded, not concatenated: moving a character between them changes the id.
+  assert.notEqual(await envelopeIdFor('tenant-a', 'b'), await envelopeIdFor('tenant', 'a-b'));
 });
 
-test('preparation rejects a missing first task without committing artifact metadata', async () => {
-  const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
+test('the initial document is the source stored once under the envelope, and a retry reuses it', async () => {
+  const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', r2Buckets: ['ARTIFACTS'] });
   try {
-    const db = await mf.getD1Database('DB'); const bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0005_preparation_assertions.sql', '0050_task_expiry.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(sql.split(';').map((s) => s.trim()).filter(Boolean).map((s) => db.prepare(s)));
-    }
-    await db.exec("INSERT INTO tenants VALUES ('tenant');\nINSERT INTO templates VALUES ('template', 'tenant', 'source', '[\"ana\"]', 1);\nINSERT INTO envelopes VALUES ('env', 'tenant', 'template', 'PROCESSING', 1);");
+    const bucket = await mf.getR2Bucket('ARTIFACTS');
+    const id = await envelopeIdFor('tenant', 'request-1');
+    await assert.rejects(() => storeInitialDocument(bucket, 'source', id), /Source artifact missing/);
+    assert.equal((await bucket.list({ prefix: 'envelopes/' })).objects.length, 0);
     await bucket.put('source', 'document');
-    await assert.rejects(() => preparation.prepareEnvelope!(db, bucket, 'tenant', 'env'));
-    assert.equal((await db.prepare('SELECT status FROM envelopes').first())!.status, 'PROCESSING');
-    assert.equal((await db.prepare('SELECT count(*) AS n FROM artifacts').first())!.n, 0);
+    const results = await Promise.all([storeInitialDocument(bucket, 'source', id), storeInitialDocument(bucket, 'source', id)]);
+    const expected = { id: `d0:${id}`, objectKey: initialDocumentKey(id), sha256: '43cc23fa52b87b4cc1d02b5b114154151d6adddb17c9fddc06b027fa99e24008' };
+    assert.deepEqual(results, [expected, expected]);
+    assert.equal(expected.objectKey, `envelopes/${id}/d0.pdf`);
+    assert.deepEqual(await storeInitialDocument(bucket, 'source', id), expected);
+    assert.equal((await bucket.list({ prefix: 'envelopes/' })).objects.length, 1);
+    assert.equal(await (await bucket.get(expected.objectKey))!.text(), 'document');
+    // Other bytes under the same envelope are refused and do not replace the stored document.
+    await bucket.put('other-source', 'another document');
+    await assert.rejects(() => storeInitialDocument(bucket, 'other-source', id), InitialDocumentConflict);
+    assert.equal(await (await bucket.get(expected.objectKey))!.text(), 'document');
   } finally { await mf.dispose(); }
 });

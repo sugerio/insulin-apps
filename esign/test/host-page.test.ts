@@ -17,10 +17,10 @@ test('certificate is readable, accurate, and escapes untrusted names',()=>{
 });
 test('host launches from templates without the legacy upload workflow',()=>{
   const html=renderToStaticMarkup(React.createElement(HostPage));
-  assert.match(html,/synthetic/i); assert.match(html,/Templates/); assert.doesNotMatch(html,/Create envelope|First signer|Second signer|Synthetic PDF|type="file"|management key/i);
+  assert.match(html,/synthetic/i); assert.match(html,/Template ID/); assert.doesNotMatch(html,/Create envelope|First signer|Second signer|Synthetic PDF|type="file"|management key/i);
 });
 
-test('host interaction creates ordered envelope, opens views, processes and displays final PDF',async()=>{
+test('host interaction creates ordered envelope, opens views, processes and displays the delivery PDF',async()=>{
   const {default:Renderer,act}=await import('react-test-renderer');
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window,oldStorage=(globalThis as any).localStorage;
@@ -36,8 +36,7 @@ test('host interaction creates ordered envelope, opens views, processes and disp
       if(path.endsWith('/process')) {if(active===0) active=1;else status='FINALIZING';return new Response(null,{status:204});}
       if(path.endsWith('/finalize')) {status='COMPLETED';return new Response(null,{status:204});}
       if(path.endsWith('/certificate')) return Response.json(certificate);
-      if(path.endsWith('/final-pdf')) return new Response(new Blob(['pdf'],{type:'application/pdf'}));
-      if(path.endsWith('/prepare')) return new Response(null,{status:204});
+      if(path.endsWith('/delivery-pdf')) return new Response(new Blob(['pdf'],{type:'application/pdf'}));
       throw new Error(`Unexpected ${path}`);
     };
     let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(HostPage));});
@@ -55,8 +54,9 @@ test('host interaction creates ordered envelope, opens views, processes and disp
     assert.equal(renderer.root.findByType('iframe').props.src,'/#code=code-1');
     await act(async()=>{await button('Process signature').props.onClick();});
     await act(async()=>{await button('Finalize').props.onClick();});
-    await act(async()=>{await button('View final PDF').props.onClick();});
-    assert.ok(renderer.root.findAllByType('a').some((a:any)=>a.props.download==='signed-local-test.pdf'));
+    await act(async()=>{await button('View delivery PDF with certificate').props.onClick();});
+    assert.ok(renderer.root.findAllByType('a').some((a:any)=>a.props.download==='delivery-local-test.pdf'));
+    assert.ok(!calls.some(c=>c.path.endsWith('/prepare')),'creating the envelope prepares it');
     await act(async()=>{await button('View completion certificate').props.onClick();});
     const rendered=JSON.stringify(renderer.toJSON());
     for(const value of ['Certificate of completion','Marcus','ana@example.com','doc-0','doc-2','2023-11-14T22:13:21.000Z','d'.repeat(64)]) assert.ok(rendered.includes(value),value);
@@ -83,35 +83,7 @@ test('host restores only envelope ID and requests a new one-use view after refre
   } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;(globalThis as any).localStorage=oldStorage;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('failed preparation selects the new envelope and retry targets it with or without an existing envelope',async()=>{
-  const {default:Renderer,act}=await import('react-test-renderer');(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
-  const oldFetch=globalThis.fetch,oldStorage=(globalThis as any).localStorage;
-  try {
-    for(const existing of [true,false]) {
-      const calls:string[]=[];
-      (globalThis as any).localStorage={getItem:()=>existing?'A':null,setItem() {}};
-      globalThis.fetch=async(input:any)=>{const path=String(input);calls.push(path);
-        if(path==='/host/templates/t')return Response.json({id:'t',roles:['first','second'],hasPositionedFields:false});
-        if(path==='/host/envelopes')return Response.json({id:'B'});
-        if(path==='/host/envelopes/A'||path==='/host/envelopes/B')return Response.json({id:path.endsWith('/A')?'A':'B',status:'PROCESSING',tasks:[]});
-        if(path==='/host/envelopes/B/prepare')return calls.filter(p=>p===path).length===1?new Response('failed',{status:503}):new Response(null,{status:204});
-        throw new Error(path);
-      };
-      let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(HostPage));});
-      const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-      await loadTemplate(renderer,act);
-      await act(async()=>{await button('Start signing from template').props.onClick();});
-      assert.match(JSON.stringify(renderer.toJSON()),/Envelope.*B/);
-      assert.ok(button('Retry prepare'));
-      await act(async()=>{await button('Retry prepare').props.onClick();});
-      assert.equal(calls.filter(p=>p==='/host/envelopes/B/prepare').length,2);
-      assert.equal(calls.includes('/host/envelopes/A/prepare'),false);
-      await act(async()=>{renderer.unmount();});
-    }
-  } finally {globalThis.fetch=oldFetch;(globalThis as any).localStorage=oldStorage;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
-});
-
-test('a delayed final PDF for the previous envelope is discarded after creating another envelope',async()=>{
+test('a delayed delivery PDF for the previous envelope is discarded after creating another envelope',async()=>{
   const {default:Renderer,act}=await import('react-test-renderer');(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   const oldFetch=globalThis.fetch,oldStorage=(globalThis as any).localStorage,oldCreate=URL.createObjectURL,oldRevoke=URL.revokeObjectURL;
   let pdfCalls=0;let resolvePdf!:(r:Response)=>void;const pending=new Promise<Response>(resolve=>{resolvePdf=resolve;});const created:string[]=[],revoked:string[]=[];
@@ -120,23 +92,22 @@ test('a delayed final PDF for the previous envelope is discarded after creating 
     (globalThis as any).localStorage={getItem:()=> 'A',setItem() {}};
     globalThis.fetch=async(input:any)=>{const path=String(input);
       if(path==='/host/envelopes/A')return Response.json({id:'A',status:'COMPLETED',tasks:[]});
-      if(path==='/host/envelopes/A/final-pdf')return ++pdfCalls===1?new Response(new Blob(['earlier A'])):pending;
+      if(path==='/host/envelopes/A/delivery-pdf')return ++pdfCalls===1?new Response(new Blob(['earlier A'])):pending;
       if(path==='/host/templates/t')return Response.json({id:'t',roles:['first','second'],hasPositionedFields:false});
       if(path==='/host/envelopes')return Response.json({id:'B'});
-      if(path==='/host/envelopes/B')return Response.json({id:'B',status:'PROCESSING',tasks:[]});
-      if(path==='/host/envelopes/B/prepare')return new Response(null,{status:204});
+      if(path==='/host/envelopes/B')return Response.json({id:'B',status:'IN_PROGRESS',tasks:[]});
       throw new Error(path);
     };
     let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(HostPage));});
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
-    await act(async()=>{await button('View final PDF').props.onClick();});
-    assert.equal(renderer.root.findAllByType('a').find((a:any)=>a.props.download==='signed-local-test.pdf').props.href,'blob:test-0');
-    let pdfRequest:Promise<void>;await act(async()=>{pdfRequest=button('View final PDF').props.onClick();});
+    await act(async()=>{await button('View delivery PDF with certificate').props.onClick();});
+    assert.equal(renderer.root.findAllByType('a').find((a:any)=>a.props.download==='delivery-local-test.pdf').props.href,'blob:test-0');
+    let pdfRequest:Promise<void>;await act(async()=>{pdfRequest=button('View delivery PDF with certificate').props.onClick();});
     await loadTemplate(renderer,act);
     await act(async()=>{await button('Start signing from template').props.onClick();});
     await act(async()=>{resolvePdf(new Response(new Blob(['A'])));await pdfRequest;});
     assert.match(JSON.stringify(renderer.toJSON()),/Envelope.*B/);
-    assert.equal(renderer.root.findAllByType('a').filter((a:any)=>a.props.download==='signed-local-test.pdf').length,0);
+    assert.equal(renderer.root.findAllByType('a').filter((a:any)=>a.props.download==='delivery-local-test.pdf').length,0);
     assert.deepEqual(created,['blob:test-0']);assert.deepEqual(revoked,['blob:test-0']);
     await act(async()=>{renderer.unmount();});
   } finally {globalThis.fetch=oldFetch;(globalThis as any).localStorage=oldStorage;URL.createObjectURL=oldCreate;URL.revokeObjectURL=oldRevoke;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
@@ -155,7 +126,6 @@ test('late signing view from previous envelope cannot appear after selecting a n
       if(path==='/host/templates/t')return Response.json({id:'t',roles:['first','second'],hasPositionedFields:false});
       if(path==='/host/envelopes')return Response.json({id:'B'});
       if(path==='/host/envelopes/B')return Response.json({id:'B',status:'ACTIVE',tasks:[]});
-      if(path==='/host/envelopes/B/prepare')return new Response(null,{status:204});
       throw new Error(path);
     };
     let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(HostPage));});
@@ -233,7 +203,6 @@ test('certificate is limited to completed envelopes and ignores a late response 
       if(path==='/host/templates/t')return Response.json({id:'t',roles:['first','second'],hasPositionedFields:false});
       if(path==='/host/envelopes')return Response.json({id:'B'});
       if(path==='/host/envelopes/B')return Response.json({id:'B',status:'ACTIVE',tasks:[]});
-      if(path==='/host/envelopes/B/prepare')return new Response(null,{status:204});
       throw new Error(path);
     };
     let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(HostPage));});
@@ -259,7 +228,6 @@ test('template launch locks duplicate requests and ignores a late restore',async
       if(path==='/host/envelopes/old')return restore;
       if(path==='/host/templates/t')return Response.json({id:'t',roles:['first','second'],hasPositionedFields:false});
       if(path==='/host/envelopes'){creates++;return create;}
-      if(path==='/host/envelopes/B/prepare')return new Response(null,{status:204});
       if(path==='/host/envelopes/B')return Response.json({id:'B',status:'ACTIVE',tasks:[]});
       throw new Error(path);
     };

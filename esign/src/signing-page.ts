@@ -2,7 +2,7 @@
  * The recipient signing page, served by the Worker itself so that it can be embedded in an
  * <iframe> by the host application (for example a product's console), with the API on the page's own origin.
  * The host builds `<origin>/sign#code=<code>` from a recipient-view code issued for this
- * origin, which must therefore be registered in tenant_page_origins.
+ * origin, the Worker's own (the default when the request names none).
  */
 
 const MAX_ANCESTORS = 10;

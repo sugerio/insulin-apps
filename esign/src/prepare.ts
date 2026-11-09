@@ -1,35 +1,47 @@
-/** Experimental request-driven preparation. No automatic recovery or scheduler is provided. */
-export async function prepareEnvelope(db: D1Database, bucket: R2Bucket, tenantId: string, envelopeId: string): Promise<void> {
-  const envelope = await db.prepare(`SELECT e.status, t.object_key FROM envelopes e
-    JOIN templates t ON t.id = e.template_id AND t.tenant_id = e.tenant_id
-    WHERE e.id = ? AND e.tenant_id = ?`).bind(envelopeId, tenantId).first<{ status: string; object_key: string }>();
-  if (!envelope) throw new Error('Envelope not found');
-  if (envelope.status === 'IN_PROGRESS') return;
-  if (envelope.status !== 'PROCESSING') throw new Error('Envelope not processable');
-  const source = await bucket.get(envelope.object_key);
+/**
+ * Preparing an envelope when it is created (POST /v1/envelopes): its id is derived from the
+ * creation request, and the template's source is copied once to the envelope's own initial
+ * document (D0). A retried creation (same tenant, same Idempotency-Key) gets the same id and so
+ * finds and reuses that copy instead of making a second one.
+ */
+
+const hex = (bytes: Uint8Array) => Array.from(bytes, (n) => n.toString(16).padStart(2, '0')).join('');
+const sha256 = async (bytes: ArrayBuffer) => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)));
+
+/** The R2 key of an envelope's initial document. */
+export const initialDocumentKey = (envelopeId: string) => `envelopes/${envelopeId}/d0.pdf`;
+
+/**
+ * The id of the envelope a creation request makes: the first 16 bytes of the SHA-256 of
+ * ["esign-envelope-id-v1", tenant id, Idempotency-Key] (as JSON), shaped as a version 8 UUID.
+ */
+export async function envelopeIdFor(tenantId: string, idempotencyKey: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(['esign-envelope-id-v1', tenantId, idempotencyKey]))));
+  const bytes = digest.slice(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x80;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const value = hex(bytes);
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
+/** An earlier attempt stored different bytes as this envelope's initial document. */
+export class InitialDocumentConflict extends Error {}
+
+/**
+ * Copies the template's source object to the envelope's initial document key, unless an earlier
+ * attempt already stored the same bytes there. Returns the artifact row to insert with the envelope.
+ */
+export async function storeInitialDocument(bucket: R2Bucket, sourceKey: string, envelopeId: string): Promise<{ id: string; objectKey: string; sha256: string }> {
+  const source = await bucket.get(sourceKey);
   if (!source) throw new Error('Source artifact missing');
   const bytes = await source.arrayBuffer();
-  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (n) => n.toString(16).padStart(2, '0')).join('');
-  const key = `envelopes/${envelopeId}/d0.pdf`;
+  const hash = await sha256(bytes);
+  const key = initialDocumentKey(envelopeId);
   const stored = await bucket.put(key, bytes, { onlyIf: { etagDoesNotMatch: '*' } });
   if (!stored) {
     const previous = await bucket.get(key);
-    if (!previous) throw new Error('Prepared object unavailable');
-    const previousHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await previous.arrayBuffer())), (n) => n.toString(16).padStart(2, '0')).join('');
-    if (previousHash !== hash) throw new Error('Prepared object conflict');
+    if (!previous) throw new Error('Initial document unavailable');
+    if (await sha256(await previous.arrayBuffer()) !== hash) throw new InitialDocumentConflict('Initial document conflict');
   }
-  await db.batch([
-    db.prepare("INSERT OR IGNORE INTO artifacts (id, envelope_id, object_key, sha256) SELECT ?, id, ?, ? FROM envelopes WHERE id = ? AND tenant_id = ? AND status = 'PROCESSING'").bind(`d0:${envelopeId}`, key, hash, envelopeId, tenantId),
-    db.prepare("UPDATE envelopes SET status = 'IN_PROGRESS' WHERE id = ? AND tenant_id = ? AND status = 'PROCESSING' AND EXISTS (SELECT 1 FROM artifacts WHERE envelope_id = ? AND object_key = ? AND sha256 = ?)").bind(envelopeId, tenantId, envelopeId, key, hash),
-    db.prepare("UPDATE tasks SET status = 'ACTIVE' WHERE envelope_id = ? AND routing_order = 1 AND status = 'PENDING' AND EXISTS (SELECT 1 FROM envelopes WHERE id = ? AND tenant_id = ? AND status = 'IN_PROGRESS')").bind(envelopeId, envelopeId, tenantId),
-    db.prepare(`INSERT INTO preparation_assertions (ok) SELECT CASE WHEN EXISTS (
-      SELECT 1 FROM envelopes e JOIN artifacts a ON a.envelope_id = e.id
-      JOIN tasks t ON t.envelope_id = e.id AND t.routing_order = 1
-      WHERE e.id = ? AND e.tenant_id = ? AND e.status = 'IN_PROGRESS'
-        AND a.object_key = ? AND a.sha256 = ? AND t.status = 'ACTIVE'
-    ) THEN 1 ELSE 0 END`).bind(envelopeId, tenantId, key, hash),
-    db.prepare('DELETE FROM preparation_assertions'),
-  ]);
-  const result = await db.prepare('SELECT status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(envelopeId, tenantId).first<{ status: string }>();
-  if (result?.status !== 'IN_PROGRESS') throw new Error('Preparation did not complete');
+  return { id: `d0:${envelopeId}`, objectKey: key, sha256: hash };
 }

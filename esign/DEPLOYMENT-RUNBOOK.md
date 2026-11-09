@@ -8,23 +8,22 @@ Disable Worker ingress first, revoke affected credentials and stop issuing sessi
 
 ## Schema inventory for a fresh isolated database
 
-Review and apply **all** migrations in filename order starting at 0001. Migrations are forward-only: the candidate-era and internal-demo files below stay in place although the code that used most of their tables was removed, because they were already applied to existing databases. Their tables are retained, not dropped; dropping them needs a separate reviewed forward migration. Verify the migration ledger and schema privately; never apply this to an existing retained database as an assumed upgrade. The sequence currently ends at 0052:
+Review and apply **all** migrations in filename order starting at 0001. Before the first deployment, migrations that only created tables for removed code (the candidate topology, the internal demo, the isolated OTP sender, the synthetic TSA test, the legacy editor prototype, the candidate editor bindings and the recipient code and session revocations) were deleted rather than dropped by a new migration; the eight earlier signing tables were replaced in place by the single `signatures` table (0007) and the local test and managed evidence tables by `seals` (0010); the three single-column batch guard tables, and the `assertions` table (0005) that replaced them, were removed because every write now carries its own conditions (see "How writes commit" in [README.md](README.md)). The numbering therefore has gaps; Wrangler applies the remaining files in name order. Verify the migration ledger and schema privately; never apply this to an existing retained database as an assumed upgrade. The sequence currently ends at 0049 and creates 18 tables. Optional facts about envelopes and tasks live in their `details_json` columns (0003), not in tables of their own:
 
 | Versions | Reviewed purpose |
 | --- | --- |
-| 0028 | Candidate issuance budgets |
-| 0029–0030 | Recipient session and code revocations |
-| 0031–0032 | Candidate v3 attempt slots and their immutability |
-| 0033 | Synthetic TSA test reservations, not a real TSA integration |
-| 0034–0036 | Candidate envelope sources, idempotency and template snapshots |
-| 0037–0040 | Provision budgets, created templates, template reservations and admission |
-| 0041–0044 | Editor sessions, limits, historical revocations and template bindings |
-| 0045 | Isolated OTP quota reservations |
-| 0046–0047 | Internal demo recipient bindings and fixed-sink mode (internal demo removed; tables retained) |
-| 0048 | Managed (KMS + TSA) evidence |
-| 0049 | Audit trail |
-| 0050 | Task expiry |
-| 0051–0052 | Signer facts and evidence |
+| 0001 | Tenants and management keys (`tenants`, `api_keys`) |
+| 0002 | Templates (`templates`) |
+| 0003 | Envelopes, tasks and idempotency records (`envelopes`, `tasks`, `idempotency_keys`); an envelope is created `IN_PROGRESS`, already prepared |
+| 0004 | Artifacts: each envelope's initial document, D0 (`artifacts`) |
+| 0006, 0009, 0025 | Recipient-view codes, page sessions, OTP challenges and verifications |
+| 0007 | Signatures: one row per accepted signature (facts and rendering as JSON, hash-chained); triggers allow only the rendering state to change and refuse deletes |
+| 0010 | Seals of completed envelopes (`seals`): `mode` `LOCAL_TEST` or `KMS_TSA`, the seal object and its hash, and for `KMS_TSA` the key ARN and the time of the timestamp |
+| 0013 | Origins allowed to embed the editor (`editor_allowed_origins`) |
+| 0015, 0016, 0018, 0019 | Editor page sessions and tokens, their template and staged source (`editor_page_entries`, `editor_page_tokens`) and template fields |
+| 0027 | Trigger: a task's recipient email is immutable |
+| 0028 | Expiry indexes on recipient-view codes |
+| 0049 | Audit trail (`audit_events`) and signed copy deliveries (`copy_deliveries`) |
 
 Inspect the SQL and dependencies, record the exact reviewed revision and migration ledger in the private change record, and stop on any mismatch. There is no authorized remote migration in this runbook. Never place account identifiers, resource identifiers, credentials or populated private configurations in this repository.
 

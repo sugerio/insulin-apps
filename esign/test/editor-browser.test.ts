@@ -13,11 +13,10 @@ import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import {signatureGeometry} from '../src/positioned-signature-geometry.ts';
 import {renderTypedSignature} from '../src/typed-signature-image.ts';
-import app, {managementAuth,createV3TestApp} from '../src/worker.ts';
+import app from '../src/worker.ts';
 import {withLocalTestOtp} from './helpers/local-otp-display.ts';
-import {Hono} from 'hono';
-import {mountEditorRoutes} from '../src/editor-routes.ts';
-import {createEditorDemoSources,createEditorDemoSession} from './helpers/editor-demo-source.ts';
+import {signedPdf} from './helpers/signed-pdf.ts';
+import {processEnvelopeStep,finalizeEnvelopeStep} from '../src/envelope-completion.ts';
 const chrome=process.env.ESIGN_TEST_CHROME??['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium'].find(existsSync);
 const sleep=(n:number)=>new Promise(r=>setTimeout(r,n));
 test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed messages fail',{skip:!chrome,timeout:120000},async()=>{
@@ -30,10 +29,10 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await build({configFile:false,root:resolve('ui'),logLevel:'silent',build:{outDir:output,rollupOptions:{input:{editor:resolve('ui/editor.html'),host:resolve('ui/editor-host.html'),recipient:resolve('ui/index.html')}}}});
   const db=await mf.getD1Database('DB');for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
   const key='local-test-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
-  await db.prepare("INSERT INTO tenants VALUES ('tenant')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?, 'tenant')").bind(digest).run();await db.prepare("INSERT INTO editor_allowed_origins VALUES ('tenant','http://127.0.0.1:5173')").run();await db.prepare("INSERT INTO tenant_page_origins VALUES ('tenant','http://127.0.0.1:8787')").run();
+  await db.prepare("INSERT INTO tenants VALUES ('tenant')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?, 'tenant')").bind(digest).run();await db.prepare("INSERT INTO editor_allowed_origins VALUES ('tenant','http://127.0.0.1:5173')").run();
   const asset=async(path:string)=>{try{if(!/^\/(editor\.html|index\.html|assets\/[a-zA-Z0-9_.-]+)$/.test(path))return new Response(null,{status:404});const data=await readFile(join(output,path));const content=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')||path.endsWith('.mjs')?'text/javascript':'application/octet-stream';return new Response(data,{headers:{'content-type':content}});}catch{return new Response(null,{status:404});}};
   const env={DB:db,ARTIFACTS:await mf.getR2Bucket('ARTIFACTS'),TEST_MAIL:await mf.getR2Bucket('TEST_MAIL'),LOCAL_TEST_MODE:'true',LOCAL_TEST_OTP_KEY:'local-test-pepper-at-least-32-bytes',LOCAL_TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes',ASSETS:{fetch:(request:Request)=>asset(new URL(request.url).pathname)}};
-  const signingApp=createV3TestApp();const sources=createEditorDemoSources(true);const editorDemo=new Hono<any>();mountEditorRoutes(editorDemo,managementAuth,{downloadSource:sources.download});
+  const signingApp=app;
   const records:{origin:string;path:string;requestOrigin:string|null;referer:string|null;status:number;secretLeaked:boolean}[]=[];
   proxy=createServer(async(req,res)=>{try{
    const url=new URL(req.url!);if(url.origin==='http://127.0.0.1:5175'){req.url=url.pathname+url.search;vite.middlewares(req,res);return;}const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));const headers=new Headers();for(const [k,v] of Object.entries(req.headers))if(v!==undefined&&k!=='host'&&k!=='connection')headers.set(k,Array.isArray(v)?v.join(','):v);
@@ -41,7 +40,10 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    if(url.pathname==='/v1/editor/save'&&holdNextSave){beforeHeld=true;await beforeGate;}
    if(url.origin==='http://127.0.0.1:5173'&&url.pathname==='/host/editor-demo-session'){
     const form=await new Request('http://127.0.0.1:5173/host/editor-demo-session',{method:'POST',headers,body:Buffer.concat(chunks)}).formData();const file=form.get('file');if(!(file instanceof File))throw new Error('Invalid file');const roles=JSON.parse(String(form.get('roles')));
-    response=await createEditorDemoSession(sources,new Uint8Array(await file.arrayBuffer()),roles,async body=>editorDemo.fetch(new Request('http://127.0.0.1:8787/v1/template-editing-sessions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body}),env));
+    // The host backend opens the session, then uploads the chosen file to it as the source.
+    const management={authorization:`Bearer ${key}`};
+    response=await app.fetch(new Request('http://127.0.0.1:8787/v1/template-editing-sessions',{method:'POST',headers:{...management,'content-type':'application/json'},body:JSON.stringify({allowedParentOrigin:'http://127.0.0.1:5173',roles})}),env);
+    if(response.status===201){const created=await response.clone().json() as {sessionId:string};const staged=await app.fetch(new Request(`http://127.0.0.1:8787/v1/template-editing-sessions/${created.sessionId}/source`,{method:'POST',headers:{...management,'content-type':'application/pdf'},body:new Uint8Array(await file.arrayBuffer())}),env);if(staged.status!==201)response=staged;}
    }else if(url.origin==='http://127.0.0.1:5173'&&url.pathname.startsWith('/host/template-editing-sessions')){headers.set('authorization',`Bearer ${key}`);const target='http://127.0.0.1:8787/v1'+url.pathname.slice('/host'.length);response=await app.fetch(new Request(target,{method:req.method,headers,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})}),env);}
    else if(url.origin==='http://127.0.0.1:5173'&&url.pathname==='/')response=new Response(await readFile(join(output,'index.html')),{headers:{'content-type':'text/html'}});
    else if(url.origin==='http://127.0.0.1:5173'&&url.pathname==='/editor-host.html'){response=new Response(await readFile(join(output,'editor-host.html')),{headers:{'content-type':'text/html'}});}
@@ -68,8 +70,8 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   assert.equal(await evaluate("Boolean(document.querySelector('input[type=file]'))",context),false);
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Save template')",context),false);
   await wait(()=>evaluate("document.querySelectorAll('[data-page]').length===2",context),'PDF rendered');
-  assert.ok(records.some(r=>r.path==='/host/editor-demo-session'&&r.status===201),'host selected file is delivered through local URL downloader');
-  assert.ok(!records.some(r=>r.path.endsWith('/source')),'no direct source staging upload');
+  assert.ok(records.some(r=>r.path==='/host/editor-demo-session'&&r.status===201),'host selected file is staged through the session source upload');
+  assert.ok(!records.some(r=>r.path.endsWith('/source')),'the browser never uploads the source itself');
   await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'host editor ready');
   await evaluate("document.querySelector('#continue').click()");
   await wait(()=>evaluate("document.querySelector('#status').textContent.includes('add a Signature field')"),'host shows validation error');
@@ -251,13 +253,6 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'reopened varied host ready');await evaluate("document.querySelector('#continue').click()");
   const nextVersion=await wait(async()=>{const v=await evaluate("document.querySelector('#status').textContent.match(/Saved template: ([a-f0-9-]+)/)?.[1]");return v&&v!==variedId?v:null;},'new template version');
   const newer=await db.prepare('SELECT fields_json FROM templates WHERE id=?').bind(nextVersion).first<{fields_json:string}>();assert.ok(newer);assert.notEqual(newer.fields_json,savedVaried.fields_json);assert.equal((await (await req(`/v1/envelopes/${envelope.id}`,{headers:auth})).json()).templateId,variedId,'existing envelope remains on original template after a new save');
-  // The default Worker has no approved network downloader and rejects remote URLs.
-  const sensitive='synthetic-sensitive-token';
-  await evaluate(`document.querySelector('#source').value='';document.querySelector('#file').value='';document.querySelector('#pdf-url').value='https://files.example.com/test.pdf?sig=${sensitive}';document.querySelector('#open').click()`);
-  await wait(()=>evaluate("document.querySelector('#status').textContent.includes('External URL downloads are disabled')"),'external download blocked');
-  assert.equal(await evaluate("document.querySelector('#pdf-url').value"),'');
-  assert.equal((await evaluate('document.body.innerText')).includes(sensitive),false);
-  assert.ok(records.every(r=>!r.path.includes(sensitive)&&!(r.referer??'').includes(sensitive)),'URL secret is not sent in paths or referrers');
   const created=await app.fetch(new Request('http://127.0.0.1:8787/v1/template-editing-sessions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({allowedParentOrigin:'http://127.0.0.1:5173'})}),env);const link=(await created.json() as any).url;
   const attack=await(await fetch(`http://127.0.0.1:${debug}/json/new?http://127.0.0.1:5174/`,{method:'PUT'})).json() as any;
   const attackWs=new WebSocket(attack.webSocketDebuggerUrl);await new Promise<void>(r=>attackWs.onopen=()=>r());let answer=0;const before=records.filter(r=>r.path==='/v1/editor/exchange').length;
@@ -287,9 +282,9 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
      assert.ok(ink.count>8,`${role} ${field.type} must show real screenshot ink: ${JSON.stringify(ink)}`);assert.ok(ink.top>visualEvidence.bottom,`${role} ${field.type} must not cover original ink: ${JSON.stringify(ink)}`);(observed[field.id]??=[]).push(ink);
     }
    }
-   await evaluate("document.documentElement.style.zoom='';document.querySelector('input[type=checkbox]').click()");await wait(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Sign document'&&!b.disabled)"),'sign ready');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Sign document').click()");await wait(()=>evaluate("document.body.innerText.includes('Signature recorded.')"),'signature recorded');assert.equal((await req(`/v1/envelopes/${envelope.id}/process`,{method:'POST',headers:auth})).status,204);
+   await evaluate("document.documentElement.style.zoom='';document.querySelector('input[type=checkbox]').click()");await wait(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Sign document'&&!b.disabled)"),'sign ready');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Sign document').click()");await wait(()=>evaluate("document.body.innerText.includes('Signature recorded.')"),'signature recorded');assert.equal(await processEnvelopeStep(env.DB,env.ARTIFACTS,'tenant',envelope.id,true),'processed');
   }
-  assert.equal((await req(`/v1/envelopes/${envelope.id}/finalize`,{method:'POST',headers:auth})).status,204);const finalResponse=await req(`/v1/envelopes/${envelope.id}/final-pdf`,{headers:auth});assert.equal(finalResponse.status,200);const finalBytes=new Uint8Array(await finalResponse.arrayBuffer());
+  assert.equal(await finalizeEnvelopeStep(env,'tenant',envelope.id),'finalized');const finalBytes=new Uint8Array(await signedPdf(env.DB,env.ARTIFACTS,envelope.id));
   // Render both PDFs with the page's own renderer, loaded from the UI source on the Vite origin.
   await call('Page.navigate',{url:'http://127.0.0.1:5175/'});await wait(()=>evaluate("document.readyState==='complete'"),'renderer origin');
   const renderAsset='renderPdf.ts';

@@ -2059,3 +2059,189 @@ two helpers only tests still use moved to `test/helpers/`. The RFC3161
 verifier test builds its query with the kept `syntheticTimestampQuery`. CI
 requires the four browser and migration cases that remain. No cloud resource
 was changed.
+
+## No process/finalize endpoints; unused tables removed before the first deployment
+
+`POST /v1/envelopes/:id/process` and `/finalize`, and `GET /v1/envelopes/:id/delivery-metadata` (two hashes a caller can compute from `delivery-pdf` and read from `certificate`), were removed. Envelopes finish on their own: the Worker finishes
+them itself after each signature (`COMPLETE_AFTER_SIGN`) and from the cron
+sweep, through `processEnvelopeStep` and the new `finalizeEnvelopeStep` in
+`src/envelope-completion.ts`. Tests now call those functions directly and assert
+their results instead of HTTP statuses.
+
+Because the project has not been deployed, the eighteen tables nothing used were
+removed by deleting the migrations that created them rather than adding a drop
+migration: the candidate budgets, reservations, snapshots, idempotency, created
+templates and editor revocations (with their triggers on `api_keys` and
+`editor_allowed_origins`), `editor_templates`, the internal demo bindings, the
+isolated OTP budgets and quota (with the unused `isolated_issue_id` column) and
+the synthetic TSA test evidence. `0028` keeps only its two indexes on
+`recipient_page_codes`. A fresh database now has 45 tables; migration numbers
+have gaps. The hidden consolidated lifecycle test that wrote to a removed table
+was deleted.
+
+## One signing origin for every tenant
+
+Every tenant signs on the same origin (the Worker's, for example `esign.suger.io`), so
+`tenant_page_origins` was removed (from `0006`, before the first deployment). The signing
+API now accepts the Worker's own origin, plus `SIGNING_PAGE_ORIGINS` (space-separated) for
+local UI development; `recipient-view` takes an optional `origin` that defaults to the
+Worker's own. Sessions stay bound to the origin their code was issued for: every signing
+query still compares the session's origin with the request's. `provision-tenant.ts` no
+longer takes `--page-origin`.
+
+## Envelope and task facts as JSON
+
+Optional facts about an envelope or a task now live in `envelopes.details_json` (document
+name, sender, certificate layout) and `tasks.details_json` (title, on behalf of, named by),
+read through `src/details.ts`, which keeps only known keys with the expected types. The
+sign-by deadline is the column `tasks.expires_at`, indexed, because the expiry sweep
+queries it. This replaces six one-row-per-envelope or one-row-per-task tables
+(`task_deadlines`, `task_signer_facts`, `task_named_by`, `envelope_documents`,
+`envelope_senders`, `envelope_certificate_versions`) and migrations 0050–0052; the project
+had not been deployed, so 0003 was changed directly. Tests that inserted into `tasks` and
+`envelopes` by position now name their columns. External API and certificates are unchanged.
+
+## One signatures table
+
+Signing state now lives in one table, `signatures` (`migrations/0007_signatures.sql`), instead
+of eight (`signature_records`, `signature_events`, `signature_jobs`, `signature_outputs`,
+`signature_layouts`, `signature_input_layouts`, `positioned_signature_inputs`,
+`positioned_v3_date_previews`); the three candidate tables nothing wrote
+(`candidate_v3_attempt_slots`, `candidate_envelope_sources`, `candidate_template_snapshots`) are
+gone too. Nothing had been deployed, so the migrations that made them (0007, 0008, 0011, 0012,
+0017, 0020–0022, 0026, 0031, 0032, 0034, 0036) were deleted or replaced in place. A fresh
+database now has 28 tables.
+
+A row holds only what is filtered, joined, constrained or chained as columns (envelope, task,
+sequence, status, input and output artifact and hash, previous and own event hash, attempts,
+last error); the rest is two versioned JSON documents. `facts_json` says who signed and how they
+were identified (task, role, name, the verified email address, session hash, OTP and consent
+times, consent disclosure, title and company). `render_json` says what is drawn: a block on the
+appended signature page (`kind: appended-page`) or the signer's placed fields with their values,
+renderer identities, image hashes and geometry (`kind: fields`). The event hash is the SHA-256 of
+the canonical JSON (`src/canonical-json.ts`) of `{previousHash, envelopeId, sequence,
+inputSha256, facts, render}`. Triggers allow only `status`, the output, `attempts` and
+`last_error` to change after the insert, a rendered output to be set only once, and no delete.
+
+There is one record path (`src/signature-record.ts`), one rendering path
+(`src/signature-processing.ts`) and one retry path, instead of the three event versions; field
+types are drawn through `src/field-renderers.ts`. The asynchronous model is unchanged: the row is
+saved first and the PDF rendered later (after signing and by the cron sweep). A rendered
+signature is rendered again, byte for byte, when the envelope is sealed and when its certificate
+is read; a failed rendering is counted on the row. The evidence manifest has a new format
+(`esign-evidence-manifest-v1`) that includes each signature's facts and rendering; the certificate
+JSON, delivery PDF, final PDF, audit trail and both seals are unchanged.
+
+The Date signed preview is no longer stored: the signing page sends the date it showed
+(`datePreviews` replaces `datePreviewIds`), and a date other than the server's UTC date is refused
+with `409 date_changed`, after which the page shows the new date. The dead guard parameters of the
+v3 record and processing paths and the modules that only served them (the six `candidate-*`
+modules and `synthetic-tsa-test-authorization.ts`) were removed, as were the event-version
+branches, `signature_input_layout_missing` and the historical replay code. Tests that only covered
+those (the candidate guards, historical v1 evidence, pre-snapshot pending jobs, the v3 event
+migration, v1/v2 event encodings, historical 24-point geometry) were deleted; the others were
+adapted, and canonical JSON, the event hash and the triggers have tests of their own. No cloud
+resource was changed.
+
+## Fewer tables and endpoints; envelopes are prepared when created
+
+Nothing had been deployed, so the migrations were edited or deleted in place again (the numbering
+keeps its gaps). A fresh database now has 19 tables instead of 28:
+
+- Removed, with the code that only read them (they were always empty): the legacy editor
+  prototype `editor_codes`, `editor_sessions` and `editor_assertions` (with `issueEditorCode`,
+  `exchangeEditorCode` and `authorizeEditor`, which nothing called), `candidate_editor_bindings`
+  (no writer; the `NOT EXISTS` checks on it are gone) and `recipient_code_revocations` and
+  `recipient_session_revocations` (no writer; a page session already loses its authority when
+  the envelope leaves `IN_PROGRESS`). Migrations 0029, 0030, 0041 and 0048 were deleted, and
+  0013 now only creates `editor_allowed_origins` (`0013_editor_allowed_origins.sql`).
+- `preparation_assertions`, `recipient_auth_assertions` and `editor_page_assertions` are one table,
+  `assertions` (`0005_assertions.sql`), used the same way: a batch inserts 0 to abort itself.
+- `local_test_evidence` and `managed_evidence` are one table, `seals` (`0010_seals.sql`): one row
+  per sealed envelope with `mode` `LOCAL_TEST` or `KMS_TSA`, the seal object and its hash, and
+  for `KMS_TSA` the key ARN and the time of the timestamp. Both seals are made and verified as
+  before; each reads only rows of its own mode.
+
+Endpoints: `GET /v1/templates` (the list) and `GET /v1/envelopes/:id/final-pdf` are gone; the demo
+page downloads the delivery PDF, which is the signed PDF with the certificate pages appended, and
+tests that need the signed PDF alone read it from storage. `POST /v1/template-editing-sessions`
+no longer takes `sourceUrl`, and the injected downloader seam is gone with it; a new document
+reaches the editor only through `POST /v1/template-editing-sessions/:id/source` (the editor test
+host now uploads the file there). `POST /v1/signing/signature-preview` and
+`POST /v1/signing/text-preview` are one endpoint, `POST /v1/signing/preview`, with the same checks,
+image bytes and headers for each field type.
+
+`POST /v1/envelopes` now prepares the envelope in the same request: it copies the template's
+source to `envelopes/<id>/d0.pdf`, and one D1 batch writes the idempotency record, the envelope
+(`IN_PROGRESS`), its tasks (the first `ACTIVE`) and the D0 artifact row. `PROCESSING` no longer
+exists. The envelope id is the first 16 bytes of SHA-256 over
+`["esign-envelope-id-v1", tenant id, Idempotency-Key]`, shaped as a version 8 UUID, so a retry
+after a failure names the same D0 key and reuses the object a failed attempt stored instead of
+storing a second one. `POST /v1/envelopes/:id/prepare` is deprecated and kept as a no-op (204 for
+an envelope of the tenant, 404 otherwise) because a caller still calls it.
+
+The unmounted local host page no longer lists templates (its `TemplateLibrary` used the removed
+list) and shows the delivery PDF. Tests that only covered removed things were deleted: the legacy
+editor code exchange, the URL source API, the in-memory URL downloader and the browser URL
+downloader, the code revocation migration, the template list and the host page's retry of a
+failed preparation. No cloud resource was changed.
+
+## Compare-and-set writes instead of the assertions table
+
+Nothing had been deployed, so `0005_assertions.sql` was deleted in place: a fresh database now has
+18 tables. The table existed only so that a D1 batch could abort itself (`INSERT INTO assertions
+SELECT CASE WHEN <condition> THEN 1 ELSE 0 END` against a `CHECK (ok = 1)`, then
+`DELETE FROM assertions`). Its 12 uses are gone; each write now commits in one of two ways:
+
+- **Compare-and-set in one statement.** The preconditions are part of the statement
+  (`UPDATE ... WHERE` or `INSERT ... SELECT ... WHERE`) and the code checks `meta.changes`. A
+  single SQLite statement is atomic; UNIQUE constraints back it up.
+- **Commit point last.** What a step needs is written first, where nobody can reach it (R2
+  objects, a session or token row whose token has not been returned, a template row nothing
+  references); one final compare-and-set makes it visible. The steps after it are idempotent
+  conditional updates that read only the current state.
+
+Per site: signing (five former guards: session/verification/turn/template, the D0 input, the
+previous signature's output, and for a document without fields the task count and every
+recipient name) is one `INSERT INTO signatures ... SELECT ... WHERE`, which also requires the
+envelope `IN_PROGRESS`, so a void or an expiry is ordered before or after it; the names are
+compared through one JSON parameter with `json_each`. The field images go to R2 before it. The
+recipient code exchange (two former guards) inserts the session from the still-valid code and
+then marks the code used with `used_at IS NULL` and the validity conditions; the token is
+returned only when that changed one row. The editor page exchange works the same way with
+`editor_page_tokens`, and the editor save inserts the template row and then records it as the
+page's result with `result_template_id IS NULL`. Rendering stores the output PDF and then moves
+the signature from `PENDING` to `DONE`; a run that loses that race checks the winner stored the
+same output. Both seals store their object first, insert the `seals` row only while the envelope
+is `FINALIZING` and move the envelope from `FINALIZING` to `COMPLETED` only with that seal
+(`commitSeal` in `src/local-test-evidence.ts`); the managed seal's completed audit event is
+recorded by the call that made that change. OTP sends and attempts were already single
+conditional statements and are unchanged. Envelope creation still writes its rows in one batch.
+A commit point and its follow-ups that were sent together still share one batch, but nothing
+relies on a batch aborting.
+
+After a commit point the envelope moves on through `advanceStatements`
+(`src/signature-processing.ts`): a task whose signature exists becomes `SIGNED`; with no task
+`ACTIVE` and every signed task rendered, the next `PENDING` task becomes `ACTIVE`; with every task
+signed and rendered, the envelope becomes `FINALIZING`, all only while it is `IN_PROGRESS`. They
+run with every rendering, and `completeEnvelope` now runs them first, so a half-advanced envelope
+is repaired. The cron sweep also picks `IN_PROGRESS` envelopes with no unsigned `ACTIVE` task
+(a signature whose task was not marked, a next task not activated, all signed but not
+`FINALIZING`), besides those with a pending signature and those `FINALIZING`; a `FINALIZING`
+envelope whose seal is already recorded is completed with that seal. Deadlines now treat a task
+whose signature exists as signed even before it is marked.
+
+Orphans that a failure before a commit point can now leave, unreferenced and unreachable: R2
+field images, output PDFs and seal objects (as before), an editor save's template source object
+and template row, and a recipient page session or editor token row whose exchange lost. None is
+cleaned up automatically.
+
+Tests: the migration lists of six tests no longer name 0005, and `envelopes.test.ts` now also
+applies 0007 because reading an envelope checks deadlines against signatures. The new
+`envelope-repair.test.ts` leaves an envelope half-advanced at each stage (a signature whose task
+is still `ACTIVE`, with the signer's deadline passed; a rendered signature whose next task is
+still `PENDING`; a voided envelope, which is not moved; every task signed but the envelope still
+`IN_PROGRESS`; a sealed envelope still `FINALIZING`) and checks that the cron sweep finishes it,
+reusing the stored seal. The existing race, retry and tamper tests pass unchanged.
+README.md ("How writes commit"), WORKER-MODE.md and DEPLOYMENT-RUNBOOK.md (18 tables) were
+updated. No cloud resource was changed.

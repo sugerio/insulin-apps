@@ -3,53 +3,85 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
-const processing = await import('../src/signature-processing.ts').catch(() => ({}));
+import { unstable_splitSqlQuery } from 'wrangler';
+import { processSignature } from '../src/signature-processing.ts';
+import { canonicalJson } from '../src/canonical-json.ts';
+import { APPENDED_PAGE_RENDERER, signatureEventHash } from '../src/signatures.ts';
+
+const sha = async (bytes: Uint8Array | ArrayBuffer) => Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+
+/** A saved signature row as recordSignature writes it: facts, render and their event hash. */
+async function signatureRow(db: D1Database, id: string, envelopeId: string, taskId: string, name: string, inputHash: string, eventHash?: string) {
+  const facts = { version: 1, signatureId: id, taskId, role: taskId, recipientName: name, recipientEmail: `${taskId}@example.com`, sessionHash: 'a'.repeat(64), otpVerifiedAt: 1000, consentedAt: 2000, inputArtifactId: 'd0' };
+  const render = { version: 1, kind: 'appended-page', renderer: APPENDED_PAGE_RENDERER, inputPageCount: 1, slot: 0, name, signedAt: new Date(2000).toISOString() };
+  const hash = eventHash ?? await signatureEventHash({ previousHash: null, envelopeId, sequence: 1, inputSha256: inputHash }, facts, render);
+  await db.prepare(`INSERT INTO signatures (id,envelope_id,task_id,sequence,status,input_artifact_id,input_sha256,previous_hash,event_hash,facts_json,render_json) VALUES (?,?,?,1,'PENDING','d0',?,NULL,?,?,?)`)
+    .bind(id, envelopeId, taskId, inputHash, hash, canonicalJson(facts), canonicalJson(render)).run();
+}
 
 test('processing preserves input, creates one signed PDF and activates the next task after retry', async () => {
-  assert.equal(typeof processing.processSignatureJob, 'function', 'signature processing is missing');
   const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
   try {
     const db = await mf.getD1Database('DB'), bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signature_records.sql','0008_signature_events.sql','0011_signature_layout.sql','0017_positioned_signatures.sql', '0050_task_expiry.sql']) {
+    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0006_page_authorization.sql','0007_signatures.sql']) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(sql.split(';').map(s=>s.trim()).filter(Boolean).map(s=>db.prepare(s)));
+      await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
     }
     const pdf = await PDFDocument.create(); pdf.addPage(); const bytes = await pdf.save();
-    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n=>n.toString(16).padStart(2,'0')).join('');
+    const hash = await sha(bytes);
     await db.exec(`INSERT INTO tenants VALUES ('a');
-INSERT INTO templates VALUES ('template','a','source','["ana","marcus"]',1);
-INSERT INTO envelopes VALUES ('env','a','template','IN_PROGRESS',1);
-INSERT INTO tasks VALUES ('ana','env','ana','Ana','ana@example.com',1,'SIGNED');
-INSERT INTO tasks VALUES ('marcus','env','marcus','Marcus','marcus@example.com',2,'PENDING');
-INSERT INTO recipient_page_sessions VALUES ('session','a','env','ana','https://host.example.com',999999);
-INSERT INTO signature_records VALUES ('sig','env','ana',1,'session','Ana','d0','${hash}',1000,2000);
-INSERT INTO signature_jobs VALUES ('job','sig','PENDING');
-INSERT INTO signature_events (signature_id,envelope_id,sequence,previous_hash,event_hash) VALUES ('sig','env',1,'','test');`);
+INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','a','source','["ana","marcus"]',1);
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('env','a','template','IN_PROGRESS',1);
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at) VALUES ('forged','a','template','IN_PROGRESS',1);
+INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','env','ana','Ana','ana@example.com',1,'SIGNED');
+INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus','env','marcus','Marcus','marcus@example.com',2,'PENDING');
+INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('wide','forged','ana','Ana','wide@example.com',1,'SIGNED');`);
     await db.prepare("INSERT INTO artifacts VALUES ('d0','env','d0.pdf',?)").bind(hash).run();
+    await signatureRow(db, 'sig', 'env', 'ana', 'Ana', hash);
+
+    // A record whose event hash does not match its facts is never rendered.
+    await signatureRow(db, 'forged-sig', 'forged', 'wide', 'W'.repeat(200), hash, 'f'.repeat(64));
+    await assert.rejects(() => processSignature(db, bucket, 'forged-sig'), /Event hash mismatch/);
+
     await bucket.put('d0.pdf', 'tampered');
-    await assert.rejects(() => processing.processSignatureJob(db,bucket,'job'), /hash mismatch/);
-    assert.equal((await db.prepare("SELECT status FROM signature_jobs WHERE id='job'").first())!.status, 'PENDING');
+    await assert.rejects(() => processSignature(db, bucket, 'sig'), /Input mismatch/);
+    assert.equal((await db.prepare("SELECT status FROM signatures WHERE id='sig'").first())!.status, 'PENDING');
     await bucket.put('d0.pdf', bytes);
-    await db.prepare("UPDATE signature_records SET recipient_name=? WHERE id='sig'").bind('W'.repeat(200)).run();
-    await assert.rejects(() => processing.processSignatureJob(db,bucket,'job'), /unsupported recipient name/i);
-    assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_outputs').first())!.n, 0);
-    assert.equal((await db.prepare("SELECT status FROM signature_jobs WHERE id='job'").first())!.status, 'PENDING');
-    await db.prepare("UPDATE signature_records SET recipient_name='Ana' WHERE id='sig'").run();
+
+    // After the insert the facts never change and the row is never deleted.
+    for (const change of ["facts_json='{}'", "render_json='{}'", "event_hash='x'", "previous_hash='x'", "input_sha256='x'", "task_id='marcus'", 'sequence=2'])
+      await assert.rejects(() => db.prepare(`UPDATE signatures SET ${change} WHERE id='sig'`).run(), /immutable/, change);
+    await assert.rejects(() => db.prepare("DELETE FROM signatures WHERE id='sig'").run(), /cannot be deleted/);
+    await assert.rejects(() => db.prepare("UPDATE signatures SET status='DONE' WHERE id='sig'").run(), /CHECK/);
+    await db.prepare("UPDATE signatures SET attempts=attempts+1,last_error='simulated' WHERE id='sig'").run();
+
     const failingDb = new Proxy(db, {get(target, key) {
       if (key === 'batch') return async () => { throw new Error('simulated D1 failure'); };
       const value = Reflect.get(target, key, target);
       return typeof value === 'function' ? value.bind(target) : value;
     }});
-    await assert.rejects(() => processing.processSignatureJob(failingDb,bucket,'job'), /simulated D1 failure/);
-    assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_outputs').first())!.n, 0);
-    await Promise.all([processing.processSignatureJob(db,bucket,'job'), processing.processSignatureJob(db,bucket,'job')]);
-    await processing.processSignatureJob(db,bucket,'job');
-    assert.equal((await db.prepare("SELECT status FROM signature_jobs WHERE id='job'").first())!.status, 'DONE');
+    await assert.rejects(() => processSignature(failingDb, bucket, 'sig'), /simulated D1 failure/);
+    assert.equal((await db.prepare("SELECT output_sha256 FROM signatures WHERE id='sig'").first())!.output_sha256, null);
+    await Promise.all([processSignature(db, bucket, 'sig'), processSignature(db, bucket, 'sig')]);
+    await processSignature(db, bucket, 'sig');
+    const out = (await db.prepare("SELECT status, output_artifact_id, output_sha256 FROM signatures WHERE id='sig'").first<{ status: string; output_artifact_id: string; output_sha256: string }>())!;
+    assert.equal(out.status, 'DONE');
+    assert.equal(out.output_artifact_id, 'signed:sig');
     assert.equal((await db.prepare("SELECT status FROM tasks WHERE id='marcus'").first())!.status, 'ACTIVE');
-    const out = await db.prepare('SELECT object_key, sha256 FROM signature_outputs').first();
-    assert.ok(out); assert.notEqual(out!.sha256, hash);
-    assert.equal((await PDFDocument.load(await (await bucket.get(out!.object_key as string))!.arrayBuffer())).getPageCount(), 2);
+    assert.notEqual(out.output_sha256, hash);
+    const key = 'envelopes/env/signed:sig.pdf', signed = await (await bucket.get(key))!.arrayBuffer();
+    assert.equal(await sha(signed), out.output_sha256);
+    assert.equal((await PDFDocument.load(signed)).getPageCount(), 2);
     assert.deepEqual(new Uint8Array(await (await bucket.get('d0.pdf'))!.arrayBuffer()), bytes);
-    assert.equal((await db.prepare('SELECT count(*) AS n FROM signature_outputs').first())!.n, 1);
+
+    // A rendered signature stays rendered, with the same output.
+    for (const change of ["status='PENDING', output_artifact_id=NULL, output_sha256=NULL", "output_sha256='x'", "output_artifact_id='x'"])
+      await assert.rejects(() => db.prepare(`UPDATE signatures SET ${change} WHERE id='sig'`).run(), /final/, change);
+
+    // Rendering again checks the stored PDF byte for byte.
+    await bucket.put(key, 'tampered');
+    await assert.rejects(() => processSignature(db, bucket, 'sig'), /Output integrity failure/);
+    await bucket.put(key, signed);
+    await processSignature(db, bucket, 'sig');
   } finally { await mf.dispose(); }
 });

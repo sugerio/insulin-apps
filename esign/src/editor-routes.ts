@@ -12,35 +12,18 @@ async function stagedBytes(bucket:R2Bucket,key:string,hash:string){const object=
 function rolesValid(value:unknown,caseSensitive=false):value is string[]{return Array.isArray(value)&&value.length>0&&value.length<=20&&value.every(r=>typeof r==='string'&&r===r.trim()&&r.length>0&&r.length<=64)&&new Set(value.map(r=>caseSensitive?r:r.toLowerCase())).size===value.length;}
 function sameOrigin(request:Request){const origin=request.headers.get('origin');return !origin||origin===new URL(request.url).origin;}
 async function contextFor(c:import('hono').Context<Env>){const match=/^Bearer ([a-f0-9]{64})$/.exec(c.req.header('authorization')??'');if(!match)throw new Error('unauthorized');return editorPageContext(c.env.DB,match[1],Date.now());}
-// Injection must provide a security-reviewed network boundary; the Worker supplies none by default.
-type SourceDownloader=(url:string,signal:AbortSignal)=>Promise<Uint8Array>;
-export function mountEditorRoutes(app:Hono<Env>,managementAuth:MiddlewareHandler<Env>,options:{downloadSource?:SourceDownloader}={}){
+export function mountEditorRoutes(app:Hono<Env>,managementAuth:MiddlewareHandler<Env>){
  app.use('/v1/template-editing-sessions',managementAuth);app.use('/v1/template-editing-sessions/*',managementAuth);
  app.post('/v1/template-editing-sessions',bodyLimit({maxSize:8192}),async c=>{
-  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;sourceUrl?:unknown;roles?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
+  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
   if(!input||typeof input.allowedParentOrigin!=='string'||(input.sourceTemplateId!==undefined&&(typeof input.sourceTemplateId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(input.sourceTemplateId)))||(input.roles!==undefined&&!rolesValid(input.roles)))return c.json({error:'invalid_session'},422);
-  let sourceUrl:string|undefined;
-  if(input.sourceUrl!==undefined){if(typeof input.sourceUrl!=='string'||input.sourceUrl.length>4096||input.sourceTemplateId!==undefined)return c.json({error:'invalid_session'},422);try{const u=new URL(input.sourceUrl);if(u.protocol!=='https:'||u.username||u.password||u.hash||u.port)throw new Error('invalid');sourceUrl=u.href;}catch{return c.json({error:'invalid_session'},422);}}
   const tenant=c.get('tenantId');
   let sourceHash:string|null=null;
   if(input.sourceTemplateId){const source=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(input.sourceTemplateId,tenant).first<{object_key:string}>();if(!source)return c.json({error:'not_found'},404);
    try{const object=await c.env.ARTIFACTS.get(source.object_key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');sourceHash=await sha256(new Uint8Array(await object.arrayBuffer()));}catch{return c.json({error:'source_unavailable'},503);}
   }
   let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now());}catch{return c.json({error:'origin_not_allowed'},403);}
-  let stagedKey:string|null=null,stagedHash:string|null=null;
-  if(sourceUrl){
-   if(!options.downloadSource)return c.json({error:'source_unavailable'},503);
-   const abort=new AbortController();let timeout:ReturnType<typeof setTimeout>|undefined;
-   try{
-    const expired=new Promise<never>((_,reject)=>{timeout=setTimeout(()=>{abort.abort();reject(new Error('timeout'));},15000);});
-    const bytes=await Promise.race([options.downloadSource(sourceUrl,abort.signal),expired]);
-    if(!(bytes instanceof Uint8Array)||bytes.length<5||bytes.length>limit||new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')throw new Error('invalid');
-    const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});if(!pdf.getPageCount()||pdf.getPageCount()>100)throw new Error('invalid');
-    stagedHash=await sha256(bytes);stagedKey=`editor-sources/${issued.pageId}/${crypto.randomUUID()}.pdf`;
-    if(!await c.env.ARTIFACTS.put(stagedKey,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/pdf'}}))throw new Error('storage');
-   }catch{return c.json({error:'source_unavailable'},503);}finally{if(timeout)clearTimeout(timeout);abort.abort();}
-  }
-  await c.env.DB.prepare('UPDATE editor_page_entries SET source_template_id=?,source_sha256=?,preset_roles_json=?,staged_object_key=?,staged_sha256=? WHERE page_id=?').bind(input.sourceTemplateId??null,sourceHash,JSON.stringify(input.roles??[]),stagedKey,stagedHash,issued.pageId).run();
+  await c.env.DB.prepare('UPDATE editor_page_entries SET source_template_id=?,source_sha256=?,preset_roles_json=? WHERE page_id=?').bind(input.sourceTemplateId??null,sourceHash,JSON.stringify(input.roles??[]),issued.pageId).run();
   const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;
   c.header('Cache-Control','no-store');c.header('Referrer-Policy','no-referrer');return c.json({sessionId:issued.pageId,url:url.toString()},201);
  });
@@ -78,12 +61,15 @@ export function mountEditorRoutes(app:Hono<Env>,managementAuth:MiddlewareHandler
   try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./template-fields.ts').TemplateField[]);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
   try{assertEditorSigningFields(fields as import('./template-fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
   const id=crypto.randomUUID(),key=`templates/${id}/source.pdf`;const stored=await c.env.ARTIFACTS.put(key,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/pdf'}});if(!stored)return c.json({error:'storage_conflict'},503);
-  try{await c.env.DB.batch([
-   c.env.DB.prepare('INSERT INTO editor_page_assertions SELECT CASE WHEN EXISTS (SELECT 1 FROM editor_page_entries e JOIN editor_allowed_origins o ON o.tenant_id=e.tenant_id AND o.origin=e.parent_origin JOIN editor_page_tokens t ON t.page_id=e.page_id WHERE e.page_id=? AND e.tenant_id=? AND e.result_template_id IS NULL AND t.expires_at>?) THEN 1 ELSE 0 END').bind(session.pageId,session.tenantId,Date.now()),
+  // The template row first: nothing references it and its id is returned only after the commit
+  // point, a compare-and-set that records it as this page's result while the page is still unsaved
+  // and has a live token. A row whose CAS lost is an unreachable, harmless orphan.
+  let saved:D1Result;
+  try{[,saved]=await c.env.DB.batch([
    c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at) VALUES (?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now()),
-   c.env.DB.prepare('UPDATE editor_page_entries SET result_template_id=? WHERE page_id=?').bind(id,session.pageId),
-   c.env.DB.prepare('DELETE FROM editor_page_assertions')
-  ]);}catch{const result=await c.env.DB.prepare('SELECT result_template_id FROM editor_page_entries WHERE page_id=?').bind(session.pageId).first<{result_template_id:string|null}>();if(result?.result_template_id)return c.json({error:'already_saved'},409);return c.json({error:'save_failed'},503);}
+   c.env.DB.prepare('UPDATE editor_page_entries AS e SET result_template_id=? WHERE e.page_id=? AND e.tenant_id=? AND e.result_template_id IS NULL AND EXISTS (SELECT 1 FROM editor_allowed_origins o WHERE o.tenant_id=e.tenant_id AND o.origin=e.parent_origin) AND EXISTS (SELECT 1 FROM editor_page_tokens t WHERE t.page_id=e.page_id AND t.expires_at>?)').bind(id,session.pageId,session.tenantId,Date.now()),
+  ]);}catch{saved={meta:{changes:0}} as D1Result;}
+  if(saved.meta.changes!==1){const result=await c.env.DB.prepare('SELECT result_template_id FROM editor_page_entries WHERE page_id=?').bind(session.pageId).first<{result_template_id:string|null}>();if(result?.result_template_id)return c.json({error:'already_saved'},409);return c.json({error:'save_failed'},503);}
   return c.json({id},201);
  });
 }

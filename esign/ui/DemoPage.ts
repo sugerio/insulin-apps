@@ -112,7 +112,6 @@ export function DemoPage(){
       // Retrying the same send reuses its idempotency key, so a lost response cannot send twice.
       if(!attempt.current||attempt.current.body!==body)attempt.current={body,key:crypto.randomUUID()};
       const {id}=await (await call('/v1/envelopes',{method:'POST',headers:{'content-type':'application/json','idempotency-key':attempt.current.key},body})).json() as {id:string};
-      await call(`/v1/envelopes/${id}/prepare`,{method:'POST'});
       attempt.current=null;const next=[id,...recent.filter(x=>x!==id)].slice(0,10);setRecent(next);save('local',RECENT_STORAGE,JSON.stringify(next));
       setFrame('');setPdf(null);setCertificate(null);await refresh(id);setMessage('Sent. Open each signer\'s page below.');
     });}
@@ -120,7 +119,7 @@ export function DemoPage(){
   function sign(task:Task){if(!envelope)return;void run(async()=>{
     const {code}=await (await call(`/v1/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({origin:window.location.origin})})).json() as {code:string};
     setFrame(`/sign#code=${encodeURIComponent(code)}`);});}
-  function download(kind:'final-pdf'|'delivery-pdf'){if(!envelope)return;void run(async()=>{const blob=await (await call(`/v1/envelopes/${envelope.id}/${kind}`)).blob();setPdf({url:URL.createObjectURL(blob),name:kind==='final-pdf'?'signed.pdf':'signed-with-certificate.pdf'});});}
+  function download(){if(!envelope)return;void run(async()=>{const blob=await (await call(`/v1/envelopes/${envelope.id}/delivery-pdf`)).blob();setPdf({url:URL.createObjectURL(blob),name:'signed-with-certificate.pdf'});});}
   function showCertificate(){if(!envelope)return;void run(async()=>{setCertificate(await (await call(`/v1/envelopes/${envelope.id}/certificate`)).json() as Certificate);});}
 
   const field=(label:string,input:React.ReactElement)=>h('label',{style:{display:'block',margin:'0.4rem 0'}},label,' ',input);
@@ -160,8 +159,7 @@ export function DemoPage(){
       h('ol',null,...envelope.tasks.map(task=>h('li',{key:task.id},`${task.recipientName} <${task.recipientEmail}>: ${task.status} `,
         task.status==='ACTIVE'&&h('button',{type:'button',disabled:busy,onClick:()=>sign(task)},`Open ${task.recipientName}'s signing page`)))),
       envelope.status==='COMPLETED'&&h('p',null,
-        h('button',{type:'button',disabled:busy,onClick:()=>download('final-pdf')},'View signed PDF'),' ',
-        h('button',{type:'button',disabled:busy,onClick:()=>download('delivery-pdf')},'View signed PDF with certificate'),' ',
+        h('button',{type:'button',disabled:busy,onClick:download},'View signed PDF with certificate'),' ',
         h('button',{type:'button',disabled:busy,onClick:showCertificate},'View completion certificate')),
       frame&&h('div',null,h('button',{type:'button',onClick:()=>setFrame('')},'Close the signing page'),
         h('iframe',{title:'Recipient signing page',src:frame,width:'100%',height:'800',sandbox:'allow-scripts allow-same-origin allow-forms'}))),

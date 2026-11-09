@@ -5,7 +5,6 @@ const status=document.querySelector<HTMLElement>('#status')!;
 const roles=document.querySelector<HTMLInputElement>('#roles')!;
 const source=document.querySelector<HTMLInputElement>('#source')!;
 const fileInput=document.querySelector<HTMLInputElement>('#file')!;
-const pdfUrl=document.querySelector<HTMLInputElement>('#pdf-url')!;
 const syntheticConfirmation=document.querySelector<HTMLInputElement>('#synthetic-confirmation')!;
 let downloadAbort:AbortController|undefined;
 const continueButton=document.querySelector<HTMLButtonElement>('#continue')!;
@@ -17,8 +16,8 @@ document.querySelector<HTMLButtonElement>('#open')!.addEventListener('click',asy
  abandonedSave ||= !!pending;downloadAbort?.abort();const controller=new AbortController();downloadAbort=controller;const current=++generation;sessionId='';editorOrigin='';pending='';ready=false;continueButton.disabled=true;clearTimeout(timer);frame.removeAttribute('src');setStatus('Opening editor…');
  try{
   if(!syntheticConfirmation.checked)throw new Error('Synthetic data confirmation required');
-  const file=fileInput.files?.[0],sourceId=source.value.trim(),inputUrl=pdfUrl.value.trim();pdfUrl.value='';
-  if(Number(!!file)+Number(!!sourceId)+Number(!!inputUrl)!==1)throw new Error('Choose one source');
+  const file=fileInput.files?.[0],sourceId=source.value.trim();
+  if(Number(!!file)+Number(!!sourceId)!==1)throw new Error('Choose one source');
   const roleValues=roles.value.split(',').map(s=>s.trim()).filter(Boolean);
   let response:Response;
   if(file){
@@ -27,12 +26,12 @@ document.querySelector<HTMLButtonElement>('#open')!.addEventListener('click',asy
    const form=new FormData();form.set('file',file);form.set('roles',JSON.stringify(roleValues));
    response=await fetch('/host/editor-demo-session',{method:'POST',headers:{'x-local-esign':'1','x-esign-synthetic-confirmed':'true'},body:form,signal:AbortSignal.timeout(15000)});
   }else{
-   response=await fetch('/host/template-editing-sessions',{method:'POST',headers:{'content-type':'application/json','x-local-esign':'1','x-esign-synthetic-confirmed':'true'},signal:AbortSignal.timeout(15000),body:JSON.stringify({allowedParentOrigin:location.origin,roles:roleValues,...(sourceId?{sourceTemplateId:sourceId}:{}),...(inputUrl?{sourceUrl:inputUrl}:{})})});
+   response=await fetch('/host/template-editing-sessions',{method:'POST',headers:{'content-type':'application/json','x-local-esign':'1','x-esign-synthetic-confirmed':'true'},signal:AbortSignal.timeout(15000),body:JSON.stringify({allowedParentOrigin:location.origin,roles:roleValues,...(sourceId?{sourceTemplateId:sourceId}:{})})});
   }
   if(!response.ok)throw new Error('Cannot open session');const data=await response.json() as {sessionId:string;url:string};if(current!==generation)return;
   const url=new URL(editorDemoURL(location.origin,data.url,data.sessionId));
   if(current!==generation)return;sessionId=data.sessionId;editorOrigin=url.origin;frame.src=url.href;setStatus('Editor open.');
- }catch{if(current===generation)setStatus('Could not open editor. Confirm synthetic-only use and choose one valid synthetic PDF, HTTPS URL or source template. External URL downloads are disabled until a secure downloader is configured.');}
+ }catch{if(current===generation)setStatus('Could not open editor. Confirm synthetic-only use and choose one valid synthetic PDF or source template.');}
 });
 async function checkSave(expectedTemplateId?:string){
  if(!sessionId)return;

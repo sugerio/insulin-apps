@@ -4,12 +4,13 @@ import { AUDIT, requestFacts } from './audit.ts';
 import { expireDueEnvelopes, expireIfDue, parseDeadline } from './task-expiry.ts';
 import { parseDocumentName, parseNamedBy, parseSender, parseSignerFacts, type SignerFacts } from './signer-facts.ts';
 import { CERTIFICATE_VERSION } from './delivery-pdf.ts';
+import type { EnvelopeDetails, TaskDetails } from './details.ts';
 import { PDFDocument } from 'pdf-lib';
 import { assertNoOverlappingFields } from './template-fields.ts';
-import { positionedFields, validatePositionedPdf, validatePositionedPlacement } from './positioned-template.ts';
+import { validatePositionedPdf, validatePositionedPlacement } from './positioned-template.ts';
 import {positionedV3Fields} from './positioned-v3-snapshot.ts';
 import { assertRenderableRecipientNames } from './recipient-name.ts';
-import { prepareEnvelope } from './prepare.ts';
+import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './prepare.ts';
 import { localSigningEnabled, mountLocalSigningRoutes } from './local-signing-routes.ts';
 import { mountEditorRoutes } from './editor-routes.ts';
 import { demoPage, EMBEDDABLE_HEADERS, signingPage } from './signing-page.ts';
@@ -23,6 +24,7 @@ type Bindings = {
   COMPLETE_AFTER_SIGN?: string;
   /** Space-separated origins allowed to embed the signing page at /sign. */
   SIGNING_PAGE_FRAME_ANCESTORS?: string;
+  SIGNING_PAGE_ORIGINS?: string;
 };
 type Env = { Bindings: Bindings; Variables: { tenantId: string } };
 
@@ -37,12 +39,11 @@ export const managementAuth = async (context: import('hono').Context<Env>, next:
   context.set('tenantId', row.tenant_id);
   await next();
 };
-function createApp(v3Enabled: boolean) {
+function createApp() {
 const app = new Hono<Env>();
 app.get('/health', (context) => context.json({ status: 'ok', service: 'esign', mode: 'experimental' }));
-// Date signed and Title fields are signed through the v3 chain; Signature-only templates keep v2.
-const hasV3Fields=(raw:string)=>{const fields:unknown=JSON.parse(raw);return Array.isArray(fields)&&fields.some((f:any)=>f?.type==='Date signed'||f?.type==='Title');};
-const supportedFields=(raw:string,roles:string[],pages:number)=>v3Enabled&&hasV3Fields(raw)?positionedV3Fields(JSON.parse(raw),roles,pages):positionedFields(raw,roles,pages);
+// The placed fields a document can be signed with: Signature, Date signed and Title.
+const supportedFields=(raw:string,roles:string[],pages:number)=>positionedV3Fields(JSON.parse(raw),roles,pages);
 app.use('/v1/me', managementAuth);
 app.use('/v1/templates', managementAuth);
 app.use('/v1/templates/*', managementAuth);
@@ -99,17 +100,6 @@ app.post('/v1/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async (
   await context.env.DB.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(id, context.get('tenantId'), key, JSON.stringify(roles), Date.now()).run();
   return context.json({ id, roles }, 201);
-});
-
-app.get('/v1/templates', async context => {
-  const params=new URL(context.req.url).searchParams;
-  if([...params.keys()].some(key=>key!=='cursor')||params.getAll('cursor').length>1)return context.json({error:'invalid_cursor'},400);
-  const cursor=params.get('cursor')??'',tenant=context.get('tenantId');
-  if(cursor&&!/^[A-Za-z0-9_-]{1,128}$/.test(cursor))return context.json({error:'invalid_cursor'},400);
-  const previous=cursor?await context.env.DB.prepare('SELECT id,created_at FROM templates WHERE tenant_id=? AND id=?').bind(tenant,cursor).first<{id:string;created_at:number}>():null;
-  if(cursor&&!previous)return context.json({error:'invalid_cursor'},400);
-  const rows=(await context.env.DB.prepare('SELECT id,created_at FROM templates WHERE tenant_id=? AND (? IS NULL OR created_at<? OR (created_at=? AND id<?)) ORDER BY created_at DESC,id DESC LIMIT 21').bind(tenant,previous?.id??null,previous?.created_at??0,previous?.created_at??0,previous?.id??'').all<{id:string;created_at:number}>()).results;
-  return context.json({templates:rows.slice(0,20).map(row=>({id:row.id,createdAt:row.created_at})),nextCursor:rows.length>20?rows[19].id:null});
 });
 
 app.get('/v1/templates/:id', async (context) => {
@@ -194,7 +184,7 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   if (existing) return existing.request_hash === hash ? context.json(JSON.parse(existing.response_json), 201) : context.json({ error: 'idempotency_conflict' }, 409);
   try { await assertRenderableRecipientNames(recipients.map((recipient) => recipient.name)); }
   catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
-  const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ roles_json: string; fields_json?: string }>();
+  const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string }>();
   if (!template) return context.json({ error: 'not_found' }, 404);
   const roles = JSON.parse(template.roles_json) as string[];
   if (template.fields_json !== undefined) {
@@ -209,20 +199,27 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     } catch { return context.json({ error: 'positioned_fields_not_supported' }, 422); }
   }
   if (roles.length !== recipients.length || new Set(recipients.map((r) => r.role)).size !== roles.length || recipients.some((r) => !roles.includes(r.role))) return context.json({ error: 'invalid_roles' }, 422);
-  const id = crypto.randomUUID();
+  // The envelope is prepared here, in the same request: its initial document (D0) is the template's
+  // source, and the first signer's task is active. The id comes from the tenant and the
+  // Idempotency-Key, so a retry after a failure reuses the D0 object stored by the failed attempt.
+  const id = await envelopeIdFor(tenantId, key);
+  let d0: { id: string; objectKey: string; sha256: string };
+  try { d0 = await storeInitialDocument(context.env.ARTIFACTS, template.object_key, id); }
+  catch (error) {
+    if (!(error instanceof InitialDocumentConflict)) return context.json({ error: 'preparation_failed' }, 503);
+    // Another request with this key stored a different document: it is a different request.
+    const raced = await lookup();
+    return raced && raced.request_hash === hash ? context.json(JSON.parse(raced.response_json), 201) : context.json({ error: 'idempotency_conflict' }, 409);
+  }
   const taskIds = recipients.map(() => crypto.randomUUID());
-  const response = { id, status: 'PROCESSING' };
+  const response = { id, status: 'IN_PROGRESS' };
+  // One batch: the envelope, its tasks and its D0 artifact commit together or not at all.
   const statements = [
     context.env.DB.prepare('INSERT INTO idempotency_keys (tenant_id, idempotency_key, request_hash, response_json) VALUES (?, ?, ?, ?)').bind(tenantId, `envelope:${key}`, hash, JSON.stringify(response)),
-    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at) VALUES (?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, 'PROCESSING', Date.now()),
-    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, 'PENDING')),
-    ...recipients.flatMap((_, index) => deadlines[index] === null ? [] : [context.env.DB.prepare('INSERT INTO task_deadlines (task_id, expires_at) VALUES (?, ?)').bind(taskIds[index], deadlines[index])]),
-    ...recipients.flatMap((_, index) => signerFacts[index].title || signerFacts[index].onBehalfOf ? [context.env.DB.prepare('INSERT INTO task_signer_facts (task_id, title, on_behalf_of) VALUES (?, ?, ?)').bind(taskIds[index], signerFacts[index].title ?? null, signerFacts[index].onBehalfOf ?? null)] : []),
-    ...(documentName ? [context.env.DB.prepare('INSERT INTO envelope_documents (envelope_id, document_name) VALUES (?, ?)').bind(id, documentName)] : []),
-    ...(sender ? [context.env.DB.prepare('INSERT INTO envelope_senders (envelope_id, name, email, organization) VALUES (?, ?, ?, ?)').bind(id, sender.name, sender.email ?? null, sender.organization ?? null)] : []),
-    ...recipients.flatMap((_, index) => namedBy[index] ? [context.env.DB.prepare('INSERT INTO task_named_by (task_id, named_by) VALUES (?, ?)').bind(taskIds[index], namedBy[index])] : []),
-    // The certificate layout this envelope is made with, fixed for good.
-    context.env.DB.prepare('INSERT INTO envelope_certificate_versions (envelope_id, version) VALUES (?, ?)').bind(id, CERTIFICATE_VERSION),
+    // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
+    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, details_json) VALUES (?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, 'IN_PROGRESS', Date.now(), JSON.stringify({ ...(documentName ? { documentName } : {}), ...(sender ? { sender } : {}), certificateVersion: CERTIFICATE_VERSION } satisfies EnvelopeDetails)),
+    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}) } satisfies TaskDetails))),
+    context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
   ];
   try { await context.env.DB.batch(statements); }
   catch (error) {
@@ -241,19 +238,19 @@ app.get('/v1/envelopes/:id', async (context) => {
   const envelope = await context.env.DB.prepare('SELECT id, template_id, status, created_at FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ id: string; template_id: string; status: string; created_at: number }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
-  const tasks = await context.env.DB.prepare(`SELECT t.id, t.role, t.recipient_name, t.recipient_email, t.routing_order, t.status, d.expires_at,
+  const tasks = await context.env.DB.prepare(`SELECT t.id, t.role, t.recipient_name, t.recipient_email, t.routing_order, t.status, t.expires_at,
       (SELECT MIN(a.occurred_at) FROM audit_events a WHERE a.envelope_id = t.envelope_id AND a.task_id = t.id AND a.type = ?) AS opened_at
-    FROM tasks t LEFT JOIN task_deadlines d ON d.task_id = t.id WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; opened_at: number | null }>();
+    FROM tasks t WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; opened_at: number | null }>();
   return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, tasks: tasks.results.map((task) => ({ id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }) })) });
 });
 
+/**
+ * Deprecated: POST /v1/envelopes prepares the envelope itself. Kept as a no-op for callers that
+ * still call it after creating one: 204 for an envelope of this tenant (always prepared), else 404.
+ */
 app.post('/v1/envelopes/:id/prepare', async (context) => {
-  const id = context.req.param('id');
-  const tenantId = context.get('tenantId');
-  const exists = await context.env.DB.prepare('SELECT id FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first();
-  if (!exists) return context.json({ error: 'not_found' }, 404);
-  try { await prepareEnvelope(context.env.DB, context.env.ARTIFACTS, tenantId, id); }
-  catch { return context.json({ error: 'preparation_failed' }, 503); }
+  const prepared = await context.env.DB.prepare('SELECT 1 FROM envelopes e JOIN artifacts a ON a.envelope_id = e.id WHERE e.id = ? AND e.tenant_id = ?').bind(context.req.param('id'), context.get('tenantId')).first();
+  if (!prepared) return context.json({ error: 'not_found' }, 404);
   return context.body(null, 204);
 });
 
@@ -305,7 +302,7 @@ app.post('/v1/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context)
     const { ip, userAgent } = requestFacts(context.req.raw);
     // One batch: the status change and its audit event commit together, once.
     await db.batch([
-      db.prepare("UPDATE envelopes SET status = 'VOIDED' WHERE id = ? AND tenant_id = ? AND status IN ('PROCESSING', 'IN_PROGRESS')").bind(id, tenantId),
+      db.prepare("UPDATE envelopes SET status = 'VOIDED' WHERE id = ? AND tenant_id = ? AND status = 'IN_PROGRESS'").bind(id, tenantId),
       db.prepare("INSERT INTO audit_events (envelope_id, task_id, type, occurred_at, ip, user_agent, detail_json) SELECT ?, NULL, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id = ? AND status = 'VOIDED') AND NOT EXISTS (SELECT 1 FROM audit_events WHERE envelope_id = ? AND type = ?)")
         .bind(id, AUDIT.voided, Date.now(), ip, userAgent, JSON.stringify(reason ? { reason } : {}), id, id, AUDIT.voided),
     ]);
@@ -314,22 +311,19 @@ app.post('/v1/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context)
   return context.json({ id, status: 'VOIDED' });
 });
 
-mountLocalSigningRoutes(app, v3Enabled);
+mountLocalSigningRoutes(app);
 return app;
 }
-
-// The app with Date signed and Title fields; the Worker entrypoint is the same app.
-export const createV3TestApp = () => createApp(true);
 
 /** Cron trigger: finishes envelopes that the after-signature work did not (see envelope-completion.ts). */
 async function scheduled(_controller: ScheduledController, env: Bindings, ctx: ExecutionContext): Promise<void> {
   if (!localSigningEnabled(env)) return;
   ctx.waitUntil(expireDueEnvelopes(env.DB).catch(() => console.error('E-sign: the expiry sweep failed; the next run retries it')));
-  ctx.waitUntil(sweepEnvelopes(env, true).then((counts) => {
+  ctx.waitUntil(sweepEnvelopes(env).then((counts) => {
     if (counts.failed) console.error(`E-sign: ${counts.failed} envelope(s) could not be finished; the next run retries them`);
   }));
 }
 
 // The Hono app stays the default export (scripts mount it with app.route); the Worker
 // runtime also finds the cron handler on it.
-export default Object.assign(createApp(true), { scheduled });
+export default Object.assign(createApp(), { scheduled });

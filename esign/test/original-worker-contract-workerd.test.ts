@@ -34,6 +34,6 @@ test('original Worker editor preload and management contract in workerd with loc
   const headers={authorization:`Bearer ${token}`,origin:'https://esign.example.test'};
   const context=await request('/v1/editor/current',{headers});assert.equal(context.status,200);assert.deepEqual(await context.json(),{roles:['Signer'],fields:[],sourceTemplateId:null,hasStagedSource:true,parentOrigin:'https://host.example.test'});
   const source=await request('/v1/editor/pdf',{headers});assert.equal(source.status,200);assert.deepEqual(new Uint8Array(await source.arrayBuffer()),bytes);
-  for(const path of ['/v1/page-sessions/exchange','/v1/signing/otp','/v1/signing/sign','/v1/envelopes/e/finalize']) assert.equal((await request(path,{method:'POST',headers:{...auth,'content-type':'application/json'},body:'{}'})).status,404,path);
+  for(const path of ['/v1/page-sessions/exchange','/v1/signing/otp','/v1/signing/sign']) assert.equal((await request(path,{method:'POST',headers:{...auth,'content-type':'application/json'},body:'{}'})).status,404,path);
  } finally {await mf?.dispose();await rm(dir,{recursive:true,force:true});}
 });

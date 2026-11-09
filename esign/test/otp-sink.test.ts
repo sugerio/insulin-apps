@@ -89,7 +89,7 @@ test('without a usable sink, only synthetic test addresses get a code, and nothi
    assert.equal((await w.req('/v1/signing/otp',w.json({},await w.session('ana.partner@partner.example')))).status,429,JSON.stringify(Object.keys(extra)));
    const synthetic=await w.req('/v1/signing/otp',w.json({},await w.session('ana@partner.test')));
    assert.equal(synthetic.status,202);
-   assert.deepEqual(Object.keys(await synthetic.json() as object),['messageId']);
+   assert.deepEqual(Object.keys(await synthetic.json() as object),['messageId','testMailbox']);
   } finally {await w.mf.dispose();}
  }
 });

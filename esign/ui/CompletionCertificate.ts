@@ -49,6 +49,6 @@ export function CompletionCertificate({certificate:c}:{certificate:Certificate})
         h('thead',null,h('tr',null,...['Time (UTC)','Event','Signer','IP address','Browser',''].map(t=>h('th',{key:t,style:{textAlign:'left',borderBottom:'1px solid #999',padding:'0.25rem'}},t)))),
         h('tbody',null,...[...c.audit.sealed.map(e=>[e,true] as const),...c.audit.afterSeal.map(e=>[e,false] as const)].map(([e,sealed])=>h('tr',{key:e.id},
           ...[utc(e.occurredAt),AUDIT_LABELS[e.type]??e.type,c.recipients.find(r=>r.id===e.taskId)?.recipient_name??'',e.ip??'',e.userAgent??'',sealed||c.mode!=='KMS_TSA'?'':'recorded after sealing'].map((v,i)=>h('td',{key:i,style:{padding:'0.25rem',verticalAlign:'top',overflowWrap:'anywhere'}},v)))))))
-    :h('p',null,'Sending, reading, IP address and identity verification beyond the local test OTP are not recorded or established.'),
+    :h('p',null,'Sending, reading, IP address and identity verification beyond the emailed code are not recorded or established.'),
     h('a',{href:`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(c,null,2))}`,download:c.mode==='KMS_TSA'?'certificate.json':'local-test-certificate.json'},'Download certificate JSON'));
 }

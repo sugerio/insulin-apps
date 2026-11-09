@@ -27,10 +27,10 @@ async function toSignStep(renderer:any, act:any) {
   await act(async()=>{await button('Verify code').props.onClick();});
 }
 
-test('recipient page identifies local-only signing and does not request a management key',()=>{
+test('recipient page has a neutral heading, no test-only wording, and does not request a management key',()=>{
   assert.equal(typeof page.RecipientPage,'function','recipient page missing');
   const html=renderToStaticMarkup(React.createElement(page.RecipientPage));
-  assert.match(html,/local test/i);assert.doesNotMatch(html,/api key/i);
+  assert.match(html,/Sign document/);assert.doesNotMatch(html,/local test|experimental|synthetic/i);assert.doesNotMatch(html,/api key/i);
 });
 
 test('recipient page opens the document before the code and retries its load on its own', async () => {
@@ -290,12 +290,13 @@ test('after signing, a Worker-served page does not ask for processing the Worker
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;(globalThis as any).document=oldDocument;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('the page says a code was emailed when the Worker emailed it', async()=>{
+test('the page says how the code was delivered, and points to the test mailbox only in dev', async()=>{
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
-  for(const [otpResponse,expected] of [[{messageId:'m',emailed:true},'Verification code sent by email.'],[{messageId:'m'},'Test code sent to the local test mailbox.']] as const) {
+  // prod emails the signer; dev with a sink emails the sink and keeps a copy; dev without one only keeps it.
+  for(const [otpResponse,expected,note] of [[{messageId:'m',emailed:true},'Verification code sent by email.',false],[{messageId:'m',emailed:true,testMailbox:true},'Verification code sent by email.',true],[{messageId:'m',testMailbox:true},'Test code saved to the test mailbox.',true]] as const) {
    (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
    globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
     if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
@@ -305,7 +306,10 @@ test('the page says a code was emailed when the Worker emailed it', async()=>{
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}));}); await settle(act);
    const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
    await settle(act);
-   assert.ok(JSON.stringify(renderer.toJSON()).includes(`"${expected}"`),expected);
+   const rendered=JSON.stringify(renderer.toJSON());
+   assert.ok(rendered.includes(`"${expected}"`),expected);
+   assert.equal(rendered.includes('test mailbox, not to the signer'),note,`test mailbox note shown: ${note}`);
+   assert.ok(!rendered.includes('local test'),'no local-test wording');
    await act(async()=>{renderer.unmount();});
   }
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}

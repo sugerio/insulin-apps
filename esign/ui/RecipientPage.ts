@@ -54,7 +54,7 @@ const embedded=(()=>{try{return typeof window!=='undefined'&&window.self!==windo
 export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:RenderDocument} = {}) {
   const container=useRef<HTMLDivElement>(null), renderController=useRef<AbortController|null>(null), loadSequence=useRef(0),api=useRef(''),signingLock=useRef(false),workerServed=useRef(false);
   useEffect(()=>()=>{loadSequence.current++;},[]);
-  const [token,setToken]=useState(''), [otp,setOtp]=useState(''), [message,setMessage]=useState('Opening local test session…');
+  const [token,setToken]=useState(''), [otp,setOtp]=useState(''), [message,setMessage]=useState('Opening the signing session…');
   const [artifact,setArtifact]=useState<Artifact|null>(null), [pdf,setPdf]=useState<Blob|null>(null), [consent,setConsent]=useState(false), [sent,setSent]=useState(false);
   const [rendered,setRendered]=useState(false),[pageHosts,setPageHosts]=useState<HTMLElement[]>([]),[imageUrls,setImageUrls]=useState<Record<string,string>>({});
   const [textReceipts,setTextReceipts]=useState<Record<string,string>>({});
@@ -63,7 +63,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const [signatures,setSignatures]=useState<Record<string,string>>({}),[previews,setPreviews]=useState<Record<string,string>>({}),[datePreviewVersion,setDatePreviewVersion]=useState(0);
   const [signing,setSigning]=useState(false),[verified,setVerified]=useState(false), [finished,setFinished]=useState(false), [messageId,setMessageId]=useState(''), [testOtp,setTestOtp]=useState('');
   // When the code was sent (its expiry counts down from there), whether it went by email, and the clock.
-  const [sentAt,setSentAt]=useState(0),[emailed,setEmailed]=useState(false),[now,setNow]=useState(()=>Date.now()),autoSent=useRef(false);
+  const [sentAt,setSentAt]=useState(0),[emailed,setEmailed]=useState(false),[testMailbox,setTestMailbox]=useState(false),[now,setNow]=useState(()=>Date.now()),autoSent=useRef(false);
   // Signing for a company: the signer's title (the host's, editable) and their confirmation of authority.
   const [signerTitle,setSignerTitle]=useState(''),[authority,setAuthority]=useState(false);
   // Declining instead of signing, with a reason.
@@ -120,9 +120,9 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     if(!response.ok){let code='';try{const body=await response.json() as {error?:unknown};if(typeof body?.error==='string')code=body.error;}catch{}throw new RequestFailed(response.status,code);}return response;
   }
   async function send(announce=true) {try {
-    const result=await (await request('/v1/signing/otp',{method:'POST'})).json() as {messageId:string;testOtp?:string;emailed?:boolean};
-    setMessageId(result.messageId);setTestOtp(result.testOtp ?? '');setSent(true);setSentAt(Date.now());setNow(Date.now());setOtp('');setEmailed(!!result.emailed);
-    if(announce)setMessage(result.emailed?'Verification code sent by email.':'Test code sent to the local test mailbox.');
+    const result=await (await request('/v1/signing/otp',{method:'POST'})).json() as {messageId:string;testOtp?:string;emailed?:boolean;testMailbox?:boolean};
+    setMessageId(result.messageId);setTestOtp(result.testOtp ?? '');setSent(true);setSentAt(Date.now());setNow(Date.now());setOtp('');setEmailed(!!result.emailed);setTestMailbox(!!result.testMailbox);
+    if(announce)setMessage(result.emailed?'Verification code sent by email.':'Test code saved to the test mailbox.');
   } catch {setMessage('Could not send a code. Wait a minute, then resend.');}}
   // Reaching "Confirm it's you" sends the code once; Resend asks for another.
   // biome-ignore lint/correctness/useExhaustiveDependencies: send once per page session
@@ -199,7 +199,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     h('h2',null,"Confirm it's you"),
     verified?h('p',null,'Your email address is confirmed.'):h('div',{className:'esign-code','data-test-message-id':messageId||undefined},
       h('p',null,sent?`Enter the 6-digit code we sent to ${sentTo}.`:`Sending a 6-digit code to ${sentTo}…`),
-      sent&&h('p',{className:'esign-code-note'},emailed?"Test environment: the code goes to this environment's test mailbox.":'Local test: the code is in the local test mailbox.'),
+      sent&&testMailbox&&h('p',{className:'esign-code-note'},"Test environment: the code goes to this environment's test mailbox, not to the signer."),
       testOtp&&h('p',{className:'esign-code-note'},'Local test verification code: ',testOtp,' (test only)'),
       h(CodeBoxes,{value:otp,onChange:setOtp,disabled:!sent,onEnter:()=>void verify()}),
       h('p',{className:'esign-code-meta'},
@@ -211,7 +211,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       !verified&&h('button',{type:'button',className:'esign-continue',disabled:otp.length!==CODE_LENGTH,onClick:()=>void verify()},'Verify code'),
       verified&&artifact&&h('button',{type:'button',className:'esign-continue',onClick:()=>setStep(3)},'Continue')));
   return h('main',{className:embedded?'esign-recipient esign-embedded':'esign-recipient'},
-    h('h1',null,'E-sign local test'),h('p',null,'Experimental synthetic documents only. Not a production signature service.'),h('p',{role:'status'},message),
+    h('h1',null,'Sign document'),h('p',{role:'status'},message),
     token && !finished && h('ol',{className:'esign-steps','aria-label':'Signing steps'},...steps.map(([n,label])=>h('li',{key:n,'aria-current':step===n?'step':undefined,className:step===n?'esign-step-current':step>n?'esign-step-done':undefined},`${n} ${label}`))),
     // The document could not be opened before the code (a host that requires it first): confirm, then read it.
     token && !finished && docNeedsCode && !verified && h('section',{className:'esign-verification-card'},verification),

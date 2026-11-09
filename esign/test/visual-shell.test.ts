@@ -11,5 +11,5 @@ test('embedded editor and recipient use scoped visual shells', () => {
   assert.match(editor, /class="esign-editor"/);
   assert.match(editor, /class="esign-editor-workspace"/);
   assert.match(recipient, /class="esign-recipient"/);
-  assert.match(recipient, /Synthetic|synthetic/);
+  assert.doesNotMatch(recipient, /local test|synthetic/i);
 });

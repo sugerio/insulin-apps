@@ -356,7 +356,7 @@ Management routes take `Authorization: Bearer <management key>` and see only the
 
 `POST /v1/page-sessions/exchange` `{code}` → `{token}`; `GET /v1/signing/current` (the document,
 fields, disclosure, intent, whether verified); `GET /v1/signing/pdf`; `POST /v1/signing/page-views`;
-`POST /v1/signing/otp` → `202 {messageId}`; `POST /v1/signing/otp/verify` `{otp}`;
+`POST /v1/signing/otp` → `202 {messageId, emailed?, testMailbox?}` (`testMailbox` only in dev, where the code is kept in the test mailbox; never the code itself); `POST /v1/signing/otp/verify` `{otp}`;
 `POST /v1/signing/preview`; `POST /v1/signing/decline` `{reason}` (at most 1000 characters);
 `POST /v1/signing/sign`. Reading (`current`, `pdf`, `page-views`) needs only the session; preview,
 decline and sign also need the entered code. A sign request that lost its response can be repeated

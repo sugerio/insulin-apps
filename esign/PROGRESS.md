@@ -2565,3 +2565,12 @@ and `worker-`.
   `worker-tsa-transport.test.ts`, `page-authorization.test.ts`, `local-http-flow.test.ts`,
   `local-signing-chain.test.ts`). The four titles CI checks are unchanged; two titles lost "v3".
   The suite has 217 tests: the 233 before, minus the 16 that tested the removed scripts.
+
+## Neutral signing page copy
+
+The signing page no longer calls itself a local test: its heading is "Sign document", the
+"experimental synthetic documents only" line and the editor's "local synthetic tests only"
+note are gone, and the page title is "E-sign". The OTP response now says `testMailbox: true`
+in dev only, and the page points the signer to the test mailbox only then; before, any
+emailed code (prod included) was described as going to the test mailbox. The demo page keeps
+its synthetic-documents notice.

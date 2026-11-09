@@ -48,7 +48,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
       assert.equal((await req('/v1/signing/current',{headers:{origin,authorization:management.authorization}})).status,401);
       assert.equal((await req('/v1/signing/current',{headers:{...headers,origin:'https://wrong.example.com'}})).status,403);
       const send=await app.fetch(new Request('https://public.example.com/v1/signing/otp',json({},headers)),env);assert.equal(send.status,202);
-      const shown=await send.json();assert.deepEqual(Object.keys(shown),['messageId']);
+      const shown=await send.json();assert.deepEqual(Object.keys(shown),['messageId','testMailbox']);
       const objects=await mail.list();const item=objects.objects[0];assert.ok(item);const message=await (await mail.get(item.key))!.json() as {to:string;otp:string};assert.equal(message.to,task.recipientEmail);assert.equal(item.key,`test-mail/${shown.messageId}.json`);await mail.delete(item.key);
       const disabled=await app.fetch(new Request('http://localhost/v1/signing/otp',json({},headers)),{...env,OTP_KEY:''});assert.equal(disabled.status,404);assert.equal((await disabled.text()).includes(message.otp),false);
       assert.equal((await req('/v1/signing/otp/verify',json({otp:message.otp},headers))).status,204);

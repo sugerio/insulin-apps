@@ -11,7 +11,8 @@ import { managedEvidenceFromEnv, type SealEnv } from './seal/config.ts';
 /**
  * Finishing envelopes: rendering each accepted signature's PDF (signature-processing.ts), then
  * sealing the envelope once nobody is left to sign. The signing request does it after every
- * signature (COMPLETE_AFTER_SIGN), and POST /api/process-due catches up, through the same functions.
+ * signature (COMPLETE_AFTER_SIGN), and due work catches up (the platform's five-minute tick, POST
+ * /api/scheduled, and POST /api/process-due), through the same functions.
  */
 
 export type ProcessStepResult = 'processed' | 'job_unavailable' | 'processing_failed';
@@ -106,12 +107,12 @@ export async function completeEnvelopeOfSession(env: CompletionEnv, token: strin
   return completeEnvelope(env,session.tenant_id,session.envelope_id);
 }
 
-/** Envelopes one process-due run looks at; picked at random so that a stuck one cannot starve the rest. */
+/** Envelopes one run of due work looks at; picked at random so that a stuck one cannot starve the rest. */
 export const SWEEP_LIMIT = 25;
 
 /**
- * Process-due: finishes the organization's envelopes (every organization's, without a tenant) whose
- * signing request did not finish them, and sends signed-copy notices still owed.
+ * Due work: finishes the organization's envelopes (every organization's, without a tenant, as the
+ * platform's tick does) whose signing request did not finish them, and sends signed-copy notices still owed.
  */
 export async function sweepEnvelopes(env: CompletionEnv, tenantId: string | null = null): Promise<Record<Completion, number>> {
   // FINALIZING (to seal, or sealed but not yet COMPLETED), or IN_PROGRESS with work left: a pending

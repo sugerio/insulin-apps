@@ -337,10 +337,11 @@ test('dry-run writes private app configs, the complete gateway config, and a red
     { binding: 'APP_BETA', service: 'insulin-apps-beta' },
   ])
   assert.deepEqual(gateway.send_email, [{ name: 'EMAIL', allowed_sender_addresses: ['sender@example.com'] }])
-  assert.deepEqual(gateway.triggers, { crons: ['17 3 * * *'] })
+  assert.deepEqual(gateway.triggers, { crons: ['*/5 * * * *', '17 3 * * *'] }, "the apps' five-minute tick and the daily cleanup")
   assert.deepEqual(gateway.ratelimits, [
     { name: 'RL_AUTH', namespace_id: '730101', simple: { limit: 20, period: 60 } },
     { name: 'RL_APP', namespace_id: '730102', simple: { limit: 600, period: 60 } },
+    { name: 'RL_PUBLIC', namespace_id: '730103', simple: { limit: 60, period: 60 } },
   ])
   assert.equal(gateway.vars.SITE_APPS[0].source, 'https://github.com/sugerio/insulin-apps/tree/main/alpha-app')
   assert.ok(!('SITE_ENV' in gateway.vars))
@@ -510,7 +511,7 @@ test("an app's declared secrets come from the environment's secrets, then its va
   const key = Buffer.alloc(32, 7).toString('base64')
   const root = await fixtureRepository()
   const manifest = JSON.parse(await readFile(join(root, 'alpha-app', 'package.json'), 'utf8'))
-  manifest.insulin = { publicPaths: ['/sign', '/api/public/'], secrets: ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION', 'ALPHA_APP_MISSING'] }
+  manifest.insulin = { publicPaths: ['/sign', '/api/public/'], scheduled: '/api/scheduled', secrets: ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION', 'ALPHA_APP_MISSING'] }
   await writeFile(join(root, 'alpha-app', 'package.json'), JSON.stringify(manifest))
   const gateway = join(root, '.github', 'hosting', 'gateway')
   await mkdir(join(gateway, 'node_modules', '.bin'), { recursive: true })
@@ -552,6 +553,8 @@ test("an app's declared secrets come from the environment's secrets, then its va
   const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
   const site = gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'alpha-app')
   assert.deepEqual(site.publicPaths, ['/sign', '/api/public/'])
+  assert.equal(site.scheduled, '/api/scheduled', 'the path the gateway ticks')
+  assert.equal(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').scheduled, null, 'an app without one has none')
   assert.equal('secrets' in site, false, "the gateway never learns an app's secret names")
 
   const out = await tempDirectory('deploy-apps-app-secrets-plan-')

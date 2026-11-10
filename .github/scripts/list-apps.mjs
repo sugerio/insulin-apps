@@ -64,8 +64,9 @@ export async function listApps(root = repositoryRoot) {
     const summary = typeof manifest.description === 'string' ? manifest.description.trim() : ''
     const permissions = readPermissions(entry.name, manifest.insulin?.permissions)
     const publicPaths = readPublicPaths(entry.name, manifest.insulin?.publicPaths)
+    const scheduled = readScheduled(entry.name, manifest.insulin?.scheduled, publicPaths)
     const secrets = readSecretNames(entry.name, manifest.insulin?.secrets)
-    apps.push({ name: entry.name, title, summary, permissions, publicPaths, secrets })
+    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, secrets })
   }
 
   checkSecretNamespaces(apps)
@@ -157,6 +158,34 @@ export function readPublicPaths(app, raw) {
     seen.add(entry)
     return entry
   })
+}
+
+/**
+ * Why an app's `insulin.scheduled` is refused, or null: one path under `/api/`, passing `publicPathProblem`, without a
+ * trailing slash, and neither one of the app's public paths nor under one, compared without regard to case. The
+ * gateway applies the same rule (scheduledProblem in its src/config.ts) and refuses to start otherwise.
+ */
+export function scheduledProblem(entry, publicPaths = []) {
+  if (typeof entry !== 'string' || !entry.startsWith('/api/') || entry.endsWith('/')) return 'must be a path under /api/, without a trailing slash'
+  const problem = publicPathProblem(entry)
+  if (problem) return problem
+  const path = entry.toLowerCase()
+  const covered = publicPaths.some((raw) => {
+    const publicPath = raw.toLowerCase()
+    return publicPath.endsWith('/') ? path.startsWith(publicPath) : path === publicPath || path.startsWith(`${publicPath}/`)
+  })
+  return covered ? "must not be one of the app's public paths or under one" : null
+}
+
+/**
+ * The path the gateway POSTs to every five minutes with no identity (`x-suger-access-via: schedule`), so the app can
+ * run its due work: `insulin.scheduled` in its package.json (DESIGN.md §8.5), or null when it has none.
+ */
+export function readScheduled(app, raw, publicPaths = []) {
+  if (raw === undefined || raw === null) return null
+  const problem = scheduledProblem(raw, publicPaths)
+  if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.scheduled ${problem}`)
+  return raw
 }
 
 /** The prefix an app's secret names must carry: its name upper-cased, with `-` as `_`. */

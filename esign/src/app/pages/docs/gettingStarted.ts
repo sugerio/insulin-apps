@@ -56,7 +56,7 @@ export const gettingStarted: DocTopic = {
         p('This is for whoever runs E-sign for your organization.'),
         ul(
           [b('Signing settings. '), 'A published E-sign signs nothing until its code pepper, mail relay and AWS KMS key are configured. Until then, the Envelopes page says that signing isn\'t set up.'],
-          [b('Due work on a schedule. '), 'Hosts call ', code('POST /api/process-due'), ' on a schedule, every few minutes, with a service account. It expires envelopes past their sign-by deadline, finishes any envelope a signing request couldn\'t finish (for example after a time limit or an outage), and retries the signed-copy emails. E-sign has no scheduled jobs of its own. Someone who manages can also run it from Envelopes with ', b('Process due work'), '.'],
+          [b('Due work every five minutes. '), 'The platform runs E-sign\'s due work for every organization every five minutes; there is nothing to set up. It expires envelopes past their sign-by deadline, finishes any envelope a signing request couldn\'t finish (for example after a time limit or an outage), and retries the signed-copy emails. To finish due work at once, someone who manages can choose ', b('Process due work'), ' on Envelopes, and a host can call ', code('POST /api/process-due'), ' with a service account; both cover their own organization.'],
           [b('Embedding. '), 'A host product can show the signing page and the field editor inside its own pages, from the origins the deployment allows.'],
         ),
       ],

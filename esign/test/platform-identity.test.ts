@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { applyMigrations, blobStore, identity } from './helpers/platform.ts';
@@ -18,8 +19,11 @@ async function harness() {
     form.set('roles', '["signer"]');
     return call('/api/templates', headers, { method: 'POST', body: form });
   };
-  return { mf, db, call, upload };
+  return { mf, db, env, call, upload };
 }
+
+/** What the gateway's five-minute tick sends: the app's id and `x-suger-access-via: schedule`, nothing else. */
+const TICK = { 'x-suger-app-id': 'insulin-apps-esign', 'x-suger-access-via': 'schedule' };
 
 test('management routes need the platform identity, and a public request never reaches them', async () => {
   const { mf, call } = await harness();
@@ -98,5 +102,67 @@ test("process-due touches only the caller's organization, FINALIZING envelopes i
     assert.equal(due.status, 200);
     assert.deepEqual(await due.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 }, "another organization's envelope is not picked up");
     assert.equal((await db.prepare("SELECT status FROM envelopes WHERE id = 'env-b'").first<{ status: string }>())?.status, 'FINALIZING');
+  } finally { await mf.dispose(); }
+});
+
+test('POST /api/scheduled answers only the platform tick: schedule and no identity at all', async () => {
+  const { mf, env, call } = await harness();
+  try {
+    const tick = (headers: Record<string, string>) => call('/api/scheduled', headers, { method: 'POST' });
+    assert.equal((await tick({})).status, 403, 'nothing marks it as the tick');
+    for (const via of ['browser', 'api', 'mcp', 'public', 'Schedule', 'schedule,schedule'])
+      assert.equal((await tick({ ...TICK, 'x-suger-access-via': via })).status, 403, via);
+    assert.equal((await tick(identity('org-a', { via: 'schedule' }))).status, 403, "a member's identity, even marked schedule");
+    assert.equal((await tick(identity('org-a', { role: 'OWNER', via: 'schedule' }))).status, 403, 'an owner too');
+    assert.equal((await tick(identity('org-a', { via: 'api', userId: 'service-account-1' }))).status, 403, "a service account's");
+    assert.equal((await tick({ ...TICK, 'x-suger-organization-id': 'org-a' })).status, 403, 'an organization alone');
+    assert.equal((await tick({ ...TICK, 'x-suger-user-id': 'user-1' })).status, 403, 'a person alone');
+    assert.equal((await tick({ ...TICK, 'x-suger-app-permissions': 'esign.manage' })).status, 403, 'permissions alone');
+    const ran = await tick(TICK);
+    assert.equal(ran.status, 200);
+    assert.deepEqual(await ran.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 });
+    assert.equal((await call('/api/scheduled', TICK)).status, 404, 'a POST only');
+
+    // The tick reaches nothing else: a request marked schedule is nobody to the management routes.
+    assert.equal((await call('/api/templates', TICK)).status, 401);
+    assert.equal((await call('/api/templates', identity('org-a', { via: 'schedule' }))).status, 401, 'whatever identity it carries');
+    assert.equal((await call('/api/process-due', identity('org-a', { via: 'schedule' }), { method: 'POST' })).status, 401);
+    const preview = await app.fetch(new Request('http://localhost/api/templates', { headers: TICK }), { ...env, IDENTITY_PREVIEW: true } as never);
+    assert.equal(preview.status, 401, "not even the local preview's stand-in owner");
+
+    const catalog = await (await call('/api/catalog', identity('org-a', { role: 'OWNER' }))).json() as { endpoints: { path: string }[] };
+    assert.equal(catalog.endpoints.some((e) => e.path === '/api/scheduled'), false, 'never in the catalog');
+    const declared = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { insulin: { scheduled: string; publicPaths: string[] } };
+    assert.equal(declared.insulin.scheduled, '/api/scheduled', 'the path the platform ticks');
+    assert.equal(declared.insulin.publicPaths.some((entry) => entry === '/api/scheduled' || '/api/scheduled'.startsWith(entry.endsWith('/') ? entry : `${entry}/`)), false, 'never public');
+  } finally { await mf.dispose(); }
+});
+
+test('the tick finishes due work for every organization at once; process-due stays with its own', async () => {
+  const { mf, db, call } = await harness();
+  try {
+    for (const org of ['org-a', 'org-b']) {
+      await db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at) VALUES (?1, ?2, ?3, '[\"signer\"]', 1)").bind(`tpl-${org}`, org, `templates/${org}.pdf`).run();
+      for (const kind of ['late', 'stuck'])
+        await db.prepare("INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256) VALUES (?1, ?2, ?3, 'IN_PROGRESS', 1, 'x')").bind(`${kind}-${org}`, org, `tpl-${org}`).run();
+      // Past its signer's deadline: expired by due work.
+      await db.prepare("INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at) VALUES (?1, ?2, 'signer', 'Ana Example', 'ana@example.com', 1, 'ACTIVE', 1)").bind(`late-task-${org}`, `late-${org}`).run();
+      // A signer a lost write never activated: due work activates them.
+      await db.prepare("INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status) VALUES (?1, ?2, 'signer', 'Marcus Example', 'marcus@example.com', 1, 'PENDING')").bind(`stuck-task-${org}`, `stuck-${org}`).run();
+    }
+    const ran = await call('/api/scheduled', TICK, { method: 'POST' });
+    assert.equal(ran.status, 200);
+    assert.deepEqual(await ran.json(), { expired: 2, completed: 0, waiting: 2, failed: 0 }, 'both organizations, in one tick');
+    const statuses = Object.fromEntries((await db.prepare('SELECT id, status FROM envelopes ORDER BY id').all<{ id: string; status: string }>()).results.map((row) => [row.id, row.status]));
+    assert.deepEqual(statuses, { 'late-org-a': 'EXPIRED', 'late-org-b': 'EXPIRED', 'stuck-org-a': 'IN_PROGRESS', 'stuck-org-b': 'IN_PROGRESS' });
+    const tasks = (await db.prepare("SELECT status FROM tasks WHERE id LIKE 'stuck-task-%'").all<{ status: string }>()).results.map((row) => row.status);
+    assert.deepEqual(tasks, ['ACTIVE', 'ACTIVE']);
+    assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE type = 'EXPIRED'").first<{ n: number }>())?.n, 2, 'one audit event each');
+    assert.deepEqual(await (await call('/api/scheduled', TICK, { method: 'POST' })).json(), { expired: 0, completed: 0, waiting: 0, failed: 0 }, 'nothing is left for the next tick');
+
+    await db.prepare("UPDATE tasks SET expires_at = 1 WHERE id IN ('stuck-task-org-a', 'stuck-task-org-b')").run();
+    const due = await call('/api/process-due', identity('org-a', { role: 'EDITOR' }), { method: 'POST' });
+    assert.deepEqual(await due.json(), { expired: 1, completed: 0, waiting: 0, failed: 0 }, "a manager's process-due is their organization's only");
+    assert.equal((await db.prepare("SELECT status FROM envelopes WHERE id = 'stuck-org-b'").first<{ status: string }>())?.status, 'IN_PROGRESS');
   } finally { await mf.dispose(); }
 });

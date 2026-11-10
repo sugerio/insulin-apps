@@ -110,11 +110,16 @@ test('only the background on electronic signatures is general information, and i
  assert.match(text,/doesn't make advanced or qualified signatures/);
 });
 
-test('the Docs cover the main tasks, what each role sees, signers, statuses, evidence, and due work on a schedule',()=>{
+test('the Docs cover the main tasks, what each role sees, signers, statuses, evidence, and due work every five minutes',()=>{
  const all=textOf(DOC_TOPICS.map(t=>render(t.slug)).join(' '));
  for(const words of [/Upload with a signature page/,/Upload and place fields/,/Send for signature/,/Void envelope/,/Process due work/,/Owner/,/Admin/,/Editor/,/User/,/Viewer/,/custom role/,/Service accounts/,/AI agents/,/About signing/,/Decline to sign/,/6-digit code/,/LOCAL TEST ONLY/,/RFC 3161/,/audit trail/])
   assert.match(all,words);
- for(const slug of ['getting-started','statuses'])assert.match(textOf(render(slug)),/Hosts call POST \/api\/process-due on a schedule/,`${slug} says hosts run due work on a schedule`);
+ for(const slug of ['getting-started','statuses']){
+  const text=textOf(render(slug));
+  assert.match(text,/The platform runs (E-sign's due work|it) for every organization every five minutes/,`${slug} says the platform runs due work every five minutes`);
+  assert.match(text,/POST \/api\/process-due/,`${slug} says process-due finishes it at once`);
+  assert.doesNotMatch(text,/Hosts call POST \/api\/process-due on a schedule/,`${slug} no longer asks hosts to schedule it`);
+ }
  assert.match(textOf(render('roles')),/Every role can read these Docs/);
 });
 

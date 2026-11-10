@@ -38,6 +38,7 @@
       "/assets/",
       "/api/public/"
     ],
+    "scheduled": "/api/scheduled",
     "secrets": [
       "ESIGN_OTP_KEY",
       "ESIGN_FRAME_ANCESTORS",

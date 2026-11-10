@@ -13,7 +13,7 @@ import { jsonResponse, redirect } from './http/response.ts'
 import { markFromApp } from './http/secure.ts'
 import { log, logError } from './log.ts'
 import { appUnavailablePage, noAppAccessPage, rateLimitedPage } from './pages/status.tsx'
-import { allowApp, allowPublic } from './ratelimit.ts'
+import { allowApp, allowPublic, allowPublicChange } from './ratelimit.ts'
 import { verifyNotice } from './auth/guard.ts'
 import { activeOrg, loadSession } from './auth/session.ts'
 
@@ -82,11 +82,14 @@ export async function proxyToApp(ctx: Context, app: HostedApp): Promise<Response
 
 /**
  * A request on one of the app's public paths: forwarded with only the app's id and `x-suger-access-via: public`, never
- * the session, a token or anyone's identity, and limited per IP. The app's own headers (its CSP and frame-ancestors)
- * stay; HTML gets no account bar.
+ * the session, a token or anyone's identity, and limited per IP (RL_APP); one that isn't GET or HEAD also counts
+ * against the stricter RL_PUBLIC, per app and IP. The app's own headers (its CSP and frame-ancestors) stay; HTML gets
+ * no account bar.
  */
 async function proxyPublic(ctx: Context, app: HostedApp, navigation: boolean): Promise<Response> {
   if (!(await allowPublic(ctx))) return navigation ? rateLimitedPage(ctx) : jsonResponse({ error: 'rate_limited' }, 429, { 'Retry-After': '60' })
+  const reading = ctx.request.method === 'GET' || ctx.request.method === 'HEAD'
+  if (!reading && !(await allowPublicChange(ctx, app.name))) return jsonResponse({ error: 'rate_limited' }, 429, { 'Retry-After': '60' })
   let upstream: Response
   try {
     upstream = await app.service!.fetch(forwardRequest(ctx.request, publicHeaders(app), { dropAuthorization: true }))

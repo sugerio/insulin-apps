@@ -7,9 +7,10 @@ import { getCurrentUser, type AppRole } from '@fours/app/server';
  * - `x-suger-app-permissions` (space-separated) can only take permissions away: the result is the
  *   role's own set intersected with the header, unknown keys ignored, so a forged header gains
  *   nothing the role didn't give. Without the header (the Insulin console) the role decides.
- * - `x-suger-access-via`: a person in the browser, an AI agent (`mcp`), an API client (`api`), or
- *   `public` for the signer pages the gateway forwards without an identity. A public request never
- *   reaches a management route, whatever else it carries.
+ * - `x-suger-access-via`: a person in the browser, an AI agent (`mcp`), an API client (`api`),
+ *   `public` for the signer pages the gateway forwards without an identity, or `schedule` for the
+ *   platform's five-minute tick. A public or scheduled request never reaches a management route,
+ *   whatever else it carries; the tick reaches `POST /api/scheduled` only (`isScheduleTick`).
  */
 export const PERMISSIONS = ['esign.manage', 'esign.view'] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -45,7 +46,7 @@ export const can = (caller: Caller, permission: Permission): boolean =>
  */
 export function readCaller(request: Request, preview: boolean): Caller | null {
   const via = request.headers.get('x-suger-access-via')?.trim().toLowerCase();
-  if (via === 'public') return null;
+  if (via === 'public' || via === 'schedule') return null;
   const user = getCurrentUser(request);
   const current = user ?? (preview ? PREVIEW : null);
   if (!current || !current.userId || !current.organizationId || current.organizationId.length > 128) return null;
@@ -65,4 +66,18 @@ export function readCaller(request: Request, preview: boolean): Caller | null {
     accessVia,
     preview: !user,
   };
+}
+
+/** The headers that carry a person, an organization, a role or permissions: the tick carries none of them. */
+const IDENTITY_HEADERS = ['x-suger-user-id', 'x-suger-organization-id', 'x-suger-app-role', 'x-suger-app-permissions', 'x-suger-user-email', 'x-suger-user-name'];
+
+/**
+ * Whether a request is the platform's own tick (package.json `insulin.scheduled`): `x-suger-access-via`
+ * exactly `schedule`, and no identity at all. The gateway removes every incoming `x-suger-*` header and
+ * app Workers have no public route, so only the gateway's tick can send one; a member, a service
+ * account or an agent never passes, whatever it sends.
+ */
+export function isScheduleTick(request: Request): boolean {
+  if (request.headers.get('x-suger-access-via') !== 'schedule') return false;
+  return IDENTITY_HEADERS.every((name) => !request.headers.has(name)) && getCurrentUser(request) === null;
 }

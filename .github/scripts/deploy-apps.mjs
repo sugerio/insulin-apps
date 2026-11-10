@@ -35,7 +35,12 @@ const ALLOWED_COMPATIBILITY_FLAGS = new Set(['nodejs_compat'])
 const RATE_LIMITS = [
   { name: 'RL_AUTH', namespace_id: '730101', simple: { limit: 20, period: 60 } },
   { name: 'RL_APP', namespace_id: '730102', simple: { limit: 600, period: 60 } },
+  // Requests to an app's public paths that change something (anything but GET and HEAD), per app and IP.
+  { name: 'RL_PUBLIC', namespace_id: '730103', simple: { limit: 60, period: 60 } },
 ]
+// The apps' five-minute tick (`insulin.scheduled`, DESIGN.md §8.5) and the daily cleanup of expired sessions, tokens
+// and mail records, for quiet days. The gateway's scheduled handler tells them apart by the cron.
+const GATEWAY_CRONS = ['*/5 * * * *', '17 3 * * *']
 
 export function readSettings(environment = process.env, { gateway = true } = {}) {
   const token = environment.CLOUDFLARE_API_TOKEN?.trim() ?? ''
@@ -230,7 +235,7 @@ export function sanitizeAppBaseConfig(baseConfig) {
 
 export function buildGatewayConfig({ root, apps, settings, databaseId }) {
   const gatewayDirectory = join(root, '.github', 'hosting', 'gateway')
-  // The gateway needs the public paths and permissions, never the names of an app's secrets.
+  // The gateway needs the permissions, public paths and scheduled path, never the names of an app's secrets.
   const siteApps = apps.map(({ secrets: _secrets, ...app }) => ({
     ...app,
     binding: serviceBinding(app.name),
@@ -265,8 +270,7 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
     ],
     send_email: [{ name: 'EMAIL', allowed_sender_addresses: [settings.senderAddress] }],
     ratelimits: RATE_LIMITS,
-    // The daily run of the gateway's cleanup of expired sessions, tokens and mail records, for quiet days.
-    triggers: { crons: ['17 3 * * *'] },
+    triggers: { crons: GATEWAY_CRONS },
     vars: {
       SITE_DOMAIN: settings.siteDomain,
       SITE_APPS: siteApps,

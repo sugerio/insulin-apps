@@ -56,10 +56,13 @@ link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).
 A custom role is built from these two permissions. Recipients don't need an account: their link and
 emailed code are their access, to their own task only.
 
-**Hosts call `POST /api/process-due` on a schedule** (every few minutes, with a service account).
-An envelope is normally finished right after its last signature, after the signer's response; the
-call finishes any that a request couldn't (a CPU limit, an outage), expires envelopes past their
-deadline and retries completion notices. E-sign has no scheduled jobs of its own.
+**The platform runs due work every five minutes.** E-sign declares `"scheduled": "/api/scheduled"`
+under `insulin` in `package.json`, and the hosting gateway POSTs there every five minutes with no
+identity (`x-suger-access-via: schedule`). An envelope is normally finished right after its last
+signature, after the signer's response; due work finishes any that a request couldn't (a CPU limit,
+an outage), expires envelopes past their deadline and retries completion notices, for every
+organization. Hosts no longer need to schedule anything: `POST /api/process-due` stays, for a
+manager or a host's service account to finish their own organization's due work at once.
 
 ## For developers
 

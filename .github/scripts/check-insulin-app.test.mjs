@@ -27,8 +27,16 @@ test('the manifest fields the gateway reads are checked as the deploy checks the
   assert.match(report, /insulin\.publicPaths\[0\] must not cover every path or the whole API/)
   assert.match(report, /insulin\.secrets\[0\] must match \^SIGNING_/)
   assert.match(report, /insulin\.permissions\[0\]\.key must match/)
-  const fine = await check('signing', { insulin: { publicPaths: ['/sign'], secrets: ['SIGNING_KEY'] } })
+  const fine = await check('signing', { insulin: { publicPaths: ['/sign'], secrets: ['SIGNING_KEY'], scheduled: '/api/scheduled' } })
   assert.doesNotMatch(fine, /insulin\./)
+})
+
+test("an app's scheduled path is checked as the deploy checks it, against its public paths", async () => {
+  assert.match(await check('signing', { insulin: { publicPaths: ['/api/public/'], scheduled: '/api/public/tick' } }), /insulin\.scheduled must not be one of the app's public paths/)
+  assert.match(await check('signing', { insulin: { scheduled: '/tick' } }), /insulin\.scheduled must be a path under \/api\//)
+  assert.match(await check('signing', { insulin: { scheduled: '/api/__suger/tick' } }), /insulin\.scheduled must not reach \/api\/__suger/)
+  // Checked against what was declared even when the public paths themselves are refused.
+  assert.match(await check('signing', { insulin: { publicPaths: ['/api/public/', 7], scheduled: '/api/public/tick' } }), /insulin\.scheduled must not be one of/)
 })
 
 test('a build that declares any binding is refused: apps get only D1 and static assets', async () => {

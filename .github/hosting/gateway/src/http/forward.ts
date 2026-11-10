@@ -13,8 +13,10 @@ export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([
 /**
  * How a request reached the app (x-suger-access-via): apps keep people, billing and integrations to `browser`.
  * `public` is a request on one of the app's public paths, from someone the gateway doesn't know (DESIGN.md §8.1).
+ * `schedule` is the gateway's own five-minute tick to the app's `insulin.scheduled` path (DESIGN.md §8.5): it never
+ * comes from outside, since every incoming x-suger-* header is removed and app Workers have no public route.
  */
-export type AccessVia = 'browser' | 'mcp' | 'api' | 'public'
+export type AccessVia = 'browser' | 'mcp' | 'api' | 'public' | 'schedule'
 
 /** Who a request acts as: a person, or a service account (DESIGN.md §5.3). */
 export interface Actor {
@@ -44,6 +46,11 @@ export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, acc
 /** What a request on a public path carries: the app it is for and that nobody is signed in. Nothing else. */
 export function publicHeaders(app: HostedApp): Record<string, string> {
   return { 'x-suger-app-id': app.appId, 'x-suger-access-via': 'public' }
+}
+
+/** What the gateway's tick carries: the app it is for and that it is the schedule. No person, organization or role. */
+export function scheduleHeaders(app: HostedApp): Record<string, string> {
+  return { 'x-suger-app-id': app.appId, 'x-suger-access-via': 'schedule' }
 }
 
 /**

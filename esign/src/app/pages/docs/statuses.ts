@@ -63,7 +63,7 @@ export const statuses: DocTopic = {
       title: 'Due work',
       body: [
         p('E-sign usually finishes an envelope right after its last signature, without making the signer wait. If that can\'t happen, for example after a time limit or an outage, the envelope stays Finishing until due work runs.'),
-        p('Due work expires envelopes past their deadline, finishes those left Finishing, and retries the signed-copy emails that didn\'t go out. Hosts call ', code('POST /api/process-due'), ' on a schedule, every few minutes, with a service account. Someone who manages can also choose ', b('Process due work'), ' on Envelopes; it says what it did.'),
+        p('Due work expires envelopes past their deadline, finishes those left Finishing, and retries the signed-copy emails that didn\'t go out. The platform runs it for every organization every five minutes, so an envelope left Finishing usually completes within a few minutes. To run it at once for your organization, someone who manages can choose ', b('Process due work'), ' on Envelopes (it says what it did), and a host can call ', code('POST /api/process-due'), '.'),
       ],
     },
   ],

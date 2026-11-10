@@ -5,7 +5,8 @@
  * A recipient who has signed is past their deadline's reach: a countersigner without a
  * deadline never makes the envelope expire.
  *
- * Expiry is applied lazily, before a request touches the envelope, and by the cron sweep.
+ * Expiry is applied lazily, before a request touches the envelope, and by due work (the platform's
+ * five-minute tick for every organization, and POST /api/process-due for one).
  */
 import { AUDIT } from './audit.ts';
 
@@ -39,7 +40,10 @@ export async function expireIfDue(db: D1Database, envelopeId: string, now = Date
   return true;
 }
 
-/** Process-due: expires every envelope of the organization with a passed deadline. Returns how many it expired. */
+/**
+ * Due work: expires every envelope of the organization (every organization's, without a tenant) with a
+ * passed deadline. Returns how many it expired.
+ */
 export async function expireDueEnvelopes(db: D1Database, now = Date.now(), tenantId: string | null = null): Promise<number> {
   const due = await db.prepare(`SELECT id FROM envelopes WHERE status = 'IN_PROGRESS' AND (?2 IS NULL OR tenant_id = ?2) AND ${DUE} LIMIT 200`).bind(now, tenantId).all<{ id: string }>();
   let expired = 0;

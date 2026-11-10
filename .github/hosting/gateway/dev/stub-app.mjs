@@ -4,6 +4,10 @@
 
 const CAP_TABLE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'"
 
+// Every request that came as the gateway's tick (x-suger-access-via: schedule), oldest first, whatever its path. The
+// tests read them at /__stub/ticks, straight from this Worker.
+const ticks = []
+
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
 function received(request) {
@@ -38,7 +42,20 @@ async function digest(stream) {
 export default {
   async fetch(request) {
     const url = new URL(request.url)
+    if (request.headers.get('x-suger-access-via') === 'schedule') {
+      ticks.push({ ...received(request), path: url.pathname, body: await request.text() })
+    }
     switch (url.pathname) {
+      case '/api/scheduled':
+        return Response.json({ ran: true })
+      case '/api/scheduled-fails':
+        // An app whose due work failed.
+        return Response.json({ error: 'failed' }, { status: 500 })
+      case '/api/scheduled-throws':
+        // An app that crashes outright.
+        throw new Error('synthetic failure')
+      case '/__stub/ticks':
+        return Response.json(ticks)
       case '/api/echo':
       case '/api/public/echo':
         return Response.json(received(request))

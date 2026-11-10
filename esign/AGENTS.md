@@ -35,7 +35,7 @@ Run from `esign/` unless noted.
 | `src/app/components/ui/`, `src/app/lib/utils.ts`, `src/app/styles.css` | shadcn/ui components (copied, as `.ts`), `cn()`, and Tailwind with the shadcn neutral theme, light and dark |
 | `nitro.config.ts`, `src/app/server/page-headers.ts`, `page-policy.ts` | The pages' security headers (CSP, framing, referrer, caching), set by a Nitro middleware without touching the platform files |
 | `src/app/server/router.ts` | `handleAppRequest(request)`: builds the bindings from `#platform` and hands every `/api/**` request to the Hono app |
-| `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due` |
+| `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due`, and the platform's tick `/api/scheduled` |
 | `src/app/server/esign/identity.ts` | The platform identity, the two permissions and `can()` |
 | `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
@@ -59,7 +59,8 @@ secret in source.
 
 - **Runtime:** one D1 database, static assets, outbound `fetch` and environment values. No cron, R2, KV, Queues,
   Durable Objects or email binding: objects live in D1 (`blob-store.ts`), mail goes through the relay (`mail.ts`), and
-  due work runs in requests and with `POST /api/process-due`.
+  due work runs in requests, on the platform's five-minute tick (`insulin.scheduled`, `POST /api/scheduled`) and with
+  `POST /api/process-due`.
 - **The members' app runs in a sandboxed iframe in the console:** no `window.open`, `alert`, `confirm`, `prompt` or
   top-level navigation (it moves with `history.pushState`); downloads use `<a download>`; no fonts, scripts or images
   from CDNs.
@@ -80,6 +81,10 @@ secret in source.
 - **Embedding:** the pages report every origin that frames them (`ancestorOrigins`) at their code exchange, and the
   exchange refuses any that is neither the app nor in `ESIGN_FRAME_ANCESTORS` (the session's parent for the editor).
   Behind the gateway, the pages' CSP `frame-ancestors` says the same; member pages can't be framed.
+- **The tick** (`insulin.scheduled`: `/api/scheduled`): the gateway POSTs there every five minutes with only
+  `x-suger-app-id` and `x-suger-access-via: schedule`. The route refuses (403) anything else, a member's or service
+  account's identity included, and runs every organization's due work; `readCaller` treats a request marked
+  `schedule` as nobody, so it never reaches a management route. Keep it off the public paths and out of the catalog.
 - **Page sessions** travel in the `x-esign-session` header, never `Authorization` (the gateway drops it on public
   paths) and never an `x-suger-*` name (the gateway strips those). `helpers/gateway.ts` behaves the same way.
 - **No login of our own.** The preview Owner exists only in the local preview.

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { listApps, publicPathProblem, validateAppName } from './list-apps.mjs'
+import { listApps, publicPathProblem, scheduledProblem, validateAppName } from './list-apps.mjs'
 
 const temporary = []
 after(async () => Promise.all(temporary.map((directory) => rm(directory, { recursive: true, force: true }))))
@@ -27,8 +27,8 @@ test('discovers top-level apps in stable order with their public metadata', asyn
   await mkdir(join(root, 'not-an-app'))
 
   assert.deepEqual(await listApps(root), [
-    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [], publicPaths: [], secrets: [] },
-    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [], publicPaths: [], secrets: [] },
+    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [], publicPaths: [], scheduled: null, secrets: [] },
+    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [], publicPaths: [], scheduled: null, secrets: [] },
   ])
 })
 
@@ -89,6 +89,28 @@ test('reads the paths an app opens to people without an account, and refuses any
   await assert.rejects(() => listApps(many), /at most 10/)
   const twice = await repository({ twice: { insulin: { publicPaths: ['/sign', '/sign'] } } })
   await assert.rejects(() => listApps(twice), /listed twice/)
+})
+
+test("reads the path an app's due work runs on, which must be under /api/ and never public or reserved", async () => {
+  const root = await repository({ signing: { insulin: { publicPaths: ['/sign', '/api/public/'], scheduled: '/api/scheduled' } } })
+  assert.equal((await listApps(root))[0].scheduled, '/api/scheduled')
+  const publicPaths = ['/sign', '/api/public/', '/api/hooks']
+  for (const good of ['/api/scheduled', '/api/jobs/due', '/api/hooksmith']) assert.equal(scheduledProblem(good, publicPaths), null, good)
+  for (const bad of [
+    '/api/', '/api', '/scheduled', 'api/scheduled', '/api/scheduled/', '/api/__suger/tick', '/API/__suger/tick', '/api/a/../b', '/api/a?b',
+    '/api/a%2fb', '/api//a', '/api/public/tick', '/API/PUBLIC/tick', '/api/hooks', '/api/hooks/tick', '/sign', 42, null, ['/api/x'],
+  ]) {
+    assert.notEqual(scheduledProblem(bad, publicPaths), null, String(bad))
+  }
+  for (const [scheduled, message] of [
+    ['/api/public/run', /insulin\.scheduled must not be one of the app's public paths or under one/],
+    ['/settings/run', /insulin\.scheduled must be a path under \/api\//],
+    ['/api/__suger/run', /insulin\.scheduled must not reach \/api\/__suger/],
+    [['/api/a', '/api/b'], /insulin\.scheduled must be a path under \/api\//],
+  ]) {
+    const broken = await repository({ broken: { insulin: { publicPaths: ['/api/public/'], scheduled } } })
+    await assert.rejects(() => listApps(broken), message, String(scheduled))
+  }
 })
 
 test("reads an app's secret names, which carry its own prefix", async () => {

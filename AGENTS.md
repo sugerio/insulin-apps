@@ -97,6 +97,11 @@ the platform for the rest in `package.json` under `insulin`:
 - **Runtime secrets** are names in `insulin.secrets`, each starting with the app's name in upper case (`ESIGN_…`). The
   deploy copies them from the GitHub environment, and the app reads them with `readAppEnv(name)`; never put a value in
   source.
+- **Scheduled work** gets a five-minute tick instead of a cron: declare one path in `insulin.scheduled` (under `/api/`,
+  never one of the public paths), and the gateway POSTs to it every five minutes with only `x-suger-app-id` and
+  `x-suger-access-via: schedule`, an empty body and a 25-second timeout. Refuse the route unless `x-suger-access-via` is
+  exactly `schedule` and no identity is present, treat a request marked `schedule` as nobody on every other route,
+  keep it out of `/api/catalog`, and do every organization's due work there, idempotent and bounded per tick.
 
 **One deployment, many organizations.** Scope every query by `getCurrentUser().organizationId`, so one organization
 never reads another's data.

@@ -297,8 +297,8 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   // envelope (KMS and the timestamp authority). With the request's waitUntil (Nitro on Workers) that
   // runs after the signer's response, so they never wait for the seal; without it (the tests), in the
   // request. Work cut short (a CPU limit, an outage) leaves the signature PENDING or the envelope
-  // FINALIZING, which POST /api/process-due finishes; hosts call it on a schedule, and it is the only
-  // way envelopes finish while the setting is off.
+  // FINALIZING, which due work finishes: the platform's five-minute tick (POST /api/scheduled), or
+  // POST /api/process-due at once. It is the only way envelopes finish while the setting is off.
   app.use('/api/public/signing/sign', async (c, next) => {
     await next();
     if (c.res.status !== 202 || c.env.COMPLETE_AFTER_SIGN !== 'true') return;

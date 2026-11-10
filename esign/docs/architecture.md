@@ -26,14 +26,20 @@ seals the finished envelope and emails each signer a link to their copy.
   small store over D1 (`blob-store.ts`): a key in a bucket points to one upload's 256 KiB chunks,
   with R2's create-only put (`onlyIf: { etagDoesNotMatch: '*' }`). The local preview's test mailbox
   is a second bucket, `test-mail`.
-- **Work in requests.** There is no cron. Once a signature is accepted it is rendered, and after the
-  last one the envelope sealed (KMS and the timestamp authority), through the request's `waitUntil`
-  that Nitro puts on the request on Workers: the signer gets their response first and never waits
-  for the seal. Without one (the tests) it runs in the request. Work cut short, by a CPU limit or an
-  outage, leaves the signature `PENDING` or the envelope `FINALIZING`. `POST /api/process-due`
-  (manage permission) expires envelopes past a deadline, finishes any envelope a request did not,
-  and retries completion notices. **Hosts call it on a schedule**, every few minutes, with a service
-  account.
+- **Work in requests, and the platform's tick.** The app has no cron. Once a signature is accepted
+  it is rendered, and after the last one the envelope sealed (KMS and the timestamp authority),
+  through the request's `waitUntil` that Nitro puts on the request on Workers: the signer gets their
+  response first and never waits for the seal. Without one (the tests) it runs in the request. Work
+  cut short, by a CPU limit or an outage, leaves the signature `PENDING` or the envelope
+  `FINALIZING`. Due work expires envelopes past a deadline, finishes any envelope a request did not,
+  and retries completion notices. **The platform runs it every five minutes**: `package.json`
+  declares `insulin.scheduled` (`/api/scheduled`), and the gateway POSTs there over its service
+  binding with only `x-suger-app-id` and `x-suger-access-via: schedule`, no person, organization or
+  role. `POST /api/scheduled` refuses (403) anything else, a member's or a service account's
+  identity included, and works for every organization; a request marked `schedule` is nobody to
+  every other route (`readCaller`). It is neither a public path nor in the catalog.
+  `POST /api/process-due` (manage permission) does the same work at once, for the caller's
+  organization only.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization. Only a 202
   counts as sent; a refusal (502 `send_failed`, 503, 429, anything else) is retried later and never
@@ -169,7 +175,8 @@ rendering and every later re-verification fail closed if the running renderer di
   intent statement ("I intend this to be my signature on <document> on behalf of <company>."),
   prefills the title, and the sign request needs a title and `authorityConfirmed: true`.
 - A recipient may carry `expiresAt` (ISO 8601, in the future, within 400 days). Expiry is applied
-  before any request touches the envelope and by `POST /api/process-due`, with one `EXPIRED` audit event.
+  before any request touches the envelope and by due work (the five-minute tick, `POST /api/process-due`), with one
+  `EXPIRED` audit event.
 - A recipient-view request may carry `hostAuthentication` (`{method, provider?, domain?,
   signedInAt?}`, `method` an upper-case word such as `SSO`): how the host signed the recipient in.
   E-sign cannot check it; it is recorded and printed as the host's statement.
@@ -276,7 +283,7 @@ it.
 (`advanceStatements` in `src/app/server/esign/signature-processing.ts`): a task whose signature exists becomes
 `SIGNED`; with no task active and every signature rendered, the next task becomes `ACTIVE`; with
 every task signed and rendered, the envelope becomes `FINALIZING` (only while `IN_PROGRESS`).
-Completion runs them first, and `POST /api/process-due` also picks envelopes left half-advanced by a lost write: a
+Completion runs them first, and due work also picks envelopes left half-advanced by a lost write: a
 signature whose task is still `ACTIVE`, a rendered signature whose next task is still `PENDING`,
 every task signed but the envelope still `IN_PROGRESS`, or a seal recorded while the envelope is
 still `FINALIZING` (completed with that same seal, never a new one). For deadlines, a recipient
@@ -290,7 +297,7 @@ template source object whose D1 insert failed. Nothing deletes them; keep them, 
 response does not show whether a write committed.
 
 A signature that keeps failing to render stays `PENDING`, with `attempts` and `last_error`, and
-`POST /api/process-due` keeps retrying it. There is no repair or termination endpoint. To list them
+due work keeps retrying it. There is no repair or termination endpoint. To list them
 (the local preview's database is in `.suger/data/`):
 
 ```sql
@@ -400,14 +407,15 @@ requests rebuild it and check the stored bytes match. The seal covers the signed
 delivery PDF. There is no endpoint for the signed PDF alone. After completion each signer is
 emailed a link to this PDF once (`src/app/server/esign/signed-copies.ts`), which the public `/copy`
 page downloads once, within 30 days (`POST /api/public/copies/open`); a failed send is retried by
-`POST /api/process-due` for envelopes created in the last seven days.
+due work for envelopes created in the last seven days.
 
 ## API
 
 Management routes take the Insulin platform identity (the console, insulinapps.com, an MCP client
 or a service-account token, all through the gateway) and see only the caller's organization (another
 organization's ids answer 404). Reading needs `esign.view`, anything else `esign.manage`. A request
-the gateway marks public (`x-suger-access-via: public`) never reaches them. `GET /api/catalog` lists
+the gateway marks public or as its tick (`x-suger-access-via: public` or `schedule`) never reaches
+them. `GET /api/catalog` lists
 the routes the caller may use, with JSON Schemas. Routes marked † are available only while signing
 is enabled.
 
@@ -418,7 +426,7 @@ is enabled.
 | `GET /api/me` | The caller: organization, user, role, permissions, how the request came, whether signing is enabled |
 | `GET /api/catalog` | The management routes the caller may use |
 | `GET /api/templates`, `GET /api/envelopes` | The organization's templates and envelopes, newest first (`limit`, `before`; envelopes also `status`) |
-| `POST /api/process-due` | Expires envelopes past a deadline, finishes envelopes the signing request did not, and retries completion notices, for the caller's organization |
+| `POST /api/process-due` † | Expires envelopes past a deadline, finishes envelopes the signing request did not, and retries completion notices, for the caller's organization, at once (the platform's tick does it for every organization every five minutes) |
 | `POST /api/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`); returns `{id, roles}` |
 | `GET /api/templates/:id` | Roles, the placed fields (type, role, page, normalized box) and whether they can be signed (`positionedFieldsSupported`) |
 | `POST /api/envelopes` | Creates and prepares an envelope (lifecycle step 2); `Idempotency-Key` required |
@@ -451,6 +459,12 @@ by the same live session with the same input and values, and returns the same si
 | `GET /editor/page/:id` | — | The editor page, framable only by the session's parent origin |
 | `POST /api/public/editor/exchange` | Same origin | `{pageId, code}` → `{token}` |
 | `GET /api/public/editor/current`, `GET /api/public/editor/pdf`, `POST /api/public/editor/save` | Editor token, same origin | The session, its source PDF, and one save |
+
+**The platform's tick**
+
+| Route | Auth | Purpose |
+| --- | --- | --- |
+| `POST /api/scheduled` † | `x-suger-access-via: schedule` and no identity (403 otherwise) | Every organization's due work, every five minutes (`insulin.scheduled`); answers `{expired, completed, waiting, failed}`. Not public, not in the catalog |
 
 **Pages** (the React app, `src/app/App.tsx`): `/sign` (the signing page), `/editor/page/:id` (the
 editor), `/copy` (a signer's copy) and, at every other path, the members' app (see "The members'
@@ -502,15 +516,17 @@ display.
 - **TSA.** Revocation of DigiCert's TSA certificates is not checked; DigiCert's terms for its free
   TSA are not confirmed for production; the request goes over plain HTTP (the response is signed and
   verified). The signed PDF carries no embedded (PAdES) signature.
-- **Rate limiting.** The app has none of its own beyond the OTP budget. Put rate limits on
-  `/api/public/signing/otp*` and `/api/public/page-sessions/exchange` before anyone outside the team
-  signs.
+- **Rate limiting.** The app has none of its own beyond the OTP budget (per task: three sends and
+  five entries per 15 minutes) and its 256-bit page codes. Behind the gateway every request to a
+  public path is limited per IP (`RL_APP`), and those that aren't GET or HEAD (the code exchanges,
+  code sends and code checks among them) also per app and IP, more strictly (`RL_PUBLIC`).
 - **Deprecated endpoint.** Delete `POST /api/envelopes/:id/prepare` once no host calls it.
 - **Retention and integrity.** No retention policy; the object store's create-only writes are not
   WORM; privileged changes to D1 or keys remain possible and are detected only where the checks above
   re-verify. Orphans are never cleaned up. A recorded signature cannot be rolled back if its input
   changes in storage before rendering; rendering then fails and the row stays `PENDING`.
-- **Due work.** Nothing runs on a schedule: deadlines, unfinished envelopes and unsent notices wait
-  for the next signing request on the envelope or a `POST /api/process-due`.
+- **Due work.** Between the platform's five-minute ticks, deadlines, unfinished envelopes and unsent
+  notices wait for the next signing request on the envelope or a `POST /api/process-due`. One run
+  looks at up to 25 envelopes to finish and 25 owing signed copies; a backlog takes several ticks.
 - **Blank editor sessions.** `POST /api/public/editor/save` still accepts a file for a session
   without a bound source, for older clients; the embedded UI does not.

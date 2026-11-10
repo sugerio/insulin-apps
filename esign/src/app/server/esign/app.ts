@@ -14,7 +14,7 @@ import { signingEnabled, type EnvironmentEnv } from './environment.ts';
 import { mountEditorRoutes } from './editor-routes.ts';
 import { sweepEnvelopes } from './envelope-completion.ts';
 import type { BlobStore } from './blob-store.ts';
-import { can, PERMISSIONS, readCaller, type Caller } from './identity.ts';
+import { can, isScheduleTick, PERMISSIONS, readCaller, type Caller } from './identity.ts';
 import type { MailEnv } from './mail.ts';
 import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
@@ -48,8 +48,11 @@ export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & {
 };
 export type Env = { Bindings: Bindings; Variables: { tenantId: string; caller: Caller } };
 
-/** Paths outside the platform identity: the signer pages' API (declared public in package.json) and the health check. */
-const isOpenPath = (path: string) => path.startsWith('/api/public/') || path === '/api/health';
+/**
+ * Paths outside the platform identity: the signer pages' API (declared public in package.json), the
+ * health check, and the platform's tick (`POST /api/scheduled`, which checks for the tick itself).
+ */
+const isOpenPath = (path: string) => path.startsWith('/api/public/') || path === '/api/health' || path === '/api/scheduled';
 
 /**
  * Management routes (`/api/*` but the public ones) belong to the organization of the platform
@@ -71,6 +74,17 @@ export function createApp() {
 const app = new Hono<Env>();
 // No configuration is disclosed: only whether the app answers.
 app.get('/api/health', (context) => context.json({ status: 'ok', service: 'esign' }));
+// The platform's tick, every five minutes (package.json `insulin.scheduled`): the due work of every
+// organization, the same work as POST /api/process-due. Only the tick passes: a request with a
+// member's, a service account's or an agent's identity, or without `x-suger-access-via: schedule`,
+// is refused. Never public and never in the catalog.
+app.post('/api/scheduled', async (context) => {
+  if (!isScheduleTick(context.req.raw)) return context.json({ error: 'forbidden' }, 403);
+  if (!signingEnabled(context.env)) return context.json({ error: 'signing_disabled' }, 404);
+  const expired = await expireDueEnvelopes(context.env.DB, Date.now(), null);
+  const counts = await sweepEnvelopes(context.env, null);
+  return context.json({ expired, ...counts });
+});
 // The placed fields a document can be signed with: Signature, Date signed and Title.
 const supportedFields=(raw:string,roles:string[],pages:number)=>validateFields(JSON.parse(raw),roles,pages);
 app.use('/api/*', async (context, next) => (isOpenPath(context.req.path) ? next() : managementAuth(context, next)));
@@ -129,9 +143,10 @@ app.get('/api/envelopes', async (context) => {
   });
 });
 
-// Work that used to run on a schedule: expire envelopes past a deadline, finish the ones whose
-// signing request did not, and send signed-copy notices still owed. The host product (or anyone
-// who manages envelopes) calls it; reading an envelope also expires it when due.
+// Due work, for the caller's organization only: expire envelopes past a deadline, finish the ones
+// whose signing request did not, and send signed-copy notices still owed. The platform's tick runs
+// it for every organization every five minutes (POST /api/scheduled); this finishes it at once, for
+// anyone who manages envelopes. Reading an envelope also expires it when due.
 app.post('/api/process-due', async (context) => {
   if (!signingEnabled(context.env)) return context.json({ error: 'signing_disabled' }, 404);
   const tenantId = context.get('tenantId');

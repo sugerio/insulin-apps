@@ -35,6 +35,11 @@ export interface HostedApp {
    * app authenticates them with its own codes. Empty for most apps.
    */
   publicPaths: string[]
+  /**
+   * The path the gateway POSTs to every five minutes, with no identity (`x-suger-access-via: schedule`), so the app can
+   * run its due work (DESIGN.md §8.5); null for an app that has none.
+   */
+  scheduled: string | null
 }
 
 export interface Config {
@@ -59,6 +64,8 @@ export interface Config {
   email: SendEmail | null
   rlAuth: RateLimit
   rlApp: RateLimit
+  /** The stricter per-IP limit on requests to public paths that change something (anything but GET and HEAD). */
+  rlPublic: RateLimit
   /** GATEWAY_SECRET_KEY's 32 bytes, or null: features that encrypt or derive secrets then say they aren't set up. */
   secretKey: Uint8Array | null
 }
@@ -170,6 +177,31 @@ export function parsePublicPaths(raw: unknown, where: string, problems: string[]
 }
 
 /**
+ * Why an app's `insulin.scheduled` is refused, or null. The same rule as .github/scripts/list-apps.mjs: one path under
+ * `/api/`, passing the rules of a public path (publicPathProblem), without a trailing slash, and neither one of the
+ * app's public paths nor under one (whatever reaches it must come from the gateway's own tick).
+ */
+export function scheduledProblem(entry: unknown, publicPaths: string[]): string | null {
+  if (typeof entry !== 'string' || !entry.startsWith('/api/') || entry.endsWith('/')) return 'must be a path under /api/, without a trailing slash'
+  const problem = publicPathProblem(entry)
+  if (problem) return problem
+  // Compared without regard to case, so no spelling of the path is public.
+  if (isPublicPath({ publicPaths: publicPaths.map((path) => path.toLowerCase()) }, entry.toLowerCase())) {
+    return 'must not be one of the app\'s public paths or under one'
+  }
+  return null
+}
+
+export function parseScheduled(raw: unknown, publicPaths: string[], where: string, problems: string[]): string | null {
+  if (raw === undefined || raw === null) return null
+  if (scheduledProblem(raw, publicPaths)) {
+    problems.push(where)
+    return null
+  }
+  return raw as string
+}
+
+/**
  * Whether a request path is one of the app's public paths: equal to an entry, below an entry that ends in `/`, or
  * below `entry/`. Never a reserved path, whatever its case, and never a path whose segments hide a dot segment or a
  * slash in their encoding (such a request falls through to the normal checks).
@@ -262,6 +294,7 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
     }
     const service = env[binding as `APP_${string}`]
     if (!hasMethod(service, 'fetch')) log('config_app_binding_missing', { app: name, binding })
+    const publicPaths = parsePublicPaths(item.publicPaths, `SITE_APPS[${index}].publicPaths`, problems)
     apps.push({
       name,
       title: truncate(cleanText(item.title), 80) || name,
@@ -272,7 +305,8 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       appId: `insulin-apps-${name}`,
       service: hasMethod(service, 'fetch') ? (service as Fetcher) : null,
       permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
-      publicPaths: parsePublicPaths(item.publicPaths, `SITE_APPS[${index}].publicPaths`, problems),
+      publicPaths,
+      scheduled: parseScheduled(item.scheduled, publicPaths, `SITE_APPS[${index}].scheduled`, problems),
     })
   })
   return apps
@@ -311,6 +345,7 @@ export function readConfig(env: Env): ConfigResult {
   if (!testMode && !hasMethod(env.EMAIL, 'send')) problems.push('EMAIL')
   if (!hasMethod(env.RL_AUTH, 'limit')) problems.push('RL_AUTH')
   if (!hasMethod(env.RL_APP, 'limit')) problems.push('RL_APP')
+  if (!hasMethod(env.RL_PUBLIC, 'limit')) problems.push('RL_PUBLIC')
 
   // Optional, but a value that is set must be usable: a wrong key would encrypt with something nobody can recover.
   const gatewayKey = parseSecretKey(env.GATEWAY_SECRET_KEY)
@@ -335,6 +370,7 @@ export function readConfig(env: Env): ConfigResult {
       email: testMode ? null : env.EMAIL!,
       rlAuth: env.RL_AUTH!,
       rlApp: env.RL_APP!,
+      rlPublic: env.RL_PUBLIC!,
       secretKey: gatewayKey,
     },
   }

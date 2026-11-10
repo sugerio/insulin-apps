@@ -10,7 +10,7 @@ const TERMS: readonly (readonly [term: string, definition: React.ReactNode])[] =
   ['Certificate of completion', 'The summary of a completed envelope: its seal, checked against the stored files, the fingerprints it binds, the signers and the audit trail. It follows the signed PDF in the file each signer gets.'],
   ['Consent disclosure', 'The statement a signer agrees to before signing: that they sign electronically, and receive the document and its records electronically. Also called the electronic records disclosure.'],
   ['Decline', 'A signer\'s choice not to sign, with a reason. It ends the envelope for everyone.'],
-  ['Due work', ['Expiring envelopes past their deadline, finishing envelopes a request left unfinished, and retrying signed-copy emails. Hosts run it on a schedule with ', h('code', null, 'POST /api/process-due'), '; someone who manages can run it from Envelopes.']],
+  ['Due work', ['Expiring envelopes past their deadline, finishing envelopes a request left unfinished, and retrying signed-copy emails. The platform runs it every five minutes; someone who manages can run it at once from Envelopes, and a host with ', h('code', null, 'POST /api/process-due'), '.']],
   ['Electronic signature', ['A sound, symbol or process attached to a record and adopted by someone with the intent to sign it. See ', h(DocLink, { to: 'e-signatures' }, 'Electronic signatures in general'), '.']],
   ['Envelope', 'A template sent to named signers, one for each role, who sign in order. It has a status and an audit trail.'],
   ['Field', 'A place on a template\'s page where a role signs or gives their title, or where the date they sign goes.'],

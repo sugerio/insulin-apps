@@ -10,7 +10,7 @@ over a service binding with the console identity headers. The apps need no hosti
 | `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; each app's `/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`; invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
-| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users` and `/settings/integrations`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1) |
+| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users` and `/settings/integrations`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
 | `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the integration proxy `/__insulin/integrations/*` and the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
@@ -41,6 +41,7 @@ bundles them.
 | `src/access.ts` | someone's role and permissions in one app, from their organization role or their grant; every way into an app ends here |
 | `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), access in forms and words (`access-forms.ts`) |
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
+| `src/scheduled.ts` | the crons: the apps' five-minute tick to their `insulin.scheduled` path, and which cron runs the daily cleanup |
 | `src/oauth/` | the authorization server: metadata, registration, authorize and consent, token, revoke; token formats and lifetimes, `resolveBearer`, and calls to an app with a token (`app-api.ts`) |
 | `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
 | `src/integrations/` | an app's integrations page (`settings.ts`) and the integration proxy (`proxy.ts`) |
@@ -69,10 +70,12 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `DB` | D1 | migrations in `migrations/` |
 | `EMAIL` | `send_email` | Cloudflare Email Service; restrict it to the `EMAIL_FROM` address |
 | `RL_AUTH` | ratelimit | suggested `limit: 10, period: 60`; keys per action and IP, and per action and email (hashed) |
-| `RL_APP` | ratelimit | suggested `limit: 600, period: 60`; keyed per user |
+| `RL_APP` | ratelimit | suggested `limit: 600, period: 60`; keyed per user (and per IP on public paths) |
+| `RL_PUBLIC` | ratelimit | suggested `limit: 60, period: 60`; requests to an app's public paths that aren't GET or HEAD, keyed per app and IP (`public-post:<app>:<ip>`), on top of `RL_APP` |
+| crons | trigger | `*/5 * * * *` (the apps' tick, `src/scheduled.ts`) and `17 3 * * *` (the daily cleanup) |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
-| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`) and `publicPaths` its paths for people without an account (`insulin.publicPaths`); a malformed list fails closed |
+| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`) and `scheduled` the path its tick goes to, or null (`insulin.scheduled`); a malformed list fails closed |
 | `GOOGLE_CLIENT_ID` | var | optional; empty hides Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | secret | required when `GOOGLE_CLIENT_ID` is set |
 | `TURNSTILE_SITE_KEY` | var | required |
@@ -85,9 +88,10 @@ The deploy pipeline generates the production wrangler config from this list; kee
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
 `SUGER_ACCESS_MODE=console`, plus `x-suger-access-via` (`browser`, `mcp` or `api`) and, for an app with a permission
-catalog, `x-suger-app-permissions` (space-separated). The app role is `ADMIN`, `EDITOR` or `VIEWER`: organization owners
-and admins are admins in every app, and a custom role is sent as the least built-in role that has its permissions
-(DESIGN.md §2.4). Every incoming `x-suger-*` header and the gateway's cookies are removed first. User, organization and
+catalog, `x-suger-app-permissions` (space-separated). A request on a public path carries only `x-suger-app-id` and
+`x-suger-access-via: public`, and the five-minute tick only `x-suger-app-id` and `x-suger-access-via: schedule`. The
+app role is `ADMIN`, `EDITOR` or `VIEWER`: organization owners and admins are admins in every app, and a custom role is
+sent as the least built-in role that has its permissions (DESIGN.md §2.4). Every incoming `x-suger-*` header and the gateway's cookies are removed first. User, organization and
 invitation ids are random UUIDs (`crypto.randomUUID()`), so apps receive UUIDs as user and organization ids.
 
 ## Develop
@@ -177,8 +181,14 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   account's never on `/mcp`.
 - **Public paths** (DESIGN.md §8.1) are checked before any session or token: a match is forwarded with only
   `x-suger-app-id` and `x-suger-access-via: public`, without the caller's `Authorization`, with no account bar, and
-  limited per IP. Reserved paths are routed first, and a path that hides a dot segment or a slash in its encoding is
-  never public, so a trick in the path can only fall back to the normal checks.
+  limited per IP (`RL_APP`); anything but GET and HEAD also per app and IP, more strictly (`RL_PUBLIC`). Reserved
+  paths are routed first, and a path that hides a dot segment or a slash in its encoding is never public, so a trick in
+  the path can only fall back to the normal checks.
+- **The tick** (DESIGN.md §8.5). On the five-minute cron the `scheduled` handler POSTs to each app's declared
+  `insulin.scheduled` path over its binding, every app in its own `waitUntil`, with `x-suger-app-id` and
+  `x-suger-access-via: schedule` only, an empty body and a 25-second timeout, and logs the app and the status. The
+  daily cron runs the cleanup instead. Since every incoming `x-suger-*` header is removed and app Workers have no
+  public route, nothing from outside can pass for the tick.
 - **The mail relay** (DESIGN.md §8.2) takes one message per request from an app with its `SUGER_APP_TOKEN`, for an
   existing organization, and sends it from `EMAIL_FROM` named after the app. Its slot in `mail_log` (`kind` `app:<name>`)
   is taken by one statement that checks the per-recipient cap and the app's 500 a day for the organization.
@@ -236,8 +246,8 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   (`<details name>`), and closed by a click anywhere outside (the open trigger's `::before` covers the window).
 - **Logs** carry event names, ids, error class names and identifier-like codes; never exception messages.
 - **Retention.** Expired sessions, used or expired links and mail-log rows older than two days are deleted in batches
-  of at most 200 per table after each POST (`src/housekeeping.ts`). The Worker also has a `scheduled` handler that
-  runs the same cleanup in bigger batches if the deploy adds a cron trigger (optional).
+  of at most 200 per table after each POST (`src/housekeeping.ts`). The daily cron (`17 3 * * *`) runs the same
+  cleanup in bigger batches.
 
 ## shadcn/ui
 

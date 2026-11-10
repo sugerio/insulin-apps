@@ -11,7 +11,10 @@ Cloudflare custom domains for the apex, `www` (redirected to the apex), `auth` (
 moved), and every app hostname point to the `insulin-apps-gateway` Worker. The gateway owns accounts, sign-in,
 organization membership and roles in its D1 database, then calls the private `insulin-apps-<app>` Workers through
 service bindings, with the identity headers the Insulin console sends. Each app has its own D1 database. App Workers have neither a `workers.dev` address nor a public route. The
-gateway deletes expired sessions, tokens and mail records after its writes and once a day on a cron trigger.
+gateway deletes expired sessions, tokens and mail records after its writes and once a day on a cron trigger, and
+every five minutes, on a second cron trigger, it calls the scheduled path of each app that declares one (DESIGN.md
+§8.5). The deploy sets both triggers and the gateway's rate limits (`RL_AUTH`, `RL_APP`, `RL_PUBLIC`); none needs
+setting up by hand.
 
 Each `.github/workflows/<app>.yml` file supplies its app name to the shared `.github/workflows/app.yml` pipeline. On a
 pull request that touches that app, the pipeline installs it, checks its Insulin shape, typechecks, tests, verifies
@@ -133,9 +136,10 @@ Add a top-level directory with a `package.json` and `src/api.ts`. Its directory 
 rule and must not be reserved. Every organization shares one deployment of the app, so the app must keep each
 organization's data apart: scope everything by the console organization (`getCurrentUser().organizationId`), as Cap
 Table does. Set `displayName` and `description` in `package.json`, include D1 migrations under
-`src/app/db/migrations`, and make sure the normal checks pass. An app that needs public paths, mail or runtime secrets
-declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to the `production` environment
-before its first deploy. Copy `.github/workflows/captable.yml` to
+`src/app/db/migrations`, and make sure the normal checks pass. An app that needs public paths, mail, runtime secrets or
+scheduled work declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to the `production`
+environment before its first deploy. A new `insulin.scheduled` path is ticked once the gateway has been deployed with
+it (the app's workflow refreshes the gateway after every app deploy). Copy `.github/workflows/captable.yml` to
 `.github/workflows/<app>.yml`, then change the workflow name, the app path entries, and `with.app`. Repository-wide CI
 enforces that every discovered app has this workflow and that no app workflow names a missing app.
 

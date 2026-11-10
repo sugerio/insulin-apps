@@ -10,7 +10,7 @@
 // lockfile, and only the D1 binding and static assets at runtime.
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, join, relative, resolve, sep } from 'node:path'
-import { readPermissions, readPublicPaths, readSecretNames } from './list-apps.mjs'
+import { readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
 
 const [appArg, ...flags] = process.argv.slice(2)
 if (!appArg) {
@@ -118,12 +118,21 @@ try {
 if (manifest.workspaces) fail('package.json must not declare workspaces: one package per app')
 // What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §8): checked as the deploy will check it.
 const appName = basename(resolve(app))
+const declared = {}
 for (const [field, readField] of [['permissions', readPermissions], ['publicPaths', readPublicPaths], ['secrets', readSecretNames]]) {
   try {
-    readField(appName, manifest.insulin?.[field])
+    declared[field] = readField(appName, manifest.insulin?.[field])
   } catch (error) {
     fail(error.message)
   }
+}
+// The scheduled path (§8.5) must not be public, so it is checked against the public paths (as declared, when the list
+// itself was refused above).
+const declaredPublicPaths = declared.publicPaths ?? (Array.isArray(manifest.insulin?.publicPaths) ? manifest.insulin.publicPaths.filter((entry) => typeof entry === 'string') : [])
+try {
+  readScheduled(appName, manifest.insulin?.scheduled, declaredPublicPaths)
+} catch (error) {
+  fail(error.message)
 }
 const scripts = manifest.scripts ?? {}
 for (const name of ['dev', 'build', 'db:generate', 'typecheck']) {

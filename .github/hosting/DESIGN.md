@@ -267,12 +267,13 @@ declared in the app's `package.json` under `insulin`:
 "insulin": {
   "permissions": [ … ],
   "publicPaths": ["/sign", "/api/public/", "/assets/"],
+  "scheduled": "/api/scheduled",
   "secrets": ["ESIGN_KMS_KEY_ARN", "ESIGN_OTP_KEY"]
 }
 ```
 
-The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths` again and
-fails closed.
+The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths` and
+`scheduled` again and fails closed.
 
 ### 8.1 Public paths
 
@@ -287,7 +288,10 @@ On a public path the gateway looks at no session and no token, and the app gets 
 `x-suger-access-via: public` only: no person, organization, role or permissions, even when a signed-in person or a
 token sent the request. Incoming `x-suger-*` headers, the gateway's cookies and `Authorization` are removed as always.
 HTML gets no account bar, the app's own headers (its CSP and `frame-ancestors`) are kept, and requests are limited per
-IP address (`RL_APP`). The gateway's own paths always win over a public path.
+IP address (`RL_APP`). A request that isn't GET or HEAD (an e-sign code exchange, a code sent or checked) also counts
+against a stricter limit per app and IP address, `RL_PUBLIC` (60 a minute suggested), and gets 429
+`{ "error": "rate_limited" }` with `Retry-After: 60` past it, while reading goes on. That is defence in depth: the app
+still limits what its codes allow. The gateway's own paths always win over a public path.
 
 The app authenticates these requests itself, with its own short-lived codes (an e-mailed one-time code, a code in the
 link a member generated), and they reach only what those codes are for. A public path is never a way around sign-in
@@ -335,6 +339,31 @@ outright), never logged, and never visible to the build, which runs in a job wit
 Credentials for outside services are stored by the platform and used through the integration proxy (§6), not kept in
 the app.
 
+### 8.5 Scheduled work
+
+Apps have no cron trigger. An app with work that falls due (deadlines that pass, work a request was cut short of,
+mail to retry) declares one path in `insulin.scheduled`, and the gateway calls it every five minutes.
+
+- **The path.** One path that starts with `/api/`, without a trailing slash, passing the rules of a public path
+  (§8.1: never `/api/__suger/…`, no dot segment, query or percent sign). It must not be one of the app's public paths
+  or under one, compared without regard to case. `list-apps.mjs`, `check-insulin-app.mjs` and the gateway's configuration check it; the
+  gateway refuses to start with a bad one.
+- **The tick.** The gateway's `scheduled` handler runs on the cron `*/5 * * * *`. For every app that declares a path
+  and has a service binding it POSTs to `https://<app>.<domain><path>` over the binding, all apps at once (each in
+  `waitUntil`, so one failing or slow app never holds up another), with an empty body and a 25-second timeout. The
+  request carries `x-suger-app-id` and `x-suger-access-via: schedule` only: no person, organization, role or
+  permissions. The log line names the app and the status (the HTTP status, `timeout` or `unreachable`), nothing else.
+- **Nobody else can send it.** The gateway removes every incoming `x-suger-*` header (a browser's, a token's, a public
+  request's), and app Workers have no public route, so a request marked `schedule` can only be the gateway's own
+  tick. The app still checks: it refuses the path unless `x-suger-access-via` is exactly `schedule` and no identity
+  is present, and treats a request marked `schedule` as nobody everywhere else.
+- **What the app does.** Its due work for every organization, since the tick belongs to none. It must be safe to
+  repeat and to overlap with requests (the next tick picks up what one leaves), and should finish well within the
+  timeout, doing a bounded amount per tick. An app can keep a route of its own (E-sign's `POST /api/process-due`) for
+  someone to finish their organization's due work at once.
+- **The daily cleanup** keeps its own cron, `17 3 * * *`: the gateway's retention cleanup runs on it and the tick
+  doesn't.
+
 ## 9. Data
 
 All in the gateway's D1 database; migrations are forward-only.
@@ -351,7 +380,9 @@ All in the gateway's D1 database; migrations are forward-only.
 | Name | Kind | Notes |
 |---|---|---|
 | `GATEWAY_SECRET_KEY` | secret | 32 random bytes, base64. Encrypts TOTP secrets, stored credentials and OIDC client secrets; derives the apps' `SUGER_APP_TOKEN`. Without it MFA, stored credentials and OIDC can't be set up (the rest works) |
-| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths` | var | From each app's `package.json` (§2.3, §8.1) |
+| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled` | var | From each app's `package.json` (§2.3, §8.1, §8.5) |
+| `RL_PUBLIC` | ratelimit | Requests to public paths that aren't GET or HEAD, per app and IP; 60 a minute suggested (§8.1) |
+| Cron triggers | trigger | `*/5 * * * *` (the apps' tick, §8.5) and `17 3 * * *` (the daily cleanup) |
 | App secrets | GitHub environment | Each app's `insulin.secrets`, by name (§8.3) |
 | `nodejs_compat` | flag | For SAML's XML signature library |
 

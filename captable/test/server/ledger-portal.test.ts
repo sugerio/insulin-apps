@@ -42,7 +42,7 @@ describe('holder portal over the synthetic Acme ledger', () => {
     const past = await getJson<api.PortalOverview>(harness, holder, '/api/portal/overview?asOf=2025-01-01')
     expect(past.asOf).toBe('2025-01-01')
     expect(past.holdings[0]!.securities.map((security) => security.displayId).sort()).toEqual(['OPT-1', 'OPT-16'])
-    for (const identity of [harness.owner, harness.admin, harness.editor]) {
+    for (const identity of [harness.owner, harness.admin, harness.reader]) {
       expect(await getJson(harness, identity, `/stakeholders/${harness.id('S04')}/preview`)).toEqual(current)
     }
   })
@@ -93,7 +93,7 @@ describe('holder portal over the synthetic Acme ledger', () => {
     })
     expect(await getJson(harness, harness.owner, `/stakeholders/${harness.id('S04')}/preview/how-to-exercise`))
       .toMatchObject({ paymentInstructions: details })
-    expect(await getJson(harness, harness.editor, `/stakeholders/${harness.id('S04')}/preview/how-to-exercise`))
+    expect(await getJson(harness, harness.reader, `/stakeholders/${harness.id('S04')}/preview/how-to-exercise`))
       .toMatchObject({ paymentInstructions: { ...details, accountNumber: '••••2333', iban: '••••7766' } })
   })
 })

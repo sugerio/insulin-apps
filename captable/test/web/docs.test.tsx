@@ -47,14 +47,18 @@ async function title(name: string): Promise<HTMLElement> {
   return screen.findByRole("heading", { level: 1, name });
 }
 
-// Every console role, as the app sees it: the workspace's (Owner, Admin, Editor) and the holder's (User, Viewer).
-const WORKSPACE_ROLES = [["an Owner", "owner", "Owner"], ["an Admin", "admin_rw", "Admin"], ["an Editor", "admin_ro", "Editor"]] as const;
+// Every role, as the app sees it: the workspace's (Owner, Admin, Editor, and a custom role that only views the cap
+// table) and the holder's (User, Viewer).
+const WORKSPACE_ROLES = [
+  ["an Owner", "owner", "Owner"], ["an Admin", "admin_rw", "Admin"], ["an Editor", "editor", "Editor"], ["a read-only custom role", "admin_ro", "Custom role"],
+] as const;
 const HOLDER_ROLES = [["a User", "USER", "User"], ["a Viewer", "VIEWER", "Viewer"]] as const;
-// Before setup, owners and admins choose how to start (and come back to it); everyone else waits for them.
+// Before setup, whoever records changes chooses how to start (and comes back to it); everyone else waits for them.
 const BEFORE_SETUP: readonly (readonly [who: string, session: Me, home: string])[] = [
   ["an Owner", me("owner", { company: null }), "Set up your company"],
   ["an Admin", me("admin_rw", { company: null }), "Set up your company"],
-  ["an Editor", me("admin_ro", { company: null }), "Home"],
+  ["an Editor", me("editor", { company: null }), "Set up your company"],
+  ["a read-only custom role", me("admin_ro", { company: null }), "Home"],
   ["a User", { ...holderMe([], { consoleRole: "USER" }), company: null }, "Home"],
   ["a Viewer", { ...holderMe([], { consoleRole: "VIEWER" }), company: null }, "Home"],
 ];
@@ -186,8 +190,16 @@ describe("the topics", () => {
     expect(importing).toContain("as Cap Table reads them on the import date");
     const gettingStarted = textOf("getting-started");
     expect(gettingStarted).toContain("one company's cap table for each Insulin organization");
-    expect(gettingStarted).toContain("The first owner or admin of each organization");
+    expect(gettingStarted).toContain("The first owner, admin or editor of each organization");
     expect(gettingStarted).not.toContain("per app");
+    // Roles: Editor records changes, Viewer is the holder view, custom roles from the three permissions, AI agents.
+    expect(gettingStarted).toContain("Owner, Admin, EditorManage the cap table");
+    expect(gettingStarted).toContain("An editor changes the cap table just as an admin does.");
+    for (const permission of ["Record changes", "View the cap table", "See own holdings"]) expect(gettingStarted).toContain(permission);
+    expect(gettingStarted).toContain("Cap Table shows \"Custom role\" under the person's name");
+    expect(gettingStarted).toContain("An AI agent acts with the role and permissions of the person who connected it");
+    expect(gettingStarted).not.toMatch(/captable\.|portfolio\.|admin_r[ow]/);
+    expect(textOf("glossary")).toContain("It acts with that person's role and permissions, and no more.");
     const stakeholders = textOf("for-stakeholders");
     expect(stakeholders).toContain("Cap Table records only exercises of vested options.");
     expect(stakeholders).toContain("counting all your ISOs from the company and its parent or subsidiary companies in the order they were granted");

@@ -1,11 +1,14 @@
-// Invitations: OWNER and ADMIN invite an e-mail address with a role; only a signed-in user whose confirmed address is
-// the invited one can accept. The link itself grants nothing.
+// Invitations: OWNER and ADMIN invite an e-mail address with an organization role or specific apps (and an app's
+// admins, to their app, from its people page: app-users.ts); only a signed-in user whose confirmed address is the
+// invited one can accept. The link itself grants nothing.
 import type { Context } from '../context.ts'
-import { authUrl } from '../context.ts'
+import { apexUrl } from '../context.ts'
 import { newId } from '../crypto.ts'
+import { listCustomRoles } from '../db/grants.ts'
 import {
   acceptInvitation as acceptForUser, claimResend, countOpenInvitations, declineInvitation as declineForUser,
-  deleteInvitation, findInvitation, insertInvitation, restoreResend, revokeInvitation as markRevoked, type InvitationRow,
+  deleteInvitation, findInvitation, insertInvitation, listInvitationGrants, restoreResend, revokeInvitation as markRevoked,
+  type InvitationGrantRow, type InvitationRow,
 } from '../db/invitations.ts'
 import { ORG_INVITATION_LIMIT, countOrgInvitationMail } from '../db/mail.ts'
 import { countMembers, findMembership } from '../db/orgs.ts'
@@ -17,21 +20,26 @@ import { log } from '../log.ts'
 import { invitationMail } from '../mail/templates.ts'
 import { sendMail } from '../mail/transport.ts'
 import { MAIL_FAILED } from '../pages/auth.tsx'
-import { invitationPage, type InvitationView } from '../pages/orgs.tsx'
+import { invitationPage, type InvitationView } from '../pages/settings.tsx'
 import { afterPost, notFoundPage } from '../pages/status.tsx'
-import { canHandleInvitation, canManageMembers, grantableRoles, isRole, ROLE_LABELS } from '../roles.ts'
+import { canHandleInvitation, canManageMembers } from '../roles.ts'
 import { requireSession } from '../auth/guard.ts'
 import { loadSession, switchActiveOrg, type Session } from '../auth/session.ts'
 import { normalizeEmail } from '../validate.ts'
-import { actorChanged, backToOrg, memberOf, notAllowed, renderOrg } from './orgs.ts'
+import { accessPhrase, parseAccessForm } from './access-forms.ts'
+import { actorChanged, backTo, memberOf, notAllowed, renderUsers, settingsUrl } from './orgs.ts'
 
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const RESEND_GAP_MS = 10 * 60 * 1000
 export const PENDING_LIMIT = 50
 export const MEMBER_LIMIT = 100
 
-function invitationLink(ctx: Context, id: string): string {
-  return authUrl(ctx, `/invitations/${id}`)
+export function invitationLink(ctx: Context, id: string): string {
+  return apexUrl(ctx, `/invitations/${id}`)
+}
+
+async function grantsOf(ctx: Context, invitationId: string): Promise<InvitationGrantRow[]> {
+  return (await listInvitationGrants(ctx.config.db, [invitationId])).get(invitationId) ?? []
 }
 
 export async function invite(ctx: Context, [orgId]: string[]): Promise<Response> {
@@ -40,13 +48,14 @@ export async function invite(ctx: Context, [orgId]: string[]): Promise<Response>
   const { session, membership } = found
   if (!canManageMembers(membership.role)) return notAllowed(ctx, session)
   const db = ctx.config.db
-  const problem = (error: string, status: number) => renderOrg(ctx, session, membership, { error, status })
+  const problem = (error: string, status: number) => renderUsers(ctx, session, membership, { error, status })
 
   const email = normalizeEmail(field(ctx.form, 'email'))
   if (!email) return problem('Enter a valid email address to invite.', 400)
-  const role = field(ctx.form, 'role')
-  if (!isRole(role)) return problem('Choose a role.', 400)
-  if (!grantableRoles(membership.role).includes(role)) return problem(`Your role can't invite someone as ${ROLE_LABELS[role]}.`, 403)
+  const customRoles = await listCustomRoles(db, membership.org_id)
+  const parsed = parseAccessForm(ctx.config, ctx.form, membership.role, customRoles)
+  if ('problem' in parsed) return problem(parsed.problem, parsed.status)
+  const { role, grants } = parsed
 
   const invitee = await findUserByEmail(db, email)
   if (invitee && await findMembership(db, membership.org_id, invitee.id)) return problem('That person is already a member.', 409)
@@ -60,7 +69,7 @@ export async function invite(ctx: Context, [orgId]: string[]): Promise<Response>
 
   const id = newId()
   const created = await insertInvitation(db, {
-    id, orgId: membership.org_id, email, role, invitedBy: session.user.id, now: ctx.now, expiresAt: ctx.now + INVITATION_TTL_MS, pendingLimit: PENDING_LIMIT,
+    id, orgId: membership.org_id, email, role, grants, app: null, invitedBy: session.user.id, now: ctx.now, expiresAt: ctx.now + INVITATION_TTL_MS, pendingLimit: PENDING_LIMIT,
   })
   if (!created) {
     // The insert re-checks the inviter's role and the pending cap itself; work out which condition stopped it.
@@ -71,13 +80,16 @@ export async function invite(ctx: Context, [orgId]: string[]): Promise<Response>
     }
     return problem('There is already a pending invitation for that address. You can resend it below.', 409)
   }
-  const outcome = await sendMail(ctx, 'invitation', email, invitationMail(session.user.name, membership.org_name, role, invitationLink(ctx, id)), membership.org_id)
+  const phrase = accessPhrase(ctx.config, role, grants.map((grant) => ({
+    app: grant.app, role: grant.role, custom_role_name: customRoles.find((custom) => custom.id === grant.customRoleId)?.name ?? null,
+  })))
+  const outcome = await sendMail(ctx, 'invitation', email, invitationMail(session.user.name, membership.org_name, phrase, invitationLink(ctx, id)), membership.org_id)
   if (outcome === 'failed') {
     await deleteInvitation(db, id)
     return problem(MAIL_FAILED, 503)
   }
-  log('invitation_created', { org: membership.org_id, invitation: id, by: session.user.id, role, emailed: outcome === 'sent' })
-  return backToOrg(ctx, membership.org_id, outcome === 'sent' ? 'invited' : 'invitation-saved')
+  log('invitation_created', { org: membership.org_id, invitation: id, by: session.user.id, role, apps: grants.length, emailed: outcome === 'sent' })
+  return backTo(ctx, 'users', membership.org_id, outcome === 'sent' ? 'invited' : 'invitation-saved')
 }
 
 /** A pending invitation of the member's organization that their role may handle, or the response to send instead. */
@@ -99,7 +111,7 @@ export async function revokeInvitation(ctx: Context, [orgId, invitationId]: stri
     return (await actorChanged(ctx, found.session, found.membership)) ?? notFoundPage(ctx)
   }
   log('invitation_revoked', { org: found.membership.org_id, invitation: found.invitation.id, by: found.session.user.id })
-  return backToOrg(ctx, found.membership.org_id, 'invitation-revoked')
+  return backTo(ctx, 'users', found.membership.org_id, 'invitation-revoked')
 }
 
 export async function resendInvitation(ctx: Context, [orgId, invitationId]: string[]): Promise<Response> {
@@ -107,19 +119,19 @@ export async function resendInvitation(ctx: Context, [orgId, invitationId]: stri
   if (found instanceof Response) return found
   const { session, membership, invitation } = found
   const db = ctx.config.db
-  const problem = (error: string, status: number) => renderOrg(ctx, session, membership, { error, status })
+  const problem = (error: string, status: number) => renderUsers(ctx, session, membership, { error, status })
   if (ctx.now - invitation.last_sent_at < RESEND_GAP_MS) return problem('An invitation can be sent again once every 10 minutes.', 429)
   if (!(await claimResend(db, invitation, session.user.id, ctx.now, RESEND_GAP_MS, ctx.now + INVITATION_TTL_MS))) {
     return (await actorChanged(ctx, session, membership)) ?? problem('An invitation can be sent again once every 10 minutes.', 429)
   }
   const outcome = await sendMail(ctx, 'invitation', invitation.email,
-    invitationMail(session.user.name, membership.org_name, invitation.role, invitationLink(ctx, invitation.id)), membership.org_id)
+    invitationMail(session.user.name, membership.org_name, accessPhrase(ctx.config, invitation.role, await grantsOf(ctx, invitation.id)), invitationLink(ctx, invitation.id)), membership.org_id)
   if (outcome !== 'sent') {
     await restoreResend(db, invitation, ctx.now)
     return problem(outcome === 'failed' ? MAIL_FAILED : 'We can\'t email that invitation right now: the address has received several emails recently, or this organization has sent its daily maximum. Try again later.', outcome === 'failed' ? 503 : 429)
   }
   log('invitation_resent', { org: membership.org_id, invitation: invitation.id, by: session.user.id })
-  return backToOrg(ctx, membership.org_id, 'invitation-resent')
+  return backTo(ctx, 'users', membership.org_id, 'invitation-resent')
 }
 
 function isOpen(ctx: Context, invitation: InvitationRow | null): invitation is InvitationRow {
@@ -139,7 +151,7 @@ export async function invitationView(ctx: Context, [invitationId]: string[]): Pr
   if (!invitation) return notFoundPage(ctx)
   const session = await loadSession(ctx)
   const view = viewFor(ctx, session, invitation)
-  return htmlResponse(invitationPage(ctx, session, invitation, view), { status: VIEW_STATUS[view] })
+  return htmlResponse(invitationPage(ctx, session, invitation, await grantsOf(ctx, invitation.id), view), { status: VIEW_STATUS[view] })
 }
 
 async function answerable(ctx: Context, invitationId: string): Promise<{ session: Session; invitation: InvitationRow } | Response> {
@@ -148,7 +160,7 @@ async function answerable(ctx: Context, invitationId: string): Promise<{ session
   const invitation = await findInvitation(ctx.config.db, invitationId)
   if (!invitation) return notFoundPage(ctx)
   const view = viewFor(ctx, session, invitation)
-  if (view !== 'open') return htmlResponse(invitationPage(ctx, session, invitation, view), { status: VIEW_STATUS[view] })
+  if (view !== 'open') return htmlResponse(invitationPage(ctx, session, invitation, await grantsOf(ctx, invitation.id), view), { status: VIEW_STATUS[view] })
   return { session, invitation }
 }
 
@@ -161,12 +173,14 @@ export async function acceptInvitation(ctx: Context, [invitationId]: string[]): 
     const full = await countMembers(db, invitation.org_id) >= MEMBER_LIMIT
     const error = full ? `This organization has reached its limit of ${MEMBER_LIMIT} members. Ask its owners to make room.` : null
     const fresh = await findInvitation(db, invitation.id)
-    return htmlResponse(invitationPage(ctx, session, fresh, full ? 'open' : 'closed', error), { status: 409 })
+    return htmlResponse(invitationPage(ctx, session, fresh, await grantsOf(ctx, invitation.id), full ? 'open' : 'closed', error), { status: 409 })
   }
   const membership = await findMembership(db, invitation.org_id, session.user.id)
   if (membership) await switchActiveOrg(ctx, session, { id: membership.org_id, name: membership.org_name, role: membership.role })
   log('invitation_accepted', { org: invitation.org_id, invitation: invitation.id, user: session.user.id })
-  return afterPost(ctx, safeReturnTo(ctx, field(ctx.form, 'return_to')) ?? authUrl(ctx, `/orgs/${invitation.org_id}?notice=joined`))
+  // Specific-apps members don't see the organization's people, so they land on their apps instead.
+  const next = membership?.role === 'APPS' ? apexUrl(ctx, '/?notice=joined') : settingsUrl(ctx, 'users', invitation.org_id, 'joined')
+  return afterPost(ctx, safeReturnTo(ctx, field(ctx.form, 'return_to')) ?? next)
 }
 
 export async function declineInvitation(ctx: Context, [invitationId]: string[]): Promise<Response> {
@@ -174,5 +188,5 @@ export async function declineInvitation(ctx: Context, [invitationId]: string[]):
   if (found instanceof Response) return found
   await declineForUser(ctx.config.db, found.invitation.id, found.session.user.email, ctx.now)
   log('invitation_declined', { org: found.invitation.org_id, invitation: found.invitation.id, user: found.session.user.id })
-  return redirect(authUrl(ctx, '/?notice=invitation-declined'), 303)
+  return redirect(apexUrl(ctx, '/?notice=invitation-declined'), 303)
 }

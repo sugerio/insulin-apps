@@ -8,9 +8,9 @@ let harness: ReadHarness | undefined
 afterEach(async () => { await harness?.close(); harness = undefined })
 
 describe('console authorization guards', () => {
-  it('maps OWNER and ADMIN to read/write, and EDITOR to read-only', async () => {
+  it('maps OWNER, ADMIN and EDITOR to read/write, and a "View the cap table" custom role to read-only', async () => {
     harness = await readHarness()
-    for (const identity of [harness.owner, harness.admin]) {
+    for (const identity of [harness.owner, harness.admin, harness.editor]) {
       const me = await getJson<{ access: string; pii: boolean }>(harness, identity, '/api/me')
       expect(me).toMatchObject({ access: 'admin_rw', pii: true })
       const response = await harness.api('POST', harness.path('/stakeholders'), identity, {
@@ -18,9 +18,9 @@ describe('console authorization guards', () => {
       })
       expect(response.status).toBe(201)
     }
-    expect(await getJson(harness, harness.editor, '/api/me')).toMatchObject({ access: 'admin_ro', pii: true })
-    expect((await harness.api('GET', harness.path('/dashboard'), harness.editor)).status).toBe(200)
-    expect((await harness.api('POST', harness.path('/stakeholders'), harness.editor, {
+    expect(await getJson(harness, harness.reader, '/api/me')).toMatchObject({ access: 'admin_ro', pii: true })
+    expect((await harness.api('GET', harness.path('/dashboard'), harness.reader)).status).toBe(200)
+    expect((await harness.api('POST', harness.path('/stakeholders'), harness.reader, {
       kind: 'individual', displayName: 'Denied Synthetic Holder', relationship: 'investor', emails: [],
     })).status).toBe(403)
   })
@@ -44,7 +44,7 @@ describe('console authorization guards', () => {
     expect(await getJson(harness, unmatched, '/api/me')).toMatchObject({ access: 'none', portal: { matches: [] } })
     expect((await harness.api('GET', '/api/portal/overview', unmatched)).status).toBe(404)
     expect((await harness.api('GET', '/api/me', {})).status).toBe(401)
-    expect((await harness.api('POST', `/api/admin/orgs/${harness.orgId}/verify-ledger`, harness.editor, {})).status).toBe(403)
+    expect((await harness.api('POST', `/api/admin/orgs/${harness.orgId}/verify-ledger`, harness.reader, {})).status).toBe(403)
     expect((await harness.api('POST', `/api/admin/orgs/${harness.orgId}/verify-ledger`, harness.owner, {})).status).toBe(200)
   })
 

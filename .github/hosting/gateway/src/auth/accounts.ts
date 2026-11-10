@@ -1,7 +1,9 @@
 // E-mail and password accounts: sign-up, sign-in, sign-out, e-mail confirmation, resend, forgotten and reset passwords.
-// Nothing here reveals whether an address has an account, except to someone who knows its password.
+// Nothing here reveals whether an address has an account, except to someone who knows its password. An address whose
+// organization requires its single sign-on (sso/flow.ts) is sent there by every one of these, before any credential
+// is looked at; that depends on the address's domain alone.
 import type { Context } from '../context.ts'
-import { authUrl } from '../context.ts'
+import { apexUrl } from '../context.ts'
 import { burnPasswordCheck, hashPassword, isToken, newId, randomToken, sha256Hex, verifyPassword } from '../crypto.ts'
 import { commitToken, consumeToken, dropToken, findUsableToken, stageToken, type TokenPurpose } from '../db/tokens.ts'
 import {
@@ -17,11 +19,13 @@ import {
   MAIL_FAILED, RATE_LIMITED, TURNSTILE_FAILED, checkInboxPage, confirmFirstPage, forgotPage, linkInvalidPage, loginPage,
   resendPage, resetPage, signupPage, verifyEmailPage,
 } from '../pages/auth.tsx'
-import { afterPost, credentialsChangedPage, home, rateLimitedPage } from '../pages/status.tsx'
+import { credentialsChangedPage, home, rateLimitedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { TURNSTILE_FIELD, verifyTurnstile } from '../turnstile.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
-import { endSession, loadSession, startSession } from './session.ts'
+import { ssoRequired, ssoRequiredResponse } from '../sso/required.ts'
+import { endSession, loadSession } from './session.ts'
+import { finishSignIn } from './sign-in.ts'
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000
 const RESET_TTL_MS = 60 * 60 * 1000
@@ -44,7 +48,7 @@ async function sendTokenMail(ctx: Context, user: UserRow, purpose: TokenPurpose,
     now: ctx.now,
     expiresAt: ctx.now + (purpose === 'verify_email' ? VERIFY_TTL_MS : RESET_TTL_MS),
   })
-  const link = authUrl(ctx, `/${purpose === 'verify_email' ? 'verify-email' : 'reset-password'}?token=${token}`)
+  const link = apexUrl(ctx, `/${purpose === 'verify_email' ? 'verify-email' : 'reset-password'}?token=${token}`)
   const outcome = await sendMail(ctx, purpose, user.email, build(link))
   if (outcome === 'sent') await commitToken(db, tokenHash, user.id, purpose)
   else await dropToken(db, tokenHash)
@@ -91,6 +95,7 @@ export async function signup(ctx: Context): Promise<Response> {
   if (!(await verifyTurnstile(ctx, field(ctx.form, TURNSTILE_FIELD), 'signup'))) {
     return htmlResponse(signupPage(ctx, { values, returnTo, errors: { form: TURNSTILE_FAILED } }), { status: 400 })
   }
+  if (await ssoRequired(ctx, email)) return ssoRequiredResponse(ctx, email, returnTo)
 
   // Both branches hash once and send one e-mail, and both answer "Check your inbox".
   let outcome: SendOutcome
@@ -102,7 +107,7 @@ export async function signup(ctx: Context): Promise<Response> {
     if (outcome === 'failed') await deleteUnverifiedUser(db, user.id)
   } else {
     if (!created) await burnPasswordCheck(password)
-    outcome = await sendMail(ctx, 'signup_exists', email, signupExistsMail(authUrl(ctx, '/login'), authUrl(ctx, '/forgot-password')))
+    outcome = await sendMail(ctx, 'signup_exists', email, signupExistsMail(apexUrl(ctx, '/login'), apexUrl(ctx, '/forgot-password')))
   }
   if (outcome === 'failed') return htmlResponse(signupPage(ctx, { values, returnTo, errors: { form: MAIL_FAILED } }), { status: 503 })
   return htmlResponse(checkInboxPage(ctx, email))
@@ -135,6 +140,7 @@ export async function login(ctx: Context): Promise<Response> {
   if (!(await verifyTurnstile(ctx, field(ctx.form, TURNSTILE_FIELD), 'login'))) {
     return htmlResponse(loginPage(ctx, { values, returnTo, errors: { form: TURNSTILE_FAILED } }), { status: 400 })
   }
+  if (await ssoRequired(ctx, email)) return ssoRequiredResponse(ctx, email, returnTo)
   const user = await findUserByEmail(db, email)
   let valid = false
   if (user?.password_hash) valid = await verifyPassword(password, user.password_hash)
@@ -145,9 +151,8 @@ export async function login(ctx: Context): Promise<Response> {
   }
   if (user.email_verified_at === null) return htmlResponse(confirmFirstPage(ctx, user.email, { returnTo }), { status: 403 })
   // The session is created only under the credential version whose password was just verified.
-  if (!(await startSession(ctx, user))) return credentialsChangedPage(ctx)
   log('login', { user: user.id })
-  return afterPost(ctx, returnTo ?? home(ctx))
+  return finishSignIn(ctx, user, 'password', returnTo ?? home(ctx), () => credentialsChangedPage(ctx))
 }
 
 export async function logout(ctx: Context): Promise<Response> {
@@ -166,13 +171,15 @@ export async function verifyEmail(ctx: Context): Promise<Response> {
   const db = ctx.config.db
   if (!(await allowAuth(ctx, 'verify'))) return rateLimitedPage(ctx)
   const token = field(ctx.form, 'token')
+  // A confirmation signs in, so an address that must use single sign-on goes there instead; the link stays unused.
+  const pending = isToken(token) ? await findUsableToken(db, await sha256Hex(token), 'verify_email', ctx.now) : null
+  if (pending && await ssoRequired(ctx, pending.email)) return ssoRequiredResponse(ctx, pending.email, safeReturnTo(ctx, pending.return_to))
   const row = isToken(token) ? await consumeToken(db, await sha256Hex(token), 'verify_email', ctx.now) : null
   const user = row ? await findUserById(db, row.user_id) : null
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'verify'), { status: 400 })
   await markVerifiedStatement(db, user.id, ctx.now).run()
-  if (!(await startSession(ctx, user))) return credentialsChangedPage(ctx)
   log('email_verified', { user: user.id })
-  return afterPost(ctx, safeReturnTo(ctx, row.return_to) ?? authUrl(ctx, '/?notice=verified'))
+  return finishSignIn(ctx, user, 'verify', safeReturnTo(ctx, row.return_to) ?? apexUrl(ctx, '/?notice=verified'), () => credentialsChangedPage(ctx))
 }
 
 export async function resendForm(ctx: Context): Promise<Response> {
@@ -217,6 +224,7 @@ export async function forgot(ctx: Context): Promise<Response> {
   if (!(await verifyTurnstile(ctx, field(ctx.form, TURNSTILE_FIELD), 'forgot'))) {
     return htmlResponse(forgotPage(ctx, { values, errors: { form: TURNSTILE_FAILED } }), { status: 400 })
   }
+  if (await ssoRequired(ctx, email)) return ssoRequiredResponse(ctx, email, null)
   ctx.exec.waitUntil(sendReset(ctx, email).catch((error) => logError('forgot_failed', error)))
   return htmlResponse(forgotPage(ctx, { done: true }))
 }
@@ -231,6 +239,7 @@ export async function resetForm(ctx: Context): Promise<Response> {
   const token = ctx.url.searchParams.get('token')
   const row = isToken(token) ? await findUsableToken(ctx.config.db, await sha256Hex(token), 'reset_password', ctx.now) : null
   if (!row || !isToken(token)) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })
+  if (await ssoRequired(ctx, row.email)) return ssoRequiredResponse(ctx, row.email, null)
   return htmlResponse(resetPage(ctx, token, row.email))
 }
 
@@ -248,12 +257,14 @@ export async function reset(ctx: Context): Promise<Response> {
     if (!row) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })
     return htmlResponse(resetPage(ctx, token, row.email, problem), { status: 400 })
   }
+  const pending = await findUsableToken(db, tokenHash, 'reset_password', ctx.now)
+  if (pending && await ssoRequired(ctx, pending.email)) return ssoRequiredResponse(ctx, pending.email, null)
   const row = await consumeToken(db, tokenHash, 'reset_password', ctx.now)
   const user = row ? await findUserById(db, row.user_id) : null
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })
   // The inbox is proven, so the address counts as confirmed; the credential version rises and every session ends.
   const version = await resetPassword(db, user.id, await hashPassword(password), ctx.now)
-  if (version === null || !(await startSession(ctx, { id: user.id, credential_version: version }))) return credentialsChangedPage(ctx)
+  if (version === null) return credentialsChangedPage(ctx)
   log('password_reset', { user: user.id })
-  return redirect(authUrl(ctx, '/?notice=password-set'), 303)
+  return finishSignIn(ctx, { id: user.id, credential_version: version }, 'reset', apexUrl(ctx, '/?notice=password-set'), () => credentialsChangedPage(ctx))
 }

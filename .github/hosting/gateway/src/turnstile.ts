@@ -59,7 +59,7 @@ export async function verifyTurnstile(ctx: Context, token: string, action: Turns
     log('turnstile_wrong_action', { expected: action })
     return false
   }
-  if (!ctx.config.testMode && result.hostname !== ctx.config.authHost) {
+  if (!ctx.config.testMode && result.hostname !== ctx.config.domain) {
     log('turnstile_wrong_hostname')
     return false
   }

@@ -1,8 +1,9 @@
-// The account page: change name, set or change the password, delete the account.
+// The account page: change name, set or change the password, a link to two-step sign-in, delete the account.
 import { Fragment } from "react"
 import { CircleAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ErrorSummary, Notice, TextField } from "@/components/forms"
@@ -17,6 +18,8 @@ import { accountOf, page } from "./document.tsx"
 
 export interface AccountState {
   notice?: string | null
+  /** Whether two-step sign-in is on (the page links to Security either way). */
+  mfaOn?: boolean
   errors?: { name?: string | null; current?: string | null; password?: string | null; delete?: string | null }
   blockingOrgs?: { id: string; name: string }[]
 }
@@ -98,6 +101,39 @@ export function accountPage(ctx: Context, session: Session, state: AccountState 
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            <h2>Two-step sign-in</h2>
+            {state.mfaOn ? <Badge>On</Badge> : <Badge variant="outline">Off</Badge>}
+          </CardTitle>
+          <CardDescription>
+            {state.mfaOn
+              ? "Signing in with your password or Google also asks for a code from your authenticator app."
+              : "Ask for a code from an authenticator app after your password or Google, so a stolen password isn't enough."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <a className={buttonVariants({ variant: "outline" })} href="/account/security">
+            {state.mfaOn ? "Manage two-step sign-in" : "Set up two-step sign-in"}
+          </a>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>AI agents</h2>
+          </CardTitle>
+          <CardDescription>MCP clients such as Claude or Codex that you allowed to use an app as you.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <a className={buttonVariants({ variant: "outline" })} href="/account/agents">
+            See and disconnect your agents
+          </a>
+        </CardContent>
+      </Card>
+
       <Card className="border-destructive/40">
         <CardHeader>
           <CardTitle className="text-destructive">
@@ -119,7 +155,7 @@ export function accountPage(ctx: Context, session: Session, state: AccountState 
                   {blocking.map((org, index) => (
                     <Fragment key={org.id}>
                       {index ? ", " : ""}
-                      <a href={`/orgs/${org.id}`}>{org.name}</a>
+                      <a href={`/settings/users?org=${org.id}`}>{org.name}</a>
                     </Fragment>
                   ))}
                   , which {blocking.length === 1 ? "has" : "have"} other members. Make another member an owner, or remove the other

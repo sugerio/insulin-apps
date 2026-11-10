@@ -8,6 +8,8 @@
   "name": "insulin-apps-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-13",
+  // SAML's XML signature library (xml-crypto) needs Node's crypto module.
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   // A distinct local id: without one, wrangler names local D1 state after the binding, and the app's DB would share it.
   "d1_databases": [

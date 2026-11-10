@@ -52,16 +52,20 @@ src/app/server/app.ts      createApp()                     middleware, then the 
    file) and hands the request to the Hono app.
 4. The middleware, in order: security headers; `GET /api/health`, the one route that needs no identity; outside the dev
    server, a same-origin check on state-changing requests (the AppBuilder preview relays requests from another origin,
-   so the dev server skips it); the identity (below), which answers 401 without one and refuses changes from an owner or
-   admin whose console profile has no e-mail address; then the access each route family needs.
+   so the dev server skips it); the identity (below), which answers 401 without one and refuses changes from someone
+   who records changes but whose profile has no e-mail address; then the access each route family needs.
 5. Route families:
-   - `/api/me`: who the caller is, their console role and access, whether this is the preview identity, the company (or
-     `null` before the first-run setup) and the stakeholders the caller holds equity as;
+   - `/api/me`: who the caller is, their console role, effective permissions, access and how the request arrived
+     (browser, MCP or API), whether this is the preview identity, the company (or `null` before the first-run setup) and
+     the stakeholders the caller holds equity as;
+   - `/api/catalog`: the endpoints the caller's access allows, with their query and body JSON Schemas and whether they
+     need an `Idempotency-Key`, generated from the route table for AI agents and API clients (the hosting platform's MCP
+     `endpoints` tool shows it);
    - `/api/orgs`: `POST` is the first-run setup; `GET` returns the one company;
    - `/api/orgs/:orgId/...`: the admin workspace: reads, ledger commands, stakeholders, valuations, documents, payment
      instructions, reports and `POST /api/orgs/:orgId/process-due`. Reads need any admin access; writes need `admin_rw`;
    - `/api/portal/...`: the holder view, answering only for the caller's own stakeholders;
-   - `/api/admin/...`: owner and admin tools; today `POST /api/admin/orgs/:orgId/verify-ledger`;
+   - `/api/admin/...`: tools for those who record changes; today `POST /api/admin/orgs/:orgId/verify-ledger`;
    - the import's routes (see [The import](#the-import)).
 
 Errors are JSON. Mutating requests carry an `Idempotency-Key`; ledger commands also carry the ledger sequence and diff
@@ -70,9 +74,16 @@ hash they were reviewed against (see [Commands](#commands)).
 ## Identity and roles
 
 - **Identity comes from the console.** `getCurrentUser(request)` from `@fours/app/server` returns
-  `{ userId, organizationId, appId, role, email, name }` (e-mail and name may be null), or `null`. The app never reads the
-  platform's identity headers itself and has no login of its own: no sessions, cookies or passwords. Console user ids
-  are opaque strings of 3–80 characters; a request with an id outside that bound has no identity.
+  `{ userId, organizationId, appId, role, email, name }` (e-mail and name may be null), or `null`. The app has no login
+  of its own: no sessions, cookies or passwords. Console user ids are opaque strings of 3–80 characters; a request with
+  an id outside that bound has no identity.
+- **What the hosting platform adds** is read by `readPlatformGrant` in `src/app/server/lib/identity.ts`, the only code
+  that reads identity headers directly. `x-suger-app-permissions` (space-separated permission keys) narrows the role:
+  the effective permissions are the role's own intersected with the header, so a forged header can only take access
+  away. `x-suger-access-via` is `browser`, `mcp` (an AI agent) or `api` (an API client with its own credentials). The
+  Insulin console sends neither: the role's full set, in the browser. Behind insulinapps.com, org owners arrive as
+  `ADMIN`; for MCP and API calls the platform sets `Origin` and `Sec-Fetch-Site: same-origin` itself, so the same-origin
+  check applies unchanged.
 - **The preview identity.** With no console user and `import.meta.env.DEV` true (the Vite dev server: local
   `npm run dev` and the AppBuilder preview), the app acts as a fixed "Preview admin" with role `OWNER` and the address
   `preview@example.test`, and `/api/me` reports `preview: true` (the web app shows a "Preview mode" strip). Server tests
@@ -83,20 +94,24 @@ hash they were reviewed against (see [Commands](#commands)).
 - **A `users` row per console user** (id = the console user id) is upserted on each request, so audit rows and
   `created_by` columns point at a real row. The e-mail is stored the first time (an invalid one as `NULL`) and never
   rewritten; the display name is kept current.
-- **Roles:**
+- **Roles and permissions.** Access follows three permissions, declared for the platform in `package.json`
+  (`insulin.permissions`, each with the least built-in role that has it) and in code as `api.PERMISSIONS` (a test keeps
+  them equal):
 
-  | Console role | Access | Can |
+  | Permission | Access | Can |
   |---|---|---|
-  | `OWNER`, `ADMIN` | `admin_rw` | read and write everything in the company |
-  | `EDITOR` | `admin_ro`, with personal data | read everything, change nothing |
-  | `USER`, `VIEWER` | holder | the holder view of their own stakeholders, if any |
+  | `captable.manage` | `admin_rw` | read and write everything in the company |
+  | `captable.view` (without `captable.manage`) | `admin_ro`, with personal data | read everything, change nothing; EIN, bank details and Pulley ids masked |
+  | `portfolio.view` (alone) | holder | the holder view of their own stakeholders, if any |
 
-  There is no owner-only tier: every write, including reversals, merges, deadline extensions, plan terms and expiry
-  confirmations, needs `admin_rw`.
+  `OWNER`, `ADMIN` and `EDITOR` have all three; `USER` and `VIEWER` have `portfolio.view`. A custom role is a role
+  narrowed by the platform's permissions header. The levels don't stack: someone with admin access isn't matched as a
+  holder. There is no owner-only tier: every write, including the first-run setup, the import, reversals, merges,
+  deadline extensions, plan terms and expiry confirmations, needs `captable.manage` (`auth.fullAccess`).
 - **Holder matching.** The console e-mail is compared, case-insensitively, with the active stakeholder e-mails of kind
   `self` on stakeholders whose portal access isn't closed. One address can match several stakeholders; the holder view
   shows each of them.
-- **Self-dealing guard.** An owner or admin can't run a ledger command that touches a stakeholder linked to them: through
+- **Self-dealing guard.** Someone who records changes can't run a ledger command that touches a stakeholder linked to them: through
   an admin link (`admin_stakeholder_links`), or because their console e-mail is on that stakeholder. They also can't
   remove their own admin link.
 - **One company per Insulin organization.** `orgs.console_organization_id` stores the opaque organization id from the
@@ -232,7 +247,7 @@ transactions; as-known views from before the reversal still show them. Display I
 has no gaps, every chain link recomputes from the genesis and the head agrees with the last link, every command's seal and
 every reversal's completeness hold, the replay keeps every invariant, and the recorded dependency edges match the ones
 replay derives. Problems are reported by id and code only. There is no nightly job and no button for it in the web app:
-owners and admins run it on demand with `POST /api/admin/orgs/:orgId/verify-ledger`.
+anyone with `captable.manage` runs it on demand with `POST /api/admin/orgs/:orgId/verify-ledger`.
 
 ### OCF alignment
 
@@ -294,8 +309,8 @@ A new company is set up by importing Pulley's standard reports or the app's own 
   than passed through floats), with decompression capped per entry and in total. Single-sheet Pulley reports may also be
   comma-separated CSV.
 - **The routes** (`src/app/server/routes/imports.ts`, with `src/app/server/lib/import/`) run before a company exists,
-  so they sit outside `/api/orgs/:orgId` and check the console role themselves: owners and admins only; editors and
-  holders get 403, a request without a console identity 401.
+  so they sit outside `/api/orgs/:orgId` and check the permissions themselves: `captable.manage` only; read-only roles
+  and holders get 403, a request without a console identity 401.
   - `GET /api/import/template`: the blank workbook, generated per request.
   - `POST /api/import/preview`: a multipart form with the source, the files and an optional as-of date, plus the
     company's time zone, jurisdiction and fiscal year end when no company exists yet.
@@ -341,7 +356,7 @@ A new company is set up by importing Pulley's standard reports or the app's own 
 
 | Missing on the platform | What Cap Table does instead |
 |---|---|
-| Cron triggers | Due work runs on demand: when an owner or admin loads the dashboard (a check against the engine's own expiry candidates first, and at most 10 automatic expiries per load), and with `POST /api/orgs/:orgId/process-due`, which has no cap. Deterministic idempotency keys (`system:terminate:<id>`, `system:expire:<company>:<date>:<security>`) make repeated runs harmless. While expiry is report-only, processing records an `expiry_runs` row for an admin to confirm instead of expiring. |
+| Cron triggers | Due work runs on demand: when someone with write access loads the dashboard (a check against the engine's own expiry candidates first, and at most 10 automatic expiries per load), and with `POST /api/orgs/:orgId/process-due`, which has no cap. Deterministic idempotency keys (`system:terminate:<id>`, `system:expire:<company>:<date>:<security>`) make repeated runs harmless. While expiry is report-only, processing records an `expiry_runs` row for an admin to confirm instead of expiring. |
 | Object storage (R2) | Document bytes in D1, in chunks. |
 | E-mail | No notifications; the UI reminds admins to tell people. |
 | Durable Objects | Per-company write serialization from the ledger's triggers in D1. |

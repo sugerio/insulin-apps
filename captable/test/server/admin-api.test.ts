@@ -20,7 +20,7 @@ describe('retained administrator API', () => {
     expect(replay.headers.get('Idempotent-Replay')).toBe('true')
     expect(await replay.json()).toEqual(await first.json())
     expect(await harness.db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE action = 'ledger.verified'").first<number>('n')).toBe(1)
-    expect((await harness.api('POST', path, harness.editor, {})).status).toBe(403)
+    expect((await harness.api('POST', path, harness.reader, {})).status).toBe(403)
   })
 
   it('updates the company profile idempotently and enforces versions and frozen share units', async () => {
@@ -84,10 +84,10 @@ describe('retained administrator API', () => {
       'INSERT INTO expiry_runs (org_id, org_seq, local_date, candidates, created_at) VALUES (?, 1, ?, ?, ?) RETURNING org_seq',
     ).bind(harness.orgId, '2026-10-21', '[]', Date.now()).first<{ org_seq: number }>()
     const runId = inserted!.org_seq
-    expect(await getJson<api.ExpiryRunList>(harness, harness.editor, '/expiry-runs')).toEqual({
+    expect(await getJson<api.ExpiryRunList>(harness, harness.reader, '/expiry-runs')).toEqual({
       items: [{ runId, localDate: '2026-10-21', startedAt: Date.now(), state: 'pending', proposalCount: 0 }],
     })
-    expect(await getJson<api.ExpiryRunDetail>(harness, harness.editor, `/expiry-runs/${runId}`)).toMatchObject({
+    expect(await getJson<api.ExpiryRunDetail>(harness, harness.reader, `/expiry-runs/${runId}`)).toMatchObject({
       runId, state: 'pending', confirmedAt: null, confirmationStartedAt: null, proposals: [],
     })
     const dry = await harness.api('POST', harness.path(`/expiry-runs/${runId}/confirm?dryRun=true`), harness.admin, {
@@ -100,7 +100,7 @@ describe('retained administrator API', () => {
     })
     expect(confirmed.status).toBe(200)
     expect(await confirmed.json()).toEqual({ runId, commands: [], expiryMode: 'automatic' })
-    expect(await getJson<api.ExpiryRunList>(harness, harness.editor, '/expiry-runs')).toEqual({ items: [] })
+    expect(await getJson<api.ExpiryRunList>(harness, harness.reader, '/expiry-runs')).toEqual({ items: [] })
     expect(await getJson<api.ExpiryRunDetail>(harness, harness.owner, `/expiry-runs/${runId}`)).toMatchObject({
       state: 'confirmed', confirmedAt: Date.now(), confirmedBy: 'Admin Example',
     })

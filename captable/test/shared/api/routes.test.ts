@@ -30,7 +30,7 @@ describe("the pruned route table", () => {
     expect(route.path).toMatch(/^\/api\//);
     expect(Object.keys(shapeOf(route.params)).sort()).toEqual(pathParamNames(route.path).sort());
     if (route.path.startsWith("/api/portal/")) expect(route.auth).toBe("holder");
-    else if (route.path === "/api/me") expect(route.auth).toBe("identity");
+    else if (route.path === "/api/me" || route.path === "/api/catalog") expect(route.auth).toBe("identity");
     else expect(route.auth).toBe("admin");
   });
 

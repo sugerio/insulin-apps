@@ -1,15 +1,18 @@
 // App hosts: forwards to the app Worker over its service binding with the Insulin console identity headers, the way
 // the console's entry worker does. Apps trust these headers, so whatever the browser sent under x-suger-* is dropped,
 // and the session cookie never reaches an app.
+import { appAccess } from './access.ts'
+import { apiCall } from './oauth/app-api.ts'
+import { hasBearer } from './oauth/tokens.ts'
 import type { HostedApp } from './config.ts'
 import type { Context } from './context.ts'
-import { authUrl, withReturnTo } from './context.ts'
+import { apexUrl, withReturnTo } from './context.ts'
 import { setCookieName } from './http/cookies.ts'
 import { GATEWAY_COOKIES, forwardRequest, identityHeaders, isNavigation } from './http/forward.ts'
 import { jsonResponse, redirect } from './http/response.ts'
 import { markFromApp } from './http/secure.ts'
 import { log, logError } from './log.ts'
-import { appUnavailablePage, rateLimitedPage } from './pages/status.tsx'
+import { appUnavailablePage, noAppAccessPage, rateLimitedPage } from './pages/status.tsx'
 import { allowApp } from './ratelimit.ts'
 import { verifyNotice } from './auth/guard.ts'
 import { activeOrg, loadSession } from './auth/session.ts'
@@ -47,22 +50,26 @@ export async function proxyToApp(ctx: Context, app: HostedApp): Promise<Response
   const navigation = !api && isNavigation(ctx.request)
   if (!app.service) return navigation ? appUnavailablePage(ctx, 503) : jsonResponse({ error: 'unavailable' }, 503)
 
+  // A bearer token is a machine's way in (DESIGN.md §4): it never falls back to the browser's cookies.
+  if (hasBearer(ctx.request)) return apiCall(ctx, app)
   const session = await loadSession(ctx)
   if (!session) {
-    return navigation ? redirect(authUrl(ctx, withReturnTo('/login', ctx.url.href)), 302) : jsonResponse({ error: 'unauthorized' }, 401)
+    return navigation ? redirect(apexUrl(ctx, withReturnTo('/login', ctx.url.href)), 302) : jsonResponse({ error: 'unauthorized' }, 401)
   }
   if (!session.user.verified) return navigation ? verifyNotice(ctx, session) : jsonResponse({ error: 'unauthorized' }, 401)
   const org = await activeOrg(ctx, session)
   if (!org) {
-    return navigation ? redirect(authUrl(ctx, withReturnTo('/orgs/new', ctx.url.href)), 302) : jsonResponse({ error: 'no_organization' }, 403)
+    return navigation ? redirect(apexUrl(ctx, withReturnTo('/orgs/new', ctx.url.href)), 302) : jsonResponse({ error: 'no_organization' }, 403)
   }
+  const access = await appAccess(ctx.config.db, app, org.id, session.user.id, org.role)
+  if (!access) return navigation ? noAppAccessPage(ctx, session, org, app) : jsonResponse({ error: 'no_app_access' }, 403)
   if (!(await allowApp(ctx, session.user.id))) {
     return navigation ? rateLimitedPage(ctx) : jsonResponse({ error: 'rate_limited' }, 429, { 'Retry-After': '60' })
   }
 
   let upstream: Response
   try {
-    upstream = await app.service.fetch(forwardRequest(ctx.request, identityHeaders(session, org, app)))
+    upstream = await app.service.fetch(forwardRequest(ctx.request, identityHeaders(session.user, org.id, app, access, 'browser')))
   } catch (error) {
     logError('app_unreachable', error, { app: app.name })
     return navigation ? appUnavailablePage(ctx, 502) : jsonResponse({ error: 'bad_gateway' }, 502)

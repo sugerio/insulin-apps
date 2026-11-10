@@ -165,11 +165,16 @@ export const COMPANY_RESOURCES = [
  * `/api/me` for a console user whose e-mail matches the given holdings' stakeholders: holder access (a USER) unless
  * `access` says they also administer the company.
  */
-export function holderMe(matches: readonly api.PortalHolding[], options: { email?: string; name?: string | null; access?: MeAccess; consoleRole?: ConsoleRole; pii?: boolean } = {}): Me {
+export function holderMe(matches: readonly api.PortalHolding[], options: { email?: string; name?: string | null; access?: MeAccess; consoleRole?: ConsoleRole; permissions?: api.Permission[]; pii?: boolean } = {}): Me {
   const access = options.access ?? (matches.length ? "holder" : "none");
+  // The permissions that give this access: everything to write, "View the cap table" alone to read, else own holdings.
+  const permissions: api.Permission[] = options.permissions
+    ?? (access === "admin_rw" ? ["captable.manage", "captable.view", "portfolio.view"] : access === "admin_ro" ? ["captable.view"] : ["portfolio.view"]);
   return api.meResponseSchema.parse({
     user: { id: USER_ID, email: options.email ?? "nadia.ps@mailbox.example", displayName: options.name === undefined ? matches[0]?.stakeholderName ?? null : options.name },
     consoleRole: options.consoleRole ?? (access === "admin_rw" ? "ADMIN" : access === "admin_ro" ? "EDITOR" : "USER"),
+    permissions,
+    accessVia: "browser",
     preview: false,
     company: COMPANY,
     access,

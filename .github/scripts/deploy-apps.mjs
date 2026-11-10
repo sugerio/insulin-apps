@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
+import { createHmac, hkdfSync } from 'node:crypto'
 import {
   appendFileSync,
   chmodSync,
@@ -22,7 +23,7 @@ const REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, '..', '..')
 const GATEWAY_NAME = 'insulin-apps-gateway'
 const COMPATIBILITY_DATE = '2026-10-13'
 const GATEWAY_REQUIRED_SETTINGS = ['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'EMAIL_FROM']
-const SECRET_SETTINGS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY']
+const SECRET_SETTINGS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY', 'GATEWAY_SECRET_KEY']
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4'
 const APP_CONFIG_KEYS = new Set(['compatibility_date', 'compatibility_flags', 'rules', 'no_bundle', 'assets'])
 const APP_ASSET_KEYS = new Set(['binding', 'html_handling', 'not_found_handling', 'run_worker_first'])
@@ -45,11 +46,19 @@ export function readSettings(environment = process.env, { gateway = true } = {})
   }
   if (missing.length) throw new Error(`Missing required deploy settings: ${missing.join(', ')}`)
 
+  // Optional, for the gateway and the apps alike: the gateway encrypts stored secrets with it, and each app's
+  // SUGER_APP_TOKEN (for the integration proxy) is derived from it.
+  const gatewaySecretKey = environment.GATEWAY_SECRET_KEY?.trim() ?? ''
+  if (gatewaySecretKey && Buffer.from(gatewaySecretKey, 'base64').length !== 32) {
+    throw new Error('GATEWAY_SECRET_KEY must be the base64 of 32 random bytes')
+  }
+
   const settings = {
     skip: false,
     cloudflareApiToken: token,
     cloudflareAccountId: environment.CLOUDFLARE_ACCOUNT_ID.trim(),
     siteDomain: environment.SITE_DOMAIN?.trim() || 'insulinapps.com',
+    gatewaySecretKey,
   }
   if (!gateway) return settings
 
@@ -72,7 +81,16 @@ export function emailAddress(value) {
   return address
 }
 
-export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {} }) {
+/**
+ * An app's SUGER_APP_TOKEN, exactly as the gateway derives it (derivedSecret in src/crypto.ts): HKDF-SHA256 of
+ * GATEWAY_SECRET_KEY with the info "insulin-apps:app-token" gives an HMAC-SHA256 key, which signs the app's name.
+ */
+export function appToken(gatewaySecretKey, app) {
+  const key = Buffer.from(hkdfSync('sha256', Buffer.from(gatewaySecretKey, 'base64'), Buffer.alloc(0), 'insulin-apps:app-token', 32))
+  return createHmac('sha256', key).update(app).digest('base64url')
+}
+
+export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null }) {
   const outputDirectory = join(appDirectory, '.output')
   const { config: generatedConfig, ignoredKeys } = sanitizeAppBaseConfig(baseConfig)
   if (ignoredKeys.length) {
@@ -94,7 +112,7 @@ export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {} 
         migrations_dir: resolve(appDirectory, 'src', 'app', 'db', 'migrations'),
       },
     ],
-    vars: { SUGER_ACCESS_MODE: 'console' },
+    vars: { SUGER_ACCESS_MODE: 'console', ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}) },
     workers_dev: false,
     preview_urls: false,
   }
@@ -186,11 +204,14 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
     name: GATEWAY_NAME,
     main: resolve(gatewayDirectory, 'src', 'index.ts'),
     compatibility_date: COMPATIBILITY_DATE,
+    // SAML's XML signature library (xml-crypto) needs Node's crypto module.
+    compatibility_flags: ['nodejs_compat'],
     workers_dev: false,
     preview_urls: false,
     routes: [
       settings.siteDomain,
       `www.${settings.siteDomain}`,
+      // Sign-in moved to the apex; the old host stays attached so links in e-mails already sent redirect.
       `auth.${settings.siteDomain}`,
       ...apps.map(({ name }) => `${name}.${settings.siteDomain}`),
     ].map(
@@ -264,11 +285,14 @@ export async function deployApps({
   }
   delete childEnvironment.GOOGLE_CLIENT_SECRET
   delete childEnvironment.TURNSTILE_SECRET_KEY
+  delete childEnvironment.GATEWAY_SECRET_KEY
 
+  const appTokens = new Map(settings.gatewaySecretKey ? apps.map(({ name }) => [name, appToken(settings.gatewaySecretKey, name)]) : [])
   const runner = new CommandRunner({
     dryRun,
     spawn,
-    secrets: [settings.cloudflareApiToken, settings.googleClientSecret, settings.turnstileSecretKey].filter(Boolean),
+    secrets: [settings.cloudflareApiToken, settings.googleClientSecret, settings.turnstileSecretKey, settings.gatewaySecretKey, ...appTokens.values()]
+      .filter(Boolean),
   })
 
   if (!skipBuild) buildApps(runner, root, appsToDeploy, environment)
@@ -307,12 +331,18 @@ export async function deployApps({
       databaseId = ensureDatabase(runner, wrangler, workerName(app.name), root, childEnvironment)
     }
 
-    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig }))
+    const integrationsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/integrations` : null
+    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl }))
     runner.run(wrangler, ['d1', 'migrations', 'apply', workerName(app.name), '--remote', '--config', configPath], {
       cwd: root,
       env: childEnvironment,
     })
-    runner.run(wrangler, ['deploy', '--config', configPath], { cwd: root, env: childEnvironment })
+    if (appTokens.size) {
+      // The token travels with the deploy itself, so no version of the app runs without it.
+      deployWithSecrets(runner, wrangler, configPath, { SUGER_APP_TOKEN: appTokens.get(app.name) }, { cwd: root, env: childEnvironment, dryRun })
+    } else {
+      runner.run(wrangler, ['deploy', '--config', configPath], { cwd: root, env: childEnvironment })
+    }
     if (dryRun) {
       runner.record('cloudflare-api', ['remove-and-verify-public-access', workerName(app.name)], {
         environment: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'SITE_DOMAIN'],
@@ -346,26 +376,9 @@ export async function deployApps({
     const secretValues = {
       ...(settings.googleClientId ? { GOOGLE_CLIENT_SECRET: settings.googleClientSecret } : {}),
       TURNSTILE_SECRET_KEY: settings.turnstileSecretKey,
+      ...(settings.gatewaySecretKey ? { GATEWAY_SECRET_KEY: settings.gatewaySecretKey } : {}),
     }
-    const gatewayDeploy = (secretFile) => ['deploy', '--config', gatewayConfigPath, '--secrets-file', secretFile]
-    if (dryRun) {
-      runner.run(wrangler, gatewayDeploy('<redacted-secret-file>'), { cwd: root, env: childEnvironment, sensitive: true })
-    } else {
-      const secretDirectory = mkdtempSync(join(tmpdir(), 'insulin-apps-secrets-'))
-      const secretFile = join(secretDirectory, 'secrets.json')
-      try {
-        writeFileSync(secretFile, `${JSON.stringify(secretValues)}\n`, { mode: 0o600 })
-        chmodSync(secretFile, 0o600)
-        runner.run(wrangler, gatewayDeploy(secretFile), {
-          cwd: root,
-          env: childEnvironment,
-          recordArgs: gatewayDeploy('<redacted-secret-file>'),
-          sensitive: true,
-        })
-      } finally {
-        rmSync(secretDirectory, { recursive: true, force: true })
-      }
-    }
+    deployWithSecrets(runner, wrangler, gatewayConfigPath, secretValues, { cwd: root, env: childEnvironment, dryRun })
     const secretList = runner.run(wrangler, ['secret', 'list', '--config', gatewayConfigPath], {
       cwd: root,
       env: childEnvironment,
@@ -440,6 +453,24 @@ async function findApps(root, only) {
   if (!apps.length) throw new Error('No apps were found')
   if (only && !apps.some(({ name }) => name === only)) throw new Error(`Unknown app for --only: ${only}`)
   return { apps, selectedApps: only ? apps.filter(({ name }) => name === only) : apps }
+}
+
+/** `wrangler deploy --secrets-file`, from a mode-600 file in a fresh directory removed right after; redacted in plans. */
+function deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd, env, dryRun }) {
+  const args = (secretFile) => ['deploy', '--config', configPath, '--secrets-file', secretFile]
+  if (dryRun) {
+    runner.run(wrangler, args('<redacted-secret-file>'), { cwd, env, sensitive: true })
+    return
+  }
+  const secretDirectory = mkdtempSync(join(tmpdir(), 'insulin-apps-secrets-'))
+  const secretFile = join(secretDirectory, 'secrets.json')
+  try {
+    writeFileSync(secretFile, `${JSON.stringify(secretValues)}\n`, { mode: 0o600 })
+    chmodSync(secretFile, 0o600)
+    runner.run(wrangler, args(secretFile), { cwd, env, recordArgs: args('<redacted-secret-file>'), sensitive: true })
+  } finally {
+    rmSync(secretDirectory, { recursive: true, force: true })
+  }
 }
 
 function buildApps(runner, root, apps, environment) {
@@ -709,7 +740,7 @@ function writeJson(path, value) {
 
 function writeSummary(path, domain, apps) {
   if (!path) return
-  const urls = [`https://${domain}`, `https://auth.${domain}`, ...apps.map(({ name }) => `https://${name}.${domain}`)]
+  const urls = [`https://${domain}`, ...apps.map(({ name }) => `https://${name}.${domain}`)]
   appendFileSync(path, `## Deployed apps\n\n${urls.map((url) => `- ${url}`).join('\n')}\n`)
 }
 
@@ -749,7 +780,8 @@ async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => {
-    process.stderr.write(`deploy-apps: ${redact(error.message, [process.env.CLOUDFLARE_API_TOKEN, process.env.GOOGLE_CLIENT_SECRET, process.env.TURNSTILE_SECRET_KEY].filter(Boolean))}\n`)
+    const secrets = [process.env.CLOUDFLARE_API_TOKEN, process.env.GOOGLE_CLIENT_SECRET, process.env.TURNSTILE_SECRET_KEY, process.env.GATEWAY_SECRET_KEY]
+    process.stderr.write(`deploy-apps: ${redact(error.message, secrets.filter(Boolean))}\n`)
     process.exitCode = 1
   })
 }

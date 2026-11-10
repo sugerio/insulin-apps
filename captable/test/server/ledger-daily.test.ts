@@ -158,7 +158,7 @@ describe('due ledger work, processed on demand', () => {
     expect(await count(l.db, "SELECT COUNT(*) AS n FROM commands WHERE type = 'terminate-stakeholder' AND actor_kind = 'system'")).toBe(0)
   })
 
-  it('runs the bounded processing on a write administrator\'s dashboard load, never on an EDITOR\'s', async () => {
+  it('runs the bounded processing on a write administrator\'s dashboard load, never on a read-only custom role\'s', async () => {
     const l = await ledgerHarness()
     const id = await schedule(l, 'S14', '2026-12-04')
     l.clock.time = Date.UTC(2026, 11, 4, 8, 30)

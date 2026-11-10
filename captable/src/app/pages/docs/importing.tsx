@@ -16,7 +16,7 @@ export const importing: DocTopic = {
       body: (
         <>
           <ul>
-            <li><b>You need to be an owner or admin</b> of the app in the Insulin console, with an e-mail address on your console profile.</li>
+            <li><b>You need to be an owner, admin or editor</b> (or have a custom role that records changes), with an e-mail address on your profile.</li>
             <li>
               <b>The import sets up an empty company.</b> It is available only while the company has no stakeholders and no
               recorded transactions, and nothing else saved yet: no documents or folders, payment instructions, signatories,
@@ -27,7 +27,7 @@ export const importing: DocTopic = {
             <li><b>Practise in the preview first.</b> The console's preview has its own practice database. Run the whole import there, look around, and only then repeat it in the published app. An import in the published app is permanent.</li>
           </ul>
           <p>
-            <b>Where to find it.</b> The first time an owner or admin opens Cap Table, the setup page offers <b>Import from
+            <b>Where to find it.</b> The first time someone who records changes opens Cap Table, the setup page offers <b>Import from
             Pulley</b> and <b>Import from a spreadsheet</b>. Later, while nothing is recorded, the dashboard shows <b>Import the
             cap table</b>. Once the company has stakeholders or recorded transactions, the import page says "Import isn't
             available for this company" and why: from then on, changes are recorded in the cap table itself.

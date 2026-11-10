@@ -1,7 +1,6 @@
 // The gateway's e-mails, as plain text and HTML. Names and organization names are user input: the HTML part escapes
 // them through the `html` tag, and they never contain line breaks (validate.ts removes control characters).
 import { html, type Html } from '../pages/html.ts'
-import { ROLE_LABELS, type Role } from '../roles.ts'
 
 export interface MailContent {
   subject: string
@@ -81,18 +80,70 @@ export function resetPasswordMail(name: string, link: string): MailContent {
   }
 }
 
-export function invitationMail(inviter: string, orgName: string, role: Role, link: string): MailContent {
-  const label = ROLE_LABELS[role]
+/** `access` says what joining gives, as accessPhrase() words it: "as Admin", "with access to Cap Table as Editor". */
+export function invitationMail(inviter: string, orgName: string, access: string, link: string): MailContent {
   return {
     subject: `${inviter} invited you to ${orgName} on ${PRODUCT}`,
     text: textBody([
-      `${inviter} invited you to join the organization "${orgName}" as ${label} on ${PRODUCT}.`,
+      `${inviter} invited you to join the organization "${orgName}" ${access} on ${PRODUCT}.`,
       `Open the invitation: ${link}`,
       'To accept, sign in or create an account with this email address. The invitation expires in 7 days. If you don\'t know the sender, you can ignore this email.',
     ]),
     html: htmlBody([
-      html`${inviter} invited you to join the organization <strong>${orgName}</strong> as ${label} on ${PRODUCT}.`,
+      html`${inviter} invited you to join the organization <strong>${orgName}</strong> ${access} on ${PRODUCT}.`,
       html`To accept, sign in or create an account with this email address. The invitation expires in 7 days. If you don't know the sender, you can ignore this email.`,
     ], { label: 'Open the invitation', url: link }),
+  }
+}
+
+/** After two-step sign-in is turned on or off: so the owner of the address notices a change they didn't make. */
+export function mfaLockedMail(securityUrl: string): MailContent {
+  return {
+    subject: `Too many wrong sign-in codes on ${PRODUCT}`,
+    text: textBody([
+      `Someone entered ten wrong codes from your authenticator app in a row while signing in to ${PRODUCT}, so app codes are paused for an hour.`,
+      'If it was you, wait an hour or sign in with a recovery code. If it wasn\'t, someone knows your password: change it and check your security settings.',
+      `Security settings: ${securityUrl}`,
+    ]),
+    html: htmlBody([
+      html`Someone entered ten wrong codes from your authenticator app in a row while signing in to ${PRODUCT}, so app codes are paused for an hour.`,
+      html`If it was you, wait an hour or sign in with a recovery code. If it wasn't, someone knows your password: change it and check your security settings.`,
+    ], { label: 'Open security settings', url: securityUrl }),
+  }
+}
+
+export function ssoLinkedMail(name: string, orgName: string, accountUrl: string): MailContent {
+  return {
+    subject: `You signed in to ${PRODUCT} through ${orgName}'s single sign-on`,
+    text: textBody([
+      `Hi ${name},`,
+      `Your ${PRODUCT} account just signed in through the single sign-on of the organization "${orgName}" for the first time. Its owners can now sign you in with their identity provider, as your work address belongs to them.`,
+      `If that wasn't you, tell the organization's owners, and check your account: ${accountUrl}`,
+    ]),
+    html: htmlBody([
+      html`Hi ${name},`,
+      html`Your ${PRODUCT} account just signed in through the single sign-on of the organization <strong>${orgName}</strong> for the first time. Its owners can now sign you in with their identity provider, as your work address belongs to them.`,
+      html`If that wasn't you, tell the organization's owners, and check your account.`,
+    ], { label: 'Open your account', url: accountUrl }),
+  }
+}
+
+export function mfaChangedMail(name: string, enabled: boolean, securityUrl: string): MailContent {
+  const what = enabled ? 'turned on' : 'turned off'
+  const after = enabled
+    ? 'From now on, signing in with your password or Google also asks for a code from your authenticator app.'
+    : 'Signing in now needs only your password or Google again.'
+  return {
+    subject: `Two-step sign-in was ${what} for your ${PRODUCT} account`,
+    text: textBody([
+      `Hi ${name},`,
+      `Two-step sign-in was ${what} for your ${PRODUCT} account. ${after} Your other sessions were signed out.`,
+      `If this wasn't you, reset your password and review your account's security: ${securityUrl}`,
+    ]),
+    html: htmlBody([
+      html`Hi ${name},`,
+      html`Two-step sign-in was ${what} for your ${PRODUCT} account. ${after} Your other sessions were signed out.`,
+      html`If this wasn't you, reset your password and review your account's security.`,
+    ], { label: 'Review your account security', url: securityUrl }),
   }
 }

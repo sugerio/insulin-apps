@@ -15,7 +15,7 @@ import { SIGNATORY_TYPES, signatoryTypeLabel } from "../lib/labels.ts";
 import { addressLine } from "../lib/stakeholders.ts";
 import { useResource, type Resource } from "../lib/useResource.ts";
 
-// Company › Profile & Settings: one page with an anchored section menu. Owners and admins edit; editors view. Who may
+// Company › Profile & Settings: one page with an anchored section menu. Owners, admins and editors edit; read-only roles view. Who may
 // use the app, and in which role, is managed in the Insulin console, not here. The writes: the profile, the holder
 // contact, the payment instructions and display.
 
@@ -58,7 +58,7 @@ export function CompanyPage() {
   }, [org.data, location.hash]);
   return (
     <Page title="Profile & Settings" crumbs={[["Company", href("company")], ["Profile & Settings"]]}>
-      <PageHead title="Profile & Settings" sub={readOnly ? "View only — owners and admins edit." : "Owners and admins edit; editors view."} />
+      <PageHead title="Profile & Settings" sub={readOnly ? "View only — owners, admins and editors edit." : "Owners, admins and editors edit; read-only roles view."} />
       <ResourceView resource={org}>
         {(data) => (
           <div className="settings-layout">

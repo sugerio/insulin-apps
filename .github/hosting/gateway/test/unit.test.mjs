@@ -2,18 +2,59 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { checkName, cleanText, normalizeEmail, passwordProblem } from '../src/validate.ts'
-import { canChangeRole, canHandleInvitation, canRemoveMember, canSeeMembers, grantableRoles } from '../src/roles.ts'
 import {
-  base64url, constantTimeEqual, fromBase64url, hashPassword, isId, isToken, newId, randomToken, verifyPassword,
+  appRoleOf, baseRoleFor, canChangeRole, canHandleInvitation, canManageCustomRoles, canRemoveMember, canSeeMembers,
+  grantableRoles, permissionsOf,
+} from '../src/roles.ts'
+import { accessFromRow, grantAccess, orgAccess } from '../src/access.ts'
+import { accessPhrase, parseAccessForm } from '../src/orgs/access-forms.ts'
+import {
+  base64url, constantTimeEqual, derivedSecret, fromBase64url, hashPassword, isId, isToken, newId, randomToken, seal, unseal,
+  verifyPassword,
 } from '../src/crypto.ts'
 import { cookieValues, serializeCookie, setCookieName, withoutCookies } from '../src/http/cookies.ts'
-import { bindingName, isAppName, issuesUrlFrom, parseSender, readConfig } from '../src/config.ts'
+import { bindingName, isAppName, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig } from '../src/config.ts'
 import { safeReturnTo } from '../src/http/return-to.ts'
 import { createContext } from '../src/context.ts'
 import { escapeHtml, html } from '../src/pages/html.ts'
 import { checkIdToken, decodeJwtPayload } from '../src/auth/id-token.ts'
-import { forwardRequest, isNavigation } from '../src/http/forward.ts'
+import { forwardRequest, identityHeaders, isNavigation } from '../src/http/forward.ts'
 import { logError } from '../src/log.ts'
+import { appToken } from '../../../scripts/deploy-apps.mjs'
+import {
+  base32Decode, base32Encode, codeDigits, groupedSecret, hotp, matchTotp, newRecoveryCode, newTotpSecret,
+  normalizeRecoveryCode, otpauthUri, timeStep,
+} from '../src/auth/totp.ts'
+
+test('TOTP: the RFC 6238 SHA-1 vectors, a window of one step either side, and base32 keys', async () => {
+  const rfc = new TextEncoder().encode('12345678901234567890')
+  for (const [seconds, expected] of [[59, '94287082'], [1111111109, '07081804'], [1111111111, '14050471'], [1234567890, '89005924'], [2000000000, '69279037'], [20000000000, '65353130']]) {
+    assert.equal(await hotp(rfc, timeStep(seconds * 1000), 8), expected, String(seconds))
+  }
+  const secret = base32Encode(rfc)
+  assert.equal(secret, 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 'the RFC 4648 encoding of the test key')
+  assert.deepEqual([...base32Decode(secret.toLowerCase().match(/.{1,4}/g).join(' '))], [...rfc], 'case and spaces are ignored')
+  assert.equal(base32Decode('not base32!'), null)
+  const now = 1_700_000_000_000
+  const step = timeStep(now)
+  for (const offset of [-1, 0, 1]) assert.equal(await matchTotp(secret, await hotp(rfc, step + offset), now), step + offset, `offset ${offset}`)
+  for (const offset of [-2, 2]) assert.equal(await matchTotp(secret, await hotp(rfc, step + offset), now), null, `offset ${offset}`)
+  assert.equal(newTotpSecret().length, 32, '20 random bytes in base32')
+  assert.equal(codeDigits(' 123 456 '), '123456')
+  assert.equal(codeDigits('12345'), null)
+  assert.equal(groupedSecret('ABCDEFGHIJ'), 'ABCD EFGH IJ')
+  assert.equal(otpauthUri('ABCD', 'ada+mfa@example.test'),
+    'otpauth://totp/Insulin%20Apps:ada%2Bmfa%40example.test?secret=ABCD&issuer=Insulin%20Apps&algorithm=SHA1&digits=6&period=30')
+})
+
+test('recovery codes are 80 random bits in four groups, and typed ones normalize to the stored form', () => {
+  const code = newRecoveryCode()
+  assert.match(code, /^[a-z2-7]{4}-[a-z2-7]{4}-[a-z2-7]{4}-[a-z2-7]{4}$/)
+  assert.notEqual(newRecoveryCode(), code)
+  assert.equal(normalizeRecoveryCode(code.toUpperCase().replaceAll('-', ' ')), code.replaceAll('-', ''))
+  assert.equal(normalizeRecoveryCode('123456'), null)
+  assert.equal(normalizeRecoveryCode('abcd-efgh-ijkl'), null)
+})
 
 test('e-mail addresses are trimmed, lower-cased and shape-checked', () => {
   assert.equal(normalizeEmail('  Ada.Lovelace@Example.TEST '), 'ada.lovelace@example.test')
@@ -38,9 +79,12 @@ test('passwords are 10 to 200 characters, without composition rules', () => {
 })
 
 test('roles follow the console order and the ADMIN limits', () => {
-  assert.deepEqual(grantableRoles('OWNER'), ['OWNER', 'ADMIN', 'EDITOR', 'USER', 'VIEWER'])
-  assert.deepEqual(grantableRoles('ADMIN'), ['ADMIN', 'EDITOR', 'USER', 'VIEWER'])
+  assert.deepEqual(grantableRoles('OWNER'), ['OWNER', 'ADMIN', 'EDITOR', 'VIEWER', 'APPS'])
+  assert.deepEqual(grantableRoles('ADMIN'), ['ADMIN', 'EDITOR', 'VIEWER', 'APPS'])
   assert.deepEqual(grantableRoles('EDITOR'), [])
+  assert.deepEqual(grantableRoles('APPS'), [])
+  assert.equal(canChangeRole('ADMIN', 'APPS', 'EDITOR'), true)
+  assert.equal(canChangeRole('ADMIN', 'OWNER', 'APPS'), false, 'ADMIN cannot move an OWNER to specific apps')
   assert.equal(canChangeRole('ADMIN', 'EDITOR', 'ADMIN'), true)
   assert.equal(canChangeRole('ADMIN', 'EDITOR', 'OWNER'), false, 'ADMIN cannot grant OWNER')
   assert.equal(canChangeRole('ADMIN', 'OWNER', 'ADMIN'), false, 'ADMIN cannot change an OWNER')
@@ -49,8 +93,92 @@ test('roles follow the console order and the ADMIN limits', () => {
   assert.equal(canRemoveMember('ADMIN', 'ADMIN'), true)
   assert.equal(canRemoveMember('EDITOR', 'VIEWER'), false)
   assert.equal(canSeeMembers('EDITOR'), true)
-  assert.equal(canSeeMembers('USER'), false)
+  assert.equal(canSeeMembers('VIEWER'), true, 'every organization role sees the people')
+  assert.equal(canSeeMembers('APPS'), false)
   assert.equal(canHandleInvitation('ADMIN', 'OWNER'), false)
+  assert.equal(canHandleInvitation('ADMIN', 'APPS'), true)
+  assert.equal(canManageCustomRoles('OWNER'), true)
+  assert.equal(canManageCustomRoles('ADMIN'), false, 'only owners edit custom roles')
+  assert.deepEqual(['OWNER', 'ADMIN', 'EDITOR', 'VIEWER', 'APPS'].map(appRoleOf), ['ADMIN', 'ADMIN', 'EDITOR', 'VIEWER', null])
+})
+
+const CATALOG = [
+  { key: 'records.manage', label: 'Record changes', description: '', role: 'EDITOR' },
+  { key: 'records.view', label: 'View records', description: '', role: 'EDITOR' },
+  { key: 'own.view', label: 'See own', description: '', role: 'VIEWER' },
+  { key: 'billing.manage', label: 'Billing', description: '', role: 'ADMIN' },
+]
+const APP = { name: 'captable', title: 'Cap Table', permissions: CATALOG }
+const BARE = { name: 'ledger', title: 'Ledger', permissions: [] }
+
+test('a built-in role has every permission at or below it, and a custom role is sent as the least role covering it', () => {
+  assert.deepEqual(permissionsOf(APP, 'ADMIN'), ['records.manage', 'records.view', 'own.view', 'billing.manage'])
+  assert.deepEqual(permissionsOf(APP, 'EDITOR'), ['records.manage', 'records.view', 'own.view'])
+  assert.deepEqual(permissionsOf(APP, 'VIEWER'), ['own.view'])
+  assert.equal(baseRoleFor(APP, ['own.view']), 'VIEWER')
+  assert.equal(baseRoleFor(APP, ['records.view', 'own.view']), 'EDITOR')
+  assert.equal(baseRoleFor(APP, ['billing.manage']), 'ADMIN')
+  assert.equal(baseRoleFor(APP, ['dropped.permission']), 'VIEWER', 'unknown keys count for nothing')
+})
+
+test('access comes from the organization role, or from the grant for the app, never both', () => {
+  assert.deepEqual(orgAccess(APP, 'OWNER'), { role: 'ADMIN', permissions: permissionsOf(APP, 'ADMIN'), label: 'Admin', source: 'org', admin: true, customRole: null })
+  assert.equal(orgAccess(APP, 'EDITOR').admin, false)
+  assert.equal(orgAccess(APP, 'APPS'), null)
+  assert.deepEqual(orgAccess(BARE, 'VIEWER').permissions, [], 'an app without a catalog gets no permissions')
+  const custom = grantAccess(APP, { role: 'CUSTOM', customRoleId: 'r1', customRoleName: 'Board', customPermissions: '["records.view","gone"]' })
+  assert.deepEqual(custom, { role: 'EDITOR', permissions: ['records.view'], label: 'Board', source: 'app', admin: false, customRole: { id: 'r1', name: 'Board' } })
+  assert.equal(grantAccess(APP, { role: 'CUSTOM', customRoleId: 'r2', customRoleName: 'All', customPermissions: '["billing.manage"]' }).admin, false,
+    'a custom role never makes someone an app admin, even one sent as ADMIN')
+  assert.equal(grantAccess(APP, { role: 'ADMIN', customRoleId: null, customRoleName: null, customPermissions: null }).admin, true)
+  const row = (member_role, grant_role = null) => ({ member_role, grant_role, custom_role_id: null, custom_role_name: null, custom_permissions: null })
+  assert.equal(accessFromRow(APP, row('APPS')), null, 'specific apps without this one')
+  assert.equal(accessFromRow(APP, row('APPS', 'VIEWER')).role, 'VIEWER')
+  assert.equal(accessFromRow(APP, row('EDITOR', 'VIEWER')).role, 'EDITOR', 'an organization role wins over a stray grant')
+  assert.equal(accessFromRow(APP, null), null)
+})
+
+test('the identity headers carry the app role, the permissions of an app with a catalog, and how the request came', () => {
+  const actor = { id: 'u1', email: 'ada@example.test', name: 'Ada Lovelace' }
+  const app = { ...APP, appId: 'insulin-apps-captable' }
+  const headers = identityHeaders(actor, 'o1', app, orgAccess(app, 'OWNER'), 'mcp')
+  assert.equal(headers['x-suger-app-role'], 'ADMIN', 'owners are admins in every app')
+  assert.equal(headers['x-suger-app-permissions'], 'records.manage records.view own.view billing.manage')
+  assert.equal(headers['x-suger-access-via'], 'mcp')
+  assert.equal(headers['x-suger-user-name'], 'Ada%20Lovelace')
+  const bare = identityHeaders(actor, 'o1', { ...BARE, appId: 'insulin-apps-ledger' }, orgAccess(BARE, 'VIEWER'), 'browser')
+  assert.equal('x-suger-app-permissions' in bare, false, 'no catalog, no permissions header')
+})
+
+test('access forms: an organization role alone, or specific apps with at least one app, within what the actor may give', () => {
+  const config = { apps: [APP, BARE] }
+  const customRoles = [{ id: 'r1', app: 'captable', name: 'Board' }]
+  const form = (fields) => new URLSearchParams(fields)
+  assert.deepEqual(parseAccessForm(config, form({ role: 'EDITOR' }), 'ADMIN', customRoles), { role: 'EDITOR', grants: [] })
+  assert.deepEqual(parseAccessForm(config, form({ role: 'APPS', 'app:captable': 'custom:r1', 'app:ledger': 'VIEWER' }), 'ADMIN', customRoles), {
+    role: 'APPS',
+    grants: [{ app: 'captable', role: 'CUSTOM', customRoleId: 'r1' }, { app: 'ledger', role: 'VIEWER', customRoleId: null }],
+  })
+  assert.equal(parseAccessForm(config, form({ role: 'OWNER' }), 'ADMIN', customRoles).status, 403)
+  assert.match(parseAccessForm(config, form({ role: 'APPS' }), 'OWNER', customRoles).problem, /at least one app/)
+  assert.match(parseAccessForm(config, form({ role: 'VIEWER', 'app:ledger': 'EDITOR' }), 'OWNER', customRoles).problem, /Specific apps/)
+  assert.match(parseAccessForm(config, form({ role: 'APPS', 'app:ledger': 'custom:r1' }), 'OWNER', customRoles).problem, /Ledger/, "another app's custom role")
+  assert.match(parseAccessForm(config, form({ role: 'USER' }), 'OWNER', customRoles).problem, /Choose/, 'the retired role')
+  assert.equal(accessPhrase(config, 'ADMIN', []), 'as Admin')
+  assert.equal(accessPhrase(config, 'APPS', [{ app: 'captable', role: 'CUSTOM', custom_role_name: 'Board' }, { app: 'ledger', role: 'VIEWER', custom_role_name: null }]),
+    'with access to Cap Table as Board and Ledger as Viewer')
+})
+
+test('permission catalogs and the secret key are checked, and fail closed when malformed', () => {
+  const problems = []
+  assert.deepEqual(parsePermissions(CATALOG, 'p', problems).map((permission) => permission.key), CATALOG.map((permission) => permission.key))
+  assert.deepEqual(problems, [])
+  parsePermissions([{ key: 'Bad Key', label: 'x', role: 'EDITOR' }, { key: 'a', label: 'x', role: 'OWNER' }, { key: 'b', role: 'VIEWER' }], 'p', problems)
+  assert.deepEqual(problems, ['p[0]', 'p[1]', 'p[2]'])
+  assert.deepEqual(parsePermissions(undefined, 'p', []), [])
+  assert.equal(parseSecretKey(Buffer.alloc(32, 7).toString('base64')).length, 32)
+  assert.equal(parseSecretKey(Buffer.alloc(16).toString('base64')), null)
+  assert.equal(parseSecretKey('not base64!'), null)
 })
 
 test('PBKDF2 hashes use the documented format and verify in constant time', async () => {
@@ -61,6 +189,25 @@ test('PBKDF2 hashes use the documented format and verify in constant time', asyn
   assert.equal(await verifyPassword('anything at all', 'pbkdf2_sha256$999999$AAAA$AAAA'), false)
   assert.equal(await verifyPassword('anything at all', 'not a hash'), false)
   assert.notEqual(await hashPassword('same password!'), await hashPassword('same password!'), 'salted')
+})
+
+test('sealed secrets open only with the same key and purpose, and derived secrets are stable per subject', async () => {
+  const key = new Uint8Array(32).fill(1)
+  const sealed = await seal(key, 'totp', 'JBSWY3DPEHPK3PXP')
+  assert.match(sealed, /^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$/)
+  assert.notEqual(await seal(key, 'totp', 'JBSWY3DPEHPK3PXP'), sealed, 'a fresh IV each time')
+  assert.equal(await unseal(key, 'totp', sealed), 'JBSWY3DPEHPK3PXP')
+  assert.equal(await unseal(key, 'integration', sealed), null, 'another purpose')
+  assert.equal(await unseal(new Uint8Array(32).fill(2), 'totp', sealed), null, 'another key')
+  assert.equal(await unseal(key, 'totp', `${sealed.slice(0, -2)}AA`), null, 'tampered')
+  assert.equal(await unseal(key, 'totp', 'plain text'), null)
+  assert.equal(await derivedSecret(key, 'app-token', 'captable'), await derivedSecret(key, 'app-token', 'captable'))
+  assert.notEqual(await derivedSecret(key, 'app-token', 'captable'), await derivedSecret(key, 'app-token', 'ledger'))
+})
+
+test('the deploy derives each app\'s SUGER_APP_TOKEN exactly as the gateway checks it', async () => {
+  const key = Buffer.alloc(32, 0x5a)
+  for (const app of ['captable', 'ledger']) assert.equal(appToken(key.toString('base64'), app), await derivedSecret(key, 'app-token', app), app)
 })
 
 test('tokens and ids are random, well-formed and recognised', () => {
@@ -164,18 +311,19 @@ function ctxFor(url, { testMode = false } = {}) {
 }
 
 test('return_to accepts only the site\'s own hosts, with the request\'s scheme and no credentials', () => {
-  const ctx = ctxFor('https://auth.example.test/login')
+  const ctx = ctxFor('https://example.test/login')
   assert.equal(safeReturnTo(ctx, 'https://captable.example.test/companies?x=1'), 'https://captable.example.test/companies?x=1')
   assert.equal(safeReturnTo(ctx, 'https://example.test/'), 'https://example.test/')
-  assert.equal(safeReturnTo(ctx, 'https://auth.example.test/invitations/x'), 'https://auth.example.test/invitations/x')
+  assert.equal(safeReturnTo(ctx, 'https://example.test/invitations/x'), 'https://example.test/invitations/x')
   for (const bad of [
+    'https://auth.example.test/invitations/x',
     'https://evil.example/', 'http://captable.example.test/', 'https://user:pass@captable.example.test/', '/relative',
     '//evil.example/', 'javascript:alert(1)', 'https://captable.example.test.evil.example/', 'https://ledger.example.test/',
     'https://evil.example\\@captable.example.test/', 'https://captable.example.test:8443/', '',
   ]) {
     assert.equal(safeReturnTo(ctx, bad), null, bad)
   }
-  const local = ctxFor('http://auth.insulinapps.localhost:8787/login', { testMode: true })
+  const local = ctxFor('http://insulinapps.localhost:8787/login', { testMode: true })
   assert.equal(safeReturnTo(local, 'http://captable.insulinapps.localhost:8787/'), 'http://captable.insulinapps.localhost:8787/')
   assert.equal(safeReturnTo(local, 'http://captable.insulinapps.localhost:9999/'), null)
 })

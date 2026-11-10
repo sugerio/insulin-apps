@@ -330,13 +330,13 @@ describe("payment instructions", () => {
 describe("who edits, and the read-only sections", () => {
   it("gives an editor no settings write", async () => {
     renderPage("company", companyHandlers(), { role: "admin_ro" });
-    expect(await screen.findByText("View only — owners and admins edit.")).toBeTruthy();
+    expect(await screen.findByText("View only — owners, admins and editors edit.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
   });
 
   it("shows no access list, e-mail settings or held e-mails: access is managed in the console", async () => {
     renderPage("company", companyHandlers());
-    expect(await screen.findByText("Owners and admins edit; editors view.")).toBeTruthy();
+    expect(await screen.findByText("Owners, admins and editors edit; read-only roles view.")).toBeTruthy();
     const sections = await screen.findByRole("navigation", { name: "Settings sections" });
     expect(within(sections).getAllByRole("link").map((link) => link.textContent)).toEqual(["Company profile", "Signatories", "Holder contact", "Payment instructions", "Display"]);
   });

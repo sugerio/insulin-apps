@@ -115,7 +115,7 @@ describe("the read-only admin experience", () => {
   it("shows the role, no + New, and no write controls anywhere on the queues", async () => {
     renderPage("securities-status", [mock(api.routes.getSecuritiesStatus, securitiesStatus()), mock(api.routes.listSecurities, securityList()), mock(api.routes.listStakeholders, stakeholderList())], { role: "admin_ro" });
     await screen.findByRole("table", { name: "Execution pending (migrated)" });
-    expect(screen.getAllByText("Editor").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Custom role").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /New/ })).toBeNull();
     expect(screen.getByText("Read-only")).toBeTruthy();
     expect(screen.queryAllByRole("button").filter((button) => /Mark executed|Cancel|Reverse|Invite|Upload|Record/.test(button.textContent ?? ""))).toHaveLength(0);

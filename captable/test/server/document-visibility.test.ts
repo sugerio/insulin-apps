@@ -41,7 +41,7 @@ describe('holder document visibility', () => {
       [company.id, 'company'], [mine.id, 'mine'],
     ].sort())
     expect(first.map((document) => document.id)).not.toContain(theirs.id)
-    expect(await getJson(harness, harness.editor, `/stakeholders/${harness.id('S04')}/preview/documents`)).toEqual(first)
+    expect(await getJson(harness, harness.reader, `/stakeholders/${harness.id('S04')}/preview/documents`)).toEqual(first)
   })
 
   it('excludes hidden, archived, unpublished and multi-holder documents', async () => {

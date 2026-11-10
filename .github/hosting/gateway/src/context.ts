@@ -15,6 +15,10 @@ export interface Context {
   /** The request's hostname, lower-cased. Routing never trusts the Host header separately from the URL. */
   host: string
   site: Site
+  /**
+   * The app this request is about: the app host's own, or, on the apex, the app whose people or integrations page is
+   * asked for (`/apps/<app>/settings/...`, set by the router).
+   */
   app: HostedApp | null
   /** https: everywhere, except http: for *.localhost when SITE_ENV=test. */
   scheme: 'https:' | 'http:'
@@ -65,19 +69,25 @@ export function ownOrigin(ctx: Context): string {
   return originOf(ctx, ctx.host)
 }
 
-export function authUrl(ctx: Context, path: string): string {
-  return `${originOf(ctx, ctx.config.authHost)}${path}`
-}
-
 export function apexUrl(ctx: Context, path = '/'): string {
   return `${originOf(ctx, ctx.config.domain)}${path}`
+}
+
+export type AppSettingsTab = 'users' | 'integrations'
+
+/**
+ * An app's people or integrations page, on the apex (DESIGN.md §3): never on the app's host, where code the app serves
+ * shares the origin and could read the page and post its forms with the visitor's session.
+ */
+export function appSettingsPath(app: HostedApp, tab: AppSettingsTab, rest = ''): string {
+  return `/apps/${app.name}/settings/${tab}${rest}`
 }
 
 export function appUrl(ctx: Context, app: HostedApp, path = '/'): string {
   return `${originOf(ctx, app.host)}${path}`
 }
 
-/** `/login?return_to=…` and friends: a path on the auth host with an optional return address. */
+/** `/login?return_to=…` and friends: a path on the apex with an optional return address. */
 export function withReturnTo(path: string, returnTo: string | null): string {
   if (!returnTo) return path
   return `${path}${path.includes('?') ? '&' : '?'}return_to=${encodeURIComponent(returnTo)}`

@@ -1,22 +1,41 @@
 // What the gateway forwards to an app: the identity headers of the Insulin console, and the browser's request without
 // anything that could impersonate them. No I/O, so the unit tests import it directly.
+import type { AppAccess } from '../access.ts'
 import type { HostedApp } from '../config.ts'
 import { withoutCookies } from './cookies.ts'
-import { SESSION_COOKIE, type ActiveOrg, type Session } from '../auth/session.ts'
+import { SESSION_COOKIE } from '../auth/session.ts'
 
 // Lower-case names of the gateway's own cookies: never forwarded to an app, never set by one.
-export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([SESSION_COOKIE, 'insulin_oauth', '__host-insulin_oauth'])
+export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([
+  SESSION_COOKIE, 'insulin_oauth', '__host-insulin_oauth', 'insulin_mfa', '__host-insulin_mfa', 'insulin_sso', '__host-insulin_sso',
+])
 
-/** The identity contract of `@fours/app` (`getCurrentUser` with SUGER_ACCESS_MODE=console). */
-export function identityHeaders(session: Session, org: ActiveOrg, app: HostedApp): Record<string, string> {
-  return {
-    'x-suger-user-id': session.user.id,
-    'x-suger-organization-id': org.id,
+/** How a request reached the app (x-suger-access-via): apps keep people, billing and integrations to `browser`. */
+export type AccessVia = 'browser' | 'mcp' | 'api'
+
+/** Who a request acts as: a person, or a service account (DESIGN.md §5.3). */
+export interface Actor {
+  id: string
+  email: string
+  name: string
+}
+
+/**
+ * The identity contract of `@fours/app` (`getCurrentUser` with SUGER_ACCESS_MODE=console), plus the permissions of an
+ * app with a catalog and how the request came (DESIGN.md §2.4).
+ */
+export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, access: AppAccess, via: AccessVia): Record<string, string> {
+  const headers: Record<string, string> = {
+    'x-suger-user-id': actor.id,
+    'x-suger-organization-id': orgId,
     'x-suger-app-id': app.appId,
-    'x-suger-app-role': org.role,
-    'x-suger-user-email': encodeURIComponent(session.user.email),
-    'x-suger-user-name': encodeURIComponent(session.user.name || session.user.email),
+    'x-suger-app-role': access.role,
+    'x-suger-user-email': encodeURIComponent(actor.email),
+    'x-suger-user-name': encodeURIComponent(actor.name || actor.email),
+    'x-suger-access-via': via,
   }
+  if (app.permissions.length) headers['x-suger-app-permissions'] = access.permissions.join(' ')
+  return headers
 }
 
 /** The original request (same URL and method, body streamed, not buffered) with the identity headers in place. */

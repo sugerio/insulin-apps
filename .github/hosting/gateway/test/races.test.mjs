@@ -53,7 +53,7 @@ test('review 2: a session row from before a credential change no longer authenti
     'INSERT INTO sessions (id_hash, user_id, active_org_id, credential_version, created_at, last_seen_at, expires_at) VALUES (?1, ?2, NULL, ?3, ?4, ?4, ?5)',
     before.id_hash, id, before.credential_version, Date.now(), Date.now() + DAY,
   )
-  const home = await client.get(h.url('auth', '/'))
+  const home = await client.get(h.url('auth', '/account'))
   assert.equal(home.status, 302, 'the old cookie is signed out')
   assert.match(home.location, /\/login/)
 })
@@ -115,7 +115,7 @@ test('review 4: an owner who loses the role or is removed mid-request can neithe
 test('review 4: an admin whose role is lowered or who is removed mid-request cannot invite, revoke, resend, change roles or remove members', async () => {
   const { orgId, owner, admin, editor, viewer } = await team()
   const pendingEmail = uniqueEmail('pending-before-race')
-  await owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email: pendingEmail, role: 'USER' })
+  await owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email: pendingEmail, role: 'VIEWER' })
   const pending = await findInvitation(h.db, (await h.sql('SELECT id FROM invitations WHERE email = ?1', pendingEmail))[0].id)
   // Old enough to resend, so the resend below is refused only because of the actor's role.
   await h.sql('UPDATE invitations SET last_sent_at = ?1 WHERE id = ?2', Date.now() - 11 * 60 * 1000, pending.id)
@@ -127,7 +127,7 @@ test('review 4: an admin whose role is lowered or who is removed mid-request can
   ]) {
     await lower()
     const invited = await insertInvitation(h.db, {
-      id: randomUUID(), orgId, email: uniqueEmail('raced-invite'), role: 'USER', invitedBy: admin.id, now: Date.now(), expiresAt: Date.now() + DAY, pendingLimit: 50,
+      id: randomUUID(), orgId, email: uniqueEmail('raced-invite'), role: 'VIEWER', grants: [], app: null, invitedBy: admin.id, now: Date.now(), expiresAt: Date.now() + DAY, pendingLimit: 50,
     })
     assert.equal(invited, false, 'invite')
     assert.equal(await revokeInvitation(h.db, pending.id, admin.id, Date.now()), false, 'revoke')
@@ -149,7 +149,7 @@ test('review 4: an admin keeps the OWNER limits inside the statement', async () 
   assert.equal(await changeRole(h.db, { orgId, userId: second.id, current: 'OWNER', next: 'VIEWER', actorId: admin.id, now: Date.now() }), false, 'cannot change an owner')
   assert.equal(await removeMember(h.db, orgId, second.id, 'OWNER', admin.id), false, 'cannot remove an owner')
   assert.equal(await insertInvitation(h.db, {
-    id: randomUUID(), orgId, email: uniqueEmail('owner-invite'), role: 'OWNER', invitedBy: admin.id, now: Date.now(), expiresAt: Date.now() + DAY, pendingLimit: 50,
+    id: randomUUID(), orgId, email: uniqueEmail('owner-invite'), role: 'OWNER', grants: [], app: null, invitedBy: admin.id, now: Date.now(), expiresAt: Date.now() + DAY, pendingLimit: 50,
   }), false, 'cannot invite an owner')
 })
 
@@ -158,13 +158,13 @@ test('review 8: concurrent invitations cannot pass the 50-pending cap', async ()
   const orgId = await h.org(owner.client, 'Cap Race Org')
   const now = Date.now()
   for (let i = 0; i < 48; i += 1) {
-    await h.sql("INSERT INTO invitations (id, org_id, email, role, invited_by, status, created_at, expires_at, last_sent_at) VALUES (?1, ?2, ?3, 'USER', ?4, 'pending', ?5, ?6, ?5)",
+    await h.sql("INSERT INTO invitations (id, org_id, email, role, invited_by, status, created_at, expires_at, last_sent_at) VALUES (?1, ?2, ?3, 'VIEWER', ?4, 'pending', ?5, ?6, ?5)",
       randomUUID(), orgId, `queued.${i}@example.test`, owner.id, now, now + DAY)
   }
-  const responses = await Promise.all(Array.from({ length: 6 }, (_, i) => owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email: uniqueEmail(`burst-${i}`), role: 'USER' })))
+  const responses = await Promise.all(Array.from({ length: 6 }, (_, i) => owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email: uniqueEmail(`burst-${i}`), role: 'VIEWER' })))
   assert.deepEqual(responses.map((response) => response.status).sort(), [303, 303, 409, 409, 409, 409])
   assert.equal(await count("SELECT COUNT(*) AS n FROM invitations WHERE org_id = ?1 AND status = 'pending'", orgId), 50)
   assert.equal(await insertInvitation(h.db, {
-    id: randomUUID(), orgId, email: uniqueEmail('over-cap'), role: 'USER', invitedBy: owner.id, now: Date.now(), expiresAt: Date.now() + DAY, pendingLimit: 50,
+    id: randomUUID(), orgId, email: uniqueEmail('over-cap'), role: 'VIEWER', grants: [], app: null, invitedBy: owner.id, now: Date.now(), expiresAt: Date.now() + DAY, pendingLimit: 50,
   }), false, 'the insert itself enforces the cap')
 })

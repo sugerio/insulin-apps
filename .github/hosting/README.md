@@ -1,15 +1,16 @@
 # Hosting the apps on insulinapps.com
 
 Every app in this repository runs at its own address, `<app>.insulinapps.com`, and has an independent CI/CD pipeline.
-People create an account and an organization, invite their teammates with a role, and use the apps for real work. Data
-is kept; nothing is reset.
+People create an account and an organization, invite their teammates with a role in every app or in specific apps,
+connect AI agents, and use the apps for real work. Data is kept; nothing is reset. How accounts, roles and access work
+is in [DESIGN.md](DESIGN.md).
 
 ## Architecture
 
-Cloudflare custom domains for the apex, `www` (redirected to the apex), `auth`, and every app hostname point to the
-`insulin-apps-gateway` Worker. The gateway owns accounts, sign-in and organization membership in its D1 database, then
-calls the private `insulin-apps-<app>` Workers through service bindings, with the identity headers the Insulin console
-sends. Each app has its own D1 database. App Workers have neither a `workers.dev` address nor a public route. The
+Cloudflare custom domains for the apex, `www` (redirected to the apex), `auth` (redirected to the apex, where sign-in
+moved), and every app hostname point to the `insulin-apps-gateway` Worker. The gateway owns accounts, sign-in,
+organization membership and roles in its D1 database, then calls the private `insulin-apps-<app>` Workers through
+service bindings, with the identity headers the Insulin console sends. Each app has its own D1 database. App Workers have neither a `workers.dev` address nor a public route. The
 gateway deletes expired sessions, tokens and mail records after its writes and once a day on a cron trigger.
 
 Each `.github/workflows/<app>.yml` file supplies its app name to the shared `.github/workflows/app.yml` pipeline. On a
@@ -49,13 +50,20 @@ that may be absent.
 
 ## Owner setup
 
-Workers Paid must be enabled for the Cloudflare account before the first deployment.
+Workers Paid must be enabled for the Cloudflare account before the first deployment. The gateway runs with the
+`nodejs_compat` flag (for SAML's XML signature library); the deploy sets it.
 
 1. Create a GitHub environment named `production` that only `main` can deploy to. Add these environment secrets:
 
    - `CLOUDFLARE_API_TOKEN`
    - `GOOGLE_CLIENT_SECRET`
    - `TURNSTILE_SECRET_KEY`
+   - `GATEWAY_SECRET_KEY`: 32 random bytes, base64 (`openssl rand -base64 32`). It seals what the gateway must read
+     back (authenticator-app secrets, stored integration credentials, OIDC client secrets) and derives each app's
+     `SUGER_APP_TOKEN`. Optional, but without it MFA, stored credentials and OIDC can't be set up. Keep a copy in the
+     credential vault: replacing it makes everything sealed with the old key unreadable (people turn MFA on again and
+     admins re-enter credentials), so don't rotate it casually. After replacing it, deploy the gateway and then every
+     app, which gives each app its new `SUGER_APP_TOKEN`.
 
    Add these environment variables:
 
@@ -78,7 +86,10 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
 
 3. Create a Google OAuth web client. Register this exact redirect URI:
 
-   `https://auth.insulinapps.com/auth/google/callback`
+   `https://insulinapps.com/auth/google/callback`
+
+   Sites set up before sign-in moved to the apex registered `https://auth.insulinapps.com/auth/google/callback`; add the
+   apex URI (keep the old one until the deploy is out), because Google compares the exact redirect URI.
 
    On its Branding page, set the application home page to `https://insulinapps.com`, the privacy policy to
    `https://insulinapps.com/privacy` and the terms of service to `https://insulinapps.com/terms`, and list
@@ -157,7 +168,8 @@ matching push to `main` will otherwise deploy the current repository state.
 - **A migration fails:** stop. Fix it with a new forward migration; never edit or delete a migration that may already
   have been applied.
 - **Email fails:** confirm Email Service onboarding, the approved sender, and that `EMAIL_FROM` contains that address.
-- **Google redirects fail:** compare the registered redirect URI character-for-character with the `auth` URL.
+- **Google redirects fail:** compare the registered redirect URI character-for-character with
+  `https://<SITE_DOMAIN>/auth/google/callback` (the apex, not `auth.`).
 - **Turnstile rejects every form:** verify that the widget permits the site's hostname and rotate both keys together
   when replacing the widget.
 - **An app is missing:** run `node .github/scripts/list-apps.mjs` and fix the directory name or required files it

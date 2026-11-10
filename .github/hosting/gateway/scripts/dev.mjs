@@ -29,9 +29,8 @@ await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', gatewayConf
 if (app === 'captable') await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', appConfig, '--persist-to', state])
 
 console.log(`
-  Landing       http://insulinapps.localhost:${port}/
-  Accounts      http://auth.insulinapps.localhost:${port}/
-  App           http://captable.insulinapps.localhost:${port}/
-  Captured mail http://auth.insulinapps.localhost:${port}/__insulin/dev/mail
+  Sign-in, accounts and settings  http://insulinapps.localhost:${port}/
+  App                             http://captable.insulinapps.localhost:${port}/
+  Captured mail                   http://insulinapps.localhost:${port}/__insulin/dev/mail
 `)
 await run(['dev', '--config', gatewayConfig, '--config', appConfig, '--local', '--persist-to', state, '--ip', '127.0.0.1', '--port', port])

@@ -700,7 +700,7 @@ describe("Import for an existing company", () => {
 
   it("tells editors who can import, and shows them no import action", async () => {
     const { callsTo } = renderAt(`${base}/import`, () => me("admin_ro"), [mock(api.routes.listStakeholders, EMPTY_COMPANY)]);
-    expect(await screen.findByText("Only owners and admins can import")).toBeTruthy();
+    expect(await screen.findByText("Only those who record changes can import")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Import from|Download the template/ })).toBeNull();
     expect(screen.queryByRole("group", { name: "Upload area" })).toBeNull();
     expect(callsTo(api.routes.listStakeholders)).toHaveLength(0);

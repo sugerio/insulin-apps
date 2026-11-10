@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 
 export const gatewayDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 export const COMPATIBILITY_DATE = '2026-10-13'
+/** As production: SAML's XML signature library (xml-crypto) needs Node's crypto module. */
+export const COMPATIBILITY_FLAGS = ['nodejs_compat']
 export const wrangler = join(gatewayDir, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler')
 
 /** Wrangler without its banner, update check, metrics or error reports: tests stay offline and quiet. */
@@ -34,7 +36,9 @@ export async function buildBundle(outDir) {
   const work = await mkdtemp(join(tmpdir(), 'gateway-build-'))
   try {
     const config = join(work, 'wrangler.json')
-    await writeFile(config, JSON.stringify({ name: 'insulin-apps-gateway', main: join(gatewayDir, 'src', 'index.ts'), compatibility_date: COMPATIBILITY_DATE }))
+    await writeFile(config, JSON.stringify({
+      name: 'insulin-apps-gateway', main: join(gatewayDir, 'src', 'index.ts'), compatibility_date: COMPATIBILITY_DATE, compatibility_flags: COMPATIBILITY_FLAGS,
+    }))
     await run(wrangler, ['deploy', '--dry-run', '--outdir', outDir, '--config', config], { cwd: work, env: { ...process.env, ...QUIET_WRANGLER } })
   } finally {
     await rm(work, { recursive: true, force: true })

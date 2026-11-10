@@ -25,7 +25,7 @@ export const forStakeholders: DocTopic = {
             <li><b>Portfolio</b> is your home page: a summary of your shares, options, warrants and SAFEs, your vesting status and upcoming vesting dates, a table of your grants and shares with each one's status, and the company resources. A SAFE shows its terms, and once it has converted, the shares it became.</li>
             <li><b>More than one record?</b> If you hold equity under more than one record (for example personally and through a trust), Portfolio lets you switch between them.</li>
             <li><b>If you have left the company,</b> a banner says how many vested options you can still exercise and until when, and when exercises start being taxed as NSOs if an ISO deadline applies.</li>
-            <li><b>Something missing or wrong?</b> Only the company can change your records. If you see no holdings at all, ask the company to add your console e-mail address to your stakeholder record.</li>
+            <li><b>Something missing or wrong?</b> Only the company can change your records. If you see no holdings at all, ask the company to add the e-mail address you sign in with to your stakeholder record.</li>
           </ul>
         </>
       ),

@@ -5,12 +5,12 @@ import { cn } from "@/lib/utils"
 import { ContactLink } from "@/components/contact"
 import { Container, proseLinks } from "@/components/layout"
 import type { Context } from "../context.ts"
-import { apexUrl, authUrl } from "../context.ts"
+import { apexUrl } from "../context.ts"
 import { SESSION_COOKIE } from "../auth/session.ts"
 import type { Html } from "./html.ts"
 import { page } from "./document.tsx"
 
-const UPDATED = "28 October 2026"
+const UPDATED = "10 November 2026"
 
 /** Readable running text: a measure of about 70 characters, relaxed leading, spaced headings and lists. */
 const PROSE = cn(
@@ -54,6 +54,8 @@ function ContactSection({ ctx }: { ctx: Context }) {
 export function privacyPage(ctx: Context): Html {
   const domain = ctx.config.domain
   const oauthCookie = "__Host-insulin_oauth"
+  const mfaCookie = "__Host-insulin_mfa"
+  const ssoCookie = "__Host-insulin_sso"
   return page(ctx, { title: "Privacy notice" }, (
     <LegalPage title="Privacy notice">
       <p>
@@ -73,12 +75,33 @@ export function privacyPage(ctx: Context): Html {
         </li>
         <li>
           <strong>Cookies:</strong> <code>{SESSION_COOKIE}</code> keeps you signed in across the service&apos;s sites for 30 days,
-          renewed while you use it. <code>{oauthCookie}</code> carries a Google sign-in for up to 10 minutes. We store only a hash
-          of the session cookie&apos;s value.
+          renewed while you use it. <code>{oauthCookie}</code> carries a Google sign-in, <code>{mfaCookie}</code> the code step of
+          two-step sign-in, and <code>{ssoCookie}</code> a single sign-on, each for up to 10 minutes. We store only a hash of the
+          session cookie&apos;s value.
         </li>
         <li>
-          <strong>Organizations:</strong> the organizations you create or join, your role in each, and invitations: the email
-          addresses people invite, the role offered, who sent the invitation, and whether it was accepted.
+          <strong>Two-step sign-in, if you turn it on:</strong> your authenticator app&apos;s secret, encrypted, when you turned it on,
+          the last code time accepted and how many wrong codes were entered in a row, and your recovery codes as hashes only. If
+          your organization&apos;s single sign-on first signs in an account that has its own password or Google link, we note
+          when, to tell you once.
+        </li>
+        <li>
+          <strong>Organizations:</strong> the organizations you create or join, your role in each (or the apps you were given and
+          your role in each), the custom roles owners define, and invitations: the email addresses people invite, the access
+          offered, who sent the invitation, and whether it was accepted.
+        </li>
+        <li>
+          <strong>Single sign-on, if your organization sets it up:</strong> the email domains it claimed and their verification
+          records, its identity provider&apos;s settings (an OIDC client secret encrypted), SCIM tokens as hashes only, and which
+          people its identity provider added, with that provider&apos;s id for them. When you sign in that way, the identity
+          provider sends us your email address and name.
+        </li>
+        <li>
+          <strong>AI agents and API access:</strong> the AI agents (MCP clients) you connect: the name and return address each
+          gave itself, and each permission you allowed (you, the organization, the app, when it was allowed and last used).
+          Service accounts that an app&apos;s admins create: their name, role, who created them and when they were last used.
+          Tokens and client secrets are stored as hashes only. Credentials for outside services that admins store for an app
+          are encrypted and never shown again.
         </li>
         <li>
           <strong>What you enter into the apps:</strong> each app stores the data you put in it for your organization. Apps also
@@ -106,7 +129,8 @@ export function privacyPage(ctx: Context): Html {
           To send the emails the service needs: confirmation links, password resets, invitations, and a notice when someone tries
           to sign up with your address.
         </li>
-        <li>To let organizations work together: membership, roles and invitations.</li>
+        <li>To let organizations work together: membership, roles, custom roles, invitations and single sign-on.</li>
+        <li>To let the AI agents you connect, and the service accounts admins create, use the apps with the access given.</li>
         <li>To run the apps you use for your organization.</li>
         <li>To limit abuse of the service: rate limits, the bot check and email limits.</li>
       </ul>
@@ -124,9 +148,22 @@ export function privacyPage(ctx: Context): Html {
           See <a href="https://policies.google.com/privacy">Google&apos;s privacy policy</a>.
         </li>
         <li>
-          <strong>Other members of your organizations:</strong> editors, admins and owners see the names and email addresses of
-          members; admins and owners see pending invitations. What you enter in an app is visible to your organization&apos;s
-          members according to that app&apos;s roles.
+          <strong>Other members of your organizations:</strong> everyone with an organization role sees the names, email addresses
+          and access of the organization&apos;s members, and everyone who can use an app sees who else can use it; admins and owners
+          see pending invitations. What you enter in an app is visible to your organization&apos;s members according to that
+          app&apos;s roles.
+        </li>
+        <li>
+          <strong>Your organization&apos;s identity provider</strong>, if it uses single sign-on, which knows when you sign in. To
+          verify a domain we look up its DNS record through Cloudflare&apos;s DNS-over-HTTPS service.
+        </li>
+        <li>
+          <strong>The AI agents you connect</strong>, and the company that runs each one: what an agent reads from an app with your
+          access goes to it, under that company&apos;s terms. Disconnect an agent at any time on your account&apos;s AI agents page.
+        </li>
+        <li>
+          <strong>Outside services an app&apos;s admins connect</strong>: the app&apos;s requests to them carry what the app sends,
+          with the stored credential.
         </li>
       </ul>
 
@@ -137,17 +174,21 @@ export function privacyPage(ctx: Context): Html {
       <p>
         Data is not reset. We keep your account until you delete it, and an organization&apos;s records, including its invitations,
         until the organization is deleted. Confirmation links expire after 24 hours and password-reset links after 1 hour;
-        sessions end when you sign out, when your password changes, or after 30 days without use.
+        sessions end when you sign out, when your password changes, or after 30 days without use. A permission you give an AI
+        agent lasts 30 days, unless you disconnect it or leave the organization first; its tokens last an hour (sign-in codes 60
+        seconds). A sign-in step waiting for a code, a single sign-on or your decision on an agent lasts 10 minutes. An agent
+        that registered but was never allowed is deleted after a day. Recovery codes last until you replace them or turn
+        two-step sign-in off.
       </p>
       <p>
-        Expired sessions, used or expired links, and email records older than two days are deleted automatically, a small batch
-        at a time, as the service handles account activity. On a quiet day they can stay a little longer before they are removed.
+        Expired sessions, used or expired links, expired sign-in steps and agent tokens, and email records older than two days
+        are deleted automatically, a small batch at a time, as the service handles account activity. On a quiet day they can stay a little longer before they are removed.
       </p>
 
       <h2>Deleting your data</h2>
       <ul>
         <li>
-          On your <a href={authUrl(ctx, "/account")}>account page</a>, choose <strong>Delete my account</strong>. This deletes your
+          On your <a href={apexUrl(ctx, "/account")}>account page</a>, choose <strong>Delete my account</strong>. This deletes your
           account, your sessions and your memberships, and every organization where you are the only member, with its
           invitations.
         </li>
@@ -162,6 +203,10 @@ export function privacyPage(ctx: Context): Html {
           contact us.
         </li>
         <li>To decline an invitation you received, use the Decline button on the invitation or on your home page.</li>
+        <li>
+          To disconnect an AI agent, use <a href={apexUrl(ctx, "/account/agents")}>AI agents</a> on your account. To turn two-step
+          sign-in off, which deletes its secret and recovery codes, use <a href={apexUrl(ctx, "/account/security")}>Security</a>.
+        </li>
       </ul>
 
       <h2>Children</h2>

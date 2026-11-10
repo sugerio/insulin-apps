@@ -54,7 +54,7 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     const status = await getJson<api.SecuritiesStatus>(harness, harness.owner, '/securities-status')
     expect(status.executionPending.map((row) => row.displayId).sort()).toEqual(['OPT-49', 'OPT-50', 'OPT-51', 'OPT-53', 'OPT-55', 'OPT-56'])
     expect(status.optionsFromTerminated.map((row) => row.securityId)).toEqual([harness.id('OPT-26'), harness.id('OPT-20')])
-    expect(await getJson<api.Org>(harness, harness.editor, '')).toMatchObject({
+    expect(await getJson<api.Org>(harness, harness.reader, '')).toMatchObject({
       id: harness.orgId, legalName: 'Acme Robotics, Inc.', ledgerSeq: harness.acme.b.headSeq,
       shareUnitFrozen: true, settings: { expiry: { mode: 'report_only' } },
     })
@@ -86,7 +86,7 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     harness = await readHarness({ emails: { S04: 's04.holder@example.test' } })
     await harness.db.prepare("UPDATE stakeholders SET phone = '+1 555 0100', version = version + 1 WHERE id = ?")
       .bind(harness.id('S04')).run()
-    for (const identity of [harness.owner, harness.admin, harness.editor]) {
+    for (const identity of [harness.owner, harness.admin, harness.reader]) {
       const list = await getJson<api.StakeholderList>(harness, identity, '/stakeholders')
       const s04 = list.items.find((row) => row.id === harness!.id('S04'))!
       expect(s04).toMatchObject({ displayName: 'Synthetic Holder S04', phone: '+1 555 0100' })
@@ -96,14 +96,14 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     expect(detail.exercises.map((exercise) => exercise.grantDisplayId)).toEqual(['OPT-1'])
     const holdings = await getJson<api.StakeholderHoldings>(harness, harness.owner, `/stakeholders/${harness.id('S04')}/holdings`)
     expect(holdings.items.map((security) => security.displayId).sort()).toEqual(['CS-7', 'OPT-1', 'OPT-16', 'OPT-37'])
-    const preview = await getJson<api.PortalOverview>(harness, harness.editor, `/stakeholders/${harness.id('S04')}/preview`)
+    const preview = await getJson<api.PortalOverview>(harness, harness.reader, `/stakeholders/${harness.id('S04')}/preview`)
     expect(api.findForbiddenKeys(preview)).toEqual([])
     const split = await getJson<api.IsoSplit>(harness, harness.owner, `/stakeholders/${harness.id('S13')}/iso-split`)
     expect(split.years.find((entry) => entry.year === 2026)!.lots)
       .toEqual([expect.objectContaining({ displayId: 'OPT-33', isoQuantity: '105263', nsoQuantity: '3070' })])
   })
 
-  it('serves structure and a pure vesting preview to EDITOR', async () => {
+  it('serves structure and a pure vesting preview to a read-only custom role', async () => {
     harness = await readHarness()
     const classes = await getJson<api.StockClassList>(harness, harness.owner, '/stock-classes')
     expect(classes.items.find((entry) => entry.name === 'Common Stock')).toMatchObject({
@@ -113,7 +113,7 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     expect(plan.returnRules).toMatchObject({ cancelledUnvestedAwards: 'RETURN', repurchasedVestedShares: 'RETIRE' })
     expect((await getJson<api.VestingTermsList>(harness, harness.owner, '/vesting-terms?templates=true')).items.map((entry) => entry.id))
       .toEqual([VS1_TEMPLATE_ID])
-    const response = await harness.api('POST', harness.path('/vesting-terms/preview'), harness.editor, {
+    const response = await harness.api('POST', harness.path('/vesting-terms/preview'), harness.reader, {
       definition: {
         type: 'SCHEDULE', totalMonths: 48, frequency: 'MONTHLY',
         cliff: { months: 12, quantityRule: 'RATABLE' }, dayRule: 'SAME_DAY_CLAMPED',
@@ -130,7 +130,7 @@ describe('read endpoints on the synthetic Acme ledger', () => {
       `INSERT INTO valuation_events (id, org_id, valuation_id, kind, event_date, description, created_by, created_at)
        VALUES (?, ?, ?, 'MATERIAL_EVENT', '2024-01-01', 'Synthetic event', ?, ?)`,
     ).bind(crypto.randomUUID(), harness.orgId, harness.id('V1'), SEED_USER_ID, Date.now()).run()
-    const valuations = await getJson<api.ValuationList>(harness, harness.editor, '/valuations')
+    const valuations = await getJson<api.ValuationList>(harness, harness.reader, '/valuations')
     expect(valuations.items.map((entry) => [entry.name, entry.status])).toEqual([
       ['409A V5', 'expiring_soon'], ['409A V4', 'superseded'], ['409A V3', 'superseded'],
       ['409A V2', 'superseded'], ['409A V1', 'superseded'],
@@ -170,7 +170,7 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     harness = await readHarness()
     await harness.db.prepare("UPDATE orgs SET ein = '12-3456789', version = version + 1 WHERE id = ?")
       .bind(harness.orgId).run()
-    for (const identity of [harness.owner, harness.admin, harness.editor]) {
+    for (const identity of [harness.owner, harness.admin, harness.reader]) {
       const companies = await getJson<api.OrgList>(harness, identity, '/api/orgs')
       expect(companies.items).toHaveLength(1)
       expect(companies.items[0]).toMatchObject({ id: harness.orgId, ein: '12-3456789' })

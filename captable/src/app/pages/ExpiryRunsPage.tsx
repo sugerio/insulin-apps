@@ -40,7 +40,7 @@ function ExpiryRunsBody() {
         <p className="small">
           Expiry mode: <b>{automatic ? "Automatic" : "Report-only"}</b>
           {automatic ? " — processing due items expires options and warrants past their last exercise day without review." : " — until an admin confirms a run and switches to automatic."}
-          {canWrite ? null : " Only an owner or admin confirms a run."}
+          {canWrite ? null : " Only someone who records changes confirms a run."}
         </p>
         <ResourceView resource={runs}>
           {(data) => data.items.length === 0 ? (
@@ -103,7 +103,7 @@ function ExpiryRunPanel({ runId, onClose, onChanged }: { runId: number; onClose:
   const run = detail.data;
   if (canWrite && run.state === "pending") return <ExpiryRunReview run={run} onClose={onClose} onChanged={onChanged} />;
   const note = readOnly
-    ? "Only an owner or admin can confirm an expiry run. This is what it proposes, and what confirming would cancel today."
+    ? "Only someone who records changes can confirm an expiry run. This is what it proposes, and what confirming would cancel today."
     : writeRestriction
       ? `${writeRestriction.text} This run can't be confirmed now.`
       : run.state === "confirming"

@@ -72,7 +72,7 @@ describe('holder security detail', () => {
   it('keeps admin holding-preview detail byte-for-byte equal to the holder result', async () => {
     harness = await readHarness({ emails: { S04: 's04@example.test' } })
     const own = await detail('OPT-1', 's04@example.test')
-    for (const identity of [harness.owner, harness.admin, harness.editor]) {
+    for (const identity of [harness.owner, harness.admin, harness.reader]) {
       expect(await getJson(
         harness, identity, `/stakeholders/${harness.id('S04')}/preview/securities/${harness.id('OPT-1')}`,
       )).toEqual(own)

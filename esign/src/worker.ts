@@ -12,6 +12,7 @@ import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './
 import { mountSigningRoutes } from './signing-routes.ts';
 import { environmentOf, isProd, prodProblems, signingEnabled, type EnvironmentEnv } from './environment.ts';
 import { mountEditorRoutes } from './editor-routes.ts';
+import { mountTenantProvisioning } from './tenant-provisioning.ts';
 import { demoPage, EMBEDDABLE_HEADERS, signingPage } from './signing-page.ts';
 import { sweepEnvelopes } from './envelope-completion.ts';
 
@@ -24,6 +25,8 @@ type Bindings = Omit<EnvironmentEnv, 'SEND_EMAIL'> & {
   /** Space-separated origins allowed to embed the signing page at /sign. */
   SIGNING_PAGE_FRAME_ANCESTORS?: string;
   SIGNING_PAGE_ORIGINS?: string;
+  /** The host's provisioning key: creates tenants and issues their first key (tenant-provisioning.ts). */
+  PROVISIONING_KEY?: string;
 };
 type Env = { Bindings: Bindings; Variables: { tenantId: string } };
 
@@ -52,6 +55,7 @@ app.use('/v1/envelopes/*', managementAuth);
 app.use('/v1/test-mail/*', managementAuth);
 
 mountEditorRoutes(app, managementAuth);
+mountTenantProvisioning(app);
 app.get('/assets/*', async (context) => {
   if (!context.env.ASSETS) return context.notFound();
   const asset = await context.env.ASSETS.fetch(context.req.raw);

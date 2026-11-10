@@ -54,7 +54,8 @@ built pages in `dist-ui`).
 
 Secrets: `OTP_KEY` (the one-time codes' pepper, at least 32 characters, both environments),
 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (the managed seal's IAM user) and, locally only,
-`TEST_SEAL_KEY` (the HMAC test seal, at least 32 characters). A deployed Worker seals with KMS and
+`TEST_SEAL_KEY` (the HMAC test seal, at least 32 characters), and optionally `PROVISIONING_KEY`
+(lets the host create its organizations' tenants, see below). A deployed Worker seals with KMS and
 TSA, so it needs no `TEST_SEAL_KEY`. A managed seal configuration that is incomplete is an error,
 never a silent fallback.
 
@@ -176,6 +177,17 @@ Secrets stay on the Worker and never pass through the deploy: set `OTP_KEY` once
   Worker origin as base URL and `<Worker origin>/sign` as the signing page URL. Every tenant signs
   on the same origin (for example `https://esign.example.com`). Running it again with a new key
   file adds a second key (rotation); revoke old keys by setting `api_keys.revoked_at`.
+- **A host organization, provisioned by the host**: with the Worker secret `PROVISIONING_KEY` set
+  (random, at least 32 characters; `wrangler secret put PROVISIONING_KEY --name esign-<target>`),
+  the host creates each organization's tenant itself the first time that organization uses E-sign:
+  `POST /v1/tenants` with `Authorization: Bearer <provisioning key>` and `{"tenantId": "<org id>"}`
+  returns `201 {"tenantId", "apiKey"}`, the key returned this once (only its SHA-256 is kept).
+  The tenant's editor origins are the frame ancestors (`ESIGN_FRAME_ANCESTORS`). The provisioning
+  key reads nothing and cannot take over a tenant in use: once the tenant has a template, an
+  envelope or an editing session, the answer is `409 tenant_in_use`. Before that, asking again
+  revokes the earlier keys and issues a new one (a host that lost the response before saving the
+  key recovers this way), so the host must not ask concurrently for one organization. Without the
+  secret the route is 404. See `src/tenant-provisioning.ts`.
 - **Editor origins**: each `--console-origin` (repeatable) must be a bare origin: https, or http on
   `localhost` or `127.0.0.1`, lowercase, with no path, quote or other punctuation; anything else is
   refused before any SQL is generated. They are merged into the tenant's `editor_origins_json`

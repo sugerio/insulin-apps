@@ -15,10 +15,11 @@ export type SignInMethod = 'password' | 'google' | 'reset' | 'verify' | 'sso'
  * With two-step sign-in on, there is no session yet: the browser gets a challenge to answer with a code (auth/mfa.ts).
  * That holds for every method but SSO, where the organization's identity provider is responsible for the second
  * factor. A confirmation link only signs in an account that has just been created, which can't have it on yet, but an
- * older link must not get around it either.
+ * older link must not get around it either. `activeOrgId` makes that organization the session's active one (single
+ * sign-on signs in to its organization).
  */
-export async function finishSignIn(ctx: Context, user: { id: string; credential_version: number }, method: SignInMethod, next: string, changed: () => Response): Promise<Response> {
+export async function finishSignIn(ctx: Context, user: { id: string; credential_version: number }, method: SignInMethod, next: string, changed: () => Response, activeOrgId: string | null = null): Promise<Response> {
   if (method !== 'sso' && await mfaEnabled(ctx.config.db, user.id)) return startChallenge(ctx, user, method, next)
-  if (!(await startSession(ctx, user))) return changed()
+  if (!(await startSession(ctx, user, activeOrgId))) return changed()
   return ctx.request.method === 'GET' ? redirect(next, 302) : afterPost(ctx, next)
 }

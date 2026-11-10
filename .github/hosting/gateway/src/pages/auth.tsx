@@ -1,4 +1,4 @@
-// Account pages on the auth host: sign-up, sign-in, e-mail confirmation, resend, forgotten and reset passwords.
+// Account pages on the apex: sign-up, sign-in, e-mail confirmation, resend, forgotten and reset passwords.
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { FieldSeparator } from "@/components/ui/field"
@@ -160,6 +160,9 @@ export function loginPage(ctx: Context, state: FormState = {}): Html {
           Sign in
         </Button>
       </form>
+      <a className={cn(buttonVariants({ variant: "outline" }), "w-full")} href={withReturnTo("/sso", state.returnTo ?? null)}>
+        Sign in with SSO
+      </a>
     </AuthCard>
   ))
 }

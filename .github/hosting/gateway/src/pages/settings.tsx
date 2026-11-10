@@ -21,7 +21,7 @@ import type { MemberRow, MembershipRow } from "../db/orgs.ts"
 import { accessPhrase, accessSummary, grantChoices, grantField, grantLabel, grantValue } from "../orgs/access-forms.ts"
 import {
   APP_ROLES, APP_ROLE_LABELS, APP_ROLE_SUMMARIES, ROLES, ROLE_LABELS, ROLE_SUMMARIES, canChangeRole, canDeleteOrg,
-  canHandleInvitation, canManageCustomRoles, canManageMembers, canRemoveMember, canRenameOrg, canSeeMembers,
+  canHandleInvitation, canManageCustomRoles, canManageMembers, canManageSso, canRemoveMember, canRenameOrg, canSeeMembers,
   grantableRoles, roleHas, type Role,
 } from "../roles.ts"
 import type { Session } from "../auth/session.ts"
@@ -32,7 +32,7 @@ import { InvitationList } from "./home.tsx"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-export type SettingsTab = "users" | "roles" | "organization"
+export type SettingsTab = "users" | "roles" | "organization" | "sso"
 
 function roleChoices(roles: Role[]): Choice[] {
   return roles.map((role) => ({ value: role, label: ROLE_LABELS[role] }))
@@ -46,7 +46,7 @@ function expiry(ctx: Context, expiresAt: number): string {
 
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
 
-interface OrgFrame {
+export interface OrgFrame {
   orgId: string
   orgName: string
   role: Role
@@ -61,6 +61,7 @@ function SettingsNav({ ctx, data, tab }: { ctx: Context; data: OrgFrame; tab: Se
     { tab: "users", label: "People", path: "/settings/users", show: true },
     { tab: "roles", label: "Roles", path: "/settings/roles", show: canSeeMembers(data.role) },
     { tab: "organization", label: "Organization", path: "/settings/organization", show: true },
+    { tab: "sso", label: "Single sign-on", path: "/settings/sso", show: canManageSso(data.role) },
   ]
   return (
     <nav aria-label="Organization settings" className="flex gap-1 border-b">
@@ -82,7 +83,7 @@ function SettingsNav({ ctx, data, tab }: { ctx: Context; data: OrgFrame; tab: Se
 }
 
 /** The organization's name, the member's role, whether it is active, the tabs, and the page's notice or problem. */
-function SettingsFrame({ ctx, data, tab, children }: { ctx: Context; data: OrgFrame; tab: SettingsTab; children: ReactNode }) {
+export function SettingsFrame({ ctx, data, tab, children }: { ctx: Context; data: OrgFrame; tab: SettingsTab; children: ReactNode }) {
   return (
     <Container className="flex flex-col gap-6 py-10 sm:py-12">
       <PageHeader

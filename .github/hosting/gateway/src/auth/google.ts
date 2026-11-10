@@ -14,6 +14,7 @@ import { log } from '../log.ts'
 import { googleFailedPage, home, notFoundPage, rateLimitedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { checkIdToken, decodeJwtPayload, type GoogleIdentity } from './id-token.ts'
+import { ssoRequired, ssoRequiredResponse } from '../sso/flow.ts'
 import { finishSignIn } from './sign-in.ts'
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -157,6 +158,8 @@ export async function googleCallback(ctx: Context): Promise<Response> {
     log('google_identity_rejected')
     return failed(ctx, 400, 'We couldn\'t confirm your Google account. Please try again, and make sure its email address is verified.')
   }
+  // An organization that requires its single sign-on for this address keeps Google out, before anything is linked.
+  if (await ssoRequired(ctx, identity.email)) return ssoRequiredResponse(ctx, identity.email, safeReturnTo(ctx, flow.returnTo))
   const user = await resolveUser(ctx, identity)
   if (!user) return failed(ctx, 409, 'This email address belongs to an account that is linked to a different Google account. Sign in with that Google account or with your password.')
   log('login', { user: user.id, method: 'google' })

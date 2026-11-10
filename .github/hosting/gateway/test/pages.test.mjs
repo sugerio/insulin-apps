@@ -51,7 +51,9 @@ test('the privacy notice covers what is collected, why, processors, retention, d
     assert.ok(page.text.includes(`>${heading}</h2>`), heading)
   }
   for (const fact of ['insulin_session', '__Host-insulin_oauth', 'PBKDF2', 'Google account id', 'Cloudflare Turnstile', 'Cloudflare D1', 'Cloudflare Email Service',
-    'IP address', 'invited email|email addresses people invite', 'No ads', 'not reset', 'under 16', 'Delete my account', 'never issued again']) {
+    'IP address', 'invited email|email addresses people invite', 'No ads', 'not reset', 'under 16', 'Delete my account', 'never issued again',
+    '__Host-insulin_mfa', '__Host-insulin_sso', 'recovery codes as hashes only', 'identity provider', 'AI agents', 'Service accounts',
+    'encrypted and never shown again', 'lasts 30 days', 'DNS-over-HTTPS']) {
     assert.match(page.text, new RegExp(fact), fact)
   }
   assert.ok(page.text.includes('href="http://insulinapps.localhost/account"'))

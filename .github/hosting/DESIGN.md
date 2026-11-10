@@ -208,17 +208,26 @@ An organization's owners set this up under `insulinapps.com/settings/sso`.
   those addresses).
   - SAML: SP-initiated, HTTP-Redirect AuthnRequest, HTTP-POST response to
     `/sso/saml/<connection>/acs`; the response or assertion must be signed with the identity provider's certificate
-    (RSA-SHA256), and `InResponseTo`, `Destination`, audience, recipient and validity window are checked. SP metadata at
-    `/sso/saml/<connection>/metadata`.
+    (RSA-SHA256), the signature must cover the element that is read (against signature wrapping), there must be exactly
+    one assertion, and `InResponseTo`, `Destination`, audience, recipient, issuer and validity window are checked. The
+    request is single use and bound to a host-only `__Host-insulin_sso` cookie, `SameSite=None` because the identity
+    provider posts it from another site; the ACS is the one form exempt from the Origin check. SP metadata at
+    `/sso/saml/<connection>/metadata`. Signatures are checked with `xml-crypto` and `@xmldom/xmldom`, which need
+    `nodejs_compat`.
   - OIDC: authorization code with PKCE and a nonce, client secret encrypted at rest; the ID token comes straight from the
     token endpoint over TLS, and its issuer, audience, expiry, nonce and `email_verified` are checked.
 - **Sign-in.** "Sign in with SSO" asks for the work e-mail, finds the verified domain and starts the connection. The
   address must be in one of the organization's verified domains. An unknown address gets an account (confirmed, no
-  password); someone who isn't a member joins with the default role.
+  password); someone who isn't a member joins with the default role, and the organization becomes the active one. With
+  "require SSO", password sign-in, sign-up, password resets, confirmation links and Google are refused for those
+  addresses before any credential is looked at.
 - **SCIM 2.0** at `https://insulinapps.com/scim/v2` with a bearer token the owner creates (shown once): `Users`
   (list with `userName eq`, create, read, replace, patch, delete), `ServiceProviderConfig`, `ResourceTypes`, `Schemas`.
   Only addresses in verified domains. Creating adds the person with the default role; `active: false` or delete removes
-  them from the organization (never its last owner). Roles stay managed on `/settings/users`.
+  them from the organization (never its last owner), which also ends their AI agents' grants there; their sessions stay,
+  since they may belong to other organizations, but they can no longer act in this one. `scim_users` remembers whom the
+  identity provider provisioned (with its external id), so a deactivated person stays visible to it. Roles stay managed
+  on `/settings/users`. SCIM calls are rate limited per token.
 
 ## 8. Data
 
@@ -227,9 +236,9 @@ All in the gateway's D1 database; migrations are forward-only.
 | Migration | Tables |
 |---|---|
 | `0003_roles` | `memberships` and `invitations` rebuilt with the role `APPS` (specific apps) and without `USER`; `app_grants`, `invitation_grants`, `custom_roles`, with the triggers of §2.2 |
-| `0004_oauth` | `oauth_clients`, `oauth_requests`, `oauth_grants`, `oauth_codes`, `oauth_tokens`, `service_accounts`, `integrations` |
+| `0004_oauth` | `oauth_clients`, `oauth_requests`, `oauth_grants`, `oauth_codes`, `oauth_tokens`, `service_accounts`, `integrations`; a trigger that deletes a person's grants in an organization they leave |
 | `0005_mfa` | TOTP columns on `users`, `mfa_recovery_codes`, `mfa_challenges` |
-| `0006_sso` | `sso_domains`, `sso_connections`, `sso_requests`, `scim_tokens` |
+| `0006_sso` | `sso_domains`, `sso_connections`, `sso_requests`, `scim_tokens`, `scim_users` |
 
 ## 9. Configuration added
 

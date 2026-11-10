@@ -24,8 +24,9 @@ The pages are React components rendered to HTML on the server (`renderToStaticMa
 edge build wrangler picks for workerd), built from [shadcn/ui](https://ui.shadcn.com) components and styled with
 Tailwind CSS. There is no client-side React: no hydration and no script bundle, and every form is a plain HTML POST.
 The runtime dependencies are only `react`, `react-dom`, `class-variance-authority`, `clsx`, `tailwind-merge`,
-`lucide-react` (icons, rendered to inline SVG) and `qrcode-generator` (the authenticator-app QR code, also rendered to
-inline SVG); wrangler bundles them.
+`lucide-react` (icons, rendered to inline SVG), `qrcode-generator` (the authenticator-app QR code, also rendered to
+inline SVG), and `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the `nodejs_compat` flag); wrangler
+bundles them.
 
 | Path | What |
 |---|---|
@@ -44,6 +45,7 @@ inline SVG); wrangler bundles them.
 | `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
 | `src/integrations/` | the `/settings/integrations` page (`settings.ts`) and the integration proxy (`proxy.ts`) |
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, and disconnecting them |
+| `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
 | `src/reserved.ts` | `/__insulin/me`, `switch-org`, `logout`, and the local captured-mail page |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode) and the messages |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
@@ -174,6 +176,12 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **The integration proxy** only forwards to the stored base URL's host or an allowed host, over https, never to the
   site's own hosts, without following redirects, with every `x-suger-*`, cookie and authorization header removed and
   the stored credential added; a path segment that decodes to `.` or `..` or holds an encoded slash is refused.
+- **Enterprise SSO.** An owner's verified domains decide where "Sign in with SSO" goes; the SAML ACS is the only form
+  exempt from the Origin check (the identity provider posts it from another site), so its request is single use and
+  bound to a host-only `__Host-insulin_sso` cookie (`SameSite=None`), and the signature must cover the element that is
+  read. SCIM has its own JSON dispatch with per-organization bearer tokens. Domain verification and OIDC discovery and
+  token calls are the gateway's only outside fetches besides Google, Turnstile and the integration proxy; none follows
+  a redirect.
 - **Two-step sign-in.** With an authenticator app turned on, `finishSignIn` gives the browser a 10-minute challenge and
   a host-only `__Host-insulin_mfa` cookie instead of a session; only a code (or a recovery code) at `/login/mfa` starts
   the session, under the credential version the first step verified. A used time step, a recovery code and a
@@ -220,7 +228,7 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 
 The components in `src/components/ui/` come from [shadcn/ui](https://ui.shadcn.com) (MIT License, copyright shadcn),
 new-york style, as `npx shadcn@4.23.0 add button card input label alert badge separator table avatar native-select
-field` wrote them. Two changes, for pages that render only on the server:
+field textarea` wrote them. Two changes, for pages that render only on the server:
 
 - `cn` comes from `@/lib/utils` (clsx and tailwind-merge) rather than the young `cn` package the CLI now imports.
 - The Radix primitives, which need client-side React, are replaced by the elements they render: `<label>` (Label), a

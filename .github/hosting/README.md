@@ -50,7 +50,8 @@ that may be absent.
 
 ## Owner setup
 
-Workers Paid must be enabled for the Cloudflare account before the first deployment.
+Workers Paid must be enabled for the Cloudflare account before the first deployment. The gateway runs with the
+`nodejs_compat` flag (for SAML's XML signature library); the deploy sets it.
 
 1. Create a GitHub environment named `production` that only `main` can deploy to. Add these environment secrets:
 

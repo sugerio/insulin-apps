@@ -73,7 +73,7 @@ test('past the deadline the envelope expires: no link, no code, and one EXPIRED 
     const task = (await h.read(id!)).tasks[0];
     const { code } = await (await h.req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).json() as { code: string };
     const { token } = await (await h.req('/api/public/page-sessions/exchange', h.json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
-    const signer = { origin: ORIGIN, authorization: `Bearer ${token}`, ...SIGNER };
+    const signer = { origin: ORIGIN, 'x-esign-session': token, ...SIGNER };
 
     // The deadline passes while the signing page is open.
     await h.db.prepare('UPDATE tasks SET expires_at=? WHERE id=?').bind(Date.now() - 1000, task.id).run();

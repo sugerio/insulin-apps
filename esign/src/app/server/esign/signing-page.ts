@@ -34,12 +34,21 @@ export function frameAncestors(raw: string | undefined, httpsOnly = false): stri
 }
 
 /**
- * Whether a page may open a session, from what it reports: `embedded` (it runs in a frame) and
- * `embedder` (the origin of the page framing it, as the browser tells it, or '' when it can't tell).
- * A page that isn't framed may; a framed one only when its embedder is the app itself or one of
- * `allowed`, so a frame whose origin the browser hides is refused.
+ * Whether a page may open a session, from what it reports: `embedded` (it runs in a frame), `embedder` (the origin of
+ * the page framing it, as the browser tells it, or '' when it can't tell) and, where the browser lists them,
+ * `embedders` (every ancestor's origin, nearest first: location.ancestorOrigins). A page that isn't framed may; a framed
+ * one only when every ancestor it reports is the app itself or one of `allowed`, so neither a frame whose origin the
+ * browser hides nor an allowed page that is itself framed by a stranger gets a session.
  */
-export function embedderAllowed(report: { embedded?: unknown; embedder?: unknown }, ownOrigin: string, allowed: readonly string[]): boolean {
+export function embedderAllowed(report: { embedded?: unknown; embedder?: unknown; embedders?: unknown }, ownOrigin: string, allowed: readonly string[]): boolean {
   if (report.embedded !== true) return true;
-  return typeof report.embedder === 'string' && (report.embedder === ownOrigin || allowed.includes(report.embedder));
+  const ok = (origin: unknown) => typeof origin === 'string' && (origin === ownOrigin || allowed.includes(origin));
+  if (report.embedders !== undefined) {
+    const list = report.embedders;
+    if (!Array.isArray(list) || list.length === 0 || list.length > 10 || !list.every(ok)) return false;
+    // The nearest ancestor is the embedder the page also names.
+    if (report.embedder !== undefined && report.embedder !== list[0]) return false;
+    return true;
+  }
+  return ok(report.embedder);
 }

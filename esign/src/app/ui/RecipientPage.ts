@@ -9,13 +9,15 @@ const h = React.createElement;
 /**
  * Who frames this page, as the browser tells it: the framing page's origin (location.ancestorOrigins
  * where supported, else the referrer's origin), or '' when the page isn't framed or the browser
- * doesn't say. The exchange refuses a framed page whose embedder isn't allowed (signing-page.ts).
+ * doesn't say, plus every ancestor's origin where the browser lists them. The exchange refuses a framed page with an
+ * ancestor that isn't allowed (signing-page.ts).
  */
-export function embedding(win: { parent: unknown; location: { ancestorOrigins?: { length: number; [index: number]: string } } }, referrer: string): { embedded: boolean; embedder: string } {
+export function embedding(win: { parent: unknown; location: { ancestorOrigins?: { length: number; [index: number]: string } } }, referrer: string): { embedded: boolean; embedder: string; embedders?: string[] } {
   const embedded = !!win.parent && win.parent !== win;
   if (!embedded) return { embedded, embedder: '' };
   const ancestors = win.location.ancestorOrigins;
-  if (ancestors?.length) return { embedded, embedder: ancestors[0] ?? '' };
+  // Every ancestor where the browser lists them (Chromium, Safari): the exchange checks each, not only the nearest.
+  if (ancestors?.length) { const embedders = Array.from({ length: Math.min(ancestors.length, 10) }, (_, i) => ancestors[i] ?? ''); return { embedded, embedder: embedders[0] ?? '', embedders }; }
   try { return { embedded, embedder: referrer ? new URL(referrer).origin : '' }; } catch { return { embedded, embedder: '' }; }
 }
 class RequestFailed extends Error {readonly status:number;readonly code:string;readonly detail:Record<string,unknown>;constructor(status:number,code='',detail:Record<string,unknown>={}){super('Request failed');this.status=status;this.code=code;this.detail=detail;}}
@@ -211,7 +213,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     return ()=>{active=false;controller.abort();if(renderController.current===controller) renderController.current=null;target.replaceChildren();};
   },[pdf,renderDocument]);
   async function request(path:string, init:RequestInit={}) {
-    const response=await fetch(`${api.current}${path}`,{...init,headers:{...init.headers,authorization:`Bearer ${token}`}});
+    const response=await fetch(`${api.current}${path}`,{...init,headers:{...init.headers,'x-esign-session':token}});
     if(!response.ok){let code='',detail:Record<string,unknown>={};try{const body=await response.json() as Record<string,unknown>;if(body&&typeof body==='object'){detail=body;if(typeof body.error==='string')code=body.error;}}catch{}throw new RequestFailed(response.status,code,detail);}return response;
   }
   async function send(announce=true) {if(sending)return;setSending(true);setCodeNote('');try {

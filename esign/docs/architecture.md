@@ -26,10 +26,14 @@ seals the finished envelope and emails each signer a link to their copy.
   small store over D1 (`blob-store.ts`): a key in a bucket points to one upload's 256 KiB chunks,
   with R2's create-only put (`onlyIf: { etagDoesNotMatch: '*' }`). The local preview's test mailbox
   is a second bucket, `test-mail`.
-- **Work in requests.** There is no cron. A signature is rendered, and the envelope sealed, in the
-  signing request after its response is ready; `POST /api/process-due` (manage permission) expires
-  envelopes past a deadline, finishes any envelope a request did not, and retries completion
-  notices. A host or a scheduled caller runs it.
+- **Work in requests.** There is no cron. Once a signature is accepted it is rendered, and after the
+  last one the envelope sealed (KMS and the timestamp authority), through the request's `waitUntil`
+  that Nitro puts on the request on Workers: the signer gets their response first and never waits
+  for the seal. Without one (the tests) it runs in the request. Work cut short, by a CPU limit or an
+  outage, leaves the signature `PENDING` or the envelope `FINALIZING`. `POST /api/process-due`
+  (manage permission) expires envelopes past a deadline, finishes any envelope a request did not,
+  and retries completion notices. **Hosts call it on a schedule**, every few minutes, with a service
+  account.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization. Only a 202
   counts as sent; a refusal (502 `send_failed`, 503, 429, anything else) is retried later and never
@@ -294,13 +298,27 @@ request names another allowed one; in the local preview only, `SIGNING_PAGE_ORIG
 for UI development. The page calls only its own origin's API. Browsers send no `Origin` on
 same-origin GETs, so the signing API then takes the origin from `Sec-Fetch-Site: same-origin`.
 
-**Who may frame the pages.** The pages are static (the platform serves `index.html` for every page
-path), so they can't send a per-deployment `frame-ancestors` header. Instead each page reports at
-its code exchange whether it is framed and by whom (`location.ancestorOrigins`, else the referrer's
-origin), and the exchange refuses a framed page whose embedder is neither the app nor allowed:
-`ESIGN_FRAME_ANCESTORS` for the signing page, the session's parent origin for the editor
-(`embedderAllowed` in `src/app/server/esign/signing-page.ts`). A frame that hides its origin is
-refused.
+**The pages' headers.** Nitro serves the same `index.html` for every page path; a middleware it
+reads from `nitro.config.ts` (`src/app/server/page-headers.ts`, policy in `page-policy.ts`) gives
+each page its Content-Security-Policy: scripts, styles, workers and requests only from this origin,
+no `eval`, `object-src 'none'`, `base-uri 'none'`. Behind insulinapps.com's gateway (the request
+has `x-suger-access-via`) it adds who may frame the page: the signing page this origin and
+`ESIGN_FRAME_ANCESTORS`, the editor this origin and its session's parent, the signed-copy page and
+the members' pages nobody, so another page can't frame them and trick a signed-in member into
+sending or voiding. The Insulin console frames its own preview, so there it leaves framing to the
+console. The signing, editor and copy pages also get `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer`.
+
+**Who may frame the pages, at the exchange too.** Each page also reports at its code exchange
+whether it is framed and by whom: every ancestor in `location.ancestorOrigins` (Chromium, Safari),
+else the referrer's origin. The exchange refuses a framed page with any ancestor that is neither the
+app nor allowed: `ESIGN_FRAME_ANCESTORS` for the signing page, the session's parent origin for the
+editor (`embedderAllowed` in `src/app/server/esign/signing-page.ts`). A frame that hides its origin
+is refused.
+
+**The page session's header.** A signing page or an editor sends its page session in
+`x-esign-session` (`session-header.ts`), never in `Authorization`: the gateway forwards public paths
+without that header, and strips every `x-suger-*` one.
 
 **Emailed code (OTP).** Six digits, valid for ten minutes, used once. Only an HMAC is stored, keyed
 by `OTP_KEY` over the task, the task's email and the code, so it verifies only while the task has

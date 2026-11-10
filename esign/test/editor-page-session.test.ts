@@ -55,7 +55,7 @@ test('removing an origin from the tenant list stops that origin\'s editor codes,
     const start = async(origin:string)=>{const r=await post('/api/template-editing-sessions',{allowedParentOrigin:origin,roles:['Signer']},{authorization:`Bearer ${key}`});assert.equal(r.status,201);const s=await r.json() as {sessionId:string;url:string};return {id:s.sessionId,code:new URL(s.url).hash.slice(1)};};
     const exchange = (s:{id:string;code:string})=>post('/api/public/editor/exchange',{pageId:s.id,code:s.code},{origin:self});
     const tokenOf = async(s:{id:string;code:string})=>{const r=await exchange(s);assert.equal(r.status,200);return ((await r.json()) as {token:string}).token;};
-    const current = (token:string)=>req('/api/public/editor/current',{headers:{authorization:`Bearer ${token}`,origin:self}});
+    const current = (token:string)=>req('/api/public/editor/current',{headers:{'x-esign-session':token,origin:self}});
     const unopened = await start(host), opened = await start(host), other = await start(kept);
     const openedToken = await tokenOf(opened), otherToken = await tokenOf(other);
     assert.equal((await current(openedToken)).status,200);
@@ -68,7 +68,7 @@ test('removing an origin from the tenant list stops that origin\'s editor codes,
     assert.equal((await exchange(unopened)).status,401,'an unused code of the removed origin is refused');
     assert.equal((await current(openedToken)).status,401,'a live token of the removed origin is refused');
     const form = new FormData();form.set('roles','["Signer"]');form.set('fields','[]');form.set('file',new File([await pdf.save()],'a.pdf',{type:'application/pdf'}));
-    assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{authorization:`Bearer ${openedToken}`,origin:self},body:form})).status,401);
+    assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':openedToken,origin:self},body:form})).status,401);
     assert.equal((await post('/api/template-editing-sessions',{allowedParentOrigin:host},{authorization:`Bearer ${key}`})).status,403);
     assert.equal((await db.prepare('SELECT count(*) AS n FROM editor_sessions WHERE result_template_id IS NOT NULL').first<{n:number}>())!.n,0);
     // The origin still listed keeps working.

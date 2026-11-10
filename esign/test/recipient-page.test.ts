@@ -221,8 +221,8 @@ test('the page talks to its own origin only, and tells the exchange how it is fr
    // The old local hosts are gone: a fragment never moves the page to another API.
    ['https://esign.example.test','#code=test-code&synthetic=1',null,{embedded:false,embedder:''}],
    ['http://127.0.0.1:5173','#code=test-code&upload=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,{embedded:false,embedder:''}],
-   // Framed: the framing page's origin, from ancestorOrigins, else the referrer.
-   ['https://esign.example.test','#code=test-code',{ancestorOrigins:['https://host.example.test']},{embedded:true,embedder:'https://host.example.test'}],
+   // Framed: the framing page's origin, from ancestorOrigins (with every ancestor, for the exchange to check each), else the referrer.
+   ['https://esign.example.test','#code=test-code',{ancestorOrigins:['https://host.example.test']},{embedded:true,embedder:'https://host.example.test',embedders:['https://host.example.test']}],
    ['https://esign.example.test','#code=test-code',{referrer:'https://host.example.test/deals/1'},{embedded:true,embedder:'https://host.example.test'}],
    ['https://esign.example.test','#code=test-code',{},{embedded:true,embedder:''}],
   ] as const) {

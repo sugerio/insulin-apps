@@ -1,6 +1,7 @@
 import { openAppD1, readAppEnv } from '#platform'
 import app, { type Bindings } from './esign/app.ts'
 import { D1BlobStore } from './esign/blob-store.ts'
+import { waitUntilOf } from './wait-until.ts'
 
 // The local preview runs without the deployment's secrets: these synthetic keys let it sign and seal
 // with the HMAC test seal. They are never used published (ESIGN_ENV is prod there, and prod needs
@@ -20,6 +21,8 @@ async function bindings(request: Request): Promise<Bindings> {
     ESIGN_ENV: dev ? 'dev' : 'prod',
     IDENTITY_PREVIEW: dev,
     COMPLETE_AFTER_SIGN: 'true',
+    // Nitro on Workers puts the invocation's waitUntil on the request (srvx does in the local preview, when it has one).
+    WAIT_UNTIL: waitUntilOf(request),
     APP_ORIGIN: new URL(request.url).origin,
     OTP_KEY: secret('ESIGN_OTP_KEY') ?? (dev ? PREVIEW_OTP_KEY : undefined),
     TEST_SEAL_KEY: dev ? PREVIEW_SEAL_KEY : undefined,

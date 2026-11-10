@@ -40,6 +40,11 @@ certificate and the timestamp service still need review before real documents ar
 A custom role is built from these two permissions. Recipients don't need an account: their link and
 emailed code are their access, to their own task only.
 
+**Hosts call `POST /api/process-due` on a schedule** (every few minutes, with a service account).
+An envelope is normally finished right after its last signature, after the signer's response; the
+call finishes any that a request couldn't (a CPU limit, an outage), expires envelopes past their
+deadline and retries completion notices. E-sign has no scheduled jobs of its own.
+
 ## For developers
 
 ### Run it locally

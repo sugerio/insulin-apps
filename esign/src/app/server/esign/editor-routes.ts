@@ -1,4 +1,5 @@
 import {embedderAllowed,frameAncestors} from './signing-page.ts';
+import { sessionToken } from './session-header.ts';
 import {isProd} from './environment.ts';
 import type {Env} from './app.ts';
 import {bodyLimit} from 'hono/body-limit';
@@ -14,7 +15,7 @@ const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.sub
 async function stagedBytes(bucket:BlobStore,key:string,hash:string){const object=await bucket.get(key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');const bytes=new Uint8Array(await object.arrayBuffer());if(await sha256(bytes)!==hash)throw new Error('Source changed');return bytes;}
 function rolesValid(value:unknown,caseSensitive=false):value is string[]{return Array.isArray(value)&&value.length>0&&value.length<=20&&value.every(r=>typeof r==='string'&&r===r.trim()&&r.length>0&&r.length<=64)&&new Set(value.map(r=>caseSensitive?r:r.toLowerCase())).size===value.length;}
 function sameOrigin(request:Request){const origin=request.headers.get('origin');return !origin||origin===new URL(request.url).origin;}
-async function contextFor(c:import('hono').Context<Env>){const match=/^Bearer ([a-f0-9]{64})$/.exec(c.req.header('authorization')??'');if(!match)throw new Error('unauthorized');return editorPageContext(c.env.DB,match[1],Date.now());}
+async function contextFor(c:import('hono').Context<Env>){const token=sessionToken(name=>c.req.header(name));if(!token)throw new Error('unauthorized');return editorPageContext(c.env.DB,token,Date.now());}
 /**
  * The embedded field editor. The host (through the management API, as its organization) starts an
  * editing session for one of the deployment's editor origins and frames `/editor/page/:id#<code>`;
@@ -51,7 +52,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   if(result.meta.changes!==1)return c.json({error:'source_immutable'},409);return c.json({ok:true},201);
  });
  app.get('/api/template-editing-sessions/:id',async c=>{const row=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=? AND tenant_id=?').bind(c.req.param('id'),c.get('tenantId')).first<{result_template_id:string|null}>();if(!row)return c.json({error:'not_found'},404);c.header('Cache-Control','no-store');return c.json({templateId:row.result_template_id});});
- app.post('/api/public/editor/exchange',bodyLimit({maxSize:1024}),async c=>{if(!sameOrigin(c.req.raw))return c.json({error:'origin'},403);let data:{pageId?:unknown;code?:unknown;embedded?:unknown;embedder?:unknown};try{data=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}if(!data||typeof data.pageId!=='string'||typeof data.code!=='string')return c.json({error:'invalid_code'},401);
+ app.post('/api/public/editor/exchange',bodyLimit({maxSize:1024}),async c=>{if(!sameOrigin(c.req.raw))return c.json({error:'origin'},403);let data:{pageId?:unknown;code?:unknown;embedded?:unknown;embedder?:unknown;embedders?:unknown};try{data=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}if(!data||typeof data.pageId!=='string'||typeof data.code!=='string')return c.json({error:'invalid_code'},401);
   // Only the session's parent may frame the editor (signing-page.ts).
   const parent=await editorPageParent(c.env.DB,data.pageId,Date.now());if(!embedderAllowed(data,new URL(c.req.url).origin,parent?[parent]:[]))return c.json({error:'embedder_not_allowed'},403);
   try{const token=await exchangeEditorPage(c.env.DB,data.pageId,data.code,Date.now());c.header('Cache-Control','no-store');return c.json({token});}catch{return c.json({error:'invalid_code'},401);}});

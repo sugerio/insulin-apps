@@ -43,7 +43,7 @@ test('a fields signature captures only the verified current role, time and image
   assert.equal((await req(`/api/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);
   const tasks=(await (await req(`/api/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;
   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[0].id}/recipient-view`,post({origin},mgmt))).json();
-  const session=await (await req('/api/public/page-sessions/exchange',post({code:view.code},{origin}))).json();const headers={origin,authorization:`Bearer ${session.token}`};
+  const session=await (await req('/api/public/page-sessions/exchange',post({code:view.code},{origin}))).json();const headers={origin,'x-esign-session':session.token};
   const sent=await (await req('/api/public/signing/otp',post({},headers))).json(),message=await (await mail.get(`test-mail/${sent.messageId}.json`))!.json() as {otp:string};assert.equal((await req('/api/public/signing/otp/verify',post({otp:message.otp},headers))).status,204);
   const current=await (await req('/api/public/signing/current',{headers})).json();
   const updated=[...fields,{id:'date-a',type:'Date signed',role:'ana',page:1,required:true,rect:{x:.35,y:.1,width:.3,height:.08}},{id:'title-a',type:'Title',role:'ana',page:1,required:true,rect:{x:.05,y:.3,width:.4,height:.08}}];
@@ -137,7 +137,7 @@ test('a fields signature captures only the verified current role, time and image
   await assert.rejects(()=>db.prepare('UPDATE signatures SET output_sha256=? WHERE id=?').bind('0'.repeat(64),id).run(),/final/);
   const originalOutput=await (await bucket.get(outputKey))!.arrayBuffer();await bucket.put(outputKey,new TextEncoder().encode('forged output'));await assert.rejects(()=>processSignature(db,bucket,id),/Output integrity failure/);assert.equal(await retrySignature(db,bucket,{...base,values}),null);await bucket.put(outputKey,originalOutput);assert.equal(await retrySignature(db,bucket,{...base,values}),id);
   const secondView=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[1].id}/recipient-view`,post({origin},mgmt))).json();
-  const secondSession=await (await req('/api/public/page-sessions/exchange',post({code:secondView.code},{origin}))).json();const secondHeaders={origin,authorization:`Bearer ${secondSession.token}`};
+  const secondSession=await (await req('/api/public/page-sessions/exchange',post({code:secondView.code},{origin}))).json();const secondHeaders={origin,'x-esign-session':secondSession.token};
   const secondSent=await (await req('/api/public/signing/otp',post({},secondHeaders))).json(),secondMessage=await (await mail.get(`test-mail/${secondSent.messageId}.json`))!.json() as {otp:string};assert.equal((await req('/api/public/signing/otp/verify',post({otp:secondMessage.otp},secondHeaders))).status,204);
   const secondCommand={token:secondSession.token,origin,now:Date.now(),consent:true,artifactId:output.artifact_id,artifactHash:output.sha256,values:{'sig-b':'BOB'},signaturePreviews:{'sig-b':await receipt(output.sha256,fields[1],'BOB')}};
   await setFields(updated.map(f=>f.id==='title-a'?{...f,rect:{...f.rect,x:.1}}:f));await assert.rejects(()=>recordSignature(db,bucket,secondCommand),'every signer signs the same placed fields');await setFields(updated);

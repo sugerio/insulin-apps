@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { SESSION_HEADER, sessionToken } from './session-header.ts';
 import {PDFDocument} from 'pdf-lib';
 import { bodyLimit } from 'hono/body-limit';
 import { issueRecipientCode, exchangeRecipientCode, authorizeRecipientSession, sendRecipientOtp, verifyRecipientOtp, otpEntryRefusal, OtpSendRefused } from './otp.ts';
@@ -32,7 +33,8 @@ import type { BlobStore } from './blob-store.ts';
  */
 const pageOrigins = (c: import('hono').Context<any>): Set<string> => new Set([new URL(c.req.url).origin, ...(isProd(c.env) ? [] : (c.env.SIGNING_PAGE_ORIGINS ?? '').split(/\s+/).filter(Boolean))]);
 
-const tokenFrom = (header: string | undefined) => /^Bearer ([a-f0-9]{64})$/.exec(header ?? '')?.[1] ?? '';
+/** The page session a signing request carries (`x-esign-session`, session-header.ts). */
+const pageToken = (c: import('hono').Context<any>) => sessionToken((name) => c.req.header(name));
 /**
  * The origin of the page a request comes from, which recipient sessions are bound to.
  * Browsers omit Origin on same-origin GETs, which is how the app's /sign page calls this API;
@@ -62,7 +64,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   app.use('/api/public/signing/*', whenSigningEnabled);
   // A passed sign-by deadline expires the envelope before the signer's request runs.
   app.use('/api/public/signing/*', async (c, next) => {
-    const session = await sessionContext(c.env.DB, tokenFrom(c.req.header('authorization')));
+    const session = await sessionContext(c.env.DB, pageToken(c));
     if (session) await expireIfDue(c.env.DB, session.envelopeId);
     await next();
   });
@@ -72,7 +74,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const origin=requestOrigin(c);
     if (!pageOrigins(c).has(origin)) return c.json({error:'forbidden'},403);
     c.header('Access-Control-Allow-Origin',origin);c.header('Vary','Origin');
-    if (c.req.method === 'OPTIONS') {c.header('Access-Control-Allow-Methods','GET, POST, OPTIONS');c.header('Access-Control-Allow-Headers','authorization, content-type');return c.body(null,204);}
+    if (c.req.method === 'OPTIONS') {c.header('Access-Control-Allow-Methods','GET, POST, OPTIONS');c.header('Access-Control-Allow-Headers',`${SESSION_HEADER}, content-type`);return c.body(null,204);}
     await next();
   };
   app.use('/api/public/page-sessions/*', cors);
@@ -100,7 +102,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     catch {return c.json({error:'recipient_unavailable'},404);}
   });
   app.post('/api/public/page-sessions/exchange', async c => {
-    let body: {code?:unknown;embedded?:unknown;embedder?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    let body: {code?:unknown;embedded?:unknown;embedder?:unknown;embedders?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.code !== 'string') return c.json({error:'invalid_request'},400);
     // A page framed by a site that may not embed it gets no session (signing-page.ts).
     if (!embedderAllowed(body,new URL(c.req.url).origin,frameAncestors(c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)))) return c.json({error:'embedder_not_allowed'},403);
@@ -114,12 +116,12 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     // prod: the code is emailed to the recipient, through the mail relay, and kept nowhere. dev (the
     // local preview): every code is kept in the test mailbox; only synthetic test addresses get one,
     // unless a mail relay is configured, which then emails it too.
-    const tokenHash=await sha256(new TextEncoder().encode(tokenFrom(c.req.header('authorization'))).buffer);
+    const tokenHash=await sha256(new TextEncoder().encode(pageToken(c)).buffer);
     const owner=await c.env.DB.prepare("SELECT tenant_id FROM access_sessions WHERE scope='recipient' AND token_hash=?").bind(tokenHash).first<{tenant_id:string}>();
     const prod=isProd(c.env), mailer=owner?otpMailer(c.env,owner.tenant_id):null;
     let sentTo='';
     try {
-      await sendRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),otpKey(c.env)!,async (to,otp)=>{
+      await sendRecipientOtp(c.env.DB,pageToken(c),requestOrigin(c),Date.now(),otpKey(c.env)!,async (to,otp)=>{
         if (prod) {
           if (!mailer || !isValidOtpEmailAddress(to)) throw new Error('Mail unavailable');
           await mailer.send(to,otp);
@@ -133,7 +135,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
         if (mailer) await mailer.send(to,otp);
         sentTo=to;
       });
-      const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
+      const session=await sessionContext(c.env.DB,pageToken(c));
       if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpSent,...requestFacts(c.req.raw),detail:{to:sentTo,delivery:mailer?'email':'test-mailbox',messageId}});
       // testMailbox: the signer does not get this email (the local preview mails nothing without a
       // relay), so the page says the code is in the test mailbox.
@@ -161,23 +163,23 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   app.post('/api/public/signing/otp/verify', async c => {
     let body: {otp?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.otp !== 'string') return c.json({error:'invalid_request'},400);
-    try {const ok=await verifyRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),otpKey(c.env)!,body.otp);
+    try {const ok=await verifyRecipientOtp(c.env.DB,pageToken(c),requestOrigin(c),Date.now(),otpKey(c.env)!,body.otp);
       if(!ok){
         // Why, so the page can say what to do next.
-        const refusal=await otpEntryRefusal(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());
+        const refusal=await otpEntryRefusal(c.env.DB,pageToken(c),requestOrigin(c),Date.now());
         if(refusal.reason==='superseded')return c.json({error:'otp_superseded'},409);
         if(refusal.reason==='locked'){const retryAfterSeconds=Math.ceil(refusal.retryAfterMs/1000);return c.json({error:'otp_attempts_exhausted',retryAfterSeconds},429,{'Retry-After':String(retryAfterSeconds)});}
         if(refusal.reason==='expired')return c.json({error:'otp_expired'},401);
         return c.json({error:'invalid_otp',attemptsLeft:refusal.attemptsLeft},401);
       }
       // Identity confirmed: the emailed code, and the host's sign-in from the link this signer was last given.
-      const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));if(session){const hostAuthentication=await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId);await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw),...(hostAuthentication?{detail:{hostAuthentication}}:{})});}
+      const session=await sessionContext(c.env.DB,pageToken(c));if(session){const hostAuthentication=await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId);await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw),...(hostAuthentication?{detail:{hostAuthentication}}:{})});}
       return c.body(null,204);}
     catch {return c.json({error:'invalid_session'},401);}
   });
   /** Whether this page session's recipient entered the emailed code. */
   async function sessionVerified(c: import('hono').Context<Env>, task: string): Promise<boolean> {
-    const token=tokenFrom(c.req.header('authorization'));
+    const token=pageToken(c);
     return !!await c.env.DB.prepare("SELECT 1 FROM access_sessions WHERE scope='recipient' AND subject_id=? AND token_hash=? AND otp_verified_at IS NOT NULL").bind(task,await sha256(new TextEncoder().encode(token).buffer)).first();
   }
   /**
@@ -186,7 +188,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
    * them. Everything that acts on it (previews, declining, signing) also needs the emailed code.
    */
   async function current(c: import('hono').Context<Env>, opts: {verified: boolean} = {verified: true}): Promise<{id:string;sha256:string;object_key:string}> {
-    const task=await authorizeRecipientSession(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());
+    const task=await authorizeRecipientSession(c.env.DB,pageToken(c),requestOrigin(c),Date.now());
     if (opts.verified && !await sessionVerified(c, task)) throw new Error('OTP verification required');
     // The latest signature's rendered PDF, or the source before anyone has signed.
     const signed=await c.env.DB.prepare(`SELECT s.envelope_id, s.output_artifact_id AS id, s.output_sha256 AS sha256 FROM tasks t JOIN signatures s ON s.envelope_id=t.envelope_id WHERE t.id=? AND s.status='DONE' ORDER BY s.sequence DESC LIMIT 1`).bind(task).first<{envelope_id:string;id:string;sha256:string}>();
@@ -195,7 +197,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     if (!d0) throw new Error('Artifact unavailable');return d0;
   }
   async function fieldsFor(c:import('hono').Context<Env>) {
-    const task=await authorizeRecipientSession(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());
+    const task=await authorizeRecipientSession(c.env.DB,pageToken(c),requestOrigin(c),Date.now());
     const row=await c.env.DB.prepare('SELECT t.role,t.recipient_name,t.recipient_email,p.roles_json,p.fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id WHERE t.id=?').bind(task).first<{role:string;recipient_name:string;recipient_email:string;roles_json:string;fields_json:string}>();
     if(!row)throw new Error('Missing template');const raw:unknown=JSON.parse(row.fields_json);if(!Array.isArray(raw))throw new Error('Invalid fields');
     // The page shows Date signed and Title fields only when the template has any.
@@ -212,7 +214,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     // The signer's title and company (when the host named them), the document's version and
     // sender, and the one sentence they agree to.
     const who=await signerContext(c.env.DB,details.task);
-    const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
+    const session=await sessionContext(c.env.DB,pageToken(c));
     // How the host said it signed this recipient in, for "Confirm it's you".
     const hostAuthentication=session?await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId):null;
     // Who signs before and after this signer, for "After you sign".
@@ -233,7 +235,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     if(!reason)return c.json({error:'reason_required'},422);
     if(reason.length>1000)return c.json({error:'reason_too_long'},422);
     try {await current(c);} catch {return c.json({error:'unavailable'},401);}
-    const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
+    const session=await sessionContext(c.env.DB,pageToken(c));
     if(!session)return c.json({error:'unavailable'},401);
     const {ip,userAgent}=requestFacts(c.req.raw);
     await c.env.DB.batch([
@@ -274,7 +276,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     return c.body(image.buffer,200,headers);
   }catch(error){return c.json({error:type==='Signature'?'signature_does_not_fit':error instanceof TextDoesNotFitError?'title_does_not_fit':'invalid_preview'},422);}});
   app.get('/api/public/signing/pdf', async c => {try {const a=await current(c,{verified:false}), file=await c.env.ARTIFACTS.get(a.object_key);if (!file) throw new Error('Missing');const bytes=await file.arrayBuffer();if (await sha256(bytes)!==a.sha256) throw new Error('Mismatch');
-    const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.documentViewed,...requestFacts(c.req.raw),detail:{artifactId:a.id,artifactSha256:a.sha256}});
+    const session=await sessionContext(c.env.DB,pageToken(c));if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.documentViewed,...requestFacts(c.req.raw),detail:{artifactId:a.id,artifactSha256:a.sha256}});
     return c.body(bytes,200,{'Content-Type':'application/pdf','X-Content-Type-Options':'nosniff'});} catch {return c.json({error:'unavailable'},401);}});
   // Which pages the signer has looked at (CS-PRM-042: "Viewed 4 of 4 pages"). Each page is
   // recorded once, in a PAGES_VIEWED audit event listing the pages seen for the first time; it
@@ -283,30 +285,34 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     let body: {pages?:unknown;total?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     const total=body?.total, pages=body?.pages;
     if (!Number.isSafeInteger(total) || (total as number)<1 || (total as number)>MAX_VIEWED_PAGES || !Array.isArray(pages) || pages.length>MAX_VIEWED_PAGES || !pages.every(p=>Number.isSafeInteger(p) && p>=1 && p<=(total as number))) return c.json({error:'invalid_request'},400);
-    let task:string;try {task=await authorizeRecipientSession(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());} catch {return c.json({error:'unavailable'},401);}
-    const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
+    let task:string;try {task=await authorizeRecipientSession(c.env.DB,pageToken(c),requestOrigin(c),Date.now());} catch {return c.json({error:'unavailable'},401);}
+    const session=await sessionContext(c.env.DB,pageToken(c));
     if (!session || session.taskId!==task) return c.json({error:'unavailable'},401);
     const seen=await viewedPages(c.env.DB,session.envelopeId,task);
     const fresh=[...new Set(pages as number[])].filter(p=>!seen.has(p)).sort((a,b)=>a-b);
     if (fresh.length) await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:task,type:AUDIT.pagesViewed,...requestFacts(c.req.raw),detail:{pages:fresh,total}});
     return c.json({viewed:seen.size+fresh.length,total});
   });
-  // COMPLETE_AFTER_SIGN: once a signature is accepted, process it and, after the last one, seal the
-  // envelope, in the same request (an Insulin app has no background work after the response).
-  // Whatever this doesn't finish, POST /api/process-due catches up, and it is the only way
-  // envelopes finish while the setting is off.
+  // COMPLETE_AFTER_SIGN: once a signature is accepted, render it and, after the last one, seal the
+  // envelope (KMS and the timestamp authority). With the request's waitUntil (Nitro on Workers) that
+  // runs after the signer's response, so they never wait for the seal; without it (the tests), in the
+  // request. Work cut short (a CPU limit, an outage) leaves the signature PENDING or the envelope
+  // FINALIZING, which POST /api/process-due finishes; hosts call it on a schedule, and it is the only
+  // way envelopes finish while the setting is off.
   app.use('/api/public/signing/sign', async (c, next) => {
     await next();
     if (c.res.status !== 202 || c.env.COMPLETE_AFTER_SIGN !== 'true') return;
-    await completeEnvelopeOfSession(c.env,tokenFrom(c.req.header('authorization')))
+    const work = completeEnvelopeOfSession(c.env,pageToken(c))
       .catch(() => console.error('E-sign: finishing the envelope after a signature failed; process-due retries it'));
+    if (c.env.WAIT_UNTIL) c.env.WAIT_UNTIL(work);
+    else await work;
   });
   app.post('/api/public/signing/sign', async c => {
     let body: {artifactId?:unknown;artifactHash?:unknown;consent?:unknown;signatures?:unknown;datePreviews?:unknown;signaturePreviews?:unknown;textPreviews?:unknown;disclosureVersion?:unknown;title?:unknown;authorityConfirmed?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.artifactId !== 'string' || typeof body.artifactHash !== 'string' || body.consent !== true) return c.json({error:'invalid_request'},400);
     // The signer consents to the disclosure the page showed; refuse consent to an older one.
     if (body.disclosureVersion !== undefined && body.disclosureVersion !== CONSENT_DISCLOSURE.version) return c.json({error:'disclosure_changed'},409);
-    const token=tokenFrom(c.req.header('authorization'));
+    const token=pageToken(c);
     // Signing for a company: the signer gives a title and confirms they may bind it.
     const who=await sessionContext(c.env.DB,token).then(s=>s?signerContext(c.env.DB,s.taskId):null).catch(()=>null);
     const signerTitle=parseSignerTitle(body.title);

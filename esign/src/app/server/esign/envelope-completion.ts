@@ -116,10 +116,11 @@ export const SWEEP_LIMIT = 25;
 export async function sweepEnvelopes(env: CompletionEnv, tenantId: string | null = null): Promise<Record<Completion, number>> {
   // FINALIZING (to seal, or sealed but not yet COMPLETED), or IN_PROGRESS with work left: a pending
   // signature, or no task ACTIVE and still unsigned (a signature whose task was not marked, a
-  // next task not activated, every task signed but the envelope not FINALIZING).
-  const rows=(await env.DB.prepare(`SELECT e.id,e.tenant_id FROM envelopes e WHERE e.status='FINALIZING' OR (e.status='IN_PROGRESS' AND (
+  // next task not activated, every task signed but the envelope not FINALIZING). The status test is
+  // in parentheses of its own: the organization filter must apply to FINALIZING envelopes too.
+  const rows=(await env.DB.prepare(`SELECT e.id,e.tenant_id FROM envelopes e WHERE (e.status='FINALIZING' OR (e.status='IN_PROGRESS' AND (
       EXISTS (SELECT 1 FROM signatures s WHERE s.envelope_id=e.id AND s.status='PENDING')
-      OR NOT EXISTS (SELECT 1 FROM tasks t WHERE t.envelope_id=e.id AND t.status='ACTIVE' AND NOT EXISTS (SELECT 1 FROM signatures g WHERE g.task_id=t.id))))
+      OR NOT EXISTS (SELECT 1 FROM tasks t WHERE t.envelope_id=e.id AND t.status='ACTIVE' AND NOT EXISTS (SELECT 1 FROM signatures g WHERE g.task_id=t.id)))))
     AND (?2 IS NULL OR e.tenant_id=?2)
     ORDER BY RANDOM() LIMIT ?1`).bind(SWEEP_LIMIT,tenantId).all<{id:string;tenant_id:string}>()).results;
   const counts: Record<Completion, number> = { completed: 0, waiting: 0, failed: 0 };

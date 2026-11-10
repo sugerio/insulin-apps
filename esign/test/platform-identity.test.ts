@@ -88,3 +88,15 @@ test('the catalog lists what the caller may use, and process-due needs the manag
     assert.deepEqual(await due.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 });
   } finally { await mf.dispose(); }
 });
+
+test("process-due touches only the caller's organization, FINALIZING envelopes included", async () => {
+  const { mf, db, call } = await harness();
+  try {
+    await db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at) VALUES ('tpl-b', 'org-b', 'templates/org-b/tpl-b.pdf', '[\"signer\"]', 1)").run();
+    await db.prepare("INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256) VALUES ('env-b', 'org-b', 'tpl-b', 'FINALIZING', 1, 'x')").run();
+    const due = await call('/api/process-due', identity('org-a', { role: 'EDITOR' }), { method: 'POST' });
+    assert.equal(due.status, 200);
+    assert.deepEqual(await due.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 }, "another organization's envelope is not picked up");
+    assert.equal((await db.prepare("SELECT status FROM envelopes WHERE id = 'env-b'").first<{ status: string }>())?.status, 'FINALIZING');
+  } finally { await mf.dispose(); }
+});

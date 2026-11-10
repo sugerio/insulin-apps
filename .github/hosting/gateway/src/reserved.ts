@@ -1,6 +1,7 @@
 // /__insulin/* on every host: reserved for the gateway and never forwarded to an app. The account bar calls these from
 // inside app pages with same-origin fetch, so the app's CSP (connect-src 'self') allows them.
 import { appAccess } from './access.ts'
+import { integrationProxy } from './integrations/proxy.ts'
 import type { Context } from './context.ts'
 import { apexUrl, appUrl } from './context.ts'
 import { listCapturedMail } from './db/mail.ts'
@@ -17,6 +18,8 @@ const BODY_LIMIT_BYTES = 4 * 1024
 
 export async function reservedRoutes(ctx: Context): Promise<Response> {
   const method = ctx.request.method
+  // The integration proxy (integrations/proxy.ts), called by app Workers with their own token: any method, apex only.
+  if (ctx.url.pathname.startsWith('/__insulin/integrations/')) return integrationProxy(ctx)
   switch (ctx.url.pathname) {
     case '/__insulin/me':
       return method === 'GET' || method === 'HEAD' ? me(ctx) : methodNotAllowed(ctx, ['GET', 'HEAD'])

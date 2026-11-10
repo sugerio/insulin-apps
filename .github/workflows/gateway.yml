@@ -78,5 +78,6 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          GATEWAY_SECRET_KEY: ${{ secrets.GATEWAY_SECRET_KEY }}
           EMAIL_FROM: ${{ vars.EMAIL_FROM }}
           SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}

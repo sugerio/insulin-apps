@@ -39,6 +39,7 @@ CREATE TABLE oauth_grants (
 ) STRICT;
 
 CREATE INDEX oauth_grants_by_user ON oauth_grants (user_id, created_at);
+CREATE INDEX oauth_grants_by_member ON oauth_grants (org_id, user_id);
 CREATE INDEX oauth_grants_by_client ON oauth_grants (client_id);
 CREATE INDEX oauth_grants_by_expiry ON oauth_grants (expires_at);
 
@@ -110,3 +111,7 @@ CREATE TABLE integrations (
   last_used_at INTEGER,
   UNIQUE (org_id, app, key)
 ) STRICT;
+
+-- Leaving or being removed from an organization ends the person's agents there: being invited again later must not
+-- bring them back. (A demotion keeps them; each request checks the current role.) One line, like 0003's triggers.
+CREATE TRIGGER memberships_removal_ends_grants AFTER DELETE ON memberships BEGIN DELETE FROM oauth_grants WHERE org_id = OLD.org_id AND user_id = OLD.user_id; END;

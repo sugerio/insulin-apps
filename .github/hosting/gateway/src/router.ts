@@ -20,9 +20,17 @@ import {
   forgot, forgotForm, login, loginForm, logout, resend, resendForm, reset, resetForm, signup, signupForm, verifyEmail,
   verifyEmailForm,
 } from './auth/accounts.ts'
+import { agentsView, disconnectAgent } from './auth/agents.ts'
 import { googleCallback, googleStart } from './auth/google.ts'
 import { mfaForm, mfaVerify } from './auth/mfa.ts'
 import { cancelSetup, disable as disableMfa, enable as enableMfa, regenerateCodes, securityView, startSetup } from './auth/security.ts'
+import {
+  createCredential, createServiceAccount, deleteCredential, deleteServiceAccountRoute, integrations, rotateServiceAccountSecret,
+  updateCredential, updateServiceAccountDetails,
+} from './integrations/settings.ts'
+import { mcpEndpoint, protectedResourceMetadata } from './mcp/server.ts'
+import { preflight } from './oauth/http.ts'
+import { authorizationServerMetadata, authorize, decide, register, revoke, token } from './oauth/server.ts'
 import { acceptInvitation, declineInvitation, invitationView, invite, resendInvitation, revokeInvitation } from './orgs/invitations.ts'
 import {
   changeAppRole, inviteToApp, removeFromApp, resendAppInvitation, revokeAppInvitation, appUsers,
@@ -46,6 +54,9 @@ const ORG = UUID_PATTERN
 const USER = UUID_PATTERN
 const INVITATION = UUID_PATTERN
 const ROLE = UUID_PATTERN
+const GRANT = UUID_PATTERN
+const ACCOUNT = UUID_PATTERN
+const CREDENTIAL = UUID_PATTERN
 
 function route(method: 'GET' | 'POST', path: string, handler: Handler): Route {
   return { method, pattern: new RegExp(`^${path}$`), handler }
@@ -110,6 +121,10 @@ const APEX_ROUTES: Route[] = [
   route('POST', '/account/security/enable', enableMfa),
   route('POST', '/account/security/recovery-codes', regenerateCodes),
   route('POST', '/account/security/disable', disableMfa),
+  route('GET', '/account/agents', agentsView),
+  route('POST', `/account/agents/(${GRANT})/disconnect`, disconnectAgent),
+  route('GET', '/oauth/authorize', authorize),
+  route('POST', '/oauth/authorize/decision', decide),
 ]
 
 /** The gateway's own pages on every app host (DESIGN.md §1); everything else there goes to the app. */
@@ -120,7 +135,57 @@ const APP_SETTINGS_ROUTES: Route[] = [
   route('POST', `/settings/users/(${USER})/remove`, removeFromApp),
   route('POST', `/settings/users/invitations/(${INVITATION})/revoke`, revokeAppInvitation),
   route('POST', `/settings/users/invitations/(${INVITATION})/resend`, resendAppInvitation),
+  route('GET', '/settings/integrations', integrations),
+  route('POST', '/settings/integrations/service-accounts', createServiceAccount),
+  route('POST', `/settings/integrations/service-accounts/(${ACCOUNT})`, updateServiceAccountDetails),
+  route('POST', `/settings/integrations/service-accounts/(${ACCOUNT})/rotate`, rotateServiceAccountSecret),
+  route('POST', `/settings/integrations/service-accounts/(${ACCOUNT})/delete`, deleteServiceAccountRoute),
+  route('POST', '/settings/integrations/credentials', createCredential),
+  route('POST', `/settings/integrations/credentials/(${CREDENTIAL})`, updateCredential),
+  route('POST', `/settings/integrations/credentials/(${CREDENTIAL})/delete`, deleteCredential),
 ]
+
+type MachineHandler = (ctx: Context) => Promise<Response> | Response
+
+/**
+ * Endpoints machines call, with JSON or form bodies and no cookies: they skip the form POST checks and answer CORS
+ * preflights (oauth/http.ts). On the apex, the authorization server; on every app host, its MCP server and metadata.
+ */
+const APEX_MACHINE: Record<string, { methods: string; handlers: Partial<Record<string, MachineHandler>> }> = {
+  '/.well-known/oauth-authorization-server': { methods: 'GET, OPTIONS', handlers: { GET: authorizationServerMetadata } },
+  '/oauth/register': { methods: 'POST, OPTIONS', handlers: { POST: register } },
+  '/oauth/token': { methods: 'POST, OPTIONS', handlers: { POST: token } },
+  '/oauth/revoke': { methods: 'POST, OPTIONS', handlers: { POST: revoke } },
+}
+
+function appMachine(ctx: Context, path: string): Promise<Response> | Response | null {
+  const app = ctx.app!
+  switch (path) {
+    case '/mcp':
+      return mcpEndpoint(ctx, app)
+    case '/.well-known/oauth-protected-resource':
+    case '/.well-known/oauth-protected-resource/mcp':
+    case '/.well-known/oauth-authorization-server': {
+      const method = ctx.request.method
+      if (method === 'OPTIONS') return preflight('GET, OPTIONS')
+      if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD, OPTIONS' } })
+      if (path === '/.well-known/oauth-authorization-server') return authorizationServerMetadata(ctx)
+      return protectedResourceMetadata(ctx, app, path.endsWith('/mcp'))
+    }
+    default:
+      return null
+  }
+}
+
+function apexMachine(ctx: Context, path: string): Promise<Response> | Response | null {
+  const endpoint = APEX_MACHINE[path]
+  if (!endpoint) return null
+  const method = ctx.request.method === 'HEAD' ? 'GET' : ctx.request.method
+  if (method === 'OPTIONS') return preflight(endpoint.methods)
+  const handler = endpoint.handlers[method]
+  if (!handler) return new Response(null, { status: 405, headers: { Allow: endpoint.methods } })
+  return handler(ctx)
+}
 
 /** Paths on an app host that belong to the gateway: the settings pages and everything below them. */
 export function isGatewayAppPath(path: string): boolean {
@@ -164,8 +229,12 @@ async function dispatch(ctx: Context): Promise<Response> {
   const path = ctx.url.pathname
   if (ctx.site === 'auth') return authRedirect(ctx)
   if (path === '/__insulin' || path.startsWith('/__insulin/')) return reservedRoutes(ctx)
-  if (ctx.site === 'app') return isGatewayAppPath(path) ? runRoutes(ctx, APP_SETTINGS_ROUTES) : proxyToApp(ctx, ctx.app!)
-  return runRoutes(ctx, APEX_ROUTES)
+  if (ctx.site === 'app') {
+    const machine = appMachine(ctx, path)
+    if (machine) return machine
+    return isGatewayAppPath(path) ? runRoutes(ctx, APP_SETTINGS_ROUTES) : proxyToApp(ctx, ctx.app!)
+  }
+  return apexMachine(ctx, path) ?? runRoutes(ctx, APEX_ROUTES)
 }
 
 /**

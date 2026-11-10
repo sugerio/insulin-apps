@@ -29,6 +29,21 @@ export async function allowAuth(ctx: Context, action: AuthAction, subject?: stri
 }
 
 /**
+ * True while `key` is within RL_AUTH's limit: the OAuth endpoints, keyed per IP (registration) or per client (tokens).
+ * Fails closed, as allowAuth does.
+ */
+export async function allowOAuth(ctx: Context, key: string): Promise<boolean> {
+  try {
+    const { success } = await ctx.config.rlAuth.limit({ key: `oauth:${key}` })
+    if (!success) log('rate_limited', { action: 'oauth', scope: key.split(':')[0] })
+    return success
+  } catch (error) {
+    logError('rate_limit_failed', error, { action: 'oauth' })
+    return false
+  }
+}
+
+/**
  * True while the user is within the app request limit. Fails open: this is abuse protection for the apps, and an
  * outage of the limiter should not take every app down.
  */

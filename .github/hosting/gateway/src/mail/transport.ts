@@ -16,14 +16,33 @@ export async function sendMail(ctx: Context, kind: MailKind, to: string, content
     log('mail_capped', { kind, org: orgId })
     return 'capped'
   }
+  return deliver(ctx, slot, { kind, orgId, to, from: ctx.config.mailFrom, content })
+}
+
+/**
+ * Sends one message that already holds a slot in `mail_log`: through the Email Service binding, or into
+ * `mail_capture` in test mode. A failed send gives its slot back. Logs carry the kind and organization, never the
+ * address or the text.
+ */
+export async function deliver(ctx: Context, slot: number, message: {
+  kind: string
+  orgId: string | null
+  to: string
+  from: { email: string; name: string }
+  replyTo?: string | null
+  content: MailContent
+}): Promise<SendOutcome> {
+  const db = ctx.config.db
+  const { kind, orgId, to, from, replyTo, content } = message
   try {
     if (ctx.config.email) {
       await ctx.config.email.send({
         to,
-        from: ctx.config.mailFrom,
+        from,
+        ...(replyTo ? { replyTo } : {}),
         subject: content.subject,
         text: content.text,
-        html: content.html,
+        ...(content.html ? { html: content.html } : {}),
       })
     } else {
       await captureMail(db, { to, subject: content.subject, text: content.text, html: content.html, now: ctx.now })

@@ -19,6 +19,25 @@ export async function reserveMailSlot(db: D1Database, slot: { recipientHash: str
   return row?.id ?? null
 }
 
+/** Messages an app may send for one organization in a day, through the mail relay (DESIGN.md §8.2). */
+export const APP_MAIL_DAILY_LIMIT = 500
+
+/**
+ * Records an app's message about to be sent through the relay, atomically checking the per-recipient cap and the
+ * app's daily cap for the organization (`kind` is `app:<name>`). Returns the log row id, or null when a cap is reached.
+ */
+export async function reserveAppMailSlot(db: D1Database, slot: { recipientHash: string; kind: string; orgId: string; now: number }): Promise<number | null> {
+  const row = await db.prepare(
+    `INSERT INTO mail_log (recipient_hash, kind, org_id, created_at)
+     SELECT ?1, ?2, ?3, ?4
+     WHERE (SELECT COUNT(*) FROM mail_log WHERE recipient_hash = ?1 AND created_at > ?4 - ?5) < ?6
+       AND (SELECT COUNT(*) FROM mail_log WHERE org_id = ?3 AND kind = ?2 AND created_at > ?4 - ?7) < ?8
+     RETURNING id`,
+  ).bind(slot.recipientHash, slot.kind, slot.orgId, slot.now, RECIPIENT_WINDOW_MS, RECIPIENT_LIMIT, ORG_WINDOW_MS, APP_MAIL_DAILY_LIMIT)
+    .first<{ id: number }>()
+  return row?.id ?? null
+}
+
 export async function releaseMailSlot(db: D1Database, id: number): Promise<void> {
   await db.prepare('DELETE FROM mail_log WHERE id = ?1').bind(id).run()
 }

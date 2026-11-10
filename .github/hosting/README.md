@@ -75,6 +75,11 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
      point to the repository's issues)
    - `SITE_DOMAIN` only when the domain is not `insulinapps.com`
 
+   **App secrets.** An app that lists names under `insulin.secrets` in its `package.json` (DESIGN.md §8.3), such as
+   `ESIGN_KMS_KEY_ARN`, gets each one that this environment holds, as a secret or else a variable of exactly that name,
+   uploaded with its Worker; names that aren't set are skipped and named in the deploy log. Add them here, as secrets
+   for anything confidential. They reach only that app's deploy step, never another app, the gateway or a build.
+
 2. Create an account-owned Cloudflare API token scoped to the account and the site's zone. Grant:
 
    - Account · Workers Scripts · Edit
@@ -128,7 +133,9 @@ Add a top-level directory with a `package.json` and `src/api.ts`. Its directory 
 rule and must not be reserved. Every organization shares one deployment of the app, so the app must keep each
 organization's data apart: scope everything by the console organization (`getCurrentUser().organizationId`), as Cap
 Table does. Set `displayName` and `description` in `package.json`, include D1 migrations under
-`src/app/db/migrations`, and make sure the normal checks pass. Copy `.github/workflows/captable.yml` to
+`src/app/db/migrations`, and make sure the normal checks pass. An app that needs public paths, mail or runtime secrets
+declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to the `production` environment
+before its first deploy. Copy `.github/workflows/captable.yml` to
 `.github/workflows/<app>.yml`, then change the workflow name, the app path entries, and `with.app`. Repository-wide CI
 enforces that every discovered app has this workflow and that no app workflow names a missing app.
 

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { listApps, validateAppName } from './list-apps.mjs'
+import { listApps, publicPathProblem, validateAppName } from './list-apps.mjs'
 
 const temporary = []
 after(async () => Promise.all(temporary.map((directory) => rm(directory, { recursive: true, force: true }))))
@@ -27,8 +27,8 @@ test('discovers top-level apps in stable order with their public metadata', asyn
   await mkdir(join(root, 'not-an-app'))
 
   assert.deepEqual(await listApps(root), [
-    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [] },
-    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [] },
+    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [], publicPaths: [], secrets: [] },
+    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [], publicPaths: [], secrets: [] },
   ])
 })
 
@@ -70,4 +70,32 @@ test('reports an invalid manifest instead of silently skipping the app', async (
   const root = await repository({ valid: {} })
   await writeFile(join(root, 'valid', 'package.json'), '{')
   await assert.rejects(() => listApps(root), /App "valid" has an invalid package.json/)
+})
+
+test('reads the paths an app opens to people without an account, and refuses any that reach the gateway or the whole API', async () => {
+  const publicPaths = ['/sign', '/editor/', '/api/public/', '/assets/']
+  const root = await repository({ signing: { insulin: { publicPaths } } })
+  assert.deepEqual((await listApps(root))[0].publicPaths, publicPaths)
+  for (const good of publicPaths) assert.equal(publicPathProblem(good), null, good)
+  for (const bad of [
+    '/', 'sign', '/api', '/api/', '/API/', '/api/__suger/x', '/__insulin/me', '/settings', '/settings/users', '/mcp', '/MCP/x',
+    '/.well-known/', '/sign/../api', '/sign?x=1', '/sign#a', '/a//b', '/a\\b', '/a b', 42,
+  ]) {
+    assert.notEqual(publicPathProblem(bad), null, String(bad))
+  }
+  const broken = await repository({ broken: { insulin: { publicPaths: ['/api/'] } } })
+  await assert.rejects(() => listApps(broken), /insulin\.publicPaths\[0\] must not cover every path or the whole API/)
+  const many = await repository({ many: { insulin: { publicPaths: Array.from({ length: 11 }, (_, i) => `/p${i}`) } } })
+  await assert.rejects(() => listApps(many), /at most 10/)
+  const twice = await repository({ twice: { insulin: { publicPaths: ['/sign', '/sign'] } } })
+  await assert.rejects(() => listApps(twice), /listed twice/)
+})
+
+test("reads an app's secret names, which carry its own prefix", async () => {
+  const root = await repository({ 'e-sign': { insulin: { secrets: ['E_SIGN_KMS_KEY_ARN', 'E_SIGN_OTP_KEY'] } } })
+  assert.deepEqual((await listApps(root))[0].secrets, ['E_SIGN_KMS_KEY_ARN', 'E_SIGN_OTP_KEY'])
+  for (const bad of ['KMS_KEY', 'e_sign_lower', 'E_SIGN_', 'OTHER_APP_KEY', 'E_SIGN_BAD-NAME']) {
+    const broken = await repository({ 'e-sign': { insulin: { secrets: [bad] } } })
+    await assert.rejects(() => listApps(broken), /insulin\.secrets\[0\] must match/, bad)
+  }
 })

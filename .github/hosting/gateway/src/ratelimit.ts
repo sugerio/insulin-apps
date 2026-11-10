@@ -44,6 +44,35 @@ export async function allowOAuth(ctx: Context, key: string): Promise<boolean> {
 }
 
 /**
+ * True while an app is within RL_AUTH's limit for the mail relay (DESIGN.md §8.2), counted per organization so one
+ * organization's mail can't hold up another's. Fails closed, as allowAuth does.
+ */
+export async function allowAppMail(ctx: Context, app: string, orgId: string): Promise<boolean> {
+  try {
+    const { success } = await ctx.config.rlAuth.limit({ key: `app-mail:${app}:${orgId}` })
+    if (!success) log('rate_limited', { action: 'app_mail', app })
+    return success
+  } catch (error) {
+    logError('rate_limit_failed', error, { action: 'app_mail' })
+    return false
+  }
+}
+
+/**
+ * True while this IP is within the app request limit for public paths (DESIGN.md §8.1). Fails open, as allowApp does.
+ */
+export async function allowPublic(ctx: Context): Promise<boolean> {
+  try {
+    const { success } = await ctx.config.rlApp.limit({ key: `public:${ctx.clientIp ?? 'unknown'}` })
+    if (!success) log('rate_limited', { action: 'public' })
+    return success
+  } catch (error) {
+    logError('rate_limit_failed', error, { action: 'public' })
+    return true
+  }
+}
+
+/**
  * True while the user is within the app request limit. Fails open: this is abuse protection for the apps, and an
  * outage of the limiter should not take every app down.
  */

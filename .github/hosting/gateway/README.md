@@ -10,8 +10,8 @@ over a service binding with the console identity headers. The apps need no hosti
 | `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; each app's `/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`; invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
-| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users` and `/settings/integrations`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the integration proxy `/__insulin/integrations/*` |
+| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users` and `/settings/integrations`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1) |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the integration proxy `/__insulin/integrations/*` and the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
 app) is `.github/hosting/README.md`. This file is for developers.
@@ -47,7 +47,7 @@ bundles them.
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, and disconnecting them |
 | `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
 | `src/reserved.ts` | `/__insulin/me`, `switch-org`, `logout`, and the local captured-mail page |
-| `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode) and the messages |
+| `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode), the messages, and the apps' mail relay (`relay.ts`) |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
 | `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (top bar, footer, favicon links); `settings.tsx` the organization's settings, `app-settings.tsx` the pages on an app host |
 | `src/pages/html.ts` | the `html` tag, which escapes the HTML of the e-mails (React escapes the pages) |
@@ -72,7 +72,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `RL_APP` | ratelimit | suggested `limit: 600, period: 60`; keyed per user |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
-| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), and a malformed one fails closed |
+| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`) and `publicPaths` its paths for people without an account (`insulin.publicPaths`); a malformed list fails closed |
 | `GOOGLE_CLIENT_ID` | var | optional; empty hides Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | secret | required when `GOOGLE_CLIENT_ID` is set |
 | `TURNSTILE_SITE_KEY` | var | required |
@@ -175,6 +175,13 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   Token requests are limited per IP before any check, and per client only when they fail; an MCP batch holds at most
   10 messages, each tool call counted against the app rate. A person's token never works on `/api/*`, and a service
   account's never on `/mcp`.
+- **Public paths** (DESIGN.md §8.1) are checked before any session or token: a match is forwarded with only
+  `x-suger-app-id` and `x-suger-access-via: public`, without the caller's `Authorization`, with no account bar, and
+  limited per IP. Reserved paths are routed first, and a path that hides a dot segment or a slash in its encoding is
+  never public, so a trick in the path can only fall back to the normal checks.
+- **The mail relay** (DESIGN.md §8.2) takes one message per request from an app with its `SUGER_APP_TOKEN`, for an
+  existing organization, and sends it from `EMAIL_FROM` named after the app. Its slot in `mail_log` (`kind` `app:<name>`)
+  is taken by one statement that checks the per-recipient cap and the app's 500 a day for the organization.
 - **The integration proxy** only forwards to the stored base URL's host or an allowed host, over https, never to the
   site's own hosts, without following redirects, with every `x-suger-*`, cookie and authorization header removed and
   the stored credential added; a path segment that decodes to `.` or `..` or holds an encoded slash is refused.

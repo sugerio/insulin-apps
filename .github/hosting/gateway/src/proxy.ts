@@ -4,16 +4,16 @@
 import { appAccess } from './access.ts'
 import { apiCall } from './oauth/app-api.ts'
 import { hasBearer } from './oauth/tokens.ts'
-import type { HostedApp } from './config.ts'
+import { isPublicPath, type HostedApp } from './config.ts'
 import type { Context } from './context.ts'
 import { apexUrl, withReturnTo } from './context.ts'
 import { setCookieName } from './http/cookies.ts'
-import { GATEWAY_COOKIES, forwardRequest, identityHeaders, isNavigation } from './http/forward.ts'
+import { GATEWAY_COOKIES, forwardRequest, identityHeaders, isNavigation, publicHeaders } from './http/forward.ts'
 import { jsonResponse, redirect } from './http/response.ts'
 import { markFromApp } from './http/secure.ts'
 import { log, logError } from './log.ts'
 import { appUnavailablePage, noAppAccessPage, rateLimitedPage } from './pages/status.tsx'
-import { allowApp } from './ratelimit.ts'
+import { allowApp, allowPublic } from './ratelimit.ts'
 import { verifyNotice } from './auth/guard.ts'
 import { activeOrg, loadSession } from './auth/session.ts'
 
@@ -24,10 +24,11 @@ function isHtml(contentType: string | null): boolean {
 }
 
 /**
- * The app's response, unchanged except: its attempts to set gateway cookies are dropped and HTML gets the account bar.
- * It is marked as the app's, so the outer security layer adds HSTS only.
+ * The app's response, unchanged except: its attempts to set gateway cookies are dropped and HTML gets the account bar
+ * (not on a public path, where nobody is signed in). It is marked as the app's, so the outer security layer adds HSTS
+ * only.
  */
-export function appResponse(ctx: Context, app: HostedApp, upstream: Response): Response {
+export function appResponse(ctx: Context, app: HostedApp, upstream: Response, { bar = true } = {}): Response {
   if (upstream.status === 101 || upstream.webSocket) return upstream
   const response = markFromApp(new Response(upstream.body, upstream))
   const cookies = response.headers.getSetCookie()
@@ -38,7 +39,7 @@ export function appResponse(ctx: Context, app: HostedApp, upstream: Response): R
       else response.headers.append('Set-Cookie', cookie)
     }
   }
-  if (!isHtml(response.headers.get('Content-Type')) || !response.body || ctx.request.method === 'HEAD') return response
+  if (!bar || !isHtml(response.headers.get('Content-Type')) || !response.body || ctx.request.method === 'HEAD') return response
   return markFromApp(new HTMLRewriter()
     .on('body', { element: (body) => { body.append(BAR_TAG, { html: true }) } })
     .transform(response))
@@ -50,6 +51,8 @@ export async function proxyToApp(ctx: Context, app: HostedApp): Promise<Response
   const navigation = !api && isNavigation(ctx.request)
   if (!app.service) return navigation ? appUnavailablePage(ctx, 503) : jsonResponse({ error: 'unavailable' }, 503)
 
+  // A public path is for people without an account (DESIGN.md §8.1): no session, token or identity is looked at or sent.
+  if (isPublicPath(app, path)) return proxyPublic(ctx, app, navigation)
   // A bearer token is a machine's way in (DESIGN.md §4): it never falls back to the browser's cookies.
   if (hasBearer(ctx.request)) return apiCall(ctx, app)
   const session = await loadSession(ctx)
@@ -75,4 +78,21 @@ export async function proxyToApp(ctx: Context, app: HostedApp): Promise<Response
     return navigation ? appUnavailablePage(ctx, 502) : jsonResponse({ error: 'bad_gateway' }, 502)
   }
   return appResponse(ctx, app, upstream)
+}
+
+/**
+ * A request on one of the app's public paths: forwarded with only the app's id and `x-suger-access-via: public`, never
+ * the session, a token or anyone's identity, and limited per IP. The app's own headers (its CSP and frame-ancestors)
+ * stay; HTML gets no account bar.
+ */
+async function proxyPublic(ctx: Context, app: HostedApp, navigation: boolean): Promise<Response> {
+  if (!(await allowPublic(ctx))) return navigation ? rateLimitedPage(ctx) : jsonResponse({ error: 'rate_limited' }, 429, { 'Retry-After': '60' })
+  let upstream: Response
+  try {
+    upstream = await app.service!.fetch(forwardRequest(ctx.request, publicHeaders(app), { dropAuthorization: true }))
+  } catch (error) {
+    logError('app_unreachable', error, { app: app.name })
+    return navigation ? appUnavailablePage(ctx, 502) : jsonResponse({ error: 'bad_gateway' }, 502)
+  }
+  return appResponse(ctx, app, upstream, { bar: false })
 }

@@ -30,6 +30,11 @@ export interface HostedApp {
   service: Fetcher | null
   /** The app's permission catalog; empty when it has none (it then has no custom roles). */
   permissions: Permission[]
+  /**
+   * Paths people without an account use (an e-sign recipient, say), forwarded with no identity (DESIGN.md §8.1): the
+   * app authenticates them with its own codes. Empty for most apps.
+   */
+  publicPaths: string[]
 }
 
 export interface Config {
@@ -120,6 +125,69 @@ export function issuesUrlFrom(apps: HostedApp[]): string | null {
 
 const PERMISSION_KEY = /^[a-z][a-z0-9_.-]{0,63}$/
 const PERMISSION_LIMIT = 50
+const PUBLIC_PATH_LIMIT = 10
+// Never public: the gateway's own paths on an app host and the platform's routes inside the app.
+const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
+
+/**
+ * Why an entry of `insulin.publicPaths` is refused, or null. The same rule as .github/scripts/list-apps.mjs: a path
+ * starting with `/`, without `..`, a query or a fragment, that neither is nor covers the API as a whole or a reserved
+ * path (compared without regard to case).
+ */
+export function publicPathProblem(entry: unknown): string | null {
+  if (typeof entry !== 'string' || !entry.startsWith('/') || entry.length > 200) return 'must be a path starting with /'
+  if (/[?#\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
+    return 'must not hold a query, a fragment, a backslash, whitespace, an empty or a dot segment'
+  }
+  const lower = entry.toLowerCase()
+  const bare = lower.replace(/\/+$/, '')
+  if (bare === '' || bare === '/api') return 'must not cover every path or the whole API'
+  for (const reserved of RESERVED_PREFIXES) {
+    const insideReserved = bare === reserved || bare.startsWith(`${reserved}/`)
+    const coversReserved = reserved.startsWith(`${bare}/`)
+    if (insideReserved || coversReserved) return `must not reach ${reserved}`
+  }
+  return null
+}
+
+export function parsePublicPaths(raw: unknown, where: string, problems: string[]): string[] {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw) || raw.length > PUBLIC_PATH_LIMIT) {
+    problems.push(`${where} (expected an array of at most ${PUBLIC_PATH_LIMIT})`)
+    return []
+  }
+  const paths: string[] = []
+  for (const [index, entry] of raw.entries()) {
+    if (publicPathProblem(entry) || paths.includes(entry as string)) {
+      problems.push(`${where}[${index}]`)
+      continue
+    }
+    paths.push(entry as string)
+  }
+  return paths
+}
+
+/**
+ * Whether a request path is one of the app's public paths: equal to an entry, below an entry that ends in `/`, or
+ * below `entry/`. Never a reserved path, whatever its case, and never a path whose segments hide a dot segment or a
+ * slash in their encoding (such a request falls through to the normal checks).
+ */
+export function isPublicPath(app: Pick<HostedApp, 'publicPaths'>, path: string): boolean {
+  if (!app.publicPaths.length) return false
+  const lower = path.toLowerCase()
+  if (RESERVED_PREFIXES.some((reserved) => lower === reserved || lower.startsWith(`${reserved}/`))) return false
+  const hidden = path.split('/').some((segment) => {
+    if (!segment.includes('%')) return false
+    try {
+      const decoded = decodeURIComponent(segment)
+      return decoded === '.' || decoded === '..' || /[/\\]/.test(decoded)
+    } catch {
+      return true
+    }
+  })
+  if (hidden) return false
+  return app.publicPaths.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry || path.startsWith(`${entry}/`)))
+}
 
 /** An app's permission catalog; a malformed one is a configuration problem (custom roles would mean the wrong thing). */
 export function parsePermissions(raw: unknown, where: string, problems: string[]): Permission[] {
@@ -202,6 +270,7 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       appId: `insulin-apps-${name}`,
       service: hasMethod(service, 'fetch') ? (service as Fetcher) : null,
       permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
+      publicPaths: parsePublicPaths(item.publicPaths, `SITE_APPS[${index}].publicPaths`, problems),
     })
   })
   return apps

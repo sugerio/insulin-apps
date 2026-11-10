@@ -13,7 +13,7 @@ import {
   verifyPassword,
 } from '../src/crypto.ts'
 import { cookieValues, serializeCookie, setCookieName, withoutCookies } from '../src/http/cookies.ts'
-import { bindingName, isAppName, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig } from '../src/config.ts'
+import { bindingName, isAppName, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig, isPublicPath, parsePublicPaths, publicPathProblem } from '../src/config.ts'
 import { safeReturnTo } from '../src/http/return-to.ts'
 import { createContext } from '../src/context.ts'
 import { escapeHtml, html } from '../src/pages/html.ts'
@@ -412,4 +412,36 @@ test('error logs carry a known error name, an identifier-like kind and code, and
   assert.deepEqual(JSON.parse(lines[2]), { event: 'odd', error: 'unknown' })
   assert.deepEqual(JSON.parse(lines[3]), { event: 'thrown', error: 'unknown' })
   assert.ok(lines.every((line) => !line.includes('@') && !line.includes('token')))
+})
+
+test('public paths: the same rule as the deploy, matched at segment boundaries, never reaching a reserved path', () => {
+  for (const good of ['/sign', '/editor/', '/api/public/', '/assets/']) assert.equal(publicPathProblem(good), null, good)
+  for (const bad of ['/', '/api', '/api/', '/API', '/api/__suger', '/__insulin/x', '/settings', '/Settings/users', '/mcp', '/.well-known/x',
+    'sign', '/a/../b', '/a?b', '/a#b', '/a//b', '/a b', 7, null]) {
+    assert.notEqual(publicPathProblem(bad), null, String(bad))
+  }
+  const problems = []
+  assert.deepEqual(parsePublicPaths(['/sign', '/api/', '/sign'], 'p', problems), ['/sign'])
+  assert.deepEqual(problems, ['p[1]', 'p[2]'], 'a refused or repeated entry is a problem, not ignored')
+  assert.deepEqual(parsePublicPaths(undefined, 'p', []), [])
+  const tooMany = []
+  parsePublicPaths(Array.from({ length: 11 }, (_, i) => `/p${i}`), 'p', tooMany)
+  assert.equal(tooMany.length, 1)
+
+  const app = { publicPaths: ['/sign', '/api/public/'] }
+  for (const path of ['/sign', '/sign/', '/sign/step', '/api/public/', '/api/public/codes/1']) assert.equal(isPublicPath(app, path), true, path)
+  for (const path of ['/signature', '/api/public', '/api/echo', '/', '/sign/%2e%2e/api/echo', '/sign/%2E%2E', '/sign/a%2fb', '/sign/%zz']) {
+    assert.equal(isPublicPath(app, path), false, path)
+  }
+  assert.equal(isPublicPath({ publicPaths: [] }, '/sign'), false)
+
+  const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
+  const env = {
+    DB: binding, RL_AUTH: binding, RL_APP: binding, EMAIL: binding, APP_CAPTABLE: binding, SITE_DOMAIN: 'example.test',
+    TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
+  }
+  assert.deepEqual(readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/sign'] }] }).config.apps[0].publicPaths, ['/sign'])
+  const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/settings/'] }] })
+  assert.equal(refused.ok, false, 'a malformed list fails closed')
+  assert.ok(refused.problems.includes('SITE_APPS[0].publicPaths[0]'))
 })

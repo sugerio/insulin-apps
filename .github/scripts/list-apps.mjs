@@ -54,7 +54,9 @@ export async function listApps(root = repositoryRoot) {
     const title = typeof manifest.displayName === 'string' && manifest.displayName.trim() ? manifest.displayName.trim() : entry.name
     const summary = typeof manifest.description === 'string' ? manifest.description.trim() : ''
     const permissions = readPermissions(entry.name, manifest.insulin?.permissions)
-    apps.push({ name: entry.name, title, summary, permissions })
+    const publicPaths = readPublicPaths(entry.name, manifest.insulin?.publicPaths)
+    const secrets = readSecretNames(entry.name, manifest.insulin?.secrets)
+    apps.push({ name: entry.name, title, summary, permissions, publicPaths, secrets })
   }
 
   return apps
@@ -83,6 +85,68 @@ export function readPermissions(app, raw) {
     if (typeof description !== 'string' || description.length > 300) throw new Error(`${where}.description must be at most 300 characters`)
     if (!PERMISSION_ROLES.has(role)) throw new Error(`${where}.role must be ADMIN, EDITOR or VIEWER`)
     return { key, label: label.trim(), description: description.trim(), role }
+  })
+}
+
+// Never public: the gateway's own paths on an app host and the platform's routes inside the app (DESIGN.md §8.1).
+const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
+
+/**
+ * Why an entry of `insulin.publicPaths` is refused, or null: a path starting with `/`, without `..`, a query or a
+ * fragment, that neither is nor covers the API as a whole or a reserved path (compared without regard to case). The
+ * gateway applies the same rule (publicPathProblem in its src/config.ts) and refuses to start otherwise.
+ */
+export function publicPathProblem(entry) {
+  if (typeof entry !== 'string' || !entry.startsWith('/') || entry.length > 200) return 'must be a path starting with /'
+  if (/[?#\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
+    return 'must not hold a query, a fragment, a backslash, whitespace, an empty or a dot segment'
+  }
+  const bare = entry.toLowerCase().replace(/\/+$/, '')
+  if (bare === '' || bare === '/api') return 'must not cover every path or the whole API'
+  for (const reserved of RESERVED_PREFIXES) {
+    if (bare === reserved || bare.startsWith(`${reserved}/`) || reserved.startsWith(`${bare}/`)) return `must not reach ${reserved}`
+  }
+  return null
+}
+
+/**
+ * The paths an app opens to people without an account, `insulin.publicPaths` in its package.json (DESIGN.md §8.1):
+ * at most 10, each passing `publicPathProblem`. The gateway forwards them with no identity at all.
+ */
+export function readPublicPaths(app, raw) {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > 10) throw new Error(`App ${JSON.stringify(app)}: insulin.publicPaths must be an array of at most 10`)
+  const seen = new Set()
+  return raw.map((entry, index) => {
+    const problem = publicPathProblem(entry)
+    if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.publicPaths[${index}] ${problem}`)
+    if (seen.has(entry)) throw new Error(`App ${JSON.stringify(app)}: insulin.publicPaths[${index}] is listed twice`)
+    seen.add(entry)
+    return entry
+  })
+}
+
+/** The prefix an app's secret names must carry: its name upper-cased, with `-` as `_`. */
+export function secretPrefix(app) {
+  return `${app.toUpperCase().replaceAll('-', '_')}_`
+}
+
+/**
+ * The secrets an app needs at runtime, `insulin.secrets` in its package.json (DESIGN.md §8.3): at most 30 names, each
+ * `<APP>_…` in upper case. The deploy copies each from the GitHub environment, when present, as a Worker secret.
+ */
+export function readSecretNames(app, raw) {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > 30) throw new Error(`App ${JSON.stringify(app)}: insulin.secrets must be an array of at most 30`)
+  const pattern = new RegExp(`^${secretPrefix(app)}[A-Z0-9_]{1,60}$`)
+  const seen = new Set()
+  return raw.map((name, index) => {
+    if (typeof name !== 'string' || !pattern.test(name)) {
+      throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] must match ${pattern.source}`)
+    }
+    if (seen.has(name)) throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] is listed twice`)
+    seen.add(name)
+    return name
   })
 }
 

@@ -275,8 +275,8 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    await evaluate(`(()=>{const x=document.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(otp)});x.dispatchEvent(new Event('input',{bubbles:true}));[...document.querySelectorAll('button')].find(b=>b.textContent==='Verify code').click();})()`);
    await wait(()=>evaluate(`Boolean(document.querySelector('input[aria-label="Full name"]'))`),'signing fields');
    await evaluate(`(()=>{const x=document.querySelector('input[aria-label="Full name"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(i?'Marcus':'Ana')});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-   // Sign hides the document (it was read on Review); show it again to check the previews on it.
-   await evaluate("document.querySelector('.esign-document').style.display='flex'");
+   // Sign hides the document (it was read on Review); show it again, full width above the step, to check the previews on it.
+   await evaluate("(()=>{if(document.querySelector('#show-document'))return;const s=document.createElement('style');s.id='show-document';s.textContent='.esign-at-step-3 .esign-document{display:flex!important;grid-column:1/-1;grid-row:1}';document.head.appendChild(s);})()");
    await wait(()=>evaluate("document.querySelectorAll('[data-signature-field] img').length===2"),'signature and date previews');
    for(const zoom of [.8,1.25]){
     await evaluate(`document.documentElement.style.zoom='${zoom}'`);

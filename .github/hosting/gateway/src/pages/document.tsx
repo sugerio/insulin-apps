@@ -36,11 +36,11 @@ export function renderDocument(element: ReactElement): Html {
 }
 
 /**
- * The favicon. On the apex and auth hosts also /favicon.ico (for browsers without SVG icons) and the Apple touch
- * icon; app hosts serve those paths themselves, so a gateway page shown there links only the reserved SVG.
+ * The favicon. On the apex also /favicon.ico (for browsers without SVG icons) and the Apple touch icon; app hosts
+ * serve those paths themselves, so a gateway page shown there links only the reserved SVG.
  */
 function IconLinks({ site }: { site: Context["site"] | null }) {
-  const own = site === "apex" || site === "auth"
+  const own = site === "apex"
   return (
     <>
       {own ? <link rel="icon" href="/favicon.ico" sizes="32x32" /> : null}

@@ -9,7 +9,7 @@ before changing code. [docs/architecture.md](docs/architecture.md) explains how 
 Cap Table is an equity management app on the Insulin app template: one npm package, Vite + React + Nitro, deployed as a
 Cloudflare Worker with one D1 database. Its source of truth is an append-only, hash-chained ledger of transactions;
 every number (positions, vesting, deadlines, the cap table) is computed by replaying that ledger with a pure TypeScript
-engine shared by the server and the browser. Users and roles come from the Insulin console. A company is set up by
+engine shared by the server and the browser. Users, roles and permissions come from the Insulin platform (the console, or insulinapps.com). A company is set up by
 importing Pulley's reports or the app's spreadsheet template.
 
 ## Commands
@@ -71,7 +71,7 @@ particular:
 
 - **Runtime:** one D1 database (`DB`), static assets, outbound `fetch`, and environment values. There is no cron, R2, KV,
   Queues, Durable Objects, e-mail binding, Workers AI, WebSockets, Server-Sent Events or service workers. Work runs inside
-  a request: due work runs when an owner or admin loads the dashboard and with `POST /api/orgs/:orgId/process-due`.
+  a request: due work runs when someone with write access loads the dashboard and with `POST /api/orgs/:orgId/process-due`.
 - **The UI runs in a sandboxed iframe in the console:** no `window.open`, `target="_blank"`, `alert`, `confirm`,
   `prompt`, `print`, `beforeunload` or top-level navigation. Downloads use `<a download>`. No fonts, scripts or images
   from CDNs. `localStorage` only for disposable UI preferences.
@@ -148,21 +148,40 @@ particular:
 
 ## Roles and access
 
-| Console role | Access in the app |
-|---|---|
-| `OWNER`, `ADMIN` | `admin_rw`: read and write. There is no owner-only tier. |
-| `EDITOR` | `admin_ro` with personal data: read only |
-| `USER`, `VIEWER` | holder: their own holdings, matched by console e-mail (case-insensitively) against active stakeholder e-mails of kind `self` whose portal access isn't closed |
+Access follows three permissions. `package.json` declares them for the platform under `insulin.permissions` (key,
+plain-language label and description, and the least built-in role that has it), and `api.PERMISSIONS` with
+`api.rolePermissions` in `src/app/shared/api/auth.ts` is the same list in code; `test/shared/api/permissions.test.ts`
+keeps the two equal. The organization's custom roles are built from them.
 
+| Permission | Access in the app |
+|---|---|
+| `captable.manage` | `admin_rw`: read and write (`auth.fullAccess`). There is no owner-only tier. |
+| `captable.view` without `captable.manage` | `admin_ro` with personal data: read only; EIN, bank details and Pulley ids masked |
+| `portfolio.view` alone | holder: their own holdings, matched by e-mail (case-insensitively) against active stakeholder e-mails of kind `self` whose portal access isn't closed |
+
+| Role (`x-suger-app-role`) | Permissions |
+|---|---|
+| `OWNER`, `ADMIN`, `EDITOR` | all three. Behind insulinapps.com, org owners arrive as `ADMIN`. Editors write: the platform's Editor is "everything but managing users, roles and integrations", and Cap Table has none of those. |
+| `USER`, `VIEWER` | `portfolio.view` |
+
+- **Decide by permission or access level, never by role name.** `x-suger-app-permissions` (from the hosting platform,
+  for every role there) narrows the role's set and can never widen it: `readPlatformGrant` intersects. A new permission
+  goes in `package.json`, `api.PERMISSIONS`, `api.rolePermissions`, the in-app Docs' table of permissions and the tests
+  together.
+- **AI agents and API clients** reach the app through the platform with the same identity headers as the browser, plus
+  `x-suger-access-via: mcp` or `api` (`auth.accessVia`). They get the same access as their role; Cap Table has no user,
+  role, billing or integration management that would have to refuse them. `GET /api/catalog` lists what the caller's
+  access allows, from the route table: a new route appears there by itself.
 - **Enforce on the server**, per route and per command (`access` in `COMMANDS`). Hiding a button is not access control.
 - **Holder responses use the allowlist schemas** in `src/app/shared/api/portal/`. Never add company-wide data, other
   holders, fully diluted percentages or anyone else's personal data to a holder response; the allowlist tests must keep
   passing.
-- **Keep the self-dealing guard:** an owner or admin can't run a command touching a stakeholder linked to them.
-- **Owners and admins without a console e-mail can't make changes**; the server refuses before any route runs.
+- **Keep the self-dealing guard:** someone who records changes can't run a command touching a stakeholder linked to them.
+- **Anyone with write access but no e-mail can't make changes**; the server refuses before any route runs.
 - **No login of our own:** no sign-in screens, sessions, cookies or passwords. Use `getCurrentUser(request)` from
-  `@fours/app/server`; never read the platform's identity headers directly. The fixed "Preview admin" exists only when
-  `import.meta.env.DEV` is true.
+  `@fours/app/server`; never read the platform's identity headers directly. The one exception is `readPlatformGrant` in
+  `src/app/server/lib/identity.ts`, which reads `x-suger-app-permissions` and `x-suger-access-via`; use what it puts on
+  the auth context. The fixed "Preview admin" exists only when `import.meta.env.DEV` is true.
 - **One company per Insulin organization**, created by the first-run setup or by the import. `orgs.console_organization_id`
   is the opaque console organization id, and every pre-company record is scoped by it. A company is `active`, `importing`
   or `archived`; keep both the owner and `active` filters in every query that lists or resolves companies, so another

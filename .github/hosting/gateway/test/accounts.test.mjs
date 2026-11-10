@@ -164,7 +164,7 @@ test('signing in creates a new session and never adopts the one the browser brou
   const value = client.jar.get('insulin_session').value
   assert.notEqual(value, planted)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM sessions WHERE id_hash = ?1', sha256(planted)))[0].n, 0)
-  assert.equal((await first.get(h.url('auth', '/'))).status, 200, 'other sessions are unaffected')
+  assert.equal((await first.get(h.url('auth', '/account'))).status, 200, 'other sessions are unaffected')
   const same = await h.signIn(h.client(), { email, returnTo: h.url('auth', '/account') })
   assert.equal(same.status, 303, 'a same-origin destination is a plain redirect')
   assert.equal(same.location, h.url('auth', '/account'))
@@ -178,7 +178,7 @@ test('signing out deletes the session and clears the cookie with the same Domain
   assert.equal(out.location, '/login?signed_out=1')
   assert.equal(sessionCookie(out), 'insulin_session=; Domain=insulinapps.localhost; Path=/; Max-Age=0; HttpOnly; SameSite=Lax')
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?1', id))[0].n, before - 1)
-  const home = await client.get(h.url('auth', '/'))
+  const home = await client.get(h.url('auth', '/account'))
   assert.equal(home.status, 302)
   assert.match(home.location, /\/login\?return_to=/)
 })
@@ -227,9 +227,9 @@ test('forgot password answers the same and resets: confirms the address, signs o
   assert.equal(reset.status, 303)
   assert.equal(reset.location, h.url('auth', '/?notice=password-set'))
   assert.ok(sessionCookie(reset))
-  const home = await elsewhere.get(h.url('auth', '/'))
+  const home = await elsewhere.get(h.url('auth', '/account'))
   assert.equal(home.status, 302, 'every older session was revoked')
-  assert.equal((await client.get(h.url('auth', '/'))).status, 200)
+  assert.equal((await client.get(h.url('auth', '/account'))).status, 200)
   assert.equal((await h.signIn(h.client(), { email })).status, 401, 'the old password stopped working')
   assert.equal((await h.signIn(h.client(), { email, password: 'a brand new password' })).status, 303)
   assert.equal((await h.client().post(h.url('auth', '/reset-password'), { token: tokenValue, password: 'yet another password' })).status, 400, 'single use')
@@ -295,7 +295,7 @@ test('deleting an account needs the address typed, is blocked for a last owner w
   assert.equal(mistyped.status, 400)
   const blocked = await owner.client.post(h.url('auth', '/account/delete'), { confirm: owner.email })
   assert.equal(blocked.status, 409)
-  assert.match(blocked.text, new RegExp(`only owner of <a href="/orgs/${UUID}">Shared Org</a>`))
+  assert.match(blocked.text, new RegExp(`only owner of <a href="/settings/users\\?org=${UUID}">Shared Org</a>`))
   assert.ok(await userRow(owner.email))
 
   await owner.client.post(h.url('auth', `/orgs/${shared}/members/${member.id}/role`), { role: 'OWNER' })
@@ -312,20 +312,20 @@ test('deleting an account needs the address typed, is blocked for a last owner w
 test('sessions slide: at most one write an hour, and an expired session counts as signed out', async () => {
   const { client, id } = await h.user()
   const [fresh] = await h.sql('SELECT last_seen_at, expires_at FROM sessions WHERE user_id = ?1', id)
-  const quiet = await client.get(h.url('auth', '/'))
+  const quiet = await client.get(h.url('auth', '/account'))
   assert.equal(sessionCookie(quiet), undefined, 'no refresh within the hour')
   assert.deepEqual((await h.sql('SELECT last_seen_at, expires_at FROM sessions WHERE user_id = ?1', id))[0], fresh)
 
   const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
   await h.sql('UPDATE sessions SET last_seen_at = ?1, expires_at = ?2 WHERE user_id = ?3', twoHoursAgo, Date.now() + 60_000, id)
-  const touched = await client.get(h.url('auth', '/'))
+  const touched = await client.get(h.url('auth', '/account'))
   assert.match(sessionCookie(touched), /Max-Age=2592000/)
   const [slid] = await h.sql('SELECT last_seen_at, expires_at FROM sessions WHERE user_id = ?1', id)
   assert.ok(slid.last_seen_at > twoHoursAgo)
   assert.ok(slid.expires_at > Date.now() + 29 * 24 * 60 * 60 * 1000)
 
   await h.sql('UPDATE sessions SET expires_at = ?1 WHERE user_id = ?2', Date.now() - 1, id)
-  assert.equal((await client.get(h.url('auth', '/'))).status, 302)
+  assert.equal((await client.get(h.url('auth', '/account'))).status, 302)
 })
 
 test('review 3: flooding resend requests past the email cap never invalidates the link already delivered', async () => {

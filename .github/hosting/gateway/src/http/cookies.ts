@@ -6,7 +6,8 @@ export interface CookieOptions {
   maxAge: number
   secure: boolean
   httpOnly: boolean
-  sameSite: 'Lax' | 'Strict'
+  /** None needs Secure; the SAML flow cookie uses it, because the identity provider posts its response cross-site. */
+  sameSite: 'Lax' | 'Strict' | 'None'
 }
 
 function pairs(header: string | null): string[] {

@@ -10,7 +10,7 @@ import { Card } from "./Page.tsx";
 // stakeholder, record a 409A): who may open it, and the wizard header (close, title).
 
 /**
- * Renders a write page only for those who may use it: editors, everyone in an inactive company, and
+ * Renders a write page only for those who may use it: read-only roles, everyone in an inactive company, and
  * an admin on their own holdings or record get the reason instead of a form. The server refuses these anyway; the page
  * doesn't offer what it would refuse.
  */
@@ -18,7 +18,7 @@ export function WriteGate({ own, back, children }: { own?: boolean; back: { to: 
   const { canWrite, writeRestriction } = useWorkspace();
   let reason: [title: string, text: string] | null = null;
   if (writeRestriction) reason = [writeRestriction.title, writeRestriction.text];
-  else if (!canWrite) reason = ["You have read-only access", "Editors can view and export but not record changes. An owner or admin can record this."];
+  else if (!canWrite) reason = ["You have read-only access", "Your role can view and export but not record changes. An owner, admin or editor can record this."];
   else if (own) reason = ["This is your own record", "Admins never record writes on their own holdings or stakeholder record — another admin must. The rule is enforced on the server, not only hidden here."];
   if (!reason) return <ErrorFocus>{children}</ErrorFocus>;
   return (

@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { cp, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
+  appToken,
   assertNoSiteEnvSecret,
   deployApps,
   emailAddress,
@@ -321,6 +322,7 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   const gateway = JSON.parse(await readFile(join(out, 'gateway.wrangler.json'), 'utf8'))
   assert.equal(gateway.name, 'insulin-apps-gateway')
   assert.equal(gateway.compatibility_date, '2026-10-13')
+  assert.deepEqual(gateway.compatibility_flags, ['nodejs_compat'], "SAML's XML signature library needs Node's crypto")
   assert.equal(gateway.workers_dev, false)
   assert.equal(gateway.preview_urls, false)
   assert.deepEqual(gateway.routes, [
@@ -362,7 +364,8 @@ test('dry-run writes private app configs, the complete gateway config, and a red
 
   const summaryText = await readFile(summary, 'utf8')
   assert.match(summaryText, /https:\/\/alpha-app\.apps\.example\.com/)
-  assert.match(summaryText, /https:\/\/auth\.apps\.example\.com/)
+  assert.match(summaryText, /^- https:\/\/apps\.example\.com$/m, 'sign-in, accounts and settings live on the apex')
+  assert.doesNotMatch(summaryText, /auth\.apps\.example\.com/)
 })
 
 test('--only deploys one app and does not plan or validate a gateway deploy', async () => {
@@ -455,6 +458,59 @@ test('a mocked deployment creates missing databases and removes its mode-600 sec
 
   const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
   assert.equal(gatewayConfig.d1_databases[0].database_id, 'fixture-insulin-apps-gateway-db')
+})
+
+test('with GATEWAY_SECRET_KEY, the gateway gets it and each app its own integration token, both as deploy secrets', async () => {
+  const key = Buffer.alloc(32, 7).toString('base64')
+  const root = await fixtureRepository()
+  const gateway = join(root, '.github', 'hosting', 'gateway')
+  await mkdir(join(gateway, 'node_modules', '.bin'), { recursive: true })
+  await mkdir(join(gateway, 'src'), { recursive: true })
+  await mkdir(join(gateway, 'migrations'), { recursive: true })
+  await writeFile(join(gateway, 'node_modules', '.bin', 'wrangler'), '')
+  await writeFile(join(gateway, 'src', 'index.ts'), 'export default {}\n')
+  await writeFile(join(gateway, 'migrations', '0001_init.sql'), 'CREATE TABLE fixture (id TEXT PRIMARY KEY);\n')
+  const secretFiles = []
+  const databases = new Map()
+  const spawn = (command, args, options) => {
+    assert.ok(!('GATEWAY_SECRET_KEY' in options.env), 'the key never reaches a command\'s environment')
+    if (args[0] === 'd1' && args[1] === 'list') {
+      return { status: 0, stdout: JSON.stringify([...databases].map(([name, uuid]) => ({ name, uuid }))), stderr: '' }
+    }
+    if (args[0] === 'd1' && args[1] === 'create') {
+      databases.set(args[2], `fixture-${args[2]}-db`)
+      return { status: 0, stdout: '', stderr: '' }
+    }
+    if (args[0] === 'deploy') {
+      assert.ok(args.includes('--secrets-file'), `${args[2]}: deployed with its secrets`)
+      const file = args[args.indexOf('--secrets-file') + 1]
+      secretFiles.push({ config: basename(args[2]), values: JSON.parse(readFileSync(file, 'utf8')) })
+    }
+    if (args[0] === 'secret' && args[1] === 'list') return { status: 0, stdout: '[]', stderr: '' }
+    return { status: 0, stdout: '', stderr: '' }
+  }
+  const result = await deployApps({ root, environment: settings({ GATEWAY_SECRET_KEY: key }), skipBuild: true, spawn, fetchImpl: cloudflareMock().fetch })
+  temporary.push(result.outputDirectory)
+  assert.deepEqual(secretFiles.map(({ config }) => config), ['alpha-app.wrangler.json', 'beta.wrangler.json', 'gateway.wrangler.json'])
+  assert.deepEqual(secretFiles[0].values, { SUGER_APP_TOKEN: appToken(key, 'alpha-app') })
+  assert.deepEqual(secretFiles[1].values, { SUGER_APP_TOKEN: appToken(key, 'beta') })
+  assert.notEqual(secretFiles[0].values.SUGER_APP_TOKEN, secretFiles[1].values.SUGER_APP_TOKEN)
+  assert.equal(secretFiles[2].values.GATEWAY_SECRET_KEY, key)
+  const alpha = JSON.parse(readFileSync(join(result.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
+  assert.equal(alpha.vars.SUGER_INTEGRATIONS_URL, 'https://apps.example.com/__insulin/integrations')
+
+  const out = await tempDirectory('deploy-apps-key-plan-')
+  await deployApps({ root, out, environment: settings({ GATEWAY_SECRET_KEY: key }), dryRun: true, skipBuild: true, spawn: () => assert.fail('spawned') })
+  const planText = await readFile(join(out, 'plan.json'), 'utf8')
+  for (const secret of [key, appToken(key, 'alpha-app'), appToken(key, 'beta')]) assert.ok(!planText.includes(secret), 'the plan redacts the key and tokens')
+  assert.throws(() => readSettings(settings({ GATEWAY_SECRET_KEY: Buffer.alloc(16).toString('base64') })), /GATEWAY_SECRET_KEY/)
+})
+
+test('the app token is a stable HMAC of the app name under the key, as the gateway derives it', () => {
+  const key = Buffer.alloc(32, 0x5a).toString('base64')
+  assert.equal(appToken(key, 'captable'), appToken(key, 'captable'))
+  assert.match(appToken(key, 'captable'), /^[A-Za-z0-9_-]{43}$/)
+  assert.notEqual(appToken(key, 'captable'), appToken(Buffer.alloc(32, 1).toString('base64'), 'captable'))
 })
 
 test('--build-only builds every app without any deploy setting reaching the build', async () => {

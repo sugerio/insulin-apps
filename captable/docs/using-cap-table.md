@@ -1,7 +1,8 @@
 # Using Cap Table
 
-Everyday tasks for owners and admins. Editors can see everything described here but can't change anything. Holders see
-only their own holdings: see [The holder view](#the-holder-view).
+Everyday tasks for owners, admins and editors. Someone with a custom role that only views the cap table (**View the cap
+table** without **Record changes**) can see everything described here but can't change anything. Holders see only their
+own holdings: see [The holder view](#the-holder-view).
 
 To set up a company in the first place, see [Importing your cap table](importing.md).
 
@@ -50,8 +51,9 @@ The sidebar:
 thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.
 Before anything is saved, Cap Table shows a review of exactly what will change, including any problem that stops it.
 
-Your name and role are in the menu at the top right. If you also hold equity, you can't record changes to your own
-stakeholder record or holdings: another owner or admin has to.
+Your name and role are in the menu at the top right ("Custom role" when your organization narrowed it). If you also hold
+equity, you can't record changes to your own stakeholder record or holdings: someone else who manages the cap table has
+to.
 
 ## Processing due items
 
@@ -60,7 +62,7 @@ Cap Table has no background scheduler. Two kinds of work fall due on a date:
 - **scheduled terminations** whose date has arrived;
 - **expiries:** options past their last exercise day, and warrants past their expiration date.
 
-Opening the dashboard as an owner or admin processes anything that has fallen due (once expiry is automatic, up to 10
+Opening the dashboard as an owner, admin or editor processes anything that has fallen due (once expiry is automatic, up to 10
 expiries per visit). You can also choose **Process due items** on the dashboard's Needs attention card at any time; it
 handles everything due and says what it did ("Due items processed: 1 scheduled termination recorded, 2 expiries waiting
 for review.", or "Nothing was due."). It's always safe to run: it never does the same thing twice. If nobody opens the app for a while, due items simply wait, so open it on or soon after important
@@ -158,8 +160,8 @@ Open the option and choose **Record exercise**:
 1. **Notice of exercise:** upload the signed notice and the date you received it.
 2. **Payment:** the amount, the date it arrived, the method (ACH, wire, check or cash) and a reference.
 3. **Exercise date:** Cap Table uses the later of the notice date and the full-payment date. It can't be in the future or
-   after the option's exercise deadline, unless the deadline is extended (an owner or admin can do that from the same
-   page).
+   after the option's exercise deadline, unless the deadline is extended (anyone who records changes can do that from
+   the same page).
 4. **Quantity:** at most what is vested and not yet exercised on that date. Unvested options can't be exercised.
 5. **ISO check:** ISO shares exercised after the ISO deadline are recorded as NSO, and the page says so.
 6. **Fair market value** on the exercise date, from the valuation valid that day; if none applies, enter it with its
@@ -275,7 +277,7 @@ imported. Nothing in it can be edited or removed.
 
 ## Correcting a mistake
 
-Cap Table never edits history. To correct something, an owner or admin **reverses** the change that recorded it, giving a
+Cap Table never edits history. To correct something, an owner, admin or editor **reverses** the change that recorded it, giving a
 reason, and then records it again correctly if needed.
 
 - A reversal undoes the whole change: reversing an exercise removes the exercise and the shares it created together.
@@ -290,10 +292,11 @@ reason, and then records it again correctly if needed.
 
 ## The holder view
 
-Holders open Cap Table from the Insulin console like everyone else. To give someone access:
+Holders sign in to Insulin and open Cap Table like everyone else. To give someone access:
 
-1. make sure their stakeholder record has, as their own address, the e-mail address of their Insulin console account;
-2. give them the **User** or **Viewer** role on the app in the console.
+1. make sure their stakeholder record has, as their own address, the e-mail address of their Insulin account;
+2. give them the **Viewer** role (in the Insulin console, **User** or **Viewer** on the app), or a custom role with
+   **See own holdings**.
 
 They then see their shares, options, warrants and SAFEs (each SAFE with its status and, once converted, the shares it
 became); vesting progress and upcoming vesting dates; for each option what they can exercise now and until when; the
@@ -309,7 +312,7 @@ more than one stakeholder (for example someone who also manages an investing ent
 - the text of the **How to exercise** page.
 
 The **payment instructions** for exercises (bank details, check payee and the reference to quote) are set on **Company ›
-Profile & Settings**. Holders see them only inside the app; editors see them masked.
+Profile & Settings**. Holders see them only inside the app; a custom role that only views the cap table sees them masked.
 
 ## Previewing as a stakeholder
 
@@ -323,16 +326,18 @@ change.
 **Company › Profile & Settings** has the **Company Profile** (company name, legal name, state of incorporation,
 incorporation date, time zone, fiscal year end, EIN, share unit, address), the **Company contact for holders**, the
 **Display** settings (how many decimals to show for share quantities and prices), the **Signatories** (view only) and the
-**Payment instructions**. Owners and admins edit them; editors view them.
+**Payment instructions**. Owners, admins and editors edit them; a custom role that only views the cap table sees them.
 
 The time zone decides when "today" starts for vesting and deadlines. The share unit (the smallest fraction of a share)
 can't change once the first record is in.
 
 ## Rules worth knowing
 
-- **You can't record changes to your own holdings.** If you hold equity, another owner or admin records changes to it, so
-  nobody approves their own transactions.
-- **Owners and admins need an e-mail address on their console profile** to make changes.
+- **You can't record changes to your own holdings.** If you hold equity, someone else who manages the cap table records
+  changes to it, so nobody approves their own transactions.
+- **Making changes needs an e-mail address** on your profile.
+- **AI agents and API clients** (on insulinapps.com) act with the role and permissions of the person who connected
+  them, or the role the client was given; their changes are in the history like anyone else's.
 - **Numbers are exact.** Quantities and amounts are never rounded behind your back; percentages and money are rounded
   only for display.
 - **Dates are calendar dates** in the company's time zone.

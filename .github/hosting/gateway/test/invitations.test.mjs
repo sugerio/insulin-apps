@@ -10,7 +10,7 @@ before(async () => { h = await startGateway() })
 after(async () => { await h?.close() })
 
 const DAY = 24 * 60 * 60 * 1000
-const invite = (person, orgId, email, role = 'USER') => person.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email, role })
+const invite = (person, orgId, email, role = 'VIEWER') => person.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email, role })
 
 async function invitation(orgId, email) {
   const [row] = await h.sql('SELECT * FROM invitations WHERE org_id = ?1 AND email = ?2 ORDER BY created_at DESC', orgId, email)
@@ -23,7 +23,7 @@ test('an invitation email names the inviter, organization and role and links to 
   const email = uniqueEmail('invitee')
   const sent = await invite(owner, orgId, email.toUpperCase(), 'EDITOR')
   assert.equal(sent.status, 303)
-  assert.equal(sent.location, h.url('auth', `/orgs/${orgId}?notice=invited`))
+  assert.equal(sent.location, h.url('auth', `/settings/users?org=${orgId}&notice=invited`))
   const row = await invitation(orgId, email)
   assert.equal(row.status, 'pending')
   assert.equal(row.role, 'EDITOR')
@@ -49,7 +49,7 @@ test('one pending invitation per organization and address; an expired one makes 
   const rows = await h.sql('SELECT status, role FROM invitations WHERE org_id = ?1 AND email = ?2 ORDER BY created_at', orgId, email)
   assert.deepEqual(rows.map((r) => r.status), ['expired', 'pending'])
   const member = await h.user()
-  await h.join(owner, orgId, member, 'USER')
+  await h.join(owner, orgId, member, 'VIEWER')
   assert.equal((await invite(owner, orgId, member.email)).status, 409, 'already a member')
 })
 
@@ -60,7 +60,7 @@ test('an admin can invite admins but not owners', async () => {
   await h.join(owner, orgId, admin, 'ADMIN')
   const asOwner = await invite(admin, orgId, uniqueEmail('would-be-owner'), 'OWNER')
   assert.equal(asOwner.status, 403)
-  assert.match(asOwner.text, /can&#x27;t invite someone as Owner/)
+  assert.match(asOwner.text, /can&#x27;t give Owner access/)
   assert.equal((await invite(admin, orgId, uniqueEmail('new-admin'), 'ADMIN')).status, 303)
   assert.equal((await invite(owner, orgId, uniqueEmail('new-owner'), 'OWNER')).status, 303)
 })
@@ -98,7 +98,7 @@ test('limits: 50 pending invitations, 30 invitation emails a day, 100 members', 
   const orgId = await h.org(owner.client, 'Limits Org')
   const now = Date.now()
   for (let i = 0; i < 50; i += 1) {
-    await h.sql("INSERT INTO invitations (id, org_id, email, role, invited_by, status, created_at, expires_at, last_sent_at) VALUES (?1, ?2, ?3, 'USER', ?4, 'pending', ?5, ?6, ?5)",
+    await h.sql("INSERT INTO invitations (id, org_id, email, role, invited_by, status, created_at, expires_at, last_sent_at) VALUES (?1, ?2, ?3, 'VIEWER', ?4, 'pending', ?5, ?6, ?5)",
       randomUUID(), orgId, `bulk.${i}@example.test`, owner.id, now, now + DAY)
   }
   const pending = await invite(owner, orgId, uniqueEmail('fifty-first'))
@@ -167,7 +167,7 @@ test('only the invited, confirmed address can accept; the link alone grants noth
   assert.match(open.text, /Accept invitation/)
   const accepted = await invitee.post(`${link}/accept`, {})
   assert.equal(accepted.status, 303)
-  assert.equal(accepted.location, h.url('auth', `/orgs/${orgId}?notice=joined`))
+  assert.equal(accepted.location, h.url('auth', `/settings/users?org=${orgId}&notice=joined`))
   const [row] = await h.sql('SELECT status FROM invitations WHERE id = ?1', id)
   assert.equal(row.status, 'accepted')
   const echo = JSON.parse((await invitee.get(h.url('captable', '/api/echo'))).text).headers

@@ -1,4 +1,5 @@
-// The account page: change name, set or change the password, delete the account.
+// The account page: change name, set or change the password, delete the account. Two-step sign-in has its own page
+// (security.ts), linked from here.
 import type { Context } from '../context.ts'
 import { hashPassword, verifyPassword } from '../crypto.ts'
 import { listMemberships } from '../db/orgs.ts'
@@ -11,6 +12,7 @@ import { RATE_LIMITED } from '../pages/auth.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
 import { requireSession } from './guard.ts'
+import { mfaEnabled } from './mfa.ts'
 import { activeOrg, clearSessionCookie } from './session.ts'
 
 const ACCOUNT_NOTICES: Record<string, string> = {
@@ -22,8 +24,10 @@ export async function accountView(ctx: Context): Promise<Response> {
   const session = await requireSession(ctx)
   if (session instanceof Response) return session
   // The top bar's organization switcher lists every membership and shows the active one.
-  const [memberships] = await Promise.all([listMemberships(ctx.config.db, session.user.id), activeOrg(ctx, session)])
-  return htmlResponse(accountPage(ctx, session, { notice: ACCOUNT_NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null }, memberships))
+  const [memberships, mfaOn] = await Promise.all([
+    listMemberships(ctx.config.db, session.user.id), mfaEnabled(ctx.config.db, session.user.id), activeOrg(ctx, session),
+  ])
+  return htmlResponse(accountPage(ctx, session, { notice: ACCOUNT_NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null, mfaOn }, memberships))
 }
 
 export async function updateName(ctx: Context): Promise<Response> {

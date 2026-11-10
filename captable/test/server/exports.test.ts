@@ -67,7 +67,7 @@ describe('the six retained exports', () => {
     expect(option.slice(9, 17)).toEqual(['300000', '250000', '268750', '31250', '50000', '0', '', '0.1'])
     expect(option[3]).toBe("'=FORMULA()")
     expect(option[47]).toBe('syn-OPT-1')
-    const editorRows = csvRows(await (await harness.api('GET', harness.path('/reports/raw-cap-table?format=csv'), harness.editor)).text())
+    const editorRows = csvRows(await (await harness.api('GET', harness.path('/reports/raw-cap-table?format=csv'), harness.reader)).text())
     expect(editorRows.find((row) => row[0] === 'OPT-1')![47]).toBe('')
   })
 
@@ -92,7 +92,7 @@ describe('the six retained exports', () => {
     harness = await readHarness({ emails: { S04: 'holder04@example.test' } })
     await harness.db.prepare("UPDATE stakeholders SET phone = '+1 555 0100', version = version + 1 WHERE id = ?")
       .bind(harness.id('S04')).run()
-    const full = csvRows(await (await harness.api('GET', harness.path('/reports/stakeholders?format=csv'), harness.editor)).text())
+    const full = csvRows(await (await harness.api('GET', harness.path('/reports/stakeholders?format=csv'), harness.reader)).text())
       .find((row) => row[0] === harness!.id('S04'))!
     expect(full[4]).toBe('holder04@example.test')
     expect(full[5]).toBe("'+1 555 0100")

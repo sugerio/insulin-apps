@@ -144,7 +144,7 @@ describe("company profile and settings", () => {
 
   it("gives every admin the edit buttons, and no payment-instruction approvals", async () => {
     renderPage("company", handlers, { role: "admin_rw" });
-    expect(await screen.findByText("Owners and admins edit; editors view.")).toBeTruthy();
+    expect(await screen.findByText("Owners, admins and editors edit; read-only roles view.")).toBeTruthy();
     await screen.findByText("First Example Bank");
     expect(screen.getByRole("button", { name: "Edit the company profile" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit the payment instructions" })).toBeTruthy();

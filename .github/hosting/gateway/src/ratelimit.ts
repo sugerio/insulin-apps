@@ -4,7 +4,7 @@ import type { Context } from './context.ts'
 import { sha256Hex } from './crypto.ts'
 import { log, logError } from './log.ts'
 
-export type AuthAction = 'signup' | 'login' | 'resend' | 'forgot' | 'reset' | 'verify' | 'google' | 'password'
+export type AuthAction = 'signup' | 'login' | 'resend' | 'forgot' | 'reset' | 'verify' | 'google' | 'password' | 'mfa' | 'sso'
 
 /**
  * True while the action is within its limits for this IP (and e-mail address or user, when given). Fails closed: if
@@ -26,6 +26,21 @@ export async function allowAuth(ctx: Context, action: AuthAction, subject?: stri
     }
   }
   return true
+}
+
+/**
+ * True while `key` is within RL_AUTH's limit: the OAuth endpoints, keyed per IP (registration) or per client (tokens).
+ * Fails closed, as allowAuth does.
+ */
+export async function allowOAuth(ctx: Context, key: string): Promise<boolean> {
+  try {
+    const { success } = await ctx.config.rlAuth.limit({ key: `oauth:${key}` })
+    if (!success) log('rate_limited', { action: 'oauth', scope: key.split(':')[0] })
+    return success
+  } catch (error) {
+    logError('rate_limit_failed', error, { action: 'oauth' })
+    return false
+  }
 }
 
 /**

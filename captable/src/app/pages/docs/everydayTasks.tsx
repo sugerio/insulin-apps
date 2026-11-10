@@ -1,13 +1,13 @@
 import { DocLink, DocTable, type DocTopic } from "./parts.tsx";
 
-// Docs › Everyday tasks: what owners and admins do once the company is set up. It follows docs/using-cap-table.md and
+// Docs › Everyday tasks: what owners, admins and editors do once the company is set up. It follows docs/using-cap-table.md and
 // the pages it describes (the grant, exercise and termination flows, Process due items, documents, reports, reversals
 // and Preview as stakeholder).
 
 export const everydayTasks: DocTopic = {
   slug: "everyday-tasks",
   title: "Everyday tasks",
-  summary: "How owners and admins keep the cap table up to date. Editors can see all of this, but can't change anything.",
+  summary: "How owners, admins and editors keep the cap table up to date. A custom role that only views the cap table sees all of this, but can't change anything.",
   group: "app",
   sections: [
     {
@@ -17,7 +17,7 @@ export const everydayTasks: DocTopic = {
         <ul>
           <li><b>Review, then confirm.</b> Before anything is saved, Cap Table shows exactly what will change, including any problem that stops it.</li>
           <li><b>Start from the record.</b> <b>+ New</b> records a signed option grant. Most other changes start on the page of the thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.</li>
-          <li><b>Not your own holdings.</b> If you hold equity, another owner or admin records changes to it, so nobody approves their own transactions.</li>
+          <li><b>Not your own holdings.</b> If you hold equity, someone else who manages the cap table records changes to it, so nobody approves their own transactions.</li>
           <li><b>Exact numbers.</b> Quantities and amounts are never rounded behind your back; percentages and money are rounded only for display. Dates are calendar dates in the company's time zone.</li>
           <li><b>Tell people yourself.</b> Cap Table sends no e-mail, collects no signatures and takes no payments: use your usual tools, and record the outcome here.</li>
           <li><b>Everything is logged.</b> <b>Recent Activity</b> lists every change with what changed, who made it and when.</li>
@@ -139,7 +139,7 @@ export const everydayTasks: DocTopic = {
             their expiration date).
           </p>
           <ul>
-            <li><b>Opening the dashboard</b> as an owner or admin processes what has fallen due. The dashboard is where Cap Table opens for owners and admins.</li>
+            <li><b>Opening the dashboard</b> as an owner, admin or editor processes what has fallen due. The dashboard is where Cap Table opens for everyone in the company workspace.</li>
             <li><b>Process due items</b>, on the dashboard's <b>Needs attention</b> card, handles everything due at any time and says what it did, or "Nothing was due." It's always safe to run: it never does the same thing twice.</li>
             <li><b>If nobody opens the app for a while,</b> due items simply wait. Open it on or soon after important dates, such as a scheduled termination.</li>
             <li><b>Expiries are proposed first.</b> A new company starts by recording what it would expire as an <b>expiry run</b> to confirm. Review what would be cancelled and confirm; when you confirm, you can switch expiry to automatic.</li>
@@ -216,7 +216,7 @@ export const everydayTasks: DocTopic = {
       body: (
         <>
           <p>
-            Cap Table never edits history. To correct something, an owner or admin <b>reverses</b> the change that recorded it,
+            Cap Table never edits history. To correct something, an owner, admin or editor <b>reverses</b> the change that recorded it,
             giving a reason, and then records it again correctly if needed.
           </p>
           <ul>
@@ -234,7 +234,7 @@ export const everydayTasks: DocTopic = {
       title: "Previewing as a stakeholder",
       body: (
         <p>
-          Owners, admins and editors can check a holder's view: choose <b>Preview as stakeholder</b> (the eye icon) next to a
+          Everyone in the company workspace can check a holder's view: choose <b>Preview as stakeholder</b> (the eye icon) next to a
           stakeholder in the list or on their page. The preview shows the holder's holdings, exercise instructions and documents
           as they see them, with a banner saying "You are previewing the portal as" their name, and every portal action is
           disabled. The holder's Docs entry isn't part of the preview. It's the quickest way to check a holder's view after an
@@ -247,7 +247,7 @@ export const everydayTasks: DocTopic = {
       title: "Company settings and what holders see",
       body: (
         <ul>
-          <li><b>Company › Profile &amp; Settings</b> has the company profile, the company contact for holders, the display decimals, the signatories (view only) and the payment instructions for exercises. Owners and admins edit them; editors view them, with the payment details masked.</li>
+          <li><b>Company › Profile &amp; Settings</b> has the company profile, the company contact for holders, the display decimals, the signatories (view only) and the payment instructions for exercises. Owners, admins and editors edit them; a custom role that only views the cap table sees them, with the payment details masked.</li>
           <li>The time zone decides when "today" starts for vesting and deadlines. The share unit (the smallest fraction of a share) can't change once the first record is in.</li>
           <li><b>Stakeholder Portal</b> (under Hire and Retain) decides what holders see: the company contact, the company resources every holder can open, the notice of exercise form, the privacy notice, and the text of the How to exercise page.</li>
         </ul>

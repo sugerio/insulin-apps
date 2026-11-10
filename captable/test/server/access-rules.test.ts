@@ -43,7 +43,7 @@ describe('write access and self-dealing rules', () => {
     const link = await created.json() as { id: string }
     const replay = await harness.api('POST', harness.path('/admin-links'), harness.admin, body, { 'Idempotency-Key': key })
     expect(replay.headers.get('Idempotent-Replay')).toBe('true')
-    const listed = await harness.api('GET', harness.path('/admin-links'), harness.editor)
+    const listed = await harness.api('GET', harness.path('/admin-links'), harness.reader)
     expect(await listed.json()).toMatchObject({ items: [{ id: link.id, email: 'manager@example.test' }] })
     const removed = await harness.api('POST', harness.path(`/admin-links/${link.id}/remove`), harness.owner, { reason: 'Role ended' })
     expect(removed.status).toBe(200)

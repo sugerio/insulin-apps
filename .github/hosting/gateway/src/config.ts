@@ -4,6 +4,15 @@ import type { Env } from './env.ts'
 import { log } from './log.ts'
 import { cleanText, normalizeEmail, truncate } from './validate.ts'
 
+/** One entry of an app's permission catalog (its package.json `insulin.permissions`, DESIGN.md §2.3). */
+export interface Permission {
+  key: string
+  label: string
+  description: string
+  /** The least built-in role that has it. */
+  role: 'ADMIN' | 'EDITOR' | 'VIEWER'
+}
+
 export interface HostedApp {
   /** Subdomain and app directory name, e.g. `captable`. */
   name: string
@@ -19,10 +28,13 @@ export interface HostedApp {
   appId: string
   /** The service binding, or null when the app is not deployed yet (its host then answers 503). */
   service: Fetcher | null
+  /** The app's permission catalog; empty when it has none (it then has no custom roles). */
+  permissions: Permission[]
 }
 
 export interface Config {
   domain: string
+  /** `auth.<domain>`, where sign-in used to live: it now redirects every request to the apex. */
   authHost: string
   apps: HostedApp[]
   appsByHost: Map<string, HostedApp>
@@ -42,6 +54,8 @@ export interface Config {
   email: SendEmail | null
   rlAuth: RateLimit
   rlApp: RateLimit
+  /** GATEWAY_SECRET_KEY's 32 bytes, or null: features that encrypt or derive secrets then say they aren't set up. */
+  secretKey: Uint8Array | null
 }
 
 export type ConfigResult = { ok: true; config: Config } | { ok: false; problems: string[] }
@@ -104,6 +118,43 @@ export function issuesUrlFrom(apps: HostedApp[]): string | null {
   return repository ? `${repository}/issues` : null
 }
 
+const PERMISSION_KEY = /^[a-z][a-z0-9_.-]{0,63}$/
+const PERMISSION_LIMIT = 50
+
+/** An app's permission catalog; a malformed one is a configuration problem (custom roles would mean the wrong thing). */
+export function parsePermissions(raw: unknown, where: string, problems: string[]): Permission[] {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw) || raw.length > PERMISSION_LIMIT) {
+    problems.push(`${where} (expected an array of at most ${PERMISSION_LIMIT})`)
+    return []
+  }
+  const permissions: Permission[] = []
+  for (const [index, entry] of raw.entries()) {
+    const item = (typeof entry === 'object' && entry !== null ? entry : {}) as Record<string, unknown>
+    const key = item.key
+    const role = item.role
+    const label = truncate(cleanText(item.label), 80)
+    if (typeof key !== 'string' || !PERMISSION_KEY.test(key) || permissions.some((permission) => permission.key === key)
+      || (role !== 'ADMIN' && role !== 'EDITOR' && role !== 'VIEWER') || !label) {
+      problems.push(`${where}[${index}]`)
+      continue
+    }
+    permissions.push({ key, label, description: truncate(cleanText(item.description), 300), role })
+  }
+  return permissions
+}
+
+/** GATEWAY_SECRET_KEY: base64 of exactly 32 bytes. */
+export function parseSecretKey(value: unknown): Uint8Array | null {
+  if (typeof value !== 'string' || !value.trim()) return null
+  try {
+    const bytes = Uint8Array.from(atob(value.trim()), (char) => char.charCodeAt(0))
+    return bytes.length === 32 ? bytes : null
+  } catch {
+    return null
+  }
+}
+
 function hasMethod(value: unknown, method: string): boolean {
   return typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>)[method] === 'function'
 }
@@ -150,6 +201,7 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       host: `${name}.${domain}`,
       appId: `insulin-apps-${name}`,
       service: hasMethod(service, 'fetch') ? (service as Fetcher) : null,
+      permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
     })
   })
   return apps
@@ -189,6 +241,10 @@ export function readConfig(env: Env): ConfigResult {
   if (!hasMethod(env.RL_AUTH, 'limit')) problems.push('RL_AUTH')
   if (!hasMethod(env.RL_APP, 'limit')) problems.push('RL_APP')
 
+  // Optional, but a value that is set must be usable: a wrong key would encrypt with something nobody can recover.
+  const gatewayKey = parseSecretKey(env.GATEWAY_SECRET_KEY)
+  if (text(env.GATEWAY_SECRET_KEY) && !gatewayKey) problems.push('GATEWAY_SECRET_KEY (base64 of 32 bytes)')
+
   if (problems.length || !mailFrom) return { ok: false, problems }
   return {
     ok: true,
@@ -208,6 +264,7 @@ export function readConfig(env: Env): ConfigResult {
       email: testMode ? null : env.EMAIL!,
       rlAuth: env.RL_AUTH!,
       rlApp: env.RL_APP!,
+      secretKey: gatewayKey,
     },
   }
 }

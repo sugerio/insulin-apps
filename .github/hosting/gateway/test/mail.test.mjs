@@ -16,8 +16,8 @@ test('production sends through the EMAIL binding with the configured sender, and
   assert.deepEqual(mail.from, { email: 'no-reply@example.test', name: 'Insulin Apps' })
   assert.equal(mail.to, email)
   assert.match(mail.subject, /^Confirm your email for Insulin Apps$/)
-  assert.match(mail.text, /https:\/\/auth\.example\.test\/verify-email\?token=[A-Za-z0-9_-]{43}/)
-  assert.match(mail.html, /<a href="https:\/\/auth\.example\.test\/verify-email\?token=/)
+  assert.match(mail.text, /https:\/\/example\.test\/verify-email\?token=[A-Za-z0-9_-]{43}/)
+  assert.match(mail.html, /<a href="https:\/\/example\.test\/verify-email\?token=/)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM mail_capture'))[0].n, 0)
 })
 
@@ -49,7 +49,7 @@ test('a failed invitation email is reported and leaves no pending invitation', a
   const email = uniqueEmail('invite-fail')
   await h.failMail('E_RATE_LIMIT_EXCEEDED')
   try {
-    const response = await owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email, role: 'USER' })
+    const response = await owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email, role: 'VIEWER' })
     assert.equal(response.status, 503)
     assert.match(response.text, /couldn(?:&#x27;|&#39;|')t send the email right now/)
   } finally {

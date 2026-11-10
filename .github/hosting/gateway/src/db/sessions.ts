@@ -3,6 +3,7 @@ export interface SessionRow {
   user_id: string
   active_org_id: string | null
   credential_version: number
+  created_at: number
   last_seen_at: number
   expires_at: number
   email: string
@@ -16,7 +17,7 @@ export interface SessionRow {
 
 export function findSession(db: D1Database, idHash: string, now: number): Promise<SessionRow | null> {
   return db.prepare(
-    `SELECT s.id_hash, s.user_id, s.active_org_id, s.credential_version, s.last_seen_at, s.expires_at,
+    `SELECT s.id_hash, s.user_id, s.active_org_id, s.credential_version, s.created_at, s.last_seen_at, s.expires_at,
        u.email, u.name, u.email_verified_at, (u.password_hash IS NOT NULL) AS has_password,
        m.role AS active_role, o.name AS active_org_name
      FROM sessions s

@@ -27,9 +27,29 @@ test('discovers top-level apps in stable order with their public metadata', asyn
   await mkdir(join(root, 'not-an-app'))
 
   assert.deepEqual(await listApps(root), [
-    { name: 'alpha-app', title: 'Alpha App', summary: 'First app' },
-    { name: 'zebra', title: 'zebra', summary: 'Last app' },
+    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [] },
+    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [] },
   ])
+})
+
+test("reads an app's permission catalog for custom roles, and refuses a malformed one", async () => {
+  const permissions = [
+    { key: 'records.manage', label: 'Record changes', description: 'Change records.', role: 'EDITOR' },
+    { key: 'own.view', label: 'See own', role: 'VIEWER' },
+  ]
+  const root = await repository({ catalogued: { insulin: { permissions } } })
+  assert.deepEqual((await listApps(root))[0].permissions, [permissions[0], { ...permissions[1], description: '' }])
+  for (const [bad, message] of [
+    [{ key: 'Bad Key', label: 'x', role: 'EDITOR' }, /key must match/],
+    [{ key: 'a', label: 'x', role: 'OWNER' }, /role must be ADMIN, EDITOR or VIEWER/],
+    [{ key: 'a', label: '', role: 'VIEWER' }, /label must be/],
+    ['a', /must be an object/],
+  ]) {
+    const broken = await repository({ broken: { insulin: { permissions: [bad] } } })
+    await assert.rejects(() => listApps(broken), message)
+  }
+  const twice = await repository({ twice: { insulin: { permissions: [permissions[1], permissions[1]] } } })
+  await assert.rejects(() => listApps(twice), /listed twice/)
 })
 
 test('accepts the full app-name boundary', () => {

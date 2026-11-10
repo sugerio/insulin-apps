@@ -65,16 +65,20 @@ export const IDS = {
 // Session and org
 
 /**
- * Who the console says is using the app: an owner or an admin manage the cap table (`admin_rw`), an editor views it
- * (`admin_ro`, with or without personal data).
+ * Who the console says is using the app: an owner, an admin or an editor manage the cap table (`admin_rw`); a custom
+ * role with only "View the cap table" views it (`admin_ro`, with or without personal data).
  */
-export type Role = "owner" | "admin_rw" | "admin_ro" | "admin_ro_pii";
+export type Role = "owner" | "admin_rw" | "editor" | "admin_ro" | "admin_ro_pii";
 
-const PEOPLE: Record<Role, { email: string; name: string; consoleRole: ConsoleRole; access: MeAccess; pii: boolean }> = {
-  owner: { email: "rachel@acmerobotics.example", name: "Rachel Ostrowski", consoleRole: "OWNER", access: "admin_rw", pii: true },
-  admin_rw: { email: "morgan@acmerobotics.example", name: "Morgan Ellis", consoleRole: "ADMIN", access: "admin_rw", pii: true },
-  admin_ro: { email: "tobias@acmerobotics.example", name: "Tobias Renner", consoleRole: "EDITOR", access: "admin_ro", pii: false },
-  admin_ro_pii: { email: "reviewer@acmerobotics.example", name: "Riley Reviewer", consoleRole: "EDITOR", access: "admin_ro", pii: true },
+const ALL_PERMISSIONS: api.Permission[] = ["captable.manage", "captable.view", "portfolio.view"];
+const READ_ONLY: api.Permission[] = ["captable.view"];
+
+const PEOPLE: Record<Role, { email: string; name: string; consoleRole: ConsoleRole; permissions: api.Permission[]; access: MeAccess; pii: boolean }> = {
+  owner: { email: "rachel@acmerobotics.example", name: "Rachel Ostrowski", consoleRole: "OWNER", permissions: ALL_PERMISSIONS, access: "admin_rw", pii: true },
+  admin_rw: { email: "morgan@acmerobotics.example", name: "Morgan Ellis", consoleRole: "ADMIN", permissions: ALL_PERMISSIONS, access: "admin_rw", pii: true },
+  editor: { email: "elena@acmerobotics.example", name: "Elena Park", consoleRole: "EDITOR", permissions: ALL_PERMISSIONS, access: "admin_rw", pii: true },
+  admin_ro: { email: "tobias@acmerobotics.example", name: "Tobias Renner", consoleRole: "EDITOR", permissions: READ_ONLY, access: "admin_ro", pii: false },
+  admin_ro_pii: { email: "reviewer@acmerobotics.example", name: "Riley Reviewer", consoleRole: "EDITOR", permissions: READ_ONLY, access: "admin_ro", pii: true },
 };
 
 export const COMPANY = { id: ORG_ID, displayName: "Acme Robotics", legalName: "Acme Robotics, Inc.", timezone: "America/Los_Angeles", currency: "USD", importSource: "pulley" as const };
@@ -85,6 +89,8 @@ export function me(role: Role, options: { ownStakeholderId?: string; preview?: b
   return api.meResponseSchema.parse({
     user: { id: USER_ID, email: person.email, displayName: person.name },
     consoleRole: person.consoleRole,
+    permissions: person.permissions,
+    accessVia: "browser",
     preview: options.preview ?? false,
     company: options.company === undefined ? COMPANY : options.company,
     access: person.access,

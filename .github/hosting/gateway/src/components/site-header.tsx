@@ -1,14 +1,14 @@
 // The top bar of every gateway page: the mark and name, a link to Insulin, and the account controls (sign-in links,
 // or the organization switcher and the account menu). Everything works without JavaScript: links, plain form POSTs
 // and <details> menus (menu.tsx).
-import { ArrowUpRight, Building2, Check, ChevronsUpDown, LogOut, Plus, UserRound, Users } from "lucide-react"
+import { ArrowUpRight, Building2, Check, ChevronsUpDown, LogOut, Plus, ShieldCheck, UserRound, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import type { ActiveOrg } from "../auth/session.ts"
 import type { Context } from "../context.ts"
-import { apexUrl, authUrl, withReturnTo } from "../context.ts"
+import { apexUrl, withReturnTo } from "../context.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import { ROLE_LABELS } from "../roles.ts"
 import { InsulinMark } from "./brand.tsx"
@@ -33,15 +33,15 @@ export function initials(name: string, email: string): string {
   return letters.join("").toLocaleUpperCase("en")
 }
 
-/** Where a top-bar form posts on this host: the auth host's own routes, else the reserved /__insulin/* ones. */
+/** Where a top-bar form posts on this host: the apex's own routes, else the reserved /__insulin/* ones. */
 function signOutAction(ctx: Context): string {
-  return ctx.site === "auth" ? "/logout" : "/__insulin/logout"
+  return ctx.site === "apex" ? "/logout" : "/__insulin/logout"
 }
 
 function SwitchOrgForm({ ctx, org }: { ctx: Context; org: MembershipRow }) {
-  // The auth host switches with /orgs/switch and comes back to this page (a GET; after a POST, to the home page);
-  // other hosts post to /__insulin/switch-org, which answers with a redirect to their home page.
-  const auth = ctx.site === "auth"
+  // The apex switches with /orgs/switch and comes back to this page (a GET; after a POST, to the home page); app hosts
+  // post to /__insulin/switch-org, which answers with a redirect to their home page.
+  const auth = ctx.site === "apex"
   const back = auth && (ctx.request.method === "GET" || ctx.request.method === "HEAD") ? ctx.url.href : null
   return (
     <form method="post" action={auth ? "/orgs/switch" : "/__insulin/switch-org"}>
@@ -84,17 +84,17 @@ function OrgSwitcher({ ctx, account, org }: { ctx: Context; account: HeaderAccou
           )
         )}
         {account.orgs ? null : (
-          <a className={menuItemClass} href={authUrl(ctx, "/")}>
+          <a className={menuItemClass} href={apexUrl(ctx, "/")}>
             <ChevronsUpDown />
             Switch organization
           </a>
         )}
         <MenuSeparator />
-        <a className={menuItemClass} href={authUrl(ctx, `/orgs/${org.id}`)}>
+        <a className={menuItemClass} href={apexUrl(ctx, `/settings/users?org=${org.id}`)}>
           <Users />
-          Manage members
+          People and roles
         </a>
-        <a className={menuItemClass} href={authUrl(ctx, "/orgs/new")}>
+        <a className={menuItemClass} href={apexUrl(ctx, "/orgs/new")}>
           <Plus />
           Create an organization
         </a>
@@ -120,13 +120,17 @@ function AccountMenu({ ctx, account }: { ctx: Context; account: HeaderAccount })
           <p className="truncate text-xs text-muted-foreground">{account.email}</p>
         </div>
         <MenuSeparator />
-        <a className={menuItemClass} href={authUrl(ctx, "/")}>
+        <a className={menuItemClass} href={apexUrl(ctx, "/")}>
           <Building2 />
           Your organizations
         </a>
-        <a className={menuItemClass} href={authUrl(ctx, "/account")}>
+        <a className={menuItemClass} href={apexUrl(ctx, "/account")}>
           <UserRound />
           Account
+        </a>
+        <a className={menuItemClass} href={apexUrl(ctx, "/account/security")}>
+          <ShieldCheck />
+          Security
         </a>
         <MenuSeparator />
         {/* Sign-out posts to the page's own host, so the Origin check and the CSP's form-action both allow it. */}
@@ -153,10 +157,10 @@ function AccountControls({ ctx, account }: { ctx: Context; account: HeaderAccoun
   const back = ctx.site === "apex" ? apexUrl(ctx) : null
   return (
     <>
-      <a className={buttonVariants({ variant: "ghost", size: "sm" })} href={authUrl(ctx, withReturnTo("/login", back))}>
+      <a className={buttonVariants({ variant: "ghost", size: "sm" })} href={apexUrl(ctx, withReturnTo("/login", back))}>
         Sign in
       </a>
-      <a className={buttonVariants({ size: "sm" })} href={authUrl(ctx, withReturnTo("/signup", back))}>
+      <a className={buttonVariants({ size: "sm" })} href={apexUrl(ctx, withReturnTo("/signup", back))}>
         Create account
       </a>
     </>

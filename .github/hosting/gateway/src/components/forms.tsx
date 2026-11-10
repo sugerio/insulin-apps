@@ -22,13 +22,17 @@ export interface TextFieldProps {
   minLength?: number
   maxLength?: number
   readOnly?: boolean
+  /** The on-screen keyboard to offer: "numeric" for one-time codes. */
+  inputMode?: "text" | "numeric"
+  /** Field ids default to `field-<name>`; a page with two forms using one name gives each its own. */
+  id?: string
   /** Shown at the end of the label's row, such as a "Forgot your password?" link. */
   labelAside?: React.ReactNode
 }
 
 /** A labelled input. Its hint and error are tied to it with aria-describedby, and an error sets aria-invalid. */
 export function TextField(props: TextFieldProps) {
-  const id = `field-${props.name}`
+  const id = props.id ?? `field-${props.name}`
   const hintId = props.hint ? `${id}-hint` : undefined
   const errorId = props.error ? `${id}-error` : undefined
   const label = <FieldLabel htmlFor={id}>{props.label}</FieldLabel>
@@ -51,6 +55,7 @@ export function TextField(props: TextFieldProps) {
         minLength={props.minLength}
         maxLength={props.maxLength}
         readOnly={props.readOnly}
+        inputMode={props.inputMode}
         aria-describedby={[hintId, errorId].filter(Boolean).join(" ") || undefined}
         aria-invalid={props.error ? true : undefined}
         defaultValue={props.value || undefined}

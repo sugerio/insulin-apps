@@ -1,6 +1,6 @@
 // Google sign-in: OpenID Connect authorization code flow with PKCE (S256), state and nonce.
 import type { Context } from '../context.ts'
-import { authUrl } from '../context.ts'
+import { apexUrl } from '../context.ts'
 import {
   base64url, constantTimeEqual, fromBase64url, isToken, newId, randomToken, sha256, utf8,
 } from '../crypto.ts'
@@ -14,7 +14,8 @@ import { log } from '../log.ts'
 import { googleFailedPage, home, notFoundPage, rateLimitedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { checkIdToken, decodeJwtPayload, type GoogleIdentity } from './id-token.ts'
-import { startSession } from './session.ts'
+import { ssoRequired, ssoRequiredResponse } from '../sso/required.ts'
+import { finishSignIn } from './sign-in.ts'
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -30,7 +31,7 @@ function flowCookie(ctx: Context, value: string, maxAge: number): string {
 }
 
 export function redirectUri(ctx: Context): string {
-  return authUrl(ctx, '/auth/google/callback')
+  return apexUrl(ctx, '/auth/google/callback')
 }
 
 export async function googleStart(ctx: Context): Promise<Response> {
@@ -157,9 +158,11 @@ export async function googleCallback(ctx: Context): Promise<Response> {
     log('google_identity_rejected')
     return failed(ctx, 400, 'We couldn\'t confirm your Google account. Please try again, and make sure its email address is verified.')
   }
+  // An organization that requires its single sign-on for this address keeps Google out, before anything is linked.
+  if (await ssoRequired(ctx, identity.email)) return ssoRequiredResponse(ctx, identity.email, safeReturnTo(ctx, flow.returnTo))
   const user = await resolveUser(ctx, identity)
   if (!user) return failed(ctx, 409, 'This email address belongs to an account that is linked to a different Google account. Sign in with that Google account or with your password.')
-  if (!(await startSession(ctx, user))) return failed(ctx, 409, 'The sign-in details of this account changed while you were signing in. Please try again.')
   log('login', { user: user.id, method: 'google' })
-  return redirect(safeReturnTo(ctx, flow.returnTo) ?? home(ctx), 302)
+  return finishSignIn(ctx, user, 'google', safeReturnTo(ctx, flow.returnTo) ?? home(ctx),
+    () => failed(ctx, 409, 'The sign-in details of this account changed while you were signing in. Please try again.'))
 }

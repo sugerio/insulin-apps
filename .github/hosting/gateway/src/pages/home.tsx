@@ -1,7 +1,6 @@
-// The apex landing page and the signed-in home page on the auth host.
+// The apex's `/`: the landing page for visitors, the home page (organizations, invitations, apps) once signed in.
 import { ArrowRight, Building2, ChartPie, LayoutGrid, Plus, ShieldCheck, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,12 +9,12 @@ import { GitHubMark } from "@/components/brand"
 import { ContactLink } from "@/components/contact"
 import { Notice, PostButton } from "@/components/forms"
 import { Container, PageHeader, SectionTitle, proseLinks } from "@/components/layout"
-import { initials } from "@/components/site-header"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { apexUrl, appUrl, authUrl, withReturnTo } from "../context.ts"
-import type { InvitationRow } from "../db/invitations.ts"
+import { apexUrl, appUrl, withReturnTo } from "../context.ts"
+import type { InvitationGrantRow, InvitationRow } from "../db/invitations.ts"
 import type { MembershipRow } from "../db/orgs.ts"
+import { accessPhrase } from "../orgs/access-forms.ts"
 import { ROLE_LABELS } from "../roles.ts"
 import type { ActiveOrg, Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
@@ -74,7 +73,7 @@ const FEATURES: { icon: LucideIcon | typeof GitHubMark; title: string; text: str
   {
     icon: ShieldCheck,
     title: "Roles from Owner to Viewer",
-    text: "Give each person a role: Owner, Admin, Editor, User or Viewer. Their role in the organization is their role in each app.",
+    text: "Give each person a role in every app (Owner, Admin, Editor or Viewer), or access to specific apps only, with built-in or custom roles.",
   },
   {
     icon: GitHubMark,
@@ -83,56 +82,11 @@ const FEATURES: { icon: LucideIcon | typeof GitHubMark; title: string; text: str
   },
 ]
 
-function SignedInCard({ ctx, session, active }: { ctx: Context; session: Session; active: ActiveOrg | null }) {
-  const user = session.user
-  return (
-    <Card className="w-full max-w-2xl py-4 text-left">
-      <CardContent className="flex flex-col gap-4 px-4 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Avatar size="lg">
-            <AvatarFallback className="bg-primary font-medium text-primary-foreground" aria-hidden="true">
-              {initials(user.name, user.email)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 text-sm">
-            <p>
-              Signed in as <strong>{user.name}</strong>
-              {active ? (
-                <>
-                  , working in <strong>{active.name}</strong> as {ROLE_LABELS[active.role]}
-                </>
-              ) : null}
-              .
-            </p>
-            <p className="truncate text-muted-foreground">{user.email}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {active ? (
-            <>
-              <a className={buttonVariants({ variant: "outline", size: "sm" })} href={authUrl(ctx, "/")}>
-                Switch organization
-              </a>
-              <a className={buttonVariants({ size: "sm" })} href={authUrl(ctx, `/orgs/${active.id}`)}>
-                Manage members
-              </a>
-            </>
-          ) : (
-            <a className={buttonVariants({ size: "sm" })} href={authUrl(ctx, "/orgs/new")}>
-              Create an organization
-            </a>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-export function landingPage(ctx: Context, session: Session | null, active: ActiveOrg | null, orgs?: MembershipRow[]): Html {
-  const account = session ? { ...accountOf(session, orgs), org: active } : null
-  const signup = authUrl(ctx, withReturnTo("/signup", apexUrl(ctx)))
-  const login = authUrl(ctx, withReturnTo("/login", apexUrl(ctx)))
-  return page(ctx, { title: "Open-source apps, hosted", user: account }, (
+/** For visitors only: a signed-in, confirmed user gets the home page at the same address. */
+export function landingPage(ctx: Context): Html {
+  const signup = apexUrl(ctx, withReturnTo("/signup", apexUrl(ctx)))
+  const login = apexUrl(ctx, withReturnTo("/login", apexUrl(ctx)))
+  return page(ctx, { title: "Open-source apps, hosted", user: null }, (
     <>
       <section className="border-b">
         <Container width="wide" className="flex flex-col items-center gap-6 py-16 text-center sm:py-24">
@@ -144,21 +98,17 @@ export function landingPage(ctx: Context, session: Session | null, active: Activ
           </div>
           <p className="max-w-2xl text-lg text-balance text-muted-foreground sm:text-xl">
             Open-source business apps for your team: create an account, set up your organization, and invite teammates
-            with a role that works in every app.
+            with a role in every app or in the apps they need.
           </p>
-          {session ? (
-            <SignedInCard ctx={ctx} session={session} active={active} />
-          ) : (
-            <div className="flex flex-wrap justify-center gap-3">
-              <a className={buttonVariants({ size: "lg" })} href={signup}>
-                Create an account
-                <ArrowRight />
-              </a>
-              <a className={buttonVariants({ variant: "outline", size: "lg" })} href={login}>
-                Sign in
-              </a>
-            </div>
-          )}
+          <div className="flex flex-wrap justify-center gap-3">
+            <a className={buttonVariants({ size: "lg" })} href={signup}>
+              Create an account
+              <ArrowRight />
+            </a>
+            <a className={buttonVariants({ variant: "outline", size: "lg" })} href={login}>
+              Sign in
+            </a>
+          </div>
         </Container>
       </section>
       <section className="py-12 sm:py-16">
@@ -203,11 +153,16 @@ const HOME_NOTICES: Record<string, string> = {
   "org-deleted": "The organization was deleted.",
   "org-left": "You left the organization.",
   "invitation-declined": "Invitation declined.",
+  joined: "You joined the organization. Your apps are below.",
   "password-set": "Your new password is saved, and every other session is signed out.",
   verified: "Your email address is confirmed.",
 }
 
-export function homePage(ctx: Context, session: Session, memberships: MembershipRow[], invitations: InvitationRow[], active: ActiveOrg | null): Html {
+/**
+ * `apps`: the apps the user can use in the active organization (all of them with an organization role); the others
+ * aren't listed.
+ */
+export function homePage(ctx: Context, session: Session, memberships: MembershipRow[], invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, active: ActiveOrg | null, apps: HostedApp[]): Html {
   const message = HOME_NOTICES[ctx.url.searchParams.get("notice") ?? ""]
   return page(ctx, { title: "Your organizations", user: { ...accountOf(session, memberships), org: active } }, (
     <Container className="flex flex-col gap-8 py-10 sm:py-12">
@@ -222,7 +177,7 @@ export function homePage(ctx: Context, session: Session, memberships: Membership
         }
       />
       {message ? <Notice kind="ok">{message}</Notice> : null}
-      <InvitationList invitations={invitations} returnTo={null} />
+      <InvitationList ctx={ctx} invitations={invitations} grants={grants} returnTo={null} />
       <Card>
         <CardHeader>
           <CardTitle>
@@ -258,7 +213,7 @@ export function homePage(ctx: Context, session: Session, memberships: Membership
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <a
                             className="font-medium underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-foreground"
-                            href={`/orgs/${membership.org_id}`}
+                            href={`/settings/users?org=${membership.org_id}`}
                           >
                             {membership.org_name}
                           </a>
@@ -287,16 +242,22 @@ export function homePage(ctx: Context, session: Session, memberships: Membership
           </CardContent>
         ) : null}
       </Card>
-      <section className="flex flex-col gap-4">
-        <SectionTitle>Apps</SectionTitle>
-        <AppCards ctx={ctx} apps={ctx.config.apps} />
-      </section>
+      {active ? (
+        <section className="flex flex-col gap-4">
+          <SectionTitle>Apps in {active.name}</SectionTitle>
+          {apps.length ? (
+            <AppCards ctx={ctx} apps={apps} />
+          ) : (
+            <p className="text-muted-foreground">You don&apos;t have access to any app in this organization yet. Ask one of its owners or admins.</p>
+          )}
+        </section>
+      ) : null}
     </Container>
   ))
 }
 
 /** Open invitations for the signed-in user's address, with accept and decline buttons. */
-export function InvitationList({ invitations, returnTo }: { invitations: InvitationRow[]; returnTo: string | null }) {
+export function InvitationList({ ctx, invitations, grants, returnTo }: { ctx: Context; invitations: InvitationRow[]; grants: Map<string, InvitationGrantRow[]>; returnTo: string | null }) {
   if (!invitations.length) return null
   return (
     <Card>
@@ -304,15 +265,15 @@ export function InvitationList({ invitations, returnTo }: { invitations: Invitat
         <CardTitle>
           <h2>Invitations</h2>
         </CardTitle>
-        <CardDescription>Accept one to join that organization with the role it offers.</CardDescription>
+        <CardDescription>Accept one to join that organization with the access it offers.</CardDescription>
       </CardHeader>
       <CardContent>
         <ul className="flex flex-col divide-y rounded-lg border">
           {invitations.map((invitation) => (
             <li key={invitation.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm">
-                <strong>{invitation.org_name}</strong>: {invitation.inviter_name ?? "A member"} invited you as{" "}
-                {ROLE_LABELS[invitation.role]}.
+                <strong>{invitation.org_name}</strong>: {invitation.inviter_name ?? "A member"} invited you{" "}
+                {accessPhrase(ctx.config, invitation.role, grants.get(invitation.id) ?? [])}.
               </p>
               <div className="flex shrink-0 gap-2">
                 <PostButton action={`/invitations/${invitation.id}/accept`} fields={returnTo ? { return_to: returnTo } : {}} size="sm">

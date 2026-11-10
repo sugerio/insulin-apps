@@ -122,3 +122,46 @@ const BURN_SALT = new Uint8Array(SALT_BYTES)
 export async function burnPasswordCheck(password: string): Promise<void> {
   await derive(password, BURN_SALT, ITERATIONS)
 }
+
+// Secrets the gateway must read back (TOTP seeds, stored credentials, OIDC client secrets) are sealed with AES-256-GCM
+// under a key derived from GATEWAY_SECRET_KEY for one purpose (HKDF-SHA256, info = the purpose), and the purpose is
+// also the additional data: a value sealed for one purpose never opens as another.
+const SEALED_PREFIX = 'v1.'
+
+async function purposeKey(master: Uint8Array, purpose: string, usage: 'AES-GCM' | 'HMAC'): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey('raw', master as Uint8Array<ArrayBuffer>, 'HKDF', false, ['deriveKey'])
+  const params = { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: utf8(`insulin-apps:${purpose}`) as Uint8Array<ArrayBuffer> }
+  return usage === 'AES-GCM'
+    ? crypto.subtle.deriveKey(params, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+    : crypto.subtle.deriveKey(params, base, { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign'])
+}
+
+/** `v1.<iv>.<ciphertext>` (base64url). */
+export async function seal(master: Uint8Array, purpose: string, plaintext: string): Promise<string> {
+  const iv = randomBytes(12)
+  const key = await purposeKey(master, purpose, 'AES-GCM')
+  const sealed = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: utf8(purpose) as Uint8Array<ArrayBuffer> }, key, utf8(plaintext) as Uint8Array<ArrayBuffer>)
+  return `${SEALED_PREFIX}${base64url(iv)}.${base64url(new Uint8Array(sealed))}`
+}
+
+/** The plaintext, or null when the value is malformed, for another purpose, or sealed with another key. */
+export async function unseal(master: Uint8Array, purpose: string, sealed: string): Promise<string | null> {
+  if (!sealed.startsWith(SEALED_PREFIX)) return null
+  const [ivText, dataText] = sealed.slice(SEALED_PREFIX.length).split('.')
+  const iv = ivText ? fromBase64url(ivText) : null
+  const data = dataText ? fromBase64url(dataText) : null
+  if (!iv || iv.length !== 12 || !data) return null
+  try {
+    const key = await purposeKey(master, purpose, 'AES-GCM')
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: utf8(purpose) as Uint8Array<ArrayBuffer> }, key, data)
+    return new TextDecoder().decode(plain)
+  } catch {
+    return null
+  }
+}
+
+/** A stable secret for one purpose and subject (an app's integration token, say), derived from the master key. */
+export async function derivedSecret(master: Uint8Array, purpose: string, subject: string): Promise<string> {
+  const key = await purposeKey(master, purpose, 'HMAC')
+  return base64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, utf8(subject) as Uint8Array<ArrayBuffer>)))
+}

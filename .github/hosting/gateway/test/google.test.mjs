@@ -48,7 +48,7 @@ test('start sets a short-lived flow cookie and sends the browser to Google with 
   const url = new URL(start.location)
   assert.equal(`${url.origin}${url.pathname}`, 'https://accounts.google.com/o/oauth2/v2/auth')
   assert.equal(url.searchParams.get('client_id'), GOOGLE_CLIENT_ID)
-  assert.equal(url.searchParams.get('redirect_uri'), 'http://auth.insulinapps.localhost/auth/google/callback')
+  assert.equal(url.searchParams.get('redirect_uri'), 'http://insulinapps.localhost/auth/google/callback')
   assert.equal(url.searchParams.get('response_type'), 'code')
   assert.equal(url.searchParams.get('scope'), 'openid email profile')
   assert.equal(url.searchParams.get('prompt'), 'select_account')
@@ -66,7 +66,7 @@ test('in production the flow cookie is __Host- and Secure, and the redirect URI 
   const cookie = start.cookies.find((line) => line.startsWith('__Host-insulin_oauth='))
   assert.match(cookie, /^__Host-insulin_oauth=[^;]+; Path=\/; Max-Age=600; Secure; HttpOnly; SameSite=Lax$/)
   assert.doesNotMatch(cookie, /Domain=/)
-  assert.equal(new URL(start.location).searchParams.get('redirect_uri'), 'https://auth.example.test/auth/google/callback')
+  assert.equal(new URL(start.location).searchParams.get('redirect_uri'), 'https://example.test/auth/google/callback')
 })
 
 test('a first Google sign-in creates a confirmed account, signs in and returns where it started', async () => {
@@ -87,7 +87,7 @@ test('a first Google sign-in creates a confirmed account, signs in and returns w
   assert.equal(exchange.params.get('code'), 'test-authorization-code')
   assert.equal(exchange.params.get('client_id'), GOOGLE_CLIENT_ID)
   assert.equal(exchange.params.get('client_secret'), GOOGLE_CLIENT_SECRET)
-  assert.equal(exchange.params.get('redirect_uri'), 'http://auth.insulinapps.localhost/auth/google/callback')
+  assert.equal(exchange.params.get('redirect_uri'), 'http://insulinapps.localhost/auth/google/callback')
   assert.equal(exchange.params.get('grant_type'), 'authorization_code')
   const verifier = start.cookies.find((line) => line.startsWith('insulin_oauth=')).split(';')[0].split('=')[1].split('.')[1]
   assert.equal(exchange.params.get('code_verifier'), verifier)

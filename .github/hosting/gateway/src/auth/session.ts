@@ -23,6 +23,8 @@ export interface Session {
   idHash: string
   /** The user's credential version this session was created under (findSession only returns matching ones). */
   credentialVersion: number
+  /** When it was created: a sign-in moments ago stands in for a password the account doesn't have. */
+  createdAt: number
   user: { id: string; email: string; name: string; verified: boolean; hasPassword: boolean }
   /** The session's organization, when it is still one of the user's memberships. */
   activeOrg: ActiveOrg | null
@@ -37,6 +39,7 @@ function toSession(row: SessionRow): Session {
   return {
     idHash: row.id_hash,
     credentialVersion: row.credential_version,
+    createdAt: row.created_at,
     user: {
       id: row.user_id,
       email: row.email,

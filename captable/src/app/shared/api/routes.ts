@@ -2,6 +2,7 @@ import "./zod-config.ts";
 import { z } from "zod";
 import { ledgerVerificationSchema } from "./admin.ts";
 import { meResponseSchema } from "./auth.ts";
+import { apiCatalogSchema } from "./catalog.ts";
 import {
   COMMANDS,
   type CommandSpec,
@@ -132,8 +133,8 @@ export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
 
 /**
- * Who may call a route: identity for any console user, admin for OWNER/ADMIN/EDITOR
- * according to `access`, and holder for USER/VIEWER records matched by their console e-mail.
+ * Who may call a route: identity for any console user, admin for those with `captable.manage` or `captable.view`
+ * according to `access`, and holder for `portfolio.view` records matched by their console e-mail.
  */
 export const AUTH_CLASSES = ["identity", "admin", "holder"] as const;
 export type AuthClass = (typeof AUTH_CLASSES)[number];
@@ -410,6 +411,15 @@ export const routes = {
     summary: "Console identity, company access and holder matches",
     auth: "identity",
     response: json(meResponseSchema),
+  }),
+  getCatalog: defineRoute({
+    id: "getCatalog",
+    method: "GET",
+    path: "/api/catalog",
+    section: "Company setup",
+    summary: "The endpoints the caller's access allows, with their query and body schemas, for AI agents and API clients",
+    auth: "identity",
+    response: json(apiCatalogSchema),
   }),
   listOrgs: defineRoute({
     id: "listOrgs",

@@ -11,9 +11,9 @@ import { plural } from "../lib/format.ts";
 import { useDocumentTitle } from "../lib/useDocumentTitle.ts";
 import { useResource } from "../lib/useResource.ts";
 
-// Import for a company that exists but is empty (set up with "Start with an empty company"): owners and admins import
-// its cap table from Pulley's exports or the Cap Table spreadsheet while it has no stakeholders and no transactions.
-// Editors are told who can; holders never get here. The page sits beside the company workspace, not inside it: an
+// Import for a company that exists but is empty (set up with "Start with an empty company"): whoever records changes
+// imports its cap table from Pulley's exports or the Cap Table spreadsheet while it has no stakeholders and no
+// transactions. Read-only roles are told who can; holders never get here. The page sits beside the company workspace, not inside it: an
 // import creates a new company and retires the empty one, so once it is done the app switches companies under this
 // page, and the result has to stay on screen while it does.
 
@@ -23,7 +23,7 @@ export function ImportPage() {
   const { orgId = "" } = useParams();
   const [imported, setImported] = useState(false);
   if (!imported) {
-    if (me.company === null) return <Navigate to="/setup" replace />;
+    if (me.company === null) return <Navigate to={me.companyExists ? "/no-access" : "/setup"} replace />;
     if (!hasAdminAccess(me)) return <Navigate to="/no-access" replace />;
     // One company per Insulin organization: another id belongs to another organization or a retired import.
     if (me.company.id !== orgId) return <Navigate to="/" replace />;
@@ -41,8 +41,8 @@ export function ImportPage() {
 function ReadOnly({ back }: { back: string }) {
   return (
     <Card>
-      <Banner kind="info" title="Only owners and admins can import">
-        You can view this company's cap table. Setting it up from Pulley or a spreadsheet takes an owner or admin of your Insulin organization.
+      <Banner kind="info" title="Only those who record changes can import">
+        You can view this company's cap table. Setting it up from Pulley or a spreadsheet takes an owner, admin or editor of your Insulin organization.
       </Banner>
       <div className="row mt-12"><Link className="btn btn-ghost" to={back}>Back to the dashboard</Link></div>
     </Card>

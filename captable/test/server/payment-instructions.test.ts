@@ -27,7 +27,7 @@ describe('simple payment instruction administration', () => {
     expect(api.paymentInstructionSchema.parse(await response.json())).toMatchObject({
       details: DETAILS, updatedBy: 'Admin Example', updatedAt: Date.now(),
     })
-    expect(await getJson(harness, harness.editor, '/payment-instructions')).toMatchObject({
+    expect(await getJson(harness, harness.reader, '/payment-instructions')).toMatchObject({
       details: { ...DETAILS, accountNumber: '••••2333', iban: '••••7766' },
     })
     expect(await harness.db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE action = 'payment_instructions.set'").first<number>('n')).toBe(1)
@@ -62,7 +62,7 @@ describe('simple payment instruction administration', () => {
 
   it('refuses editor writes and validates the details contract', async () => {
     harness = await readHarness()
-    expect((await harness.api('POST', harness.path('/payment-instructions'), harness.editor, {
+    expect((await harness.api('POST', harness.path('/payment-instructions'), harness.reader, {
       details: DETAILS, updatedAt: null,
     })).status).toBe(403)
     const invalid = await harness.api('POST', harness.path('/payment-instructions'), harness.owner, {

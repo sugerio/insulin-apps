@@ -53,10 +53,37 @@ export async function listApps(root = repositoryRoot) {
 
     const title = typeof manifest.displayName === 'string' && manifest.displayName.trim() ? manifest.displayName.trim() : entry.name
     const summary = typeof manifest.description === 'string' ? manifest.description.trim() : ''
-    apps.push({ name: entry.name, title, summary })
+    const permissions = readPermissions(entry.name, manifest.insulin?.permissions)
+    apps.push({ name: entry.name, title, summary, permissions })
   }
 
   return apps
+}
+
+const PERMISSION_KEY = /^[a-z][a-z0-9_.-]{0,63}$/
+const PERMISSION_ROLES = new Set(['ADMIN', 'EDITOR', 'VIEWER'])
+
+/**
+ * An app's permission catalog, `insulin.permissions` in its package.json (.github/hosting/DESIGN.md §2.3): at most 50
+ * entries of { key, label, description?, role }, where `role` is the least built-in role that has the permission. The
+ * gateway checks it again and refuses to start with a malformed one, so a mistake fails here, before a deploy.
+ */
+export function readPermissions(app, raw) {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > 50) throw new Error(`App ${JSON.stringify(app)}: insulin.permissions must be an array of at most 50`)
+  const keys = new Set()
+  return raw.map((entry, index) => {
+    const where = `App ${JSON.stringify(app)}: insulin.permissions[${index}]`
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${where} must be an object`)
+    const { key, label, description = '', role } = entry
+    if (typeof key !== 'string' || !PERMISSION_KEY.test(key)) throw new Error(`${where}.key must match ${PERMISSION_KEY.source}`)
+    if (keys.has(key)) throw new Error(`${where}.key ${JSON.stringify(key)} is listed twice`)
+    keys.add(key)
+    if (typeof label !== 'string' || !label.trim() || label.length > 80) throw new Error(`${where}.label must be 1-80 characters`)
+    if (typeof description !== 'string' || description.length > 300) throw new Error(`${where}.description must be at most 300 characters`)
+    if (!PERMISSION_ROLES.has(role)) throw new Error(`${where}.role must be ADMIN, EDITOR or VIEWER`)
+    return { key, label: label.trim(), description: description.trim(), role }
+  })
 }
 
 export function validateAppName(name) {

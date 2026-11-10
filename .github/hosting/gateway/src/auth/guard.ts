@@ -1,5 +1,5 @@
 import type { Context } from '../context.ts'
-import { authUrl, withReturnTo } from '../context.ts'
+import { apexUrl, withReturnTo } from '../context.ts'
 import { redirect } from '../http/response.ts'
 import { confirmEmailFirstPage } from '../pages/status.tsx'
 import { loadSession, type Session } from './session.ts'
@@ -13,7 +13,7 @@ export async function requireSession(ctx: Context, back: string | null = null): 
   if (session?.user.verified) return session
   if (session) return verifyNotice(ctx, session)
   const get = ctx.request.method === 'GET' || ctx.request.method === 'HEAD'
-  return redirect(authUrl(ctx, withReturnTo('/login', get ? ctx.url.href : back)), get ? 302 : 303)
+  return redirect(apexUrl(ctx, withReturnTo('/login', get ? ctx.url.href : back)), get ? 302 : 303)
 }
 
 /** Sessions are only created for confirmed addresses; this covers an account whose address is somehow unconfirmed. */

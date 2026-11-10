@@ -62,7 +62,7 @@ describe('recording a 409A', () => {
     expect(await harness.db.prepare('SELECT role FROM document_links WHERE valuation_id = ?').bind(valuation.id).first('role')).toBe('REPORT')
     expect(await harness.db.prepare("SELECT result FROM audit_events WHERE action = 'valuation.recorded' AND target_id = ?")
       .bind(valuation.id).first('result')).toBe('success')
-    expect((await getJson<api.FmvResponse>(harness, harness.editor, '/valuations/fmv?date=2026-10-21')).fmv)
+    expect((await getJson<api.FmvResponse>(harness, harness.reader, '/valuations/fmv?date=2026-10-21')).fmv)
       .toMatchObject({ valuationId: valuation.id, pricePerShare: '1.1', status: 'presumptively_valid' })
     expect(await harness.db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE valuation_id = ?').bind(valuation.id).first('n')).toBe(0)
   })
@@ -95,10 +95,10 @@ describe('recording a 409A', () => {
     expect(await harness.db.prepare('SELECT COUNT(*) AS n FROM valuations WHERE org_id = ?').bind(harness.orgId).first('n')).toBe(5)
   })
 
-  it('permits OWNER and ADMIN, but refuses EDITOR and holders', async () => {
+  it('permits OWNER and ADMIN, but refuses a read-only custom role and holders', async () => {
     harness = await readHarness({ emails: { S04: 'holder@example.test' } })
     const documentId = await report()
-    expect((await post('/valuations', harness.editor, recordBody(documentId))).status).toBe(403)
+    expect((await post('/valuations', harness.reader, recordBody(documentId))).status).toBe(403)
     expect((await post('/valuations', holderIdentity('holder@example.test'), recordBody(documentId))).status).toBe(404)
     expect((await post('/valuations', harness.owner, recordBody(documentId))).status).toBe(201)
   })
@@ -119,8 +119,8 @@ describe('material events, review and voids', () => {
       id: valuation.id, status: 'review_required', presumptivelyValidUntil: null,
       events: [{ kind: 'MATERIAL_EVENT', eventDate: '2026-10-18', description: 'Term sheet signed', documentId: evidence }],
     })
-    expect((await getJson<api.FmvResponse>(harness, harness.editor, '/valuations/fmv?date=2026-10-21')).fmv).toBeNull()
-    expect((await getJson<api.DashboardResponse>(harness, harness.editor, '/dashboard')).needsAttention
+    expect((await getJson<api.FmvResponse>(harness, harness.reader, '/valuations/fmv?date=2026-10-21')).fmv).toBeNull()
+    expect((await getJson<api.DashboardResponse>(harness, harness.reader, '/dashboard')).needsAttention
       .find((item) => item.kind === 'VALUATION_STATUS')?.count).toBe(1)
     expect(codesOf((await post('/valuations/material-events', harness.admin, {
       eventDate: '2026-10-19', description: 'Again',
@@ -179,7 +179,7 @@ describe('material events, review and voids', () => {
     })
     expect(voided.status, JSON.stringify(voided.body)).toBe(200)
     expect(voided.body).toMatchObject({ status: 'voided' })
-    expect((await getJson<api.FmvResponse>(harness, harness.editor, '/valuations/fmv?date=2026-10-21')).fmv)
+    expect((await getJson<api.FmvResponse>(harness, harness.reader, '/valuations/fmv?date=2026-10-21')).fmv)
       .toMatchObject({ valuationId: harness.id('V5'), pricePerShare: '0.95' })
   })
 })
@@ -201,7 +201,7 @@ describe('confirming an imported vesting template', () => {
       Date.now(),
     ).run()
     const path = `/vesting-terms/${template}/confirm`
-    expect((await post(path, harness.editor, {})).status).toBe(403)
+    expect((await post(path, harness.reader, {})).status).toBe(403)
     const key = crypto.randomUUID()
     const confirmed = await post(path, harness.owner, {}, key)
     expect(confirmed.status).toBe(200)

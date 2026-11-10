@@ -60,14 +60,14 @@ describe("Stakeholder Portal settings: view", () => {
   it("is view only for an editor", async () => {
     page(() => DOCUMENTS, [], { role: "admin_ro", orgOverrides: [{}, { portal: PORTAL }] });
     await screen.findByRole("list", { name: "Company resources" });
-    expect(screen.getByText(/View only — owners and admins edit/)).toBeTruthy();
+    expect(screen.getByText(/View only — owners, admins and editors edit/)).toBeTruthy();
     for (const name of [/^Edit/, /^Upload/, "Publish a document", /^Stop showing/]) expect(screen.queryByRole("button", { name })).toBeNull();
   });
 
   it("lets every admin edit, not only the owner", async () => {
     page(() => DOCUMENTS, [], { role: "admin_rw", orgOverrides: [{}, { portal: PORTAL }] });
     await screen.findByRole("list", { name: "Company resources" });
-    expect(screen.getByText(/Owners and admins edit; editors view/)).toBeTruthy();
+    expect(screen.getByText(/Owners, admins and editors edit; read-only roles view/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Publish a document" })).toBeTruthy();
   });
 });

@@ -27,9 +27,14 @@ export function meRoutes(deps: AppDeps) {
       ).bind(orgId).first<CompanyRow>()
       : null
     const access = adminOrg?.access ?? (auth.portalMatches.length > 0 ? 'holder' : 'none')
+    const exists = company !== null || (await c.env.DB.prepare(
+      `SELECT 1 AS found FROM orgs WHERE console_organization_id = ? AND status = 'active' LIMIT 1`,
+    ).bind(auth.consoleOrganizationId).first<{ found: number }>()) !== null
     return c.json(api.meResponseSchema.parse({
       user: auth.user,
       consoleRole: auth.consoleRole,
+      permissions: api.PERMISSIONS.filter((permission) => auth.permissions.has(permission)),
+      accessVia: auth.accessVia,
       preview: auth.preview,
       company: company && {
         id: company.id,
@@ -39,6 +44,7 @@ export function meRoutes(deps: AppDeps) {
         currency: company.currency,
         importSource: company.import_source,
       },
+      companyExists: exists,
       access,
       pii: adminOrg?.pii ?? false,
       portal: { matches: auth.portalMatches },

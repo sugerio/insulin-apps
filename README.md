@@ -11,7 +11,9 @@ D1 database.
 ## Use the apps online
 
 Every app here also runs at its own address on insulinapps.com, for example [Cap Table](https://captable.insulinapps.com).
-Sign up with an e-mail address or Google, create an organization and invite your team. Maintainers run it with the
+Sign up with an e-mail address, Google or your company's single sign-on, create an organization and invite your
+team, with a role in every app or in the apps each person needs. Connect AI agents such as Claude or Codex to an app
+over MCP, or call its API with a service account. Maintainers run it with the
 [hosting runbook](.github/hosting/README.md).
 
 ## Using an app
@@ -40,6 +42,8 @@ Each app is a top-level directory with its own `README.md` and `AGENTS.md`, and 
   open, before setup too. It explains in plain words how to use the app and gives the background a business user needs
   for its domain. Cap Table's `src/app/pages/docs/` shows the pattern: one static page per topic, describing only what
   the app does, updated in the same change as the behaviour it describes, and covered by tests;
+- leave sign-in, people and roles to the platform, and map the roles (and any custom-role permissions) to its own
+  functions, as [`AGENTS.md`](AGENTS.md) describes under "Accounts, roles and access";
 - use synthetic data only, in code, tests and docs.
 
 Add the app to the table above. Copy `.github/workflows/captable.yml` to `.github/workflows/<app>.yml` and change its

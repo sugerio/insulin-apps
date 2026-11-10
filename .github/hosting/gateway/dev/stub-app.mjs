@@ -41,6 +41,15 @@ export default {
     switch (url.pathname) {
       case '/api/echo':
         return Response.json(received(request))
+      case '/api/echo-body':
+        return Response.json({ ...received(request), body: await request.text() })
+      case '/api/catalog':
+        // What an app's catalog looks like (Cap Table's GET /api/catalog), for the MCP server's endpoints tool.
+        return Response.json({ endpoints: [{ method: 'GET', path: '/api/echo', summary: 'Echo the request', query: null, body: null, idempotencyKey: false }] })
+      case '/api/large':
+        return new Response('x'.repeat(300 * 1024), { headers: { 'Content-Type': 'text/plain' } })
+      case '/api/__suger/health':
+        return Response.json({ platform: true })
       case '/upload':
         return Response.json({ ...received(request), body: request.body ? await digest(request.body) : null })
       case '/style.css':

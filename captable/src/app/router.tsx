@@ -41,8 +41,9 @@ import { SetupPage } from "./pages/SetupPage.tsx";
 
 function Home() {
   const me = useMe();
-  // One company per Insulin organization: an owner or admin sets it up the first time this organization opens the app.
-  if (me.company === null) return <Navigate to="/setup" replace />;
+  // One company per Insulin organization: someone who records changes sets it up the first time this organization opens
+  // the app. A company the caller can't see means no access, not a missing company.
+  if (me.company === null) return <Navigate to={me.companyExists ? "/no-access" : "/setup"} replace />;
   if (hasAdminAccess(me)) return <Navigate to={`/companies/${me.company.id}/dashboard`} replace />;
   if (me.portal.matches.length > 0) return <Navigate to="/portfolio" replace />;
   return <Navigate to="/no-access" replace />;

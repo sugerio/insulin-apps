@@ -98,6 +98,20 @@ export function accountPage(ctx: Context, session: Session, state: AccountState 
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>AI agents</h2>
+          </CardTitle>
+          <CardDescription>MCP clients such as Claude or Codex that you allowed to use an app as you.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <a className={buttonVariants({ variant: "outline" })} href="/account/agents">
+            See and disconnect your agents
+          </a>
+        </CardContent>
+      </Card>
+
       <Card className="border-destructive/40">
         <CardHeader>
           <CardTitle className="text-destructive">

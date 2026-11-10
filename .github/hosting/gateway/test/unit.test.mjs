@@ -20,6 +20,7 @@ import { escapeHtml, html } from '../src/pages/html.ts'
 import { checkIdToken, decodeJwtPayload } from '../src/auth/id-token.ts'
 import { forwardRequest, identityHeaders, isNavigation } from '../src/http/forward.ts'
 import { logError } from '../src/log.ts'
+import { appToken } from '../../../scripts/deploy-apps.mjs'
 
 test('e-mail addresses are trimmed, lower-cased and shape-checked', () => {
   assert.equal(normalizeEmail('  Ada.Lovelace@Example.TEST '), 'ada.lovelace@example.test')
@@ -168,6 +169,11 @@ test('sealed secrets open only with the same key and purpose, and derived secret
   assert.equal(await unseal(key, 'totp', 'plain text'), null)
   assert.equal(await derivedSecret(key, 'app-token', 'captable'), await derivedSecret(key, 'app-token', 'captable'))
   assert.notEqual(await derivedSecret(key, 'app-token', 'captable'), await derivedSecret(key, 'app-token', 'ledger'))
+})
+
+test('the deploy derives each app\'s SUGER_APP_TOKEN exactly as the gateway checks it', async () => {
+  const key = Buffer.alloc(32, 0x5a)
+  for (const app of ['captable', 'ledger']) assert.equal(appToken(key.toString('base64'), app), await derivedSecret(key, 'app-token', app), app)
 })
 
 test('tokens and ids are random, well-formed and recognised', () => {

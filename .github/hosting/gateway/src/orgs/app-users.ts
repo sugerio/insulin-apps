@@ -41,14 +41,14 @@ const NOTICES: Record<string, string> = {
   'invitation-resent': 'Invitation sent again.',
 }
 
-interface AppMember {
+export interface AppMember {
   session: Session
   membership: MembershipRow
   access: AppAccess
 }
 
 /** The signed-in user's access to this app in `orgId` (the active organization, or a form's), or the page to show. */
-async function appMember(ctx: Context, app: HostedApp, orgId: string | null): Promise<AppMember | Response> {
+export async function appMember(ctx: Context, app: HostedApp, orgId: string | null): Promise<AppMember | Response> {
   const session = await requireSession(ctx)
   if (session instanceof Response) return session
   const id = orgId ?? (await activeOrg(ctx, session))?.id
@@ -61,7 +61,7 @@ async function appMember(ctx: Context, app: HostedApp, orgId: string | null): Pr
 }
 
 /** An app admin, for a POST: the organization comes from the form. */
-async function appAdminOf(ctx: Context, app: HostedApp): Promise<AppMember | Response> {
+export async function appAdminOf(ctx: Context, app: HostedApp): Promise<AppMember | Response> {
   const found = await appMember(ctx, app, field(ctx.form, 'org_id') || null)
   if (found instanceof Response) return found
   return found.access.admin ? found : notAllowedPage(ctx, found.session)
@@ -161,7 +161,7 @@ export async function inviteToApp(ctx: Context): Promise<Response> {
 }
 
 /** After a guarded write changed nothing: the actor's own access to the app changed meanwhile, or null. */
-async function stillAdmin(ctx: Context, app: HostedApp, member: AppMember): Promise<Response | null> {
+export async function stillAdmin(ctx: Context, app: HostedApp, member: AppMember): Promise<Response | null> {
   const fresh = await appAccess(ctx.config.db, app, member.membership.org_id, member.session.user.id)
   if (fresh?.admin) return null
   return notAllowedPage(ctx, member.session)

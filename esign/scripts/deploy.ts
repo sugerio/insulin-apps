@@ -8,14 +8,15 @@
 //
 // The target decides the environment (ESIGN_ENV, src/environment.ts): `prod` deploys esign-prod in
 // prod; any other target (`dev`) deploys in dev. dev binds the test mailbox bucket and pins the
-// send_email binding to the sink; prod has no test mailbox, no sink, and mails recipients.
+// send_email binding to the sink when one is set (else mails recipients); prod has no test mailbox,
+// no sink, and mails recipients.
 //
 // --bundle deploys an already built bundle (dist/worker.js from `npm run build`) as is, which is how
 // CI deploys what its unprivileged job built; without it Wrangler bundles src/worker.ts.
 //
 // Required environment: CLOUDFLARE_ACCOUNT_ID (and CLOUDFLARE_API_TOKEN outside an interactive
 // login), ESIGN_MAIL_FROM, ESIGN_FRAME_ANCESTORS (https only in prod), ESIGN_KMS_KEY_ARN,
-// ESIGN_KMS_PUBLIC_KEY, ESIGN_AWS_ROLE_ARN, and in dev ESIGN_MAIL_SINK.
+// ESIGN_KMS_PUBLIC_KEY, ESIGN_AWS_ROLE_ARN, and in dev optionally ESIGN_MAIL_SINK.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -63,7 +64,8 @@ export function settingsFromEnv(env: Record<string, string | undefined>, target:
     target,
     environment,
     mailFrom: check('ESIGN_MAIL_FROM', v => EMAIL.test(v)),
-    mailSink: prod ? '' : check('ESIGN_MAIL_SINK', v => EMAIL.test(v)),
+    // dev: optional; with a sink every message goes there, without one to its recipient.
+    mailSink: prod || !read('ESIGN_MAIL_SINK') ? '' : check('ESIGN_MAIL_SINK', v => EMAIL.test(v)),
     frameAncestors: check('ESIGN_FRAME_ANCESTORS', v => frameAncestors(v, prod).length === v.split(/\s+/).length),
     kmsKeyArn: check('ESIGN_KMS_KEY_ARN', v => KMS_KEY_ARN.test(v)),
     kmsPublicKey: check('ESIGN_KMS_PUBLIC_KEY', v => BASE64.test(v)),
@@ -113,15 +115,16 @@ export function deployConfig(base: Record<string, unknown>, s: DeploySettings, d
       // dev keeps every code in a test mailbox for tests to read; prod keeps none.
       ...(prod ? [] : [{ binding: 'TEST_MAIL', bucket_name: names.testMail }]),
     ],
-    // dev: the binding itself can only ever send to the sink (src/otp-mail-sink.ts). prod: to recipients.
-    send_email: [prod ? { name: 'SEND_EMAIL' } : { name: 'SEND_EMAIL', destination_address: s.mailSink }],
+    // With a sink (dev only) the binding itself can only ever send there (src/otp-mail-sink.ts);
+    // otherwise it sends to recipients.
+    send_email: [s.mailSink ? { name: 'SEND_EMAIL', destination_address: s.mailSink } : { name: 'SEND_EMAIL' }],
     vars: {
       ESIGN_ENV: s.environment,
       KMS_KEY_ARN: s.kmsKeyArn,
       KMS_PUBLIC_KEY: s.kmsPublicKey,
       AWS_ROLE_ARN: s.awsRoleArn,
       MAIL_FROM: s.mailFrom,
-      ...(prod ? {} : { MAIL_SINK: s.mailSink }),
+      ...(s.mailSink ? { MAIL_SINK: s.mailSink } : {}),
       COMPLETE_AFTER_SIGN: 'true',
       SIGNING_PAGE_FRAME_ANCESTORS: s.frameAncestors,
     },

@@ -123,8 +123,10 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       });
       const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
       if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpSent,...requestFacts(c.req.raw),detail:{to:sentTo,delivery:mailer?'email':'test-mailbox',messageId}});
-      // testMailbox: dev keeps the code in the test mailbox (and mails only the sink), so the page says where to find it.
-      return c.json({messageId,...(mailer?{emailed:true}:{}),...(prod?{}:{testMailbox:true})},202);
+      // testMailbox: the signer does not get this email (dev mails only its sink, or nothing), so the
+      // page says the code is in the test mailbox. dev without a sink emails the signer like prod.
+      const toSigner=!!mailer&&(prod||!(c.env.MAIL_SINK??'').trim());
+      return c.json({messageId,...(mailer?{emailed:true}:{}),...(toSigner?{}:{testMailbox:true})},202);
     } catch {return c.json({error:'otp_unavailable'},429);}
   });
   // The test mailbox (dev only), read back by the tenant whose recipient was sent the code.

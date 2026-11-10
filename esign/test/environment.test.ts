@@ -40,7 +40,7 @@ test('the HMAC test seal is dev only, whatever prod is given', () => {
   assert.equal(testSealKey({ ...PROD, TEST_SEAL_KEY: KEY }), null);
 });
 
-test('dev mails the sink, prod mails recipients, and neither falls back to the other', async () => {
+test('dev with a sink mails the sink, prod mails recipients, and neither falls back to the other', async () => {
   const sent: { to: string; subject: string }[] = [];
   const binding = { send: async (m: { to: string; subject: string }) => { sent.push(m); } };
   const dev = { SEND_EMAIL: binding, MAIL_FROM: 'sign@sender.example', MAIL_SINK: 'inbox@sink.example' };
@@ -55,6 +55,19 @@ test('dev mails the sink, prod mails recipients, and neither falls back to the o
   assert.deepEqual({ to: sent.at(-1)!.to, subject: sent.at(-1)!.subject }, { to: 'ana@partner.example', subject: 'Hello' });
   await assert.rejects(mailerFor(prod)!.send('not an address', 'Hello', 'Body'), /Invalid recipient/);
   assert.equal(mailerFor({ ESIGN_ENV: 'prod', MAIL_FROM: 'sign@sender.example' }), null, 'no binding, no mail');
+});
+
+test('dev without a sink mails recipients, marked as dev; a named but unusable sink mails nobody', async () => {
+  const sent: { to: string; subject: string; text: string }[] = [];
+  const binding = { send: async (m: { to: string; subject: string; text: string }) => { sent.push(m); } };
+  const dev = { SEND_EMAIL: binding, MAIL_FROM: 'sign@sender.example' };
+  assert.equal(sinkMailer(dev), null);
+  await mailerFor(dev)!.send('ana@partner.example', 'Hello', 'Body');
+  assert.deepEqual({ to: sent.at(-1)!.to, subject: sent.at(-1)!.subject }, { to: 'ana@partner.example', subject: 'Hello' });
+  assert.match(sent.at(-1)!.text, /^Body\n\nSent by the E-sign dev environment\./);
+  await assert.rejects(mailerFor(dev)!.send('not an address', 'Hello', 'Body'), /Invalid recipient/);
+  assert.equal(mailerFor({ ...dev, MAIL_SINK: 'not an address' }), null, 'a sink that is set but unusable never falls back to recipients');
+  assert.equal(recipientMailer({ ...dev, MAIL_SINK: 'inbox@sink.example' }), null);
 });
 
 test('prod lets only https origins embed the signing page', () => {

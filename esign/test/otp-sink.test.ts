@@ -1,6 +1,6 @@
-// One-time codes delivered to a single fixed mailbox (MAIL_SINK) through the send_email
-// binding: any recipient address is accepted, every code is really emailed, and the email says
-// whom it was meant for. Without the sink, only synthetic test addresses are accepted, as before.
+// One-time codes through the send_email binding. dev with a sink (MAIL_SINK): any recipient
+// address is accepted, every code is emailed to the sink, saying whom it was meant for. dev without
+// a sink: emailed to the signer, as in prod. Without mail at all, only synthetic test addresses.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
@@ -92,6 +92,25 @@ test('without a usable sink, only synthetic test addresses get a code, and nothi
    assert.deepEqual(Object.keys(await synthetic.json() as object),['messageId','testMailbox']);
   } finally {await w.mf.dispose();}
  }
+});
+
+test('dev without a sink emails the code to the signer, says so, and still keeps it for tests', async()=>{
+ const sent:Mail[]=[];
+ const w=await setup({SEND_EMAIL:{send:async(m:Mail)=>{sent.push(m);}},MAIL_FROM:FROM});
+ try {
+  const res=await w.req('/v1/signing/otp',w.json({},await w.session('ana@c01.e2e.example.test')));
+  assert.equal(res.status,202);
+  const body=await res.json() as {messageId:string;emailed?:boolean;testMailbox?:boolean};
+  assert.equal(body.emailed,true);
+  assert.equal(body.testMailbox,undefined,'the signer gets it, so the page does not point to the test mailbox');
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].to,'ana@c01.e2e.example.test');
+  assert.equal(sent[0].subject,'Your verification code');
+  const otp=/Verification code: (\d{6})/.exec(sent[0].text)?.[1];
+  assert.ok(otp);
+  const kept=await (await w.req(`/v1/test-mail/${body.messageId}`,{headers:w.auth})).json() as {otp:string};
+  assert.equal(kept.otp,otp,'dev keeps every code for tests');
+ } finally {await w.mf.dispose();}
 });
 
 // prod (ESIGN_ENV=prod): codes go to the recipient and are kept nowhere.

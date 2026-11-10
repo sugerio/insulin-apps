@@ -14,8 +14,10 @@ const ENV = {
 
 test('deploy settings come from the environment, and every missing or invalid one is named without its value', () => {
   assert.equal(settingsFromEnv(ENV, 'dev').mailSink, 'inbox@sink.example');
-  assert.throws(() => settingsFromEnv({ ...ENV, ESIGN_MAIL_SINK: '', ESIGN_AWS_ROLE_ARN: 'not-an-arn' }, 'dev'), (e: Error) =>
-    /ESIGN_MAIL_SINK is not set/.test(e.message) && /ESIGN_AWS_ROLE_ARN is invalid/.test(e.message) && !e.message.includes('not-an-arn'));
+  assert.throws(() => settingsFromEnv({ ...ENV, ESIGN_MAIL_SINK: 'not an address', ESIGN_AWS_ROLE_ARN: 'not-an-arn' }, 'dev'), (e: Error) =>
+    /ESIGN_MAIL_SINK is invalid/.test(e.message) && /ESIGN_AWS_ROLE_ARN is invalid/.test(e.message) && !e.message.includes('not-an-arn'));
+  // The sink is optional in dev: without one, dev mails recipients.
+  assert.equal(settingsFromEnv({ ...ENV, ESIGN_MAIL_SINK: '' }, 'dev').mailSink, '');
   assert.throws(() => settingsFromEnv({ ...ENV, ESIGN_FRAME_ANCESTORS: 'http://console.example' }, 'dev'), /ESIGN_FRAME_ANCESTORS is invalid/);
   assert.throws(() => settingsFromEnv(ENV, 'Dev Env'), /target/);
 });
@@ -38,6 +40,14 @@ test('the generated configuration names every resource after the target and keep
   assert.deepEqual(config.triggers, { crons: ['*/5 * * * *'] });
   assert.equal('account_id' in config, false);
   assert.equal(deployConfig(base, settingsFromEnv(ENV, 'dev'), 'db-uuid', { assets: '/a', migrations: '/m' }).no_bundle, undefined);
+});
+
+test('dev without a sink mails recipients: the binding is not pinned and no sink is set', () => {
+  const base = parseJsonc(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+  const config = deployConfig(base, settingsFromEnv({ ...ENV, ESIGN_MAIL_SINK: '' }, 'dev'), 'db-uuid', { bundle: '/b', assets: '/a', migrations: '/m' });
+  assert.deepEqual(config.send_email, [{ name: 'SEND_EMAIL' }]);
+  assert.equal('MAIL_SINK' in config.vars, false);
+  assert.deepEqual(config.r2_buckets.map(b => b.bucket_name), ['esign-dev-artifacts', 'esign-dev-test-mail'], 'dev still keeps codes for tests');
 });
 
 test('prod is the prod target only: no test mailbox, no sink, mail to recipients, https framing', () => {

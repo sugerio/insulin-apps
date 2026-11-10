@@ -6,11 +6,13 @@ import { OTP_TTL_MS } from './otp.ts';
  * Email from the Worker: one-time codes and signed copies, through a `send_email` binding
  * SEND_EMAIL and MAIL_FROM (an address on a domain onboarded to Cloudflare Email Sending).
  *
- * - dev (ESIGN_ENV, see environment.ts): every message goes to one fixed mailbox, MAIL_SINK,
- *   saying whom it was for. On Cloudflare the binding itself is pinned to that address with
- *   `destination_address`, so the Worker cannot mail anyone else. A code is then accepted for any
- *   recipient address, because none of them ever receives it.
- * - prod: every message goes to its recipient.
+ * - dev (ESIGN_ENV, see environment.ts) with a sink (MAIL_SINK): every message goes to that one
+ *   mailbox, saying whom it was for. On Cloudflare the binding itself is pinned to that address
+ *   with `destination_address`, so the Worker cannot mail anyone else.
+ * - dev without a sink, and prod: every message goes to its recipient. dev marks its messages as
+ *   coming from a test environment.
+ *
+ * dev keeps every code in its test mailbox as well (signing-routes.ts), whichever way it mails.
  */
 
 export type MailAttachment = { disposition: 'attachment'; filename: string; type: string; content: Uint8Array };
@@ -45,21 +47,34 @@ export function sinkMailer(env: MailEnv): Mailer | null {
   };
 }
 
-/** prod: each message to its own recipient, or null when mail is not configured. Never in dev. */
+/**
+ * Each message to its own recipient (prod, and dev without a sink), or null when mail is not
+ * configured or dev has a sink.
+ */
 export function recipientMailer(env: MailEnv): Mailer | null {
-  const configured = usableBinding(env);
-  if (!isProd(env) || !configured) return null;
+  const configured = usableBinding(env), prod = isProd(env);
+  if (!configured || (!prod && hasSink(env))) return null;
   const { binding, from } = configured;
   return {
     async send(recipient, subject, text, attachments) {
       if (!isValidOtpEmailAddress(recipient)) throw new Error('Invalid recipient address');
-      await binding.send({ from, to: recipient, subject, text, ...(attachments?.length ? { attachments } : {}) });
+      await binding.send({
+        from, to: recipient, subject,
+        text: prod ? text : [text, '', 'Sent by the E-sign dev environment. Synthetic test documents only; not a production signature service.'].join('\n'),
+        ...(attachments?.length ? { attachments } : {}),
+      });
     },
   };
 }
 
-/** The environment's mailer: the recipient in prod, the sink in dev; null when not configured. */
-export const mailerFor = (env: MailEnv): Mailer | null => (isProd(env) ? recipientMailer(env) : sinkMailer(env));
+/** dev names a sink: then it mails only the sink, never a recipient, even when the sink is unusable. */
+const hasSink = (env: MailEnv) => (env.MAIL_SINK ?? '').trim() !== '';
+
+/**
+ * The environment's mailer: in prod the recipient; in dev the sink when one is named, else the
+ * recipient; null when not configured.
+ */
+export const mailerFor = (env: MailEnv): Mailer | null => (isProd(env) || !hasSink(env) ? recipientMailer(env) : sinkMailer(env));
 
 /** One-time codes through the environment's mailer. */
 export function otpMailer(env: MailEnv): OtpMailer | null {

@@ -70,6 +70,30 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 
 The platform provides `SUGER_MAIL_URL` and `SUGER_APP_TOKEN`.
 
+## The members' app and the Docs
+
+- **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` (envelopes),
+  `/envelopes/new`, `/envelopes/:id`, `/templates` and `/docs/:topic?`. It moves with
+  `history.pushState` (`router.ts`), the only navigation the console's sandboxed iframe allows. Every
+  call is a same-origin request as the signed-in member; there is no key in the browser.
+- **Roles.** What a role can't do is hidden (`canManage(me)`), and the server refuses it anyway.
+  `/api/me` answering 401 shows a sign-in message; the Docs open without it.
+- **Hosting the public pages.** The envelope page opens the active signer's `/sign` in a dialog
+  with a recipient view for its own origin and follows its `esign.signing.*` messages; the Templates
+  page opens the editor for its own origin and confirms the editor's save with
+  `GET /api/template-editing-sessions/:id`. Both behave exactly as a host product would.
+- **Sending.** A send carries an `Idempotency-Key` that a retry of the same form reuses. An
+  optional sign-by day becomes every signer's `expiresAt` (the end of that day, the member's time).
+- **Docs.** Static topics in `src/app/pages/docs/` (one file each; `topics.ts` sets the reading
+  order) rendered by `src/app/components/Docs.ts`, with no request to the server. The background
+  topic carries the general-information note. The signing page's "About signing" panel
+  (`src/app/ui/SigningHelp.ts`) says the same as the signers topic in brief.
+- **UI.** shadcn/ui components in `src/app/components/ui/`, `cn()` in `src/app/lib/utils.ts`,
+  Tailwind v4 through `postcss.config.mjs` with the neutral theme in `src/app/styles.css`.
+  `src/app/ui/esign-theme.css` keeps the public pages' layout hooks on the same tokens. All UI is
+  `.ts` with `React.createElement`: the tests run on Node's type stripping, which doesn't transform
+  JSX.
+
 ## The signing lifecycle
 
 1. **Template.** The host uploads a PDF (`POST /api/templates`, multipart `file` and `roles`), or
@@ -403,7 +427,7 @@ is enabled.
 | `GET /api/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
 | `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{origin?, hostAuthentication?}`; returns `{code}` for the active task |
 | `GET /api/envelopes/:id/delivery-pdf` † | The signed PDF with its certificate, for a `COMPLETED` envelope |
-| `GET /api/envelopes/:id/certificate` † | The completion certificate as JSON (used by the member page), verified on every read |
+| `GET /api/envelopes/:id/certificate` † | The completion certificate as JSON (shown on the envelope page), verified on every read |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 
@@ -429,7 +453,8 @@ by the same live session with the same input and values, and returns the same si
 | `GET /api/public/editor/current`, `GET /api/public/editor/pdf`, `POST /api/public/editor/save` | Editor token, same origin | The session, its source PDF, and one save |
 
 **Pages** (the React app, `src/app/App.tsx`): `/sign` (the signing page), `/editor/page/:id` (the
-editor), `/copy` (a signer's copy) and `/`, the member page. **Public API** (declared in
+editor), `/copy` (a signer's copy) and, at every other path, the members' app (see "The members'
+app and the Docs"). **Public API** (declared in
 `insulin.publicPaths`): `/api/public/*` and `GET /api/health` (`{"status": "ok", "service": "esign"}`).
 
 ## Embedded editor

@@ -116,11 +116,15 @@ export async function changeRole(db: D1Database, change: { orgId: string; userId
  * Gives a member access to specific apps instead of an organization role, or changes which apps and roles they have,
  * in one batch: the role becomes APPS if it is still `current` (never the last OWNER), grants for apps left out go, and
  * the given grants are written. Every statement requires `actorId` still to be an OWNER, or an ADMIN when the member
- * was not an OWNER. False when nothing was written.
+ * was not an OWNER. Moving from an organization role, the grant statements also require that this batch's own role
+ * change applied (its `updated_at`), so a decision someone else made meanwhile is never overwritten. False when nothing
+ * was written.
  */
 export async function setAppAccess(db: D1Database, change: { orgId: string; userId: string; current: Role; grants: GrantInput[]; actorId: string; now: number }): Promise<boolean> {
   const actor = `EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ?1 AND a.user_id = ?3
     AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?4 <> 'OWNER')))`
+  // ?6 is this batch's time: when the member had an organization role, the first statement stamps it on the membership.
+  const ours = `(?4 = 'APPS' OR (SELECT m.updated_at FROM memberships m WHERE m.org_id = ?1 AND m.user_id = ?2 AND m.role = 'APPS') = ?6)`
   const apps = JSON.stringify(change.grants.map((grant) => grant.app))
   const grants = JSON.stringify(change.grants.map((grant) => ({ app: grant.app, role: grant.role, customRoleId: grant.customRoleId })))
   const statements = [
@@ -131,16 +135,16 @@ export async function setAppAccess(db: D1Database, change: { orgId: string; user
     ).bind(change.orgId, change.userId, change.actorId, change.current, change.now),
     db.prepare(
       `DELETE FROM app_grants WHERE org_id = ?1 AND user_id = ?2
-         AND app NOT IN (SELECT value FROM json_each(?5)) AND ${actor}`,
-    ).bind(change.orgId, change.userId, change.actorId, change.current, apps),
+         AND app NOT IN (SELECT value FROM json_each(?5)) AND ${actor} AND ${ours}`,
+    ).bind(change.orgId, change.userId, change.actorId, change.current, apps, change.now),
     db.prepare(
       `INSERT INTO app_grants (org_id, user_id, app, role, custom_role_id, created_at, updated_at)
-       SELECT ?1, ?2, json_extract(value, '$.app'), json_extract(value, '$.role'), json_extract(value, '$.customRoleId'), ?5, ?5
-       FROM json_each(?6)
-       WHERE (SELECT role FROM memberships WHERE org_id = ?1 AND user_id = ?2) = 'APPS' AND ${actor}
+       SELECT ?1, ?2, json_extract(value, '$.app'), json_extract(value, '$.role'), json_extract(value, '$.customRoleId'), ?6, ?6
+       FROM json_each(?5)
+       WHERE (SELECT role FROM memberships WHERE org_id = ?1 AND user_id = ?2) = 'APPS' AND ${actor} AND ${ours}
        ON CONFLICT (org_id, user_id, app) DO UPDATE SET role = excluded.role, custom_role_id = excluded.custom_role_id,
          updated_at = excluded.updated_at`,
-    ).bind(change.orgId, change.userId, change.actorId, change.current, change.now, grants),
+    ).bind(change.orgId, change.userId, change.actorId, change.current, grants, change.now),
   ]
   const [moved, , written] = await db.batch(statements)
   return (change.current === 'APPS' || (moved?.meta.changes ?? 0) > 0) && (written?.meta.changes ?? 0) > 0

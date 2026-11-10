@@ -9,6 +9,8 @@ import { Log, LogLevel, Miniflare, convertV4MiniflareOptions } from 'miniflare'
 import { APPS, NAVIGATE, splitStatements, startGateway, uniqueEmail } from './helpers/harness.mjs'
 import { COMPATIBILITY_DATE, gatewayDir } from './helpers/bundle.mjs'
 import { removeGrant, upsertGrant, updateCustomRole } from '../src/db/grants.ts'
+import { insertInvitation } from '../src/db/invitations.ts'
+import { setAppAccess } from '../src/db/orgs.ts'
 
 const CATALOG = [
   { key: 'captable.manage', label: 'Record changes', description: 'Record and reverse equity changes.', role: 'EDITOR' },
@@ -234,6 +236,39 @@ test('the app-level writes re-check the actor in SQL: a demoted app admin or own
   await h.sql("INSERT INTO custom_roles (id, org_id, app, name, permissions, created_at, updated_at) VALUES (?1, ?2, 'captable', 'Guarded', '[\"captable.view\"]', 1, 1)", roleId, orgId)
   await h.sql("UPDATE memberships SET role = 'ADMIN' WHERE org_id = ?1 AND user_id = ?2", orgId, owner.id)
   assert.equal(await updateCustomRole(h.db, { id: roleId, orgId, name: 'Renamed', description: '', permissions: ['portfolio.view'], actorId: owner.id, now }), false, 'no longer an owner')
+})
+
+test("review: an invitation's grants stay in its organization, a stale access change never overwrites a newer one, and cleanups re-check the actor", async () => {
+  const owner = await h.user()
+  const orgId = await h.org(owner.client, 'Integrity Org')
+  const otherOrg = await h.org(owner.client, 'Other Integrity Org')
+  const invitationId = randomUUID()
+  await h.sql("INSERT INTO invitations (id, org_id, email, role, status, created_at, expires_at, last_sent_at) VALUES (?1, ?2, ?3, 'APPS', 'pending', 1, ?4, 1)",
+    invitationId, orgId, uniqueEmail('integrity'), Date.now() + 60_000)
+  await assert.rejects(
+    h.sql("INSERT INTO invitation_grants (invitation_id, org_id, app, role) VALUES (?1, ?2, 'captable', 'VIEWER')", invitationId, otherOrg),
+    /FOREIGN KEY/,
+    "a grant naming another organization than its invitation's",
+  )
+
+  const second = await h.user()
+  await h.join(owner, orgId, second, 'OWNER')
+  const target = await h.user()
+  await h.join(owner, orgId, target, 'EDITOR')
+  // The second owner moves the target to Ledger first; the first owner's change was read while they were an Editor.
+  assert.equal(await setAppAccess(h.db, { orgId, userId: target.id, current: 'EDITOR', grants: [{ app: 'ledger', role: 'ADMIN', customRoleId: null }], actorId: second.id, now: Date.now() - 5 }), true)
+  assert.equal(await setAppAccess(h.db, { orgId, userId: target.id, current: 'EDITOR', grants: [{ app: 'captable', role: 'VIEWER', customRoleId: null }], actorId: owner.id, now: Date.now() }), false)
+  assert.deepEqual(await grantsOf(orgId, target.id), [{ app: 'ledger', role: 'ADMIN', custom_role_id: null }], 'the newer decision stands')
+
+  const admin = await h.user()
+  await h.join(owner, orgId, admin, 'ADMIN')
+  const email = uniqueEmail('expired-invitee')
+  await h.sql("INSERT INTO invitations (id, org_id, email, role, status, created_at, expires_at, last_sent_at) VALUES (?1, ?2, ?3, 'VIEWER', 'pending', 1, 2, 1)", randomUUID(), orgId, email)
+  await h.sql("UPDATE memberships SET role = 'VIEWER' WHERE org_id = ?1 AND user_id = ?2", orgId, admin.id)
+  assert.equal(await insertInvitation(h.db, {
+    id: randomUUID(), orgId, email, role: 'VIEWER', grants: [], app: null, invitedBy: admin.id, now: Date.now(), expiresAt: Date.now() + 60_000, pendingLimit: 50,
+  }), false)
+  assert.equal((await h.sql('SELECT status FROM invitations WHERE org_id = ?1 AND email = ?2', orgId, email))[0].status, 'pending', 'a demoted admin closes nothing either')
 })
 
 test('migration 0003 turns USER memberships and invitations into VIEWER and keeps everything else', async () => {

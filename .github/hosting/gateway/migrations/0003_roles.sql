@@ -35,7 +35,8 @@ CREATE TABLE invitations_next (
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   last_sent_at INTEGER NOT NULL,
-  responded_at INTEGER
+  responded_at INTEGER,
+  UNIQUE (id, org_id)
 ) STRICT;
 
 INSERT INTO invitations_next (id, org_id, email, role, invited_by, status, created_at, expires_at, last_sent_at, responded_at)
@@ -88,14 +89,16 @@ CREATE INDEX app_grants_by_app ON app_grants (org_id, app);
 
 CREATE INDEX app_grants_by_custom_role ON app_grants (custom_role_id) WHERE custom_role_id IS NOT NULL;
 
--- The apps an APPS invitation grants, copied to app_grants when it is accepted.
+-- The apps an APPS invitation grants, copied to app_grants when it is accepted. The composite keys tie each grant to its
+-- invitation's organization, and its custom role to that organization and app.
 CREATE TABLE invitation_grants (
-  invitation_id TEXT NOT NULL REFERENCES invitations (id) ON DELETE CASCADE,
+  invitation_id TEXT NOT NULL,
   org_id TEXT NOT NULL,
   app TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('ADMIN', 'EDITOR', 'VIEWER', 'CUSTOM')),
   custom_role_id TEXT,
   PRIMARY KEY (invitation_id, app),
+  FOREIGN KEY (invitation_id, org_id) REFERENCES invitations (id, org_id) ON DELETE CASCADE,
   FOREIGN KEY (org_id, app, custom_role_id) REFERENCES custom_roles (org_id, app, id),
   CHECK ((role = 'CUSTOM') = (custom_role_id IS NOT NULL))
 ) STRICT;

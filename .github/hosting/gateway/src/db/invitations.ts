@@ -42,6 +42,18 @@ function mayHandle(org: string, actor: string, app: string): string {
       AND ${appAdmin(org, actor, app)}))`
 }
 
+/**
+ * Who may invite for role `role` into organization `org`, as SQL (each argument names a parameter): an OWNER, or an ADMIN
+ * for a role other than OWNER; with an app, that app's admin, for specific-apps access to it. `app` names the app
+ * parameter too, so every statement binds it.
+ */
+function mayInvite(appName: string | null, org: string, role: string, actor: string, app: string): string {
+  return appName
+    ? `(${role} = 'APPS' AND ${appAdmin(org, actor, app)})`
+    : `(${app} IS NULL AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor}
+        AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ${role} <> 'OWNER'))))`
+}
+
 /** The grants of these invitations, by invitation id. */
 export async function listInvitationGrants(db: D1Database, ids: string[]): Promise<Map<string, InvitationGrantRow[]>> {
   const grouped = new Map<string, InvitationGrantRow[]>()
@@ -101,18 +113,17 @@ export async function insertInvitation(db: D1Database, invitation: {
   expiresAt: number
   pendingLimit: number
 }): Promise<boolean> {
-  const inviter = invitation.app
-    ? `(?4 = 'APPS' AND ${appAdmin('?2', '?5', '?9')})`
-    : `(?9 IS NULL AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ?2 AND a.user_id = ?5
-           AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?4 <> 'OWNER'))))`
   const grants = JSON.stringify(invitation.grants.map((grant) => ({ app: grant.app, role: grant.role, customRoleId: grant.customRoleId })))
+  // Closing an expired invitation for the address makes room for the new one; it too needs an inviter allowed now.
   const [, inserted] = await db.batch([
-    db.prepare("UPDATE invitations SET status = 'expired' WHERE org_id = ?1 AND email = ?2 AND status = 'pending' AND expires_at <= ?3")
-      .bind(invitation.orgId, invitation.email, invitation.now),
+    db.prepare(
+      `UPDATE invitations SET status = 'expired' WHERE org_id = ?1 AND email = ?2 AND status = 'pending' AND expires_at <= ?3
+         AND ${mayInvite(invitation.app, '?1', '?4', '?5', '?6')}`,
+    ).bind(invitation.orgId, invitation.email, invitation.now, invitation.role, invitation.invitedBy, invitation.app),
     db.prepare(
       `INSERT INTO invitations (id, org_id, email, role, invited_by, status, created_at, expires_at, last_sent_at)
        SELECT ?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?7, ?6
-       WHERE ${inviter}
+       WHERE ${mayInvite(invitation.app, '?2', '?4', '?5', '?9')}
          AND (SELECT COUNT(*) FROM invitations p WHERE p.org_id = ?2 AND p.status = 'pending' AND p.expires_at > ?6) < ?8
        ON CONFLICT DO NOTHING`,
     ).bind(invitation.id, invitation.orgId, invitation.email, invitation.role, invitation.invitedBy, invitation.now,
@@ -179,8 +190,8 @@ export async function acceptInvitation(db: D1Database, id: string, userId: strin
     ).bind(id, userId, now, email, memberLimit),
     db.prepare(
       `INSERT INTO app_grants (org_id, user_id, app, role, custom_role_id, created_at, updated_at)
-       SELECT g.org_id, ?2, g.app, g.role, g.custom_role_id, ?3, ?3
-       FROM invitation_grants g JOIN invitations i ON i.id = g.invitation_id
+       SELECT i.org_id, ?2, g.app, g.role, g.custom_role_id, ?3, ?3
+       FROM invitation_grants g JOIN invitations i ON i.id = g.invitation_id AND i.org_id = g.org_id
        WHERE g.invitation_id = ?1 AND i.status = 'pending' AND i.expires_at > ?3 AND i.email = ?4 AND i.role = 'APPS'
          AND (SELECT m.role FROM memberships m WHERE m.org_id = i.org_id AND m.user_id = ?2) = 'APPS'
        ON CONFLICT DO NOTHING`,

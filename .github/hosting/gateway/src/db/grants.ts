@@ -174,9 +174,9 @@ export async function updateCustomRole(db: D1Database, role: {
 export async function deleteCustomRole(db: D1Database, orgId: string, id: string, actorId: string, now: number): Promise<boolean> {
   const [, deleted] = await db.batch([
     db.prepare(
-      `DELETE FROM invitation_grants WHERE custom_role_id = ?1
+      `DELETE FROM invitation_grants WHERE custom_role_id = ?1 AND org_id = ?3 AND ${owner('?3', '?4')}
          AND invitation_id IN (SELECT i.id FROM invitations i WHERE i.status <> 'pending' OR i.expires_at <= ?2)`,
-    ).bind(id, now),
+    ).bind(id, now, orgId, actorId),
     db.prepare(
       `DELETE FROM custom_roles WHERE org_id = ?1 AND id = ?2 AND ${owner('?1', '?3')}
          AND NOT EXISTS (SELECT 1 FROM app_grants g WHERE g.custom_role_id = ?2)

@@ -16,8 +16,9 @@ export function embedding(win: { parent: unknown; location: { ancestorOrigins?: 
   const embedded = !!win.parent && win.parent !== win;
   if (!embedded) return { embedded, embedder: '' };
   const ancestors = win.location.ancestorOrigins;
-  // Every ancestor where the browser lists them (Chromium, Safari): the exchange checks each, not only the nearest.
-  if (ancestors?.length) { const embedders = Array.from({ length: Math.min(ancestors.length, 10) }, (_, i) => ancestors[i] ?? ''); return { embedded, embedder: embedders[0] ?? '', embedders }; }
+  // Every ancestor where the browser lists them (Chromium, Safari): the exchange checks each, not only the nearest. It
+  // accepts at most ten, so the page sends up to eleven: a deeper nesting is refused there, never cut short here.
+  if (ancestors?.length) { const embedders = Array.from({ length: Math.min(ancestors.length, 11) }, (_, i) => ancestors[i] ?? ''); return { embedded, embedder: embedders[0] ?? '', embedders }; }
   try { return { embedded, embedder: referrer ? new URL(referrer).origin : '' }; } catch { return { embedded, embedder: '' }; }
 }
 class RequestFailed extends Error {readonly status:number;readonly code:string;readonly detail:Record<string,unknown>;constructor(status:number,code='',detail:Record<string,unknown>={}){super('Request failed');this.status=status;this.code=code;this.detail=detail;}}

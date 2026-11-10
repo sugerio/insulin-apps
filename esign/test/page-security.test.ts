@@ -78,6 +78,12 @@ test('the exchange checks every ancestor the browser lists, and the nearest one 
   assert.deepEqual(embedding(framed, ''), { embedded: true, embedder: 'https://host.example.test', embedders: ['https://host.example.test', 'https://top.example.test'] });
   const firefox = { parent: {}, location: {} };
   assert.deepEqual(embedding(firefox, 'https://host.example.test/page?x=1'), { embedded: true, embedder: 'https://host.example.test' });
+  // Nested deeper than the exchange accepts: the page sends one ancestor more than ten, so the exchange refuses the
+  // page instead of checking only the first ten (an allowed chain under a stranger's outermost frame).
+  const deep = { parent: {}, location: { ancestorOrigins: { length: 12, ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, i < 11 ? 'https://host.example.test' : 'https://evil.example.test'])) } } };
+  const report = embedding(deep, '');
+  assert.equal(report.embedders?.length, 11);
+  assert.equal(embedderAllowed(report, own, allowed), false, 'more ancestors than the exchange checks');
 });
 
 test('a page session travels in x-esign-session, which is no Authorization and no x-suger-* header', () => {

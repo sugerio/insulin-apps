@@ -41,7 +41,7 @@ function PreviewStrip() {
 export function RequireOrgAccess() {
   const { orgId } = useParams();
   const me = useMe();
-  if (me.company === null) return <Navigate to="/setup" replace />;
+  if (me.company === null) return <Navigate to={me.companyExists ? "/no-access" : "/setup"} replace />;
   if (!hasAdminAccess(me)) return <Navigate to="/no-access" replace />;
   // One company per Insulin organization: another id is foreign or retired, so an administrator goes home.
   return me.company.id === orgId ? <Outlet /> : <Navigate to="/" replace />;

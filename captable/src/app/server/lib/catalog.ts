@@ -1,24 +1,31 @@
 import { api } from '#shared'
 import { z } from 'zod'
+import type { AuthContext } from '../types.ts'
 
 /**
  * `GET /api/catalog`: the route table as data for AI agents and API clients (the hosting platform's MCP `endpoints`
- * tool shows it), limited to what the caller's access level may call. Built once per level and isolate.
+ * tool shows it), limited to what the caller can use right now. Built once per level and isolate.
  */
 
-export type CatalogLevel = 'admin_rw' | 'admin_ro' | 'holder' | 'none'
+/** `setup`: someone who records changes, before the organization has a company (setup or an import comes first). */
+export type CatalogLevel = 'admin_rw' | 'admin_ro' | 'holder' | 'setup' | 'none'
 
-/** The level the caller's permissions give, whether or not the company exists yet. */
-export function catalogLevel(permissions: ReadonlySet<api.Permission>): CatalogLevel {
-  if (permissions.has('captable.manage')) return 'admin_rw'
-  if (permissions.has('captable.view')) return 'admin_ro'
-  return permissions.has('portfolio.view') ? 'holder' : 'none'
+/** The level the caller has now: their access to the company, a holder match, or the right to set one up. */
+export function catalogLevel(auth: Pick<AuthContext, 'orgAccess' | 'portalMatches' | 'permissions'>, companyExists: boolean): CatalogLevel {
+  const company = [...auth.orgAccess.values()][0]
+  if (company) return company.access
+  if (auth.portalMatches.length > 0) return 'holder'
+  return !companyExists && auth.permissions.has('captable.manage') ? 'setup' : 'none'
 }
+
+const isCreateCompany = (route: api.AnyRoute) => route.method === 'POST' && route.path === '/api/orgs'
+const isImport = (route: api.AnyRoute) => route.path.startsWith('/api/import/')
 
 function callable(route: api.AnyRoute, level: CatalogLevel): boolean {
   if (route.auth === 'identity') return true
   if (route.auth === 'holder') return level === 'holder'
-  return (level === 'admin_rw' || level === 'admin_ro') && route.access.includes(level)
+  if (level === 'setup') return isCreateCompany(route) || isImport(route)
+  return (level === 'admin_rw' || level === 'admin_ro') && route.access.includes(level) && !isCreateCompany(route)
 }
 
 function jsonSchemaOf(schema: z.ZodType): Record<string, unknown> {

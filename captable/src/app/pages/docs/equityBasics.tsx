@@ -149,7 +149,7 @@ export const equityBasics: DocTopic = {
               spread.
             </p>
           </Example>
-          <InApp>An option's page shows the exercise price, what has vested, and what can be exercised now and until when. Exercises happen outside the app, and an owner or admin records them.</InApp>
+          <InApp>An option's page shows the exercise price, what has vested, and what can be exercised now and until when. Exercises happen outside the app, and someone who records changes records them.</InApp>
         </>
       ),
     },

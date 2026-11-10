@@ -45,6 +45,11 @@ export const meResponseSchema = z.strictObject({
     currency: z.string(),
     importSource: importSourceSchema.nullable(),
   }).nullable(),
+  /**
+   * Whether this organization has a company, even when the caller can't see it (`company` is then null): someone
+   * without access goes to the no-access page, not to setup. Absent means false.
+   */
+  companyExists: z.boolean().optional(),
   access: z.enum(['admin_rw', 'admin_ro', 'holder', 'none']),
   pii: z.boolean(),
   portal: z.strictObject({

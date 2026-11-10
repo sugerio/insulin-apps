@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { api } from '../../src/app/shared/index.ts'
-import { consoleHeaders } from '../support/server-harness.ts'
+import { appRequest, consoleHeaders, createTestDatabase } from '../support/server-harness.ts'
 import { getJson, holderIdentity, readHarness, type ReadHarness } from '../support/read-helpers.ts'
 
 let harness: ReadHarness | undefined
@@ -83,7 +83,8 @@ describe('permissions from the role, narrowed by a custom role', () => {
     harness = await readHarness()
     expect(await getJson(harness, consoleHeaders({ via: 'mcp' }), '/api/me')).toMatchObject({ accessVia: 'mcp' })
     expect(await getJson(harness, consoleHeaders({ via: 'API' }), '/api/me')).toMatchObject({ accessVia: 'api' })
-    expect(await getJson(harness, consoleHeaders({ via: 'telnet' }), '/api/me')).toMatchObject({ accessVia: 'browser' })
+    expect(await getJson(harness, consoleHeaders({ via: 'telnet' }), '/api/me'), 'an unknown channel never passes for the browser').toMatchObject({ accessVia: 'api' })
+    expect(await getJson(harness, consoleHeaders(), '/api/me'), 'no header: the Insulin console').toMatchObject({ accessVia: 'browser' })
   })
 })
 
@@ -96,7 +97,8 @@ describe('the API catalog for AI agents and API clients', () => {
   it('lists every endpoint for those who record changes, with placeholders, schemas and idempotency', async () => {
     harness = await readHarness()
     const { endpoints } = await catalog(harness.editor)
-    expect(endpoints.length).toBe(api.ROUTE_TABLE.filter((route) => route.auth !== 'holder').length)
+    expect(endpoints.length).toBe(api.ROUTE_TABLE.filter((route) => route.auth !== 'holder').length - 1)
+    expect(has(endpoints, 'POST', '/api/orgs'), 'the company exists, so setting one up is no longer offered').toBe(false)
     expect(endpoints.every((endpoint) => endpoint.path.startsWith('/api/') && !endpoint.path.includes(':'))).toBe(true)
     const create = endpoints.find((endpoint) => endpoint.method === 'POST' && endpoint.path === '/api/orgs/{orgId}/stakeholders')!
     expect(create).toMatchObject({ idempotencyKey: true, query: null })
@@ -119,5 +121,25 @@ describe('the API catalog for AI agents and API clients', () => {
 
     const none = (await catalog(custom(''))).endpoints
     expect(none.map((endpoint) => endpoint.path).sort()).toEqual(['/api/catalog', '/api/me'])
+    const unmatched = (await catalog(holderIdentity('nobody@example.test'))).endpoints
+    expect(unmatched.map((endpoint) => endpoint.path).sort(), 'a holder without a match has no portal').toEqual(['/api/catalog', '/api/me'])
+  })
+
+  it('offers setup and the import before the company exists, and sends someone without access to an existing one away', async () => {
+    const empty = await createTestDatabase()
+    try {
+      const response = await appRequest('/api/catalog', {}, consoleHeaders({ role: 'EDITOR' }))
+      const { endpoints } = api.apiCatalogSchema.parse(await response.json())
+      expect(has(endpoints, 'POST', '/api/orgs')).toBe(true)
+      expect(has(endpoints, 'POST', '/api/import/preview')).toBe(true)
+      expect(endpoints.some((endpoint) => endpoint.path.startsWith('/api/orgs/{orgId}')), 'no company id to use yet').toBe(false)
+      const me = await (await appRequest('/api/me', {}, consoleHeaders({ role: 'VIEWER' }))).json()
+      expect(me).toMatchObject({ company: null, companyExists: false })
+    } finally {
+      await empty.close()
+    }
+    harness = await readHarness()
+    const outsider = await getJson(harness, custom(''), '/api/me')
+    expect(outsider).toMatchObject({ company: null, companyExists: true, access: 'none' })
   })
 })

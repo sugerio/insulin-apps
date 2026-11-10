@@ -37,8 +37,11 @@ export function readPlatformGrant(request: Request, role: AppRole): PlatformGran
   const header = request.headers.get('x-suger-app-permissions')
   const listed = header === null ? null : new Set(header.split(/[\s,]+/).filter(Boolean))
   const permissions = new Set(listed === null ? own : own.filter((permission) => listed.has(permission)))
-  const via = api.accessViaSchema.safeParse(request.headers.get('x-suger-access-via')?.trim().toLowerCase())
-  return { permissions, accessVia: via.success ? via.data : 'browser' }
+  // Absent (the Insulin console) means the browser; a value that isn't one of the three counts as an API client, the
+  // most limited channel, so a garbled header never passes for a person in the browser.
+  const raw = request.headers.get('x-suger-access-via')
+  const via = api.accessViaSchema.safeParse(raw?.trim().toLowerCase())
+  return { permissions, accessVia: raw === null ? 'browser' : via.success ? via.data : 'api' }
 }
 
 export async function resolveCurrentIdentity(

@@ -23,7 +23,7 @@ export function ImportPage() {
   const { orgId = "" } = useParams();
   const [imported, setImported] = useState(false);
   if (!imported) {
-    if (me.company === null) return <Navigate to="/setup" replace />;
+    if (me.company === null) return <Navigate to={me.companyExists ? "/no-access" : "/setup"} replace />;
     if (!hasAdminAccess(me)) return <Navigate to="/no-access" replace />;
     // One company per Insulin organization: another id belongs to another organization or a retired import.
     if (me.company.id !== orgId) return <Navigate to="/" replace />;

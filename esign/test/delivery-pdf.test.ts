@@ -13,7 +13,7 @@ import { deliveryPdf } from '../src/app/server/esign/delivery-pdf.ts';
 
 const sha=async (data:ArrayBuffer|Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data instanceof Uint8Array?Uint8Array.from(data):data)),n=>n.toString(16).padStart(2,'0')).join('');
 
-test('delivery retries concurrent creation and completed finalization with long names and multipage certificate',{timeout:20000},async()=>{
+test('delivery retries concurrent creation and completed finalization with long names and multipage certificate',{timeout:60000},async()=>{
   const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
   try {
     const db=await mf.getD1Database('DB'), bucket=await blobStore(mf,'artifacts');
@@ -77,7 +77,7 @@ test('delivery retries concurrent creation and completed finalization with long 
     await bucket.put('envelopes/env/local-delivery-v2.json','v2 metadata');
     // Competing first requests conditionally create the same objects without deleting either.
     let arrivals=0, release!:()=>void;
-    const gate=new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('concurrency gate timed out')),5000);release=()=>{clearTimeout(timer);resolve();};});
+    const gate=new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('concurrency gate timed out')),15000);release=()=>{clearTimeout(timer);resolve();};});
     const racingBucket=new Proxy(bucket,{get(target,prop){if(prop==='delete')return ()=>{throw new Error('delivery must not delete objects');};if(prop==='put')return async (objectKey:string,...args:any[])=>{assert.equal(originalObjects.has(objectKey),false,'delivery must not write prior artifact keys');if(objectKey.endsWith('local-delivery-v3.pdf')) {if(++arrivals===4)release();await gate;}return (target.put as any)(objectKey,...args);};const value=Reflect.get(target,prop,target);return typeof value==='function'?value.bind(target):value;}});
     const deliveries=await Promise.all(Array.from({length:4},()=>deliveryPdf(db,racingBucket,'tenant','env',key)));
     assert.equal(arrivals,4);

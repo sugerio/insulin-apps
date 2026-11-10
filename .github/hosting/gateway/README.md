@@ -1,19 +1,20 @@
 # Insulin Apps gateway
 
-A Cloudflare Worker (`insulin-apps-gateway`) that signs people in, keeps their organizations, and puts each app on its
-own subdomain. It plays the part the Insulin console's entry worker plays in production: it authenticates the user,
-picks their active organization and role, and forwards the request to the app Worker over a service binding with the
-console identity headers. The apps need no hosting-specific code.
+A Cloudflare Worker (`insulin-apps-gateway`) that signs people in, keeps their organizations and roles, and puts each
+app on its own subdomain. It plays the part the Insulin console's entry worker plays in production: it authenticates
+the user, picks their active organization, works out their role in the app, and forwards the request to the app Worker
+over a service binding with the console identity headers. The apps need no hosting-specific code.
 
 | Host | What it serves |
 |---|---|
-| `SITE_DOMAIN` (e.g. `insulinapps.com`) | landing page, `/privacy`, `/terms` (public, indexable), `/favicon.ico`, `/apple-touch-icon.png` |
+| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up and sign-in; the account; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; invitations; `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
-| `auth.SITE_DOMAIN` | accounts, organizations, members, invitations; `/favicon.ico`, `/apple-touch-icon.png` |
-| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included) |
+| `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
+| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/settings/users` and `/settings/integrations` |
 | `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout` |
 
-The operator runbook (setup, secrets, adding an app) is `.github/hosting/README.md`. This file is for developers.
+The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
+app) is `.github/hosting/README.md`. This file is for developers.
 
 ## Code
 
@@ -33,13 +34,15 @@ The runtime dependencies are only `react`, `react-dom`, `class-variance-authorit
 | `src/crypto.ts` | random tokens and ids, SHA-256, PBKDF2 hashes, constant-time comparison |
 | `src/http/` | cookies, security headers, request parsing, responses, `return_to`, what is forwarded to apps |
 | `src/db/` | D1 queries, one module per table group; every race-sensitive rule is a single statement or batch |
-| `src/auth/` | sessions, email and password accounts, Google sign-in, the account page |
-| `src/orgs/` | organizations, roles and members; invitations |
+| `src/auth/` | sessions, email and password accounts, Google sign-in, the account page; `sign-in.ts`, where every sign-in becomes a session |
+| `src/roles.ts` | organization roles, app roles, permissions and who may give what |
+| `src/access.ts` | someone's role and permissions in one app, from their organization role or their grant; every way into an app ends here |
+| `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), access in forms and words (`access-forms.ts`) |
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
 | `src/reserved.ts` | `/__insulin/me`, `switch-org`, `logout`, and the local captured-mail page |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode) and the messages |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
-| `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (top bar, footer, favicon links) |
+| `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (top bar, footer, favicon links); `settings.tsx` the organization's settings, `app-settings.tsx` the pages on an app host |
 | `src/pages/html.ts` | the `html` tag, which escapes the HTML of the e-mails (React escapes the pages) |
 | `src/components/ui/` | shadcn/ui components (new-york style), as the shadcn CLI writes them; see "shadcn/ui" below |
 | `src/components/` | the gateway's own pieces: top bar, footer, `<details>` menus, form fields, brand marks |
@@ -62,20 +65,23 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `RL_APP` | ratelimit | suggested `limit: 600, period: 60`; keyed per user |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
-| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source" }]` |
+| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), and a malformed one fails closed |
 | `GOOGLE_CLIENT_ID` | var | optional; empty hides Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | secret | required when `GOOGLE_CLIENT_ID` is set |
 | `TURNSTILE_SITE_KEY` | var | required |
 | `TURNSTILE_SECRET_KEY` | secret | required |
 | `EMAIL_FROM` | var | `Name <address>` or a bare address (the name then is "Insulin Apps") |
 | `SUPPORT_EMAIL` | var | optional contact on the landing, privacy and terms pages; empty points to the repository's issues |
+| `GATEWAY_SECRET_KEY` | secret | optional, base64 of 32 random bytes; seals stored secrets (AES-256-GCM, a key per purpose) and derives per-app secrets. A value that isn't 32 bytes fails closed |
 | `SITE_ENV` | var | **local development and tests only**: `test` captures mail and relaxes cookies on `http://*.localhost`. Any non-empty value is a configuration error unless it is `test` and `SITE_DOMAIN` ends in `.localhost` |
 
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
-`SUGER_ACCESS_MODE=console`. Every incoming `x-suger-*` header and the `insulin_session` cookie are removed first.
-User, organization and invitation ids are random UUIDs (`crypto.randomUUID()`), so apps receive UUIDs as user and
-organization ids.
+`SUGER_ACCESS_MODE=console`, plus `x-suger-access-via` (`browser`, `mcp` or `api`) and, for an app with a permission
+catalog, `x-suger-app-permissions` (space-separated). The app role is `ADMIN`, `EDITOR` or `VIEWER`: organization owners
+and admins are admins in every app, and a custom role is sent as the least built-in role that has its permissions
+(DESIGN.md §2.4). Every incoming `x-suger-*` header and the gateway's cookies are removed first. User, organization and
+invitation ids are random UUIDs (`crypto.randomUUID()`), so apps receive UUIDs as user and organization ids.
 
 ## Develop
 
@@ -99,10 +105,10 @@ binding.
 `npm run dev` writes `.dev/app.wrangler.json` (the app Worker's config), applies the D1 migrations locally and runs
 `wrangler dev --local` with both configs. Open:
 
-- `http://insulinapps.localhost:8787/`: the landing page
-- `http://auth.insulinapps.localhost:8787/`: accounts and organizations
-- `http://captable.insulinapps.localhost:8787/`: the app (the stub echoes the identity headers it receives)
-- `http://auth.insulinapps.localhost:8787/__insulin/dev/mail`: mail captured instead of sent (`?format=json` for JSON)
+- `http://insulinapps.localhost:8787/`: the landing page, sign-in, accounts, organizations and their settings
+- `http://captable.insulinapps.localhost:8787/`: the app (the stub echoes the identity headers it receives), and its
+  `/settings/users`
+- `http://insulinapps.localhost:8787/__insulin/dev/mail`: mail captured instead of sent (`?format=json` for JSON)
 
 Browsers and curl resolve `*.localhost` to your machine. The local config uses Cloudflare's public Turnstile test
 keys: in a browser the widget loads from `challenges.cloudflare.com` and always passes; with curl, send
@@ -158,10 +164,16 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **Links are staged.** A new confirmation or reset token is stored next to the older ones; only after its e-mail goes
   out do the older links stop working. A capped or failed send drops the new token, so flooding requests cannot
   invalidate the links someone already received.
-- **Organization changes re-check the actor in SQL.** Rename, delete, invite, revoke, resend, role changes and removals
-  carry an `EXISTS` on the actor's current role (with the OWNER and ADMIN limits) in the same statement, and the
+- **Organization changes re-check the actor in SQL.** Rename, delete, invite, revoke, resend, role and app-access
+  changes, removals and custom roles carry an `EXISTS` on the actor's current role (with the OWNER and ADMIN limits, the
+  app-admin rule in `db/grants.ts` `appAdmin`, and owner-only custom roles) in the same statement, and the
   50-pending-invitation cap sits inside the insert. A member whose role is lowered, or who is removed, mid-request
   changes nothing.
+- **One kind of access or the other.** Triggers keep `app_grants` to specific-apps (`APPS`) memberships and drop a
+  member's grants the moment they get an organization role; composite foreign keys keep a grant's custom role in the
+  same organization and app, and stop a custom role from being deleted while anything uses it.
+- **Forms on an app host carry the organization's id**, so switching the active organization in another tab can't
+  redirect a change made on a page that was showing the previous one.
 - **Turnstile tokens are per form** (`data-action` signup, login, resend or forgot, required in `siteverify`).
   Google's callback checks `state` before it handles an error or clears the flow cookie. Only real navigations
   (`Sec-Fetch-Mode: navigate`, or HTML in `Accept` when fetch metadata is missing) are sent to sign in; everything

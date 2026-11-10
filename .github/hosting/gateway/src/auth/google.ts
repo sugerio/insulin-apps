@@ -14,7 +14,7 @@ import { log } from '../log.ts'
 import { googleFailedPage, home, notFoundPage, rateLimitedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { checkIdToken, decodeJwtPayload, type GoogleIdentity } from './id-token.ts'
-import { ssoRequired, ssoRequiredResponse } from '../sso/flow.ts'
+import { ssoRequired, ssoRequiredResponse } from '../sso/required.ts'
 import { finishSignIn } from './sign-in.ts'
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'

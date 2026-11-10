@@ -3,6 +3,7 @@
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { UUID_RE, startGateway } from './helpers/harness.mjs'
+import { joinOrgByScim } from '../src/db/sso.ts'
 
 let h
 before(async () => { h = await startGateway() })
@@ -142,4 +143,38 @@ test('only the organization\'s own people in verified domains; paging; the last 
   const unsupported = await h.client().request(h.url('apex', '/scim/v2/Users'), { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' }, body: 'x' })
   assert.equal(unsupported.status, 415)
   assert.equal((await scim(token, 'GET', '/Groups')).status, 404)
+})
+
+test('review: removing a domain removes the people SCIM provisioned on it, and SCIM can no longer reach or reactivate them', async () => {
+  const domain = 'scim-removed.test'
+  const { owner, orgId, token } = await provisioned(domain)
+  const created = await scim(token, 'POST', '/Users', { schemas: [USER], userName: `gone@${domain}`, active: true })
+  assert.equal(created.status, 201, created.text)
+  const id = json(created).id
+  const kept = await h.user({ email: `kept@${domain}` })
+  await h.join(owner, orgId, kept, 'EDITOR')
+  assert.equal((await owner.client.post(h.url('auth', `/orgs/${orgId}/sso/domains/remove`), { domain })).status, 303)
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?1 AND user_id = ?2', orgId, id))[0].n, 0, 'the provisioned person left')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM scim_users WHERE org_id = ?1 AND user_id = ?2', orgId, id))[0].n, 0, 'and their link')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?1 AND user_id = ?2', orgId, kept.id))[0].n, 1, 'people SCIM never touched stay')
+  assert.equal((await h.sql("SELECT role FROM memberships WHERE org_id = ?1 AND user_id = ?2", orgId, owner.id))[0].role, 'OWNER')
+  assert.equal((await scim(token, 'GET', `/Users/${id}`)).status, 404)
+  const reactivate = await scim(token, 'PATCH', `/Users/${id}`, { schemas: [PATCH], Operations: [{ op: 'replace', path: 'active', value: true }] })
+  assert.equal(reactivate.status, 404)
+  assert.equal(json(await scim(token, 'GET', `/Users?filter=${encodeURIComponent(`userName eq "gone@${domain}"`)}`)).totalResults, 0)
+  assert.equal((await scim(token, 'POST', '/Users', { schemas: [USER], userName: `again@${domain}` })).status, 400, 'no longer a verified domain')
+})
+
+test('review: a domain that loses its verification hides its people from SCIM, and joining re-checks it in the same statement', async () => {
+  const domain = 'scim-unverified.test'
+  const { orgId, token } = await provisioned(domain)
+  const created = await scim(token, 'POST', '/Users', { schemas: [USER], userName: `paused@${domain}`, active: false })
+  assert.equal(created.status, 201, created.text)
+  const id = json(created).id
+  await h.sql('UPDATE sso_domains SET verified_at = NULL WHERE org_id = ?1 AND domain = ?2', orgId, domain)
+  const reactivate = await scim(token, 'PATCH', `/Users/${id}`, { schemas: [PATCH], Operations: [{ op: 'replace', path: 'active', value: true }] })
+  assert.equal(reactivate.status, 404)
+  assert.equal(await joinOrgByScim(h.db, orgId, id, 'VIEWER', Date.now(), 100), false, 'the join itself refuses an address outside a verified domain')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?1 AND user_id = ?2', orgId, id))[0].n, 0)
+  assert.equal((await scim(token, 'POST', '/Users', { schemas: [USER], userName: 'anna@bücher.test' })).status, 400, 'a domain in its Unicode form')
 })

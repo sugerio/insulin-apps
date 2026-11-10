@@ -43,9 +43,17 @@ export interface PendingSignIn {
   return_to: string | null
 }
 
-/** The part of an address after the @, which domain rules compare. */
+/**
+ * The part of an address after the @, which domain rules compare, in the form domains are stored: lower case and
+ * punycode (so `bücher.example` and `xn--bcher-kva.example` are the same domain). Unparseable: returned as it is.
+ */
 export function domainOf(email: string): string {
-  return email.slice(email.lastIndexOf('@') + 1)
+  const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase()
+  try {
+    return new URL(`http://${domain}`).hostname
+  } catch {
+    return domain
+  }
 }
 
 export async function listDomains(db: D1Database, orgId: string): Promise<SsoDomainRow[]> {
@@ -80,10 +88,28 @@ export async function markDomainVerified(db: D1Database, orgId: string, domain: 
   return result.meta.changes > 0
 }
 
+/** SCIM-provisioned people of organization ?1 whose address is in domain ?2 (SQL, for the statements below). */
+const PROVISIONED_IN_DOMAIN = `SELECT s.user_id FROM scim_users s JOIN users u ON u.id = s.user_id
+  WHERE s.org_id = ?1 AND substr(u.email, instr(u.email, '@') + 1) = ?2`
+
+/**
+ * Removes a claimed domain while the actor is an OWNER. With it go the people SCIM provisioned on it: their membership
+ * (never an OWNER's, so never the last one) and their SCIM link, in the same batch, so the identity provider keeps no
+ * hold on addresses the organization no longer vouches for.
+ */
 export async function removeDomain(db: D1Database, orgId: string, domain: string, actorId: string): Promise<boolean> {
-  const result = await db.prepare(`DELETE FROM sso_domains WHERE org_id = ?1 AND domain = ?2 AND ${owner('?1', '?3')}`)
-    .bind(orgId, domain, actorId).run()
-  return result.meta.changes > 0
+  const [, , removed] = await db.batch([
+    db.prepare(
+      `DELETE FROM memberships WHERE org_id = ?1 AND role <> 'OWNER' AND user_id IN (${PROVISIONED_IN_DOMAIN})
+         AND EXISTS (SELECT 1 FROM sso_domains d WHERE d.org_id = ?1 AND d.domain = ?2) AND ${owner('?1', '?3')}`,
+    ).bind(orgId, domain, actorId),
+    db.prepare(
+      `DELETE FROM scim_users WHERE org_id = ?1 AND user_id IN (${PROVISIONED_IN_DOMAIN})
+         AND EXISTS (SELECT 1 FROM sso_domains d WHERE d.org_id = ?1 AND d.domain = ?2) AND ${owner('?1', '?3')}`,
+    ).bind(orgId, domain, actorId),
+    db.prepare(`DELETE FROM sso_domains WHERE org_id = ?1 AND domain = ?2 AND ${owner('?1', '?3')}`).bind(orgId, domain, actorId),
+  ])
+  return (removed?.meta.changes ?? 0) > 0
 }
 
 /** Whether `domain` is one of the organization's verified domains. */
@@ -149,7 +175,11 @@ export async function saveConnection(db: D1Database, save: { id: string; orgId: 
        saml_sso_url = excluded.saml_sso_url,
        saml_certificates = COALESCE(excluded.saml_certificates, sso_connections.saml_certificates), oidc_issuer = excluded.oidc_issuer,
        oidc_client_id = excluded.oidc_client_id,
-       oidc_client_secret = COALESCE(excluded.oidc_client_secret, sso_connections.oidc_client_secret),
+       oidc_client_secret = CASE
+         WHEN excluded.oidc_client_secret IS NOT NULL THEN excluded.oidc_client_secret
+         WHEN sso_connections.oidc_issuer IS excluded.oidc_issuer AND sso_connections.oidc_client_id IS excluded.oidc_client_id
+           THEN sso_connections.oidc_client_secret
+         ELSE NULL END,
        updated_at = excluded.updated_at`,
   ).bind(
     save.id, save.orgId, input.protocol, input.enabled ? 1 : 0, input.requireSso ? 1 : 0, input.defaultRole, input.samlEntityId,
@@ -232,6 +262,36 @@ export async function joinOrg(db: D1Database, orgId: string, userId: string, rol
   return (member?.results.length ?? 0) > 0
 }
 
+/**
+ * Adds a SCIM-provisioned member with `role`, in one statement that also requires their address to be in one of the
+ * organization's verified domains now and the organization to have room; an existing member keeps their role. True
+ * when they are a member afterwards.
+ */
+export async function joinOrgByScim(db: D1Database, orgId: string, userId: string, role: 'EDITOR' | 'VIEWER', now: number, limit: number): Promise<boolean> {
+  const [, member] = await db.batch([
+    db.prepare(
+      `INSERT INTO memberships (org_id, user_id, role, created_at, updated_at)
+       SELECT ?1, ?2, ?3, ?4, ?4 WHERE (SELECT COUNT(*) FROM memberships m WHERE m.org_id = ?1) < ?5
+         AND EXISTS (SELECT 1 FROM users u JOIN sso_domains d ON d.org_id = ?1 AND d.verified_at IS NOT NULL
+           AND d.domain = substr(u.email, instr(u.email, '@') + 1) WHERE u.id = ?2)
+       ON CONFLICT DO NOTHING`,
+    ).bind(orgId, userId, role, now, limit),
+    db.prepare('SELECT 1 AS found FROM memberships WHERE org_id = ?1 AND user_id = ?2').bind(orgId, userId),
+  ])
+  return (member?.results.length ?? 0) > 0
+}
+
+/**
+ * Notes an existing account's first sign-in through single sign-on: true once, for an account with a password or a
+ * Google link (the person is then told by e-mail); false for one made by single sign-on, or already noted.
+ */
+export async function markSsoLinked(db: D1Database, userId: string, now: number): Promise<boolean> {
+  const result = await db.prepare(
+    `UPDATE users SET sso_linked_at = ?2 WHERE id = ?1 AND sso_linked_at IS NULL AND (password_hash IS NOT NULL OR google_sub IS NOT NULL)`,
+  ).bind(userId, now).run()
+  return result.meta.changes > 0
+}
+
 /** Removes a member, never the organization's last OWNER. 'removed', 'not_member' or 'last_owner'. */
 export async function leaveBySso(db: D1Database, orgId: string, userId: string): Promise<'removed' | 'not_member' | 'last_owner'> {
   const result = await db.prepare(
@@ -268,13 +328,15 @@ export interface ScimUserRow {
   external_id: string | null
 }
 
+/** People in one of organization ?1's verified domains now (SQL): the only ones its SCIM client may see or touch. */
+const IN_VERIFIED_DOMAIN = `substr(u.email, instr(u.email, '@') + 1) IN (SELECT d.domain FROM sso_domains d WHERE d.org_id = ?1 AND d.verified_at IS NOT NULL)`
+
 /**
- * The people a SCIM client sees: those it provisioned or linked, and members whose address is in a verified domain.
- * `email` narrows to one address.
+ * The people a SCIM client sees: those it provisioned or linked, and members, whose address is in one of the
+ * organization's verified domains now. `email` narrows to one address.
  */
 export async function listScimUsers(db: D1Database, orgId: string, options: { email?: string | null; offset: number; count: number }): Promise<{ total: number; users: ScimUserRow[] }> {
-  const where = `(s.user_id IS NOT NULL OR (m.user_id IS NOT NULL
-      AND substr(u.email, instr(u.email, '@') + 1) IN (SELECT d.domain FROM sso_domains d WHERE d.org_id = ?1 AND d.verified_at IS NOT NULL)))
+  const where = `(s.user_id IS NOT NULL OR m.user_id IS NOT NULL) AND ${IN_VERIFIED_DOMAIN}
     AND (?2 IS NULL OR u.email = ?2)`
   const from = `FROM users u LEFT JOIN memberships m ON m.org_id = ?1 AND m.user_id = u.id
     LEFT JOIN scim_users s ON s.org_id = ?1 AND s.user_id = u.id`
@@ -293,8 +355,7 @@ export async function findScimUser(db: D1Database, orgId: string, userId: string
     `SELECT u.id, u.email, u.name, u.created_at, u.updated_at, (m.user_id IS NOT NULL) AS member, s.external_id
      FROM users u LEFT JOIN memberships m ON m.org_id = ?1 AND m.user_id = u.id
      LEFT JOIN scim_users s ON s.org_id = ?1 AND s.user_id = u.id
-     WHERE u.id = ?2 AND (s.user_id IS NOT NULL OR (m.user_id IS NOT NULL
-       AND substr(u.email, instr(u.email, '@') + 1) IN (SELECT d.domain FROM sso_domains d WHERE d.org_id = ?1 AND d.verified_at IS NOT NULL)))`,
+     WHERE u.id = ?2 AND (s.user_id IS NOT NULL OR m.user_id IS NOT NULL) AND ${IN_VERIFIED_DOMAIN}`,
   ).bind(orgId, userId).first<ScimUserRow>()
 }
 

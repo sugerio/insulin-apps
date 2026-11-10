@@ -80,8 +80,10 @@ export function privacyPage(ctx: Context): Html {
           session cookie&apos;s value.
         </li>
         <li>
-          <strong>Two-step sign-in, if you turn it on:</strong> your authenticator app&apos;s secret, encrypted, when you turned it on
-          and the last code time accepted, and your recovery codes as hashes only.
+          <strong>Two-step sign-in, if you turn it on:</strong> your authenticator app&apos;s secret, encrypted, when you turned it on,
+          the last code time accepted and how many wrong codes were entered in a row, and your recovery codes as hashes only. If
+          your organization&apos;s single sign-on first signs in an account that has its own password or Google link, we note
+          when, to tell you once.
         </li>
         <li>
           <strong>Organizations:</strong> the organizations you create or join, your role in each (or the apps you were given and

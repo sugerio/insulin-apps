@@ -36,6 +36,8 @@ const GIVEN_NAME_ATTRIBUTES = ['givenname', 'firstname', 'http://schemas.xmlsoap
 const SURNAME_ATTRIBUTES = ['surname', 'sn', 'lastname', 'familyname', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname']
 
 export const MAX_RESPONSE_BYTES = 256 * 1024
+/** Deeper element nesting is refused before parsing, so no walk of the document can recurse without bound. */
+export const MAX_DEPTH = 64
 const CLOCK_SKEW_MS = 2 * 60 * 1000
 
 export type SamlProblem =
@@ -60,9 +62,31 @@ function malformed(message: string): SamlError {
   return new SamlError('malformed', message)
 }
 
+/**
+ * How deeply the elements nest, from the markup alone (attribute values can't hold `<`, so every `<` starts markup):
+ * comments, CDATA and processing instructions are skipped. Stops counting past `limit`.
+ */
+export function nestingDepth(xml: string, limit: number): number {
+  let depth = 0
+  let deepest = 0
+  const markup = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<(\/?)[^<>]*?(\/?)>/g
+  for (const match of xml.matchAll(markup)) {
+    const token = match[0]
+    if (token.startsWith('<!--') || token.startsWith('<![CDATA[') || token.startsWith('<?')) continue
+    if (match[1]) depth -= 1
+    else if (!match[2]) {
+      depth += 1
+      if (depth > deepest) deepest = depth
+      if (deepest > limit) break
+    }
+  }
+  return deepest
+}
+
 /** Untrusted XML, parsed strictly: no DTD (so no entity expansion), and any parser warning or error aborts. */
 function parseXml(xml: string): XmlDocument {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw malformed('DTDs are not allowed')
+  if (nestingDepth(xml, MAX_DEPTH) > MAX_DEPTH) throw malformed('The response is nested too deeply')
   const fail = () => { throw malformed('The response is not well-formed XML') }
   let doc: XmlDocument | undefined
   try {
@@ -208,6 +232,7 @@ function decode(samlResponse: string): string {
   if (samlResponse.length > (MAX_RESPONSE_BYTES * 4) / 3 + 4096) throw malformed('The response is too large')
   const bytes = fromBase64(samlResponse.replace(/\s+/g, ''))
   if (!bytes) throw malformed('The response is not base64')
+  if (bytes.length > MAX_RESPONSE_BYTES) throw malformed('The response is too large')
   try {
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes)
   } catch {

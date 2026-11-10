@@ -134,11 +134,15 @@ Apps keep the same rule for anything of that kind they implement themselves, usi
 - **E-mail and password**, with the existing confirmation, reset, Turnstile, rate limits and credential versions.
 - **Google** (the platform's OAuth client), callback `https://insulinapps.com/auth/google/callback`.
 - **MFA with an authenticator app (TOTP).** Turned on under Account → Security with a QR code and a code from the app;
-  ten single-use recovery codes are shown once. While it is on, every password or Google sign-in asks for a code (or a
-  recovery code) before a session exists. Codes are RFC 6238, SHA-1, 6 digits, 30 seconds, ±1 step, and a used step is
-  never accepted twice. The secret is stored encrypted (AES-256-GCM with `GATEWAY_SECRET_KEY`).
-- **Enterprise SSO** (§7): SAML 2.0 or OpenID Connect for an organization's verified e-mail domains; the identity
-  provider is responsible for MFA there.
+  ten single-use recovery codes are shown once. Turning it on needs the current password (or, for an account without
+  one, a sign-in in the last ten minutes), so a stolen session can't put the thief's authenticator on the account. While
+  it is on, every sign-in, password, Google, a reset link or enterprise SSO alike, asks for a code (or a recovery code)
+  before a session exists. Codes are RFC 6238, SHA-1, 6 digits, 30 seconds, ±1 step, and a used step is never accepted
+  twice. Ten wrong app codes in a row, across sign-ins, pause app codes for an hour (recovery codes still work) and
+  e-mail the person once. The secret is stored encrypted (AES-256-GCM with `GATEWAY_SECRET_KEY`).
+- **Enterprise SSO** (§7): SAML 2.0 or OpenID Connect for an organization's verified e-mail domains. It asks for the
+  code too: the organization that verified a domain controls its mailboxes and so could already reset a password, and
+  with MFA applied to its identity provider as well, single sign-on is no weaker a way in than a reset.
 
 ### 5.2 MCP clients (Claude, Codex, Gemini, opencode, …)
 
@@ -231,20 +235,27 @@ An organization's owners set this up under `insulinapps.com/settings/sso`.
     provider posts it from another site; the ACS is the one form exempt from the Origin check. SP metadata at
     `/sso/saml/<connection>/metadata`. Signatures are checked with `xml-crypto` and `@xmldom/xmldom`, which need
     `nodejs_compat`.
+  - SAML responses over 256 KB, or nested deeper than 64 elements, are refused before any walk of the document.
   - OIDC: authorization code with PKCE and a nonce, client secret encrypted at rest; the ID token comes straight from the
-    token endpoint over TLS, and its issuer, audience, expiry, nonce and `email_verified` are checked.
+    token endpoint over TLS, and its issuer, audience, expiry, nonce and `email_verified` are checked. A stored client
+    secret belongs to the issuer and client id it was given for: changing either drops it, and the owner enters it
+    again, so a changed issuer never receives the old secret.
 - **Sign-in.** "Sign in with SSO" asks for the work e-mail, finds the verified domain and starts the connection. The
   address must be in one of the organization's verified domains. An unknown address gets an account (confirmed, no
-  password); someone who isn't a member joins with the default role, and the organization becomes the active one. With
+  password); someone who isn't a member joins with the default role, and the organization becomes the active one. An
+  existing account with its own password or Google link is told by e-mail the first time it signs in this way. With
   "require SSO", password sign-in, sign-up, password resets, confirmation links and Google are refused for those
-  addresses before any credential is looked at.
+  addresses before any credential is looked at, and again where every sign-in finishes, against the account's stored
+  address, so a Google account matched by its subject can't get around it. Domains are compared in punycode.
 - **SCIM 2.0** at `https://insulinapps.com/scim/v2` with a bearer token the owner creates (shown once): `Users`
   (list with `userName eq`, create, read, replace, patch, delete), `ServiceProviderConfig`, `ResourceTypes`, `Schemas`.
-  Only addresses in verified domains. Creating adds the person with the default role; `active: false` or delete removes
-  them from the organization (never its last owner), which also ends their AI agents' grants there; their sessions stay,
-  since they may belong to other organizations, but they can no longer act in this one. `scim_users` remembers whom the
-  identity provider provisioned (with its external id), so a deactivated person stays visible to it. Roles stay managed
-  on `/settings/users`. SCIM calls are rate limited per token.
+  Only addresses in a currently verified domain, for every read and write; joining checks that in the same statement.
+  Creating adds the person with the default role; `active: false` or delete removes them from the organization (never
+  its last owner), which also ends their AI agents' grants there; their sessions stay, since they may belong to other
+  organizations, but they can no longer act in this one. `scim_users` remembers whom the identity provider provisioned
+  (with its external id), so a deactivated person stays visible to it. Removing a domain removes the non-owner members
+  SCIM provisioned on it, and their SCIM links, in the same batch. Roles stay managed on `/settings/users`. SCIM calls
+  are rate limited per token.
 
 ## 8. Data
 

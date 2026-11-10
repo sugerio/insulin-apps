@@ -97,6 +97,37 @@ export function invitationMail(inviter: string, orgName: string, access: string,
 }
 
 /** After two-step sign-in is turned on or off: so the owner of the address notices a change they didn't make. */
+export function mfaLockedMail(securityUrl: string): MailContent {
+  return {
+    subject: `Too many wrong sign-in codes on ${PRODUCT}`,
+    text: textBody([
+      `Someone entered ten wrong codes from your authenticator app in a row while signing in to ${PRODUCT}, so app codes are paused for an hour.`,
+      'If it was you, wait an hour or sign in with a recovery code. If it wasn\'t, someone knows your password: change it and check your security settings.',
+      `Security settings: ${securityUrl}`,
+    ]),
+    html: htmlBody([
+      html`Someone entered ten wrong codes from your authenticator app in a row while signing in to ${PRODUCT}, so app codes are paused for an hour.`,
+      html`If it was you, wait an hour or sign in with a recovery code. If it wasn't, someone knows your password: change it and check your security settings.`,
+    ], { label: 'Open security settings', url: securityUrl }),
+  }
+}
+
+export function ssoLinkedMail(name: string, orgName: string, accountUrl: string): MailContent {
+  return {
+    subject: `You signed in to ${PRODUCT} through ${orgName}'s single sign-on`,
+    text: textBody([
+      `Hi ${name},`,
+      `Your ${PRODUCT} account just signed in through the single sign-on of the organization "${orgName}" for the first time. Its owners can now sign you in with their identity provider, as your work address belongs to them.`,
+      `If that wasn't you, tell the organization's owners, and check your account: ${accountUrl}`,
+    ]),
+    html: htmlBody([
+      html`Hi ${name},`,
+      html`Your ${PRODUCT} account just signed in through the single sign-on of the organization <strong>${orgName}</strong> for the first time. Its owners can now sign you in with their identity provider, as your work address belongs to them.`,
+      html`If that wasn't you, tell the organization's owners, and check your account.`,
+    ], { label: 'Open your account', url: accountUrl }),
+  }
+}
+
 export function mfaChangedMail(name: string, enabled: boolean, securityUrl: string): MailContent {
   const what = enabled ? 'turned on' : 'turned off'
   const after = enabled

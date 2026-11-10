@@ -6,7 +6,7 @@ import { apexUrl } from '../context.ts'
 import { base64url, newId, randomToken, sha256, sha256Hex, unseal } from '../crypto.ts'
 import {
   confirmByIdentityProvider, connectionForDomain, consumePendingSignIn, domainOf, findConnectionById, insertPendingSignIn,
-  isVerifiedDomain, joinOrg, ssoRequiredForDomain, type SsoConnectionRow,
+  isVerifiedDomain, joinOrg, markSsoLinked, type SsoConnectionRow,
 } from '../db/sso.ts'
 import { findUserByEmail, findUserById, insertUser, type UserRow } from '../db/users.ts'
 import { cookieValues, serializeCookie } from '../http/cookies.ts'
@@ -14,8 +14,10 @@ import { field } from '../http/request.ts'
 import { htmlResponse } from '../http/response.ts'
 import { safeReturnTo } from '../http/return-to.ts'
 import { log } from '../log.ts'
+import { ssoLinkedMail } from '../mail/templates.ts'
+import { sendMail } from '../mail/transport.ts'
 import { MEMBER_LIMIT } from '../orgs/invitations.ts'
-import { ssoContinuePage, ssoFailedPage, ssoRequiredPage, ssoStartPage } from '../pages/sso.tsx'
+import { ssoContinuePage, ssoFailedPage, ssoStartPage } from '../pages/sso.tsx'
 import { home, notFoundPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { finishSignIn } from '../auth/sign-in.ts'
@@ -62,20 +64,6 @@ function certificatesOf(connection: SsoConnectionRow): string[] {
 export function connectionReady(connection: SsoConnectionRow): boolean {
   if (connection.protocol === 'saml') return Boolean(connection.saml_entity_id && connection.saml_sso_url && certificatesOf(connection).length)
   return Boolean(connection.oidc_issuer && connection.oidc_client_id && connection.oidc_client_secret)
-}
-
-/**
- * Whether an organization requires its single sign-on for this address: password, Google, reset and confirmation
- * sign-ins are then refused. It depends on the domain alone, so it says nothing about whether an account exists.
- */
-export function ssoRequired(ctx: Context, email: string): Promise<boolean> {
-  return ssoRequiredForDomain(ctx.config.db, domainOf(email))
-}
-
-/** The page that sends someone with a required single sign-on there instead. */
-export function ssoRequiredResponse(ctx: Context, email: string, returnTo: string | null): Response {
-  log('sso_required_refused')
-  return htmlResponse(ssoRequiredPage(ctx, email, returnTo), { status: 403 })
 }
 
 function failed(ctx: Context, status: number, text: string): Response {
@@ -252,6 +240,12 @@ async function completeSignIn(ctx: Context, connection: SsoConnectionRow, identi
   if (!user) return failed(ctx, 409, 'We couldn\'t set up your account. Please try again.')
   if (!(await joinOrg(db, connection.org_id, user.id, connection.default_role, ctx.now, MEMBER_LIMIT))) {
     return failed(ctx, 409, `This organization has reached its limit of ${MEMBER_LIMIT} members. Ask its owners to make room.`)
+  }
+  // An account that had its own way in (a password or Google) learns, once, that the organization can now sign it in.
+  if (await markSsoLinked(db, user.id, ctx.now)) {
+    const org = await db.prepare('SELECT name FROM orgs WHERE id = ?1').bind(connection.org_id).first<{ name: string }>()
+    await sendMail(ctx, 'sso_linked', user.email, ssoLinkedMail(user.name, org?.name ?? 'your organization', apexUrl(ctx, '/account')))
+    log('sso_linked', { user: user.id, connection: connection.id })
   }
   log('login', { user: user.id, method: 'sso', connection: connection.id })
   return finishSignIn(ctx, user, 'sso', safeReturnTo(ctx, returnTo) ?? home(ctx),

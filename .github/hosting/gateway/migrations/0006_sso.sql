@@ -62,7 +62,12 @@ CREATE TABLE scim_tokens (
 
 CREATE INDEX scim_tokens_by_org ON scim_tokens (org_id);
 
--- People the SCIM client provisioned or linked: they stay visible to it (active or not) until it deletes them.
+-- When an existing account (one with a password or a Google link) first signed in through an organization's single
+-- sign-on: the person is told once, by e-mail.
+ALTER TABLE users ADD COLUMN sso_linked_at INTEGER;
+
+-- People the SCIM client provisioned or linked: they stay visible to it (active or not) while their address is in one
+-- of the organization's verified domains, until it deletes them.
 CREATE TABLE scim_users (
   org_id TEXT NOT NULL REFERENCES orgs (id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,

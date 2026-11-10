@@ -122,13 +122,16 @@ test('the mail relay takes one message from an app with its token, for an existi
   assert.doesNotMatch(h.logText(), new RegExp(sent.to.replace(/[.+]/g, '\\$&')), 'logs never name the recipient')
 })
 
-test('the mail relay keeps to the per-recipient cap and to 500 messages a day for each organization and app', async () => {
+test("the mail relay keeps to apps' per-recipient cap, apart from the gateway's own, and to the daily caps", async () => {
   const orgId = await newOrg(h)
   const to = uniqueEmail('capped')
-  for (let i = 0; i < 5; i += 1) assert.equal((await relay(h, { orgId, body: message({ to }) })).status, 202)
+  for (let i = 0; i < 10; i += 1) assert.equal((await relay(h, { orgId, body: message({ to }) })).status, 202)
   const capped = await relay(h, { orgId, body: message({ to }) })
   assert.equal(capped.status, 429)
   assert.deepEqual(JSON.parse(capped.text), { error: 'rate_limited' })
+  // The gateway's own mail to that address isn't crowded out: a sign-up confirmation still goes.
+  assert.equal((await h.signUp(h.client(), { email: to })).status, 200)
+  assert.ok((await h.mails(to)).some((mail) => /verify-email/.test(mail.text)), "an app's mail never uses up room the gateway's own messages need")
 
   const busy = await newOrg(h)
   const now = Date.now()
@@ -138,6 +141,14 @@ test('the mail relay keeps to the per-recipient cap and to 500 messages a day fo
   }
   assert.equal((await relay(h, { orgId: busy, body: message() })).status, 429, 'the daily cap for this organization and app')
   assert.equal((await relay(h, { orgId, body: message() })).status, 202, 'another organization has its own')
+
+  const others = await newOrg(h)
+  for (let i = 0; i < 5000; i += 250) {
+    const rows = Array.from({ length: 250 }, (_, j) => `('g${i + j}', 'app:captable', 'org-${(i + j) % 40}', ${now - 1000})`).join(', ')
+    await h.sql(`INSERT INTO mail_log (recipient_hash, kind, org_id, created_at) VALUES ${rows}`)
+  }
+  assert.equal((await relay(h, { orgId: others, body: message() })).status, 429, 'the daily cap for the app across organizations')
+  await h.sql("DELETE FROM mail_log WHERE recipient_hash LIKE 'g%'")
 })
 
 test('without GATEWAY_SECRET_KEY the relay says it is not set up', async () => {

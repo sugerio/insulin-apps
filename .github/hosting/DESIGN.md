@@ -305,7 +305,9 @@ token and the organization it serves in `x-suger-organization-id`:
 
 - **Sender.** It goes from the gateway's `EMAIL_FROM` address, named "`<App title>` via Insulin Apps", with the app's
   `replyTo` if it gave one.
-- **Limits.** The per-recipient cap (five an hour), 500 messages a day for each organization and app, and `RL_AUTH`
+- **Limits.** Apps' mail has its own per-recipient allowance (ten an hour, all apps together), counted apart from the
+  gateway's own sign-in and security mail so an app can never crowd those out; 500 messages a day for each organization
+  and app, 5,000 a day for each app across organizations, and `RL_AUTH`
   per app and organization.
 - **Responses.** 202 `{ "status": "sent" }`. Otherwise an error: 400 `invalid_request`, 401 `unauthorized`, 404
   `unknown_organization`, 429 `rate_limited`, 502 `send_failed`, or 503 `not_configured` without
@@ -322,8 +324,10 @@ An app lists the secrets it needs at runtime in `insulin.secrets`: at most 30 na
 in upper case (`ESIGN_…` for `esign`). The app deploy takes each from the GitHub `production` environment, a secret of
 that exact name or else a variable, and uploads it with the Worker's `--secrets-file`; names that aren't set are skipped
 and logged by name. The workflow hands the deploy step the environment's secrets and variables as JSON
-(`toJSON(secrets)`, `toJSON(vars)`), and the script picks only the declared names: never another app's, never the
-gateway's, never logged, and never visible to the build, which runs in a job without them. The app reads them with
+(`toJSON(secrets)`, `toJSON(vars)`), and the script picks only the declared names: never another app's (a name inside a
+longer app's prefix, `ESIGN_PRO_…` next to an app `esign-pro`, is refused), never the platform's (apps can't be named
+`cloudflare`, `google`, `turnstile`, `github`, `site`, `suger` and the like, and the platform's setting names are refused
+outright), never logged, and never visible to the build, which runs in a job without them. The app reads them with
 `readAppEnv(name)`. The gateway never learns an app's secret names.
 
 ### 8.4 Integrations

@@ -99,3 +99,14 @@ test("reads an app's secret names, which carry its own prefix", async () => {
     await assert.rejects(() => listApps(broken), /insulin\.secrets\[0\] must match/, bad)
   }
 })
+
+test("never hands an app the platform's own settings, or a name in another app's namespace", async () => {
+  for (const name of ['cloudflare', 'google', 'turnstile', 'github', 'site', 'suger']) {
+    const reserved = await repository({ [name]: { insulin: { secrets: [`${name.toUpperCase()}_API_TOKEN`] } } })
+    await assert.rejects(() => listApps(reserved), /is reserved/, name)
+  }
+  const both = await repository({ esign: { insulin: { secrets: ['ESIGN_PRO_KEY'] } }, 'esign-pro': { insulin: { secrets: ['ESIGN_PRO_KEY'] } } })
+  await assert.rejects(() => listApps(both), /ESIGN_PRO_KEY belongs to app "esign-pro"/)
+  const percent = await repository({ app1: { insulin: { publicPaths: ['/%5f%5finsulin/'] } } })
+  await assert.rejects(() => listApps(percent), /percent sign/)
+})

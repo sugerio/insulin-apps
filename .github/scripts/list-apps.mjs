@@ -21,6 +21,15 @@ export const RESERVED_APP_NAMES = new Set([
   'docs',
   'help',
   'support',
+  // An app's secrets are named <APP>_*; these would collide with the platform's own settings (DESIGN.md §8.3).
+  'cloudflare',
+  'google',
+  'turnstile',
+  'github',
+  'site',
+  'suger',
+  'actions',
+  'runner',
 ])
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -59,7 +68,31 @@ export async function listApps(root = repositoryRoot) {
     apps.push({ name: entry.name, title, summary, permissions, publicPaths, secrets })
   }
 
+  checkSecretNamespaces(apps)
   return apps
+}
+
+/**
+ * Settings and secrets the platform's own workflows use: never an app's, whatever its name (the reserved app names
+ * already keep app prefixes off them; this is the second lock).
+ */
+export const PLATFORM_SETTING_NAMES = new Set([
+  'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SITE_KEY',
+  'TURNSTILE_SECRET_KEY', 'EMAIL_FROM', 'SUPPORT_EMAIL', 'SITE_DOMAIN', 'GATEWAY_SECRET_KEY', 'GITHUB_TOKEN',
+])
+const PLATFORM_SETTING_PREFIXES = ['SUGER_', 'GITHUB_', 'ACTIONS_', 'RUNNER_']
+
+/**
+ * One app's secret names never fall in another app's namespace: `esign` may not declare `ESIGN_PRO_KEY` when an app
+ * `esign-pro` exists, since that name is the longer prefix's.
+ */
+export function checkSecretNamespaces(apps) {
+  for (const app of apps) {
+    for (const name of app.secrets ?? []) {
+      const owner = apps.filter((other) => other !== app && name.startsWith(secretPrefix(other.name)) && secretPrefix(other.name).length > secretPrefix(app.name).length)[0]
+      if (owner) throw new Error(`App ${JSON.stringify(app.name)}: insulin.secrets name ${name} belongs to app ${JSON.stringify(owner.name)}`)
+    }
+  }
 }
 
 const PERMISSION_KEY = /^[a-z][a-z0-9_.-]{0,63}$/
@@ -98,8 +131,8 @@ const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/
  */
 export function publicPathProblem(entry) {
   if (typeof entry !== 'string' || !entry.startsWith('/') || entry.length > 200) return 'must be a path starting with /'
-  if (/[?#\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
-    return 'must not hold a query, a fragment, a backslash, whitespace, an empty or a dot segment'
+  if (/[?#%\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
+    return 'must not hold a query, a fragment, a percent sign, a backslash, whitespace, an empty or a dot segment'
   }
   const bare = entry.toLowerCase().replace(/\/+$/, '')
   if (bare === '' || bare === '/api') return 'must not cover every path or the whole API'
@@ -143,6 +176,9 @@ export function readSecretNames(app, raw) {
   return raw.map((name, index) => {
     if (typeof name !== 'string' || !pattern.test(name)) {
       throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] must match ${pattern.source}`)
+    }
+    if (PLATFORM_SETTING_NAMES.has(name) || PLATFORM_SETTING_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+      throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] names a setting of the platform itself`)
     }
     if (seen.has(name)) throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] is listed twice`)
     seen.add(name)

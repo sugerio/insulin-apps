@@ -68,6 +68,8 @@ export type ConfigResult = { ok: true; config: Config } | { ok: false; problems:
 export const RESERVED_APP_NAMES = new Set([
   'auth', 'www', 'api', 'admin', 'app', 'apps', 'mail', 'email', 'cf-bounce', 'gateway', 'static', 'assets',
   'status', 'docs', 'help', 'support',
+  // An app's secrets are named <APP>_*; these would collide with the platform's own settings (DESIGN.md §8.3).
+  'cloudflare', 'google', 'turnstile', 'github', 'site', 'suger', 'actions', 'runner',
 ])
 
 const DEFAULT_SENDER_NAME = 'Insulin Apps'
@@ -136,8 +138,8 @@ const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/
  */
 export function publicPathProblem(entry: unknown): string | null {
   if (typeof entry !== 'string' || !entry.startsWith('/') || entry.length > 200) return 'must be a path starting with /'
-  if (/[?#\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
-    return 'must not hold a query, a fragment, a backslash, whitespace, an empty or a dot segment'
+  if (/[?#%\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
+    return 'must not hold a query, a fragment, a percent sign, a backslash, whitespace, an empty or a dot segment'
   }
   const lower = entry.toLowerCase()
   const bare = lower.replace(/\/+$/, '')

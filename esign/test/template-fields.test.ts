@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {validateTemplateFields} from '../src/fields.ts';
+import {validateTemplateFields} from '../src/app/server/esign/fields.ts';
 
 test('template fields must reference a role and fit a real PDF page',()=>{
   const field={id:'field-1',type:'Signature',role:'Partner',page:1,required:true,rect:{x:0.1,y:0.2,width:0.3,height:0.1}};
@@ -11,7 +11,7 @@ test('template fields must reference a role and fit a real PDF page',()=>{
 
 
 test('new template fields require exactly one Signature per exact role',async()=>{
-  const {assertEditorSigningFields}=await import('../src/fields.ts');
+  const {assertEditorSigningFields}=await import('../src/app/server/esign/fields.ts');
   const field={id:'a',type:'Signature',role:'Partner',page:1,required:true,rect:{x:0,y:0,width:.3,height:.1}};
   assert.doesNotThrow(()=>assertEditorSigningFields([field],['Partner']));
   assert.doesNotThrow(()=>assertEditorSigningFields([field,{...field,id:'date',type:'Date signed'}, {...field,id:'title',type:'Title'}],['Partner']));

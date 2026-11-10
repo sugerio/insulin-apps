@@ -1,28 +1,26 @@
+import {applyMigrations} from './helpers/platform.ts';
+import {blobStore} from './helpers/platform.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
-import app from '../src/worker.ts';
-import { unstable_splitSqlQuery } from 'wrangler';
-import { envelopeIdFor } from '../src/prepare.ts';
+import app from './helpers/gateway.ts';
+import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/platform.ts';
+import { envelopeIdFor } from '../src/app/server/esign/prepare.ts';
 
 test('envelope creation is tenant-isolated, role-bound, idempotent and prepares the envelope', async () => {
-  const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
+  const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0007_signatures.sql', '0049_audit_trail.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8').catch(() => '');
-      assert.ok(sql, `missing migration ${name}`);
-      await db.batch(unstable_splitSqlQuery(sql).map((s) => db.prepare(s)));
-    }
+    await applyMigrations(db);
     const secret = 'test-key-0123456789-abcdefghijklmnopqrstuvwxyz';
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret))), (n) => n.toString(16).padStart(2, '0')).join('');
     await db.prepare("INSERT INTO tenants (id) VALUES ('tenant-a'),('tenant-b')").run();
     await db.prepare("INSERT INTO api_keys (key_hash, tenant_id) VALUES (?, 'tenant-a')").bind(hash).run();
-    await db.prepare("INSERT INTO templates VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1), ('template-b', 'tenant-b', 'object-b', '[\"ana\"]', 1)").run();
-    const env = { DB: db, ARTIFACTS: await mf.getR2Bucket('ARTIFACTS') };
+    await db.prepare("INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1), ('template-b', 'tenant-b', 'object-b', '[\"ana\"]', 1)").run();
+    const env = { DB: db, ARTIFACTS: await blobStore(mf,'artifacts') };
     const body = { templateId: 'template-a', recipients: [{ role: 'ana', name: 'Ana', email: 'ana@example.com' }, { role: 'marcus', name: 'Marcus', email: 'marcus@example.com' }] };
-    const create = (data: unknown, key = 'request-1') => app.fetch(new Request('http://localhost/v1/envelopes', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(data) }), env);
+    const create = (data: unknown, key = 'request-1') => app.fetch(new Request('http://localhost/api/envelopes', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(data) }), env);
     assert.equal((await create({ ...body, templateId: 'template-b' }, 'other')).status, 404);
     assert.equal((await create({ ...body, recipients: body.recipients.slice(0, 1) }, 'bad')).status, 422);
     const unsupported = await create({ ...body, recipients: [body.recipients[0], {...body.recipients[1], name: '李雷'}] }, 'unicode');
@@ -58,13 +56,13 @@ test('envelope creation is tenant-isolated, role-bound, idempotent and prepares 
     await db.prepare("UPDATE envelopes SET status = 'VOIDED' WHERE id = ?").bind(result.id).run();
     const afterVoid = await create(body); assert.equal(afterVoid.status, 201); assert.deepEqual(await afterVoid.json(), result);
     await db.prepare("UPDATE envelopes SET status = 'IN_PROGRESS' WHERE id = ?").bind(result.id).run();
-    const fetched = await app.fetch(new Request(`http://localhost/v1/envelopes/${result.id}`, { headers: { authorization: `Bearer ${secret}` } }), env);
+    const fetched = await app.fetch(new Request(`http://localhost/api/envelopes/${result.id}`, { headers: { authorization: `Bearer ${secret}` } }), env);
     assert.equal(fetched.status, 200);
     const details = await fetched.json();
     assert.equal(details.id, result.id);
     assert.equal(details.status, 'IN_PROGRESS');
     assert.deepEqual(details.tasks.map((task: { role: string }) => task.role), ['ana', 'marcus']);
-    assert.equal((await app.fetch(new Request('http://localhost/v1/envelopes/missing', { headers: { authorization: `Bearer ${secret}` } }), env)).status, 404);
+    assert.equal((await app.fetch(new Request('http://localhost/api/envelopes/missing', { headers: { authorization: `Bearer ${secret}` } }), env)).status, 404);
     assert.equal((await db.prepare('SELECT count(*) AS n FROM envelopes').first())!.n, 1);
     assert.equal((await db.prepare('SELECT count(*) AS n FROM tasks WHERE envelope_id = ?').bind(result.id).first())!.n, 2);
     // The first signer's task is active, the others wait; the initial document is the template's source.
@@ -73,7 +71,7 @@ test('envelope creation is tenant-isolated, role-bound, idempotent and prepares 
     assert.deepEqual(d0, { id: `d0:${result.id}`, object_key: `envelopes/${result.id}/d0.pdf`, sha256: '43cc23fa52b87b4cc1d02b5b114154151d6adddb17c9fddc06b027fa99e24008' });
     assert.equal(await (await env.ARTIFACTS.get(d0!.object_key as string))!.text(), 'document');
     // Deprecated preparation is a no-op for this tenant's envelopes, and not found otherwise.
-    const prepare = (id: string) => app.fetch(new Request(`http://localhost/v1/envelopes/${id}/prepare`, { method: 'POST', headers: { authorization: `Bearer ${secret}` } }), env);
+    const prepare = (id: string) => app.fetch(new Request(`http://localhost/api/envelopes/${id}/prepare`, { method: 'POST', headers: { authorization: `Bearer ${secret}` } }), env);
     assert.equal((await prepare(result.id)).status, 204);
     assert.equal((await prepare(result.id)).status, 204);
     assert.equal((await prepare('missing')).status, 404);
@@ -85,7 +83,7 @@ test('envelope creation is tenant-isolated, role-bound, idempotent and prepares 
 
     // A creation whose database write fails leaves nothing behind but its D0 object, which the retry reuses.
     const failingDb = new Proxy(db, { get(target, prop) { if (prop === 'batch') return async () => { throw new Error('simulated D1 outage'); }; const v = Reflect.get(target, prop, target); return typeof v === 'function' ? v.bind(target) : v; } });
-    const failed = await app.fetch(new Request('http://localhost/v1/envelopes', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'idempotency-key': 'request-2' }, body: JSON.stringify(body) }), { ...env, DB: failingDb });
+    const failed = await app.fetch(new Request('http://localhost/api/envelopes', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'idempotency-key': 'request-2' }, body: JSON.stringify(body) }), { ...env, DB: failingDb });
     assert.equal(failed.status, 500);
     const retriedId = await envelopeIdFor('tenant-a', 'request-2');
     assert.equal(await db.prepare('SELECT 1 FROM envelopes WHERE id = ?').bind(retriedId).first(), null);
@@ -101,22 +99,20 @@ test('envelope creation is tenant-isolated, role-bound, idempotent and prepares 
 });
 
 test('concurrent creations with one Idempotency-Key make one envelope, and a lost race applies the same rules', async () => {
-  const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
+  const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql', '0002_templates.sql', '0003_envelopes.sql', '0004_artifacts.sql', '0007_signatures.sql', '0049_audit_trail.sql']) {
-      await db.batch(unstable_splitSqlQuery(await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8')).map((s) => db.prepare(s)));
-    }
+    await applyMigrations(db);
     const secret = 'test-key-0123456789-abcdefghijklmnopqrstuvwxyz';
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret))), (n) => n.toString(16).padStart(2, '0')).join('');
     await db.prepare("INSERT INTO tenants (id) VALUES ('tenant-a')").run();
     await db.prepare("INSERT INTO api_keys (key_hash, tenant_id) VALUES (?, 'tenant-a')").bind(hash).run();
-    await db.prepare("INSERT INTO templates VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1)").run();
-    const env = { DB: db, ARTIFACTS: await mf.getR2Bucket('ARTIFACTS') };
+    await db.prepare("INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1)").run();
+    const env = { DB: db, ARTIFACTS: await blobStore(mf,'artifacts') };
     await env.ARTIFACTS.put('object-a', 'document');
     const body = { templateId: 'template-a', recipients: [{ role: 'ana', name: 'Ana', email: 'ana@example.com' }, { role: 'marcus', name: 'Marcus', email: 'marcus@example.com' }] };
     const other = { ...body, recipients: [...body.recipients].reverse() };
-    const create = (data: unknown, key: string, target = env) => app.fetch(new Request('http://localhost/v1/envelopes', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(data) }), target);
+    const create = (data: unknown, key: string, target = env) => app.fetch(new Request('http://localhost/api/envelopes', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(data) }), target);
     const count = async (id: string) => ({
       envelopes: (await db.prepare('SELECT count(*) AS n FROM envelopes WHERE id = ?').bind(id).first())!.n,
       tasks: (await db.prepare('SELECT count(*) AS n FROM tasks WHERE envelope_id = ?').bind(id).first())!.n,

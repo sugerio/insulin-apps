@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
-import {strictPdfOptions} from '../ui/pdf.ts';
-import {renderPdfDocument} from '../ui/pdf.ts';
+import {strictPdfOptions} from '../src/app/ui/pdf.ts';
+import {renderPdfDocument} from '../src/app/ui/pdf.ts';
 import {fakePreviewNode,syntheticInlineImagePdf} from './helpers/pdf-fixture.ts';
 
 test('actual PDF.js rejects a damaged inline image while rendering',async()=>{
@@ -20,19 +20,20 @@ test('actual PDF.js renders a valid inline image',async()=>{
 test('recipient page does not offer signing when actual PDF.js rejects a damaged inline image',async()=>{
   const React=(await import('react')).default;
   const {default:Renderer,act}=await import('react-test-renderer');
-  const {RecipientPage}=await import('../ui/RecipientPage.ts');
+  const {RecipientPage}=await import('../src/app/ui/RecipientPage.ts');
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
   const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
   try {
     const broken=await syntheticInlineImagePdf(true);let signRequests=0;
     (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
     globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
-      if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
-      if(path==='/v1/signing/otp') return Response.json({messageId:'test'});
-      if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
-      if(path==='/v1/signing/current') return Response.json({id:'d0',sha256:'hash'});
-      if(path==='/v1/signing/pdf') return new Response(broken);
-      if(path==='/v1/signing/sign') {signRequests++;return new Response(null,{status:202});}
+      if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+      if(path==='/api/public/page-sessions/exchange') return Response.json({token:'token'});
+      if(path==='/api/public/signing/otp') return Response.json({messageId:'test'});
+      if(path==='/api/public/signing/otp/verify') return new Response(null,{status:204});
+      if(path==='/api/public/signing/current') return Response.json({id:'d0',sha256:'hash'});
+      if(path==='/api/public/signing/pdf') return new Response(broken);
+      if(path==='/api/public/signing/sign') {signRequests++;return new Response(null,{status:202});}
       throw new Error(path);};
     const visible=fakePreviewNode();let renderer:any;
     let complete!:()=>void;const rendered=new Promise<void>(resolve=>complete=resolve);

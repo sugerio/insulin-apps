@@ -1,10 +1,10 @@
-// Deliberately omit 0027 in these isolated fixtures to exercise defense in depth under task tampering.
-import {unstable_splitSqlQuery} from 'wrangler';
+// Deliberately drop the task recipient trigger in these isolated fixtures to exercise defense in depth under task tampering.
+import {MIGRATIONS_DIR,splitSql as unstable_splitSqlQuery} from './helpers/platform.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
-import {issueRecipientCode,exchangeRecipientCode,verifyRecipientOtp,sendRecipientOtp} from '../src/otp.ts';
+import {issueRecipientCode,exchangeRecipientCode,verifyRecipientOtp,sendRecipientOtp} from '../src/app/server/esign/otp.ts';
 
 /** Recipient sessions marked as having entered the emailed code. */
 const verifiedSessions=async(db:D1Database)=>(await db.prepare('SELECT COUNT(*) AS n FROM access_sessions WHERE otp_verified_at IS NOT NULL').first<{n:number}>())!.n;
@@ -12,8 +12,8 @@ const verifiedSessions=async(db:D1Database)=>(await db.prepare('SELECT COUNT(*) 
 test('OTP verification binds the sent recipient across address changes and D1 races',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  try{
-  const db=await mf.getD1Database('DB');for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&!n.startsWith('0027_')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
-  const origin='https://host.example.com';await db.exec(`INSERT INTO tenants (id) VALUES ('a');INSERT INTO templates VALUES ('ta','a','src','["ana"]',1,'[]');INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('ea','a','ta','IN_PROGRESS',1,'hash');INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('t1','ea','ana','Ana','ana@example.com',1,'ACTIVE');`);
+  const db=await mf.getD1Database('DB');for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(name,MIGRATIONS_DIR),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}await db.exec('DROP TRIGGER immutable_task_recipient_email');
+  const origin='https://host.example.com';await db.exec(`INSERT INTO tenants (id) VALUES ('a');INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at,fields_json) VALUES ('ta','a','src','["ana"]',1,'[]');INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('ea','a','ta','IN_PROGRESS',1,'hash');INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('t1','ea','ana','Ana','ana@example.com',1,'ACTIVE');`);
   const now=Date.now(),code=await issueRecipientCode(db,{tenantId:'a',envelopeId:'ea',taskId:'t1',origin,now}),token=await exchangeRecipientCode(db,code,origin,now+1),pepper='synthetic-otp-secret-with-at-least-32-bytes';let otp='';
   await sendRecipientOtp(db,token,origin,now+2,new TextEncoder().encode(pepper),async(to,value)=>{assert.equal(to,'ana@example.com');otp=value;});
   await db.prepare("UPDATE tasks SET recipient_email='lee@example.test' WHERE id='t1'").run();
@@ -33,8 +33,8 @@ test('OTP verification binds the sent recipient across address changes and D1 ra
 test('the code is bound to the exact bytes of the task email',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  try{
-  const db=await mf.getD1Database('DB');for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')&&!n.startsWith('0027_')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
-  const origin='https://host.example.com';await db.exec(`INSERT INTO tenants (id) VALUES ('a');INSERT INTO templates VALUES ('ta','a','src','["ana"]',1,'[]');INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('ea','a','ta','IN_PROGRESS',1,'hash');INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('t1','ea','ana','Ana','Ana@example.com',1,'ACTIVE');`);
+  const db=await mf.getD1Database('DB');for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(name,MIGRATIONS_DIR),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}await db.exec('DROP TRIGGER immutable_task_recipient_email');
+  const origin='https://host.example.com';await db.exec(`INSERT INTO tenants (id) VALUES ('a');INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at,fields_json) VALUES ('ta','a','src','["ana"]',1,'[]');INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('ea','a','ta','IN_PROGRESS',1,'hash');INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('t1','ea','ana','Ana','Ana@example.com',1,'ACTIVE');`);
   const now=Date.now(),code=await issueRecipientCode(db,{tenantId:'a',envelopeId:'ea',taskId:'t1',origin,now}),token=await exchangeRecipientCode(db,code,origin,now+1),pepper=new TextEncoder().encode('synthetic-otp-secret-with-at-least-32-bytes');let otp='';
   await sendRecipientOtp(db,token,origin,now+2,pepper,async(to,value)=>{assert.equal(to,'Ana@example.com');otp=value;});
   await db.prepare("UPDATE tasks SET recipient_email='ana@example.com' WHERE id='t1'").run();
@@ -47,8 +47,8 @@ test('the code is bound to the exact bytes of the task email',async()=>{
 test('an emailed code stays valid for 10 minutes and no longer',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  try{
-  const db=await mf.getD1Database('DB');for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
-  const origin='https://host.example.com';await db.exec(`INSERT INTO tenants (id) VALUES ('a');INSERT INTO templates VALUES ('ta','a','src','["ana"]',1,'[]');INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('ea','a','ta','IN_PROGRESS',1,'hash');INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('t1','ea','ana','Ana','ana@example.com',1,'ACTIVE');`);
+  const db=await mf.getD1Database('DB');for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(name,MIGRATIONS_DIR),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
+  const origin='https://host.example.com';await db.exec(`INSERT INTO tenants (id) VALUES ('a');INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at,fields_json) VALUES ('ta','a','src','["ana"]',1,'[]');INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('ea','a','ta','IN_PROGRESS',1,'hash');INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('t1','ea','ana','Ana','ana@example.com',1,'ACTIVE');`);
   const pepper=new TextEncoder().encode('synthetic-otp-secret-with-at-least-32-bytes'),minute=60_000;
   const codeAt=async(now:number)=>{const code=await issueRecipientCode(db,{tenantId:'a',envelopeId:'ea',taskId:'t1',origin,now});const token=await exchangeRecipientCode(db,code,origin,now);let otp='';await sendRecipientOtp(db,token,origin,now,pepper,async(_to,value)=>{otp=value;});return {token,otp};};
   const late=Date.now(),first=await codeAt(late);

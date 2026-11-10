@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {editorSavedMessage,consumeEditorFragment} from '../ui/editor-client.ts';
+import {editorSavedMessage,consumeEditorFragment} from '../src/app/ui/editor-client.ts';
 
 test('editor strips its fragment before exchange and parent accepts only current iframe and exact editor origin',()=>{
  const location={hash:'#'+'a'.repeat(64),pathname:'/editor/page/'+'b'.repeat(64),search:''};let replacement='';

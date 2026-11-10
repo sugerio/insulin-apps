@@ -1,13 +1,14 @@
+import {blobStore} from './helpers/platform.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
-import { unstable_splitSqlQuery } from 'wrangler';
-import { canonicalJson } from '../src/canonical-json.ts';
-import { sweepEnvelopes } from '../src/envelope-completion.ts';
-import { expireDueEnvelopes } from '../src/task-expiry.ts';
-import { APPENDED_PAGE_RENDERER, signatureEventHash } from '../src/signatures.ts';
+import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/platform.ts';
+import { canonicalJson } from '../src/app/server/esign/canonical-json.ts';
+import { sweepEnvelopes } from '../src/app/server/esign/envelope-completion.ts';
+import { expireDueEnvelopes } from '../src/app/server/esign/task-expiry.ts';
+import { APPENDED_PAGE_RENDERER, signatureEventHash } from '../src/app/server/esign/signatures.ts';
 
 /**
  * Signing, rendering and sealing each commit with one conditional write, and the steps after it
@@ -29,11 +30,11 @@ async function signatureRow(db: D1Database, row: { id: string; taskId: string; n
 }
 
 test('the cron sweep finishes an envelope left half-advanced after signing, rendering and sealing', async () => {
-  const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS'] });
+  const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] });
   try {
-    const db = await mf.getD1Database('DB'), bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of (await readdir(new URL('../migrations/', import.meta.url))).filter(n => n.endsWith('.sql')).sort())
-      await db.batch(unstable_splitSqlQuery(await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8')).map(s => db.prepare(s)));
+    const db = await mf.getD1Database('DB'), bucket = await blobStore(mf,'artifacts');
+    for (const name of (await readdir(MIGRATIONS_DIR)).filter(n => n.endsWith('.sql')).sort())
+      await db.batch(unstable_splitSqlQuery(await readFile(new URL(name,MIGRATIONS_DIR), 'utf8')).map(s => db.prepare(s)));
     const pdf = await PDFDocument.create(); pdf.addPage(); const d0 = await pdf.save(), d0Hash = await sha(d0);
     await bucket.put('envelopes/env/d0.pdf', d0);
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');

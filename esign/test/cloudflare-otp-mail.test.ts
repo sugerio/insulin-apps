@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidOtpEmailAddress } from '../src/cloudflare-otp-mail.ts';
+import { isValidOtpEmailAddress } from '../src/app/server/esign/email-address.ts';
 
 test('a mail address must be one plain address, with no header injection or trailing line terminator', () => {
   for (const good of ['sign@example.com', 'ana.lee+test@mail.example.test']) assert.equal(isValidOtpEmailAddress(good), true, good);

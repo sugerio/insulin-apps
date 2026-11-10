@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {renderTypedSignature,TYPED_SIGNATURE_FONT,TYPED_SIGNATURE_FONT_HASH} from '../src/field-render.ts';
-import {SIGNATURE_ATLAS_BASE64} from '../src/fonts/signature-atlas.ts';
+import {renderTypedSignature,TYPED_SIGNATURE_FONT,TYPED_SIGNATURE_FONT_HASH} from '../src/app/server/esign/field-render.ts';
+import {SIGNATURE_ATLAS_BASE64} from '../src/app/server/esign/fonts/signature-atlas.ts';
 
 test('Caveat signature atlas is pinned and renders mixed case deterministically',async()=>{
  const atlas=Uint8Array.from(atob(SIGNATURE_ATLAS_BASE64),c=>c.charCodeAt(0));

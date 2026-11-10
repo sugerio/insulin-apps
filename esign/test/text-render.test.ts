@@ -2,8 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {inflateSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
-import {TEXT_ATLAS_BASE64} from '../src/fonts/text-atlas.ts';
-import {renderText,TEXT_RENDERER,TEXT_ATLAS_HASH} from '../src/field-render.ts';
+import {TEXT_ATLAS_BASE64} from '../src/app/server/esign/fonts/text-atlas.ts';
+import {renderText,TEXT_RENDERER,TEXT_ATLAS_HASH} from '../src/app/server/esign/field-render.ts';
 
 function pixels(png:Uint8Array){
  const data=Buffer.from(png);assert.equal(data.subarray(0,8).toString('hex'),'89504e470d0a1a0a');const width=data.readUInt32BE(16),height=data.readUInt32BE(20);let i=8;const chunks:Buffer[]=[];

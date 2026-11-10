@@ -1,3 +1,4 @@
+import {blobStore} from './helpers/platform.ts';
 // Completing envelopes with the managed seal: sealed once, stored, reused on retry, verified on
 // every read, and refused when the stored records or files no longer match. Synthetic data.
 import { test } from 'node:test';
@@ -5,13 +6,14 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
-import { unstable_splitSqlQuery } from 'wrangler';
-import app from '../src/worker.ts';
-import { finalizeManagedEvidence, verifyManagedEvidence, managedDelivery, managedEvidenceKey, type ManagedEvidenceConfig } from '../src/seal/managed.ts';
-import { deliveryPdf } from '../src/delivery-pdf.ts';
-import { evidenceMessage } from '../src/seal/kms.ts';
+import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/platform.ts';
+import app from './helpers/gateway.ts';
+import { finalizeManagedEvidence, verifyManagedEvidence, managedDelivery, managedEvidenceKey, type ManagedEvidenceConfig } from '../src/app/server/esign/seal/managed.ts';
+import { deliveryPdf } from '../src/app/server/esign/delivery-pdf.ts';
+import { evidenceMessage } from '../src/app/server/esign/seal/kms.ts';
 import { startOpensslTsa } from './helpers/openssl-tsa.ts';
-import {processEnvelopeStep} from '../src/envelope-completion.ts';
+import { mailRelay, RELAY_URL } from './helpers/mail-relay.ts';
+import {processEnvelopeStep} from '../src/app/server/esign/envelope-completion.ts';
 
 const ORIGIN = 'https://esign.example.test';
 const KEY = 'm'.repeat(64);
@@ -38,9 +40,9 @@ async function sealing() {
 
 /** A two-signer envelope signed through the API and processed, left FINALIZING. */
 async function finishedEnvelope() {
-  const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS', 'TEST_MAIL'] });
-  const db = await mf.getD1Database('DB'), bucket = await mf.getR2Bucket('ARTIFACTS'), mail = await mf.getR2Bucket('TEST_MAIL');
-  for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`, 'utf8')).map(s => db.prepare(s)));
+  const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] });
+  const db = await mf.getD1Database('DB'), bucket = await blobStore(mf,'artifacts'), mail = await blobStore(mf,'test-mail');
+  for (const name of (await readdir(MIGRATIONS_DIR)).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(new URL(name,MIGRATIONS_DIR), 'utf8')).map(s => db.prepare(s)));
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex')).run();
   const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: mail, OTP_KEY: 'managed-evidence-otp-pepper-32-bytes-long' };
@@ -49,22 +51,22 @@ async function finishedEnvelope() {
   const json = (body: unknown, headers: Record<string, string> = {}) => ({ method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const pdf = await PDFDocument.create(); pdf.addPage();
   const form = new FormData(); form.set('file', new File([await pdf.save()], 'synthetic.pdf', { type: 'application/pdf' })); form.set('roles', '["partner","isv"]');
-  const template = await (await req('/v1/templates', { method: 'POST', headers: auth, body: form })).json() as { id: string };
-  const { id } = await (await req('/v1/envelopes', json({ templateId: template.id, recipients: [{ role: 'partner', name: 'Ana Partner', email: 'ana@partner.test' }, { role: 'isv', name: 'Marcus Seller', email: 'marcus@seller.test' }] }, { ...auth, 'idempotency-key': crypto.randomUUID() }))).json() as { id: string };
-  await req(`/v1/envelopes/${id}/prepare`, { method: 'POST', headers: auth });
+  const template = await (await req('/api/templates', { method: 'POST', headers: auth, body: form })).json() as { id: string };
+  const { id } = await (await req('/api/envelopes', json({ templateId: template.id, recipients: [{ role: 'partner', name: 'Ana Partner', email: 'ana@partner.test' }, { role: 'isv', name: 'Marcus Seller', email: 'marcus@seller.test' }] }, { ...auth, 'idempotency-key': crypto.randomUUID() }))).json() as { id: string };
+  await req(`/api/envelopes/${id}/prepare`, { method: 'POST', headers: auth });
   for (const index of [0, 1]) {
-    const task = (await (await req(`/v1/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[index];
-    const { code } = await (await req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN }, auth))).json() as { code: string };
-    const { token } = await (await req('/v1/page-sessions/exchange', json({ code }, { origin: ORIGIN }))).json() as { token: string };
+    const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[index];
+    const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN }, auth))).json() as { code: string };
+    const { token } = await (await req('/api/public/page-sessions/exchange', json({ code }, { origin: ORIGIN }))).json() as { token: string };
     const headers = { origin: ORIGIN, authorization: `Bearer ${token}` };
-    const { messageId } = await (await req('/v1/signing/otp', json({}, headers))).json() as { messageId: string };
-    const { otp } = await (await req(`/v1/test-mail/${messageId}`, { headers: auth })).json() as { otp: string };
-    await req('/v1/signing/otp/verify', json({ otp }, headers));
-    const current = await (await req('/v1/signing/current', { headers })).json() as { id: string; sha256: string };
-    assert.equal((await req('/v1/signing/sign', json({ artifactId: current.id, artifactHash: current.sha256, consent: true }, headers))).status, 202);
+    const { messageId } = await (await req('/api/public/signing/otp', json({}, headers))).json() as { messageId: string };
+    const { otp } = await (await req(`/api/test-mail/${messageId}`, { headers: auth })).json() as { otp: string };
+    await req('/api/public/signing/otp/verify', json({ otp }, headers));
+    const current = await (await req('/api/public/signing/current', { headers })).json() as { id: string; sha256: string };
+    assert.equal((await req('/api/public/signing/sign', json({ artifactId: current.id, artifactHash: current.sha256, consent: true }, headers))).status, 202);
     assert.equal(await processEnvelopeStep(env.DB,env.ARTIFACTS,'tenant',id,true), 'processed');
   }
-  const status = async () => ((await (await req(`/v1/envelopes/${id}`, { headers: auth })).json()) as { status: string }).status;
+  const status = async () => ((await (await req(`/api/envelopes/${id}`, { headers: auth })).json()) as { status: string }).status;
   assert.equal(await status(), 'FINALIZING');
   return { mf, db, bucket, id, status };
 }
@@ -135,7 +137,7 @@ test('the seal covers the audit trail up to sealing; later events are reported a
   const { tsa, config } = await sealing();
   const e = await finishedEnvelope();
   try {
-    const { auditTrail, recordAudit, AUDIT } = await import('../src/audit.ts');
+    const { auditTrail, recordAudit, AUDIT } = await import('../src/app/server/esign/audit.ts');
     const before = await auditTrail(e.db, e.id);
     assert.ok(before.length >= 10, 'two signers left their events');
     await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
@@ -152,54 +154,71 @@ test('the seal covers the audit trail up to sealing; later events are reported a
   } finally { await e.mf.dispose(); await tsa.dispose(); }
 });
 
-test('once completed, each signer is sent one copy: the signed PDF with its certificate, recorded in the audit trail', async () => {
+test('once completed, each signer is emailed one link to their copy: the signed PDF with its certificate, downloaded once', async () => {
   const { tsa, config } = await sealing();
   const e = await finishedEnvelope();
   try {
-    const { sendSignedCopies } = await import('../src/signed-copies.ts');
-    const { sinkMailer } = await import('../src/otp-mail-sink.ts');
-    const { auditTrail, AUDIT } = await import('../src/audit.ts');
-    const sent: { to: string; subject: string; text: string; attachments?: { filename: string; type: string; content: Uint8Array }[] }[] = [];
-    const mailer = sinkMailer({ SEND_EMAIL: { send: async (m: (typeof sent)[number]) => { sent.push(m); } }, MAIL_FROM: 'esign-dev@sender.example.test', MAIL_SINK: 'inbox@sink.example.test' })!;
-    await assert.rejects(sendSignedCopies(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust), mailer), /not completed/);
+    const { sendSignedCopies, useCopyLink, COPY_LINK_TTL_MS } = await import('../src/app/server/esign/signed-copies.ts');
+    const { mailerFor } = await import('../src/app/server/esign/mail.ts');
+    const { auditTrail, AUDIT } = await import('../src/app/server/esign/audit.ts');
+    const mail = mailRelay();
+    const mailer = mailerFor({ ESIGN_ENV: 'prod', ...mail.env }, 'tenant')!;
+    await assert.rejects(sendSignedCopies(e.db, 'tenant', e.id, mailer, ORIGIN), /not completed/);
     await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
-    const result = await sendSignedCopies(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust), mailer);
-    assert.deepEqual(result, { sent: 2, skipped: 0 });
-    assert.deepEqual(sent.map(m => m.to), ['inbox@sink.example.test', 'inbox@sink.example.test']);
-    assert.match(sent[0].subject, /for ana@partner\.test/);
-    assert.match(sent[1].subject, /for marcus@seller\.test/);
-    const attachment = sent[0].attachments?.[0];
-    assert.equal(attachment?.type, 'application/pdf');
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const pdf = await pdfjs.getDocument({ data: Uint8Array.from(attachment!.content), useSystemFonts: true }).promise;
-    const lastPage = (await (await pdf.getPage(pdf.numPages)).getTextContent()).items.map((i: any) => i.str ?? '').join(' ');
-    assert.match(lastPage, /AWS KMS/, 'the attachment carries the certificate pages');
-    // Running again (the cron, a retry) sends nothing more.
-    assert.deepEqual(await sendSignedCopies(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust), mailer), { sent: 0, skipped: 2 });
-    assert.equal(sent.length, 2);
+    await assert.rejects(sendSignedCopies(e.db, 'other-tenant', e.id, mailer, ORIGIN), /not completed/, 'another organization\'s envelope');
+    const now = Date.now();
+    assert.deepEqual(await sendSignedCopies(e.db, 'tenant', e.id, mailer, ORIGIN, now), { sent: 2, skipped: 0 });
+    assert.deepEqual(mail.sent.map(r => r.body.to), ['ana@partner.test', 'marcus@seller.test']);
+    assert.deepEqual(mail.sent.map(r => [r.url, r.headers.get('authorization'), r.headers.get('x-suger-organization-id')]), Array(2).fill([RELAY_URL, 'Bearer synthetic-app-token', 'tenant']));
+    const tokens = mail.sent.map(r => /https:\/\/esign\.example\.test\/copy#token=([a-f0-9]{64})/.exec(r.body.text)?.[1]);
+    assert.ok(tokens.every(Boolean), 'each notice carries a link to the copy page');
+    assert.notEqual(tokens[0], tokens[1]);
+    // Running again (process-due, a retry) sends nothing more.
+    assert.deepEqual(await sendSignedCopies(e.db, 'tenant', e.id, mailer, ORIGIN), { sent: 0, skipped: 2 });
+    assert.equal(mail.sent.length, 2);
     const copies = (await auditTrail(e.db, e.id)).filter(a => a.type === AUDIT.copySent);
     assert.deepEqual(copies.map(c => c.detail?.to), ['ana@partner.test', 'marcus@seller.test']);
-    assert.match(String(copies[0].detail?.attachmentSha256), /^[0-9a-f]{64}$/);
-    // The delivery PDF stays the one that was sent, although events (the copies) were recorded since.
-    const again = await deliveryPdf(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust));
-    assert.deepEqual(Uint8Array.from(again.bytes), Uint8Array.from(attachment!.content));
+    // Only the token's hash is kept; a link opens its signer's copy once, and not after 30 days.
+    assert.equal((await e.db.prepare('SELECT COUNT(*) AS n FROM signed_copy_links WHERE token_hash IN (?,?)').bind(tokens[0], tokens[1]).first<{ n: number }>())!.n, 0);
+    assert.equal(await useCopyLink(e.db, tokens[1]!, now + COPY_LINK_TTL_MS), null, 'expired');
+    const tasks = (await e.db.prepare('SELECT id FROM tasks WHERE envelope_id=? ORDER BY routing_order').bind(e.id).all<{ id: string }>()).results;
+    const opens = await Promise.all([useCopyLink(e.db, tokens[0]!, now + 1), useCopyLink(e.db, tokens[0]!, now + 1)]);
+    assert.deepEqual(opens.filter(Boolean), [{ tenantId: 'tenant', envelopeId: e.id, taskId: tasks[0]!.id }], 'two opens at once download it once');
+    assert.equal(await useCopyLink(e.db, tokens[0]!, now + 2), null, 'used');
+    assert.equal(await useCopyLink(e.db, 'f'.repeat(64), now), null, 'unknown');
+    // What the link downloads: the signed PDF with the certificate pages.
+    const delivery = await deliveryPdf(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust));
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdf = await pdfjs.getDocument({ data: Uint8Array.from(delivery.bytes), useSystemFonts: true }).promise;
+    const lastPage = (await (await pdf.getPage(pdf.numPages)).getTextContent()).items.map((i: any) => i.str ?? '').join(' ');
+    assert.match(lastPage, /AWS KMS/, 'the copy carries the certificate pages');
   } finally { await e.mf.dispose(); await tsa.dispose(); }
 });
 
-test('a copy that could not be sent is tried again later, not lost', async () => {
+test('a notice the relay could not send (502 send_failed, 503, 429) is tried again later, never marked sent', async () => {
   const { tsa, config } = await sealing();
   const e = await finishedEnvelope();
   try {
-    const { sendSignedCopies } = await import('../src/signed-copies.ts');
-    const { sinkMailer } = await import('../src/otp-mail-sink.ts');
+    const { sendSignedCopies } = await import('../src/app/server/esign/signed-copies.ts');
+    const { mailerFor } = await import('../src/app/server/esign/mail.ts');
+    const { auditTrail, AUDIT } = await import('../src/app/server/esign/audit.ts');
     await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
-    let fail = true, sent = 0;
-    const mailer = sinkMailer({ SEND_EMAIL: { send: async () => { if (fail) throw new Error('mail outage'); sent++; } }, MAIL_FROM: 'esign-dev@sender.example.test', MAIL_SINK: 'inbox@sink.example.test' })!;
-    const delivery = () => managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust);
-    assert.deepEqual(await sendSignedCopies(e.db, e.bucket, 'tenant', e.id, delivery(), mailer), { sent: 0, skipped: 0 });
-    fail = false;
-    // A reservation left by a failed attempt is retried once it is old enough.
-    assert.deepEqual(await sendSignedCopies(e.db, e.bucket, 'tenant', e.id, delivery(), mailer, Date.now() + 16 * 60 * 1000), { sent: 2, skipped: 0 });
-    assert.equal(sent, 2);
+    const sentAt = async () => (await e.db.prepare('SELECT sent_at FROM copy_deliveries WHERE envelope_id=? ORDER BY task_id').bind(e.id).all<{ sent_at: number | null }>()).results.map(r => r.sent_at);
+    let status = 502, now = Date.now();
+    const mail = mailRelay(() => status);
+    const mailer = mailerFor({ ESIGN_ENV: 'prod', ...mail.env }, 'tenant')!;
+    for (const refused of [502, 503, 429]) {
+      status = refused;
+      assert.deepEqual(await sendSignedCopies(e.db, 'tenant', e.id, mailer, ORIGIN, now), { sent: 0, skipped: 0 }, String(refused));
+      assert.deepEqual(await sentAt(), [null, null]);
+      // A reservation left by a failed attempt blocks another for a while, then is retried.
+      assert.deepEqual(await sendSignedCopies(e.db, 'tenant', e.id, mailer, ORIGIN, now + 1), { sent: 0, skipped: 2 });
+      now += 16 * 60 * 1000;
+    }
+    assert.equal((await auditTrail(e.db, e.id)).filter(a => a.type === AUDIT.copySent).length, 0);
+    status = 202;
+    assert.deepEqual(await sendSignedCopies(e.db, 'tenant', e.id, mailer, ORIGIN, now), { sent: 2, skipped: 0 });
+    assert.ok((await sentAt()).every(t => t === now));
+    assert.equal((await auditTrail(e.db, e.id)).filter(a => a.type === AUDIT.copySent).length, 2);
   } finally { await e.mf.dispose(); await tsa.dispose(); }
 });

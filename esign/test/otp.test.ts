@@ -1,20 +1,19 @@
+import {applyMigrations} from './helpers/platform.ts';
+import {MIGRATIONS_DIR} from './helpers/platform.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
-const auth = await import('../src/otp.ts').catch(() => ({}));
+const auth = await import('../src/app/server/esign/otp.ts').catch(() => ({}));
 
 test('recipient code and OTP are origin-bound, scoped, one-time and persistently limited', async () => {
   assert.equal(typeof auth.issueRecipientCode, 'function', 'persisted recipient authorization is missing');
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0005_access.sql','0006_otp_challenges.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(sql.split(';').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
-    }
+    await applyMigrations(db);
     await db.exec(`INSERT INTO tenants (id) VALUES ('a'), ('b');
-INSERT INTO templates VALUES ('template', 'a', 'source', '["ana","marcus"]', 1);
+INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template', 'a', 'source', '["ana","marcus"]', 1);
 INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env', 'a', 'template', 'IN_PROGRESS', 1,'hash');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana', 'env', 'ana', 'Ana', 'ana@example.com', 1, 'ACTIVE');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus', 'env', 'marcus', 'Marcus', 'marcus@example.com', 2, 'PENDING');
@@ -68,12 +67,9 @@ test('OTP resend recovers after cooldown without resetting the task attempt budg
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0005_access.sql','0006_otp_challenges.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(sql.split(';').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
-    }
+    await applyMigrations(db);
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');
-INSERT INTO templates VALUES ('t','a','source','["ana"]',1);
+INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('t','a','source','["ana"]',1);
 INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('e','a','t','IN_PROGRESS',1,'hash');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','e','ana','Ana','ana@example.com',1,'ACTIVE');
 `);
@@ -110,12 +106,9 @@ test('OTP sends: 60 seconds apart, 3 per 15-minute window per task across sessio
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("ok") } }', d1Databases: ['DB'] });
   try {
     const db = await mf.getD1Database('DB');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0005_access.sql','0006_otp_challenges.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(sql.split(';').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
-    }
+    await applyMigrations(db);
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');
-INSERT INTO templates VALUES ('t','a','source','["ana"]',1);
+INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('t','a','source','["ana"]',1);
 INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('e','a','t','IN_PROGRESS',1,'hash');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','e','ana','Ana','ana@example.com',1,'ACTIVE');
 `);

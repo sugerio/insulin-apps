@@ -2,10 +2,10 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {inflateSync} from 'node:zlib';
 import {PDFDocument} from 'pdf-lib';
-import {renderTypedSignature} from '../src/field-render.ts';
-import {renderText} from '../src/field-render.ts';
-import {signatureGeometry} from '../src/field-render.ts';
-import {textGeometry,assertTextFits} from '../src/field-render.ts';
+import {renderTypedSignature} from '../src/app/server/esign/field-render.ts';
+import {renderText} from '../src/app/server/esign/field-render.ts';
+import {signatureGeometry} from '../src/app/server/esign/field-render.ts';
+import {textGeometry,assertTextFits} from '../src/app/server/esign/field-render.ts';
 
 function inkHeight(bytes:Uint8Array){const b=Buffer.from(bytes),width=b.readUInt32BE(16),height=b.readUInt32BE(20);let offset=8;const parts:Buffer[]=[];while(offset<b.length){const n=b.readUInt32BE(offset);if(b.toString('ascii',offset+4,offset+8)==='IDAT')parts.push(b.subarray(offset+8,offset+8+n));offset+=n+12;}const raw=inflateSync(Buffer.concat(parts));let first=height,last=-1;for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(raw[y*(width*4+1)+1+4*x+3]){first=Math.min(first,y);last=y;}return (last-first+1)/height;}
 test('date and title reference ink is 80% of the signature reference ink',async()=>{

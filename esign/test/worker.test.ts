@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-const worker = await import('../src/worker.ts').catch(() => ({ default: undefined }));
+import './helpers/platform.ts';
+import app from '../src/app/server/esign/app.ts';
 
-test('health is available but unimplemented signing routes are closed', async () => {
-  assert.ok(worker.default, 'worker is not implemented');
-  const health = await worker.default.fetch(new Request('http://localhost/health'));
+test('health answers without disclosing configuration, and signing routes are closed until signing is configured', async () => {
+  const health = await app.fetch(new Request('http://localhost/api/health'), {} as never);
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { status: 'ok', service: 'esign', environment: 'dev' });
-  for (const [ESIGN_ENV, environment] of [['prod', 'prod'], ['dev', 'dev'], ['staging', 'dev']]) {
-    const answer = await worker.default.fetch(new Request('http://localhost/health'), { ESIGN_ENV });
-    assert.deepEqual(await answer.json(), { status: 'ok', service: 'esign', environment }, ESIGN_ENV);
+  assert.deepEqual(await health.json(), { status: 'ok', service: 'esign' });
+  for (const ESIGN_ENV of ['prod', 'dev']) {
+    const signing = await app.fetch(new Request('http://localhost/api/public/signing/current', { headers: { authorization: `Bearer ${'0'.repeat(64)}` } }), { ESIGN_ENV } as never);
+    assert.equal(signing.status, 404, ESIGN_ENV);
   }
-  const signing = await worker.default.fetch(new Request('http://localhost/v1/signing-sessions/a/tasks/b/sign', { method: 'POST' }));
-  assert.equal(signing.status, 404);
+  const unknown = await app.fetch(new Request('http://localhost/v1/signing-sessions/a/tasks/b/sign', { method: 'POST' }), {} as never);
+  assert.equal(unknown.status, 404, 'the old routes are gone');
 });

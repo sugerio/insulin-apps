@@ -1,5 +1,5 @@
-import {editorDemoURL,editorSavedMessage} from '../../ui/editor-client';
-import {readSaveResult} from '../../ui/editor-save-protocol';
+import {editorDemoURL,editorSavedMessage} from '../../src/app/ui/editor-client.ts';
+import {readSaveResult} from '../../src/app/ui/editor-save-protocol.ts';
 const frame=document.querySelector<HTMLIFrameElement>('#editor')!;
 const status=document.querySelector<HTMLElement>('#status')!;
 const roles=document.querySelector<HTMLInputElement>('#roles')!;

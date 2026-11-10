@@ -1,23 +1,24 @@
-import {unstable_splitSqlQuery} from 'wrangler';
+import {blobStore} from './helpers/platform.ts';
+import {MIGRATIONS_DIR,splitSql as unstable_splitSqlQuery} from './helpers/platform.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
-import { issueRecipientCode, exchangeRecipientCode, sendRecipientOtp, verifyRecipientOtp } from '../src/otp.ts';
-import { recordSignature } from '../src/signature-record.ts';
-import { processSignature } from '../src/signature-processing.ts';
-import { finalizeLocalTestEvidence } from '../src/seal/local.ts';
-import { deliveryPdf } from '../src/delivery-pdf.ts';
+import { issueRecipientCode, exchangeRecipientCode, sendRecipientOtp, verifyRecipientOtp } from '../src/app/server/esign/otp.ts';
+import { recordSignature } from '../src/app/server/esign/signature-record.ts';
+import { processSignature } from '../src/app/server/esign/signature-processing.ts';
+import { finalizeLocalTestEvidence } from '../src/app/server/esign/seal/local.ts';
+import { deliveryPdf } from '../src/app/server/esign/delivery-pdf.ts';
 
 const sha=async (data:ArrayBuffer|Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data instanceof Uint8Array?Uint8Array.from(data):data)),n=>n.toString(16).padStart(2,'0')).join('');
 
 test('delivery retries concurrent creation and completed finalization with long names and multipage certificate',{timeout:20000},async()=>{
-  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
+  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
   try {
-    const db=await mf.getD1Database('DB'), bucket=await mf.getR2Bucket('ARTIFACTS');
-    for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()) {
-      const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');
+    const db=await mf.getD1Database('DB'), bucket=await blobStore(mf,'artifacts');
+    for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort()) {
+      const sql=await readFile(new URL(name,MIGRATIONS_DIR),'utf8');
       await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
     }
     const pdf=await PDFDocument.create();pdf.addPage();pdf.addPage();const d0=await pdf.save();

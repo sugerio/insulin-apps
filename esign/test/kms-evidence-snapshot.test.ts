@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { signKmsEvidence } from '../src/seal/kms.ts';
+import { signKmsEvidence } from '../src/app/server/esign/seal/kms.ts';
 
 const domain = new TextEncoder().encode('esign-worker-evidence-candidate-v1\0');
 const shared = (bytes: Uint8Array) => { const value = new Uint8Array(new SharedArrayBuffer(bytes.length)); value.set(bytes); return value; };

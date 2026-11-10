@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {captureFields} from '../src/fields.ts';
-import {parseFacts,parseRender,signatureEventHash,type FieldsRender} from '../src/signatures.ts';
-import {fieldRenderer} from '../src/field-render.ts';
+import {captureFields} from '../src/app/server/esign/fields.ts';
+import {parseFacts,parseRender,signatureEventHash,type FieldsRender} from '../src/app/server/esign/signatures.ts';
+import {fieldRenderer} from '../src/app/server/esign/field-render.ts';
 
 const rect=(x:number)=>({x,y:.1,width:.2,height:.1});
 const template=[{id:'sig-a',type:'Signature',role:'ana',page:1,required:true,rect:rect(.0)},{id:'date-a',type:'Date signed',role:'ana',page:1,required:true,rect:rect(.2)},{id:'title-a',type:'Title',role:'ana',page:1,required:true,rect:rect(.4)},{id:'sig-b',type:'Signature',role:'bob',page:1,required:true,rect:rect(.6)}];

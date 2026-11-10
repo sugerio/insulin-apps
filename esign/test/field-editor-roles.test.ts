@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
-const editor = await import('../ui/FieldEditor.ts').catch(() => ({}));
+const editor = await import('../src/app/ui/FieldEditor.ts').catch(() => ({}));
 
 test('host roles are a labeled selectable list without role creation controls', async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
@@ -44,7 +44,7 @@ test('editor offers only signature, date and title fields',async()=>{
 test('role names are rendered as text, not HTML',async()=>{
  const {renderToStaticMarkup}=await import('react-dom/server');
  const React=(await import('react')).default;
- const {FieldEditor}=await import('../ui/FieldEditor.ts');
+ const {FieldEditor}=await import('../src/app/ui/FieldEditor.ts');
  const html=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['<img src=x onerror=alert(1)>']}));
  assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
  assert.ok(!html.includes('<img src=x'));

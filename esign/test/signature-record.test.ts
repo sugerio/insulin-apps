@@ -1,24 +1,23 @@
+import {applyMigrations} from './helpers/platform.ts';
+import {blobStore} from './helpers/platform.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
-import { unstable_splitSqlQuery } from 'wrangler';
+import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/platform.ts';
 import { PDFDocument } from 'pdf-lib';
-import * as auth from '../src/otp.ts';
-const signing = await import('../src/signature-record.ts').catch(() => ({}));
+import * as auth from '../src/app/server/esign/otp.ts';
+const signing = await import('../src/app/server/esign/signature-record.ts').catch(() => ({}));
 
 test('signature atomically requires persisted verified session, consent and the current artifact', async () => {
   assert.equal(typeof signing.recordSignature, 'function', 'signature recording is missing');
-  const mf = new Miniflare({modules:true, script:'export default {fetch(){return new Response("ok")}}', d1Databases:['DB'], r2Buckets:['ARTIFACTS']});
+  const mf = new Miniflare({modules:true, script:'export default {fetch(){return new Response("ok")}}', d1Databases:['DB']});
   try {
-    const db = await mf.getD1Database('DB'), bucket=await mf.getR2Bucket('ARTIFACTS');
+    const db = await mf.getD1Database('DB'), bucket=await blobStore(mf,'artifacts');
     const pdf=await PDFDocument.create();pdf.addPage();const bytes=await pdf.save();
     const h0=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');
+    await applyMigrations(db);
     await bucket.put('d0.pdf',bytes);
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0005_access.sql','0006_otp_challenges.sql','0007_signatures.sql','0015_editor_sessions.sql','0016_editor_template_integration.sql','0027_immutable_task_recipient_email.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
-    }
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');
 INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template', 'a', 'source', '["ana"]', 1);
 INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env', 'a', 'template', 'IN_PROGRESS', 1,'hash');

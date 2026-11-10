@@ -1,12 +1,14 @@
+import {applyMigrations} from './helpers/platform.ts';
+import {blobStore} from './helpers/platform.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
-import { unstable_splitSqlQuery } from 'wrangler';
-import { processSignature } from '../src/signature-processing.ts';
-import { canonicalJson } from '../src/canonical-json.ts';
-import { APPENDED_PAGE_RENDERER, signatureEventHash } from '../src/signatures.ts';
+import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/platform.ts';
+import { processSignature } from '../src/app/server/esign/signature-processing.ts';
+import { canonicalJson } from '../src/app/server/esign/canonical-json.ts';
+import { APPENDED_PAGE_RENDERER, signatureEventHash } from '../src/app/server/esign/signatures.ts';
 
 const sha = async (bytes: Uint8Array | ArrayBuffer) => Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
 
@@ -20,13 +22,10 @@ async function signatureRow(db: D1Database, id: string, envelopeId: string, task
 }
 
 test('processing preserves input, creates one signed PDF and activates the next task after retry', async () => {
-  const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
+  const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
   try {
-    const db = await mf.getD1Database('DB'), bucket = await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0005_access.sql','0006_otp_challenges.sql','0007_signatures.sql']) {
-      const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
-      await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
-    }
+    const db = await mf.getD1Database('DB'), bucket = await blobStore(mf,'artifacts');
+    await applyMigrations(db);
     const pdf = await PDFDocument.create(); pdf.addPage(); const bytes = await pdf.save();
     const hash = await sha(bytes);
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');

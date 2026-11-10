@@ -1,20 +1,20 @@
-// The /demo page drives the Worker API on its own origin with a pasted tenant key: upload a
-// PDF, send to one or two signers (signature page or editor-placed fields), open each signer's
-// page, and fetch the results once the Worker has completed the envelope.
+// The member page drives the app's API on its own origin as the signed-in member (the platform
+// identity): upload a PDF, send to one or two signers (signature page or editor-placed fields),
+// open each signer's page, and fetch the results once the app has completed the envelope.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 
 const ORIGIN='https://esign.example.test';
-const KEY='d'.repeat(64);
+const ME={organizationId:'demo-org',permissions:['esign.manage','esign.view']};
 type Call={path:string;method:string;headers:Record<string,string>;body:unknown};
 
 function memoryStorage(){const m=new Map<string,string>();return {getItem:(k:string)=>m.get(k)??null,setItem:(k:string,v:string)=>void m.set(k,v),removeItem:(k:string)=>void m.delete(k),map:m};}
 
-async function harness(routes:(call:Call)=>Response|undefined,{storedKey=''}={}){
+async function harness(routes:(call:Call)=>Response|undefined){
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
- const session=memoryStorage(),local=memoryStorage();if(storedKey)session.setItem('esign-demo-key',storedKey);
+ const session=memoryStorage(),local=memoryStorage();
  const listeners=new Set<(e:unknown)=>void>();
  (globalThis as any).window={location:{origin:ORIGIN},sessionStorage:session,localStorage:local,
   addEventListener:(type:string,f:(e:unknown)=>void)=>{if(type==='message')listeners.add(f);},removeEventListener:(type:string,f:(e:unknown)=>void)=>listeners.delete(f)};
@@ -27,7 +27,7 @@ async function harness(routes:(call:Call)=>Response|undefined,{storedKey=''}={})
   return response;
  }) as typeof fetch;
  const posted:unknown[]=[];const editorWindow={postMessage:(m:unknown)=>posted.push(m)};
- const {DemoPage}=await import('../ui/DemoPage.ts');
+ const {DemoPage}=await import('../src/app/ui/DemoPage.ts');
  let renderer:any;
  await act(async()=>{renderer=Renderer.create(React.createElement(DemoPage),{createNodeMock:()=>({contentWindow:editorWindow})});});
  const text=()=>JSON.stringify(renderer.toJSON());
@@ -43,37 +43,48 @@ const pdf=()=>new File(['%PDF-1.7 synthetic'],'synthetic.pdf',{type:'application
 const envelope=(status:string,tasks:[string,string][])=>({id:'11111111-1111-4111-8111-111111111111',templateId:'t',status,tasks:tasks.map(([name,s],i)=>({id:`task-${i}`,role:`signer-${i+1}`,recipientName:name,recipientEmail:`${name.toLowerCase()}@partner.example`,status:s,routingOrder:i+1}))});
 const ENV_ID='11111111-1111-4111-8111-111111111111';
 
-test('connecting checks the pasted key and keeps it only in this tab', async()=>{
- const h=await harness(c=>{if(c.path==='/v1/me')return c.headers.authorization===`Bearer ${KEY}`?json({tenantId:'demo-tenant'}):json({error:'unauthorized'},401);});
+test('the page opens as the signed-in member: an Editor sends, a Viewer is told why not, a visitor to sign in', async()=>{
+ const editor=await harness(c=>{if(c.path==='/api/me')return json(ME);});
  try {
-  await h.type('Tenant management key','e'.repeat(64));await h.click('Connect');
-  assert.match(h.text(),/The key was not accepted/);assert.equal(h.session.map.size,0);
-  await h.type('Tenant management key',KEY);await h.click('Connect');
-  assert.match(h.text(),/demo-tenant/);assert.equal(h.session.getItem('esign-demo-key'),KEY);assert.equal(h.local.map.has('esign-demo-key'),false);
-  await h.click('Disconnect');assert.equal(h.session.map.size,0);assert.match(h.text(),/Tenant management key/);
- } finally {await h.unmount();}
+  await editor.act(async()=>{await new Promise(r=>setTimeout(r,0));});
+  assert.ok(editor.button('Send for signature'));
+  const me=editor.calls.find(c=>c.path==='/api/me')!;
+  assert.equal(me.headers.authorization,undefined,'no key: the session is the platform\'s');
+  assert.equal(editor.session.map.size+editor.local.map.size,0,'nothing secret is stored');
+ } finally {await editor.unmount();}
+ const viewer=await harness(c=>{if(c.path==='/api/me')return json({organizationId:'demo-org',permissions:['esign.view']});});
+ try {
+  await viewer.act(async()=>{await new Promise(r=>setTimeout(r,0));});
+  assert.equal(viewer.button('Send for signature'),undefined);
+  assert.match(viewer.text(),/Your role can see envelopes but not send them/);
+ } finally {await viewer.unmount();}
+ const visitor=await harness(c=>{if(c.path==='/api/me')return json({error:'unauthorized'},401);});
+ try {
+  await visitor.act(async()=>{await new Promise(r=>setTimeout(r,0));});
+  assert.match(visitor.text(),/Sign in to use E-sign/);
+ } finally {await visitor.unmount();}
 });
 
 test('sending adds a signature page, signs in order through the embedded signing page, and offers the results', async()=>{
  let state=envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]);
  const h=await harness(c=>{
-  if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});
-  if(c.path==='/v1/templates'&&c.method==='POST')return json({id:'tpl-1',roles:['signer-1','signer-2']},201);
-  if(c.path==='/v1/envelopes'&&c.method==='POST')return json({id:ENV_ID,status:'IN_PROGRESS'},201);
-  if(c.path===`/v1/envelopes/${ENV_ID}`)return json(state);
-  if(c.path===`/v1/envelopes/${ENV_ID}/tasks/task-0/recipient-view`)return json({code:'c0de'},201);
-  if(c.path===`/v1/envelopes/${ENV_ID}/delivery-pdf`)return new Response(new Blob(['%PDF-delivery']),{status:200});
- },{storedKey:KEY});
+  if(c.path==='/api/me')return json(ME);
+  if(c.path==='/api/templates'&&c.method==='POST')return json({id:'tpl-1',roles:['signer-1','signer-2']},201);
+  if(c.path==='/api/envelopes'&&c.method==='POST')return json({id:ENV_ID,status:'IN_PROGRESS'},201);
+  if(c.path===`/api/envelopes/${ENV_ID}`)return json(state);
+  if(c.path===`/api/envelopes/${ENV_ID}/tasks/task-0/recipient-view`)return json({code:'c0de'},201);
+  if(c.path===`/api/envelopes/${ENV_ID}/delivery-pdf`)return new Response(new Blob(['%PDF-delivery']),{status:200});
+ });
  try {
   await h.act(async()=>{await new Promise(r=>setTimeout(r,0));});
   await h.act(async()=>{h.byLabel('PDF').props.onChange({target:{files:[pdf()]}});});
   await h.type('Signer 1 name','Ana');await h.type('Signer 1 email','ana@partner.example');
   await h.type('Signer 2 name','Marcus');await h.type('Signer 2 email','marcus@seller.example');
   await h.click('Send for signature');
-  const template=h.calls.find(c=>c.path==='/v1/templates')!;
+  const template=h.calls.find(c=>c.path==='/api/templates')!;
   assert.ok(template.body instanceof FormData);assert.equal((template.body as FormData).get('roles'),'["signer-1","signer-2"]');
-  assert.equal(template.headers.authorization,`Bearer ${KEY}`);
-  const send=h.calls.find(c=>c.path==='/v1/envelopes')!;
+  assert.equal(template.headers.authorization,undefined,'the member\'s session, not a key');
+  const send=h.calls.find(c=>c.path==='/api/envelopes')!;
   assert.match(send.headers['idempotency-key'],/^[0-9a-f-]{36}$/);
   assert.deepEqual(JSON.parse(String(send.body)),{templateId:'tpl-1',recipients:[{role:'signer-1',name:'Ana',email:'ana@partner.example'},{role:'signer-2',name:'Marcus',email:'marcus@seller.example'}],
    documentName:'Mutual Non-Disclosure Agreement',documentVersion:{label:'v1'},sender:{name:'Sam Seller',organization:'Example Seller Inc.'}});
@@ -92,7 +103,7 @@ test('sending adds a signature page, signs in order through the embedded signing
   await h.act(async()=>{h.renderer.root.findAllByType('button').find((b:any)=>JSON.stringify(b.children).includes(ENV_ID)).props.onClick();await new Promise(r=>setTimeout(r,0));});
   assert.match(h.text(),/COMPLETED/);
   await h.click('View signed PDF with certificate');
-  assert.ok(h.calls.some(c=>c.path===`/v1/envelopes/${ENV_ID}/delivery-pdf`));
+  assert.ok(h.calls.some(c=>c.path===`/api/envelopes/${ENV_ID}/delivery-pdf`));
   assert.ok(h.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signed PDF'));
  } finally {await h.unmount();}
 });
@@ -100,11 +111,11 @@ test('sending adds a signature page, signs in order through the embedded signing
 test('one signer, and a send that fails is retried with the same idempotency key', async()=>{
  let fail=true;
  const h=await harness(c=>{
-  if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});
-  if(c.path==='/v1/templates')return json({id:'tpl-1'},201);
-  if(c.path==='/v1/envelopes'&&c.method==='POST'){if(fail){fail=false;return json({error:'unavailable'},503);}return json({id:ENV_ID},201);}
-  if(c.path===`/v1/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE']]));
- },{storedKey:KEY});
+  if(c.path==='/api/me')return json(ME);
+  if(c.path==='/api/templates')return json({id:'tpl-1'},201);
+  if(c.path==='/api/envelopes'&&c.method==='POST'){if(fail){fail=false;return json({error:'unavailable'},503);}return json({id:ENV_ID},201);}
+  if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE']]));
+ });
  try {
   await h.act(async()=>{await new Promise(r=>setTimeout(r,0));});
   await h.act(async()=>{h.byLabel('PDF').props.onChange({target:{files:[pdf()]}});});
@@ -113,30 +124,30 @@ test('one signer, and a send that fails is retried with the same idempotency key
   await h.click('Send for signature');
   assert.match(h.text(),/Request failed \(503 unavailable\)/);
   await h.click('Send for signature');
-  const sends=h.calls.filter(c=>c.path==='/v1/envelopes'&&c.method==='POST');
+  const sends=h.calls.filter(c=>c.path==='/api/envelopes'&&c.method==='POST');
   assert.equal(sends.length,2);assert.equal(sends[0].headers['idempotency-key'],sends[1].headers['idempotency-key']);
   assert.deepEqual(JSON.parse(String(sends[1].body)).recipients,[{role:'signer-1',name:'Ana',email:'ana@partner.example'}]);
-  assert.equal((h.calls.find(c=>c.path==='/v1/templates')!.body as FormData).get('roles'),'["signer-1"]');
+  assert.equal((h.calls.find(c=>c.path==='/api/templates')!.body as FormData).get('roles'),'["signer-1"]');
  } finally {await h.unmount();}
 });
 
 test('placing fields opens the editor on this origin, saves through it, and sends with the saved template', async()=>{
  const SESSION='a'.repeat(64),TEMPLATE='22222222-2222-4222-8222-222222222222';
  const h=await harness(c=>{
-  if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});
-  if(c.path==='/v1/template-editing-sessions'&&c.method==='POST')return json({sessionId:SESSION,url:`${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}`},201);
-  if(c.path===`/v1/template-editing-sessions/${SESSION}/source`)return json({},201);
-  if(c.path===`/v1/template-editing-sessions/${SESSION}`)return json({templateId:TEMPLATE});
-  if(c.path==='/v1/envelopes'&&c.method==='POST')return json({id:ENV_ID},201);
-  if(c.path===`/v1/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]));
- },{storedKey:KEY});
+  if(c.path==='/api/me')return json(ME);
+  if(c.path==='/api/template-editing-sessions'&&c.method==='POST')return json({sessionId:SESSION,url:`${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}`},201);
+  if(c.path===`/api/template-editing-sessions/${SESSION}/source`)return json({},201);
+  if(c.path===`/api/template-editing-sessions/${SESSION}`)return json({templateId:TEMPLATE});
+  if(c.path==='/api/envelopes'&&c.method==='POST')return json({id:ENV_ID},201);
+  if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]));
+ });
  try {
   await h.act(async()=>{await new Promise(r=>setTimeout(r,0));});
   await h.act(async()=>{h.byLabel('PDF').props.onChange({target:{files:[pdf()]}});});
   await h.act(async()=>{h.renderer.root.findAll((n:any)=>n.type==='input'&&n.props.type==='radio')[1].props.onChange();});
   assert.equal(h.button('Send for signature').props.disabled,true,'fields come first');
   await h.click('Place signature fields');
-  const session=h.calls.find(c=>c.path==='/v1/template-editing-sessions')!;
+  const session=h.calls.find(c=>c.path==='/api/template-editing-sessions')!;
   assert.deepEqual(JSON.parse(String(session.body)),{allowedParentOrigin:ORIGIN,roles:['signer-1','signer-2']});
   const source=h.calls.find(c=>c.path.endsWith('/source'))!;assert.equal(source.headers['content-type'],'application/pdf');
   const frame=h.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signature field editor');
@@ -153,36 +164,14 @@ test('placing fields opens the editor on this origin, saves through it, and send
   await h.type('Signer 1 name','Ana');await h.type('Signer 1 email','ana@partner.example');
   await h.type('Signer 2 name','Marcus');await h.type('Signer 2 email','marcus@seller.example');
   await h.click('Send for signature');
-  assert.equal(h.calls.some(c=>c.path==='/v1/templates'),false);
-  assert.equal(JSON.parse(String(h.calls.find(c=>c.path==='/v1/envelopes')!.body)).templateId,TEMPLATE);
+  assert.equal(h.calls.some(c=>c.path==='/api/templates'),false);
+  assert.equal(JSON.parse(String(h.calls.find(c=>c.path==='/api/envelopes')!.body)).templateId,TEMPLATE);
  } finally {await h.unmount();}
-});
-
-test('a saved key is dropped only when the service rejects it, not when a check is interrupted', async()=>{
- const h1=await harness(c=>{if(c.path==='/v1/me')throw new TypeError('Failed to fetch');},{storedKey:KEY});
- try {
-  await h1.act(async()=>{await new Promise(r=>setTimeout(r,0));});
-  assert.equal(h1.session.getItem('esign-demo-key'),KEY,'an interrupted check keeps the key');
-  assert.match(h1.text(),/Could not reach the service/);
-  assert.equal(h1.calls.filter(c=>c.path==='/v1/me').length,1);
- } finally {await h1.unmount();}
- const h2=await harness(c=>{if(c.path==='/v1/me')return json({error:'unauthorized'},401);},{storedKey:KEY});
- try {
-  await h2.act(async()=>{await new Promise(r=>setTimeout(r,0));});
-  assert.equal(h2.session.getItem('esign-demo-key'),null);
-  assert.match(h2.text(),/The saved key was not accepted/);
- } finally {await h2.unmount();}
- const h3=await harness(c=>{if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});});
- try {
-  await h3.type('Tenant management key',KEY);await h3.click('Connect');
-  await h3.act(async()=>{await new Promise(r=>setTimeout(r,0));});
-  assert.equal(h3.calls.filter(c=>c.path==='/v1/me').length,1,'connecting checks the key once');
- } finally {await h3.unmount();}
 });
 
 test('the completion certificate shows the managed seal, and keeps the local test wording for the local seal', async()=>{
  const {renderToStaticMarkup}=await import('react-dom/server');
- const {CompletionCertificate}=await import('../ui/CompletionCertificate.ts');
+ const {CompletionCertificate}=await import('../src/app/ui/CompletionCertificate.ts');
  const base={envelope:{id:'e1',template_id:'t1',created_at:Date.parse('2026-11-07T00:00:00Z'),status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'signed:x',finalSha256:'b'.repeat(64),recipients:[],signatures:[]};
  const managed=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...base,mode:'KMS_TSA',seal:{keyArn:'arn:aws:kms:us-west-2:123456789012:key/k',publicKeySha256:'c'.repeat(64),timestampTime:Date.parse('2026-11-07T01:02:03Z'),tsaUrl:'http://timestamp.digicert.com'}} as never}));
  assert.match(managed,/AWS KMS/);assert.match(managed,/2026-11-07T01:02:03.000Z/);assert.match(managed,/c{64}/);assert.match(managed,/timestamp\.digicert\.com/);
@@ -193,7 +182,7 @@ test('the completion certificate shows the managed seal, and keeps the local tes
 
 test('the completion certificate lists the audit trail, marking events recorded after sealing', async()=>{
  const {renderToStaticMarkup}=await import('react-dom/server');
- const {CompletionCertificate}=await import('../ui/CompletionCertificate.ts');
+ const {CompletionCertificate}=await import('../src/app/ui/CompletionCertificate.ts');
  const event=(id:number,type:string,extra:Record<string,unknown>={})=>({id,envelopeId:'e1',taskId:'t1',type,occurredAt:Date.parse('2026-11-07T01:00:00Z')+id*1000,ip:'203.0.113.9',userAgent:'Mozilla/5.0 (Synthetic)',detail:null,...extra});
  const certificate={envelope:{id:'e1',template_id:'t1',created_at:0,status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'x',finalSha256:'b'.repeat(64),
   recipients:[{id:'t1',role:'partner',recipient_name:'Ana Partner',recipient_email:'ana@partner.test',routing_order:1,status:'SIGNED'}],signatures:[],mode:'KMS_TSA',
@@ -209,12 +198,12 @@ test('the completion certificate lists the audit trail, marking events recorded 
 test('the demo sends the host facts it is given, states a sign-in, and follows the signing page\'s messages', async()=>{
  let state=envelope('IN_PROGRESS',[['Ana','ACTIVE']]);
  const h=await harness(c=>{
-  if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});
-  if(c.path==='/v1/templates')return json({id:'tpl-1'},201);
-  if(c.path==='/v1/envelopes'&&c.method==='POST')return json({id:ENV_ID},201);
-  if(c.path===`/v1/envelopes/${ENV_ID}`)return json(state);
-  if(c.path===`/v1/envelopes/${ENV_ID}/tasks/task-0/recipient-view`)return json({code:'c0de'},201);
- },{storedKey:KEY});
+  if(c.path==='/api/me')return json(ME);
+  if(c.path==='/api/templates')return json({id:'tpl-1'},201);
+  if(c.path==='/api/envelopes'&&c.method==='POST')return json({id:ENV_ID},201);
+  if(c.path===`/api/envelopes/${ENV_ID}`)return json(state);
+  if(c.path===`/api/envelopes/${ENV_ID}/tasks/task-0/recipient-view`)return json({code:'c0de'},201);
+ });
  try {
   await h.act(async()=>{await new Promise(r=>setTimeout(r,0));});
   await h.act(async()=>{h.byLabel('PDF').props.onChange({target:{files:[pdf()]}});});
@@ -224,7 +213,7 @@ test('the demo sends the host facts it is given, states a sign-in, and follows t
   await h.act(async()=>{h.byLabel('Signer 1 after signing').props.onChange({target:{value:'Your onboarding moves on.\n\nTraining opens.'}});});
   await h.type('Version','v3');await h.type('Published (YYYY-MM-DD)','2026-09-02');await h.type('Sender name','');
   await h.click('Send for signature');
-  const body=JSON.parse(String(h.calls.find(c=>c.path==='/v1/envelopes')!.body));
+  const body=JSON.parse(String(h.calls.find(c=>c.path==='/api/envelopes')!.body));
   assert.deepEqual(body,{templateId:'tpl-1',documentName:'Mutual Non-Disclosure Agreement',documentVersion:{label:'v3',publishedAt:'2026-09-02T00:00:00.000Z'},
    recipients:[{role:'signer-1',name:'Ana',email:'ana@partner.example',title:'Partner Manager',onBehalfOf:'Partner Company Ltd',afterSigning:['Your onboarding moves on.','Training opens.']}]},'an empty sender name sends no sender');
   await h.act(async()=>{h.byLabel('Signer signed in with').props.onChange({target:{value:'google'}});});

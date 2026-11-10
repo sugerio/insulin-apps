@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {renderPdfDocument,MAX_PAGE_PIXELS,MAX_TOTAL_PIXELS} from '../ui/pdf.ts';
+import {renderPdfDocument,MAX_PAGE_PIXELS,MAX_TOTAL_PIXELS} from '../src/app/ui/pdf.ts';
 
 function fixture(sizes:[number,number][], pending=false) {
   const canvases:any[]=[];let cancelled=0,destroyed=0,renders=0, resolveRender!:()=>void;

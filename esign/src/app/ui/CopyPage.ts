@@ -1,4 +1,8 @@
 import React from 'react';
+import { Download } from 'lucide-react';
+import { Alert, AlertDescription } from '../components/ui/alert.ts';
+import { Button, buttonVariants } from '../components/ui/button.ts';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.ts';
 
 const h=React.createElement;
 
@@ -28,13 +32,17 @@ export function CopyPage(){
       setDownload({url:URL.createObjectURL(blob),name:'signed-document.pdf'});setState('done');
     }catch{setState('unavailable');}
   }
-  return h('main',{style:{maxWidth:640,margin:'3rem auto',padding:'0 1rem',fontFamily:'sans-serif'}},
-    h('h1',null,'Your signed document'),
-    state==='unavailable'?h('p',{role:'alert'},'This link has already been used or has expired. Ask the sender for a copy.'):null,
-    state==='ready'||state==='busy'?h(React.Fragment,null,
-      h('p',null,'Download the signed document, followed by its certificate of completion, and keep it for your records. The link works once.'),
-      h('button',{type:'button',disabled:state==='busy',onClick:()=>void open()},state==='busy'?'Preparing…':'Download my copy')):null,
-    state==='done'&&download?h(React.Fragment,null,
-      h('p',{role:'status'},'Your copy is ready.'),
-      h('a',{href:download.url,download:download.name},'Save the PDF')):null);
+  return h('main',{className:'mx-auto flex min-h-svh w-full max-w-lg items-center px-4 py-12'},
+    h(Card,{className:'w-full'},
+      h(CardHeader,null,
+        h(CardTitle,{className:'text-xl'},h('h1',null,'Your signed document')),
+        h(CardDescription,null,'The signed document, followed by its certificate of completion.')),
+      h(CardContent,{className:'flex flex-col gap-4'},
+        state==='unavailable'?h(Alert,{variant:'destructive'},h(AlertDescription,null,'This link has already been used or has expired. Ask the sender for a copy.')):null,
+        state==='ready'||state==='busy'?h(React.Fragment,null,
+          h('p',{className:'text-sm text-muted-foreground'},'Download it and keep it for your records. The link works once.'),
+          h(Button,{disabled:state==='busy',onClick:()=>void open(),className:'w-full sm:w-auto'},state==='busy'?'Preparing…':'Download my copy')):null,
+        state==='done'&&download?h(React.Fragment,null,
+          h('p',{role:'status',className:'text-sm'},'Your copy is ready.'),
+          h('a',{href:download.url,download:download.name,className:buttonVariants({variant:'outline',className:'w-full sm:w-auto'})},h(Download,{'aria-hidden':true}),'Save the PDF')):null)));
 }

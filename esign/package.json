@@ -18,10 +18,26 @@
   },
   "insulin": {
     "permissions": [
-      { "key": "esign.manage", "label": "Send and manage envelopes", "description": "Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing.", "role": "EDITOR" },
-      { "key": "esign.view", "label": "View envelopes", "description": "See templates, envelopes and their status, the audit trail, signed documents and certificates of completion.", "role": "VIEWER" }
+      {
+        "key": "esign.manage",
+        "label": "Send and manage envelopes",
+        "description": "Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing.",
+        "role": "EDITOR"
+      },
+      {
+        "key": "esign.view",
+        "label": "View envelopes",
+        "description": "See templates, envelopes and their status, the audit trail, signed documents and certificates of completion.",
+        "role": "VIEWER"
+      }
     ],
-    "publicPaths": ["/sign", "/editor/", "/copy", "/assets/", "/api/public/"],
+    "publicPaths": [
+      "/sign",
+      "/editor/",
+      "/copy",
+      "/assets/",
+      "/api/public/"
+    ],
     "secrets": [
       "ESIGN_OTP_KEY",
       "ESIGN_FRAME_ANCESTORS",
@@ -39,19 +55,24 @@
     "@fours/app": "0.1.0-beta.0",
     "@smithy/signature-v4": "5.7.5",
     "asn1js": "3.0.6",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
     "drizzle-orm": "0.45.3",
     "hono": "4.13.16",
     "jose": "6.2.3",
+    "lucide-react": "1.55.0",
     "nitro": "3.0.260610-beta",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "5.4.624",
     "pkijs": "3.4.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261103.1",
     "@rolldown/binding-wasm32-wasi": "1.2.14",
+    "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.20.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -61,6 +82,7 @@
     "lightningcss": "npm:lightningcss-wasm@1.33.0",
     "miniflare": "4.20260730.0",
     "react-test-renderer": "19.3.1",
+    "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vite": "8.3.4"
   },

@@ -46,7 +46,7 @@ export function EditorPage(){
     openSession(pageId,code).then(value=>{if(live)setSession(value);}).catch(()=>{if(live)setFailed(true);});
     return()=>{live=false;};
   },[]);
-  if(failed)return h('p',{role:'alert'},'Editor session unavailable. Ask the host to open a new session.');
-  if(!session)return h('p',{role:'status'},'Loading the editor…');
+  if(failed)return h('p',{role:'alert',className:'p-6 text-sm text-destructive'},'Editor session unavailable. Ask the host to open a new session.');
+  if(!session)return h('p',{role:'status',className:'p-6 text-sm text-muted-foreground'},'Loading the editor…');
   return h(EmbeddedEditor,{session});
 }

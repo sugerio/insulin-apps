@@ -1,4 +1,4 @@
-import './ui/esign-theme.css'
+import './styles.css'
 import { StrictMode } from 'react'
 import { CopyPage } from './ui/CopyPage.ts'
 import { DemoPage } from './ui/DemoPage.ts'

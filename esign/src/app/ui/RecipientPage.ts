@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {createPortal} from 'react-dom';
 import { signingHost, type SigningHostMessage } from './signing-host-protocol.ts';
+import { Button } from '../components/ui/button.ts';
+import { Input, checkClass } from '../components/ui/input.ts';
+import { Textarea } from '../components/ui/textarea.ts';
+import { SigningHelp } from './SigningHelp.ts';
 const h = React.createElement;
 /**
  * Who frames this page, as the browser tells it: the framing page's origin (location.ancestorOrigins
@@ -102,7 +106,7 @@ function CodeBoxes({value,onChange,disabled,onEnter,focusSignal}:{value:string;o
   // A code was just sent, or the last one was refused: the next digit goes in without a click.
   // biome-ignore lint/correctness/useExhaustiveDependencies: focuses on the signal only
   useEffect(()=>{if(focusSignal&&!disabled)focus(value.length);},[focusSignal,disabled]);
-  return h('div',{className:'esign-code-boxes',role:'group','aria-label':'Verification code'},...Array.from({length:CODE_LENGTH},(_,i)=>h('input',{
+  return h('div',{className:'esign-code-boxes',role:'group','aria-label':'Verification code'},...Array.from({length:CODE_LENGTH},(_,i)=>h(Input,{
     key:i,ref:(el:HTMLInputElement|null)=>{boxes.current[i]=el;},'aria-label':`Digit ${i+1} of ${CODE_LENGTH}`,value:value[i]??'',disabled,
     inputMode:'numeric',autoComplete:i===0?'one-time-code':'off',
     onFocus:(e:React.FocusEvent<HTMLInputElement>)=>{if(i>value.length){focus(value.length);return;}e.target.select();},
@@ -143,7 +147,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   // The name the signer adopts: it fills every one of their Signature fields.
   const [fullName,setFullName]=useState('');
   // Declining instead of signing, with a reason; the electronic records disclosure, opened from Sign.
-  const [declining,setDeclining]=useState(false),[declineReason,setDeclineReason]=useState(''),[declineBusy,setDeclineBusy]=useState(false),[showDisclosure,setShowDisclosure]=useState(false);
+  const [declining,setDeclining]=useState(false),[declineReason,setDeclineReason]=useState(''),[declineBusy,setDeclineBusy]=useState(false),[showDisclosure,setShowDisclosure]=useState(false),[showHelp,setShowHelp]=useState(false);
   // What the signer is about to sign: how many pages, the page in view, and the document itself to keep a copy before signing.
   const [pageCount,setPageCount]=useState(0),[currentPage,setCurrentPage]=useState(1),[pdfUrl,setPdfUrl]=useState('');
   // The three steps (review, confirm it's you, sign); a decline waiting for the code; pages viewed.
@@ -299,8 +303,15 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const sender = artifact?.sender?.organization || artifact?.sender?.name || '';
   const versionLabel = artifact?.documentVersion?.label;
   const steps:[1|2|3,string][]=[[1,'Review'],[2,"Confirm it's you"],[3,'Sign']];
-  const button=(label:string,onClick:()=>void,opts:{primary?:boolean;quiet?:boolean;disabled?:boolean;className?:string}={})=>
-    h('button',{type:'button',className:[opts.primary?'esign-primary':opts.quiet?'esign-quiet':'',opts.className??''].filter(Boolean).join(' ')||undefined,disabled:opts.disabled,onClick},label);
+  // shadcn's Button: the step's main action is the default (primary) variant, Decline a destructive one, the rest outline
+  // or ghost. The esign-* classes stay as hooks for the host's tests.
+  const button=(label:string,onClick:()=>void,opts:{primary?:boolean;quiet?:boolean;disabled?:boolean;className?:string}={})=>{
+    const danger=opts.className?.includes('esign-danger-fill')?'destructive':undefined;
+    const variant=danger??(opts.primary?'default':opts.quiet?'ghost':'outline');
+    const tone=opts.className?.split(' ').includes('esign-danger')?'text-destructive hover:bg-destructive/10 hover:text-destructive':'';
+    return h(Button,{variant,className:[opts.primary?'esign-primary':opts.quiet?'esign-quiet':'',opts.className??'',tone].filter(Boolean).join(' ')||undefined,disabled:opts.disabled,onClick},label);};
+  const linkButton=(label:string,onClick:(event:React.MouseEvent)=>void,disabled=false)=>
+    h(Button,{variant:'link',className:'esign-link h-auto p-0 align-baseline',disabled,onClick},label);
 
   // The document's facts: its name, version, pages and fingerprint (both sides can later prove what was signed).
   const documentFacts=(published:boolean)=>artifact&&h('dl',{className:'esign-facts','aria-label':'Document details'},
@@ -309,7 +320,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     pageCount>0&&fact('Pages',String(pageCount)),
     fact('Fingerprint (SHA-256)',h('span',{className:'esign-mono',title:artifact.sha256},fingerprintText(artifact.sha256))));
   const section=(label:string,...children:React.ReactNode[])=>h('section',{className:'esign-side-section','aria-label':label},h('h2',null,label),...children);
-  const titleInput=(label:string)=>h('label',{className:'esign-field'},h('span',null,'Title'),h('input',{'aria-label':label,value:signerTitle,maxLength:128,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setSignerTitle(event.target.value)}));
+  const titleInput=(label:string)=>h('label',{className:'esign-field'},h('span',null,'Title'),h(Input,{'aria-label':label,value:signerTitle,maxLength:128,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setSignerTitle(event.target.value)}));
 
   const codeLeft=sentAt+CODE_TTL_MS-now, sentTo=artifact?.recipientEmail||'your email address', auth=artifact?.hostAuthentication;
   // Step 2: the host's sign-in (when it said how) and the emailed code.
@@ -327,7 +338,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       codeNote&&h('p',{role:'alert',className:'esign-code-error'},codeNote),
       h('p',{className:'esign-code-meta'},
         sent&&(codeLeft>0?`Code expires in ${codeTimeLeft(codeLeft)}`:'This code has expired.'),sent&&' · ',
-        h('button',{type:'button',className:'esign-link',disabled:sending||now<resendAt,onClick:()=>void send()},sending?'Sending…':now<resendAt?`Resend code in ${codeTimeLeft(resendAt-now)}`:'Resend code')))),
+        linkButton(sending?'Sending…':now<resendAt?`Resend code in ${codeTimeLeft(resendAt-now)}`:'Resend code',()=>void send(),sending||now<resendAt)))),
     h('div',{className:'esign-why'},h('h3',null,'Why we ask'),
       h('p',null,auth?"Your sign-in and the email code are recorded in the agreement's audit trail, with the time, your IP address and browser. That record is what makes the signature hold up."
         :"The email code is recorded in the agreement's audit trail, with the time, your IP address and browser. That record is what makes the signature hold up."),
@@ -371,7 +382,9 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const showVerification=token&&!finished&&(step===2||(docNeedsCode&&!verified));
 
   return h('main',{className:embedded?'esign-recipient esign-embedded':'esign-recipient'},
-    h('h1',null,'Sign document'),
+    h('div',{className:'esign-header'},h('h1',null,'Sign document'),
+      // The signer's help, in plain words: what the steps are, why the code, how to decline (SigningHelp.ts).
+      !finished&&h(Button,{variant:'ghost',size:'sm',className:'esign-help-open ml-auto text-muted-foreground',onClick:()=>setShowHelp(true)},'About signing')),
     token && !finished && h('ol',{className:'esign-steps','aria-label':'Signing steps'},...steps.flatMap(([n,label],i)=>[
       i>0&&h('li',{key:`line-${n}`,className:'esign-step-line','aria-hidden':true}),
       h('li',{key:n,'aria-current':step===n?'step':undefined,className:step===n?'esign-step-current':step>n?'esign-step-done':undefined},h('span',{className:'esign-step-number'},step>n?'✓':String(n)),label)])),
@@ -390,7 +403,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
           section('Signing as',
             h('dl',{className:'esign-facts'},signingAs&&fact('Name',signingAs),artifact.recipientEmail&&fact('Email',artifact.recipientEmail)),
             titleShown&&titleInput('Your title'),
-            forCompany&&h('label',{className:'esign-check'},h('input',{type:'checkbox','aria-label':'Authorized to sign',checked:authority,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setAuthority(event.target.checked)}),h('span',null,"I'm authorized to sign for ",h('strong',null,forCompany)))),
+            forCompany&&h('label',{className:'esign-check'},h('input',{type:'checkbox',className:checkClass,'aria-label':'Authorized to sign',checked:authority,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>setAuthority(event.target.checked)}),h('span',null,"I'm authorized to sign for ",h('strong',null,forCompany)))),
           pageCount>0&&h('div',{className:'esign-viewed','aria-label':'Pages viewed'},
             h('div',{className:'esign-progress'},h('div',{style:{width:`${Math.round(Math.min(viewed,pageCount)/pageCount*100)}%`}})),
             h('span',null,`Viewed ${Math.min(viewed,pageCount)} of ${pageCount} ${pageCount===1?'page':'pages'}`))),
@@ -398,7 +411,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
         ready && step===3 && h('section',{className:'esign-adopt'},
           h('h2',null,'Adopt your signature'),h('p',{className:'esign-sub'},'This is how your signature appears on the document.'),
           h('div',{className:'esign-adopt-inputs'},
-            h('label',{className:'esign-field'},h('span',null,'Full name'),h('input',{'aria-label':'Full name',value:fullName,maxLength:64,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setFullName(event.target.value);}})),
+            h('label',{className:'esign-field'},h('span',null,'Full name'),h(Input,{'aria-label':'Full name',value:fullName,maxLength:64,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setFullName(event.target.value);}})),
             titleShown&&titleInput('Title')),
           nameError&&h('p',{role:'alert',className:'esign-field-error'},nameError),
           titleError&&h('p',{role:'alert',className:'esign-field-error'},titleError),
@@ -409,8 +422,8 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
             h('p',{className:'esign-preview-caption'},signatureCaption(fullName,signerTitle,forCompany))),
           ...fieldPreviews,
           h('label',{className:'esign-check esign-consent'},
-            h('input',{type:'checkbox','aria-label':'Consent to sign',checked:consent,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setConsent(event.target.checked);}}),
-            h('span',null,consentText,' ',artifact.disclosure&&h('button',{type:'button',className:'esign-link',onClick:(event:React.MouseEvent)=>{event.preventDefault();setShowDisclosure(true);}},'Read the electronic records disclosure')))),
+            h('input',{type:'checkbox',className:checkClass,'aria-label':'Consent to sign',checked:consent,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setConsent(event.target.checked);}}),
+            h('span',null,consentText,' ',artifact.disclosure&&linkButton('Read the electronic records disclosure',(event:React.MouseEvent)=>{event.preventDefault();setShowDisclosure(true);})))),
         ready && step===3 && h('aside',{className:'esign-side'},
           section('Document',documentFacts(false)),
           section('After you sign',h('ul',{className:'esign-after'},...afterSigningLines(artifact).map((line,i)=>h('li',{key:i},line)))))),
@@ -418,7 +431,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     declining && modal('Decline to sign',
       h('h2',null,'Decline to sign'),
       h('p',{className:'esign-sub'},`Tell ${sender||'the sender'} why you are declining. They are notified, and nobody can sign this agreement afterwards.`),
-      h('label',{className:'esign-field'},h('span',null,'Why are you declining?'),h('textarea',{'aria-label':'Reason for declining',value:declineReason,maxLength:1000,onChange:(event:React.ChangeEvent<HTMLTextAreaElement>)=>setDeclineReason(event.target.value)})),
+      h('label',{className:'esign-field'},h('span',null,'Why are you declining?'),h(Textarea,{'aria-label':'Reason for declining',value:declineReason,maxLength:1000,onChange:(event:React.ChangeEvent<HTMLTextAreaElement>)=>setDeclineReason(event.target.value)})),
       h('div',{className:'esign-modal-actions'},
         button('Keep the document',()=>{setDeclining(false);setDeclineReason('');setPendingDecline(false);},{disabled:declineBusy}),
         button('Decline',()=>{if(verified)void decline();else{setDeclining(false);setPendingDecline(true);setStep(2);setMessage("Confirm it's you to decline.");}},{primary:true,className:'esign-danger-fill',disabled:declineBusy||!declineReason.trim()}))),
@@ -426,6 +439,10 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       h('h2',null,'Electronic records disclosure'),
       h('div',{className:'esign-disclosure'},artifact.disclosure.text),
       h('div',{className:'esign-modal-actions'},button('Close',()=>setShowDisclosure(false),{primary:true}))),
+    showHelp && modal('About signing',
+      h('h2',null,'About signing'),
+      h(SigningHelp,{sender:sender||'The sender',documentName:artifact?.documentName}),
+      h('div',{className:'esign-modal-actions'},button('Close',()=>setShowHelp(false),{primary:true}))),
     rendered&&fields.map((field,index)=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${artifact?.role ? `${artifact.role} ${field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature'}${fields.length>1?` ${index+1}`:""}` : `${field.type||'Signature'} field ${index+1}`} on page ${field.page}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:'2px dashed #135c9b',outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},imageUrls[field.id]&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)));
 }
 

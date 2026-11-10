@@ -1,34 +1,20 @@
-name: E-sign CI
-
-# Deployments (esign/WORKER-MODE.md, "Deploy"):
-# - dev: every push to main or to an E-sign branch (feat/esign-*) is tested, then deployed to
-#   esign-dev, once the repository variable ESIGN_DEV_DEPLOY is true. Also by hand: Run workflow,
-#   target dev, on any branch. GitHub environment `esign-dev` (no branch restriction).
-# - prod: only by hand, Run workflow on main with target prod. GitHub environment `production`
-#   (main only; give it required reviewers).
-# Each environment holds the same names: secret CLOUDFLARE_API_TOKEN, variables
-# CLOUDFLARE_ACCOUNT_ID, ESIGN_MAIL_FROM, ESIGN_FRAME_ANCESTORS, ESIGN_KMS_KEY_ARN,
-# ESIGN_KMS_PUBLIC_KEY, ESIGN_AWS_ROLE_ARN, and in esign-dev only ESIGN_MAIL_SINK.
+name: esign
 
 on:
   push:
-    branches: [main, 'feat/esign-*']
+    branches: [main]
     paths:
       - esign/**
       - .github/workflows/esign.yml
+      - .github/workflows/app.yml
       - .github/scripts/**
   pull_request:
     paths:
       - esign/**
       - .github/workflows/esign.yml
+      - .github/workflows/app.yml
       - .github/scripts/**
   workflow_dispatch:
-    inputs:
-      target:
-        description: Deploy to (prod only from main)
-        type: choice
-        options: [none, dev, prod]
-        default: none
 
 permissions:
   contents: read
@@ -38,144 +24,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: esign
-    outputs:
-      target: ${{ steps.target.outputs.target }}
-    env:
-      CI: 'true'
-      WRANGLER_SEND_METRICS: 'false'
-      ESIGN_TEST_CHROME: /usr/bin/google-chrome
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Choose the deployment
-        # dev on a push (main or feat/esign-*) once ESIGN_DEV_DEPLOY is true; dev or prod by hand.
-        id: target
-        shell: bash
-        env:
-          EVENT: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-          INPUT: ${{ inputs.target }}
-          DEV_ON_PUSH: ${{ vars.ESIGN_DEV_DEPLOY }}
-        run: |
-          set -euo pipefail
-          target=''
-          if [ "$EVENT" = push ] && [ "$DEV_ON_PUSH" = true ]; then target=dev; fi
-          if [ "$EVENT" = workflow_dispatch ] && [ "$INPUT" != none ]; then target="$INPUT"; fi
-          if [ "$target" = prod ] && [ "$REF" != refs/heads/main ]; then echo "::error::prod deploys only from main."; exit 1; fi
-          case "$target" in ''|dev|prod) ;; *) echo "::error::Unknown target $target"; exit 1;; esac
-          echo "target=$target" >> "$GITHUB_OUTPUT"
-          echo "Deployment: ${target:-none}"
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: esign/package-lock.json
-      - name: Install
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Check browser availability
-        run: test -x "$ESIGN_TEST_CHROME" && "$ESIGN_TEST_CHROME" --version
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Test all suites serially
-        shell: bash
-        run: |
-          set -o pipefail
-          node --test --test-concurrency=1 --test-reporter=tap test/*.test.ts | tee "$RUNNER_TEMP/esign-tests.tap"
-          for title in \
-            'Chrome completes two typed positioned signatures' \
-            'isolated Chrome Ana then Marcus' \
-            'cross-origin browser embeds, saves and reopens' \
-            'local Wrangler migrations apply once'; do
-            grep -F 'ok ' "$RUNNER_TEMP/esign-tests.tap" | grep -F "$title" | grep -viE '# *skip|# *todo' > /dev/null
-          done
-      - name: Build the Worker bundle and pages (dry-run only)
-        run: npm run build
-      - name: Pack the build for the deployment
-        # Built here, without any credential; the deploy job treats the archive as untrusted.
-        if: steps.target.outputs.target != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          out="$RUNNER_TEMP/esign-build"
-          mkdir -p "$out/dist"
-          cp dist/worker.js "$out/dist/"
-          cp -R dist-ui "$out/dist-ui"
-          if find "$out" ! -type f ! -type d -print -quit | grep -q .; then echo 'Unexpected link or special file'; exit 1; fi
-          tar -czf "$RUNNER_TEMP/esign-build.tgz" -C "$RUNNER_TEMP" esign-build
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: steps.target.outputs.target != ''
-        with:
-          name: esign-build
-          path: ${{ runner.temp }}/esign-build.tgz
-          if-no-files-found: error
-          retention-days: 3
-      - name: Repository policy checks
-        working-directory: .
-        run: |
-          node --test .github/scripts/*.test.mjs
-          node .github/scripts/check-app-workflows.mjs
-          node .github/scripts/check-public-content.mjs
-
-  deploy:
-    # esign-dev or esign-prod (esign/WORKER-MODE.md, "Deploy"). It deploys only what the
-    # credential-free job above built and tested; the target decides ESIGN_ENV (scripts/deploy.ts).
-    name: Deploy esign-${{ needs.checks.outputs.target }}
-    needs: checks
-    if: needs.checks.outputs.target != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: ${{ needs.checks.outputs.target == 'prod' && 'production' || 'esign-dev' }}
-    concurrency:
-      group: deploy-esign-${{ needs.checks.outputs.target }}
-      cancel-in-progress: false
-    defaults:
-      run:
-        working-directory: esign
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: esign/package-lock.json
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: esign-build
-          path: ${{ runner.temp }}
-      - name: Unpack build
-        shell: bash
-        working-directory: .
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/esign-build.tgz"
-          members="$RUNNER_TEMP/esign-build.members"
-          tar --list --gzip --file "$archive" --quoting-style=literal | tee "$members"
-          node .github/scripts/check-build-archive.mjs "$members" esign-build
-          if ! tar --list --verbose --gzip --file "$archive" | awk 'substr($1, 1, 1) != "-" && substr($1, 1, 1) != "d" { exit 1 }'; then
-            echo "::error::Build archive contains a link or special file."
-            exit 1
-          fi
-          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP" --no-same-owner --no-same-permissions
-          test -f "$RUNNER_TEMP/esign-build/dist/worker.js" && test -d "$RUNNER_TEMP/esign-build/dist-ui"
-      - name: Install deployment tooling
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Migrate and deploy
-        run: node scripts/deploy.ts --target "$TARGET" --bundle "$RUNNER_TEMP/esign-build/dist" --assets "$RUNNER_TEMP/esign-build/dist-ui"
-        env:
-          TARGET: ${{ needs.checks.outputs.target }}
-          WRANGLER_SEND_METRICS: 'false'
-          # The same names in each GitHub environment; ESIGN_MAIL_SINK exists in esign-dev only
-          # (scripts/deploy.ts refuses a sink for prod).
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          ESIGN_MAIL_FROM: ${{ vars.ESIGN_MAIL_FROM }}
-          ESIGN_MAIL_SINK: ${{ vars.ESIGN_MAIL_SINK }}
-          ESIGN_FRAME_ANCESTORS: ${{ vars.ESIGN_FRAME_ANCESTORS }}
-          ESIGN_KMS_KEY_ARN: ${{ vars.ESIGN_KMS_KEY_ARN }}
-          ESIGN_KMS_PUBLIC_KEY: ${{ vars.ESIGN_KMS_PUBLIC_KEY }}
-          ESIGN_AWS_ROLE_ARN: ${{ vars.ESIGN_AWS_ROLE_ARN }}
+  app:
+    uses: ./.github/workflows/app.yml
+    with:
+      app: esign
+      deploy: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      workerd-smoke: false
+    secrets: inherit

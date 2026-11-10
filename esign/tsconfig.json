@@ -1,23 +1,27 @@
 {
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/helpers/**/*.ts", "test/fixtures/**/*.ts", "vite.config.ts"],
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2023",
+    "jsx": "react-jsx",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "strict": true,
-    "noEmit": true,
+    "paths": {
+      "#platform": ["./src/platform.local.ts"],
+      "#/*": ["./src/*"]
+    },
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+
+    /* Linting */
     "skipLibCheck": true,
-    "lib": [
-      "ES2022",
-      "DOM"
-    ],
-    "types": [
-      "@cloudflare/workers-types"
-    ]
-  },
-  "include": [
-    "src/**/*.ts",
-    "ui/**/*.ts",
-    "test/fixtures/**/*.ts"
-  ]
+    "strict": true,
+    "noFallthroughCasesInSwitch": true
+  }
 }

@@ -1,19 +1,20 @@
-import {unstable_splitSqlQuery} from 'wrangler';
+import {blobStore} from './helpers/platform.ts';
+import {MIGRATIONS_DIR,splitSql as unstable_splitSqlQuery} from './helpers/platform.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
-import app from '../src/worker.ts';
-import {authorizeAccess,exchangeAccessCode,issueAccessCode} from '../src/access.ts';
-import {authorizeRecipientSession,exchangeRecipientCode,issueRecipientCode,sendRecipientOtp,verifyRecipientOtp} from '../src/otp.ts';
-import {editorPageContext,exchangeEditorPage} from '../src/editor-session.ts';
+import app from './helpers/gateway.ts';
+import {authorizeAccess,exchangeAccessCode,issueAccessCode} from '../src/app/server/esign/access.ts';
+import {authorizeRecipientSession,exchangeRecipientCode,issueRecipientCode,sendRecipientOtp,verifyRecipientOtp} from '../src/app/server/esign/otp.ts';
+import {editorPageContext,exchangeEditorPage} from '../src/app/server/esign/editor-session.ts';
 import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 async function database(mf:Miniflare){
  const db=await mf.getD1Database('DB');
- for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort())
-  await db.batch(unstable_splitSqlQuery(await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8')).map(s=>db.prepare(s)));
+ for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort())
+  await db.batch(unstable_splitSqlQuery(await readFile(new URL(name,MIGRATIONS_DIR),'utf8')).map(s=>db.prepare(s)));
  return db;
 }
 
@@ -75,9 +76,9 @@ INSERT INTO editor_sessions (id,tenant_id,parent_origin) VALUES ('${id}','a','${
 });
 
 test('signing APIs refuse editor codes and tokens, editor APIs refuse recipient codes and tokens',async()=>{
- const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS','TEST_MAIL']});
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  try{
-  const db=await database(mf),bucket=await mf.getR2Bucket('ARTIFACTS'),mail=await mf.getR2Bucket('TEST_MAIL');
+  const db=await database(mf),bucket=await blobStore(mf,'artifacts'),mail=await blobStore(mf,'test-mail');
   const key='local-test-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const keyHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();
@@ -92,38 +93,38 @@ test('signing APIs refuse editor codes and tokens, editor APIs refuse recipient 
   const json=(body:unknown,headers:Record<string,string>={})=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
 
   const pdf=await PDFDocument.create();pdf.addPage();const form=new FormData();form.set('file',new File([await pdf.save()],'sample.pdf',{type:'application/pdf'}));form.set('roles','["ana"]');
-  const template=await (await req('/v1/templates',{method:'POST',headers:management,body:form})).json() as {id:string};
-  const created=await req('/v1/envelopes',json({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'}]},{...management,'idempotency-key':'scope-1'}));
+  const template=await (await req('/api/templates',{method:'POST',headers:management,body:form})).json() as {id:string};
+  const created=await req('/api/envelopes',json({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'}]},{...management,'idempotency-key':'scope-1'}));
   assert.equal(created.status,201,await created.clone().text());const envelope=await created.json() as {id:string};
-  const task=((await (await req(`/v1/envelopes/${envelope.id}`,{headers:management})).json()) as {tasks:{id:string}[]}).tasks[0].id;
-  const view=await req(`/v1/envelopes/${envelope.id}/tasks/${task}/recipient-view`,json({origin:host},management));assert.equal(view.status,201);
+  const task=((await (await req(`/api/envelopes/${envelope.id}`,{headers:management})).json()) as {tasks:{id:string}[]}).tasks[0].id;
+  const view=await req(`/api/envelopes/${envelope.id}/tasks/${task}/recipient-view`,json({origin:host},management));assert.equal(view.status,201);
   const recipientCode=((await view.json()) as {code:string}).code;
-  const session=await req('/v1/template-editing-sessions',json({allowedParentOrigin:host,roles:['Signer']},management));assert.equal(session.status,201);
+  const session=await req('/api/template-editing-sessions',json({allowedParentOrigin:host,roles:['Signer']},management));assert.equal(session.status,201);
   const editor=await session.json() as {sessionId:string;url:string};const editorCode=new URL(editor.url).hash.slice(1);
 
   // Codes at the wrong exchange.
-  assert.equal((await req('/v1/page-sessions/exchange',json({code:editorCode},{origin:host}))).status,401);
-  assert.equal((await req('/v1/editor/exchange',json({pageId:editor.sessionId,code:recipientCode},{origin:self}))).status,401);
+  assert.equal((await req('/api/public/page-sessions/exchange',json({code:editorCode},{origin:host}))).status,401);
+  assert.equal((await req('/api/public/editor/exchange',json({pageId:editor.sessionId,code:recipientCode},{origin:self}))).status,401);
   // Both codes are still unused: each is exchanged at its own endpoint.
-  const recipientExchange=await req('/v1/page-sessions/exchange',json({code:recipientCode},{origin:host}));assert.equal(recipientExchange.status,200);
+  const recipientExchange=await req('/api/public/page-sessions/exchange',json({code:recipientCode},{origin:host}));assert.equal(recipientExchange.status,200);
   const recipientToken=((await recipientExchange.json()) as {token:string}).token;
-  const editorExchange=await req('/v1/editor/exchange',json({pageId:editor.sessionId,code:editorCode},{origin:self}));assert.equal(editorExchange.status,200);
+  const editorExchange=await req('/api/public/editor/exchange',json({pageId:editor.sessionId,code:editorCode},{origin:self}));assert.equal(editorExchange.status,200);
   const editorToken=((await editorExchange.json()) as {token:string}).token;
 
   // Tokens at the wrong APIs.
   const asRecipient=(token:string)=>({origin:host,authorization:`Bearer ${token}`});
   const asEditor=(token:string)=>({origin:self,authorization:`Bearer ${token}`});
-  assert.equal((await req('/v1/signing/current',{headers:asRecipient(recipientToken)})).status,200);
-  assert.equal((await req('/v1/editor/current',{headers:asEditor(editorToken)})).status,200);
-  assert.equal((await req('/v1/signing/current',{headers:asRecipient(editorToken)})).status,401);
-  assert.equal((await req('/v1/signing/pdf',{headers:asRecipient(editorToken)})).status,401);
-  assert.notEqual((await req('/v1/signing/otp',json({},asRecipient(editorToken)))).status,202);
+  assert.equal((await req('/api/public/signing/current',{headers:asRecipient(recipientToken)})).status,200);
+  assert.equal((await req('/api/public/editor/current',{headers:asEditor(editorToken)})).status,200);
+  assert.equal((await req('/api/public/signing/current',{headers:asRecipient(editorToken)})).status,401);
+  assert.equal((await req('/api/public/signing/pdf',{headers:asRecipient(editorToken)})).status,401);
+  assert.notEqual((await req('/api/public/signing/otp',json({},asRecipient(editorToken)))).status,202);
   assert.equal((await mail.list()).objects.length,0,'no code is sent for an editor token');
-  assert.equal((await req('/v1/signing/otp/verify',json({otp:'123456'},asRecipient(editorToken)))).status,401);
-  assert.equal((await req('/v1/editor/current',{headers:asEditor(recipientToken)})).status,401);
-  assert.equal((await req('/v1/editor/pdf',{headers:asEditor(recipientToken)})).status,401);
+  assert.equal((await req('/api/public/signing/otp/verify',json({otp:'123456'},asRecipient(editorToken)))).status,401);
+  assert.equal((await req('/api/public/editor/current',{headers:asEditor(recipientToken)})).status,401);
+  assert.equal((await req('/api/public/editor/pdf',{headers:asEditor(recipientToken)})).status,401);
   const save=new FormData();save.set('roles','["Signer"]');save.set('fields','[]');
-  assert.equal((await req('/v1/editor/save',{method:'POST',headers:asEditor(recipientToken),body:save})).status,401);
-  assert.equal(((await (await req(`/v1/template-editing-sessions/${editor.sessionId}`,{headers:management})).json()) as {templateId:string|null}).templateId,null);
+  assert.equal((await req('/api/public/editor/save',{method:'POST',headers:asEditor(recipientToken),body:save})).status,401);
+  assert.equal(((await (await req(`/api/template-editing-sessions/${editor.sessionId}`,{headers:management})).json()) as {templateId:string|null}).templateId,null);
  }finally{await mf.dispose();}
 });

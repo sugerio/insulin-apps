@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { signKmsEvidence } from '../src/seal/kms.ts';
+import { signKmsEvidence } from '../src/app/server/esign/seal/kms.ts';
 
 const domain = new TextEncoder().encode('esign-worker-evidence-candidate-v1\0');
 const join = (a: Uint8Array, b: Uint8Array) => Uint8Array.from([...a, ...b]);

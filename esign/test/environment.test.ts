@@ -1,15 +1,15 @@
-// The one switch, ESIGN_ENV (src/environment.ts): what dev and prod each allow.
+// The one switch, ESIGN_ENV (src/app/server/esign/environment.ts): what dev and prod each allow.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { environmentOf, prodProblems, signingEnabled, testSealKey } from '../src/environment.ts';
-import { frameAncestors } from '../src/signing-page.ts';
-import { mailerFor, recipientMailer, sinkMailer } from '../src/otp-mail-sink.ts';
+import { environmentOf, prodProblems, signingEnabled, testSealKey } from '../src/app/server/esign/environment.ts';
+import { embedderAllowed, frameAncestors } from '../src/app/server/esign/signing-page.ts';
+import { MailRelayError, mailerFor, relayConfig } from '../src/app/server/esign/mail.ts';
+import { mailRelay } from './helpers/mail-relay.ts';
 
 const KEY = 'k'.repeat(32);
-const TEST_MAIL = {} as R2Bucket;
-const SEND_EMAIL = { send: async () => ({}) };
+const TEST_MAIL = {};
 const KMS_KEY_ARN = 'arn:aws:kms:us-west-2:123456789012:key/00000000-0000-4000-8000-000000000000';
-const PROD = { ESIGN_ENV: 'prod', OTP_KEY: KEY, SEND_EMAIL, MAIL_FROM: 'sign@sender.example', KMS_KEY_ARN };
+const PROD = { ESIGN_ENV: 'prod', OTP_KEY: KEY, SUGER_MAIL_URL: 'https://mail.example.test/v1/send', SUGER_APP_TOKEN: 'synthetic-app-token', KMS_KEY_ARN };
 
 test('only "prod" is prod; unset or anything else is dev', () => {
   assert.equal(environmentOf({ ESIGN_ENV: 'prod' }), 'prod');
@@ -24,8 +24,8 @@ test('dev signs with the code pepper and a test mailbox; prod with its whole con
   assert.deepEqual(prodProblems(PROD), []);
   assert.deepEqual(prodProblems({ OTP_KEY: KEY }), [], 'dev is lenient');
   const cases: [Record<string, unknown>, RegExp][] = [
-    [{ OTP_KEY: '' }, /OTP_KEY/], [{ SEND_EMAIL: undefined }, /SEND_EMAIL/], [{ MAIL_FROM: 'nope' }, /MAIL_FROM/],
-    [{ MAIL_SINK: 'inbox@sink.example' }, /MAIL_SINK is set/], [{ TEST_MAIL }, /TEST_MAIL bucket is bound/], [{ KMS_KEY_ARN: '' }, /KMS_KEY_ARN/],
+    [{ OTP_KEY: '' }, /ESIGN_OTP_KEY/], [{ SUGER_MAIL_URL: undefined }, /mail relay/], [{ SUGER_APP_TOKEN: '' }, /mail relay/],
+    [{ TEST_MAIL }, /test mailbox is bound/], [{ KMS_KEY_ARN: '' }, /ESIGN_KMS_KEY_ARN/],
   ];
   for (const [change, problem] of cases) {
     const env = { ...PROD, ...change };
@@ -40,38 +40,40 @@ test('the HMAC test seal is dev only, whatever prod is given', () => {
   assert.equal(testSealKey({ ...PROD, TEST_SEAL_KEY: KEY }), null);
 });
 
-test('dev with a sink mails the sink, prod mails recipients, and neither falls back to the other', async () => {
-  const sent: { to: string; subject: string }[] = [];
-  const binding = { send: async (m: { to: string; subject: string }) => { sent.push(m); } };
-  const dev = { SEND_EMAIL: binding, MAIL_FROM: 'sign@sender.example', MAIL_SINK: 'inbox@sink.example' };
-  assert.ok(sinkMailer(dev));
-  assert.equal(recipientMailer(dev), null);
-  await mailerFor(dev)!.send('ana@partner.example', 'Hello', 'Body');
-  assert.equal(sent.at(-1)!.to, 'inbox@sink.example');
-  assert.match(sent.at(-1)!.subject, /^\[E-sign dev\] Hello \(for ana@partner\.example\)$/);
-  const prod = { ...dev, ESIGN_ENV: 'prod' };
-  assert.equal(sinkMailer(prod), null, 'prod never uses a sink, even one configured');
-  await mailerFor(prod)!.send('ana@partner.example', 'Hello', 'Body');
-  assert.deepEqual({ to: sent.at(-1)!.to, subject: sent.at(-1)!.subject }, { to: 'ana@partner.example', subject: 'Hello' });
-  await assert.rejects(mailerFor(prod)!.send('not an address', 'Hello', 'Body'), /Invalid recipient/);
-  assert.equal(mailerFor({ ESIGN_ENV: 'prod', MAIL_FROM: 'sign@sender.example' }), null, 'no binding, no mail');
-});
-
-test('dev without a sink mails recipients, marked as dev; a named but unusable sink mails nobody', async () => {
-  const sent: { to: string; subject: string; text: string }[] = [];
-  const binding = { send: async (m: { to: string; subject: string; text: string }) => { sent.push(m); } };
-  const dev = { SEND_EMAIL: binding, MAIL_FROM: 'sign@sender.example' };
-  assert.equal(sinkMailer(dev), null);
-  await mailerFor(dev)!.send('ana@partner.example', 'Hello', 'Body');
-  assert.deepEqual({ to: sent.at(-1)!.to, subject: sent.at(-1)!.subject }, { to: 'ana@partner.example', subject: 'Hello' });
-  assert.match(sent.at(-1)!.text, /^Body\n\nSent by the E-sign dev environment\./);
-  await assert.rejects(mailerFor(dev)!.send('not an address', 'Hello', 'Body'), /Invalid recipient/);
-  assert.equal(mailerFor({ ...dev, MAIL_SINK: 'not an address' }), null, 'a sink that is set but unusable never falls back to recipients');
-  assert.equal(recipientMailer({ ...dev, MAIL_SINK: 'inbox@sink.example' }), null);
+test('the relay is used only at an https address with its token, and refusals are errors, never a send', async () => {
+  const relay = mailRelay();
+  assert.ok(relayConfig(relay.env));
+  for (const change of [{ SUGER_MAIL_URL: '' }, { SUGER_APP_TOKEN: '' }, { SUGER_MAIL_URL: 'http://mail.example.test/send' }, { SUGER_MAIL_URL: 'not a url' }]) {
+    assert.equal(relayConfig({ ...relay.env, ...change }), null, JSON.stringify(change));
+    assert.equal(mailerFor({ ...relay.env, ...change }, 'org-a'), null);
+  }
+  assert.ok(relayConfig({ ...relay.env, SUGER_MAIL_URL: 'http://127.0.0.1:8787/send' }), 'plain http on loopback, for local development');
+  assert.equal(mailerFor(relay.env, ''), null, 'mail is always for an organization');
+  await mailerFor({ ...relay.env, ESIGN_ENV: 'prod' }, 'org-a')!.send('ana@partner.example', 'Hello', 'Body');
+  assert.deepEqual(relay.sent.at(-1)!.body, { to: 'ana@partner.example', subject: 'Hello', text: 'Body' });
+  assert.equal(relay.sent.at(-1)!.headers.get('x-suger-organization-id'), 'org-a');
+  await mailerFor(relay.env, 'org-a')!.send('ana@partner.example', 'Hello', 'Body');
+  assert.match(relay.sent.at(-1)!.body.text, /^Body\n\nSent by an E-sign test deployment\./, 'the preview marks what it sends');
+  await assert.rejects(mailerFor(relay.env, 'org-a')!.send('not an address', 'Hello', 'Body'), /Invalid recipient/);
+  for (const status of [502, 503, 429, 200, 400]) {
+    const refusing = mailRelay(() => status);
+    await assert.rejects(mailerFor(refusing.env, 'org-a')!.send('ana@partner.example', 'Hello', 'Body'), (error: unknown) => error instanceof MailRelayError && error.status === status, String(status));
+  }
 });
 
 test('prod lets only https origins embed the signing page', () => {
   const raw = 'https://console.example http://localhost:3000';
   assert.deepEqual(frameAncestors(raw), ['https://console.example', 'http://localhost:3000']);
   assert.deepEqual(frameAncestors(raw, true), ['https://console.example']);
+});
+
+test('a framed page opens a session only for the app itself or an origin allowed to embed it', () => {
+  const own = 'https://esign.example.test', allowed = ['https://console.example.test'];
+  assert.equal(embedderAllowed({ embedded: false }, own, allowed), true, 'not framed');
+  assert.equal(embedderAllowed({}, own, allowed), true, 'an older page that does not say');
+  assert.equal(embedderAllowed({ embedded: true, embedder: 'https://console.example.test' }, own, allowed), true);
+  assert.equal(embedderAllowed({ embedded: true, embedder: own }, own, allowed), true, 'the app frames itself (the member page)');
+  for (const embedder of ['https://evil.example.test', '', undefined, 7, 'https://console.example.test/']) {
+    assert.equal(embedderAllowed({ embedded: true, embedder }, own, allowed), false, String(embedder));
+  }
 });

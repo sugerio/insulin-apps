@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { build } from 'esbuild';
 import { Miniflare } from 'miniflare';
-import { createAwsKmsSignProvider } from '../src/seal/kms.ts';
-import { signKmsEvidence } from '../src/seal/kms.ts';
+import { createAwsKmsSignProvider } from '../src/app/server/esign/seal/kms.ts';
+import { signKmsEvidence } from '../src/app/server/esign/seal/kms.ts';
 import { TEMPORARY_KEY_ID } from './helpers/synthetic-aws.ts';
 
 const arn = 'arn:aws:kms:us-east-1:000000000000:key/11111111-1111-4111-8111-111111111111';
@@ -127,7 +127,7 @@ test('requires bounded temporary credential metadata and matching explicit key A
 });
 
 test('browser-bundled provider signs in workerd with an injected response and no network', async () => {
-  const source = `import {createAwsKmsSignProvider, signKmsEvidence} from './src/seal/kms.ts';
+  const source = `import {createAwsKmsSignProvider, signKmsEvidence} from './src/app/server/esign/seal/kms.ts';
 export default {async fetch(){let calls=0;const provider=createAwsKmsSignProvider({region:'us-east-1',keyArn:${JSON.stringify(arn)},credentials:{accessKeyId:${JSON.stringify(TEMPORARY_KEY_ID)},secretAccessKey:'synthetic-secret',sessionToken:'synthetic-session',expiration:new Date(Date.now()+3600000)},fetch:async req=>{calls++;if(req.url!=='https://kms.us-east-1.amazonaws.com/'||req.redirect!=='manual')throw Error('invalid');return new Response(${JSON.stringify(JSON.stringify({ KeyId: arn, SigningAlgorithm: 'ECDSA_SHA_256', Signature: signature.toString('base64') }))},{headers:{'content-type':'application/x-amz-json-1.1'}})}});try {const result=await signKmsEvidence(new Uint8Array(${JSON.stringify([...input])}),new Uint8Array(${JSON.stringify([...spki])}),provider);return Response.json({calls,length:result.signature.length});} catch(e) {return Response.json({error:e.message,calls},{status:500});}}};`;
   const built = await build({ stdin: { contents: source, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser' });
   const mf = new Miniflare({ modules: true, script: built.outputFiles[0].text });

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import * as editorClient from '../ui/editor-client.ts';
+import * as editorClient from '../src/app/ui/editor-client.ts';
 
 test('editor demo accepts the configured local Worker or same-origin HTTPS Worker only', () => {
  const validate = (editorClient as Record<string, unknown>).editorDemoURL;

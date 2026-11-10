@@ -1,3 +1,4 @@
+import {blobStore} from './helpers/platform.ts';
 // A recipient's sign-by deadline: past it, while that recipient has not signed, the envelope expires
 // for everyone (in-process, synthetic data).
 import { test } from 'node:test';
@@ -5,10 +6,10 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
-import { unstable_splitSqlQuery } from 'wrangler';
-import app from '../src/worker.ts';
-import { AUDIT, auditTrail } from '../src/audit.ts';
-import { expireDueEnvelopes } from '../src/task-expiry.ts';
+import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/platform.ts';
+import app from './helpers/gateway.ts';
+import { AUDIT, auditTrail } from '../src/app/server/esign/audit.ts';
+import { expireDueEnvelopes } from '../src/app/server/esign/task-expiry.ts';
 
 const ORIGIN = 'https://esign.example.test';
 const KEY = 'a'.repeat(64);
@@ -16,28 +17,28 @@ const SIGNER = { 'cf-connecting-ip': '203.0.113.9', 'user-agent': 'Mozilla/5.0 (
 const DAY = 86_400_000;
 
 async function harness() {
-  const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'], r2Buckets: ['ARTIFACTS', 'TEST_MAIL'] });
+  const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] });
   const db = await mf.getD1Database('DB');
-  for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(`migrations/${name}`, 'utf8')).map(s => db.prepare(s)));
+  for (const name of (await readdir(MIGRATIONS_DIR)).filter(n => n.endsWith('.sql')).sort()) await db.batch(unstable_splitSqlQuery(await readFile(new URL(name,MIGRATIONS_DIR), 'utf8')).map(s => db.prepare(s)));
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex')).run();
-  const env = { DB: db, ARTIFACTS: await mf.getR2Bucket('ARTIFACTS'), TEST_MAIL: await mf.getR2Bucket('TEST_MAIL'), OTP_KEY: 'task-expiry-otp-pepper-at-least-32-bytes' };
+  const env = { DB: db, ARTIFACTS: await blobStore(mf,'artifacts'), TEST_MAIL: await blobStore(mf,'test-mail'), OTP_KEY: 'task-expiry-otp-pepper-at-least-32-bytes' };
   const auth = { authorization: `Bearer ${KEY}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);
   const json = (body: unknown, headers: Record<string, string> = {}) => ({ method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const pdf = await PDFDocument.create(); pdf.addPage();
   const form = new FormData(); form.set('file', new File([await pdf.save()], 'synthetic.pdf', { type: 'application/pdf' })); form.set('roles', '["partner","isv"]');
-  const template = await (await req('/v1/templates', { method: 'POST', headers: auth, body: form })).json() as { id: string };
+  const template = await (await req('/api/templates', { method: 'POST', headers: auth, body: form })).json() as { id: string };
   /** A prepared envelope: the partner signs by `partnerExpiresAt`, the countersigner has no deadline. */
   const envelope = async (key: string, partnerExpiresAt?: string) => {
     const partner: Record<string, string> = { role: 'partner', name: 'Ana Partner', email: 'ana@partner.test' };
     if (partnerExpiresAt !== undefined) partner.expiresAt = partnerExpiresAt;
-    const res = await req('/v1/envelopes', json({ templateId: template.id, recipients: [partner, { role: 'isv', name: 'Marcus Seller', email: 'marcus@seller.test' }] }, { ...auth, 'idempotency-key': key }));
+    const res = await req('/api/envelopes', json({ templateId: template.id, recipients: [partner, { role: 'isv', name: 'Marcus Seller', email: 'marcus@seller.test' }] }, { ...auth, 'idempotency-key': key }));
     const body = await res.json() as { id?: string; error?: string };
-    if (body.id) await req(`/v1/envelopes/${body.id}/prepare`, { method: 'POST', headers: auth });
+    if (body.id) await req(`/api/envelopes/${body.id}/prepare`, { method: 'POST', headers: auth });
     return { status: res.status, ...body };
   };
-  const read = async (id: string) => (await req(`/v1/envelopes/${id}`, { headers: auth })).json() as Promise<{ status: string; tasks: { id: string; status: string; expiresAt?: string }[] }>;
+  const read = async (id: string) => (await req(`/api/envelopes/${id}`, { headers: auth })).json() as Promise<{ status: string; tasks: { id: string; status: string; expiresAt?: string }[] }>;
   return { mf, db, auth, req, json, envelope, read };
 }
 
@@ -70,16 +71,16 @@ test('past the deadline the envelope expires: no link, no code, and one EXPIRED 
   try {
     const { id } = await h.envelope('k2', new Date(Date.now() + DAY).toISOString());
     const task = (await h.read(id!)).tasks[0];
-    const { code } = await (await h.req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).json() as { code: string };
-    const { token } = await (await h.req('/v1/page-sessions/exchange', h.json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
+    const { code } = await (await h.req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).json() as { code: string };
+    const { token } = await (await h.req('/api/public/page-sessions/exchange', h.json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
     const signer = { origin: ORIGIN, authorization: `Bearer ${token}`, ...SIGNER };
 
     // The deadline passes while the signing page is open.
     await h.db.prepare('UPDATE tasks SET expires_at=? WHERE id=?').bind(Date.now() - 1000, task.id).run();
-    assert.notEqual((await h.req('/v1/signing/otp', h.json({}, signer))).status, 200, 'no code after the deadline');
+    assert.notEqual((await h.req('/api/public/signing/otp', h.json({}, signer))).status, 200, 'no code after the deadline');
     assert.equal((await h.read(id!)).status, 'EXPIRED');
-    assert.notEqual((await h.req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).status, 201, 'no new link');
-    assert.equal((await h.req(`/v1/envelopes/${id}/void`, h.json({}, h.auth))).status, 409, 'an expired envelope is not voided');
+    assert.notEqual((await h.req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).status, 201, 'no new link');
+    assert.equal((await h.req(`/api/envelopes/${id}/void`, h.json({}, h.auth))).status, 409, 'an expired envelope is not voided');
     const events = (await auditTrail(h.db, id!)).filter(e => e.type === AUDIT.expired);
     assert.equal(events.length, 1);
     assert.deepEqual(events[0].detail, { taskId: task.id });

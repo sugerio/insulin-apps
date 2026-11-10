@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-const protocol=await import('../ui/editor-save-protocol.ts').catch(()=>({readSaveRequest:undefined,readSaveResult:undefined}));
+const protocol=await import('../src/app/ui/editor-save-protocol.ts').catch(()=>({readSaveRequest:undefined,readSaveResult:undefined}));
 
 test('save messages require exact parent/source origin, request ID and matching response',()=>{
  assert.equal(typeof protocol.readSaveRequest,'function','host-initiated save protocol is not implemented');

@@ -5,8 +5,8 @@ import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash as sha} from 'node:crypto';
-import {timestampQuery} from '../src/seal/tsa.ts';
-const verifier=await import('../src/seal/tsa.ts').catch(()=>({}));
+import {timestampQuery} from '../src/app/server/esign/seal/tsa.ts';
+const verifier=await import('../src/app/server/esign/seal/tsa.ts').catch(()=>({}));
 const run=(args:string[],cwd:string)=>execFileSync('openssl',args,{cwd,stdio:'pipe'});
 
 test('Worker RFC3161 verifier binds synthetic response to imprint, nonce, signer, root and explicit policy',async()=>{
@@ -104,7 +104,7 @@ test('Worker RFC3161 verifier binds synthetic response to imprint, nonce, signer
   pathLength=0;await assert.rejects(()=>verify(badRoot,{...chainPolicy,roots:[criticalRoot]}),/critical/i,'unknown critical root extension is rejected');assert.equal(pathLength,0,'invalid root must not reach revocation approval');
   const {build}=await import('esbuild'),{Miniflare}=await import('miniflare');
   const workerNegatives=[unknown,doubleDigest,wrongDigestType,unsorted,badIntermediate,badRoot,duplicateSigner,duplicateIntermediate].map(b=>Buffer.from(b).toString('base64'));
-  const source=`import {verifyRfc3161Timestamp} from './src/seal/tsa.ts'; const dec=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)); export default {async fetch(){try{const policy={roots:[dec('${root.toString('base64')}')],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:['${signerPin}'],checkRevocation:async()=>true};const verify=(bytes,p=policy)=>verifyRfc3161Timestamp(dec(bytes),dec('${input.toString('base64')}'),dec('${nonce.toString('base64')}'),p);const r=await verify('${response.toString('base64')}');const negatives=${JSON.stringify(workerNegatives)};let rejected=0;for(let i=0;i<negatives.length;i++){try{await verify(negatives[i],i===5?{...policy,roots:[dec('${criticalRoot.toString('base64')}')]}:policy);}catch{rejected++;}}return Response.json({status:r.status,rejected});}catch(e){return new Response(String(e),{status:500});}}}`;
+  const source=`import {verifyRfc3161Timestamp} from './src/app/server/esign/seal/tsa.ts'; const dec=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)); export default {async fetch(){try{const policy={roots:[dec('${root.toString('base64')}')],now:Date.now(),maxAgeMs:60000,maxFutureSkewMs:5000,allowedPolicies:['1.2.3.4'],allowedSignerSpkiSha256:['${signerPin}'],checkRevocation:async()=>true};const verify=(bytes,p=policy)=>verifyRfc3161Timestamp(dec(bytes),dec('${input.toString('base64')}'),dec('${nonce.toString('base64')}'),p);const r=await verify('${response.toString('base64')}');const negatives=${JSON.stringify(workerNegatives)};let rejected=0;for(let i=0;i<negatives.length;i++){try{await verify(negatives[i],i===5?{...policy,roots:[dec('${criticalRoot.toString('base64')}')]}:policy);}catch{rejected++;}}return Response.json({status:r.status,rejected});}catch(e){return new Response(String(e),{status:500});}}}`;
   const built=await build({stdin:{contents:source,resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'browser'});const mf=new Miniflare({modules:true,script:built.outputFiles[0].text,compatibilityDate:'2026-01-01'});
   try{const workerResponse=await mf.dispatchFetch('https://local.test/');const text=await workerResponse.text();assert.equal(workerResponse.status,200,text);assert.deepEqual(JSON.parse(text),{status:'VERIFIED',rejected:8});}finally{await mf.dispose();}
   await assert.rejects(()=>verify(response,{...policy,checkRevocation:undefined} as any));
@@ -127,9 +127,10 @@ test('Worker RFC3161 verifier binds synthetic response to imprint, nonce, signer
 
 test('a real DigiCert timestamp verifies against the pinned root, signer and policy', async () => {
   const {readFile}=await import('node:fs/promises');
-  const trust=await import('../src/seal/tsa.ts');
+  const trust=await import('../src/app/server/esign/seal/tsa.ts');
   const dir='test/fixtures/digicert-tsa-2026-11-06/';
-  const [response,input,nonce]=await Promise.all(['response.der','input.bin','nonce.bin'].map(async f=>new Uint8Array(await readFile(dir+f))));
+  const fixture=JSON.parse(await readFile(dir+'fixture.json','utf8')) as Record<'response'|'input'|'nonce',string>;
+  const [response,input,nonce]=(['response','input','nonce'] as const).map(k=>new Uint8Array(Buffer.from(fixture[k],'base64')));
   const policy={roots:trust.digicertRoots(),now:Date.parse('2026-11-06T16:05:43Z'),maxAgeMs:300000,maxFutureSkewMs:300000,allowedPolicies:[trust.DIGICERT_TSA_POLICY],allowedSignerSpkiSha256:trust.DIGICERT_TSA_SIGNERS,missingAccuracyMs:trust.DIGICERT_MISSING_ACCURACY_MS,checkRevocation:async()=>true};
   const result=await verifier.verifyRfc3161Timestamp!(response,input,nonce,policy);
   assert.equal(result.time,Date.parse('2026-11-06T16:05:43Z'));

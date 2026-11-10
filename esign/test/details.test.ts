@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { envelopeDetails, taskDetails } from '../src/details.ts';
+import { envelopeDetails, taskDetails } from '../src/app/server/esign/details.ts';
 
 test('envelope details keep only known facts with the expected types', () => {
   assert.deepEqual(envelopeDetails(JSON.stringify({

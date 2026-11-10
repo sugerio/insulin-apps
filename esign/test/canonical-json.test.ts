@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canonicalJson } from '../src/canonical-json.ts';
-import { signatureEventHash } from '../src/signatures.ts';
+import { canonicalJson } from '../src/app/server/esign/canonical-json.ts';
+import { signatureEventHash } from '../src/app/server/esign/signatures.ts';
 
 test('canonical JSON sorts object keys at every depth and has no whitespace', () => {
   assert.equal(canonicalJson({ b: 1, a: { d: [3, { z: true, y: null }], c: 'x' } }), '{"a":{"c":"x","d":[3,{"y":null,"z":true}]},"b":1}');

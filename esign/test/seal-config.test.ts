@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { managedEvidenceFromEnv } from '../src/seal/config.ts';
-import { evidenceMessage } from '../src/seal/kms.ts';
-import { DIGICERT_TSA_SIGNERS, DIGICERT_TSA_URL } from '../src/seal/tsa.ts';
+import { managedEvidenceFromEnv } from '../src/app/server/esign/seal/config.ts';
+import { evidenceMessage } from '../src/app/server/esign/seal/kms.ts';
+import { DIGICERT_TSA_SIGNERS, DIGICERT_TSA_URL } from '../src/app/server/esign/seal/tsa.ts';
 import { LONG_TERM_KEY_ID, TEMPORARY_KEY_ID, syntheticKeyId } from './helpers/synthetic-aws.ts';
 
 const ARN = 'arn:aws:kms:us-west-2:123456789012:key/00000000-0000-4000-8000-000000000000';

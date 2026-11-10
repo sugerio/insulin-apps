@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assumeRole, cachedRoleCredentials } from '../src/seal/kms.ts';
+import { assumeRole, cachedRoleCredentials } from '../src/app/server/esign/seal/kms.ts';
 import { LONG_TERM_KEY_ID, TEMPORARY_KEY_ID } from './helpers/synthetic-aws.ts';
 
 const BASE = { accessKeyId: LONG_TERM_KEY_ID, secretAccessKey: 'synthetic-secret-key' };

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { assertRenderableRecipientNames } from '../src/field-render.ts';
+import { assertRenderableRecipientNames } from '../src/app/server/esign/field-render.ts';
 
 test('recipient-name validation matches the rendered signature page width boundary', async () => {
   const document = await PDFDocument.create();

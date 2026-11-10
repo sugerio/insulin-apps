@@ -3,15 +3,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
-import { readSigningHostMessage, signingHost } from '../ui/signing-host-protocol.ts';
-import { afterSigningLines, dateText, fingerprintText, hostSignInText, RecipientPage } from '../ui/RecipientPage.ts';
+import { readSigningHostMessage, signingHost } from '../src/app/ui/signing-host-protocol.ts';
+import { afterSigningLines, dateText, fingerprintText, hostSignInText, RecipientPage } from '../src/app/ui/RecipientPage.ts';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const CONSOLE = 'https://console.example.test';
-const WORKER = 'https://esign.example.test';
+const APP = 'https://esign.example.test';
 
 test('the page reports only to a framing host the Worker allows, and that framed it', () => {
-  const allowed = `${WORKER} ${CONSOLE}`;
+  const allowed = `${APP} ${CONSOLE}`;
   assert.equal(signingHost(CONSOLE, allowed, true), CONSOLE);
   assert.equal(signingHost(CONSOLE, allowed, true, CONSOLE), CONSOLE, 'the framing page is that host');
   assert.equal(signingHost(CONSOLE, allowed, true, 'https://other.example.test'), '', 'another page frames it');
@@ -24,16 +24,16 @@ test('the page reports only to a framing host the Worker allows, and that framed
 
 test('a host reads only the signing page\'s own messages, from its frame and origin', () => {
   const frame = {};
-  const from = (data: unknown, origin = WORKER, source: unknown = frame) => readSigningHostMessage({ origin, source, data }, WORKER, frame);
+  const from = (data: unknown, origin = APP, source: unknown = frame) => readSigningHostMessage({ origin, source, data }, APP, frame);
   assert.deepEqual(from({ type: 'esign.signing.cancel' }), { type: 'esign.signing.cancel' });
   assert.deepEqual(from({ type: 'esign.signing.finished', outcome: 'signed' }), { type: 'esign.signing.finished', outcome: 'signed' });
   assert.deepEqual(from({ type: 'esign.signing.finished', outcome: 'declined' }), { type: 'esign.signing.finished', outcome: 'declined' });
   assert.equal(from({ type: 'esign.signing.finished', outcome: 'voided' }), null);
   assert.equal(from({ type: 'esign.signing.cancel', extra: 1 }), null, 'nothing more than the message');
   assert.equal(from({ type: 'esign.signing.cancel' }, 'https://other.example.test'), null, 'another origin');
-  assert.equal(from({ type: 'esign.signing.cancel' }, WORKER, {}), null, 'another frame');
+  assert.equal(from({ type: 'esign.signing.cancel' }, APP, {}), null, 'another frame');
   assert.equal(from('esign.signing.cancel'), null);
-  assert.equal(readSigningHostMessage({ origin: WORKER, source: frame, data: { type: 'esign.signing.cancel' } }, WORKER, null), null, 'no frame yet');
+  assert.equal(readSigningHostMessage({ origin: APP, source: frame, data: { type: 'esign.signing.cancel' } }, APP, null), null, 'no frame yet');
 });
 
 test('the page shows a fingerprint, a date and the host\'s sign-in the way people read them', () => {
@@ -64,26 +64,26 @@ test('After you sign: the copy, who signs next (or that nobody does), then the h
   ]);
 });
 
-/** The signing page, served by the Worker and framed by the console, through all three steps. */
+/** The signing page, served by the app and framed by the console, through all three steps. */
 async function framedPage(current: Record<string, unknown>, opts: { host?: string; ancestor?: string } = {}) {
   const { default: Renderer, act } = await import('react-test-renderer');
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const posted: { message: unknown; target: string }[] = [];
   const requests: { path: string; body: any }[] = [];
   const parent = { postMessage: (message: unknown, target: string) => posted.push({ message, target }) };
-  (globalThis as any).window = { location: { origin: WORKER, hash: `#code=test${opts.host ? `&host=${encodeURIComponent(opts.host)}` : ''}`, pathname: '/sign', ...(opts.ancestor ? { ancestorOrigins: { length: 1, 0: opts.ancestor } } : {}) }, history: { replaceState() {} }, parent };
-  (globalThis as any).document = { querySelector: (selector: string) => selector === 'meta[name="esign-api"]' ? { getAttribute: () => WORKER } : selector === 'meta[name="esign-hosts"]' ? { getAttribute: () => `${WORKER} ${CONSOLE}` } : null };
+  (globalThis as any).window = { location: { origin: APP, hash: `#code=test${opts.host ? `&host=${encodeURIComponent(opts.host)}` : ''}`, pathname: '/sign', ...(opts.ancestor ? { ancestorOrigins: { length: 1, 0: opts.ancestor } } : {}) }, history: { replaceState() {} }, parent };
   globalThis.fetch = (async (input: any, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     requests.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (path === '/v1/page-sessions/exchange') return Response.json({ token: 'token' });
-    if (path === '/v1/signing/otp') return Response.json({ messageId: 'm', emailed: true });
-    if (path === '/v1/signing/otp/verify') return new Response(null, { status: 204 });
-    if (path === '/v1/signing/current') return Response.json(current);
-    if (path === '/v1/signing/pdf') return new Response(new Blob(['pdf']));
-    if (path === '/v1/signing/sign') return new Response(null, { status: 202 });
-    if (path === '/v1/signing/decline') return Response.json({ status: 'DECLINED' });
-    if (path === '/v1/signing/preview') return new Response(new Blob(['png'], { type: 'image/png' }), { headers: { 'X-Signature-Preview': 'c'.repeat(64), 'X-Signature-Width': '.5', 'X-Signature-Height': '.5' } });
+    if (path === '/api/public/signing-page') return Response.json({ hosts: [APP, CONSOLE], signingEnabled: true });
+    if (path === '/api/public/page-sessions/exchange') return Response.json({ token: 'token' });
+    if (path === '/api/public/signing/otp') return Response.json({ messageId: 'm', emailed: true });
+    if (path === '/api/public/signing/otp/verify') return new Response(null, { status: 204 });
+    if (path === '/api/public/signing/current') return Response.json(current);
+    if (path === '/api/public/signing/pdf') return new Response(new Blob(['pdf']));
+    if (path === '/api/public/signing/sign') return new Response(null, { status: 202 });
+    if (path === '/api/public/signing/decline') return Response.json({ status: 'DECLINED' });
+    if (path === '/api/public/signing/preview') return new Response(new Blob(['png'], { type: 'image/png' }), { headers: { 'X-Signature-Preview': 'c'.repeat(64), 'X-Signature-Width': '.5', 'X-Signature-Height': '.5' } });
     throw new Error(path);
   }) as typeof fetch;
   let renderer: any;
@@ -103,7 +103,7 @@ async function framedPage(current: Record<string, unknown>, opts: { host?: strin
   return { renderer, act, settle, button, labelled, text, toSign, posted, requests };
 }
 
-const restore = () => { delete (globalThis as any).window; delete (globalThis as any).document; delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT; };
+const restore = () => { delete (globalThis as any).window; delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT; };
 const oldFetch = globalThis.fetch;
 
 const CURRENT = {

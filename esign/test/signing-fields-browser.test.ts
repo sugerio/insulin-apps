@@ -1,4 +1,5 @@
-import {unstable_splitSqlQuery} from 'wrangler';
+import {blobStore} from './helpers/platform.ts';
+import {MIGRATIONS_DIR,splitSql as unstable_splitSqlQuery} from './helpers/platform.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -12,10 +13,10 @@ import {once} from 'node:events';
 import {createServer as createViteServer} from 'vite';
 import {Miniflare} from 'miniflare';
 import {PDFDocument,rgb} from 'pdf-lib';
-import app from '../src/worker.ts';
-import {renderTypedSignature} from '../src/field-render.ts';
+import app from './helpers/gateway.ts';
+import {renderTypedSignature} from '../src/app/server/esign/field-render.ts';
 import {withLocalTestOtp} from './helpers/local-otp-display.ts';
-import {processEnvelopeStep,finalizeEnvelopeStep} from '../src/envelope-completion.ts';
+import {processEnvelopeStep,finalizeEnvelopeStep} from '../src/app/server/esign/envelope-completion.ts';
 import {signedPdf} from './helpers/signed-pdf.ts';
 const chrome=process.env.ESIGN_TEST_CHROME ?? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -43,18 +44,18 @@ async function imageBounds(bytes:Uint8Array):Promise<PdfImageBounds[][]>{
 
 test('Chrome completes two typed positioned signatures using server previews',{skip:!chrome,timeout:120000},async()=>{
  const temp=await mkdtemp(join(tmpdir(),'esign-positioned-browser-'));
- const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS','TEST_MAIL']});
+ const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  const db=await mf.getD1Database('DB');
- for(const name of (await readdir(new URL('../migrations/',import.meta.url))).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
+ for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(name,MIGRATIONS_DIR),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
  const secret='test-key-0123456789-abcdefghijklmnopqrstuvwxyz',digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(secret))),n=>n.toString(16).padStart(2,'0')).join('');
  await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(digest).run();
- const env={DB:db,ARTIFACTS:await mf.getR2Bucket('ARTIFACTS'),TEST_MAIL:await mf.getR2Bucket('TEST_MAIL'),SIGNING_PAGE_ORIGINS:'http://127.0.0.1:5173',OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
+ const env={DB:db,ARTIFACTS:await blobStore(mf,'artifacts'),TEST_MAIL:await blobStore(mf,'test-mail'),SIGNING_PAGE_ORIGINS:'http://127.0.0.1:5173',OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes'};
  const req=(path:string,init:RequestInit={})=>app.fetch(new Request('http://127.0.0.1:8787'+path,init),env);const mgmt={authorization:`Bearer ${secret}`};const post=(body:unknown,headers:Record<string,string>)=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
- const pdf=await PDFDocument.create();pdf.addPage([400.2,500.1]);pdf.addPage([200.1,100.1]).drawRectangle({x:199.2,y:0,width:.9,height:100.1,color:rgb(1,0,0),borderWidth:0});const form=new FormData();form.set('file',new File([await pdf.save()],'synthetic.pdf'));form.set('roles','["ana","marcus"]');const template=await (await req('/v1/templates',{method:'POST',headers:mgmt,body:form})).json();
+ const pdf=await PDFDocument.create();pdf.addPage([400.2,500.1]);pdf.addPage([200.1,100.1]).drawRectangle({x:199.2,y:0,width:.9,height:100.1,color:rgb(1,0,0),borderWidth:0});const form=new FormData();form.set('file',new File([await pdf.save()],'synthetic.pdf'));form.set('roles','["ana","marcus"]');const template=await (await req('/api/templates',{method:'POST',headers:mgmt,body:form})).json();
  const fields=[{id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:0,y:0,width:.05,height:.1}},{id:'a2',type:'Signature',role:'ana',page:1,required:true,rect:{x:.1,y:.9,width:.4,height:.1}},{id:'a3',type:'Signature',role:'ana',page:2,required:true,rect:{x:.001,y:.002,width:.998,height:.995}},{id:'b',type:'Signature',role:'marcus',page:1,required:true,rect:{x:.7,y:.9,width:.3,height:.1}}];await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(fields),template.id).run();
- const created=await req('/v1/envelopes',post({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'},{role:'marcus',name:'Marcus',email:'marcus@example.com'}]},{...mgmt,'idempotency-key':'browser'}));assert.equal(created.status,201);const envelope=await created.json();assert.equal((await req(`/v1/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);const tasks=(await (await req(`/v1/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;
- const vite=await createViteServer({configFile:false,root:resolve('ui'),appType:'spa',server:{middlewareMode:true,hmr:false}});
- const proxy=createServer(async(req,res)=>{try{const url=new URL(req.url!);if(url.origin==='http://127.0.0.1:5173'){req.url=url.pathname+url.search;vite.middlewares(req,res);return;}if(url.origin!=='http://127.0.0.1:8787'){res.writeHead(403).end();return;}const parts:Buffer[]=[];for await(const part of req)parts.push(Buffer.from(part));const body=Buffer.concat(parts);let response=await app.fetch(new Request(url,{method:req.method,headers:req.headers as HeadersInit,...(body.length?{body}: {})}),env);if(req.method==='POST'&&url.pathname==='/v1/signing/otp')response=await withLocalTestOtp(response,env.TEST_MAIL);res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch{res.writeHead(500).end();}});
+ const created=await req('/api/envelopes',post({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'},{role:'marcus',name:'Marcus',email:'marcus@example.com'}]},{...mgmt,'idempotency-key':'browser'}));assert.equal(created.status,201);const envelope=await created.json();assert.equal((await req(`/api/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);const tasks=(await (await req(`/api/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;
+ const vite=await createViteServer({configFile:false,root:resolve('.'),appType:'spa',server:{middlewareMode:true,hmr:false}});
+ const proxy=createServer(async(req,res)=>{try{const url=new URL(req.url!);if(url.origin==='http://127.0.0.1:5173'&&!url.pathname.startsWith('/api/')){req.url=url.pathname+url.search;vite.middlewares(req,res);return;}if(url.origin!=='http://127.0.0.1:8787'&&url.origin!=='http://127.0.0.1:5173'){res.writeHead(403).end();return;}const parts:Buffer[]=[];for await(const part of req)parts.push(Buffer.from(part));const body=Buffer.concat(parts);let response=await app.fetch(new Request(url,{method:req.method,headers:req.headers as HeadersInit,...(body.length?{body}: {})}),env);if(req.method==='POST'&&url.pathname==='/api/public/signing/otp')response=await withLocalTestOtp(response,env.TEST_MAIL);res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch{res.writeHead(500).end();}});
  proxy.listen(0,'127.0.0.1');await once(proxy,'listening');const port=(proxy.address() as import('node:net').AddressInfo).port;
  const browser=spawn(chrome!,['--headless=new','--disable-gpu','--no-first-run','--disable-background-networking','--remote-debugging-port=0',`--user-data-dir=${temp}/chrome`,`--proxy-server=http://127.0.0.1:${port}`,'--proxy-bypass-list=<-loopback>','about:blank'],{stdio:'ignore'});
  let ws:WebSocket|undefined;
@@ -104,7 +105,7 @@ test('Chrome completes two typed positioned signatures using server previews',{s
    for(const item of actual){const [w,h]=item.page===1?[400.2,500.1]:[200.1,100.1];(previews[item.id]??=[]).push({x:item.x*w,y:(1-item.y-item.height)*h,width:item.width*w,height:item.height*h,pixelWidth:item.pixelWidth,pixelHeight:item.pixelHeight,tolerance});}
   };
   for(let i=0;i<2;i++){
-   const view=await (await req(`/v1/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({origin:'http://127.0.0.1:5173'},mgmt))).json();await call('Page.navigate',{url:`http://127.0.0.1:5173/?signer=${i}#code=${view.code}`});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Continue'&&!b.disabled)",'session');await setupPixelVerifier();await click('Continue');const otp=await wait("document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]",'OTP');
+   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({origin:'http://127.0.0.1:5173'},mgmt))).json();await call('Page.navigate',{url:`http://127.0.0.1:5173/sign?signer=${i}#code=${view.code}`});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Continue'&&!b.disabled)",'session');await setupPixelVerifier();await click('Continue');const otp=await wait("document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]",'OTP');
    await evaluate(`(()=>{const x=document.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(otp)});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);await click('Verify code');await wait("Boolean(document.querySelector('input[aria-label=\"Full name\"]'))",'name input');
    // One adopted name fills every Signature field of the signer.
    await evaluate(`(()=>{const x=document.querySelector('input[aria-label="Full name"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(i?'Marcus':'Alexander')});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);assert.equal(await evaluate("document.querySelectorAll('[data-signature-field]').length"),i===0?3:1,'signature positions are placed');

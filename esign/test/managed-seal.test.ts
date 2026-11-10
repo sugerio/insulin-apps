@@ -2,8 +2,8 @@
 // 3161 timestamp over that signature. Here a local key stands in for KMS and OpenSSL for the TSA.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sealManifest, verifyManagedSeal, type Sealer, type SealTrust } from '../src/seal/managed.ts';
-import { evidenceMessage } from '../src/seal/kms.ts';
+import { sealManifest, verifyManagedSeal, type Sealer, type SealTrust } from '../src/app/server/esign/seal/managed.ts';
+import { evidenceMessage } from '../src/app/server/esign/seal/kms.ts';
 import { startOpensslTsa } from './helpers/openssl-tsa.ts';
 
 const TSA_URL = 'http://tsa.example.test/';

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-const page=await import('../ui/RecipientPage.ts').catch(()=>({}));
+const page=await import('../src/app/ui/RecipientPage.ts').catch(()=>({}));
 /** Lets the requests a render starts (the document opens on its own) finish. */
 async function settle(act:any) {
   await act(async()=>{for(let i=0;i<10;i++)await new Promise(resolve=>setTimeout(resolve,0));});
@@ -42,16 +42,17 @@ test('recipient page opens the document before the code and retries its load on 
   const oldFetch=globalThis.fetch, oldWindow=(globalThis as any).window;
   try {
     (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};
-    for (const failedPath of ['/v1/signing/current','/v1/signing/pdf']) {
+    for (const failedPath of ['/api/public/signing/current','/api/public/signing/pdf']) {
       let failed=false, verifies=0;
       globalThis.fetch=async (input:any) => {
         const path=new URL(String(input)).pathname;
-        if(path==='/v1/page-sessions/exchange') return Response.json({token:'test-token'});
-        if(path==='/v1/signing/otp') return Response.json({messageId:'local-message-id',testOtp:'012345'},{status:202});
-        if(path==='/v1/signing/otp/verify') {verifies++;return new Response(null,{status:204});}
+        if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+        if(path==='/api/public/page-sessions/exchange') return Response.json({token:'test-token'});
+        if(path==='/api/public/signing/otp') return Response.json({messageId:'local-message-id',testOtp:'012345'},{status:202});
+        if(path==='/api/public/signing/otp/verify') {verifies++;return new Response(null,{status:204});}
         if(path===failedPath && !failed) {failed=true;return new Response(null,{status:503});}
-        if(path==='/v1/signing/current') return Response.json({id:'d0',sha256:'h0'});
-        if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
+        if(path==='/api/public/signing/current') return Response.json({id:'d0',sha256:'h0'});
+        if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
         throw new Error(`Unexpected request ${path}`);
       };
       let renderer:any;
@@ -79,11 +80,12 @@ test('recipient page permits retry of verification after its response is lost', 
   try {
     (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};let attempts=0;
     globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
-      if(path==='/v1/page-sessions/exchange') return Response.json({token:'test-token'});
-      if(path==='/v1/signing/otp') return Response.json({messageId:'local-message-id'},{status:202});
-      if(path==='/v1/signing/otp/verify') {if(++attempts===1) throw new Error('lost response');return new Response(null,{status:204});}
-      if(path==='/v1/signing/current') return Response.json({id:'d0',sha256:'h0'});
-      if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
+      if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+      if(path==='/api/public/page-sessions/exchange') return Response.json({token:'test-token'});
+      if(path==='/api/public/signing/otp') return Response.json({messageId:'local-message-id'},{status:202});
+      if(path==='/api/public/signing/otp/verify') {if(++attempts===1) throw new Error('lost response');return new Response(null,{status:204});}
+      if(path==='/api/public/signing/current') return Response.json({id:'d0',sha256:'h0'});
+      if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
       throw new Error('Unexpected request');};
     let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
@@ -104,11 +106,12 @@ test('pixel-budget render failure never offers consent or signing and allows ret
   try {
     (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};
     globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
-      if(path==='/v1/page-sessions/exchange') return Response.json({token:'test-token'});
-      if(path==='/v1/signing/otp') return Response.json({messageId:'test'});
-      if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
-      if(path==='/v1/signing/current') return Response.json({id:'d0',sha256:'h0'});
-      if(path==='/v1/signing/pdf') return new Response(new Blob(['bad pdf']));
+      if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+      if(path==='/api/public/page-sessions/exchange') return Response.json({token:'test-token'});
+      if(path==='/api/public/signing/otp') return Response.json({messageId:'test'});
+      if(path==='/api/public/signing/otp/verify') return new Response(null,{status:204});
+      if(path==='/api/public/signing/current') return Response.json({id:'d0',sha256:'h0'});
+      if(path==='/api/public/signing/pdf') return new Response(new Blob(['bad pdf']));
       throw new Error('Unexpected request');};
     let attempts=0, renderer:any;
     await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{if(++attempts===1) throw new Error('PDF pixel budget exceeded');}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
@@ -130,11 +133,12 @@ test('superseded render cannot contaminate a later successful preview', async ()
     (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
     let currentRequests=0;
     globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
-      if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
-      if(path==='/v1/signing/otp') return Response.json({messageId:'test'});
-      if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
-      if(path==='/v1/signing/current') return ++currentRequests===1?new Response(null,{status:503}):Response.json({id:'d0',sha256:'hash'});
-      if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
+      if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+      if(path==='/api/public/page-sessions/exchange') return Response.json({token:'token'});
+      if(path==='/api/public/signing/otp') return Response.json({messageId:'test'});
+      if(path==='/api/public/signing/otp/verify') return new Response(null,{status:204});
+      if(path==='/api/public/signing/current') return ++currentRequests===1?new Response(null,{status:503}):Response.json({id:'d0',sha256:'hash'});
+      if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf']));
       throw new Error(path);};
     const makeNode=()=>({children:[] as any[],appendChild(node:any){this.children.push(node);},replaceChildren(...nodes:any[]){this.children=nodes;}});
     const visible:any=makeNode();visible.ownerDocument={createElement:()=>makeNode()};
@@ -162,12 +166,13 @@ test('older retry response cannot replace a newer document', async () => {
     (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
     let current=0,releaseOld!:(response:Response)=>void,signed:any;
     globalThis.fetch=async (input:any,init?:RequestInit)=>{const path=new URL(String(input)).pathname;
-      if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
-      if(path==='/v1/signing/otp') return Response.json({messageId:'test'});
-      if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
-      if(path==='/v1/signing/current') {current++;if(current===1)return new Response(null,{status:503});if(current===2)return new Promise<Response>(resolve=>releaseOld=resolve);return Response.json({id:'new',sha256:'newhash'});}
-      if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
-      if(path==='/v1/signing/sign') {signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
+      if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+      if(path==='/api/public/page-sessions/exchange') return Response.json({token:'token'});
+      if(path==='/api/public/signing/otp') return Response.json({messageId:'test'});
+      if(path==='/api/public/signing/otp/verify') return new Response(null,{status:204});
+      if(path==='/api/public/signing/current') {current++;if(current===1)return new Response(null,{status:503});if(current===2)return new Promise<Response>(resolve=>releaseOld=resolve);return Response.json({id:'new',sha256:'newhash'});}
+      if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf']));
+      if(path==='/api/public/signing/sign') {signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
       throw new Error(path);};
     let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
     const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
@@ -189,12 +194,13 @@ test('positioned signatures fail closed when a page marker cannot be rendered',a
  try{
   (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
   globalThis.fetch=async(input:any,init?:RequestInit)=>{const path=new URL(String(input)).pathname;
+   if(path.endsWith('/signing-page'))return Response.json({hosts:[],signingEnabled:true});
    if(path.endsWith('/exchange'))return Response.json({token:'token'});
    if(path.endsWith('/otp'))return Response.json({messageId:'test'});
    if(path.endsWith('/verify'))return new Response(null,{status:204});
    if(path.endsWith('/current'))return Response.json({id:'d0',sha256:'hash',fields:[{id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:0,y:0,width:.3,height:.1}}]});
    if(path.endsWith('/pdf'))return new Response(new Blob(['pdf']));
-   if(path.endsWith('/v1/signing/preview'))return new Response(new Blob(['image'],{type:'image/png'}));
+   if(path.endsWith('/api/public/signing/preview'))return new Response(new Blob(['image'],{type:'image/png'}));
    if(path.endsWith('/sign')){signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
    throw new Error(path);
   };
@@ -204,82 +210,58 @@ test('positioned signatures fail closed when a page marker cannot be rendered',a
  }finally{globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('recipient demo never sends a fragment code from an untrusted non-local page to loopback or a relative endpoint',async()=>{
+test('the page talks to its own origin only, and tells the exchange how it is framed',async()=>{
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
-  for(const fragment of ['#code=synthetic-code','#code=synthetic-code&synthetic=1','#code=synthetic-code&upload=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']) {
-   let calls=0,removed=false;
-   (globalThis as any).window={location:{origin:'https://demo.example.test',hash:fragment,pathname:'/'},history:{replaceState(){removed=true;}}};
-   globalThis.fetch=async()=>{calls++;return Response.json({token:'test'});};
-   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});
-   assert.equal(removed,true);assert.equal(calls,0);assert.match(JSON.stringify(renderer.toJSON()),/unavailable/i);
-   await act(async()=>renderer.unmount());
-  }
- } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
-});
-
-test('recipient demo keeps only its local development endpoint',async()=>{
- const {default:Renderer,act}=await import('react-test-renderer');
- (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
- const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
- try {
-  for(const [origin,target] of [['http://127.0.0.1:5173','http://127.0.0.1:8787']]) {
-   let url='';(globalThis as any).window={location:{origin,hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};
-   globalThis.fetch=async input=>{if(!url)url=String(input);return Response.json({token:'test'});};
-   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});
-   assert.equal(url,`${target}/v1/page-sessions/exchange`);await act(async()=>renderer.unmount());
-  }
- } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
-});
-
-test('recipient page served by the Worker exchanges the code with its own origin only when the Worker declares it',async()=>{
- const {default:Renderer,act}=await import('react-test-renderer');
- (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
- const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window,oldDocument=(globalThis as any).document;
- const origin='https://esign.example.test';
- try {
-  // [declared API origin, fragment, expected exchange URL or null]
-  for(const [declared,fragment,expected] of [
-   [origin,'#code=test-code',`${origin}/v1/page-sessions/exchange`],
-   // Worker-served pages never switch to the local synthetic or upload hosts.
-   [origin,'#code=test-code&synthetic=1',`${origin}/v1/page-sessions/exchange`],
-   [origin,'#code=test-code&upload=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',`${origin}/v1/page-sessions/exchange`],
-   // A copied page declaring another origin, or none, stays closed.
-   ['https://other.example.test','#code=test-code',null],
-   [null,'#code=test-code',null],
+  // [page origin, fragment, framing, what the exchange is told]
+  for(const [origin,fragment,frame,expected] of [
+   ['https://esign.example.test','#code=test-code',null,{embedded:false,embedder:''}],
+   // The old local hosts are gone: a fragment never moves the page to another API.
+   ['https://esign.example.test','#code=test-code&synthetic=1',null,{embedded:false,embedder:''}],
+   ['http://127.0.0.1:5173','#code=test-code&upload=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,{embedded:false,embedder:''}],
+   // Framed: the framing page's origin, from ancestorOrigins, else the referrer.
+   ['https://esign.example.test','#code=test-code',{ancestorOrigins:['https://host.example.test']},{embedded:true,embedder:'https://host.example.test'}],
+   ['https://esign.example.test','#code=test-code',{referrer:'https://host.example.test/deals/1'},{embedded:true,embedder:'https://host.example.test'}],
+   ['https://esign.example.test','#code=test-code',{},{embedded:true,embedder:''}],
   ] as const) {
-   let url='',calls=0;
-   (globalThis as any).window={location:{origin,hash:fragment,pathname:'/sign'},history:{replaceState(){}}};
-   (globalThis as any).document={querySelector:(selector:string)=>selector==='meta[name="esign-api"]'&&declared?{getAttribute:(name:string)=>name==='content'?declared:null}:null};
-   globalThis.fetch=async input=>{calls++;if(!url)url=String(input);return Response.json({token:'test'});};
-   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});
-   if(expected){assert.equal(url,expected,`${declared} ${fragment}`);}
-   else {assert.equal(calls,0,`${declared} ${fragment}`);assert.match(JSON.stringify(renderer.toJSON()),/unavailable/i);}
+   const urls:string[]=[];let exchange:unknown,removed=false;
+   const win:any={location:{origin,hash:fragment,pathname:'/sign',...(frame&&'ancestorOrigins' in frame?{ancestorOrigins:frame.ancestorOrigins}:{})},history:{replaceState(){removed=true;}},document:{referrer:frame&&'referrer' in frame?frame.referrer:''}};
+   win.parent=frame?{}:win;
+   (globalThis as any).window=win;
+   globalThis.fetch=async (input:any,init?:RequestInit)=>{urls.push(String(input));const path=new URL(String(input)).pathname;
+    if(path==='/api/public/signing-page') return Response.json({hosts:[origin],signingEnabled:true});
+    if(path==='/api/public/page-sessions/exchange'){exchange=JSON.parse(String(init?.body));return Response.json({error:'invalid_code'},{status:401});}
+    throw new Error(path);};
+   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});await settle(act);
+   assert.equal(removed,true,'the code leaves the address bar');
+   assert.deepEqual(urls,[`${origin}/api/public/signing-page`,`${origin}/api/public/page-sessions/exchange`],`${origin} ${fragment}`);
+   assert.deepEqual(exchange,{code:'test-code',...expected});
+   assert.match(JSON.stringify(renderer.toJSON()),/unavailable/i);
    await act(async()=>renderer.unmount());
   }
- } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;(globalThis as any).document=oldDocument;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('after signing, a Worker-served page does not ask for processing the Worker does itself',async()=>{
+test('after signing, the page says the signature is recorded: the app processes it itself',async()=>{
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
- const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window,oldDocument=(globalThis as any).document;
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
-  for(const [origin,declared,expected] of [
-   ['https://esign.example.test','https://esign.example.test','Signature recorded.'],
-   ['http://127.0.0.1:5173',null,'Signature recorded. Local processing must be requested separately.'],
+  for(const [origin,expected] of [
+   ['https://esign.example.test','Signature recorded.'],
+   ['http://127.0.0.1:5173','Signature recorded.'],
   ] as const) {
    (globalThis as any).window={location:{origin,hash:'#code=test',pathname:'/sign'},history:{replaceState(){}}};
-   (globalThis as any).document={querySelector:(selector:string)=>selector==='meta[name="esign-api"]'&&declared?{getAttribute:()=>declared}:null};
    globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
-    if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
-    if(path==='/v1/signing/otp') return Response.json({messageId:'test'});
-    if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
-    if(path==='/v1/signing/current') return Response.json({id:'artifact',sha256:'hash'});
-    if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
-    if(path==='/v1/signing/sign') return new Response(null,{status:202});
+    if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+    if(path==='/api/public/page-sessions/exchange') return Response.json({token:'token'});
+    if(path==='/api/public/signing/otp') return Response.json({messageId:'test'});
+    if(path==='/api/public/signing/otp/verify') return new Response(null,{status:204});
+    if(path==='/api/public/signing/current') return Response.json({id:'artifact',sha256:'hash'});
+    if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf']));
+    if(path==='/api/public/signing/sign') return new Response(null,{status:202});
     throw new Error(path);};
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
    const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
@@ -290,7 +272,7 @@ test('after signing, a Worker-served page does not ask for processing the Worker
    assert.ok(text.includes(`"${expected}"`),`${origin}: ${text}`);
    await act(async()=>{renderer.unmount();});
   }
- } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;(globalThis as any).document=oldDocument;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
 test('the page says how the code was delivered, and points to the test mailbox only in dev', async()=>{
@@ -302,9 +284,10 @@ test('the page says how the code was delivered, and points to the test mailbox o
   for(const [otpResponse,expected,note] of [[{messageId:'m',emailed:true},'Verification code sent by email.',false],[{messageId:'m',emailed:true,testMailbox:true},'Verification code sent by email.',true],[{messageId:'m',testMailbox:true},'Test code saved to the test mailbox.',true]] as const) {
    (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
    globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
-    if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
-    if(path==='/v1/signing/otp') return Response.json(otpResponse,{status:202});
-    if(path==='/v1/signing/current') return new Response(null,{status:401});
+    if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+    if(path==='/api/public/page-sessions/exchange') return Response.json({token:'token'});
+    if(path==='/api/public/signing/otp') return Response.json(otpResponse,{status:202});
+    if(path==='/api/public/signing/current') return new Response(null,{status:401});
     throw new Error(path);};
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}));}); await settle(act);
    const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
@@ -326,12 +309,13 @@ test('the page shows the consent disclosure from the server and signs with its v
   (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
   let signed:any;
   globalThis.fetch=async (input:any,init?:RequestInit)=>{const path=new URL(String(input)).pathname;
-   if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
-   if(path==='/v1/signing/otp') return Response.json({messageId:'m'});
-   if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
-   if(path==='/v1/signing/current') return Response.json({id:'a1',sha256:'h1',disclosure:{version:'2026-11-07',text:'Consent to use electronic records and signatures\nYou may ask the sender for a paper copy.'}});
-   if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
-   if(path==='/v1/signing/sign') {signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
+   if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+   if(path==='/api/public/page-sessions/exchange') return Response.json({token:'token'});
+   if(path==='/api/public/signing/otp') return Response.json({messageId:'m'});
+   if(path==='/api/public/signing/otp/verify') return new Response(null,{status:204});
+   if(path==='/api/public/signing/current') return Response.json({id:'a1',sha256:'h1',disclosure:{version:'2026-11-07',text:'Consent to use electronic records and signatures\nYou may ask the sender for a paper copy.'}});
+   if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf']));
+   if(path==='/api/public/signing/sign') {signed=JSON.parse(String(init?.body));return new Response(null,{status:202});}
    throw new Error(path);};
   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
   const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
@@ -354,11 +338,12 @@ async function reviewPage(current: Record<string, unknown>, onPost: (path: strin
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
  globalThis.fetch=async (input:any,init?:RequestInit)=>{const path=new URL(String(input)).pathname;
-  if(path==='/v1/page-sessions/exchange') return Response.json({token:'token'});
-  if(path==='/v1/signing/otp') return Response.json({messageId:'m'});
-  if(path==='/v1/signing/otp/verify') return new Response(null,{status:204});
-  if(path==='/v1/signing/current') return Response.json(current);
-  if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf']));
+  if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+  if(path==='/api/public/page-sessions/exchange') return Response.json({token:'token'});
+  if(path==='/api/public/signing/otp') return Response.json({messageId:'m'});
+  if(path==='/api/public/signing/otp/verify') return new Response(null,{status:204});
+  if(path==='/api/public/signing/current') return Response.json(current);
+  if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf']));
   const out=onPost(path,init?.body?JSON.parse(String(init.body)):undefined);if(out)return out;
   throw new Error(path);};
  let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
@@ -371,7 +356,7 @@ test('signing for a company: the title and authority come first, on Review; the 
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
   let signed:any;
-  const p=await reviewPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting.',signer:{title:'Partner Manager',onBehalfOf:'Northbeam Consulting'}},(path,body)=>{if(path==='/v1/signing/sign'){signed=body;return new Response(null,{status:202});}return undefined;});
+  const p=await reviewPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting.',signer:{title:'Partner Manager',onBehalfOf:'Northbeam Consulting'}},(path,body)=>{if(path==='/api/public/signing/sign'){signed=body;return new Response(null,{status:202});}return undefined;});
   assert.equal(p.labelled('Your title').props.value,'Partner Manager');
   assert.equal(p.button('Continue').props.disabled,true,'authority not yet confirmed');
   await p.act(async()=>{p.labelled('Your title').props.onChange({target:{value:'Head of Partnerships'}});});
@@ -392,7 +377,7 @@ test('the signer may decline with a reason instead of signing: the code comes fi
  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
  try {
   let declined:any;
-  const p=await reviewPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on this document.'},(path,body)=>{if(path==='/v1/signing/decline'){declined=body;return Response.json({status:'DECLINED'});}return undefined;});
+  const p=await reviewPage({id:'a1',sha256:'h1',intent:'I intend this to be my signature on this document.'},(path,body)=>{if(path==='/api/public/signing/decline'){declined=body;return Response.json({status:'DECLINED'});}return undefined;});
   await p.act(async()=>{await p.button('Decline to sign').props.onClick();});
   assert.equal(p.button('Decline').props.disabled,true,'a reason comes first');
   await p.act(async()=>{p.labelled('Reason for declining').props.onChange({target:{value:'Clause 4 needs changes.'}});});
@@ -487,11 +472,12 @@ test('the code card shows a wrong code and a refused send beside the boxes, and 
     (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};
     let sends=0;
     globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
-      if(path==='/v1/page-sessions/exchange') return Response.json({token:'test-token'});
-      if(path==='/v1/signing/otp') return ++sends===1?Response.json({messageId:'m',emailed:true},{status:202}):Response.json({error:'otp_rate_limited',retryAfterSeconds:42},{status:429});
-      if(path==='/v1/signing/otp/verify') return Response.json({error:'invalid_otp',attemptsLeft:3},{status:401});
-      if(path==='/v1/signing/current') return Response.json({id:'d0',sha256:'h0'});
-      if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
+      if(path==='/api/public/signing-page') return Response.json({hosts:[],signingEnabled:true});
+      if(path==='/api/public/page-sessions/exchange') return Response.json({token:'test-token'});
+      if(path==='/api/public/signing/otp') return ++sends===1?Response.json({messageId:'m',emailed:true},{status:202}):Response.json({error:'otp_rate_limited',retryAfterSeconds:42},{status:429});
+      if(path==='/api/public/signing/otp/verify') return Response.json({error:'invalid_otp',attemptsLeft:3},{status:401});
+      if(path==='/api/public/signing/current') return Response.json({id:'d0',sha256:'h0'});
+      if(path==='/api/public/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
       throw new Error('Unexpected request');};
     await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){},focus(){}})});}); await settle(act);
     const button=(text:RegExp)=>renderer.root.findAllByType('button').find((b:any)=>text.test(visibleText(b.children)));

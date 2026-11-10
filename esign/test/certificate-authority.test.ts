@@ -1,7 +1,7 @@
 // The certificate's audit trail names the title and the company a signer signed for.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { authorityFact, signerAuthority } from '../src/delivery-pdf.ts';
+import { authorityFact, signerAuthority } from '../src/app/server/esign/delivery-pdf.ts';
 
 test('a signature for a company shows the title, the company and that authority was confirmed', () => {
   assert.equal(authorityFact({ title: 'Partner Manager', onBehalfOf: 'Northbeam Consulting', authorityConfirmed: true }), 'as Partner Manager, on behalf of Northbeam Consulting (authority confirmed)');

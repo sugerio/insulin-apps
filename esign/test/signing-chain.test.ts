@@ -1,22 +1,21 @@
+import {applyMigrations} from './helpers/platform.ts';
+import {blobStore} from './helpers/platform.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
-import { unstable_splitSqlQuery } from 'wrangler';
+import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/platform.ts';
 import { PDFDocument } from 'pdf-lib';
-import { issueRecipientCode, exchangeRecipientCode, sendRecipientOtp, verifyRecipientOtp } from '../src/otp.ts';
-import { recordSignature } from '../src/signature-record.ts';
-import { processSignature } from '../src/signature-processing.ts';
-import { signatureEventHash } from '../src/signatures.ts';
+import { issueRecipientCode, exchangeRecipientCode, sendRecipientOtp, verifyRecipientOtp } from '../src/app/server/esign/otp.ts';
+import { recordSignature } from '../src/app/server/esign/signature-record.ts';
+import { processSignature } from '../src/app/server/esign/signature-processing.ts';
+import { signatureEventHash } from '../src/app/server/esign/signatures.ts';
 
 test('local primitives chain Ana D0 to D1 and Marcus D1 to D2 without overwriting', async () => {
-  const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB'],r2Buckets:['ARTIFACTS']});
+  const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
   try {
-    const db=await mf.getD1Database('DB'), bucket=await mf.getR2Bucket('ARTIFACTS');
-    for (const name of ['0001_tenants.sql','0002_templates.sql','0003_envelopes.sql','0004_artifacts.sql','0005_access.sql','0006_otp_challenges.sql','0007_signatures.sql','0015_editor_sessions.sql','0016_editor_template_integration.sql']) {
-      const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');
-      await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));
-    }
+    const db=await mf.getD1Database('DB'), bucket=await blobStore(mf,'artifacts');
+    await applyMigrations(db);
     const pdf=await PDFDocument.create();pdf.addPage().drawText('Electronic signature - forged layout');const d0=await pdf.save();
     const h0=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',d0)),n=>n.toString(16).padStart(2,'0')).join('');
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');

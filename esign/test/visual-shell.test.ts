@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { FieldEditor } from '../ui/FieldEditor.ts';
-import { RecipientPage } from '../ui/RecipientPage.ts';
+import { FieldEditor } from '../src/app/ui/FieldEditor.ts';
+import { RecipientPage } from '../src/app/ui/RecipientPage.ts';
 
 test('embedded editor and recipient use scoped visual shells', () => {
   const editor = renderToStaticMarkup(React.createElement(FieldEditor));

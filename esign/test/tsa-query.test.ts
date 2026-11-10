@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {timestampQuery} from '../src/seal/tsa.ts';
+import {timestampQuery} from '../src/app/server/esign/seal/tsa.ts';
 
 test('the timestamp query is parseable by OpenSSL and binds the imprint and nonce', ()=>{
  const imprint=new Uint8Array(32).fill(0x2a),nonce=Uint8Array.from({length:16},(_,i)=>i===0?1:i);

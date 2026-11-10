@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {PDFDocument,PDFName,PDFNumber,degrees} from 'pdf-lib';
-import {validateFieldsPdf,validateFieldPlacement} from '../src/fields.ts';
-import {validateFields} from '../src/fields.ts';
+import {validateFieldsPdf,validateFieldPlacement} from '../src/app/server/esign/fields.ts';
+import {validateFields} from '../src/app/server/esign/fields.ts';
 
 const signableFields=(raw:string,roles:string[],pages:number)=>validateFields(JSON.parse(raw),roles,pages);
 
@@ -20,7 +20,7 @@ test('positioned templates reject unsupported fields, geometry and PDFs',async()
 });
 
 test('overlap validation rejects same-page intersections for any role, but permits touching edges and other pages',async()=>{
- const {assertNoOverlappingFields}=await import('../src/fields.ts');
+ const {assertNoOverlappingFields}=await import('../src/app/server/esign/fields.ts');
  const a={id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.1,y:.1,width:.25,height:.1}};
  for(const role of ['ana','marcus'])assert.throws(()=>assertNoOverlappingFields([a,{...a,id:'b',role,rect:{...a.rect,x:.2}}]));
  assert.doesNotThrow(()=>assertNoOverlappingFields([a,{...a,id:'b',role:'marcus',rect:{...a.rect,x:.35}}]));

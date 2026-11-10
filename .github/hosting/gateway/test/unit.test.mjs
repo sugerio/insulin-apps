@@ -9,7 +9,8 @@ import {
 import { accessFromRow, grantAccess, orgAccess } from '../src/access.ts'
 import { accessPhrase, parseAccessForm } from '../src/orgs/access-forms.ts'
 import {
-  base64url, constantTimeEqual, fromBase64url, hashPassword, isId, isToken, newId, randomToken, verifyPassword,
+  base64url, constantTimeEqual, derivedSecret, fromBase64url, hashPassword, isId, isToken, newId, randomToken, seal, unseal,
+  verifyPassword,
 } from '../src/crypto.ts'
 import { cookieValues, serializeCookie, setCookieName, withoutCookies } from '../src/http/cookies.ts'
 import { bindingName, isAppName, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig } from '../src/config.ts'
@@ -153,6 +154,20 @@ test('PBKDF2 hashes use the documented format and verify in constant time', asyn
   assert.equal(await verifyPassword('anything at all', 'pbkdf2_sha256$999999$AAAA$AAAA'), false)
   assert.equal(await verifyPassword('anything at all', 'not a hash'), false)
   assert.notEqual(await hashPassword('same password!'), await hashPassword('same password!'), 'salted')
+})
+
+test('sealed secrets open only with the same key and purpose, and derived secrets are stable per subject', async () => {
+  const key = new Uint8Array(32).fill(1)
+  const sealed = await seal(key, 'totp', 'JBSWY3DPEHPK3PXP')
+  assert.match(sealed, /^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$/)
+  assert.notEqual(await seal(key, 'totp', 'JBSWY3DPEHPK3PXP'), sealed, 'a fresh IV each time')
+  assert.equal(await unseal(key, 'totp', sealed), 'JBSWY3DPEHPK3PXP')
+  assert.equal(await unseal(key, 'integration', sealed), null, 'another purpose')
+  assert.equal(await unseal(new Uint8Array(32).fill(2), 'totp', sealed), null, 'another key')
+  assert.equal(await unseal(key, 'totp', `${sealed.slice(0, -2)}AA`), null, 'tampered')
+  assert.equal(await unseal(key, 'totp', 'plain text'), null)
+  assert.equal(await derivedSecret(key, 'app-token', 'captable'), await derivedSecret(key, 'app-token', 'captable'))
+  assert.notEqual(await derivedSecret(key, 'app-token', 'captable'), await derivedSecret(key, 'app-token', 'ledger'))
 })
 
 test('tokens and ids are random, well-formed and recognised', () => {

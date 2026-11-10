@@ -17,11 +17,12 @@ import {
   MAIL_FAILED, RATE_LIMITED, TURNSTILE_FAILED, checkInboxPage, confirmFirstPage, forgotPage, linkInvalidPage, loginPage,
   resendPage, resetPage, signupPage, verifyEmailPage,
 } from '../pages/auth.tsx'
-import { afterPost, credentialsChangedPage, home, rateLimitedPage } from '../pages/status.tsx'
+import { credentialsChangedPage, home, rateLimitedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { TURNSTILE_FIELD, verifyTurnstile } from '../turnstile.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
-import { endSession, loadSession, startSession } from './session.ts'
+import { endSession, loadSession } from './session.ts'
+import { finishSignIn } from './sign-in.ts'
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000
 const RESET_TTL_MS = 60 * 60 * 1000
@@ -145,9 +146,8 @@ export async function login(ctx: Context): Promise<Response> {
   }
   if (user.email_verified_at === null) return htmlResponse(confirmFirstPage(ctx, user.email, { returnTo }), { status: 403 })
   // The session is created only under the credential version whose password was just verified.
-  if (!(await startSession(ctx, user))) return credentialsChangedPage(ctx)
   log('login', { user: user.id })
-  return afterPost(ctx, returnTo ?? home(ctx))
+  return finishSignIn(ctx, user, 'password', returnTo ?? home(ctx), () => credentialsChangedPage(ctx))
 }
 
 export async function logout(ctx: Context): Promise<Response> {
@@ -170,9 +170,8 @@ export async function verifyEmail(ctx: Context): Promise<Response> {
   const user = row ? await findUserById(db, row.user_id) : null
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'verify'), { status: 400 })
   await markVerifiedStatement(db, user.id, ctx.now).run()
-  if (!(await startSession(ctx, user))) return credentialsChangedPage(ctx)
   log('email_verified', { user: user.id })
-  return afterPost(ctx, safeReturnTo(ctx, row.return_to) ?? apexUrl(ctx, '/?notice=verified'))
+  return finishSignIn(ctx, user, 'verify', safeReturnTo(ctx, row.return_to) ?? apexUrl(ctx, '/?notice=verified'), () => credentialsChangedPage(ctx))
 }
 
 export async function resendForm(ctx: Context): Promise<Response> {
@@ -253,7 +252,7 @@ export async function reset(ctx: Context): Promise<Response> {
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })
   // The inbox is proven, so the address counts as confirmed; the credential version rises and every session ends.
   const version = await resetPassword(db, user.id, await hashPassword(password), ctx.now)
-  if (version === null || !(await startSession(ctx, { id: user.id, credential_version: version }))) return credentialsChangedPage(ctx)
+  if (version === null) return credentialsChangedPage(ctx)
   log('password_reset', { user: user.id })
-  return redirect(apexUrl(ctx, '/?notice=password-set'), 303)
+  return finishSignIn(ctx, { id: user.id, credential_version: version }, 'reset', apexUrl(ctx, '/?notice=password-set'), () => credentialsChangedPage(ctx))
 }

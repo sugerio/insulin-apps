@@ -14,7 +14,7 @@ import { log } from '../log.ts'
 import { googleFailedPage, home, notFoundPage, rateLimitedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { checkIdToken, decodeJwtPayload, type GoogleIdentity } from './id-token.ts'
-import { startSession } from './session.ts'
+import { finishSignIn } from './sign-in.ts'
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -159,7 +159,7 @@ export async function googleCallback(ctx: Context): Promise<Response> {
   }
   const user = await resolveUser(ctx, identity)
   if (!user) return failed(ctx, 409, 'This email address belongs to an account that is linked to a different Google account. Sign in with that Google account or with your password.')
-  if (!(await startSession(ctx, user))) return failed(ctx, 409, 'The sign-in details of this account changed while you were signing in. Please try again.')
   log('login', { user: user.id, method: 'google' })
-  return redirect(safeReturnTo(ctx, flow.returnTo) ?? home(ctx), 302)
+  return finishSignIn(ctx, user, 'google', safeReturnTo(ctx, flow.returnTo) ?? home(ctx),
+    () => failed(ctx, 409, 'The sign-in details of this account changed while you were signing in. Please try again.'))
 }

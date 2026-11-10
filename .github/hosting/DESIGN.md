@@ -10,13 +10,18 @@ are in the repository's [AGENTS.md](../../AGENTS.md).
 
 | Host | Serves |
 |---|---|
-| `insulinapps.com` | The single entry for everything that is not an app: landing, privacy and terms; sign-up, sign-in, MFA, Google and enterprise SSO; account and organizations; `/settings/users` and `/settings/roles` (the organization's people and roles); `/settings/sso` (SAML or OIDC and SCIM); the OAuth authorization server for MCP clients and service accounts; SCIM. |
+| `insulinapps.com` | The single entry for everything that is not an app: landing, privacy and terms; sign-up, sign-in, MFA, Google and enterprise SSO; account and organizations; `/settings/users` and `/settings/roles` (the organization's people and roles); `/settings/sso` (SAML or OIDC and SCIM); each app's people and integrations at `/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`; the OAuth authorization server for MCP clients and service accounts; SCIM. |
 | `auth.insulinapps.com` | A 308 redirect to the same path on the apex, so links in e-mails already sent keep working. |
 | `www.insulinapps.com` | A 301 redirect to the apex. |
-| `<app>.insulinapps.com` | The app, plus the gateway's own pages and endpoints on that host: `/settings/users` (the app's people), `/settings/integrations` (service accounts and stored credentials), `/mcp` and its OAuth metadata. Everything else goes to the app Worker. |
+| `<app>.insulinapps.com` | The app, plus the gateway's endpoints on that host: `/mcp` and its OAuth metadata, and `/settings/users` and `/settings/integrations`, which only redirect (GET) to the app's settings on the apex. Everything else goes to the app Worker. |
 
 Paths the gateway keeps on every app host, so apps must not use them: `/__insulin/*`, `/settings/users`,
 `/settings/integrations` (and everything below both), `/mcp`, and `/.well-known/oauth-*`.
+
+The pages that manage an app's people and integrations are served on the apex, never on the app's host: the session
+cookie is sent to app hosts too, so code the app serves could otherwise read those pages (secrets shown once
+included) and post their forms as the visitor. On the apex they are another origin to the app, and the apex's Origin
+check refuses a form posted from the app's pages.
 
 ## 2. Roles
 
@@ -97,13 +102,14 @@ Apps refuse mutations of their own people, roles, billing or integrations unless
   people with specific-apps access are told where to go instead.
 - `insulinapps.com/settings/roles` lists the built-in roles and each app's custom roles with their permissions; owners
   add, edit and delete custom roles there.
-- `<app>.insulinapps.com/settings/users` lists everyone who can use the app in the active organization: people whose
+- `insulinapps.com/apps/<app>/settings/users` (where `<app>.insulinapps.com/settings/users` leads) lists everyone who
+  can use the app in the active organization: people whose
   access comes from their organization role (marked *from organization role*, not editable here) and people with access
   to this app. App admins invite people to this app (Admin, Editor, Viewer or one of the app's custom roles), change
   their role in this app and remove them from it. Removing someone's last app removes them from the organization.
   Inviting someone who already has specific-apps access adds the app at once; inviting a member with an organization
   role is refused (they already have access).
-- `<app>.insulinapps.com/settings/integrations`: §6.
+- `insulinapps.com/apps/<app>/settings/integrations` (where `<app>.insulinapps.com/settings/integrations` leads): §6.
 
 Every change re-checks the actor's role inside the same SQL statement as the change, so a member who was demoted or
 removed meanwhile changes nothing (the gateway's existing rule, extended to app grants and custom roles).
@@ -163,7 +169,12 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
   removed or demoted person's agent loses access or power at once. The agent acts with the person's role
   (`x-suger-access-via: mcp`), and the app sees `User-Agent: Insulin Apps MCP: <client name>`, which its audit trail can
   record. Leaving or being removed from an organization deletes the person's grants there, so a later invitation
-  doesn't bring old agents back.
+  doesn't bring old agents back, and a credential change (a password set, changed or reset, two-step sign-in turned
+  on or off) deletes all of them, so an agent connected by someone who took over the account doesn't outlive its
+  recovery.
+- **Limits.** The token endpoint is limited per IP before anything is checked, and per client only on failed
+  attempts, so junk requests naming a public client id can't lock that client out. A JSON-RPC batch holds at most 10
+  messages, and every tool call in one counts against the person's app rate.
 - **Resources.** Authorization and tokens accept `https://<app>/mcp` and, for clients that read the root
   protected-resource metadata, `https://<app>`. A person's token is refused on `/api/*`, and a service account's on
   `/mcp`.
@@ -174,7 +185,7 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
 
 ### 5.3 Service accounts (API access)
 
-App admins create service accounts under `<app>.insulinapps.com/settings/integrations`, each with a role in that app
+App admins create service accounts on the app's integrations page (§6), each with a role in that app
 (Admin, Editor, Viewer or a custom role). The client secret is shown once and can be rotated. A program gets a token
 with `client_credentials` at `https://insulinapps.com/oauth/token` (HTTP Basic, optional `resource=https://<app host>`)
 and calls `https://<app host>/api/...` with it. The app receives the service account's id, the name, and the address
@@ -183,8 +194,9 @@ and calls `https://<app host>/api/...` with it. The app receives the service acc
 
 ## 6. Integrations
 
-`<app>.insulinapps.com/settings/integrations` has two parts; app admins create, edit and delete, everyone else who can
-use the app sees names, kinds, hosts and status, never a secret, and tokens never reach them (§4).
+An app's integrations page, `insulinapps.com/apps/<app>/settings/integrations` (`<app>.insulinapps.com/settings/
+integrations` leads there), has two parts; app admins create, edit and delete, everyone else who can use the app sees
+names, kinds, hosts and status, never a secret, and tokens never reach it (§4).
 
 - **Service accounts** (§5.3).
 - **Stored credentials** for outside services the app calls through `integrationFetch(key)` of `@fours/app`: a key, a
@@ -194,7 +206,12 @@ use the app sees names, kinds, hosts and status, never a secret, and tokens neve
   (`SUGER_APP_TOKEN`, an HMAC of the app's name with `GATEWAY_SECRET_KEY`, which the deploy gives each app Worker)
   and the organization in `x-suger-organization-id`, which the app sets from `getCurrentUser()` on the request it is
   serving. It sends the request on only to an allowed `https` host, with the credential added and every `x-suger-*`,
-  cookie and authorization header removed, and never follows redirects.
+  cookie and authorization header removed, and never follows redirects. Hosts are names, never IP addresses or
+  single-label names. Changing a credential's base URL, allowed hosts or the way its secret is sent needs the secret
+  entered again in the same save, so an admin can never send a stored secret somewhere new to read it.
+- **Known limitation.** `SUGER_APP_TOKEN` is per app, not per organization: the app chooses the organization in each
+  proxy call. An app bug, or a leaked token, could therefore use another organization's stored credentials for that
+  app through the proxy, though never read them.
 
 ## 7. Enterprise SSO and SCIM
 

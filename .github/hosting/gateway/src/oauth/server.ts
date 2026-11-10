@@ -194,8 +194,20 @@ export async function token(ctx: Context): Promise<Response> {
   }
 }
 
-async function tokenLimit(ctx: Context, clientId: string): Promise<Response | null> {
-  return (await allowOAuth(ctx, `token:client:${clientId}`)) ? null : oauthError('slow_down', 'Too many token requests. Try again in a minute.', 429, { 'Retry-After': '60' })
+const SLOW_DOWN = { error: 'slow_down', description: 'Too many token requests. Try again in a minute.' } as const
+
+/** Every token request, before anything is checked: per IP, so nobody can use up a client's allowance by naming it. */
+async function tokenLimit(ctx: Context): Promise<Response | null> {
+  return (await allowOAuth(ctx, `token:ip:${ctx.clientIp ?? 'unknown'}`)) ? null : oauthError(SLOW_DOWN.error, SLOW_DOWN.description, 429, { 'Retry-After': '60' })
+}
+
+/**
+ * A failed authentication, counted per client as well: guessing is slowed per client, but only failures count, so
+ * someone else's junk requests never stop the client's own valid ones.
+ */
+async function failed(ctx: Context, clientId: string, error: Response): Promise<Response> {
+  if (clientId && !(await allowOAuth(ctx, `token:failed:${clientId}`))) return oauthError(SLOW_DOWN.error, SLOW_DOWN.description, 429, { 'Retry-After': '60' })
+  return error
 }
 
 /** Access and refresh tokens for a person's grant, the refresh token lasting as long as the grant. */
@@ -212,10 +224,10 @@ async function grantTokens(ctx: Context, grant: { id: string; expires_at: number
 
 async function exchangeCode(ctx: Context, params: Record<string, string>): Promise<Response> {
   const clientId = params.client_id ?? ''
-  const limited = await tokenLimit(ctx, clientId)
+  const limited = await tokenLimit(ctx)
   if (limited) return limited
   const code = params.code ?? ''
-  if (!isSecret(code, PREFIX.code)) return oauthError('invalid_grant', 'The code is not valid.')
+  if (!isSecret(code, PREFIX.code)) return failed(ctx, clientId, oauthError('invalid_grant', 'The code is not valid.'))
   const codeHash = await hashSecret(code)
   const redeemed = await redeemCode(ctx.config.db, codeHash, clientId, ctx.now)
   if (!redeemed) {
@@ -225,7 +237,7 @@ async function exchangeCode(ctx: Context, params: Record<string, string>): Promi
       await deleteGrant(ctx.config.db, replayed)
       log('oauth_code_replayed', { grant: replayed })
     }
-    return oauthError('invalid_grant', 'The code is not valid, has expired, or was already used.')
+    return failed(ctx, clientId, oauthError('invalid_grant', 'The code is not valid, has expired, or was already used.'))
   }
   const grant = await findGrant(ctx.config.db, redeemed.grant_id, ctx.now)
   if (!grant || grant.client_id !== clientId) return oauthError('invalid_grant', 'The code was issued to another client.')
@@ -240,10 +252,10 @@ async function exchangeCode(ctx: Context, params: Record<string, string>): Promi
 
 async function refresh(ctx: Context, params: Record<string, string>): Promise<Response> {
   const clientId = params.client_id ?? ''
-  const limited = await tokenLimit(ctx, clientId)
+  const limited = await tokenLimit(ctx)
   if (limited) return limited
   const presented = params.refresh_token ?? ''
-  if (!isSecret(presented, PREFIX.refresh)) return oauthError('invalid_grant', 'The refresh token is not valid.')
+  if (!isSecret(presented, PREFIX.refresh)) return failed(ctx, clientId, oauthError('invalid_grant', 'The refresh token is not valid.'))
   const hash = await hashSecret(presented)
   const grantId = await redeemRefresh(ctx.config.db, hash, clientId, ctx.now)
   if (!grantId) {
@@ -253,7 +265,7 @@ async function refresh(ctx: Context, params: Record<string, string>): Promise<Re
       await deleteGrant(ctx.config.db, reused)
       log('oauth_refresh_reused', { grant: reused })
     }
-    return oauthError('invalid_grant', 'The refresh token is not valid, has expired, or was already used.')
+    return failed(ctx, clientId, oauthError('invalid_grant', 'The refresh token is not valid, has expired, or was already used.'))
   }
   const grant = await findGrant(ctx.config.db, grantId, ctx.now)
   if (!grant || grant.client_id !== clientId) return oauthError('invalid_grant', 'The refresh token was issued to another client.')
@@ -291,10 +303,10 @@ export async function serviceAccountFor(ctx: Context, credentials: { id: string;
 
 async function clientCredentials(ctx: Context, params: Record<string, string>): Promise<Response> {
   const credentials = clientSecretOf(ctx, params)
-  const limited = await tokenLimit(ctx, credentials?.id ?? `ip:${ctx.clientIp ?? 'unknown'}`)
+  const limited = await tokenLimit(ctx)
   if (limited) return limited
   const account = await serviceAccountFor(ctx, credentials)
-  if (!account) return oauthError('invalid_client', 'The client id or secret is wrong.', 401, { 'WWW-Authenticate': 'Basic realm="insulin-apps"' })
+  if (!account) return failed(ctx, credentials?.id ?? '', oauthError('invalid_client', 'The client id or secret is wrong.', 401, { 'WWW-Authenticate': 'Basic realm="insulin-apps"' }))
   const app = ctx.config.apps.find((candidate) => candidate.name === account.app)
   if (!app) return oauthError('invalid_client', 'The app of this service account is no longer available.', 401)
   if (params.resource && params.resource.replace(/\/$/, '') !== apiResource(ctx, app)) {
@@ -329,7 +341,7 @@ export async function revoke(ctx: Context): Promise<Response> {
     if (owner.kind === 'refresh') await deleteGrant(ctx.config.db, owner.grant_id)
     else await deleteToken(ctx.config.db, hash)
     log('oauth_revoked', { grant: owner.grant_id, kind: owner.kind })
-  } else if (owner.service_account_client_id && owner.service_account_client_id === clientId) {
+  } else if (owner.service_account_client_id && (await serviceAccountFor(ctx, credentials))?.client_id === owner.service_account_client_id) {
     await deleteToken(ctx.config.db, hash)
     log('oauth_revoked', { kind: 'service' })
   }

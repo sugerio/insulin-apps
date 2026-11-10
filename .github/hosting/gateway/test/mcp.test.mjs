@@ -137,3 +137,25 @@ test("a token is for one app: a grant for another app doesn't open this one", as
   assert.equal(refused.status, 401)
   assert.match(refused.headers.get('www-authenticate'), /error="invalid_token"/)
 })
+
+test('review: a batch holds at most 10 messages, and every tool call in it counts against the person\'s app rate', async () => {
+  const limited = await startGateway({ appLimit: 4 })
+  try {
+    const person = await limited.user()
+    const orgId = await limited.org(person.client, 'Batch Org')
+    const tokens = await connect(limited, person, orgId)
+    const send = (messages) => json(limited.client(), limited.url('captable', '/mcp'), messages, { Authorization: `Bearer ${tokens.access_token}` })
+    const call = (id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'whoami', arguments: {} } })
+    const tooMany = await send(Array.from({ length: 11 }, (_, index) => call(index)))
+    assert.equal(tooMany.status, 400)
+    assert.equal(tooMany.json.error.code, -32600)
+    assert.match(tooMany.json.error.message, /at most 10/)
+    // Of the four requests a minute, the refused batch took one and this request another: five tool calls share two.
+    const batch = await send(Array.from({ length: 5 }, (_, index) => call(index)))
+    assert.equal(batch.status, 200)
+    assert.equal(batch.json.filter((answer) => answer.result).length, 2)
+    assert.equal(batch.json.filter((answer) => answer.error?.code === -32000).length, 3)
+  } finally {
+    await limited.close()
+  }
+})

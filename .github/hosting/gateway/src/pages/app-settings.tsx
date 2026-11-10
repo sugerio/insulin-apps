@@ -1,5 +1,6 @@
-// The gateway's pages on an app host (DESIGN.md §3, §6): the app's people, and (integrations.tsx) its integrations.
-// Every form posts to the app host itself, with the organization's id.
+// An app's settings pages, on the apex at /apps/<app>/settings/... (DESIGN.md §3, §6): the app's people, and
+// (integrations.tsx) its integrations. Every form posts to the apex, with the organization's id. They are never served
+// on the app's own host, where code the app serves could read them and post their forms.
 import type { ReactNode } from "react"
 import { ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -13,7 +14,7 @@ import { Container, PageHeader } from "@/components/layout"
 import type { AppAccess } from "../access.ts"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { apexUrl } from "../context.ts"
+import { apexUrl, appSettingsPath, appUrl, type AppSettingsTab } from "../context.ts"
 import type { CustomRoleRow, GrantRow } from "../db/grants.ts"
 import type { InvitationGrantRow, InvitationRow } from "../db/invitations.ts"
 import type { MemberRow, MembershipRow } from "../db/orgs.ts"
@@ -26,7 +27,7 @@ import { accountOf, page } from "./document.tsx"
 const DAY_MS = 24 * 60 * 60 * 1000
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
 
-export type AppSettingsTab = "users" | "integrations"
+export type { AppSettingsTab }
 
 export interface AppFrame {
   orgId: string
@@ -37,11 +38,11 @@ export interface AppFrame {
   error?: string | null
 }
 
-/** The heading, the tabs (People, Integrations) and the page's notice or problem, on an app host. */
+/** The heading, the tabs (People, Integrations) and the page's notice or problem. */
 export function AppSettingsFrame({ ctx, app, data, tab, children }: { ctx: Context; app: HostedApp; data: AppFrame; tab: AppSettingsTab; children: ReactNode }) {
   const tabs: { tab: AppSettingsTab; label: string; path: string }[] = [
-    { tab: "users", label: "People", path: "/settings/users" },
-    { tab: "integrations", label: "Integrations", path: "/settings/integrations" },
+    { tab: "users", label: "People", path: appSettingsPath(app, "users") },
+    { tab: "integrations", label: "Integrations", path: appSettingsPath(app, "integrations") },
   ]
   return (
     <Container className="flex flex-col gap-6 py-10 sm:py-12">
@@ -57,7 +58,7 @@ export function AppSettingsFrame({ ctx, app, data, tab, children }: { ctx: Conte
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <a className={buttonVariants({ variant: "outline" })} href="/">
+            <a className={buttonVariants({ variant: "outline" })} href={appUrl(ctx, app)}>
               Back to {app.title}
             </a>
             {canManageMembers(data.orgRole) ? (
@@ -210,7 +211,7 @@ function GranteesCard({ app, data, session }: { app: HostedApp; data: AppUsersDa
                     </TableCell>
                     <TableCell>
                       {admin ? (
-                        <form method="post" action={`/settings/users/${member.user_id}/role`} className="flex items-center gap-2">
+                        <form method="post" action={appSettingsPath(app, "users", `/${member.user_id}/role`)} className="flex items-center gap-2">
                           <input type="hidden" name="org_id" defaultValue={data.orgId} />
                           <label className="sr-only" htmlFor={id}>
                             Role in {app.title} for {member.name}
@@ -232,7 +233,7 @@ function GranteesCard({ app, data, session }: { app: HostedApp; data: AppUsersDa
                     </TableCell>
                     {admin ? (
                       <TableCell className="text-right">
-                        <PostButton action={`/settings/users/${member.user_id}/remove`} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
+                        <PostButton action={appSettingsPath(app, "users", `/${member.user_id}/remove`)} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
                           Remove<span className="sr-only"> {member.name} from {app.title}</span>
                         </PostButton>
                       </TableCell>
@@ -267,7 +268,7 @@ function AppInvitations({ ctx, app, data }: { ctx: Context; app: HostedApp; data
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form method="post" action="/settings/users/invite" className="grid gap-4 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
+          <form method="post" action={appSettingsPath(app, "users", "/invite")} className="grid gap-4 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
             <input type="hidden" name="org_id" defaultValue={data.orgId} />
             <TextField label="Email address" name="email" type="email" autoComplete="off" maxLength={254} />
             <SelectField label={`Role in ${app.title}`} name="role" choices={grantChoices(app, data.customRoles, false)} selected="VIEWER" />
@@ -306,10 +307,10 @@ function AppInvitations({ ctx, app, data }: { ctx: Context; app: HostedApp; data
                     <TableCell>
                       {mayHandle(invitation) ? (
                         <div className="flex items-center justify-end gap-2">
-                          <PostButton action={`/settings/users/invitations/${invitation.id}/resend`} fields={{ org_id: data.orgId }} variant="outline" size="sm">
+                          <PostButton action={appSettingsPath(app, "users", `/invitations/${invitation.id}/resend`)} fields={{ org_id: data.orgId }} variant="outline" size="sm">
                             Resend<span className="sr-only"> to {invitation.email}</span>
                           </PostButton>
-                          <PostButton action={`/settings/users/invitations/${invitation.id}/revoke`} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
+                          <PostButton action={appSettingsPath(app, "users", `/invitations/${invitation.id}/revoke`)} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
                             Revoke<span className="sr-only"> for {invitation.email}</span>
                           </PostButton>
                         </div>

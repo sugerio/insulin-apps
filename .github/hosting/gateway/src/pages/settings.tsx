@@ -14,7 +14,7 @@ import { ErrorSummary, Hidden, Notice, PostButton, SelectField, TextField, type 
 import { AuthCard, Container, PageHeader } from "@/components/layout"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { apexUrl, appUrl, withReturnTo } from "../context.ts"
+import { apexUrl, appSettingsPath, withReturnTo } from "../context.ts"
 import type { CustomRoleRow, GrantRow } from "../db/grants.ts"
 import type { InvitationGrantRow, InvitationRow } from "../db/invitations.ts"
 import type { MemberRow, MembershipRow } from "../db/orgs.ts"
@@ -372,7 +372,7 @@ function MyAppsCard({ ctx, grants }: { ctx: Context; grants: GrantRow[] }) {
                 <span>
                   <strong>{app.title}</strong>: {grantLabel(grant)}
                 </span>
-                <a className={buttonVariants({ variant: "outline", size: "sm" })} href={appUrl(ctx, app, "/settings/users")}>
+                <a className={buttonVariants({ variant: "outline", size: "sm" })} href={appSettingsPath(app, "users")}>
                   People in {app.title}
                   <ArrowRight />
                 </a>

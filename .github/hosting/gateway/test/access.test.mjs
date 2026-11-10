@@ -25,7 +25,9 @@ before(async () => {
 after(async () => { await h?.close() })
 
 const post = (person, path, fields = {}) => person.client.post(h.url('auth', path), fields)
-const appPost = (person, path, fields = {}) => person.client.post(h.url('captable', path), fields)
+// An app's settings live on the apex, under /apps/<app> (the app's own host only redirects there).
+const appPost = (person, path, fields = {}) => person.client.post(h.url('apex', `/apps/captable${path}`), fields)
+const appPage = (person, path) => person.client.get(h.url('apex', `/apps/captable${path}`))
 
 async function forwarded(client) {
   const response = await client.get(h.url('captable', '/api/echo'))
@@ -171,12 +173,12 @@ test("an app's people page: everyone with access sees it; the app's admins invit
   const viewer = await h.user({ name: 'Org Viewer' })
   await h.join(owner, orgId, viewer, 'VIEWER')
 
-  const seen = await viewer.client.get(h.url('captable', '/settings/users'))
+  const seen = await appPage(viewer, '/settings/users')
   assert.equal(seen.status, 200)
   assert.match(seen.text, /Cap Admin/)
   assert.match(seen.text, /<h2>From the organization<\/h2>/)
   assert.doesNotMatch(seen.text, /Invite people to Cap Table/, 'only app admins manage')
-  const page = await appAdmin.client.get(h.url('captable', '/settings/users'))
+  const page = await appPage(appAdmin, '/settings/users')
   assert.match(page.text, /Invite people to Cap Table/)
   assert.match(page.text, new RegExp(`name="org_id" value="${orgId}"`))
 
@@ -218,6 +220,29 @@ test("an app's people page: everyone with access sees it; the app's admins invit
   await appPost(appAdmin, '/settings/users/invite', { org_id: orgId, email: uniqueEmail('app-invitee'), role: 'VIEWER' })
   const [appInvitation] = await h.sql("SELECT id FROM invitations WHERE org_id = ?1 AND role = 'APPS' AND status = 'pending'", orgId)
   assert.equal((await appPost(appAdmin, `/settings/users/invitations/${appInvitation.id}/revoke`, { org_id: orgId })).status, 303)
+})
+
+test("the app's own host never serves its settings: a page view goes to the apex, and a post from the app's origin changes nothing", async () => {
+  const owner = await h.user()
+  const orgId = await h.org(owner.client, 'Isolated Settings Org')
+  const old = await owner.client.get(h.url('captable', '/settings/users?notice=removed'))
+  assert.equal(old.status, 302)
+  assert.equal(old.location, h.url('apex', '/apps/captable/settings/users?notice=removed'))
+  assert.equal((await owner.client.get(h.url('captable', '/settings/integrations'))).location, h.url('apex', '/apps/captable/settings/integrations'))
+  // What code on the app's own pages could send with the visitor's cookie: a same-origin fetch to the old address, and
+  // a cross-origin one to the apex.
+  const invite = { org_id: orgId, email: uniqueEmail('smuggled'), role: 'ADMIN' }
+  const sameOrigin = await owner.client.post(h.url('captable', '/settings/users/invite'), invite, { headers: { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors' } })
+  assert.equal(sameOrigin.status, 405)
+  const crossOrigin = await owner.client.post(h.url('apex', '/apps/captable/settings/users/invite'), invite, {
+    origin: h.url('captable').replace(/\/$/, ''), headers: { 'Sec-Fetch-Site': 'same-site', 'Sec-Fetch-Mode': 'cors' },
+  })
+  assert.equal(crossOrigin.status, 403, "the apex refuses a post from the app's origin")
+  const account = await owner.client.post(h.url('captable', '/settings/integrations/service-accounts'), { org_id: orgId, name: 'Smuggled', role: 'ADMIN' })
+  assert.equal(account.status, 405)
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM invitations WHERE org_id = ?1', orgId))[0].n, 0)
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM service_accounts WHERE org_id = ?1', orgId))[0].n, 0)
+  assert.equal((await owner.client.get(h.url('apex', '/apps/no-such-app/settings/users'))).status, 404)
 })
 
 test('the app-level writes re-check the actor in SQL: a demoted app admin or owner changes nothing', async () => {

@@ -36,8 +36,10 @@ app never adds sign-in screens, sessions, passwords, cookies or OAuth endpoints 
 
 **People and roles are managed in one place.** An organization's people, roles and custom roles are at
 `insulinapps.com/settings/users` and `/settings/roles`; each app's people and integrations are at
-`<app>.insulinapps.com/settings/users` and `/settings/integrations`, pages the gateway serves on the app's host. Apps
-don't build their own people, role or integration management.
+`insulinapps.com/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`, which
+`<app>.insulinapps.com/settings/users` and `/settings/integrations` redirect to. They are on the apex so that code an
+app serves can never read them or post their forms. Apps don't build their own people, role or integration
+management.
 
 **Roles.** Each member has one organization role or access to specific apps, never both:
 
@@ -77,9 +79,10 @@ client-credentials token.
 - **Publish your API** at `GET /api/catalog` (`{ endpoints: [{ method, path, summary, query, body, idempotencyKey }] }`,
   only what the caller may use) so the MCP `endpoints` tool can show it, and keep it in step with the routes.
 - **Paths the gateway keeps on an app host.** Tokens reach only `/api/*`, never `/api/__suger/*`. Don't use these paths
-  in an app: `/__insulin/*`, `/settings/users`, `/settings/integrations`, `/mcp`, `/.well-known/oauth-*`.
+  in an app: `/__insulin/*`, `/settings/users` and `/settings/integrations` (the gateway redirects them to the apex),
+  `/mcp`, `/.well-known/oauth-*`.
 
-**Outside services.** Credentials for outside APIs are stored by the platform under `/settings/integrations`. Call the
+**Outside services.** Credentials for outside APIs are stored by the platform on the app's integrations page. Call the
 service with `integrationFetch(key)` from `@fours/app/server`, passing the request's `x-suger-organization-id`; never
 keep such secrets in the app's database or source.
 

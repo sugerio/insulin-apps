@@ -17,8 +17,9 @@ before(async () => {
 })
 after(async () => { await h?.close() })
 
-const page = (person) => person.client.get(h.url('captable', '/settings/integrations'))
-const post = (person, path, fields) => person.client.post(h.url('captable', path), fields)
+// The app's integrations page lives on the apex, under /apps/<app>.
+const page = (person) => person.client.get(h.url('apex', '/apps/captable/settings/integrations'))
+const post = (person, path, fields) => person.client.post(h.url('apex', `/apps/captable${path}`), fields)
 
 async function team(name) {
   const owner = await h.user({ name: 'Ivy Owner' })
@@ -119,8 +120,9 @@ test('a bearer request never falls back to cookies, and reaches only the app\'s 
   for (const path of ['/dashboard', '/api/__suger/health', '/']) assert.equal((await api(token, path)).status, 401, path)
   const mcp = await json(h.client(), h.url('captable', '/mcp'), { jsonrpc: '2.0', id: 1, method: 'ping' }, { Authorization: `Bearer ${token}` })
   assert.equal(mcp.status, 401, 'MCP is for people')
-  const settings = await h.client().get(h.url('captable', '/settings/integrations'), { headers: { Authorization: `Bearer ${token}` } })
+  const settings = await h.client().get(h.url('apex', '/apps/captable/settings/integrations'), { headers: { Authorization: `Bearer ${token}` } })
   assert.equal(settings.status, 302, 'a token never opens the gateway\'s pages: they want a signed-in browser')
+  assert.match(settings.location, /\/login\?/)
 })
 
 test('custom roles, edits, new secrets and deletion apply to the next request', async () => {
@@ -177,13 +179,37 @@ test('stored credentials: admins save them encrypted, nobody sees the secret, an
     [{ key: 'hdr', auth_scheme: 'header', header_name: 'Cookie' }, 'a reserved header'],
     [{ key: 'basic', auth_scheme: 'basic', secret: 'no-colon' }, 'basic needs user:password'],
     [{ key: 'empty', secret: '' }, 'no secret'],
+    [{ key: 'ip', base_url: 'https://169.254.169.254/latest' }, 'an IPv4 address'],
+    [{ key: 'ip6', base_url: 'https://[::1]/x' }, 'an IPv6 address'],
+    [{ key: 'single', base_url: 'https://intranet/x' }, 'a single-label host'],
+    [{ key: 'numeric', base_url: 'https://api.example.123/x' }, 'a numeric last label'],
+    [{ key: 'hostip', allowed_hosts: '10.0.0.1' }, 'an IP address among the allowed hosts'],
   ]) {
     const response = await save(fields)
     assert.ok([400, 409].includes(response.status), `${why}: ${response.status}`)
   }
-  assert.equal((await post(owner, `/settings/integrations/credentials/${row.id}`, { org_id: orgId, name: 'Payroll API', base_url: 'https://api.example.test/v2', auth_scheme: 'bearer', secret: '' })).status, 303)
+  const update = (fields) => post(owner, `/settings/integrations/credentials/${row.id}`, {
+    org_id: orgId, name: 'Payroll API', base_url: 'https://api.example.test/v1', allowed_hosts: 'files.example.test', auth_scheme: 'bearer', secret: '', ...fields,
+  })
+  assert.equal((await update({})).status, 303, 'renaming keeps the stored secret')
   const [kept] = await h.sql('SELECT name, base_url, secret_enc FROM integrations WHERE id = ?1', row.id)
-  assert.deepEqual([kept.name, kept.base_url, kept.secret_enc], ['Payroll API', 'https://api.example.test/v2', row.secret_enc], 'an empty secret keeps the one stored')
+  assert.deepEqual([kept.name, kept.base_url, kept.secret_enc], ['Payroll API', 'https://api.example.test/v1', row.secret_enc])
+  // Sending the stored secret anywhere new, or differently, needs it entered again: an admin could otherwise read it there.
+  for (const [fields, why] of [
+    [{ base_url: 'https://attacker.example.test' }, 'another base URL'],
+    [{ allowed_hosts: 'files.example.test collector.example.test' }, 'another allowed host'],
+    [{ auth_scheme: 'header', header_name: 'X-Leak' }, 'another way of sending it'],
+  ]) {
+    const refused = await update(fields)
+    assert.equal(refused.status, 400, why)
+    assert.match(refused.text, /needs the secret again/, why)
+  }
+  const [unchanged] = await h.sql('SELECT base_url, allowed_hosts, auth_scheme, secret_enc FROM integrations WHERE id = ?1', row.id)
+  assert.deepEqual([unchanged.base_url, JSON.parse(unchanged.allowed_hosts), unchanged.auth_scheme, unchanged.secret_enc], ['https://api.example.test/v1', ['files.example.test'], 'bearer', row.secret_enc])
+  assert.equal((await update({ base_url: 'https://api.example.test/v2', secret: 'sk-live-synthetic-456' })).status, 303, 'with a new secret, it may move')
+  const [moved] = await h.sql('SELECT base_url, secret_enc FROM integrations WHERE id = ?1', row.id)
+  assert.equal(moved.base_url, 'https://api.example.test/v2')
+  assert.notEqual(moved.secret_enc, row.secret_enc, 'and the old secret is gone')
   assert.equal((await post(owner, `/settings/integrations/credentials/${row.id}/delete`, { org_id: orgId })).status, 303)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM integrations WHERE id = ?1', row.id))[0].n, 0)
 })
@@ -248,10 +274,10 @@ test('without GATEWAY_SECRET_KEY, stored credentials and the proxy say they are 
   try {
     const owner = await bare.user()
     const orgId = await bare.org(owner.client, 'Keyless Org')
-    const text = (await owner.client.get(bare.url('captable', '/settings/integrations'))).text
+    const text = (await owner.client.get(bare.url('apex', '/apps/captable/settings/integrations'))).text
     assert.match(text, /aren&#x27;t set up on this site yet/)
     assert.match(text, /New service account/, 'service accounts need no key')
-    const refused = await owner.client.post(bare.url('captable', '/settings/integrations/credentials'), { org_id: orgId, key: 'k', name: 'n', base_url: 'https://api.example.test', auth_scheme: 'bearer', secret: 's' })
+    const refused = await owner.client.post(bare.url('apex', '/apps/captable/settings/integrations/credentials'), { org_id: orgId, key: 'k', name: 'n', base_url: 'https://api.example.test', auth_scheme: 'bearer', secret: 's' })
     assert.equal(refused.status, 503)
     const proxy = await bare.client().get(bare.url('apex', '/__insulin/integrations/k/proxy/_/x'), { headers: { Authorization: 'Bearer x', 'x-suger-organization-id': orgId } })
     assert.equal(proxy.status, 503)
@@ -264,4 +290,17 @@ test('connecting an agent to Cap Table needs no integrations: a person\'s MCP to
   const { owner, orgId } = await team('Apart Org')
   const tokens = await connect(h, owner, orgId)
   assert.equal((await api(tokens.access_token)).status, 401)
+})
+
+test('review: revoking a service account\'s token needs its secret, not just its client id', async () => {
+  const { owner, orgId } = await team('Revoke SA Org')
+  const account = await serviceAccount(owner, orgId, 'Revocable', 'VIEWER')
+  const token = (await serviceToken(account)).json.access_token
+  const revoke = (headers, fields = {}) => form(h.client(), h.url('apex', '/oauth/revoke'), { token, ...fields }, headers)
+  assert.equal((await revoke({}, { client_id: account.clientId })).status, 200)
+  assert.equal((await api(token)).status, 200, 'the client id alone revoked nothing')
+  assert.equal((await revoke({ Authorization: `Basic ${Buffer.from(`${account.clientId}:ia_sk_${'W'.repeat(43)}`).toString('base64')}` })).status, 200)
+  assert.equal((await api(token)).status, 200, 'nor did a wrong secret')
+  assert.equal((await revoke({ Authorization: `Basic ${Buffer.from(`${account.clientId}:${account.secret}`).toString('base64')}` })).status, 200)
+  assert.equal((await api(token)).status, 401, 'its own credentials did')
 })

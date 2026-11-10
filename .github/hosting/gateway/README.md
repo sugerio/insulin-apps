@@ -7,10 +7,10 @@ over a service binding with the console identity headers. The apps need no hosti
 
 | Host | What it serves |
 |---|---|
-| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
+| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; each app's `/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`; invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
-| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/settings/users`, `/settings/integrations`, `/mcp` and `/.well-known/oauth-*`; `/api/*` with a service account's Bearer token goes to the app as that account |
+| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users` and `/settings/integrations`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account |
 | `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the integration proxy `/__insulin/integrations/*` |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
@@ -43,7 +43,7 @@ bundles them.
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
 | `src/oauth/` | the authorization server: metadata, registration, authorize and consent, token, revoke; token formats and lifetimes, `resolveBearer`, and calls to an app with a token (`app-api.ts`) |
 | `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
-| `src/integrations/` | the `/settings/integrations` page (`settings.ts`) and the integration proxy (`proxy.ts`) |
+| `src/integrations/` | an app's integrations page (`settings.ts`) and the integration proxy (`proxy.ts`) |
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, and disconnecting them |
 | `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
 | `src/reserved.ts` | `/__insulin/me`, `switch-org`, `logout`, and the local captured-mail page |
@@ -113,8 +113,8 @@ binding.
 `wrangler dev --local` with both configs. Open:
 
 - `http://insulinapps.localhost:8787/`: the landing page, sign-in, accounts, organizations and their settings
-- `http://captable.insulinapps.localhost:8787/`: the app (the stub echoes the identity headers it receives), and its
-  `/settings/users`
+- `http://captable.insulinapps.localhost:8787/`: the app (the stub echoes the identity headers it receives); its
+  people and integrations are at `http://insulinapps.localhost:8787/apps/captable/settings/users` and `.../integrations`
 - `http://insulinapps.localhost:8787/__insulin/dev/mail`: mail captured instead of sent (`?format=json` for JSON)
 
 Browsers and curl resolve `*.localhost` to your machine. The local config uses Cloudflare's public Turnstile test
@@ -170,8 +170,10 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   service-account call re-checks the grant or account and the current role (`access.ts`) before it is forwarded with
   no cookies, `Origin` set to the app (tokens aren't ambient credentials, so the app's CSRF check has nothing to
   protect), `x-suger-access-via: mcp` or `api`, and a `User-Agent` naming the client (`Insulin Apps MCP: <client>`,
-  `Insulin Apps API: <account>`). Leaving or being removed from an organization deletes one's grants in it (a trigger),
-  so a later invitation doesn't bring old agents back. A person's token never works on `/api/*`, and a service
+  `Insulin Apps API: <account>`). Leaving or being removed from an organization deletes one's grants in it, and a
+  credential change deletes all of them (triggers), so neither a later invitation nor an intruder's agent survives.
+  Token requests are limited per IP before any check, and per client only when they fail; an MCP batch holds at most
+  10 messages, each tool call counted against the app rate. A person's token never works on `/api/*`, and a service
   account's never on `/mcp`.
 - **The integration proxy** only forwards to the stored base URL's host or an allowed host, over https, never to the
   site's own hosts, without following redirects, with every `x-suger-*`, cookie and authorization header removed and
@@ -204,8 +206,10 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **One kind of access or the other.** Triggers keep `app_grants` to specific-apps (`APPS`) memberships and drop a
   member's grants the moment they get an organization role; composite foreign keys keep a grant's custom role in the
   same organization and app, and stop a custom role from being deleted while anything uses it.
-- **Forms on an app host carry the organization's id**, so switching the active organization in another tab can't
-  redirect a change made on a page that was showing the previous one.
+- **An app's settings live on the apex** (`/apps/<app>/settings/...`); the app's host only redirects there. The
+  session cookie reaches app hosts, so a page served there could be read, and its forms posted, by code the app serves.
+- **Forms on an app's settings pages carry the organization's id**, so switching the active organization in another
+  tab can't redirect a change made on a page that was showing the previous one.
 - **Turnstile tokens are per form** (`data-action` signup, login, resend or forgot, required in `siteverify`).
   Google's callback checks `state` before it handles an error or clears the flow cookie. Only real navigations
   (`Sec-Fetch-Mode: navigate`, or HTML in `Accept` when fetch metadata is missing) are sent to sign in; everything

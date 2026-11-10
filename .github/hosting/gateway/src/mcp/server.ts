@@ -13,6 +13,8 @@ import { bearerToken, resolveBearer, type BearerIdentity } from '../oauth/tokens
 
 export const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']
 const BODY_LIMIT_BYTES = 1024 * 1024
+// JSON-RPC batches (MCP before 2025-06-18) are capped, and every tool call in one counts against the app rate.
+const BATCH_LIMIT = 10
 export const RESULT_LIMIT_BYTES = 200 * 1024
 const CHANGE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'] as const
 const METADATA_PATH = '/.well-known/oauth-protected-resource/mcp'
@@ -113,10 +115,12 @@ export async function mcpEndpoint(ctx: Context, app: HostedApp): Promise<Respons
   if (body === undefined) return json(rpcError(null, { code: -32700, message: 'Send a JSON-RPC message as application/json.' }), 400)
   if (Array.isArray(body)) {
     if (!body.length) return json(rpcError(null, { code: -32600, message: 'Empty batch.' }), 400)
-    const answers = (await Promise.all(body.map((message) => handleMessage(ctx, app, identity, message)))).filter((answer) => answer !== null)
+    if (body.length > BATCH_LIMIT) return json(rpcError(null, { code: -32600, message: `Send at most ${BATCH_LIMIT} messages in a batch.` }), 400)
+    // The request was counted once above; every tool call in a batch counts again, so a batch can't outrun the limit.
+    const answers = (await Promise.all(body.map((message) => handleMessage(ctx, app, identity, message, true)))).filter((answer) => answer !== null)
     return answers.length ? json(answers) : new Response(null, { status: 202, headers: CORS })
   }
-  const answer = await handleMessage(ctx, app, identity, body)
+  const answer = await handleMessage(ctx, app, identity, body, false)
   return answer === null ? new Response(null, { status: 202, headers: CORS }) : json(answer)
 }
 
@@ -124,7 +128,7 @@ function isId(value: unknown): value is JsonRpcId {
   return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
 }
 
-async function handleMessage(ctx: Context, app: HostedApp, identity: Extract<BearerIdentity, { kind: 'person' }>, message: unknown): Promise<object | null> {
+async function handleMessage(ctx: Context, app: HostedApp, identity: Extract<BearerIdentity, { kind: 'person' }>, message: unknown, charge: boolean): Promise<object | null> {
   if (!message || typeof message !== 'object' || Array.isArray(message)) return rpcError(null, { code: -32600, message: 'Not a JSON-RPC message.' })
   const { jsonrpc, method, id, params } = message as Record<string, unknown>
   if (jsonrpc !== '2.0' || typeof method !== 'string') return isId(id) || id === undefined ? rpcError(isId(id) ? id : null, { code: -32600, message: 'Not a JSON-RPC 2.0 request.' }) : null
@@ -147,6 +151,7 @@ async function handleMessage(ctx: Context, app: HostedApp, identity: Extract<Bea
     case 'tools/list':
       return rpcResult(id, { tools: TOOLS })
     case 'tools/call': {
+      if (charge && !(await allowApp(ctx, identity.actor.id))) return rpcError(id, { code: -32000, message: 'Too many requests. Try again in a minute.' })
       const name = args.name
       const input = (args.arguments && typeof args.arguments === 'object' && !Array.isArray(args.arguments) ? args.arguments : {}) as Record<string, unknown>
       if (typeof name !== 'string' || !TOOLS.some((tool) => tool.name === name)) return rpcError(id, { code: -32602, message: `Unknown tool: ${String(name).slice(0, 40)}` })

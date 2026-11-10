@@ -3,7 +3,7 @@
 import { appAccess } from './access.ts'
 import { integrationProxy } from './integrations/proxy.ts'
 import type { Context } from './context.ts'
-import { apexUrl, appUrl } from './context.ts'
+import { apexUrl, appSettingsPath } from './context.ts'
 import { listCapturedMail } from './db/mail.ts'
 import { findMembership, listMemberships } from './db/orgs.ts'
 import { BodyTooLarge, isFormBody, isJsonBody, isSameOrigin, readText, wantsJson } from './http/request.ts'
@@ -55,8 +55,8 @@ async function me(ctx: Context): Promise<Response> {
       active: membership.org_id === active?.id,
     })),
     links: {
-      members: ctx.app && access ? appUrl(ctx, ctx.app, '/settings/users') : active ? apexUrl(ctx, `/settings/users?org=${active.id}`) : apexUrl(ctx, '/orgs/new'),
-      integrations: ctx.app && access ? appUrl(ctx, ctx.app, '/settings/integrations') : null,
+      members: ctx.app && access ? apexUrl(ctx, appSettingsPath(ctx.app, 'users')) : active ? apexUrl(ctx, `/settings/users?org=${active.id}`) : apexUrl(ctx, '/orgs/new'),
+      integrations: ctx.app && access ? apexUrl(ctx, appSettingsPath(ctx.app, 'integrations')) : null,
       organizations: apexUrl(ctx, '/'),
       account: apexUrl(ctx, '/account'),
       apps: apexUrl(ctx),

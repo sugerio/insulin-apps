@@ -11,7 +11,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Notice, PostButton, SelectField, type Choice } from "@/components/forms"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { originOf } from "../context.ts"
+import { appSettingsPath, originOf } from "../context.ts"
 import type { CustomRoleRow } from "../db/grants.ts"
 import type { AuthScheme, IntegrationRow } from "../db/integrations.ts"
 import type { ServiceAccountRow } from "../db/oauth.ts"
@@ -139,7 +139,7 @@ function AccountsCard({ data, app }: { data: IntegrationsData; app: HostedApp })
                           Edit<span className="sr-only"> {account.name}</span>
                           <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
                         </summary>
-                        <form method="post" action={`/settings/integrations/service-accounts/${account.id}`} className="mt-3 flex flex-col gap-4">
+                        <form method="post" action={appSettingsPath(app, "integrations", `/service-accounts/${account.id}`)} className="mt-3 flex flex-col gap-4">
                           <input type="hidden" name="org_id" defaultValue={data.orgId} />
                           <Field id={`account-${account.id}-name`} label="Name" name="name" value={account.name} maxLength={80} />
                           <SelectField id={`account-${account.id}-role`} label="Role" name="role" choices={roles} selected={grantValue(account)} />
@@ -155,10 +155,10 @@ function AccountsCard({ data, app }: { data: IntegrationsData; app: HostedApp })
                   {admin ? (
                     <TableCell className="align-top">
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        <PostButton action={`/settings/integrations/service-accounts/${account.id}/rotate`} fields={{ org_id: data.orgId }} variant="outline" size="sm">
+                        <PostButton action={appSettingsPath(app, "integrations", `/service-accounts/${account.id}/rotate`)} fields={{ org_id: data.orgId }} variant="outline" size="sm">
                           New secret<span className="sr-only"> for {account.name}</span>
                         </PostButton>
-                        <PostButton action={`/settings/integrations/service-accounts/${account.id}/delete`} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
+                        <PostButton action={appSettingsPath(app, "integrations", `/service-accounts/${account.id}/delete`)} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
                           Delete<span className="sr-only"> {account.name}</span>
                         </PostButton>
                       </div>
@@ -175,7 +175,7 @@ function AccountsCard({ data, app }: { data: IntegrationsData; app: HostedApp })
       {admin ? (
         <CardFooter className="flex-col items-stretch gap-4 border-t">
           <h3 className="text-sm font-semibold">New service account</h3>
-          <form method="post" action="/settings/integrations/service-accounts" className="grid gap-4 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
+          <form method="post" action={appSettingsPath(app, "integrations", "/service-accounts")} className="grid gap-4 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
             <input type="hidden" name="org_id" defaultValue={data.orgId} />
             <Field id="new-account-name" label="Name" name="name" maxLength={80} />
             <SelectField id="new-account-role" label="Role" name="role" choices={roles} selected="VIEWER" />
@@ -247,7 +247,7 @@ function CredentialsCard({ data, app }: { data: IntegrationsData; app: HostedApp
                             Edit<span className="sr-only"> {credential.key}</span>
                             <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
                           </summary>
-                          <form method="post" action={`/settings/integrations/credentials/${credential.id}`} className="mt-3 flex flex-col gap-4">
+                          <form method="post" action={appSettingsPath(app, "integrations", `/credentials/${credential.id}`)} className="mt-3 flex flex-col gap-4">
                             <input type="hidden" name="org_id" defaultValue={data.orgId} />
                             <CredentialFields idPrefix={`credential-${credential.id}`} credential={credential} />
                             <div>
@@ -267,7 +267,7 @@ function CredentialsCard({ data, app }: { data: IntegrationsData; app: HostedApp
                     <TableCell className="align-top text-muted-foreground max-md:hidden">{day(credential.last_used_at)}</TableCell>
                     {admin ? (
                       <TableCell className="text-right align-top">
-                        <PostButton action={`/settings/integrations/credentials/${credential.id}/delete`} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
+                        <PostButton action={appSettingsPath(app, "integrations", `/credentials/${credential.id}/delete`)} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
                           Delete<span className="sr-only"> {credential.key}</span>
                         </PostButton>
                       </TableCell>
@@ -285,7 +285,7 @@ function CredentialsCard({ data, app }: { data: IntegrationsData; app: HostedApp
         <CardFooter className="flex-col items-stretch gap-4 border-t">
           <h3 className="text-sm font-semibold">New stored credential</h3>
           {data.sealing ? (
-            <form method="post" action="/settings/integrations/credentials" className="flex flex-col gap-4">
+            <form method="post" action={appSettingsPath(app, "integrations", "/credentials")} className="flex flex-col gap-4">
               <input type="hidden" name="org_id" defaultValue={data.orgId} />
               <Field id="new-credential-key" label="Key" name="key" maxLength={40} hint={`The name ${app.title} uses for it: lower-case letters, digits, - and _.`} />
               <CredentialFields idPrefix="new-credential" />

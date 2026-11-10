@@ -1,11 +1,12 @@
-// <app>.<domain>/settings/users (DESIGN.md §3): everyone who can use the app in the active organization. People whose
-// access comes from their organization role are listed but managed on the apex; the app's admins invite people to this
+// An app's people page, on the apex at /apps/<app>/settings/users (DESIGN.md §3; <app>.<domain>/settings/users
+// redirects there): everyone who can use the app in the active organization. People whose access comes from their
+// organization role are listed but managed on the organization's own settings; the app's admins invite people to this
 // app, change their role in it and remove them from it. Forms carry the organization's id, so a switch of the active
 // organization in another tab can't redirect a change.
 import { appAccess, type AppAccess } from '../access.ts'
 import type { HostedApp } from '../config.ts'
 import type { Context } from '../context.ts'
-import { apexUrl } from '../context.ts'
+import { apexUrl, appSettingsPath } from '../context.ts'
 import { newId } from '../crypto.ts'
 import { listAppGrants, listCustomRoles, removeGrant, upsertGrant } from '../db/grants.ts'
 import {
@@ -98,8 +99,8 @@ export async function renderAppUsers(ctx: Context, app: HostedApp, member: AppMe
   }, memberships), { status: problem?.status ?? 200 })
 }
 
-function back(notice: string): Response {
-  return redirect(`/settings/users?notice=${notice}`, 303)
+function back(app: HostedApp, notice: string): Response {
+  return redirect(`${appSettingsPath(app, 'users')}?notice=${notice}`, 303)
 }
 
 export async function appUsers(ctx: Context): Promise<Response> {
@@ -132,7 +133,7 @@ export async function inviteToApp(ctx: Context): Promise<Response> {
       return (await stillAdmin(ctx, app, found)) ?? problem('That person\'s access changed meanwhile. Reload the page and try again.', 409)
     }
     log('app_access_added', { org: orgId, app: app.name, user: invitee.id, by: session.user.id })
-    return back('access-added')
+    return back(app, 'access-added')
   }
   if (await countMembers(db, orgId) >= MEMBER_LIMIT) return problem(`This organization has reached its limit of ${MEMBER_LIMIT} members.`, 409)
   const pendingFull = `This organization already has ${PENDING_LIMIT} pending invitations. Revoke some before inviting more people.`
@@ -157,7 +158,7 @@ export async function inviteToApp(ctx: Context): Promise<Response> {
     return problem(MAIL_FAILED, 503)
   }
   log('invitation_created', { org: orgId, invitation: id, by: session.user.id, role: 'APPS', app: app.name, emailed: outcome === 'sent' })
-  return back(outcome === 'sent' ? 'invited' : 'invitation-saved')
+  return back(app, outcome === 'sent' ? 'invited' : 'invitation-saved')
 }
 
 /** After a guarded write changed nothing: the actor's own access to the app changed meanwhile, or null. */
@@ -187,7 +188,7 @@ export async function changeAppRole(ctx: Context, [userId]: string[]): Promise<R
     return (await stillAdmin(ctx, app, found)) ?? notFoundPage(ctx)
   }
   log('app_role_changed', { org: orgId, app: app.name, user: userId, by: found.session.user.id })
-  return back('role-changed')
+  return back(app, 'role-changed')
 }
 
 export async function removeFromApp(ctx: Context, [userId]: string[]): Promise<Response> {
@@ -200,7 +201,7 @@ export async function removeFromApp(ctx: Context, [userId]: string[]): Promise<R
     return (await stillAdmin(ctx, app, found)) ?? notFoundPage(ctx)
   }
   log('app_access_removed', { org: orgId, app: app.name, user: userId, by: found.session.user.id })
-  return back('removed')
+  return back(app, 'removed')
 }
 
 /**
@@ -225,7 +226,7 @@ export async function revokeAppInvitation(ctx: Context, [invitationId]: string[]
     return (await stillAdmin(ctx, app, found)) ?? notFoundPage(ctx)
   }
   log('invitation_revoked', { org: found.membership.org_id, invitation: invitation.id, by: found.session.user.id, app: app.name })
-  return back('invitation-revoked')
+  return back(app, 'invitation-revoked')
 }
 
 export async function resendAppInvitation(ctx: Context, [invitationId]: string[]): Promise<Response> {
@@ -251,5 +252,5 @@ export async function resendAppInvitation(ctx: Context, [invitationId]: string[]
     })
   }
   log('invitation_resent', { org: invitation.org_id, invitation: invitation.id, by: found.session.user.id, app: app.name })
-  return back('invitation-resent')
+  return back(app, 'invitation-resent')
 }

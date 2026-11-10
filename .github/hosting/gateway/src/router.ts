@@ -70,6 +70,8 @@ const GRANT = UUID_PATTERN
 const ACCOUNT = UUID_PATTERN
 const CREDENTIAL = UUID_PATTERN
 const CONNECTION = UUID_PATTERN
+// App names, as config.ts isAppName allows them; an unknown one is a 404 in forApp.
+const APP = '[a-z](?:[a-z0-9-]{0,30}[a-z0-9])?'
 const SCIM_TOKEN = UUID_PATTERN
 
 function route(method: 'GET' | 'POST', path: string, handler: Handler, options: { crossSite?: boolean } = {}): Route {
@@ -154,23 +156,48 @@ const APEX_ROUTES: Route[] = [
   route('POST', '/oauth/authorize/decision', decide),
 ]
 
-/** The gateway's own pages on every app host (DESIGN.md §1); everything else there goes to the app. */
+
+/**
+ * A handler for one app's settings page on the apex: the app named in the path, as `ctx.app`, or a 404. These pages
+ * live on the apex, not on the app's host: the session cookie reaches app hosts too, so code the app serves could
+ * otherwise read them and post their forms as the visitor (DESIGN.md §3).
+ */
+function forApp(handler: Handler): Handler {
+  return (ctx, [name, ...params]) => {
+    const app = ctx.config.apps.find((candidate) => candidate.name === name)
+    if (!app) return notFoundPage(ctx)
+    ctx.app = app
+    return handler(ctx, params)
+  }
+}
+
+/** Each app's people and integrations pages, on the apex (DESIGN.md §3, §6). */
 const APP_SETTINGS_ROUTES: Route[] = [
-  route('GET', '/settings/users', appUsers),
-  route('POST', '/settings/users/invite', inviteToApp),
-  route('POST', `/settings/users/(${USER})/role`, changeAppRole),
-  route('POST', `/settings/users/(${USER})/remove`, removeFromApp),
-  route('POST', `/settings/users/invitations/(${INVITATION})/revoke`, revokeAppInvitation),
-  route('POST', `/settings/users/invitations/(${INVITATION})/resend`, resendAppInvitation),
-  route('GET', '/settings/integrations', integrations),
-  route('POST', '/settings/integrations/service-accounts', createServiceAccount),
-  route('POST', `/settings/integrations/service-accounts/(${ACCOUNT})`, updateServiceAccountDetails),
-  route('POST', `/settings/integrations/service-accounts/(${ACCOUNT})/rotate`, rotateServiceAccountSecret),
-  route('POST', `/settings/integrations/service-accounts/(${ACCOUNT})/delete`, deleteServiceAccountRoute),
-  route('POST', '/settings/integrations/credentials', createCredential),
-  route('POST', `/settings/integrations/credentials/(${CREDENTIAL})`, updateCredential),
-  route('POST', `/settings/integrations/credentials/(${CREDENTIAL})/delete`, deleteCredential),
+  route('GET', `/apps/(${APP})/settings/users`, forApp(appUsers)),
+  route('POST', `/apps/(${APP})/settings/users/invite`, forApp(inviteToApp)),
+  route('POST', `/apps/(${APP})/settings/users/(${USER})/role`, forApp(changeAppRole)),
+  route('POST', `/apps/(${APP})/settings/users/(${USER})/remove`, forApp(removeFromApp)),
+  route('POST', `/apps/(${APP})/settings/users/invitations/(${INVITATION})/revoke`, forApp(revokeAppInvitation)),
+  route('POST', `/apps/(${APP})/settings/users/invitations/(${INVITATION})/resend`, forApp(resendAppInvitation)),
+  route('GET', `/apps/(${APP})/settings/integrations`, forApp(integrations)),
+  route('POST', `/apps/(${APP})/settings/integrations/service-accounts`, forApp(createServiceAccount)),
+  route('POST', `/apps/(${APP})/settings/integrations/service-accounts/(${ACCOUNT})`, forApp(updateServiceAccountDetails)),
+  route('POST', `/apps/(${APP})/settings/integrations/service-accounts/(${ACCOUNT})/rotate`, forApp(rotateServiceAccountSecret)),
+  route('POST', `/apps/(${APP})/settings/integrations/service-accounts/(${ACCOUNT})/delete`, forApp(deleteServiceAccountRoute)),
+  route('POST', `/apps/(${APP})/settings/integrations/credentials`, forApp(createCredential)),
+  route('POST', `/apps/(${APP})/settings/integrations/credentials/(${CREDENTIAL})`, forApp(updateCredential)),
+  route('POST', `/apps/(${APP})/settings/integrations/credentials/(${CREDENTIAL})/delete`, forApp(deleteCredential)),
 ]
+
+/**
+ * `<app>.<domain>/settings/users` and `/settings/integrations` (and below): a GET goes to the same page on the apex,
+ * anything else is refused, so nothing on the app's host can change settings.
+ */
+function appSettingsRedirect(ctx: Context): Response {
+  const method = ctx.request.method
+  if (method !== 'GET' && method !== 'HEAD') return methodNotAllowed(ctx, ['GET', 'HEAD'])
+  return redirect(apexUrl(ctx, `/apps/${ctx.app!.name}${ctx.url.pathname}${ctx.url.search}`), 302)
+}
 
 type MachineHandler = (ctx: Context) => Promise<Response> | Response
 
@@ -214,7 +241,7 @@ function apexMachine(ctx: Context, path: string): Promise<Response> | Response |
   return handler(ctx)
 }
 
-/** Paths on an app host that belong to the gateway: the settings pages and everything below them. */
+/** Paths on an app host that belong to the gateway: the old settings addresses, which redirect to the apex. */
 export function isGatewayAppPath(path: string): boolean {
   return /^\/settings\/(?:users|integrations)(?:\/|$)/.test(path)
 }
@@ -259,11 +286,11 @@ async function dispatch(ctx: Context): Promise<Response> {
   if (ctx.site === 'app') {
     const machine = appMachine(ctx, path)
     if (machine) return machine
-    return isGatewayAppPath(path) ? runRoutes(ctx, APP_SETTINGS_ROUTES) : proxyToApp(ctx, ctx.app!)
+    return isGatewayAppPath(path) ? appSettingsRedirect(ctx) : proxyToApp(ctx, ctx.app!)
   }
   // SCIM speaks JSON with a bearer token, not forms: it has its own dispatch and checks (sso/scim.ts).
   if (path === SCIM_BASE || path.startsWith(`${SCIM_BASE}/`)) return scimRoutes(ctx)
-  return apexMachine(ctx, path) ?? runRoutes(ctx, APEX_ROUTES)
+  return apexMachine(ctx, path) ?? runRoutes(ctx, path.startsWith('/apps/') ? APP_SETTINGS_ROUTES : APEX_ROUTES)
 }
 
 /**

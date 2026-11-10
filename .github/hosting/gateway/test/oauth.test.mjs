@@ -2,7 +2,7 @@
 // refresh tokens, revocation, and Account → AI agents.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { startGateway } from './helpers/harness.mjs'
+import { PASSWORD, startGateway } from './helpers/harness.mjs'
 import { LOOPBACK, authorizeUrl, connect, decide, form, json, openConsent, pkce, registerClient, rpc } from './helpers/oauth.mjs'
 
 let h
@@ -217,4 +217,34 @@ test('housekeeping drops expired requests, codes, tokens and grants, and clients
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM oauth_clients WHERE id = ?1', idle.client_id))[0].n, 0)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM oauth_grants WHERE user_id = ?1', person.id))[0].n, 0)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM oauth_tokens'))[0].n, 0)
+})
+
+test('review: a credential change ends the person\'s agents, so one connected by an intruder doesn\'t outlive the recovery', async () => {
+  const person = await owner('Recovery Org')
+  const tokens = await connect(h, person, person.orgId)
+  assert.equal((await rpc(h, tokens.access_token, 'ping')).status, 200)
+  const changed = await person.client.post(h.url('apex', '/account/password'), { current_password: PASSWORD, password: 'a brand new passphrase' })
+  assert.equal(changed.status, 303, changed.text.slice(0, 300))
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM oauth_grants WHERE user_id = ?1', person.id))[0].n, 0)
+  assert.equal((await rpc(h, tokens.access_token, 'ping')).status, 401)
+  const renewed = await form(h.client(), h.url('apex', '/oauth/token'), { grant_type: 'refresh_token', refresh_token: tokens.refresh_token, client_id: tokens.client.client_id })
+  assert.equal(renewed.status, 400, 'nor can it refresh')
+})
+
+test('review: junk token requests naming a public client id are slowed per IP and per failure, never locking the client out', async () => {
+  const limited = await startGateway({ authLimit: 5 })
+  try {
+    const person = await limited.user()
+    const orgId = await limited.org(person.client, 'Slow Down Org')
+    const tokens = await connect(limited, person, orgId)
+    const attacker = limited.client()
+    const junk = () => form(attacker, limited.url('apex', '/oauth/token'), { grant_type: 'refresh_token', refresh_token: `ia_rt_${'J'.repeat(43)}`, client_id: tokens.client.client_id })
+    const statuses = []
+    for (let attempt = 0; attempt < 8; attempt += 1) statuses.push((await junk()).status)
+    assert.ok(statuses.includes(429), `the attacker is slowed: ${statuses}`)
+    const renewed = await form(limited.client(), limited.url('apex', '/oauth/token'), { grant_type: 'refresh_token', refresh_token: tokens.refresh_token, client_id: tokens.client.client_id })
+    assert.equal(renewed.status, 200, 'the real client still refreshes')
+  } finally {
+    await limited.close()
+  }
 })

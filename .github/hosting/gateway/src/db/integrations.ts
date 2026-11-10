@@ -64,14 +64,18 @@ export async function insertIntegration(db: D1Database, row: IntegrationInput & 
   return result.meta.changes > 0
 }
 
-/** Changes a stored credential while `actorId` is still the app's admin; a null secret keeps the current one. */
+/**
+ * Changes a stored credential while `actorId` is still the app's admin. A null secret keeps the current one, and then
+ * only while the destination and the way it is sent stay as they are: the stored secret never goes anywhere new.
+ */
 export async function updateIntegration(db: D1Database, row: IntegrationInput & {
   id: string; orgId: string; app: string; secretEnc: string | null; actorId: string; now: number
 }): Promise<boolean> {
   const result = await db.prepare(
     `UPDATE integrations SET name = ?4, base_url = ?5, allowed_hosts = ?6, auth_scheme = ?7, header_name = ?8,
        secret_enc = COALESCE(?9, secret_enc), updated_at = ?10
-     WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${appAdmin('?2', '?11', '?3')}`,
+     WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${appAdmin('?2', '?11', '?3')}
+       AND (?9 IS NOT NULL OR (base_url = ?5 AND allowed_hosts = ?6 AND auth_scheme = ?7 AND header_name IS ?8))`,
   ).bind(row.id, row.orgId, row.app, row.name, row.baseUrl, JSON.stringify(row.allowedHosts), row.authScheme, row.headerName,
     row.secretEnc, row.now, row.actorId).run()
   return result.meta.changes > 0

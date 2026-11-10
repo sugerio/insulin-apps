@@ -114,4 +114,8 @@ CREATE TABLE integrations (
 
 -- Leaving or being removed from an organization ends the person's agents there: being invited again later must not
 -- bring them back. (A demotion keeps them; each request checks the current role.) One line, like 0003's triggers.
+-- A changed credential version (a password set, changed or reset, two-step sign-in turned on or off) ends the person's
+-- grants too: an agent connected by someone who took over the account must not outlive its recovery.
+CREATE TRIGGER users_credential_change_ends_grants AFTER UPDATE OF credential_version ON users WHEN NEW.credential_version <> OLD.credential_version BEGIN DELETE FROM oauth_grants WHERE user_id = NEW.id; END;
+
 CREATE TRIGGER memberships_removal_ends_grants AFTER DELETE ON memberships BEGIN DELETE FROM oauth_grants WHERE org_id = OLD.org_id AND user_id = OLD.user_id; END;

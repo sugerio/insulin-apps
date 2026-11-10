@@ -23,8 +23,9 @@ TypeScript on the Workers runtime (Web Crypto, `HTMLRewriter`, D1, fetch). The e
 The pages are React components rendered to HTML on the server (`renderToStaticMarkup` from `react-dom/server`, the
 edge build wrangler picks for workerd), built from [shadcn/ui](https://ui.shadcn.com) components and styled with
 Tailwind CSS. There is no client-side React: no hydration and no script bundle, and every form is a plain HTML POST.
-The runtime dependencies are only `react`, `react-dom`, `class-variance-authority`, `clsx`, `tailwind-merge` and
-`lucide-react` (icons, rendered to inline SVG); wrangler bundles them.
+The runtime dependencies are only `react`, `react-dom`, `class-variance-authority`, `clsx`, `tailwind-merge`,
+`lucide-react` (icons, rendered to inline SVG) and `qrcode-generator` (the authenticator-app QR code, also rendered to
+inline SVG); wrangler bundles them.
 
 | Path | What |
 |---|---|
@@ -34,7 +35,7 @@ The runtime dependencies are only `react`, `react-dom`, `class-variance-authorit
 | `src/crypto.ts` | random tokens and ids, SHA-256, PBKDF2 hashes, constant-time comparison |
 | `src/http/` | cookies, security headers, request parsing, responses, `return_to`, what is forwarded to apps |
 | `src/db/` | D1 queries, one module per table group; every race-sensitive rule is a single statement or batch |
-| `src/auth/` | sessions, email and password accounts, Google sign-in, the account page; `sign-in.ts`, where every sign-in becomes a session |
+| `src/auth/` | sessions, email and password accounts, Google sign-in, the account page; `sign-in.ts`, where every sign-in becomes a session; `totp.ts` (RFC 6238 codes, recovery codes), `mfa.ts` (the second step at `/login/mfa`) and `security.ts` (Account → Security at `/account/security`) |
 | `src/roles.ts` | organization roles, app roles, permissions and who may give what |
 | `src/access.ts` | someone's role and permissions in one app, from their organization role or their grant; every way into an app ends here |
 | `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), access in forms and words (`access-forms.ts`) |
@@ -157,6 +158,13 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   `location.assign`.
 - Session ids and email tokens are 32 random bytes; D1 stores only their SHA-256. Passwords are PBKDF2-SHA256
   (100,000 iterations, the workerd maximum).
+- **Two-step sign-in.** With an authenticator app turned on, `finishSignIn` gives the browser a 10-minute challenge and
+  a host-only `__Host-insulin_mfa` cookie instead of a session; only a code (or a recovery code) at `/login/mfa` starts
+  the session, under the credential version the first step verified. A used time step, a recovery code and a
+  challenge are each spent by one conditional statement, so two concurrent answers can't both pass; five wrong answers
+  end a challenge. The secret is sealed with `GATEWAY_SECRET_KEY` (purpose `totp`); turning the feature on or off
+  raises the credential version, which ends every other session. Enterprise SSO skips this step: the identity provider
+  owns MFA there.
 - **Credential version.** Every password set, change or reset (and clearing a password when Google takes over an
   unconfirmed account) raises `users.credential_version`. A session is valid only while its version matches, and
   session inserts and password writes are conditional on the version the request verified, so a sign-in or password

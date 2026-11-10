@@ -1,6 +1,6 @@
 // Google sign-in: OpenID Connect authorization code flow with PKCE (S256), state and nonce.
 import type { Context } from '../context.ts'
-import { authUrl } from '../context.ts'
+import { apexUrl } from '../context.ts'
 import {
   base64url, constantTimeEqual, fromBase64url, isToken, newId, randomToken, sha256, utf8,
 } from '../crypto.ts'
@@ -30,7 +30,7 @@ function flowCookie(ctx: Context, value: string, maxAge: number): string {
 }
 
 export function redirectUri(ctx: Context): string {
-  return authUrl(ctx, '/auth/google/callback')
+  return apexUrl(ctx, '/auth/google/callback')
 }
 
 export async function googleStart(ctx: Context): Promise<Response> {

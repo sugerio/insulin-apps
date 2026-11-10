@@ -59,3 +59,14 @@ export function passwordProblem(input: unknown): string | null {
   if (count > PASSWORD_MAX) return `Use at most ${PASSWORD_MAX} characters.`
   return null
 }
+
+export const ROLE_NAME_MAX = 60
+export const ROLE_DESCRIPTION_MAX = 200
+
+/** A custom role's name: 1–60 characters after cleaning. */
+export function checkRoleName(input: unknown): { name: string } | { problem: string } {
+  const name = cleanText(input)
+  if (!name) return { problem: 'Enter a name for the role.' }
+  if (length(name) > ROLE_NAME_MAX) return { problem: `Use at most ${ROLE_NAME_MAX} characters for the role's name.` }
+  return { name }
+}

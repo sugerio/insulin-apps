@@ -362,7 +362,8 @@ test('dry-run writes private app configs, the complete gateway config, and a red
 
   const summaryText = await readFile(summary, 'utf8')
   assert.match(summaryText, /https:\/\/alpha-app\.apps\.example\.com/)
-  assert.match(summaryText, /https:\/\/auth\.apps\.example\.com/)
+  assert.match(summaryText, /^- https:\/\/apps\.example\.com$/m, 'sign-in, accounts and settings live on the apex')
+  assert.doesNotMatch(summaryText, /auth\.apps\.example\.com/)
 })
 
 test('--only deploys one app and does not plan or validate a gateway deploy', async () => {

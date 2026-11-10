@@ -18,7 +18,7 @@ async function team(name = 'Team Org') {
   const owner = await h.user({ name: 'Olive Owner' })
   const orgId = await h.org(owner.client, name)
   const people = { owner }
-  for (const role of ['ADMIN', 'EDITOR', 'USER', 'VIEWER']) {
+  for (const role of ['ADMIN', 'EDITOR', 'VIEWER']) {
     people[role.toLowerCase()] = await h.user({ name: `${role[0]}${role.slice(1).toLowerCase()} Person` })
     await h.join(owner, orgId, people[role.toLowerCase()], role)
   }
@@ -31,13 +31,13 @@ test('creating an organization makes you its owner and your active organization'
   const { client, id } = await h.user()
   const created = await client.post(h.url('auth', '/orgs/new'), { name: '  Example   Holdings  ' })
   assert.equal(created.status, 303)
-  const orgId = new RegExp(`/orgs/(${UUID})\\?notice=created$`).exec(created.location)[1]
+  const orgId = new RegExp(`/settings/users\\?org=(${UUID})&notice=created$`).exec(created.location)[1]
   const [membership] = await h.sql('SELECT role FROM memberships WHERE org_id = ?1 AND user_id = ?2', orgId, id)
   assert.equal(membership.role, 'OWNER')
   assert.equal((await h.sql('SELECT name FROM orgs WHERE id = ?1', orgId))[0].name, 'Example Holdings')
-  const page = await client.get(h.url('auth', `/orgs/${orgId}?notice=created`))
+  const page = await client.get(h.url('auth', `/settings/users?org=${orgId}&notice=created`))
   assert.match(page.text, /<h1>Example Holdings<\/h1>/)
-  assert.match(page.text, /Your role: <strong>Owner<\/strong>/)
+  assert.match(page.text, /Your access: <strong>Owner<\/strong>/)
   assert.match(page.text, /Active organization/)
   assert.equal((await forwarded(client))['x-suger-organization-id'], orgId)
   for (const name of ['', '   ', 'x'.repeat(81)]) {
@@ -56,42 +56,42 @@ test('a user can create 10 organizations in total; deleting one does not give th
   assert.equal((await client.post(h.url('auth', '/orgs/new'), { name: 'Still too many' })).status, 409)
 })
 
-test('each role sees what the console role allows', async () => {
+test('every organization role sees the people and roles; only owners and admins manage them', async () => {
   const people = await team('Visibility Org')
-  const page = async (person) => (await person.client.get(h.url('auth', `/orgs/${people.orgId}`))).text
+  const page = async (person, path = '/settings/users') => (await person.client.get(h.url('auth', `${path}?org=${people.orgId}`))).text
   const owner = await page(people.owner)
-  assert.match(owner, /<h2>Members<\/h2>/)
+  assert.match(owner, /<h2>People<\/h2>/)
   assert.ok(owner.includes(people.viewer.email), 'owners see addresses')
   assert.match(owner, /Invite people/)
-  assert.match(owner, /Delete this organization/)
-  assert.match(owner, new RegExp(`action="/orgs/${UUID}/rename"`))
   assert.match(owner, /<option\b[^>]*\svalue="OWNER"/, 'OWNER can offer OWNER')
+  assert.match(owner, /<option\b[^>]*\svalue="APPS"/, 'and specific apps')
+  const settings = await page(people.owner, '/settings/organization')
+  assert.match(settings, /Delete this organization/)
+  assert.match(settings, new RegExp(`action="/orgs/${UUID}/rename"`))
   const admin = await page(people.admin)
   assert.match(admin, /Invite people/)
-  assert.doesNotMatch(admin, /Delete this organization/)
+  assert.doesNotMatch(await page(people.admin, '/settings/organization'), /Delete this organization/)
   assert.doesNotMatch(admin, /<option\b[^>]*\svalue="OWNER"/, 'ADMIN cannot offer OWNER')
-  const editor = await page(people.editor)
-  assert.ok(editor.includes(people.viewer.email), 'editors see the member list')
-  assert.doesNotMatch(editor, /Invite people/)
-  for (const person of [people.user, people.viewer]) {
+  for (const person of [people.editor, people.viewer]) {
     const text = await page(person)
-    assert.match(text, /Only editors, admins and owners can see the member list/)
-    assert.ok(!text.includes(people.owner.email), 'no member addresses')
+    assert.ok(text.includes(people.owner.email), 'every organization role sees the people')
     assert.doesNotMatch(text, /Invite people/)
+    assert.doesNotMatch(text, /Change access/)
+    assert.match(await page(person, '/settings/roles'), /<h2>Organization roles<\/h2>/)
   }
-  assert.match(await page(people.viewer), /Your role: <strong>Viewer<\/strong>/)
+  assert.match(await page(people.viewer), /Your access: <strong>Viewer<\/strong>/)
 })
 
 test('the server enforces roles: ADMIN cannot grant, change or remove OWNER, and lower roles manage nothing', async () => {
   const people = await team('Rules Org')
-  const { orgId, owner, admin, editor, user, viewer } = people
+  const { orgId, owner, admin, editor, viewer } = people
   assert.equal((await post(admin, `/orgs/${orgId}/rename`, { name: 'Renamed' })).status, 403)
   assert.equal((await post(admin, `/orgs/${orgId}/delete`, { confirm: 'Rules Org' })).status, 403)
   assert.equal((await post(admin, `/orgs/${orgId}/members/${editor.id}/role`, { role: 'OWNER' })).status, 403, 'ADMIN granting OWNER')
   assert.equal((await post(admin, `/orgs/${orgId}/members/${owner.id}/role`, { role: 'VIEWER' })).status, 403, 'ADMIN changing an OWNER')
   assert.equal((await post(admin, `/orgs/${orgId}/members/${owner.id}/remove`)).status, 403, 'ADMIN removing an OWNER')
-  assert.equal((await post(editor, `/orgs/${orgId}/members/${viewer.id}/role`, { role: 'USER' })).status, 403)
-  assert.equal((await post(user, `/orgs/${orgId}/members/${viewer.id}/remove`)).status, 403)
+  assert.equal((await post(editor, `/orgs/${orgId}/members/${viewer.id}/role`, { role: 'VIEWER' })).status, 403)
+  assert.equal((await post(viewer, `/orgs/${orgId}/members/${editor.id}/remove`)).status, 403)
   assert.equal((await post(editor, `/orgs/${orgId}/invitations`, { email: 'new.person@example.test', role: 'VIEWER' })).status, 403)
 
   assert.equal((await post(admin, `/orgs/${orgId}/members/${editor.id}/role`, { role: 'ADMIN' })).status, 303)
@@ -99,8 +99,10 @@ test('the server enforces roles: ADMIN cannot grant, change or remove OWNER, and
   assert.equal((await post(admin, `/orgs/${orgId}/members/${viewer.id}/remove`)).status, 303)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?1 AND user_id = ?2', orgId, viewer.id))[0].n, 0)
   assert.equal((await post(owner, `/orgs/${orgId}/members/${admin.id}/role`, { role: 'OWNER' })).status, 303, 'OWNER can grant OWNER')
-  assert.equal((await post(owner, `/orgs/${orgId}/members/${user.id}/role`, { role: 'SUPERUSER' })).status, 400)
-  assert.equal((await forwarded(admin.client))['x-suger-app-role'], 'OWNER', 'the new role reaches the apps at once')
+  assert.equal((await post(owner, `/orgs/${orgId}/members/${editor.id}/role`, { role: 'SUPERUSER' })).status, 400)
+  assert.equal((await post(owner, `/orgs/${orgId}/members/${editor.id}/role`, { role: 'USER' })).status, 400, 'the retired role')
+  assert.equal((await h.sql('SELECT role FROM memberships WHERE org_id = ?1 AND user_id = ?2', orgId, admin.id))[0].role, 'OWNER')
+  assert.equal((await forwarded(admin.client))['x-suger-app-role'], 'ADMIN', 'owners are admins in every app, at once')
 })
 
 test('the last owner can neither leave, nor lose the owner role, nor be removed; with two owners one may leave', async () => {
@@ -126,7 +128,7 @@ test('deleting an organization needs its name typed exactly and moves members to
   const orgId = await h.org(owner.client, 'Doomed Org')
   await h.join(owner, orgId, member, 'EDITOR')
   assert.equal((await forwarded(member.client))['x-suger-organization-id'], orgId, 'joining made it active')
-  const page = await owner.client.get(h.url('auth', `/orgs/${orgId}`))
+  const page = await owner.client.get(h.url('auth', `/settings/organization?org=${orgId}`))
   assert.match(page.text, /Apps keep the data they stored for it, but nobody can reach that data again/)
   assert.equal((await post(owner, `/orgs/${orgId}/delete`, { confirm: 'doomed org' })).status, 400)
   const deleted = await post(owner, `/orgs/${orgId}/delete`, { confirm: ' Doomed Org ' })
@@ -150,13 +152,13 @@ test('switching organization changes what the apps receive; a removed member fal
   assert.equal(switched.status, 303)
   let headers = await forwarded(member.client)
   assert.equal(headers['x-suger-organization-id'], first)
-  assert.equal(headers['x-suger-app-role'], 'OWNER')
+  assert.equal(headers['x-suger-app-role'], 'ADMIN', 'an owner is an admin in the app')
   await member.client.post(h.url('auth', '/orgs/switch'), { org_id: shared })
   assert.equal((await forwarded(member.client))['x-suger-organization-id'], shared)
   await post(owner, `/orgs/${shared}/members/${member.id}/remove`)
   headers = await forwarded(member.client)
   assert.equal(headers['x-suger-organization-id'], first, 'oldest remaining membership')
-  assert.equal(headers['x-suger-app-role'], 'OWNER')
+  assert.equal(headers['x-suger-app-role'], 'ADMIN')
 })
 
 test('nobody reaches another organization: pages, actions and switching all answer 404', async () => {
@@ -164,7 +166,7 @@ test('nobody reaches another organization: pages, actions and switching all answ
   const bob = await h.user()
   const aliceOrg = await h.org(alice.client, 'Alice Org')
   const bobOrg = await h.org(bob.client, 'Bob Org')
-  assert.equal((await bob.client.get(h.url('auth', `/orgs/${aliceOrg}`))).status, 404)
+  assert.equal((await bob.client.get(h.url('auth', `/settings/users?org=${aliceOrg}`))).status, 404)
   for (const [path, fields] of [
     [`/orgs/${aliceOrg}/rename`, { name: 'Taken' }],
     [`/orgs/${aliceOrg}/delete`, { confirm: 'Alice Org' }],
@@ -184,4 +186,7 @@ test('nobody reaches another organization: pages, actions and switching all answ
   assert.equal((await h.sql('SELECT name FROM orgs WHERE id = ?1', aliceOrg))[0].name, 'Alice Org')
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?1', aliceOrg))[0].n, 1)
   assert.equal((await bob.client.get(h.url('auth', '/orgs/not-an-id'))).status, 404)
+  assert.equal((await bob.client.get(h.url('auth', `/orgs/${aliceOrg}`))).status, 404, 'the old page address too')
+  const old = await alice.client.get(h.url('auth', `/orgs/${aliceOrg}`))
+  assert.equal(old.location, h.url('auth', `/settings/users?org=${aliceOrg}`), 'which now leads to the people page')
 })

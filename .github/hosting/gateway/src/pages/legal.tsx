@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { ContactLink } from "@/components/contact"
 import { Container, proseLinks } from "@/components/layout"
 import type { Context } from "../context.ts"
-import { apexUrl, authUrl } from "../context.ts"
+import { apexUrl } from "../context.ts"
 import { SESSION_COOKIE } from "../auth/session.ts"
 import type { Html } from "./html.ts"
 import { page } from "./document.tsx"
@@ -147,7 +147,7 @@ export function privacyPage(ctx: Context): Html {
       <h2>Deleting your data</h2>
       <ul>
         <li>
-          On your <a href={authUrl(ctx, "/account")}>account page</a>, choose <strong>Delete my account</strong>. This deletes your
+          On your <a href={apexUrl(ctx, "/account")}>account page</a>, choose <strong>Delete my account</strong>. This deletes your
           account, your sessions and your memberships, and every organization where you are the only member, with its
           invitations.
         </li>

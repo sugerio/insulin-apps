@@ -1,7 +1,7 @@
 // E-mail and password accounts: sign-up, sign-in, sign-out, e-mail confirmation, resend, forgotten and reset passwords.
 // Nothing here reveals whether an address has an account, except to someone who knows its password.
 import type { Context } from '../context.ts'
-import { authUrl } from '../context.ts'
+import { apexUrl } from '../context.ts'
 import { burnPasswordCheck, hashPassword, isToken, newId, randomToken, sha256Hex, verifyPassword } from '../crypto.ts'
 import { commitToken, consumeToken, dropToken, findUsableToken, stageToken, type TokenPurpose } from '../db/tokens.ts'
 import {
@@ -44,7 +44,7 @@ async function sendTokenMail(ctx: Context, user: UserRow, purpose: TokenPurpose,
     now: ctx.now,
     expiresAt: ctx.now + (purpose === 'verify_email' ? VERIFY_TTL_MS : RESET_TTL_MS),
   })
-  const link = authUrl(ctx, `/${purpose === 'verify_email' ? 'verify-email' : 'reset-password'}?token=${token}`)
+  const link = apexUrl(ctx, `/${purpose === 'verify_email' ? 'verify-email' : 'reset-password'}?token=${token}`)
   const outcome = await sendMail(ctx, purpose, user.email, build(link))
   if (outcome === 'sent') await commitToken(db, tokenHash, user.id, purpose)
   else await dropToken(db, tokenHash)
@@ -102,7 +102,7 @@ export async function signup(ctx: Context): Promise<Response> {
     if (outcome === 'failed') await deleteUnverifiedUser(db, user.id)
   } else {
     if (!created) await burnPasswordCheck(password)
-    outcome = await sendMail(ctx, 'signup_exists', email, signupExistsMail(authUrl(ctx, '/login'), authUrl(ctx, '/forgot-password')))
+    outcome = await sendMail(ctx, 'signup_exists', email, signupExistsMail(apexUrl(ctx, '/login'), apexUrl(ctx, '/forgot-password')))
   }
   if (outcome === 'failed') return htmlResponse(signupPage(ctx, { values, returnTo, errors: { form: MAIL_FAILED } }), { status: 503 })
   return htmlResponse(checkInboxPage(ctx, email))
@@ -172,7 +172,7 @@ export async function verifyEmail(ctx: Context): Promise<Response> {
   await markVerifiedStatement(db, user.id, ctx.now).run()
   if (!(await startSession(ctx, user))) return credentialsChangedPage(ctx)
   log('email_verified', { user: user.id })
-  return afterPost(ctx, safeReturnTo(ctx, row.return_to) ?? authUrl(ctx, '/?notice=verified'))
+  return afterPost(ctx, safeReturnTo(ctx, row.return_to) ?? apexUrl(ctx, '/?notice=verified'))
 }
 
 export async function resendForm(ctx: Context): Promise<Response> {
@@ -255,5 +255,5 @@ export async function reset(ctx: Context): Promise<Response> {
   const version = await resetPassword(db, user.id, await hashPassword(password), ctx.now)
   if (version === null || !(await startSession(ctx, { id: user.id, credential_version: version }))) return credentialsChangedPage(ctx)
   log('password_reset', { user: user.id })
-  return redirect(authUrl(ctx, '/?notice=password-set'), 303)
+  return redirect(apexUrl(ctx, '/?notice=password-set'), 303)
 }

@@ -119,7 +119,7 @@ export function accountPage(ctx: Context, session: Session, state: AccountState 
                   {blocking.map((org, index) => (
                     <Fragment key={org.id}>
                       {index ? ", " : ""}
-                      <a href={`/orgs/${org.id}`}>{org.name}</a>
+                      <a href={`/settings/users?org=${org.id}`}>{org.name}</a>
                     </Fragment>
                   ))}
                   , which {blocking.length === 1 ? "has" : "have"} other members. Make another member an owner, or remove the other

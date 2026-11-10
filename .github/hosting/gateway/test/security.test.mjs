@@ -26,7 +26,8 @@ test('auth POSTs need this host\'s own Origin: foreign, missing, null and cross-
     ['http://evil.example', {}, 'foreign origin'],
     [null, {}, 'no Origin'],
     ['null', {}, 'opaque origin'],
-    [h.url('apex').replace(/\/$/, ''), {}, 'another host of the site'],
+    [h.url('captable').replace(/\/$/, ''), {}, 'another host of the site'],
+    [h.url('old-auth').replace(/\/$/, ''), {}, 'the old sign-in host'],
     [h.url('auth').replace(/\/$/, ''), { 'Sec-Fetch-Site': 'cross-site' }, 'browser says cross-site'],
   ]) {
     const response = await h.client().post(login, fields, { origin, headers })
@@ -83,8 +84,20 @@ test('return_to pointing anywhere but the site is ignored', async () => {
     assert.equal(signedIn.status, 303, bad)
     assert.equal(signedIn.location, h.url('auth', '/'), bad)
   }
-  const good = await h.signIn(h.client(), { email, returnTo: h.url('apex', '/') })
-  assert.match(good.text, /url=http:\/\/insulinapps\.localhost\//)
+  const good = await h.signIn(h.client(), { email, returnTo: h.url('captable', '/x') })
+  assert.match(good.text, /url=http:\/\/captable\.insulinapps\.localhost\/x/)
+  const apex = await h.signIn(h.client(), { email, returnTo: h.url('apex', '/settings/users') })
+  assert.equal(apex.location, h.url('apex', '/settings/users'), 'the apex itself: a plain redirect')
+})
+
+test('the old sign-in host redirects everything to the same address on the apex, keeping the method', async () => {
+  const get = await h.client().get(h.url('old-auth', '/invitations/x?y=1'))
+  assert.equal(get.status, 308)
+  assert.equal(get.location, h.url('apex', '/invitations/x?y=1'))
+  const post = await h.client().post(h.url('old-auth', '/login'), { email: 'a@example.test' })
+  assert.equal(post.status, 308, 'a form from an old page is sent on, where the Origin check refuses it')
+  assert.equal(post.location, h.url('apex', '/login'))
+  assert.equal((await h.client().get(h.url('old-auth', '/__insulin/me'))).status, 308, 'even the reserved paths')
 })
 
 test('RL_AUTH: per IP and per email address', async () => {

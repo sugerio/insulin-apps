@@ -65,9 +65,9 @@ function assertPage(page, { status = 200, title, site = 'auth', state, name = 'R
 test('the apex pages, signed out and signed in', async () => {
   const anonymous = h.client()
   assertPage(await anonymous.get(h.url('apex', '/')), { site: 'apex', title: 'Open-source apps, hosted', state: 'out' })
-  const landing = await owner.client.get(h.url('apex', '/'))
-  assertPage(landing, { site: 'apex', title: 'Open-source apps, hosted', state: 'in' })
-  assert.match(header(landing), /Rendering Org[\s\S]*?>Owner<\/span>/, 'the switcher shows the active organization and role')
+  const home = await owner.client.get(h.url('apex', '/'))
+  assertPage(home, { site: 'apex', title: 'Your organizations', state: 'in' })
+  assert.match(header(home), /Rendering Org[\s\S]*?>Owner<\/span>/, 'the switcher shows the active organization and role')
   for (const [path, title] of [['/privacy', 'Privacy notice'], ['/terms', 'Terms of use']]) {
     assertPage(await anonymous.get(h.url('apex', path)), { site: 'apex', title, state: 'none' })
     assertPage(await owner.client.get(h.url('apex', path)), { site: 'apex', title, state: 'none' })
@@ -96,17 +96,20 @@ test('the auth forms render signed out; signed in, sign-in and sign-up send the 
 })
 
 test('the signed-in pages render with the account controls, and send the signed-out to sign in', async () => {
-  const pages = [['/', 'Your organizations'], ['/account', 'Account'], ['/orgs/new', 'Create an organization'], [`/orgs/${orgId}`, 'Rendering Org']]
+  const pages = [
+    ['/account', 'Account'], ['/orgs/new', 'Create an organization'], [`/settings/users?org=${orgId}`, 'People · Rendering Org'],
+    [`/settings/roles?org=${orgId}`, 'Roles · Rendering Org'], [`/settings/organization?org=${orgId}`, 'Organization · Rendering Org'],
+  ]
   for (const [path, title] of pages) {
     const page = await owner.client.get(h.url('auth', path))
     assertPage(page, { title, state: 'in' })
-    assert.match(page.text, /<form action="\/logout" method="post">/, `${path}: sign-out posts to the auth host's own route`)
+    assert.match(page.text, /<form action="\/logout" method="post">/, `${path}: sign-out posts to the apex's own route`)
     const away = await h.client().get(h.url('auth', path))
     assert.equal(away.status, 302, path)
     assert.equal(away.location, h.url('auth', `/login?return_to=${encodeURIComponent(h.url('auth', path))}`))
   }
   const home = await owner.client.get(h.url('auth', '/'))
-  assert.match(header(home), new RegExp(`<a class="[^"]*" href="http://auth\\.insulinapps\\.localhost/orgs/${orgId}">`), 'Manage members')
+  assert.match(header(home), new RegExp(`<a class="[^"]*" href="http://insulinapps\\.localhost/settings/users\\?org=${orgId}">`), 'People and roles')
   assert.equal(header(home).match(/<details data-slot="menu" class="[^"]*" name="top-bar">/g)?.length, 2, 'two exclusive <details> menus')
 })
 
@@ -143,10 +146,10 @@ test('the e-mail link pages, the form results and the error pages', async () => 
   const resend = await h.client().post(h.url('auth', '/resend-verification'), { email, 'cf-turnstile-response': TOKENS.resend })
   assertPage(resend, { title: 'Check your inbox', state: 'none' })
 
-  // A sign-in that returns to another host continues with a page; its link and meta refresh carry the destination.
-  const back = await h.signIn(h.client(), { email, returnTo: h.url('apex', '/') })
+  // A sign-in that returns to another host (an app) continues with a page; its link and meta refresh carry the destination.
+  const back = await h.signIn(h.client(), { email, returnTo: h.url('captable', '/') })
   assertPage(back, { title: 'Continue', state: 'none' })
-  assert.match(back.text, /<meta http-equiv="refresh" content="0; url=http:\/\/insulinapps\.localhost\/"\/>/)
+  assert.match(back.text, /<meta http-equiv="refresh" content="0; url=http:\/\/captable\.insulinapps\.localhost\/"\/>/)
 
   assertPage(await h.client().get(h.url('auth', '/logout')), { status: 405, title: 'Not allowed', state: 'none' })
   assertPage(await h.client().post(h.url('auth', '/login'), {}, { origin: 'http://evil.example' }), { status: 403, title: 'Request blocked', state: 'none' })
@@ -176,7 +179,7 @@ test('names and organization names are escaped wherever they appear', async () =
   const person = await h.user({ name })
   const evilOrg = `"><script>alert(1)</script>`
   const id = await h.org(person.client, evilOrg)
-  for (const href of [h.url('apex', '/'), h.url('auth', '/'), h.url('auth', `/orgs/${id}`), h.url('auth', '/account')]) {
+  for (const href of [h.url('apex', '/'), h.url('auth', '/'), h.url('auth', `/settings/users?org=${id}`), h.url('auth', '/account')]) {
     const page = await person.client.get(href)
     assert.equal(page.status, 200, href)
     assert.ok(!page.text.includes('<img src=x'), `${href}: the name is escaped`)

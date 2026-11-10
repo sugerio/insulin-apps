@@ -19,10 +19,10 @@ export const NAVIGATE = { 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'docum
 export const turnstile = (action) => `turnstile-ok:${action}`
 export const TOKENS = { signup: turnstile('signup'), login: turnstile('login'), resend: turnstile('resend'), forgot: turnstile('forgot') }
 
-/** The stubbed siteverify: a token from `turnstile(action)` succeeds, for the auth host and that action. */
+/** The stubbed siteverify: a token from `turnstile(action)` succeeds, for the apex (where the forms are) and that action. */
 export function siteverify(params, harness) {
   const match = /^turnstile-ok:([a-z]+)$/.exec(params.get('response') ?? '')
-  return match ? { success: true, hostname: harness.authHost, action: match[1] } : { success: false, 'error-codes': ['invalid-input-response'] }
+  return match ? { success: true, hostname: harness.domain, action: match[1] } : { success: false, 'error-codes': ['invalid-input-response'] }
 }
 export const GOOGLE_CLIENT_ID = 'test-client.apps.googleusercontent.com'
 export const GOOGLE_CLIENT_SECRET = 'test-google-client-secret'
@@ -231,10 +231,12 @@ export class Harness {
     this.limits = { authLimit, appLimit }
   }
 
+  /** The old sign-in host, which only redirects to the apex now. */
   get authHost() { return `auth.${this.domain}` }
 
+  /** A URL on a site: 'apex', 'auth' (sign-in and organizations, which live on the apex: an alias), 'old-auth' or an app. */
   url(site, path = '/') {
-    const host = site === 'apex' ? this.domain : site === 'auth' ? this.authHost : `${site}.${this.domain}`
+    const host = site === 'apex' || site === 'auth' ? this.domain : site === 'old-auth' ? this.authHost : `${site}.${this.domain}`
     return `${this.scheme}//${host}${path}`
   }
 
@@ -361,7 +363,7 @@ export class Harness {
   async org(client, name = 'Example Org') {
     const response = await client.post(this.url('auth', '/orgs/new'), { name })
     assert.equal(response.status, 303, response.text)
-    return new RegExp(`/orgs/(${UUID})`).exec(response.location)[1]
+    return new RegExp(`[?&]org=(${UUID})`).exec(response.location)[1]
   }
 
   /** Invites `email` to `orgId` as `role` and accepts as `invitee` (a user from `user()` with that address). */

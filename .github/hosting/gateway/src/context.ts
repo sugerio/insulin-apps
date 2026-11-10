@@ -65,10 +65,6 @@ export function ownOrigin(ctx: Context): string {
   return originOf(ctx, ctx.host)
 }
 
-export function authUrl(ctx: Context, path: string): string {
-  return `${originOf(ctx, ctx.config.authHost)}${path}`
-}
-
 export function apexUrl(ctx: Context, path = '/'): string {
   return `${originOf(ctx, ctx.config.domain)}${path}`
 }
@@ -77,7 +73,7 @@ export function appUrl(ctx: Context, app: HostedApp, path = '/'): string {
   return `${originOf(ctx, app.host)}${path}`
 }
 
-/** `/login?return_to=…` and friends: a path on the auth host with an optional return address. */
+/** `/login?return_to=…` and friends: a path on the apex with an optional return address. */
 export function withReturnTo(path: string, returnTo: string | null): string {
   if (!returnTo) return path
   return `${path}${path.includes('?') ? '&' : '?'}return_to=${encodeURIComponent(returnTo)}`

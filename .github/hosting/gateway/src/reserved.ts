@@ -1,7 +1,8 @@
 // /__insulin/* on every host: reserved for the gateway and never forwarded to an app. The account bar calls these from
 // inside app pages with same-origin fetch, so the app's CSP (connect-src 'self') allows them.
+import { appAccess } from './access.ts'
 import type { Context } from './context.ts'
-import { apexUrl, authUrl } from './context.ts'
+import { apexUrl, appUrl } from './context.ts'
 import { listCapturedMail } from './db/mail.ts'
 import { findMembership, listMemberships } from './db/orgs.ts'
 import { BodyTooLarge, isFormBody, isJsonBody, isSameOrigin, readText, wantsJson } from './http/request.ts'
@@ -30,15 +31,19 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
   }
 }
 
-/** What the account bar shows: who is signed in, the active organization and role, the other organizations, links. */
+/**
+ * What the account bar shows: who is signed in, the active organization with their role (in an app: their role in that
+ * app), the other organizations, links (in an app: its own people and integrations pages).
+ */
 async function me(ctx: Context): Promise<Response> {
   const session = await loadSession(ctx)
   if (!session?.user.verified) return jsonResponse({ error: 'unauthorized' }, 401)
   const active = await activeOrg(ctx, session)
   const memberships = await listMemberships(ctx.config.db, session.user.id)
+  const access = ctx.app && active ? await appAccess(ctx.config.db, ctx.app, active.id, session.user.id, active.role) : null
   return jsonResponse({
     user: { name: session.user.name, email: session.user.email },
-    organization: active ? { id: active.id, name: active.name, role: active.role, roleLabel: ROLE_LABELS[active.role] } : null,
+    organization: active ? { id: active.id, name: active.name, role: active.role, roleLabel: access?.label ?? ROLE_LABELS[active.role] } : null,
     organizations: memberships.map((membership) => ({
       id: membership.org_id,
       name: membership.org_name,
@@ -47,9 +52,10 @@ async function me(ctx: Context): Promise<Response> {
       active: membership.org_id === active?.id,
     })),
     links: {
-      members: active ? authUrl(ctx, `/orgs/${active.id}`) : authUrl(ctx, '/orgs/new'),
-      organizations: authUrl(ctx, '/'),
-      account: authUrl(ctx, '/account'),
+      members: ctx.app && access ? appUrl(ctx, ctx.app, '/settings/users') : active ? apexUrl(ctx, `/settings/users?org=${active.id}`) : apexUrl(ctx, '/orgs/new'),
+      integrations: ctx.app && access ? appUrl(ctx, ctx.app, '/settings/integrations') : null,
+      organizations: apexUrl(ctx, '/'),
+      account: apexUrl(ctx, '/account'),
       apps: apexUrl(ctx),
     },
   })

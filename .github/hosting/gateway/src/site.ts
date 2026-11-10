@@ -1,20 +1,19 @@
-// The apex pages (landing, privacy notice, terms of use: public and indexable) and the auth host's home page.
+// The apex's own pages: `/` (the landing page, public and indexable, or the signed-in home page), the privacy notice
+// and the terms of use.
 import type { Context } from './context.ts'
-import { listInvitationsFor } from './db/invitations.ts'
+import { listUserGrants } from './db/grants.ts'
+import { listInvitationGrants, listInvitationsFor } from './db/invitations.ts'
 import { listMemberships } from './db/orgs.ts'
 import { htmlResponse } from './http/response.ts'
 import { homePage, landingPage } from './pages/home.tsx'
 import { privacyPage, termsPage } from './pages/legal.tsx'
-import { requireSession } from './auth/guard.ts'
-import { activeOrg, loadSession } from './auth/session.ts'
+import { activeOrg, loadSession, type Session } from './auth/session.ts'
 
+/** `/`: the home page for a signed-in, confirmed user; the landing page (indexable) for everyone else. */
 export async function landing(ctx: Context): Promise<Response> {
   const session = await loadSession(ctx)
-  const signedIn = session?.user.verified ? session : null
-  const [active, memberships] = signedIn
-    ? await Promise.all([activeOrg(ctx, signedIn), listMemberships(ctx.config.db, signedIn.user.id)])
-    : [null, undefined]
-  return htmlResponse(landingPage(ctx, signedIn, active, memberships), { index: true })
+  if (session?.user.verified) return home(ctx, session)
+  return htmlResponse(landingPage(ctx), { index: true })
 }
 
 export function privacy(ctx: Context): Response {
@@ -25,13 +24,16 @@ export function terms(ctx: Context): Response {
   return htmlResponse(termsPage(ctx), { index: true })
 }
 
-export async function authHome(ctx: Context): Promise<Response> {
-  const session = await requireSession(ctx)
-  if (session instanceof Response) return session
+async function home(ctx: Context, session: Session): Promise<Response> {
+  const db = ctx.config.db
   const [memberships, invitations, active] = await Promise.all([
-    listMemberships(ctx.config.db, session.user.id),
-    listInvitationsFor(ctx.config.db, session.user.email, ctx.now),
+    listMemberships(db, session.user.id),
+    listInvitationsFor(db, session.user.email, ctx.now),
     activeOrg(ctx, session),
   ])
-  return htmlResponse(homePage(ctx, session, memberships, invitations, active))
+  const grants = await listInvitationGrants(db, invitations.map((invitation) => invitation.id))
+  // A specific-apps member sees only their apps; an organization role reaches every app.
+  const mine = active?.role === 'APPS' ? new Set((await listUserGrants(db, active.id, session.user.id)).map((grant) => grant.app)) : null
+  const apps = ctx.config.apps.filter((app) => !mine || mine.has(app.name))
+  return htmlResponse(homePage(ctx, session, memberships, invitations, grants, active, apps))
 }

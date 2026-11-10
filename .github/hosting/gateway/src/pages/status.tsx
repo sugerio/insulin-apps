@@ -4,9 +4,10 @@ import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 import { AuthCard, Container, proseLinks } from "@/components/layout"
 import type { HeaderAccount } from "@/components/site-header"
-import type { Session } from "../auth/session.ts"
+import type { ActiveOrg, Session } from "../auth/session.ts"
+import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { apexUrl, authUrl, ownOrigin } from "../context.ts"
+import { apexUrl, ownOrigin } from "../context.ts"
 import { htmlResponse, redirect } from "../http/response.ts"
 import { accountOf, barePage, page } from "./document.tsx"
 
@@ -67,12 +68,25 @@ export function appUnavailablePage(ctx: Context, status: number): Response {
   return messagePage(ctx, status, "This app is not available right now", <p>Please try again in a few minutes.</p>)
 }
 
+/** A member of the active organization who has no access to this app (specific-apps access, without this one). */
+export function noAppAccessPage(ctx: Context, session: Session, org: ActiveOrg, app: HostedApp): Response {
+  return messagePage(ctx, 403, `You don't have access to ${app.title}`, (
+    <>
+      <p>
+        In <strong className="text-foreground">{org.name}</strong>, you have access to specific apps only, and {app.title} isn&apos;t one of
+        them. Ask an owner or admin of the organization to add it, or switch to another organization.
+      </p>
+      <ButtonLink href={apexUrl(ctx)}>See your apps and organizations</ButtonLink>
+    </>
+  ), { user: accountOf(session) })
+}
+
 /** Sessions are only created for confirmed addresses; this covers an account whose address is somehow unconfirmed. */
 export function confirmEmailFirstPage(ctx: Context, session: Session): Response {
   return messagePage(ctx, 403, "Confirm your email first", (
     <p>
       Open the confirmation link we emailed to <strong className="text-foreground">{session.user.email}</strong>, or{" "}
-      <a href={authUrl(ctx, "/resend-verification")}>ask for a new one</a>.
+      <a href={apexUrl(ctx, "/resend-verification")}>ask for a new one</a>.
     </p>
   ), { user: accountOf(session) })
 }
@@ -103,7 +117,7 @@ export function notAllowedPage(ctx: Context, session: Session): Response {
   return messagePage(ctx, 403, "Not allowed", (
     <>
       <p>Your role in this organization doesn&apos;t allow that.</p>
-      <ButtonLink href="/">Back to your organizations</ButtonLink>
+      <ButtonLink href={apexUrl(ctx)}>Back to your organizations</ButtonLink>
     </>
   ), { user: accountOf(session) })
 }
@@ -113,7 +127,7 @@ export function actorChangedPage(ctx: Context, session: Session, orgId: string):
   return messagePage(ctx, 409, "Nothing was changed", (
     <>
       <p>Your role in this organization changed while you were working, so nothing was changed.</p>
-      <ButtonLink href={`/orgs/${orgId}`}>Back to the organization</ButtonLink>
+      <ButtonLink href={apexUrl(ctx, `/settings/users?org=${orgId}`)}>Back to the organization</ButtonLink>
     </>
   ), { user: accountOf(session) })
 }
@@ -157,7 +171,7 @@ function describe(ctx: Context, target: string): string {
   return "your account"
 }
 
-/** The auth home page, the default destination. */
+/** The home page, the default destination. */
 export function home(ctx: Context): string {
-  return authUrl(ctx, "/")
+  return apexUrl(ctx, "/")
 }

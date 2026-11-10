@@ -1,8 +1,9 @@
-// Host and path dispatch. Every POST to the auth host passes the Origin and content-type checks here before its
-// handler runs; /__insulin/* checks its own (reserved.ts). index.ts wraps all of it in the outer security layer.
+// Host and path dispatch. Every form POST to the apex passes the Origin and content-type checks here before its handler
+// runs; /__insulin/* checks its own (reserved.ts). index.ts wraps all of it in the outer security layer. The old auth
+// host only redirects to the apex.
 import { siteIcon, staticAsset } from './assets.ts'
 import { loadConfig } from './config.ts'
-import { createContext, type Context } from './context.ts'
+import { apexUrl, createContext, type Context } from './context.ts'
 import { UUID_PATTERN } from './crypto.ts'
 import type { Env } from './env.ts'
 import { housekeeping } from './housekeeping.ts'
@@ -13,7 +14,7 @@ import { httpsUpgrade, isFromApp, markFromApp } from './http/secure.ts'
 import { log, logError } from './log.ts'
 import { badRequestPage, forbiddenPage, methodNotAllowed, notConfiguredResponse, notFoundPage } from './pages/status.tsx'
 import { proxyToApp } from './proxy.ts'
-import { authHome, landing, privacy, terms } from './site.ts'
+import { landing, privacy, terms } from './site.ts'
 import { accountView, deleteAccount, updateName, updatePassword } from './auth/account.ts'
 import {
   forgot, forgotForm, login, loginForm, logout, resend, resendForm, reset, resetForm, signup, signupForm, verifyEmail,
@@ -22,7 +23,12 @@ import {
 import { googleCallback, googleStart } from './auth/google.ts'
 import { acceptInvitation, declineInvitation, invitationView, invite, resendInvitation, revokeInvitation } from './orgs/invitations.ts'
 import {
-  changeMemberRole, createOrg, deleteOrg, leaveOrg, newOrgForm, orgOverview, removeMember, renameOrg, switchOrg,
+  changeAppRole, inviteToApp, removeFromApp, resendAppInvitation, revokeAppInvitation, appUsers,
+} from './orgs/app-users.ts'
+import { createCustomRole, deleteCustomRole, updateCustomRole } from './orgs/custom-roles.ts'
+import {
+  changeMemberRole, createOrg, deleteOrg, leaveOrg, newOrgForm, orgOverview, organizationSettings, removeMember,
+  renameOrg, rolesSettings, switchOrg, usersSettings,
 } from './orgs/orgs.ts'
 
 type Handler = (ctx: Context, params: string[]) => Promise<Response> | Response
@@ -37,6 +43,7 @@ interface Route {
 const ORG = UUID_PATTERN
 const USER = UUID_PATTERN
 const INVITATION = UUID_PATTERN
+const ROLE = UUID_PATTERN
 
 function route(method: 'GET' | 'POST', path: string, handler: Handler): Route {
   return { method, pattern: new RegExp(`^${path}$`), handler }
@@ -49,15 +56,10 @@ const ICON_ROUTES: Route[] = [
 ]
 
 const APEX_ROUTES: Route[] = [
+  ...ICON_ROUTES,
   route('GET', '/', landing),
   route('GET', '/privacy', privacy),
   route('GET', '/terms', terms),
-  ...ICON_ROUTES,
-]
-
-const AUTH_ROUTES: Route[] = [
-  ...ICON_ROUTES,
-  route('GET', '/', authHome),
   route('GET', '/signup', signupForm),
   route('POST', '/signup', signup),
   route('GET', '/login', loginForm),
@@ -85,6 +87,12 @@ const AUTH_ROUTES: Route[] = [
   route('POST', `/orgs/(${ORG})/invitations`, invite),
   route('POST', `/orgs/(${ORG})/invitations/(${INVITATION})/revoke`, revokeInvitation),
   route('POST', `/orgs/(${ORG})/invitations/(${INVITATION})/resend`, resendInvitation),
+  route('POST', `/orgs/(${ORG})/roles`, createCustomRole),
+  route('POST', `/orgs/(${ORG})/roles/(${ROLE})`, updateCustomRole),
+  route('POST', `/orgs/(${ORG})/roles/(${ROLE})/delete`, deleteCustomRole),
+  route('GET', '/settings/users', usersSettings),
+  route('GET', '/settings/roles', rolesSettings),
+  route('GET', '/settings/organization', organizationSettings),
   route('GET', `/invitations/(${INVITATION})`, invitationView),
   route('POST', `/invitations/(${INVITATION})/accept`, acceptInvitation),
   route('POST', `/invitations/(${INVITATION})/decline`, declineInvitation),
@@ -93,6 +101,21 @@ const AUTH_ROUTES: Route[] = [
   route('POST', '/account/password', updatePassword),
   route('POST', '/account/delete', deleteAccount),
 ]
+
+/** The gateway's own pages on every app host (DESIGN.md §1); everything else there goes to the app. */
+const APP_SETTINGS_ROUTES: Route[] = [
+  route('GET', '/settings/users', appUsers),
+  route('POST', '/settings/users/invite', inviteToApp),
+  route('POST', `/settings/users/(${USER})/role`, changeAppRole),
+  route('POST', `/settings/users/(${USER})/remove`, removeFromApp),
+  route('POST', `/settings/users/invitations/(${INVITATION})/revoke`, revokeAppInvitation),
+  route('POST', `/settings/users/invitations/(${INVITATION})/resend`, resendAppInvitation),
+]
+
+/** Paths on an app host that belong to the gateway: the settings pages and everything below them. */
+export function isGatewayAppPath(path: string): boolean {
+  return /^\/settings\/(?:users|integrations)(?:\/|$)/.test(path)
+}
 
 export async function handleRequest(request: Request, env: Env, exec: ExecutionContext): Promise<Response> {
   const url = new URL(request.url)
@@ -129,9 +152,18 @@ function toHttps(ctx: Context): Response {
 async function dispatch(ctx: Context): Promise<Response> {
   if (ctx.site === 'other') return notFoundPage(ctx)
   const path = ctx.url.pathname
+  if (ctx.site === 'auth') return authRedirect(ctx)
   if (path === '/__insulin' || path.startsWith('/__insulin/')) return reservedRoutes(ctx)
-  if (ctx.site === 'app') return proxyToApp(ctx, ctx.app!)
-  return runRoutes(ctx, ctx.site === 'auth' ? AUTH_ROUTES : APEX_ROUTES)
+  if (ctx.site === 'app') return isGatewayAppPath(path) ? runRoutes(ctx, APP_SETTINGS_ROUTES) : proxyToApp(ctx, ctx.app!)
+  return runRoutes(ctx, APEX_ROUTES)
+}
+
+/**
+ * Sign-in used to live on auth.<domain>; links in e-mails already sent point there. A 308 keeps the method and body,
+ * but a form posted from an old page still fails the apex's Origin check, which is right: it came from another origin.
+ */
+function authRedirect(ctx: Context): Response {
+  return redirect(apexUrl(ctx, `${ctx.url.pathname}${ctx.url.search}`), 308)
 }
 
 async function runRoutes(ctx: Context, routes: Route[]): Promise<Response> {
@@ -154,7 +186,7 @@ async function runRoutes(ctx: Context, routes: Route[]): Promise<Response> {
   return notFoundPage(ctx)
 }
 
-/** POSTs to the auth host: from the auth host's own pages, as a small urlencoded form. Otherwise 403, 415 or 413. */
+/** Form POSTs to the apex: from the apex's own pages, as a small urlencoded form. Otherwise 403, 415 or 413. */
 async function readPostForm(ctx: Context): Promise<Response | null> {
   if (!isSameOrigin(ctx)) {
     log('origin_rejected', { site: ctx.site, path: ctx.url.pathname })

@@ -14,7 +14,7 @@ export interface Env {
   RL_APP?: RateLimit
 
   SITE_DOMAIN?: string
-  /** JSON: [{ name, title, summary, binding, source }]. A wrangler `vars` object arrives already parsed. */
+  /** JSON: [{ name, title, summary, binding, source, permissions }]. A wrangler `vars` object arrives already parsed. */
   SITE_APPS?: unknown
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
@@ -24,6 +24,8 @@ export interface Env {
   EMAIL_FROM?: string
   /** Optional contact address shown on the landing, privacy and terms pages. */
   SUPPORT_EMAIL?: string
+  /** Base64 of 32 random bytes: encrypts stored secrets and derives the apps' integration tokens. Optional. */
+  GATEWAY_SECRET_KEY?: string
   /** Local development and tests only (`test`); the deploy never sets it. */
   SITE_ENV?: string
 

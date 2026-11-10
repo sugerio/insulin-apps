@@ -191,6 +191,7 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
     routes: [
       settings.siteDomain,
       `www.${settings.siteDomain}`,
+      // Sign-in moved to the apex; the old host stays attached so links in e-mails already sent redirect.
       `auth.${settings.siteDomain}`,
       ...apps.map(({ name }) => `${name}.${settings.siteDomain}`),
     ].map(
@@ -709,7 +710,7 @@ function writeJson(path, value) {
 
 function writeSummary(path, domain, apps) {
   if (!path) return
-  const urls = [`https://${domain}`, `https://auth.${domain}`, ...apps.map(({ name }) => `https://${name}.${domain}`)]
+  const urls = [`https://${domain}`, ...apps.map(({ name }) => `https://${name}.${domain}`)]
   appendFileSync(path, `## Deployed apps\n\n${urls.map((url) => `- ${url}`).join('\n')}\n`)
 }
 

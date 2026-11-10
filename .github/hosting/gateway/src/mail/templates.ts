@@ -1,7 +1,6 @@
 // The gateway's e-mails, as plain text and HTML. Names and organization names are user input: the HTML part escapes
 // them through the `html` tag, and they never contain line breaks (validate.ts removes control characters).
 import { html, type Html } from '../pages/html.ts'
-import { ROLE_LABELS, type Role } from '../roles.ts'
 
 export interface MailContent {
   subject: string
@@ -81,17 +80,17 @@ export function resetPasswordMail(name: string, link: string): MailContent {
   }
 }
 
-export function invitationMail(inviter: string, orgName: string, role: Role, link: string): MailContent {
-  const label = ROLE_LABELS[role]
+/** `access` says what joining gives, as accessPhrase() words it: "as Admin", "with access to Cap Table as Editor". */
+export function invitationMail(inviter: string, orgName: string, access: string, link: string): MailContent {
   return {
     subject: `${inviter} invited you to ${orgName} on ${PRODUCT}`,
     text: textBody([
-      `${inviter} invited you to join the organization "${orgName}" as ${label} on ${PRODUCT}.`,
+      `${inviter} invited you to join the organization "${orgName}" ${access} on ${PRODUCT}.`,
       `Open the invitation: ${link}`,
       'To accept, sign in or create an account with this email address. The invitation expires in 7 days. If you don\'t know the sender, you can ignore this email.',
     ]),
     html: htmlBody([
-      html`${inviter} invited you to join the organization <strong>${orgName}</strong> as ${label} on ${PRODUCT}.`,
+      html`${inviter} invited you to join the organization <strong>${orgName}</strong> ${access} on ${PRODUCT}.`,
       html`To accept, sign in or create an account with this email address. The invitation expires in 7 days. If you don't know the sender, you can ignore this email.`,
     ], { label: 'Open the invitation', url: link }),
   }

@@ -52,7 +52,9 @@ test('the app receives exactly the console identity headers', async () => {
   assert.match(received.headers['x-suger-organization-id'], UUID_RE, 'organization ids are UUIDs')
   assert.ok(received.headers['x-suger-organization-id'].length <= 128)
   assert.equal(received.headers['x-suger-app-id'], 'insulin-apps-captable')
-  assert.equal(received.headers['x-suger-app-role'], 'OWNER')
+  assert.equal(received.headers['x-suger-app-role'], 'ADMIN', 'an owner is an admin in every app')
+  assert.equal(received.headers['x-suger-access-via'], 'browser')
+  assert.equal(received.headers['x-suger-app-permissions'], undefined, 'this app declares no permissions')
   assert.equal(received.headers['x-suger-user-email'], encodeURIComponent(person.email))
   assert.equal(received.headers['x-suger-user-name'], encodeURIComponent('Zoë O\'Brien & Co'))
   assert.equal(decodeURIComponent(received.headers['x-suger-user-name']), 'Zoë O\'Brien & Co')
@@ -64,6 +66,7 @@ test('header spoofing: x-suger-* headers from the browser never reach the app, i
     headers: {
       'X-Suger-User-Id': 'usr_spoofed', 'x-suger-organization-id': 'org_spoofed', 'X-SUGER-APP-ROLE': 'OWNER',
       'x-Suger-App-Id': 'evil', 'x-suger-user-email': 'boss%40example.test', 'X-Suger-Extra': 'smuggled',
+      'x-suger-app-permissions': 'everything', 'x-suger-access-via': 'api',
     },
   })
   assert.equal(received.headers['x-suger-user-id'], person.id)
@@ -71,6 +74,8 @@ test('header spoofing: x-suger-* headers from the browser never reach the app, i
   assert.equal(received.headers['x-suger-app-id'], 'insulin-apps-captable')
   assert.equal(received.headers['x-suger-user-email'], encodeURIComponent(person.email))
   assert.equal(received.headers['x-suger-extra'], undefined)
+  assert.equal(received.headers['x-suger-app-permissions'], undefined)
+  assert.equal(received.headers['x-suger-access-via'], 'browser')
   const anonymous = await h.client().get(h.url('captable', '/api/echo'), { headers: { 'x-suger-user-id': 'usr_x', 'x-suger-organization-id': 'org_x', 'x-suger-app-id': 'a', 'x-suger-app-role': 'OWNER' } })
   assert.equal(anonymous.status, 401, 'spoofed identity without a session gets nowhere')
 })
@@ -195,9 +200,10 @@ test('/__insulin/me tells the account bar who is signed in and where things are'
   assert.equal(response.headers.get('cache-control'), 'no-store')
   const me = JSON.parse(response.text)
   assert.deepEqual(me.user, { name: 'Bar User', email: person.email })
-  assert.deepEqual(me.organization, { id: person.orgId, name: 'Bar Org', role: 'OWNER', roleLabel: 'Owner' })
+  assert.deepEqual(me.organization, { id: person.orgId, name: 'Bar Org', role: 'OWNER', roleLabel: 'Admin' }, 'in an app, the role there')
   assert.deepEqual(me.organizations.map((org) => [org.id, org.active]), [[person.orgId, true], [second, false]])
-  assert.equal(me.links.members, h.url('auth', `/orgs/${person.orgId}`))
+  assert.equal(me.links.members, h.url('captable', '/settings/users'), "in an app, the app's own people")
+  assert.equal(me.links.integrations, h.url('captable', '/settings/integrations'))
   assert.equal(me.links.apps, h.url('apex', '/'))
   assert.equal(me.links.account, h.url('auth', '/account'))
 })

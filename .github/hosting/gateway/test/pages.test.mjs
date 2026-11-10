@@ -22,23 +22,25 @@ test('the landing page presents the hosted apps, with sign-in links, and links t
   assert.ok(page.text.includes('href="http://captable.insulinapps.localhost/">Open Cap Table</a>'))
   assert.match(page.text, /href="https:\/\/github\.com\/example\/insulin-apps\/tree\/main\/captable"><svg[^>]*>[\s\S]*?<\/svg>Source<\/a>/)
   assert.match(page.text, /<h3>Ledger<\/h3>[\s\S]*?Not available right now/, 'an app whose Worker is missing')
-  assert.ok(page.text.includes(`href="http://auth.insulinapps.localhost/signup?return_to=${encodeURIComponent('http://insulinapps.localhost/')}"`))
+  assert.ok(page.text.includes(`href="http://insulinapps.localhost/signup?return_to=${encodeURIComponent('http://insulinapps.localhost/')}"`))
   assert.ok(page.text.includes(`href="${PRIVACY}"`))
   assert.ok(page.text.includes(`href="${TERMS}"`))
   assert.match(page.text, /without an uptime guarantee/)
   assert.ok(page.text.includes('href="https://github.com/example/insulin-apps/issues"'), 'contact falls back to the repository issues')
 })
 
-test('signed in, the landing page shows the user and organization, and signs out on its own host', async () => {
+test('signed in, / is the home page with the organizations and their apps, and signs out on its own host', async () => {
   const person = await h.user({ name: 'Landing Person' })
   await h.org(person.client, 'Landing Org')
   const page = await person.client.get(h.url('apex', '/'))
-  assert.match(page.text, /Signed in as <strong>Landing Person<\/strong>, working in <strong>Landing Org<\/strong> as Owner/)
-  assert.match(page.text, /<form action="\/__insulin\/logout" method="post">/)
-  const out = await person.client.post(h.url('apex', '/__insulin/logout'), {})
+  assert.match(page.text, /<h1>Welcome, Landing Person<\/h1>/)
+  assert.match(page.text, /<h2>Apps in Landing Org<\/h2>/)
+  assert.equal(page.headers.get('x-robots-tag'), 'noindex', 'the home page is private')
+  assert.match(page.text, /<form action="\/logout" method="post">/)
+  const out = await person.client.post(h.url('apex', '/logout'), {})
   assert.equal(out.status, 303)
-  assert.equal(out.location, h.url('apex', '/'))
-  assert.doesNotMatch((await person.client.get(h.url('apex', '/'))).text, /Signed in as/)
+  const after = await person.client.get(h.url('apex', '/'))
+  assert.match(after.text, /<title>Open-source apps, hosted · Insulin Apps<\/title>/, 'the landing page again')
 })
 
 test('the privacy notice covers what is collected, why, processors, retention, deletion, children, changes and contact', async () => {
@@ -52,7 +54,7 @@ test('the privacy notice covers what is collected, why, processors, retention, d
     'IP address', 'invited email|email addresses people invite', 'No ads', 'not reset', 'under 16', 'Delete my account', 'never issued again']) {
     assert.match(page.text, new RegExp(fact), fact)
   }
-  assert.ok(page.text.includes('href="http://auth.insulinapps.localhost/account"'))
+  assert.ok(page.text.includes('href="http://insulinapps.localhost/account"'))
   assert.ok(page.text.includes('href="https://github.com/example/insulin-apps/issues"'))
   assert.match(page.text, /don(?:&#x27;|&#39;|')t post personal data/)
 })

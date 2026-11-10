@@ -8,6 +8,7 @@ import { securityHeaders } from './middleware/security-headers.ts'
 import { commandRoutes } from './routes/commands.ts'
 import { documentRoutes, portalDocumentRoutes } from './routes/documents.ts'
 import { ledgerAdminRoutes, ledgerWriteRoutes } from './routes/ledger-admin.ts'
+import { catalogRoutes } from './routes/catalog.ts'
 import { meRoutes } from './routes/me.ts'
 import { orgRoutes as orgWriteRoutes } from './routes/orgs.ts'
 import { paymentInstructionRoutes } from './routes/payment-instructions.ts'
@@ -23,10 +24,6 @@ export function createDeps(options: Partial<AppDeps> = {}): AppDeps {
     now: options.now ?? Date.now,
     runImportBatch: options.runImportBatch ?? ((db, statements) => db.batch(statements)),
   }
-}
-
-function hasWriteAccess(role: string): boolean {
-  return role === 'OWNER' || role === 'ADMIN'
 }
 
 function isReadOnlyMutation(method: string, path: string): boolean {
@@ -55,7 +52,7 @@ export function createApp(options: Partial<AppDeps> & { enforceSameOrigin?: bool
     }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)
       && !isReadOnlyMutation(c.req.method, c.req.path)
-      && hasWriteAccess(auth.consoleRole)
+      && auth.fullAccess
       && !auth.user.email) {
       throw new ApiError('forbidden', 'Add an e-mail address to your console profile before making changes')
     }
@@ -77,24 +74,22 @@ export function createApp(options: Partial<AppDeps> & { enforceSameOrigin?: bool
   app.use('/api/orgs/:orgId', requireCompany)
   app.use('/api/orgs/:orgId/*', requireCompany)
 
-  app.use('/api/admin/*', async (c, next) => {
-    if (!hasWriteAccess(c.get('auth').consoleRole)) {
-      throw new ApiError('forbidden', 'Administrator access is required')
+  // Ledger verification and the company import: only for those who record changes.
+  const requireManage: MiddlewareHandler<AppEnv> = async (c, next) => {
+    if (!c.get('auth').fullAccess) {
+      throw new ApiError('forbidden', 'Your role can view the cap table but not change it')
     }
     await next()
-  })
-  app.use('/api/import/*', async (c, next) => {
-    if (!hasWriteAccess(c.get('auth').consoleRole)) {
-      throw new ApiError('forbidden', 'Administrator access is required')
-    }
-    await next()
-  })
+  }
+  app.use('/api/admin/*', requireManage)
+  app.use('/api/import/*', requireManage)
   app.use('/api/portal/*', async (c, next) => {
     if (c.get('auth').portalMatches.length === 0) throw notFound()
     await next()
   })
 
   app.route('/api/me', meRoutes(deps))
+  app.route('/api/catalog', catalogRoutes())
   app.route('/api/import', importRoutes(deps))
   app.route('/api/orgs', orgWriteRoutes(deps))
   app.route('/api/orgs', orgReadRoutes())

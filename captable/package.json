@@ -6,6 +6,13 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "insulin": {
+    "permissions": [
+      { "key": "captable.manage", "label": "Record changes", "description": "Record and reverse equity changes, run imports and manage documents. Includes viewing the whole cap table.", "role": "EDITOR" },
+      { "key": "captable.view", "label": "View the cap table", "description": "See the whole cap table, stakeholders, reports and documents, read only.", "role": "EDITOR" },
+      { "key": "portfolio.view", "label": "See own holdings", "description": "See their own holdings in the holder view, matched by their e-mail address.", "role": "VIEWER" }
+    ]
+  },
   "imports": {
     "#shared": "./src/app/shared/index.ts",
     "#/*": "./src/*"

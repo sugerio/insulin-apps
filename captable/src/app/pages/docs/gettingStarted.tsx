@@ -1,7 +1,8 @@
 import { DocLink, DocTable, type DocTopic } from "./parts.tsx";
 
-// Docs › Getting started: what the app does, the roles, preview mode and the first-run setup. It follows README.md
-// ("What it does", "Good to know", "Who can do what") and docs/importing.md ("Where to find the import").
+// Docs › Getting started: what the app does, the roles and custom roles, AI agents, preview mode and the first-run
+// setup. It follows README.md ("What it does", "Good to know", "Who can do what") and docs/importing.md ("Where to find
+// the import"). The permissions' names and texts are package.json's `insulin.permissions`.
 
 export const gettingStarted: DocTopic = {
   slug: "getting-started",
@@ -44,25 +45,50 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Cap Table uses the role each person has on the app in the Insulin console. There are no separate accounts or
-            passwords: everyone opens Cap Table from the console.
+            Cap Table uses the role each person has in your Insulin organization, or on Cap Table alone. There are no separate
+            accounts or passwords: everyone signs in to Insulin and opens Cap Table from there.
           </p>
           <DocTable
-            label="Console roles and what they allow"
-            columns={["Console role", "In Cap Table"]}
+            label="Roles and what they allow"
+            columns={["Role", "In Cap Table"]}
             rows={[
-              ["Owner, Admin", "Manage the cap table: set up the company, import, add and edit stakeholders, record grants, exercises, terminations and cancellations, record valuations, upload documents, change the settings and download reports."],
-              ["Editor", "See everything, including personal details such as e-mail addresses and phone numbers, and download reports. Change nothing."],
-              ["User, Viewer", "See only their own holdings: the stakeholder records that carry the e-mail address of their console account."],
+              ["Owner, Admin, Editor", "Manage the cap table: set up the company, import, add and edit stakeholders, record grants, exercises, terminations and cancellations, record valuations, upload documents, change the settings and download reports."],
+              ["Viewer (and User, in the Insulin console)", "See only their own holdings: the stakeholder records that carry the e-mail address of their account."],
             ]}
           />
           <ul>
-            <li><b>Holders are matched by e-mail.</b> A User or Viewer sees a stakeholder record when it lists the e-mail address of their console account as the person's own address (not as a contact for an institution). Capital letters don't matter. If someone sees no holdings, an owner or admin adds their console e-mail address to their stakeholder record.</li>
+            <li><b>Holders are matched by e-mail.</b> A Viewer sees a stakeholder record when it lists the e-mail address of their account as the person's own address (not as a contact for an institution). Capital letters don't matter. If someone sees no holdings, someone who manages the cap table adds their e-mail address to their stakeholder record.</li>
             <li><b>One person, several records.</b> Someone who holds equity personally and through, say, a trust sees every record that lists their address as its own.</li>
-            <li><b>Owners and admins need an e-mail address on their console profile</b> to make changes.</li>
-            <li><b>Nobody records changes to their own holdings.</b> Cap Table refuses a change to a stakeholder, or to their holdings, when the record carries the e-mail address of the owner or admin making it. Another owner or admin has to record it.</li>
-            <li><b>Choose editors with care.</b> In the console, an editor can also publish the app, which is much more than viewing. Give the role only to people you would trust with the whole cap table.</li>
+            <li><b>Making changes needs an e-mail address</b> on your profile, so that every change in the history names who made it.</li>
+            <li><b>Nobody records changes to their own holdings.</b> Cap Table refuses a change to a stakeholder, or to their holdings, when the record carries the e-mail address of the person making it. Someone else who manages the cap table has to record it.</li>
+            <li><b>Choose editors with care.</b> An editor changes the cap table just as an admin does. Give the role only to people you would trust with the whole cap table.</li>
           </ul>
+          <h3 id="custom-roles" tabIndex={-1}>Access to Cap Table only, and custom roles</h3>
+          <p>
+            On insulinapps.com, your organization's owners and admins can give someone access to Cap Table alone, as an Admin,
+            Editor or Viewer of the app, instead of a role across the whole organization. The organization's owner can also make
+            custom roles for Cap Table from three permissions:
+          </p>
+          <DocTable
+            label="The permissions a custom role is made from"
+            columns={["Permission", "What it allows"]}
+            rows={[
+              ["Record changes", "Record and reverse equity changes, run imports and manage documents. Includes viewing the whole cap table."],
+              ["View the cap table", "See the whole cap table, stakeholders, reports and documents, read only. Personal details are shown; bank account numbers and the EIN are partly hidden."],
+              ["See own holdings", "See their own holdings in the holder view, matched by their e-mail address."],
+            ]}
+          />
+          <p>
+            A custom role with <b>View the cap table</b> but not <b>Record changes</b> opens the company workspace and changes
+            nothing. Cap Table shows "Custom role" under the person's name for anyone whose role was narrowed this way.
+          </p>
+          <h3 id="ai-agents" tabIndex={-1}>AI agents and API clients</h3>
+          <p>
+            On insulinapps.com, people can connect an AI agent, such as Claude or Codex, to Cap Table, and app admins can set up
+            API clients for other systems. An AI agent acts with the role and permissions of the person who connected it, and an
+            API client with the role it was given: neither can do anything that role can't. Their changes appear in the history
+            under the person's or the client's name, like any other change.
+          </p>
           <h3 id="preview-mode" tabIndex={-1}>Preview mode</h3>
           <p>
             When you try Cap Table in the console's preview, or run it on your own computer, there is no console account behind
@@ -82,13 +108,13 @@ export const gettingStarted: DocTopic = {
             Cap Table keeps one company's cap table for each Insulin organization. Switching organizations in the Insulin
             console switches the company Cap Table opens; each organization sets up or imports its own company independently.
           </p>
-          <p>The first owner or admin of each organization to open the published app chooses how to start:</p>
+          <p>The first owner, admin or editor of each organization to open the published app chooses how to start:</p>
           <ul>
             <li><b>Start with an empty company.</b> Enter the company's name, legal name, state and date of incorporation, time zone and fiscal year end. The time zone decides when "today" starts for vesting and deadlines. You can import into the company later, as long as nothing has been added to it yet.</li>
             <li><b>Import from Pulley.</b> Upload Pulley's standard reports.</li>
             <li><b>Import from a spreadsheet.</b> Download the Cap Table spreadsheet template, fill it in and upload it.</li>
           </ul>
-          <p>Until a company is set up, editors and holders see a page saying that Cap Table isn't set up yet.</p>
+          <p>Until a company is set up, everyone else sees a page saying that Cap Table isn't set up yet.</p>
           <p>
             <b>Practise first.</b> Run the whole import in the console's preview, look around, and only then repeat it in the
             published app: an import in the published app is permanent. <DocLink to="importing">Importing your cap table</DocLink> walks
@@ -106,7 +132,7 @@ export const gettingStarted: DocTopic = {
           <li><b>Upload your documents.</b> Agreements, board consents, certificates, plan documents and valuation reports, each linked to the record it belongs to. Choose which ones holders may see.</li>
           <li><b>Record your current 409A valuation.</b> The import doesn't bring valuations in, and new option grants need a valid one.</li>
           <li><b>Fill in what holders see:</b> the company contact, the How to exercise text and the payment instructions.</li>
-          <li><b>Give holders access.</b> Make sure each holder's stakeholder record has, as their own address, the e-mail address of their console account. Then give them the User or Viewer role on the app in the console.</li>
+          <li><b>Give holders access.</b> Make sure each holder's stakeholder record has, as their own address, the e-mail address of their account. Then give them the Viewer role (User or Viewer in the Insulin console), or a custom role with <b>See own holdings</b>.</li>
         </ol>
       ),
     },
@@ -115,7 +141,7 @@ export const gettingStarted: DocTopic = {
       title: "Finding your way around",
       body: (
         <>
-          <p>Owners, admins and editors see the company workspace. Its sidebar has:</p>
+          <p>Owners, admins and editors, and anyone whose custom role lets them view the cap table, see the company workspace. Its sidebar has:</p>
           <ul>
             <li><b>Dashboard:</b> company totals, how much of each equity plan is granted, ownership by group, the largest stakeholders, recent activity, and <b>Needs attention</b>.</li>
             <li><b>Cap Table:</b> ownership by stakeholder and a tab for each kind of security, as of any date. Under it: <b>Share Classes</b>, <b>Equity Plans</b>, <b>Securities Status</b> (lists that need attention) and <b>Vesting</b>.</li>
@@ -124,7 +150,7 @@ export const gettingStarted: DocTopic = {
             <li><b>Stakeholders</b>, <b>Company</b> (with <b>Documents</b>, <b>Reports</b> and <b>Recent Activity</b>) and <b>Certificates</b> (with <b>Legends</b> and <b>Terms</b>).</li>
           </ul>
           <p>
-            Owners and admins also have <b>+ New</b> at the top of the sidebar, to record a signed option grant. Holders see{" "}
+            Everyone who records changes also has <b>+ New</b> at the top of the sidebar, to record a signed option grant. Holders see{" "}
             <b>Portfolio</b>, <b>How to exercise</b> and <b>Documents</b>. Everyone finds <b>Docs</b> at the bottom of the
             sidebar, and their name, role and the theme switch in the menu at the top right.
           </p>

@@ -30,6 +30,8 @@ export function meRoutes(deps: AppDeps) {
     return c.json(api.meResponseSchema.parse({
       user: auth.user,
       consoleRole: auth.consoleRole,
+      permissions: api.PERMISSIONS.filter((permission) => auth.permissions.has(permission)),
+      accessVia: auth.accessVia,
       preview: auth.preview,
       company: company && {
         id: company.id,

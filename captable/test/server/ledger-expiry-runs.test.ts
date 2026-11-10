@@ -80,7 +80,7 @@ describe('expiry runs', () => {
     expect((await l.api('GET', l.path('/expiry-runs/seventy'), l.sa)).status).toBe(404)
   })
 
-  it('refuses a holder and a read-only EDITOR before it looks at the run id, and answers an administrator 404 for a missing run', async () => {
+  it('refuses a holder and a read-only custom role before it looks at the run id, and answers an administrator 404 for a missing run', async () => {
     const l = await harness()
     const runId = await runDaily(l)
     // Whatever the id (the run's, a missing one, a UUID, not a number), a holder gets the concealed company.
@@ -90,7 +90,7 @@ describe('expiry runs', () => {
       expect((await response.json() as { error: { code: string } }).error.code, id).toBe('not_found')
       expect((await l.api('POST', l.path(`/expiry-runs/${id}/confirm?dryRun=true`), holder, { securityIds: [] })).status, id).toBe(404)
     }
-    // A read-only EDITOR on the confirmation: refused before the run is looked up, whatever its id.
+    // A read-only custom role on the confirmation: refused before the run is looked up, whatever its id.
     for (const id of [String(runId), '999999', '00000000-0000-4000-8000-000000000001']) {
       const response = await l.api('POST', l.path(`/expiry-runs/${id}/confirm?dryRun=true`), l.ro, { securityIds: [] })
       expect(response.status, id).toBe(403)
@@ -161,7 +161,7 @@ describe('expiry runs', () => {
     expect(api.expiryRunDetailSchema.parse(await getJson(l, l.sa, `/expiry-runs/${runId}`)).proposals.find((p) => p.displayId === 'OPT-26')!.confirmable).toBeNull()
   })
 
-  it("shows the holder's name and e-mail to every administrator, the read-only EDITOR included", async () => {
+  it("shows the holder's name and e-mail to every administrator, the read-only custom role included", async () => {
     const l = await harness()
     const runId = await runDaily(l)
     const holderOf = async (identity: Record<string, string>) => api.expiryRunDetailSchema.parse(await getJson(l, identity, `/expiry-runs/${runId}`)).proposals.find((p) => p.displayId === 'OPT-26')!.holder

@@ -48,8 +48,8 @@ holdings.
 - **No e-mail.** The app doesn't send messages; tell people yourself when something changes for them.
 - **No signatures or payments.** Agreements are signed elsewhere and uploaded; payments happen outside the app and are
   recorded in it.
-- **No background jobs.** Scheduled terminations and option expiries take effect when an owner or admin opens the
-  dashboard, or chooses **Process due items** there.
+- **No background jobs.** Scheduled terminations and option expiries take effect when an owner, admin or editor opens
+  the dashboard, or chooses **Process due items** there.
 - **Not a valuation, tax or legal service.** It records 409A valuations but doesn't perform them, and it doesn't file tax
   forms or give advice.
 - **One company per Insulin organization.** Switching organizations in the Insulin console switches the company Cap
@@ -71,7 +71,7 @@ holdings.
    setting on **Console**: Cap Table relies on the console to know who is using it, and opened any other way it only
    says "Open this app from the Insulin console".
 4. **Give people access.** In the console, give each person a role on the app (see [Who can do what](#who-can-do-what)).
-5. **Set up your company.** The first owner or admin to open the published app chooses how to start: **Start with an
+5. **Set up your company.** The first owner, admin or editor to open the published app chooses how to start: **Start with an
    empty company**, **Import from Pulley**, or **Import from a spreadsheet** (with **Download the template**). An empty
    company asks for its name, legal name, state and date of incorporation, time zone (which decides when "today" starts
    for vesting and deadlines) and fiscal year end; you can still import into it later, as long as nothing has been added
@@ -82,22 +82,34 @@ holdings.
 
 ## Who can do what
 
-Cap Table uses the roles people have on the app in the Insulin console. There are no separate accounts or passwords.
+Cap Table uses the role each person has in the Insulin organization, or on Cap Table alone. There are no separate
+accounts or passwords.
 
-| Console role | In Cap Table |
+| Role | In Cap Table |
 |---|---|
-| Owner, Admin | Manage the cap table: the import, stakeholders, grants, exercises, terminations, valuations, documents, settings and reports. |
-| Editor | See everything, including personal details, and download reports. Change nothing. |
-| User, Viewer | The holder view: their own holdings only. |
+| Owner, Admin, Editor | Manage the cap table: the import, stakeholders, grants, exercises, terminations, valuations, documents, settings and reports. |
+| Viewer (and User, in the Insulin console) | The holder view: their own holdings only. |
 
-- **Holders are matched by e-mail.** A User or Viewer sees the stakeholder records that carry the e-mail address of their
-  console account as the person's own address (not as a contact for an institution); capitals don't matter. If someone
-  sees no holdings, add their console e-mail address to their stakeholder record.
-- **Owners and admins need an e-mail address on their console profile** to make changes.
-- **Owners and admins who hold equity** can't record changes to their own stakeholder record or holdings: another
-  owner or admin has to. They see their holdings in the cap table itself; the holder view is for Users and Viewers.
-- **About the Editor role:** in the console, an editor can also publish the app from the AppBuilder, which is much more
-  than viewing. Give it only to people you would trust with the whole cap table.
+On insulinapps.com, an organization's owners and admins can also give someone access to Cap Table alone (Admin, Editor
+or Viewer of the app), and its owner can make **custom roles** for Cap Table from three permissions, which
+`package.json` declares under `insulin.permissions`:
+
+| Permission | What it allows |
+|---|---|
+| Record changes | Record and reverse equity changes, run imports and manage documents; includes viewing the whole cap table. |
+| View the cap table | The whole cap table, stakeholders, reports and documents, read only, with personal details; bank account numbers and the EIN partly hidden. |
+| See own holdings | The holder view, matched by e-mail address. |
+
+- **Holders are matched by e-mail.** A Viewer sees the stakeholder records that carry the e-mail address of their
+  account as the person's own address (not as a contact for an institution); capitals don't matter. If someone sees no
+  holdings, add their e-mail address to their stakeholder record.
+- **Making changes needs an e-mail address** on the person's profile.
+- **People who hold equity** can't record changes to their own stakeholder record or holdings: someone else who manages
+  the cap table has to. Those who manage it see their holdings in the cap table itself; the holder view is for Viewers.
+- **About the Editor role:** an editor changes the cap table just as an admin does (and, in the Insulin console, can also
+  publish the app). Give it only to people you would trust with the whole cap table.
+- **AI agents and API clients** (on insulinapps.com) act with the role and permissions of the person who connected
+  them, or the role the client was given, and their changes are in the history like any other.
 
 ## The holder view
 
@@ -110,7 +122,7 @@ When a holder opens Cap Table they see:
 - the documents you have made visible to them, and the company resources you share with all holders;
 - **Docs**: what they see and how to read it, how exercising works, and the basics of equity.
 
-They never see the cap table, other holders or ownership percentages. Owners, admins and editors can open any stakeholder
+They never see the cap table, other holders or ownership percentages. Everyone in the company workspace can open any stakeholder
 and choose **Preview as stakeholder** to see that person's holdings, exercise instructions and documents as they see
 them; the holder's **Docs** entry isn't part of the preview.
 
@@ -119,7 +131,7 @@ them; the holder's **Docs** entry isn't part of the preview.
 | Guide | For |
 |---|---|
 | **Docs**, in the app | Everyone: getting started, importing, everyday tasks, the holder view, equity basics and a glossary. |
-| [Using Cap Table](docs/using-cap-table.md) | Owners and admins: everyday tasks. |
+| [Using Cap Table](docs/using-cap-table.md) | Owners, admins and editors: everyday tasks. |
 | [Importing your cap table](docs/importing.md) | Whoever sets up the company: from Pulley or the spreadsheet template, step by step in the browser. |
 | [Architecture](docs/architecture.md) | Developers: how the app works. |
 | [AGENTS.md](AGENTS.md) | AI coding agents (including the Insulin AppBuilder) and contributors: the rules of the codebase. |

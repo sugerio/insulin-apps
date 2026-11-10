@@ -25,8 +25,8 @@ There is nothing to install, no command line, and no keys or passwords to look a
 
 ## Before you start
 
-- **You need to be an owner or admin** of the Cap Table app in the Insulin console, with an e-mail address on your
-  console profile.
+- **You need to be an owner, admin or editor** (or have a custom role with **Record changes**), with an e-mail address
+  on your profile.
 - **The import sets up an empty company.** It works only while the company has no stakeholders and no recorded
   transactions, and none of these saved yet: documents, document folders, payment instructions, signatories, legends or
   valuations. If you chose to start with an empty company and haven't added any of those, you can still import: the
@@ -40,10 +40,11 @@ There is nothing to install, no command line, and no keys or passwords to look a
 
 ## Where to find the import
 
-- **The first time an owner or admin opens Cap Table**, the setup page says "Choose how to start" and offers three ways:
-  **Start with an empty company**, **Import from Pulley**, and **Import from a spreadsheet** (which also has **Download the
-  template**). Editors and holders see that Cap Table isn't set up yet, and are asked to wait for an owner or admin.
-- **Later**, while nothing is recorded, an owner's or admin's dashboard shows "Nothing is recorded in this cap table
+- **The first time someone who records changes opens Cap Table**, the setup page says "Choose how to start" and offers
+  three ways: **Start with an empty company**, **Import from Pulley**, and **Import from a spreadsheet** (which also has
+  **Download the template**). Everyone else sees that Cap Table isn't set up yet, and is asked to wait for an owner or
+  admin.
+- **Later**, while nothing is recorded, the dashboard of anyone who records changes shows "Nothing is recorded in this cap table
   yet" with **Import the cap table**. If the company already has stakeholders or recorded transactions, the import page
   says "Import isn't available for this company" and why.
 
@@ -310,7 +311,8 @@ that already has stakeholders or records.
 3. **Record your current 409A valuation.** The import doesn't bring valuations in, and new grants need a valid one.
 4. **Fill in what holders see:** the company contact, the How to exercise text and the payment instructions.
 5. **Give holders access.** Make sure each holder's stakeholder record has, as their own address, the e-mail address of
-   their Insulin console account, then give them the User or Viewer role on the app in the console.
+   their Insulin account, then give them the Viewer role (User or Viewer in the Insulin console), or a custom role with
+   **See own holdings**.
 
 ## What isn't imported
 

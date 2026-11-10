@@ -341,6 +341,8 @@ export const ENDPOINT_EXAMPLES: Record<RouteId, EndpointExample> = {
     response: {
       user: { id: USER_ID, email: "morgan.admin@example.test", displayName: "Morgan Admin" },
       consoleRole: "ADMIN",
+      permissions: ["captable.manage", "captable.view", "portfolio.view"],
+      accessVia: "browser",
       preview: false,
       company: { id: ORG_ID, displayName: "Acme Robotics", legalName: "Acme Robotics, Inc.", timezone: "America/Los_Angeles", currency: "USD", importSource: "pulley" },
       access: "admin_rw",
@@ -348,7 +350,22 @@ export const ENDPOINT_EXAMPLES: Record<RouteId, EndpointExample> = {
       portal: { matches: [{ orgId: ORG_ID, stakeholderId: STAKEHOLDER_ID, stakeholderName: "Dana Example" }] },
       serverTime: T,
     },
-    invalid: [{ response: { user: { id: USER_ID, email: null, displayName: null }, consoleRole: "STAFF", preview: false, company: null, access: "none", pii: false, portal: { matches: [] }, serverTime: T } }],
+    invalid: [
+      { response: { user: { id: USER_ID, email: null, displayName: null }, consoleRole: "STAFF", permissions: [], accessVia: "browser", preview: false, company: null, access: "none", pii: false, portal: { matches: [] }, serverTime: T } },
+      { response: { user: { id: USER_ID, email: null, displayName: null }, consoleRole: "VIEWER", permissions: ["captable.delete"], accessVia: "browser", preview: false, company: null, access: "none", pii: false, portal: { matches: [] }, serverTime: T } },
+    ],
+  },
+  getCatalog: {
+    response: {
+      endpoints: [
+        { method: "GET", path: "/api/me", summary: "Console identity, company access and holder matches", query: null, body: null, idempotencyKey: false },
+        { method: "POST", path: "/api/orgs/{orgId}/stakeholders", summary: "Add a stakeholder", query: null, body: { type: "object" }, idempotencyKey: true },
+      ],
+    },
+    invalid: [
+      { response: { endpoints: [{ method: "TRACE", path: "/api/me", summary: "", query: null, body: null, idempotencyKey: false }] } },
+      { response: { endpoints: [{ method: "GET", path: "/elsewhere", summary: "", query: null, body: null, idempotencyKey: false }] } },
+    ],
   },
   listOrgs: { response: { items: [org] }, invalid: [{ response: { items: [{ ...org, entityType: "LLC" }] } }] },
   createOrg: {

@@ -8,6 +8,7 @@ export * from "./errors.ts";
 export * from "./http.ts";
 export * from "./common.ts";
 export * from "./auth.ts";
+export * from "./catalog.ts";
 export * from "./orgs.ts";
 export * from "./stakeholders.ts";
 export * from "./equity.ts";

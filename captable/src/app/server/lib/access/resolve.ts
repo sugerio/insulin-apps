@@ -1,5 +1,4 @@
-import type { AppRole } from '@fours/app/server'
-import type { OrgAccess } from '#shared'
+import type { OrgAccess, api } from '#shared'
 
 export interface ResolvedOrg {
   id: string
@@ -32,11 +31,17 @@ interface OrgRow {
   timezone: string
 }
 
-/** Resolve platform roles inside the caller's one-company console organization. */
+/**
+ * Resolve the caller's effective permissions inside their one-company console organization: `captable.manage` is
+ * read/write administration, `captable.view` read-only administration, and `portfolio.view` alone the holder view.
+ * The levels don't stack: someone who administers the company isn't matched as a holder.
+ */
 export async function resolveAccess(
   db: D1Database,
-  identity: { role: AppRole; email: string | null; organizationId: string },
+  identity: { permissions: ReadonlySet<api.Permission>; email: string | null; organizationId: string },
 ): Promise<AccessResolution> {
+  const manage = identity.permissions.has('captable.manage')
+  const admin = manage || identity.permissions.has('captable.view')
   const orgAccess = new Map<string, ResolvedOrg>()
   const org = await db.prepare(
     `SELECT id, org_key, slug, display_name, status, timezone
@@ -44,7 +49,7 @@ export async function resolveAccess(
      ORDER BY created_at, id LIMIT 1`,
   ).bind(identity.organizationId).first<OrgRow>()
 
-  if (org && ['OWNER', 'ADMIN', 'EDITOR'].includes(identity.role)) {
+  if (org && admin) {
     orgAccess.set(org.id, {
       id: org.id,
       orgKey: org.org_key,
@@ -52,13 +57,13 @@ export async function resolveAccess(
       displayName: org.display_name,
       status: org.status,
       timezone: org.timezone,
-      access: identity.role === 'EDITOR' ? 'admin_ro' : 'admin_rw',
+      access: manage ? 'admin_rw' : 'admin_ro',
       pii: true,
     })
   }
 
   let portalMatches: PortalMatch[] = []
-  if (identity.email && ['USER', 'VIEWER'].includes(identity.role)) {
+  if (identity.email && !admin && identity.permissions.has('portfolio.view')) {
     const { results } = await db.prepare(
       `SELECT DISTINCT s.org_id, s.id AS stakeholder_id, s.display_name AS stakeholder_name
        FROM stakeholder_emails se

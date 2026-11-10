@@ -11,8 +11,8 @@ import { ErrorState, Loading } from "./Feedback.tsx";
 import { ToastProvider } from "./Toast.tsx";
 import { UnsettledGuard } from "./UnsettledGuard.tsx";
 
-// What every admin page of the company needs to know about the person and the company: their access (OWNER and ADMIN
-// write, EDITOR reads), whether personal data is shown, which stakeholders are their own (no
+// What every admin page of the company needs to know about the person and the company: their access (those who record
+// changes write; a custom role that only views the cap table reads), whether personal data is shown, which stakeholders are their own (no
 // writes on one's own holdings), and the company's display settings. The access comes from /api/me; the company
 // record is fetched once, and no page renders until it has: every figure is formatted with the company's decimals and
 // time zone, never with defaults standing in for settings that haven't arrived or failed to load.
@@ -23,9 +23,9 @@ export interface Workspace {
   legalName: string;
   today: string;
   access: api.MeResponse["access"];
-  /** An owner or admin, in a company that accepts changes. */
+  /** Someone who records changes (an owner, admin or editor), in a company that accepts changes. */
   canWrite: boolean;
-  /** An editor: no write buttons and a "Read-only" badge. */
+  /** Read-only access (a custom role that only views the cap table): no write buttons and a "Read-only" badge. */
   readOnly: boolean;
   canSeePii: boolean;
   /** Why this company refuses all writes; null when its state permits them. */

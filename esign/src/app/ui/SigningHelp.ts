@@ -12,7 +12,7 @@ export function SigningHelp({ sender, documentName }: { sender: string; document
       h('li', null, h('strong', null, 'Review. '), 'Read the document. Its fingerprint (SHA-256) identifies exactly this file, and you can download a copy.'),
       h('li', null, h('strong', null, "Confirm it's you. "), 'We email a 6-digit code to your address. It works for 10 minutes; you can ask for a new one after a minute.'),
       h('li', null, h('strong', null, 'Sign. '), 'Type your full name to adopt your signature, check how it looks, and agree to sign electronically.')),
-    h('p', null, 'If you don\'t want to sign, choose Decline to sign on the first step and give a reason. You confirm it\'s you with the emailed code first. The sender is told, and nobody can sign this document afterwards.'),
+    h('p', null, 'If you don\'t want to sign, choose Decline to sign on the first step and give a reason. You confirm it\'s you with the emailed code first. The document then ends for everyone, and its audit trail records your reason.'),
     h('p', null, 'When everyone has signed, you get an email with a link to download the signed document and its certificate of completion. The link works once, within 30 days.'),
     h('p', null, 'Each step is recorded in the document\'s audit trail, with the time, your IP address and your browser.'));
 }

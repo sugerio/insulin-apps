@@ -496,3 +496,19 @@ test('the code card shows a wrong code and a refused send beside the boxes, and 
     assert.equal(alert(),'');
   } finally {await act(async()=>{renderer?.unmount();});globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
+
+test('About signing explains the steps, the code, declining and the copy link, and closes again', async()=>{
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ try {
+  const p=await reviewPage({id:'a1',sha256:'ab'.repeat(32),documentName:'Mutual NDA',signerName:'Ana Partner'},()=>undefined);
+  const dialog=()=>p.renderer.root.findAll((n:any)=>n.props?.role==='dialog'&&n.props['aria-label']==='About signing')[0];
+  assert.equal(dialog(),undefined);
+  await p.act(async()=>{p.button('About signing').props.onClick();});
+  const help=visibleText(dialog().children);
+  assert.match(help,/asked you to sign Mutual NDA/);
+  for(const words of [/Review/,/6-digit code/,/10 minutes/,/Decline to sign/,/once, within 30 days/,/audit trail/])assert.match(help,words);
+  await p.act(async()=>{p.button('Close').props.onClick();});
+  assert.equal(dialog(),undefined);
+  await p.act(async()=>{p.renderer.unmount();});
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});

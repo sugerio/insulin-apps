@@ -17,7 +17,7 @@ type Certificate={
   signatures:{id:string;sequence:number;task_id:string;recipient_name:string;input_artifact_id:string;input_sha256:string;otp_verified_at:number;consented_at:number;previous_hash:string;event_hash:string;artifact_id:string;sha256:string}[];
 };
 type AuditEntry={id:number;taskId:string|null;type:string;occurredAt:number;ip:string|null;userAgent:string|null};
-export const AUDIT_LABELS:Record<string,string>={RECIPIENT_VIEW_ISSUED:'Signing link issued',SIGNING_SESSION_OPENED:'Signing page opened',OTP_SENT:'Verification code sent',OTP_VERIFIED:'OTP verified',DOCUMENT_VIEWED:'Document viewed',PAGES_VIEWED:'Pages viewed',SIGNED:'Signed',COMPLETED:'Completed and sealed',COPY_SENT:'Signed copy sent'};
+export const AUDIT_LABELS:Record<string,string>={RECIPIENT_VIEW_ISSUED:'Signing link issued',SIGNING_SESSION_OPENED:'Signing page opened',OTP_SENT:'Verification code sent',OTP_VERIFIED:'OTP verified',DOCUMENT_VIEWED:'Document viewed',PAGES_VIEWED:'Pages viewed',SIGNED:'Signed',COMPLETED:'Completed and sealed',COPY_SENT:'Signed copy sent',COPY_DOWNLOADED:'Signed copy downloaded',DECLINED:'Declined',VOIDED:'Voided',EXPIRED:'Deadline passed'};
 const utc=(value:number)=>Number.isFinite(value) && !Number.isNaN(new Date(value).getTime()) ? new Date(value).toISOString() : 'Not recorded';
 export function CompletionCertificate({certificate:c}:{certificate:Certificate}) {
   const field=(label:string,value:string|number)=>h('div',{key:label,className:'flex flex-col gap-0.5'},h('dt',{className:'text-xs font-medium text-muted-foreground'},label),h('dd',{className:'text-sm break-all'},value));

@@ -161,7 +161,12 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
   every use; presenting a used one revokes the whole grant.
 - **Each MCP request re-checks** the grant and the person's current access to the app in that organization, so a
   removed or demoted person's agent loses access or power at once. The agent acts with the person's role
-  (`x-suger-access-via: mcp`).
+  (`x-suger-access-via: mcp`), and the app sees `User-Agent: Insulin Apps MCP: <client name>`, which its audit trail can
+  record. Leaving or being removed from an organization deletes the person's grants there, so a later invitation
+  doesn't bring old agents back.
+- **Resources.** Authorization and tokens accept `https://<app>/mcp` and, for clients that read the root
+  protected-resource metadata, `https://<app>`. A person's token is refused on `/api/*`, and a service account's on
+  `/mcp`.
 - **Tools:** `whoami` (person, organization, app, role, permissions), `endpoints` (the app's `GET /api/catalog`, if it
   has one), `read` (GET) and `change` (POST, PUT, PATCH, DELETE) on `/api/*` paths, forwarded to the app as that person,
   with an optional `Idempotency-Key`. Responses larger than 200 KB are cut.
@@ -173,7 +178,8 @@ App admins create service accounts under `<app>.insulinapps.com/settings/integra
 (Admin, Editor, Viewer or a custom role). The client secret is shown once and can be rotated. A program gets a token
 with `client_credentials` at `https://insulinapps.com/oauth/token` (HTTP Basic, optional `resource=https://<app host>`)
 and calls `https://<app host>/api/...` with it. The app receives the service account's id, the name, and the address
-`<id>@service-accounts.invalid` (a reserved domain nobody can own), with `x-suger-access-via: api`.
+`<id>@service-accounts.invalid` (a reserved domain nobody can own), with `x-suger-access-via: api` and
+`User-Agent: Insulin Apps API: <name>`.
 
 ## 6. Integrations
 

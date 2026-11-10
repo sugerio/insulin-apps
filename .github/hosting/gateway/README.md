@@ -7,11 +7,11 @@ over a service binding with the console identity headers. The apps need no hosti
 
 | Host | What it serves |
 |---|---|
-| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up and sign-in; the account; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; invitations; `/favicon.ico`, `/apple-touch-icon.png` |
+| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
-| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/settings/users` and `/settings/integrations` |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout` |
+| `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/settings/users`, `/settings/integrations`, `/mcp` and `/.well-known/oauth-*`; `/api/*` with a service account's Bearer token goes to the app as that account |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the integration proxy `/__insulin/integrations/*` |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
 app) is `.github/hosting/README.md`. This file is for developers.
@@ -40,6 +40,10 @@ inline SVG); wrangler bundles them.
 | `src/access.ts` | someone's role and permissions in one app, from their organization role or their grant; every way into an app ends here |
 | `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), access in forms and words (`access-forms.ts`) |
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
+| `src/oauth/` | the authorization server: metadata, registration, authorize and consent, token, revoke; token formats and lifetimes, `resolveBearer`, and calls to an app with a token (`app-api.ts`) |
+| `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
+| `src/integrations/` | the `/settings/integrations` page (`settings.ts`) and the integration proxy (`proxy.ts`) |
+| `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, and disconnecting them |
 | `src/reserved.ts` | `/__insulin/me`, `switch-org`, `logout`, and the local captured-mail page |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode) and the messages |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
@@ -158,6 +162,18 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   `location.assign`.
 - Session ids and email tokens are 32 random bytes; D1 stores only their SHA-256. Passwords are PBKDF2-SHA256
   (100,000 iterations, the workerd maximum).
+- **OAuth for agents and service accounts.** Each app's `/mcp` is its own protected resource, so a client registers and
+  is authorized per app; tokens are 32 random bytes stored as SHA-256, access tokens last an hour, refresh tokens rotate
+  and a replayed one ends its grant, and codes and refresh tokens are bound to their client. Every MCP call and every
+  service-account call re-checks the grant or account and the current role (`access.ts`) before it is forwarded with
+  no cookies, `Origin` set to the app (tokens aren't ambient credentials, so the app's CSRF check has nothing to
+  protect), `x-suger-access-via: mcp` or `api`, and a `User-Agent` naming the client (`Insulin Apps MCP: <client>`,
+  `Insulin Apps API: <account>`). Leaving or being removed from an organization deletes one's grants in it (a trigger),
+  so a later invitation doesn't bring old agents back. A person's token never works on `/api/*`, and a service
+  account's never on `/mcp`.
+- **The integration proxy** only forwards to the stored base URL's host or an allowed host, over https, never to the
+  site's own hosts, without following redirects, with every `x-suger-*`, cookie and authorization header removed and
+  the stored credential added; a path segment that decodes to `.` or `..` or holds an encoded slash is refused.
 - **Two-step sign-in.** With an authenticator app turned on, `finishSignIn` gives the browser a 10-minute challenge and
   a host-only `__Host-insulin_mfa` cookie instead of a session; only a code (or a recovery code) at `/login/mfa` starts
   the session, under the credential version the first step verified. A used time step, a recovery code and a

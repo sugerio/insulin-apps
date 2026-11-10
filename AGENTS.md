@@ -69,7 +69,8 @@ client registration per agent, and service accounts call `https://<app>.insulina
 client-credentials token.
 
 - **Same role as the person.** An agent acts with its person's current role; a service account has the role an app admin
-  gave it. The app sees the same headers as for a browser, with `x-suger-access-via: mcp` or `api`.
+  gave it. The app sees the same headers as for a browser, with `x-suger-access-via: mcp` or `api`, and a
+  `User-Agent` naming the client (`Insulin Apps MCP: <client>` or `Insulin Apps API: <account>`) for its audit trail.
 - **Every API serves agents and clients alike**, under the same rules as the browser. The exception: mutations of
   people, roles, billing and integrations. They stay browser-only and owner- or admin-only; if an app implements any of
   them, it refuses unless `x-suger-access-via` is `browser`.

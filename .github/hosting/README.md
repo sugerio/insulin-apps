@@ -61,7 +61,8 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
      back (authenticator-app secrets, stored integration credentials, OIDC client secrets) and derives each app's
      `SUGER_APP_TOKEN`. Optional, but without it MFA, stored credentials and OIDC can't be set up. Keep a copy in the
      credential vault: replacing it makes everything sealed with the old key unreadable (people turn MFA on again and
-     admins re-enter credentials), so don't rotate it casually.
+     admins re-enter credentials), so don't rotate it casually. After replacing it, deploy the gateway and then every
+     app, which gives each app its new `SUGER_APP_TOKEN`.
 
    Add these environment variables:
 

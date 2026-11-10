@@ -5,6 +5,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {CompletionCertificate} from './CompletionCertificate.ts';
 import {readSaveResult} from './editor-save-protocol.ts';
+import {readSigningHostMessage} from './signing-host-protocol.ts';
 const h=React.createElement;
 
 export const KEY_STORAGE='esign-demo-key';
@@ -15,7 +16,30 @@ const POLL_MS=3000;
 
 type Task={id:string;role:string;recipientName:string;recipientEmail:string;status:string;routingOrder:number};
 type Envelope={id:string;templateId:string;status:string;tasks:Task[]};
-type Signer={name:string;email:string};
+/** A signer, with the facts a host gives about them: their title, the company they sign for, what follows their signature. */
+type Signer={name:string;email:string;title:string;company:string;after:string};
+/** What a host says about the document and who sent it (synthetic examples, editable). */
+type DocumentFacts={name:string;version:string;published:string;senderName:string;senderCompany:string};
+const SAMPLE_DOCUMENT:DocumentFacts={name:'Mutual Non-Disclosure Agreement',version:'v1',published:'',senderName:'Sam Seller',senderCompany:'Example Seller Inc.'};
+/** How the host says the signer signed in before it opened their page; recorded as the host's statement. */
+const SIGN_IN_OPTIONS:[string,string,{method:string;provider?:string}|null][]=[
+  ['none','None',null],
+  ['google','Google Workspace',{method:'SSO',provider:'Google Workspace'}],
+  ['microsoft','Microsoft',{method:'SSO',provider:'Microsoft'}],
+  ['sso','Enterprise SSO',{method:'ENTERPRISE_SSO',provider:'Enterprise SSO'}],
+  ['password','Password',{method:'PASSWORD',provider:'Email and password'}],
+];
+/** The envelope a send creates: the document facts and each signer's, leaving out what is empty. */
+export function envelopeRequest(templateId:string,roles:string[],people:Signer[],doc:DocumentFacts){
+  const text=(v:string)=>v.trim();
+  const published=text(doc.published)&&!Number.isNaN(Date.parse(text(doc.published)))?new Date(text(doc.published)).toISOString():'';
+  return {templateId,
+    recipients:people.map((s,i)=>{const after=s.after.split('\n').map(text).filter(Boolean);return {role:roles[i],name:text(s.name),email:text(s.email),
+      ...(text(s.title)?{title:text(s.title)}:{}),...(text(s.company)?{onBehalfOf:text(s.company)}:{}),...(after.length?{afterSigning:after}:{})};}),
+    ...(text(doc.name)?{documentName:text(doc.name)}:{}),
+    ...(text(doc.version)?{documentVersion:{label:text(doc.version),...(published?{publishedAt:published}:{})}}:{}),
+    ...(text(doc.senderName)?{sender:{name:text(doc.senderName),...(text(doc.senderCompany)?{organization:text(doc.senderCompany)}:{})}}:{})};
+}
 type Certificate=Parameters<typeof CompletionCertificate>[0]['certificate'];
 type Editor={sessionId:string;url:string;ready:boolean;requestId:string};
 
@@ -45,12 +69,13 @@ const describe=(error:unknown)=>error instanceof DemoRequestError?(error.status=
 export function DemoPage(){
   const [keyInput,setKeyInput]=useState(''),[key,setKey]=useState(()=>load('session',KEY_STORAGE)),[tenant,setTenant]=useState('');
   const [file,setFile]=useState<File|null>(null),[mode,setMode]=useState<'page'|'fields'>('page'),[twoSigners,setTwoSigners]=useState(true);
-  const [signers,setSigners]=useState<Signer[]>([{name:'',email:''},{name:'',email:''}]);
+  const [signers,setSigners]=useState<Signer[]>([{name:'',email:'',title:'',company:'',after:''},{name:'',email:'',title:'',company:'',after:''}]);
+  const [doc,setDoc]=useState<DocumentFacts>(SAMPLE_DOCUMENT),[signIn,setSignIn]=useState('none');
   const [editor,setEditor]=useState<Editor|null>(null),[templateId,setTemplateId]=useState('');
   const [envelope,setEnvelope]=useState<Envelope|null>(null),[recent,setRecent]=useState<string[]>(recentIds);
-  const [frame,setFrame]=useState(''),[pdf,setPdf]=useState<{url:string;name:string}|null>(null),[certificate,setCertificate]=useState<Certificate|null>(null);
+  const [frame,setFrame]=useState<{url:string;task:Task}|null>(null),[pdf,setPdf]=useState<{url:string;name:string}|null>(null),[certificate,setCertificate]=useState<Certificate|null>(null);
   const [message,setMessage]=useState(''),[busy,setBusy]=useState(false);
-  const attempt=useRef<{body:string;key:string}|null>(null),editorFrame=useRef<HTMLIFrameElement|null>(null);
+  const attempt=useRef<{body:string;key:string}|null>(null),editorFrame=useRef<HTMLIFrameElement|null>(null),signingFrame=useRef<HTMLIFrameElement|null>(null);
   const call=demoClient(key);
   const roles=twoSigners?ROLES:ROLES.slice(0,1);
 
@@ -72,7 +97,7 @@ export function DemoPage(){
 
   function connect(){const value=keyInput.trim();if(!/^[A-Za-z0-9_-]{32,256}$/.test(value)){setMessage('Paste the tenant management key.');return;}
     void run(async()=>{const me=await (await demoClient(value)('/v1/me')).json() as {tenantId:string};save('session',KEY_STORAGE,value);setKeyInput('');setTenant(me.tenantId);setKey(value);});}
-  function disconnect(){save('session',KEY_STORAGE,null);setKey('');setTenant('');setEnvelope(null);setFrame('');setEditor(null);setTemplateId('');}
+  function disconnect(){save('session',KEY_STORAGE,null);setKey('');setTenant('');setEnvelope(null);setFrame(null);setEditor(null);setTemplateId('');}
 
   function pdfError(){if(!file)return 'Choose a PDF.';if(file.size>MAX_PDF_BYTES)return 'The PDF must be 5 MB or smaller.';return '';}
   function chooseFile(next:File|null){setFile(next);setTemplateId('');setEditor(null);attempt.current=null;}
@@ -108,17 +133,27 @@ export function DemoPage(){
     if(people.some(s=>!s.name.trim()||!EMAIL.test(s.email.trim()))){setMessage('Enter a name and an email address for each signer.');return;}
     void run(async()=>{
       const template=mode==='fields'?templateId:await createTemplate();
-      const body=JSON.stringify({templateId:template,recipients:people.map((s,i)=>({role:roles[i],name:s.name.trim(),email:s.email.trim()}))});
+      const body=JSON.stringify(envelopeRequest(template,roles,people,doc));
       // Retrying the same send reuses its idempotency key, so a lost response cannot send twice.
       if(!attempt.current||attempt.current.body!==body)attempt.current={body,key:crypto.randomUUID()};
       const {id}=await (await call('/v1/envelopes',{method:'POST',headers:{'content-type':'application/json','idempotency-key':attempt.current.key},body})).json() as {id:string};
       attempt.current=null;const next=[id,...recent.filter(x=>x!==id)].slice(0,10);setRecent(next);save('local',RECENT_STORAGE,JSON.stringify(next));
-      setFrame('');setPdf(null);setCertificate(null);await refresh(id);setMessage('Sent. Open each signer\'s page below.');
+      setFrame(null);setPdf(null);setCertificate(null);await refresh(id);setMessage('Sent. Open each signer\'s page below.');
     });}
-  function open(id:string){void run(async()=>{setFrame('');setPdf(null);setCertificate(null);await refresh(id);});}
+  function open(id:string){void run(async()=>{setFrame(null);setPdf(null);setCertificate(null);await refresh(id);});}
   function sign(task:Task){if(!envelope)return;void run(async()=>{
-    const {code}=await (await call(`/v1/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({origin:window.location.origin})})).json() as {code:string};
-    setFrame(`/sign#code=${encodeURIComponent(code)}`);});}
+    // The sign-in the host states, when one is chosen: the signer's email domain, now.
+    const chosen=SIGN_IN_OPTIONS.find(([id])=>id===signIn)?.[2];
+    const hostAuthentication=chosen?{...chosen,domain:task.recipientEmail.split('@').pop()?.toLowerCase(),signedInAt:new Date().toISOString()}:undefined;
+    const {code}=await (await call(`/v1/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({origin:window.location.origin,...(hostAuthentication?{hostAuthentication}:{})})})).json() as {code:string};
+    // This page is the host: the signing page reports to it when the signer closes, signs or declines.
+    setFrame({url:`/sign#code=${encodeURIComponent(code)}&host=${encodeURIComponent(window.location.origin)}`,task});});}
+  // The signing page's own messages: Cancel closes it; signing or declining closes it and reads the envelope again.
+  useEffect(()=>{if(!frame||!envelope)return;const id=envelope.id,name=frame.task.recipientName;
+    const listen=(event:MessageEvent)=>{const msg=readSigningHostMessage(event,window.location.origin,signingFrame.current?.contentWindow);if(!msg)return;
+      setFrame(null);
+      if(msg.type==='esign.signing.finished')void run(async()=>{await refresh(id);setMessage(msg.outcome==='signed'?`${name} signed.`:`${name} declined.`);});};
+    window.addEventListener('message',listen);return()=>window.removeEventListener('message',listen);},[frame,envelope?.id,key]);
   function download(){if(!envelope)return;void run(async()=>{const blob=await (await call(`/v1/envelopes/${envelope.id}/delivery-pdf`)).blob();setPdf({url:URL.createObjectURL(blob),name:'signed-with-certificate.pdf'});});}
   function showCertificate(){if(!envelope)return;void run(async()=>{setCertificate(await (await call(`/v1/envelopes/${envelope.id}/certificate`)).json() as Certificate);});}
 
@@ -140,10 +175,16 @@ export function DemoPage(){
       h('fieldset',null,h('legend',null,'Where signatures go'),
         h('label',{style:{display:'block'}},h('input',{type:'radio',name:'mode',checked:mode==='page',onChange:()=>{setMode('page');setEditor(null);setTemplateId('');}}),' On a signature page added after the last page'),
         h('label',{style:{display:'block'}},h('input',{type:'radio',name:'mode',checked:mode==='fields',onChange:()=>setMode('fields')}),' In signature fields I place on the document')),
+      h('fieldset',null,h('legend',null,'Document (shown to signers)'),
+        ...([['name','Document name'],['version','Version'],['published','Published (YYYY-MM-DD)'],['senderName','Sender name'],['senderCompany','Sender company']] as [keyof DocumentFacts,string][]).map(([k,label])=>
+          h(React.Fragment,{key:k},field(label,h('input',{'aria-label':label,value:doc[k],onChange:(e:React.ChangeEvent<HTMLInputElement>)=>{const value=e.target.value;setDoc(old=>({...old,[k]:value}));}}))))),
       h('label',{style:{display:'block',margin:'0.4rem 0'}},h('input',{type:'checkbox',checked:twoSigners,disabled:!!editor||!!templateId,onChange:(e:React.ChangeEvent<HTMLInputElement>)=>{setTwoSigners(e.target.checked);attempt.current=null;}}),' Two signers, in order'),
       ...counted.map((s,i)=>h('fieldset',{key:i},h('legend',null,`Signer ${i+1}`),
         field('Name',h('input',{'aria-label':`Signer ${i+1} name`,value:s.name,onChange:(e:React.ChangeEvent<HTMLInputElement>)=>setSigners(old=>old.map((x,j)=>j===i?{...x,name:e.target.value}:x))})),
-        field('Email',h('input',{type:'email','aria-label':`Signer ${i+1} email`,value:s.email,onChange:(e:React.ChangeEvent<HTMLInputElement>)=>setSigners(old=>old.map((x,j)=>j===i?{...x,email:e.target.value}:x))})))),
+        field('Email',h('input',{type:'email','aria-label':`Signer ${i+1} email`,value:s.email,onChange:(e:React.ChangeEvent<HTMLInputElement>)=>setSigners(old=>old.map((x,j)=>j===i?{...x,email:e.target.value}:x))})),
+        field('Title (optional)',h('input',{'aria-label':`Signer ${i+1} title`,value:s.title,onChange:(e:React.ChangeEvent<HTMLInputElement>)=>setSigners(old=>old.map((x,j)=>j===i?{...x,title:e.target.value}:x))})),
+        field('Signs for company (optional)',h('input',{'aria-label':`Signer ${i+1} company`,value:s.company,onChange:(e:React.ChangeEvent<HTMLInputElement>)=>setSigners(old=>old.map((x,j)=>j===i?{...x,company:e.target.value}:x))})),
+        field('After signing, one line each (optional, at most 3)',h('textarea',{'aria-label':`Signer ${i+1} after signing`,rows:2,value:s.after,onChange:(e:React.ChangeEvent<HTMLTextAreaElement>)=>setSigners(old=>old.map((x,j)=>j===i?{...x,after:e.target.value}:x))})))),
       mode==='fields'&&!templateId&&h('button',{type:'button',disabled:busy,onClick:openEditor},editor?'Restart the editor':'Place signature fields'),
       mode==='fields'&&templateId&&h('p',null,'Signature fields saved.'),
       h('button',{type:'button',disabled:busy||(mode==='fields'&&!templateId),onClick:send},'Send for signature'),
@@ -156,13 +197,22 @@ export function DemoPage(){
       h('ul',null,...recent.map(id=>h('li',{key:id},h('button',{type:'button',disabled:busy,onClick:()=>open(id)},id))))),
     envelope&&h('section',{'aria-label':'Envelope'},h('h2',null,'2. Sign'),
       h('p',null,'Envelope ',envelope.id,': ',h('strong',null,envelope.status)),
+      field('Signer signed in with',h('select',{'aria-label':'Signer signed in with',value:signIn,onChange:(e:React.ChangeEvent<HTMLSelectElement>)=>setSignIn(e.target.value)},
+        ...SIGN_IN_OPTIONS.map(([id,label])=>h('option',{key:id,value:id},label)))),
+      h('p',{style:{fontSize:'0.85rem',color:'#555'}},'Recorded as the host\'s statement on the certificate.'),
       h('ol',null,...envelope.tasks.map(task=>h('li',{key:task.id},`${task.recipientName} <${task.recipientEmail}>: ${task.status} `,
         task.status==='ACTIVE'&&h('button',{type:'button',disabled:busy,onClick:()=>sign(task)},`Open ${task.recipientName}'s signing page`)))),
       envelope.status==='COMPLETED'&&h('p',null,
         h('button',{type:'button',disabled:busy,onClick:download},'View signed PDF with certificate'),' ',
         h('button',{type:'button',disabled:busy,onClick:showCertificate},'View completion certificate')),
-      frame&&h('div',null,h('button',{type:'button',onClick:()=>setFrame('')},'Close the signing page'),
-        h('iframe',{title:'Recipient signing page',src:frame,width:'100%',height:'800',sandbox:'allow-scripts allow-same-origin allow-forms'}))),
+      // The signing page in a dialog, as a host shows it: its title, who sent it, and close.
+      frame&&h('div',{style:{position:'fixed',inset:0,background:'#0006',display:'flex',alignItems:'center',justifyContent:'center',padding:16,zIndex:10}},
+        h('div',{role:'dialog','aria-modal':true,'aria-label':'Signing page',style:{background:'#fff',borderRadius:8,width:'min(1152px,100%)',height:'88vh',display:'flex',flexDirection:'column',padding:20,gap:12}},
+          h('div',{style:{display:'flex',alignItems:'flex-start',gap:12}},
+            h('div',{style:{flex:1}},h('h2',{style:{margin:0,fontSize:18}},`Sign the ${doc.name.trim()||'document'}`),
+              h('p',{style:{margin:'4px 0 0',color:'#666',fontSize:14}},[doc.senderCompany.trim()&&`From ${doc.senderCompany.trim()}`,doc.senderName.trim()&&`sent by ${doc.senderName.trim()} on ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`].filter(Boolean).join(' · '))),
+            h('button',{type:'button','aria-label':'Close the signing page',onClick:()=>setFrame(null)},'✕')),
+          h('iframe',{ref:signingFrame,title:'Recipient signing page',src:frame.url,style:{flex:1,width:'100%',border:'1px solid #e3e5e8',borderRadius:8},sandbox:'allow-scripts allow-same-origin allow-forms allow-downloads'})))),
     pdf&&h('section',null,h('a',{href:pdf.url,download:pdf.name},`Download ${pdf.name}`),h('iframe',{title:'Signed PDF',src:pdf.url,width:'100%',height:'760'})),
     certificate&&envelope?.status==='COMPLETED'&&h(CompletionCertificate,{certificate}));
 }

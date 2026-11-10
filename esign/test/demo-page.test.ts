@@ -75,17 +75,20 @@ test('sending adds a signature page, signs in order through the embedded signing
   assert.equal(template.headers.authorization,`Bearer ${KEY}`);
   const send=h.calls.find(c=>c.path==='/v1/envelopes')!;
   assert.match(send.headers['idempotency-key'],/^[0-9a-f-]{36}$/);
-  assert.deepEqual(JSON.parse(String(send.body)),{templateId:'tpl-1',recipients:[{role:'signer-1',name:'Ana',email:'ana@partner.example'},{role:'signer-2',name:'Marcus',email:'marcus@seller.example'}]});
+  assert.deepEqual(JSON.parse(String(send.body)),{templateId:'tpl-1',recipients:[{role:'signer-1',name:'Ana',email:'ana@partner.example'},{role:'signer-2',name:'Marcus',email:'marcus@seller.example'}],
+   documentName:'Mutual Non-Disclosure Agreement',documentVersion:{label:'v1'},sender:{name:'Sam Seller',organization:'Example Seller Inc.'}});
   assert.ok(!h.calls.some(c=>c.path.endsWith('/prepare')),'creating the envelope prepares it');
   assert.deepEqual(JSON.parse(h.local.getItem('esign-demo-envelopes')!),[ENV_ID]);
   await h.click("Open Ana's signing page");
   const view=h.calls.find(c=>c.path.endsWith('/recipient-view'))!;
   assert.deepEqual(JSON.parse(String(view.body)),{origin:ORIGIN},'the code is bound to this origin, which serves /sign');
   const frame=h.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Recipient signing page');
-  assert.equal(frame.props.src,'/sign#code=c0de');
+  assert.equal(frame.props.src,`/sign#code=c0de&host=${encodeURIComponent(ORIGIN)}`,'this page is the host the signing page reports to');
+  assert.match(h.text(),/Sign the Mutual Non-Disclosure Agreement/);
+  assert.match(h.text(),/From Example Seller Inc\. · sent by Sam Seller on /);
   assert.equal(h.button("Open Marcus's signing page"),undefined,'only the signer whose turn it is');
   state=envelope('COMPLETED',[['Ana','SIGNED'],['Marcus','SIGNED']]);
-  await h.click('Close the signing page');
+  await h.act(async()=>{h.byLabel('Close the signing page').props.onClick();});
   await h.act(async()=>{h.renderer.root.findAllByType('button').find((b:any)=>JSON.stringify(b.children).includes(ENV_ID)).props.onClick();await new Promise(r=>setTimeout(r,0));});
   assert.match(h.text(),/COMPLETED/);
   await h.click('View signed PDF with certificate');
@@ -201,4 +204,42 @@ test('the completion certificate lists the audit trail, marking events recorded 
  assert.match(html,/OTP verified/);assert.match(html,/Ana Partner/);assert.match(html,/203\.0\.113\.9/);assert.match(html,/Mozilla\/5\.0 \(Synthetic\)/);
  assert.match(html,/2026-11-07T01:00:02/);
  assert.equal((html.match(/recorded after sealing/g)??[]).length,1);
+});
+
+test('the demo sends the host facts it is given, states a sign-in, and follows the signing page\'s messages', async()=>{
+ let state=envelope('IN_PROGRESS',[['Ana','ACTIVE']]);
+ const h=await harness(c=>{
+  if(c.path==='/v1/me')return json({tenantId:'demo-tenant'});
+  if(c.path==='/v1/templates')return json({id:'tpl-1'},201);
+  if(c.path==='/v1/envelopes'&&c.method==='POST')return json({id:ENV_ID},201);
+  if(c.path===`/v1/envelopes/${ENV_ID}`)return json(state);
+  if(c.path===`/v1/envelopes/${ENV_ID}/tasks/task-0/recipient-view`)return json({code:'c0de'},201);
+ },{storedKey:KEY});
+ try {
+  await h.act(async()=>{await new Promise(r=>setTimeout(r,0));});
+  await h.act(async()=>{h.byLabel('PDF').props.onChange({target:{files:[pdf()]}});});
+  await h.act(async()=>{h.renderer.root.find((n:any)=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:false}});});
+  await h.type('Signer 1 name','Ana');await h.type('Signer 1 email','ana@partner.example');
+  await h.type('Signer 1 title','Partner Manager');await h.type('Signer 1 company','Partner Company Ltd');
+  await h.act(async()=>{h.byLabel('Signer 1 after signing').props.onChange({target:{value:'Your onboarding moves on.\n\nTraining opens.'}});});
+  await h.type('Version','v3');await h.type('Published (YYYY-MM-DD)','2026-09-02');await h.type('Sender name','');
+  await h.click('Send for signature');
+  const body=JSON.parse(String(h.calls.find(c=>c.path==='/v1/envelopes')!.body));
+  assert.deepEqual(body,{templateId:'tpl-1',documentName:'Mutual Non-Disclosure Agreement',documentVersion:{label:'v3',publishedAt:'2026-09-02T00:00:00.000Z'},
+   recipients:[{role:'signer-1',name:'Ana',email:'ana@partner.example',title:'Partner Manager',onBehalfOf:'Partner Company Ltd',afterSigning:['Your onboarding moves on.','Training opens.']}]},'an empty sender name sends no sender');
+  await h.act(async()=>{h.byLabel('Signer signed in with').props.onChange({target:{value:'google'}});});
+  await h.click("Open Ana's signing page");
+  const view=JSON.parse(String(h.calls.find(c=>c.path.endsWith('/recipient-view'))!.body));
+  assert.equal(view.origin,ORIGIN);
+  assert.deepEqual({...view.hostAuthentication,signedInAt:undefined},{method:'SSO',provider:'Google Workspace',domain:'partner.example',signedInAt:undefined});
+  assert.ok(!Number.isNaN(Date.parse(view.hostAuthentication.signedInAt)));
+  // Only the signing page's own message, from its frame and this origin, is followed.
+  const frameWindow=h.editorWindow;
+  await h.dispatch({origin:'https://other.example.test',source:frameWindow,data:{type:'esign.signing.cancel'}});
+  assert.ok(h.renderer.root.findAll((n:any)=>n.type==='iframe'&&n.props.title==='Recipient signing page').length===1,'another origin is ignored');
+  state=envelope('COMPLETED',[['Ana','SIGNED']]);
+  await h.dispatch({origin:ORIGIN,source:frameWindow,data:{type:'esign.signing.finished',outcome:'signed'}});
+  assert.equal(h.renderer.root.findAll((n:any)=>n.type==='iframe'&&n.props.title==='Recipient signing page').length,0,'the dialog closes');
+  assert.match(h.text(),/Ana signed\./);assert.match(h.text(),/COMPLETED/);
+ } finally {await h.unmount();}
 });

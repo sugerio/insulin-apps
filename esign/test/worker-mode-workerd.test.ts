@@ -102,6 +102,7 @@ test('Worker mode serves the recipient signing page for embedding in the configu
   assert.equal(page.headers.get('cache-control'),'no-store');
   const html=await page.text();
   assert.ok(html.includes(`<meta name="esign-api" content="${WORKER}">`),'the page learns that its own origin is the signing API');
+  assert.ok(html.includes(`<meta name="esign-hosts" content="${WORKER} ${CONSOLE}">`),'the page learns which hosts it may report to: its own origin and the configured console');
   const asset=await w.request('/assets/recipient.js');
   assert.equal(asset.status,200);
   assert.equal(asset.headers.get('cross-origin-resource-policy'),'cross-origin');

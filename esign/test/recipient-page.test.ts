@@ -19,6 +19,9 @@ function visibleText(node:any):string {
   return visibleText(node.children);
 }
 
+/** The Sign step's one consent box. */
+const consentBox=(renderer:any)=>renderer.root.findAll((n:any)=>n.type==='input'&&n.props['aria-label']==='Consent to sign')[0];
+
 /** From Review through the emailed code to the Sign step (the page's three steps). */
 async function toSignStep(renderer:any, act:any) {
   const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
@@ -173,7 +176,7 @@ test('older retry response cannot replace a newer document', async () => {
     await act(async()=>{await retry();}); await settle(act);
     await act(async()=>{releaseOld(Response.json({id:'old',sha256:'oldhash'}));await old;});
     await toSignStep(renderer,act);
-    await act(async()=>{renderer.root.findByType('input').props.onChange({target:{checked:true}});});
+    await act(async()=>{consentBox(renderer).props.onChange({target:{checked:true}});});
     await act(async()=>{await button('Sign document').props.onClick();});
     assert.equal(signed.artifactId,'new');assert.equal(signed.artifactHash,'newhash');
     await act(async()=>{renderer.unmount();});
@@ -281,7 +284,7 @@ test('after signing, a Worker-served page does not ask for processing the Worker
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
    const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
    await toSignStep(renderer,act);
-   await act(async()=>{renderer.root.findByType('input').props.onChange({target:{checked:true}});});
+   await act(async()=>{consentBox(renderer).props.onChange({target:{checked:true}});});
    await act(async()=>{await button('Sign document').props.onClick();});
    const text=JSON.stringify(renderer.toJSON());
    assert.ok(text.includes(`"${expected}"`),`${origin}: ${text}`);
@@ -333,9 +336,12 @@ test('the page shows the consent disclosure from the server and signs with its v
   let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){}})});}); await settle(act);
   const button=(text:string)=>renderer.root.findAllByType('button').find((b:any)=>b.children.includes(text));
   await toSignStep(renderer,act);
+  assert.doesNotMatch(JSON.stringify(renderer.toJSON()),/paper copy/,'the disclosure opens from its link');
+  await act(async()=>{button('Read the electronic records disclosure').props.onClick({preventDefault(){}});});
   const text=JSON.stringify(renderer.toJSON());
   assert.match(text,/Consent to use electronic records and signatures/);assert.match(text,/paper copy/);
-  await act(async()=>{renderer.root.findByType('input').props.onChange({target:{checked:true}});});
+  await act(async()=>{button('Close').props.onClick();});
+  await act(async()=>{consentBox(renderer).props.onChange({target:{checked:true}});});
   await act(async()=>{await button('Sign document').props.onClick();});
   assert.equal(signed.disclosureVersion,'2026-11-07');assert.equal(signed.consent,true);
   await act(async()=>{renderer.unmount();});
@@ -411,7 +417,7 @@ test('Review names the document with its fingerprint and offers the PDF; Sign sa
   assert.ok(p.labelled('Document details'));
   assert.ok(p.labelled('Signing steps'));
   assert.match(JSON.stringify(p.renderer.toJSON()),/Mutual NDA/);
-  assert.match(JSON.stringify(p.renderer.toJSON()),new RegExp(`${sha.slice(0,16)}…${sha.slice(-8)}`));
+  assert.match(JSON.stringify(p.renderer.toJSON()),/abab abab abab … abab abab/);
   const link=p.renderer.root.findAll((n:any)=>n.type==='a'&&n.props.download)[0];
   assert.equal(link.props.download,'Mutual NDA.pdf');assert.match(link.props.href,/^blob:/);
   assert.match(JSON.stringify(p.renderer.toJSON()),/Ana Partner/);
@@ -420,8 +426,8 @@ test('Review names the document with its fingerprint and offers the PDF; Sign sa
   await p.act(async()=>{p.labelled('Authorized to sign').props.onChange({target:{checked:true}});});
   await p.toSign();
   const out=JSON.stringify(p.renderer.toJSON());
-  assert.match(out,/Signed electronically by Ana Partner, Head of Partnerships, on behalf of Northbeam Consulting/);
-  assert.match(out,/What happens next/);
+  assert.match(out,/Ana Partner · Head of Partnerships, Northbeam Consulting · Signed electronically through E-sign/);
+  assert.match(out,/After you sign/);
   // Back returns to Review with what was entered.
   await p.act(async()=>{p.button('Back').props.onClick();});
   assert.equal(p.labelled('Your title').props.value,'Head of Partnerships');
@@ -429,9 +435,10 @@ test('Review names the document with its fingerprint and offers the PDF; Sign sa
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
-test('signedByLine leaves out what is not known', ()=>{
- assert.equal(page.signedByLine('Ana Partner','',undefined),'Signed electronically by Ana Partner');
- assert.equal(page.signedByLine('','',undefined),'Signed electronically by you');
+test('signatureCaption leaves out what is not known', ()=>{
+ assert.equal(page.signatureCaption('Ana Partner','Partner Manager','Northbeam Consulting'),'Ana Partner · Partner Manager, Northbeam Consulting · Signed electronically through E-sign');
+ assert.equal(page.signatureCaption('Ana Partner','',undefined),'Ana Partner · Signed electronically through E-sign');
+ assert.equal(page.signatureCaption('','',undefined),'Signed electronically through E-sign');
 });
 
 test('the code boxes take one digit each, move on, go back and take a paste', ()=>{

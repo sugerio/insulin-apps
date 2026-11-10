@@ -4,7 +4,7 @@ import { finalizeLocalTestEvidence } from './seal/local.ts';
 const hash = async (bytes: Uint8Array | ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes instanceof Uint8Array ? Uint8Array.from(bytes) : bytes)), n=>n.toString(16).padStart(2,'0')).join('');
 
 import { AUDIT, auditTrail, type AuditEvent } from './audit.ts';
-import { describeHostAuthentication, parseHostAuthentication, sendFacts } from './signer-facts.ts';
+import { describeHostAuthentication, parseHostAuthentication, sendFacts, versionedName } from './signer-facts.ts';
 import { envelopeDetails } from './details.ts';
 
 /**
@@ -112,7 +112,9 @@ export async function deliveryPdf(db:D1Database,bucket:R2Bucket,tenantId:string,
     const facts=await sendFacts(db,envelopeId);
     const created=await db.prepare('SELECT created_at,details_json FROM envelopes WHERE id = ?').bind(envelopeId).first<{created_at:number;details_json:string}>();
     const events=(evidence.audit?evidence.audit.sealed:await auditTrail(db,envelopeId)).filter(event=>SUMMARY_EVENTS.has(event.type));
-    return {...facts,documentName:envelopeDetails(created?.details_json).documentName??null,createdAt:created?.created_at??null,events};
+    // The name with its version ("Mutual NDA (v3)") when the host gave one; older envelopes have none.
+    const details=envelopeDetails(created?.details_json);
+    return {...facts,documentName:versionedName(details.documentName,details.documentVersion),createdAt:created?.created_at??null,events};
   })():null;
   heading('Document');
   if(v2?.documentName)field('Name',ascii(v2.documentName));

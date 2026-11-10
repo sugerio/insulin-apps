@@ -269,12 +269,14 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    // Sign on the Worker's own signing page, as a host embeds it: <Worker origin>/sign#code=<code>.
    const view=await (await req(`/v1/envelopes/${envelope.id}/tasks/${info.tasks[i].id}/recipient-view`,post({origin:'http://127.0.0.1:8787'},auth))).json();
    // A new code differs only in the fragment, which would not reload the page: start from a blank page.
-   await call('Page.navigate',{url:'about:blank'});await call('Page.navigate',{url:`http://127.0.0.1:8787/sign#code=${view.code}`});await wait(()=>evaluate("document.body.innerText.includes('Review every page, then continue.')"),'signing session');
+   await call('Page.navigate',{url:'about:blank'});await call('Page.navigate',{url:`http://127.0.0.1:8787/sign#code=${view.code}`});await wait(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Continue')"),'signing session');
    await wait(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Continue'&&!b.disabled)"),'document reviewed');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Continue').click()");
    const otp=await wait(()=>evaluate("document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]"),'synthetic OTP');
    await evaluate(`(()=>{const x=document.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(otp)});x.dispatchEvent(new Event('input',{bubbles:true}));[...document.querySelectorAll('button')].find(b=>b.textContent==='Verify code').click();})()`);
-   await wait(()=>evaluate("Boolean(document.querySelector('input[aria-label*=signature]'))"),'signing fields');
-   await evaluate(`(()=>{const x=document.querySelector('input[aria-label*=signature]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(i?'Marcus':'Ana')});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+   await wait(()=>evaluate(`Boolean(document.querySelector('input[aria-label="Full name"]'))`),'signing fields');
+   await evaluate(`(()=>{const x=document.querySelector('input[aria-label="Full name"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(i?'Marcus':'Ana')});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+   // Sign hides the document (it was read on Review); show it again to check the previews on it.
+   await evaluate("document.querySelector('.esign-document').style.display='flex'");
    await wait(()=>evaluate("document.querySelectorAll('[data-signature-field] img').length===2"),'signature and date previews');
    for(const zoom of [.8,1.25]){
     await evaluate(`document.documentElement.style.zoom='${zoom}'`);

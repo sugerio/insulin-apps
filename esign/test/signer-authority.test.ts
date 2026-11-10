@@ -31,14 +31,14 @@ async function harness() {
   const form = new FormData(); form.set('file', new File([await pdf.save()], 'synthetic.pdf', { type: 'application/pdf' })); form.set('roles', '["partner"]');
   const template = await (await req('/v1/templates', { method: 'POST', headers: auth, body: form })).json() as { id: string };
   /** A prepared envelope whose signer has opened the page; `verify` also passes the code. */
-  const open = async (key: string, recipient: Record<string, string>, extra: Record<string, unknown> = {}, verify = true) => {
+  const open = async (key: string, recipient: Record<string, unknown>, extra: Record<string, unknown> = {}, verify = true, view: Record<string, unknown> = {}) => {
     const res = await req('/v1/envelopes', json({ templateId: template.id, recipients: [{ role: 'partner', name: 'Ana Partner', email: 'ana@partner.test', ...recipient }], ...extra }, { ...auth, 'idempotency-key': key }));
     const created = await res.json() as { id?: string; error?: string };
     if (!created.id) return { status: res.status, error: created.error } as const;
     const id = created.id;
     await req(`/v1/envelopes/${id}/prepare`, { method: 'POST', headers: auth });
     const task = (await (await req(`/v1/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[0];
-    const { code } = await (await req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN }, auth))).json() as { code: string };
+    const { code } = await (await req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN, ...view }, auth))).json() as { code: string };
     const { token } = await (await req('/v1/page-sessions/exchange', json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
     const headers = { origin: ORIGIN, authorization: `Bearer ${token}`, ...SIGNER };
     if (verify) {
@@ -60,7 +60,42 @@ test("the page shows the signer's title and company and the intent naming the do
     assert.equal(s.status, 201);
     const current = await (await h.req('/v1/signing/current', { headers: s.headers! })).json() as { signer?: unknown; intent?: string };
     assert.deepEqual(current.signer, { title: 'Partner Manager', onBehalfOf: 'Northbeam Consulting' });
-    assert.equal(current.intent, 'I intend this to be my signature on Mutual NDA on behalf of Northbeam Consulting.');
+    assert.equal(current.intent, 'I agree to use electronic records and signatures, and I intend this to be my signature on the Mutual NDA on behalf of Northbeam Consulting.');
+  } finally { await h.mf.dispose(); }
+});
+
+test('the page learns the version, the sender, the sign-in, who signs around this signer and what follows', async () => {
+  const h = await harness();
+  try {
+    const hostAuthentication = { method: 'SSO', provider: 'Google Workspace', domain: 'partner.test', signedInAt: '2026-10-23T10:31:00.000Z' };
+    const s = await h.open('v1', { ...NAMED, afterSigning: ['Your onboarding moves on to: Complete your profile.'] },
+      { documentName: 'Mutual NDA', documentVersion: { label: 'v3', publishedAt: '2026-09-02T00:00:00Z' }, sender: { name: 'Bryan Dunn', email: 'bryan@seller.test', organization: 'Pigment' } },
+      true, { hostAuthentication });
+    assert.equal(s.status, 201);
+    const current = await (await h.req('/v1/signing/current', { headers: s.headers! })).json() as Record<string, unknown>;
+    assert.deepEqual(current.documentVersion, { label: 'v3', publishedAt: '2026-09-02T00:00:00.000Z' });
+    assert.deepEqual(current.sender, { name: 'Bryan Dunn', organization: 'Pigment' }, 'no sender email on the page');
+    assert.deepEqual(current.hostAuthentication, hostAuthentication);
+    assert.deepEqual(current.signers, { before: 0, after: 0 });
+    assert.deepEqual(current.afterSigning, ['Your onboarding moves on to: Complete your profile.']);
+    assert.equal(current.intent, 'I agree to use electronic records and signatures, and I intend this to be my signature on the Mutual NDA (v3) on behalf of Northbeam Consulting.');
+    // Without them, the page gets none of it.
+    const plain = await h.open('v2', {});
+    const bare = await (await h.req('/v1/signing/current', { headers: plain.headers! })).json() as Record<string, unknown>;
+    for (const key of ['documentVersion', 'sender', 'hostAuthentication', 'afterSigning']) assert.equal(bare[key], undefined, key);
+  } finally { await h.mf.dispose(); }
+});
+
+test("the host's document version and after-signing lines are bounded", async () => {
+  const h = await harness();
+  try {
+    for (const [i, documentVersion] of [{ label: 'x'.repeat(17) }, { label: '' }, { label: 'v1', publishedAt: 'soon' }, 'v1', []].entries()) {
+      assert.equal((await h.open(`dv${i}`, {}, { documentVersion }, false)).status, 422, JSON.stringify(documentVersion));
+    }
+    for (const [i, afterSigning] of [['a', 'b', 'c', 'd'], ['x'.repeat(201)], [7], [''], 'line', ['bell\u0007']].entries()) {
+      assert.equal((await h.open(`as${i}`, { afterSigning }, {}, false)).status, 422, JSON.stringify(afterSigning));
+    }
+    assert.equal((await h.open('ok', { afterSigning: ['a', 'b', 'c'] }, { documentVersion: { label: 'v12' } }, false)).status, 201);
   } finally { await h.mf.dispose(); }
 });
 
@@ -107,9 +142,12 @@ test('a signer without a company signs as before', async () => {
     const s = await h.open('k3', {});
     const current = await (await h.req('/v1/signing/current', { headers: s.headers! })).json() as { id: string; sha256: string; signer?: unknown; intent: string };
     assert.equal(current.signer, undefined);
-    assert.equal(current.intent, 'I intend this to be my signature on this document.');
+    assert.equal(current.intent, 'I agree to use electronic records and signatures, and I intend this to be my signature on this document.');
     const disclosure = await consentDisclosure();
     assert.equal((await h.req('/v1/signing/sign', h.json({ artifactId: current.id, artifactHash: current.sha256, consent: true, disclosureVersion: disclosure.version }, s.headers!))).status, 202);
+    // The sentence ticked is recorded even with no company to bind.
+    const event = (await auditTrail(h.db, s.id!)).find(e => e.type === AUDIT.signed);
+    assert.equal(event?.detail?.intentSha256, Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(current.intent))).toString('hex'));
   } finally { await h.mf.dispose(); }
 });
 

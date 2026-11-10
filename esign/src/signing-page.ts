@@ -1,8 +1,10 @@
 /**
  * The recipient signing page, served by the Worker itself so that it can be embedded in an
  * <iframe> by the host application (for example a product's console), with the API on the page's own origin.
- * The host builds `<origin>/sign#code=<code>` from a recipient-view code issued for this
- * origin, the Worker's own (the default when the request names none).
+ * The host builds `<origin>/sign#code=<code>&host=<its own origin>` from a recipient-view code
+ * issued for this origin, the Worker's own (the default when the request names none). `host` is
+ * where the page reports that the signer closed it, signed or declined; it must be an origin
+ * allowed to frame the page.
  */
 
 const MAX_ANCESTORS = 10;
@@ -44,9 +46,11 @@ export async function signingPage(request: Request, assets: Fetcher | undefined,
   const html = await source.text();
   if (!html.includes('<head>')) return null;
   const origin = new URL(request.url).origin;
-  // Declares that this page's own origin serves the signing API (see ui/RecipientPage.ts).
-  const page = html.replace('<head>', `<head><meta name="esign-api" content="${origin}">`);
-  const ancestors = ["'self'", ...frameAncestors(rawAncestors, httpsOnly)].join(' ');
+  const allowed = frameAncestors(rawAncestors, httpsOnly);
+  // Declares that this page's own origin serves the signing API, and which hosts may frame it: the
+  // page tells only one of those that the signer closed, signed or declined (see ui/RecipientPage.ts).
+  const page = html.replace('<head>', `<head><meta name="esign-api" content="${origin}"><meta name="esign-hosts" content="${[origin, ...allowed].join(' ')}">`);
+  const ancestors = ["'self'", ...allowed].join(' ');
   return new Response(page, {
     status: 200,
     headers: {

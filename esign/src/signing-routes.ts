@@ -13,8 +13,9 @@ import { isProd, otpKey, signingEnabled, testSealKey, type EnvironmentEnv } from
 import { managedEvidenceFromEnv, type SealEnv } from './seal/config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
 import { expireIfDue } from './task-expiry.ts';
-import { intentStatement, lastHostAuthentication, parseHostAuthentication, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
+import { consentStatement, lastHostAuthentication, parseHostAuthentication, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
 import { CONSENT_DISCLOSURE, consentDisclosure } from './disclosure.ts';
+import { taskDetails } from './details.ts';
 import { hasManagedEvidence, managedDelivery, verifyManagedEvidence } from './seal/managed.ts';
 import { isValidOtpEmailAddress } from './cloudflare-otp-mail.ts';
 import { deliveryPdf } from './delivery-pdf.ts';
@@ -183,9 +184,22 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     if(prior.some(p=>{const render=JSON.parse(p.render_json) as {kind?:unknown;template?:unknown};return render.kind!=='fields'||canonicalJson(render.template)!==canonicalJson(all);}))throw new Error('Template snapshot changed');
   }
   app.get('/v1/signing/current', async c => {try {const a=await current(c,{verified:false}),details=await fieldsFor(c);
-    // The signer's title and company (when the host named them) and the sentence they adopt.
+    // The signer's title and company (when the host named them), the document's version and
+    // sender, and the one sentence they agree to.
     const who=await signerContext(c.env.DB,details.task);
-    return c.json({id:a.id,sha256:a.sha256,verified:await sessionVerified(c,details.task),disclosure:{version:CONSENT_DISCLOSURE.version,text:CONSENT_DISCLOSURE.text},intent:intentStatement(who.documentName,who.facts.onBehalfOf),signerName:details.recipientName,recipientEmail:details.recipientEmail,...(who.documentName?{documentName:who.documentName}:{}),...(who.facts.title||who.facts.onBehalfOf?{signer:who.facts}:{}),...(details.fields.length?{fields:details.fields,role:details.role,recipientName:details.recipientName,...(details.hasTextFields?{v3:true}:{})}:{})});} catch {return c.json({error:'unavailable'},401);}});
+    const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));
+    // How the host said it signed this recipient in, for "Confirm it's you".
+    const hostAuthentication=session?await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId):null;
+    // Who signs before and after this signer, for "After you sign".
+    const order=await c.env.DB.prepare('SELECT SUM(CASE WHEN o.routing_order<t.routing_order THEN 1 ELSE 0 END) AS before, SUM(CASE WHEN o.routing_order>t.routing_order THEN 1 ELSE 0 END) AS after FROM tasks t JOIN tasks o ON o.envelope_id=t.envelope_id WHERE t.id=?').bind(details.task).first<{before:number|null;after:number|null}>();
+    const nextRow=await c.env.DB.prepare('SELECT n.recipient_name AS name, n.details_json AS details FROM tasks t JOIN tasks n ON n.envelope_id=t.envelope_id AND n.routing_order=t.routing_order+1 WHERE t.id=?').bind(details.task).first<{name:string;details:string}>();
+    const nextCompany=nextRow?taskDetails(nextRow.details).onBehalfOf:undefined;
+    const next=nextRow?{name:nextRow.name,...(nextCompany?{organization:nextCompany}:{})}:undefined;
+    return c.json({id:a.id,sha256:a.sha256,verified:await sessionVerified(c,details.task),disclosure:{version:CONSENT_DISCLOSURE.version,text:CONSENT_DISCLOSURE.text},intent:consentStatement(who.documentName,who.documentVersion,who.facts.onBehalfOf),signerName:details.recipientName,recipientEmail:details.recipientEmail,
+      ...(who.documentName?{documentName:who.documentName}:{}),...(who.documentVersion?{documentVersion:who.documentVersion}:{}),
+      ...(who.sender?{sender:{name:who.sender.name,...(who.sender.organization?{organization:who.sender.organization}:{})}}:{}),
+      ...(hostAuthentication?{hostAuthentication}:{}),signers:{before:order?.before??0,after:order?.after??0,...(next?{next}:{})},...(who.afterSigning.length?{afterSigning:who.afterSigning}:{}),
+      ...(who.facts.title||who.facts.onBehalfOf?{signer:who.facts}:{}),...(details.fields.length?{fields:details.fields,role:details.role,recipientName:details.recipientName,...(details.hasTextFields?{v3:true}:{})}:{})});} catch {return c.json({error:'unavailable'},401);}});
   // The signer whose turn it is declines, after the code, with a reason: the envelope ends for
   // everyone, and the audit trail records who declined, why, and from where.
   app.post('/v1/signing/decline', async c => {
@@ -276,8 +290,9 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       if(!signerTitle)return c.json({error:'title_required'},422);
       if(body.authorityConfirmed!==true)return c.json({error:'authority_required'},422);
     }
-    const intent=intentStatement(who?.documentName??null,who?.facts.onBehalfOf);
-    const authority={...(signerTitle?{title:signerTitle}:{}),...(who?.facts.onBehalfOf?{onBehalfOf:who.facts.onBehalfOf,authorityConfirmed:true}:{}),...(who?.facts.onBehalfOf||signerTitle?{intentSha256:await sha256Hex(intent)}:{})};
+    // The sentence the signer agreed to by ticking the box: always recorded, by its SHA-256.
+    const intent=consentStatement(who?.documentName??null,who?.documentVersion??null,who?.facts.onBehalfOf);
+    const authority={...(signerTitle?{title:signerTitle}:{}),...(who?.facts.onBehalfOf?{onBehalfOf:who.facts.onBehalfOf,authorityConfirmed:true}:{}),intentSha256:await sha256Hex(intent)};
     // A retried request (same session, same document, same values) gets the signature it made.
     const replay=async () => {
       const id=await retrySignature(c.env.DB,c.env.ARTIFACTS,{token,origin:requestOrigin(c),now:Date.now(),artifactId:body.artifactId as string,artifactHash:body.artifactHash as string,values:body.signatures,datePreviews:body.datePreviews});

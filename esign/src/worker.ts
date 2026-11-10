@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { AUDIT, requestFacts } from './audit.ts';
 import { expireDueEnvelopes, expireIfDue, parseDeadline } from './task-expiry.ts';
-import { parseDocumentName, parseNamedBy, parseSender, parseSignerFacts, type SignerFacts } from './signer-facts.ts';
+import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedBy, parseSender, parseSignerFacts, type SignerFacts } from './signer-facts.ts';
 import { CERTIFICATE_VERSION } from './delivery-pdf.ts';
 import type { EnvelopeDetails, TaskDetails } from './details.ts';
 import { PDFDocument } from 'pdf-lib';
@@ -155,10 +155,13 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   let body: unknown;
   try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
-  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; sender?: unknown };
+  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown };
   // The document's name, shown to the signer and named in the intent statement.
   const documentName = parseDocumentName(input.documentName);
   if (documentName === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  // Which version of the document it is ("v3"), and when it was published, as the host names it.
+  const documentVersion = parseDocumentVersion(input.documentVersion);
+  if (documentVersion === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
   // Who sent it, for the certificate.
   const sender = parseSender(input.sender);
   if (sender === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
@@ -167,6 +170,7 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const deadlines: (number | null)[] = [];
   const signerFacts: SignerFacts[] = [];
   const namedBy: (string | null)[] = [];
+  const afterSigning: (string[] | null)[] = [];
   for (const recipient of input.recipients) {
     if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || typeof recipient.name !== 'string' || typeof recipient.email !== 'string' || !recipient.name.trim() || recipient.name.length > 200 || recipient.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email)) return context.json({ error: 'invalid_recipient' }, 422);
     // A sign-by deadline for this recipient (ISO 8601, future, within 400 days).
@@ -181,10 +185,14 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     const named = parseNamedBy((recipient as { namedBy?: unknown }).namedBy);
     if (named === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
     namedBy.push(named);
-    recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email, ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}) });
+    // What the host says happens once this signer signs, shown on their signing page only.
+    const after = parseAfterSigning((recipient as { afterSigning?: unknown }).afterSigning);
+    if (after === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    afterSigning.push(after);
+    recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email, ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}) });
   }
   const tenantId = context.get('tenantId');
-  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(sender ? { sender } : {}) });
+  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
   // Idempotency is by the envelope itself: its id comes from the tenant and the Idempotency-Key, and
   // it keeps the hash of the request that created it. A retry of that request gets the response a
@@ -228,8 +236,8 @@ app.post('/v1/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   // or not at all.
   const statements = [
     // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
-    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(sender ? { sender } : {}), certificateVersion: CERTIFICATE_VERSION } satisfies EnvelopeDetails)),
-    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}) } satisfies TaskDetails))),
+    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), certificateVersion: CERTIFICATE_VERSION } satisfies EnvelopeDetails)),
+    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
   ];
   try { await context.env.DB.batch(statements); }

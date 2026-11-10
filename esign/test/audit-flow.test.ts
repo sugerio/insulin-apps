@@ -53,6 +53,8 @@ test('a signing leaves an ordered audit trail with the signer\'s IP and browser,
     assert.ok(trail.every(e => e.taskId === task.id));
     for (const e of trail.slice(1)) assert.deepEqual([e.ip, e.userAgent], ['203.0.113.9', 'Mozilla/5.0 (Synthetic signer)'], e.type);
     assert.deepEqual(trail.find(e => e.type === AUDIT.otpSent)?.detail, { to: 'ana@partner.test', delivery: 'test-mailbox', messageId });
-    assert.deepEqual(trail.find(e => e.type === AUDIT.signed)?.detail, { signatureId, artifactId: current.id, artifactSha256: current.sha256, consentDisclosureVersion: disclosure.version, consentDisclosureSha256: disclosure.sha256 });
+    // The sentence the signer ticked is recorded by its SHA-256, with the disclosure it refers to.
+    const intentSha256 = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode((current as { intent: string }).intent))).toString('hex');
+    assert.deepEqual(trail.find(e => e.type === AUDIT.signed)?.detail, { signatureId, artifactId: current.id, artifactSha256: current.sha256, consentDisclosureVersion: disclosure.version, consentDisclosureSha256: disclosure.sha256, intentSha256 });
   } finally { await mf.dispose(); }
 });

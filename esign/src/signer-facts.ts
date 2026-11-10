@@ -30,6 +30,47 @@ export function parseSignerFacts(recipient: { title?: unknown; onBehalfOf?: unkn
 /** The document's name from the create request: null when absent, or 'invalid'. */
 export const parseDocumentName = (value: unknown) => text(value, MAX_DOCUMENT_NAME);
 
+const MAX_VERSION_LABEL = 16;
+const MAX_AFTER_SIGNING = 3;
+const MAX_AFTER_SIGNING_LINE = 200;
+
+/** Which version of the document is signed, as the host names it ("v3"), and when it was published. */
+export type DocumentVersion = { label: string; publishedAt?: string };
+
+/** The document's version from the create request: null when absent, or 'invalid'. */
+export function parseDocumentVersion(value: unknown): DocumentVersion | null | 'invalid' {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return 'invalid';
+  const v = value as { label?: unknown; publishedAt?: unknown };
+  const label = text(v.label, MAX_VERSION_LABEL);
+  if (label === 'invalid' || !label) return 'invalid';
+  if (v.publishedAt === undefined || v.publishedAt === null) return { label };
+  if (typeof v.publishedAt !== 'string' || Number.isNaN(Date.parse(v.publishedAt))) return 'invalid';
+  return { label, publishedAt: new Date(v.publishedAt).toISOString() };
+}
+
+/**
+ * What the host says happens once this signer signs (at most three lines), from the create
+ * request: null when absent, or 'invalid'. Shown on the signing page only; never evidence.
+ */
+export function parseAfterSigning(value: unknown): string[] | null | 'invalid' {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || value.length > MAX_AFTER_SIGNING) return 'invalid';
+  const lines: string[] = [];
+  for (const line of value) {
+    const parsed = text(line, MAX_AFTER_SIGNING_LINE);
+    if (parsed === 'invalid' || !parsed) return 'invalid';
+    lines.push(parsed);
+  }
+  return lines.length ? lines : null;
+}
+
+/** "Mutual NDA (v3)": the document's name with its version, as the signer agrees to it. */
+export function versionedName(documentName: string | null | undefined, version: DocumentVersion | null | undefined): string | null {
+  if (!documentName) return null;
+  return version ? `${documentName} (${version.label})` : documentName;
+}
+
 const MAX_NAME = 200;
 const MAX_EMAIL = 254;
 const MAX_NAMED_BY = 300;
@@ -94,20 +135,38 @@ export async function sendFacts(db: D1Database, envelopeId: string): Promise<{ s
 /** A signer's own title as typed on the page: trimmed, bounded, or 'invalid'. */
 export const parseSignerTitle = (value: unknown) => text(value, MAX_TITLE);
 
-/** The host's facts about the task's signer, and the document's name. */
-export async function signerContext(db: D1Database, taskId: string): Promise<{ facts: SignerFacts; documentName: string | null }> {
+/** What the signing page shows about the task's signer and the document, as the host said it. */
+export type SignerContext = {
+  facts: SignerFacts;
+  documentName: string | null;
+  documentVersion: DocumentVersion | null;
+  sender: Sender | null;
+  afterSigning: string[];
+};
+
+/** The host's facts about the task's signer, the document and its sender. */
+export async function signerContext(db: D1Database, taskId: string): Promise<SignerContext> {
   const row = await db.prepare('SELECT t.details_json AS task, e.details_json AS envelope FROM tasks t JOIN envelopes e ON e.id = t.envelope_id WHERE t.id = ?')
     .bind(taskId).first<{ task: string; envelope: string }>();
-  const { title, onBehalfOf } = taskDetails(row?.task);
+  const { title, onBehalfOf, afterSigning } = taskDetails(row?.task);
+  const envelope = envelopeDetails(row?.envelope);
   return {
     facts: { ...(title ? { title } : {}), ...(onBehalfOf ? { onBehalfOf } : {}) },
-    documentName: envelopeDetails(row?.envelope).documentName ?? null,
+    documentName: envelope.documentName ?? null,
+    documentVersion: envelope.documentVersion ?? null,
+    sender: envelope.sender ?? null,
+    afterSigning: afterSigning ?? [],
   };
 }
 
-/** The sentence the signer adopts: it names the document and the company being bound. */
-export function intentStatement(documentName: string | null, onBehalfOf: string | undefined): string {
-  return `I intend this to be my signature on ${documentName ?? 'this document'}${onBehalfOf ? ` on behalf of ${onBehalfOf}` : ''}.`;
+/**
+ * The one sentence the signer agrees to: consent to electronic records and signatures, and the
+ * intent to sign this document (named with its version) for the company being bound. Its SHA-256
+ * is recorded on the SIGNED audit event.
+ */
+export function consentStatement(documentName: string | null, version: DocumentVersion | null, onBehalfOf: string | undefined): string {
+  const name = versionedName(documentName, version);
+  return `I agree to use electronic records and signatures, and I intend this to be my signature on ${name ? `the ${name}` : 'this document'}${onBehalfOf ? ` on behalf of ${onBehalfOf}` : ''}.`;
 }
 
 export async function sha256Hex(value: string): Promise<string> {

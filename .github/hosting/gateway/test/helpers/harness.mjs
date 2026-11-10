@@ -27,6 +27,8 @@ export function siteverify(params, harness) {
 export const GOOGLE_CLIENT_ID = 'test-client.apps.googleusercontent.com'
 export const GOOGLE_CLIENT_SECRET = 'test-google-client-secret'
 export const TURNSTILE_SECRET = 'test-turnstile-secret'
+/** GATEWAY_SECRET_KEY in tests: 32 synthetic bytes, base64. */
+export const SECRET_KEY = Buffer.alloc(32, 0x5a).toString('base64')
 export const APPS = [
   { name: 'captable', title: 'Cap Table', summary: 'Equity management for startups.', binding: 'APP_CAPTABLE', source: 'https://github.com/example/insulin-apps/tree/main/captable' },
   { name: 'ledger', title: 'Ledger', summary: 'An app that is not deployed in these tests.', binding: 'APP_LEDGER' },
@@ -108,11 +110,21 @@ function secureContext(url) {
   return url.protocol === 'https:' || url.hostname === 'localhost' || url.hostname.endsWith('.localhost')
 }
 
-/** Miniflare's outbound fetch hook: answers Turnstile's siteverify and Google's token endpoint, records every call. */
+/**
+ * Miniflare's outbound fetch hook: answers Turnstile's siteverify and Google's token endpoint, records every call. A
+ * test answers other outside services with `on(prefix, handler)`: the longest matching prefix wins.
+ */
 export class Outbound {
   requests = []
   turnstile = siteverify
   google = () => new Response('no Google response configured', { status: 500 })
+  handlers = new Map()
+
+  /** Answers requests whose URL starts with `prefix` with `handler(request, url, params, body)` (a Response, or JSON). */
+  on(prefix, handler) {
+    this.handlers.set(prefix, handler)
+    return () => this.handlers.delete(prefix)
+  }
 
   constructor(harness) {
     this.harness = harness
@@ -120,14 +132,20 @@ export class Outbound {
 
   async handle(request) {
     const url = new URL(request.url)
-    const params = new URLSearchParams(request.method === 'POST' ? await request.text() : '')
-    this.requests.push({ url: url.href, method: request.method, params })
+    const body = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.text()
+    const params = new URLSearchParams(body)
+    this.requests.push({ url: url.href, method: request.method, params, body, headers: Object.fromEntries(request.headers) })
     if (url.href === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
       const answer = await this.turnstile(params, this.harness)
       return answer instanceof Response ? answer : Response.json(answer)
     }
     if (url.href === 'https://oauth2.googleapis.com/token') {
       const answer = await this.google(params, this.harness)
+      return answer instanceof Response ? answer : Response.json(answer)
+    }
+    const prefix = [...this.handlers.keys()].filter((candidate) => url.href.startsWith(candidate)).sort((a, b) => b.length - a.length)[0]
+    if (prefix) {
+      const answer = await this.handlers.get(prefix)(request, url, params, body)
       return answer instanceof Response ? answer : Response.json(answer)
     }
     return new Response(`unexpected outbound request to ${url.host}`, { status: 599 })
@@ -225,6 +243,7 @@ export class Harness {
       TURNSTILE_SITE_KEY: 'test-site-key',
       TURNSTILE_SECRET_KEY: TURNSTILE_SECRET,
       EMAIL_FROM: 'Insulin Apps <no-reply@example.test>',
+      GATEWAY_SECRET_KEY: SECRET_KEY,
       ...(mode === 'test' ? { SITE_ENV: 'test' } : {}),
     }
     this.vars = Object.fromEntries(Object.entries({ ...base, ...vars }).filter(([, value]) => value !== undefined))

@@ -2,10 +2,14 @@
 // used twice, a challenge answered twice, turning it on or off while the credentials change) is one statement or batch.
 
 export interface MfaRow {
+  email: string
   totp_secret: string | null
   totp_pending: string | null
   totp_enabled_at: number | null
   totp_last_step: number
+  /** Wrong app codes in a row; at the limit, app codes are refused until `totp_locked_until`. */
+  totp_failures: number
+  totp_locked_until: number | null
   credential_version: number
 }
 
@@ -15,13 +19,38 @@ export interface ChallengeRow {
   credential_version: number
   method: string
   next: string
+  /** The organization a single sign-on signs in to, made the session's active one. */
+  active_org_id: string | null
   attempts: number
   expires_at: number
 }
 
 export function findMfa(db: D1Database, userId: string): Promise<MfaRow | null> {
-  return db.prepare('SELECT totp_secret, totp_pending, totp_enabled_at, totp_last_step, credential_version FROM users WHERE id = ?1')
-    .bind(userId).first<MfaRow>()
+  return db.prepare(
+    `SELECT email, totp_secret, totp_pending, totp_enabled_at, totp_last_step, totp_failures, totp_locked_until, credential_version
+     FROM users WHERE id = ?1`,
+  ).bind(userId).first<MfaRow>()
+}
+
+/**
+ * Counts a wrong app code, in one statement. At the `limit`-th in a row, app codes are refused until `now + lockMs`
+ * and the count starts again. Returns whether this one set the lock (the caller tells the person once).
+ */
+export async function recordCodeFailure(db: D1Database, userId: string, now: number, limit: number, lockMs: number): Promise<boolean> {
+  const row = await db.prepare(
+    `UPDATE users SET
+       totp_locked_until = CASE WHEN totp_failures + 1 >= ?3 THEN ?2 + ?4 ELSE totp_locked_until END,
+       totp_failures = CASE WHEN totp_failures + 1 >= ?3 THEN 0 ELSE totp_failures + 1 END
+     WHERE id = ?1 AND totp_secret IS NOT NULL
+     RETURNING totp_locked_until`,
+  ).bind(userId, now, limit, lockMs).first<{ totp_locked_until: number | null }>()
+  return row?.totp_locked_until === now + lockMs
+}
+
+/** A right code (or recovery code) ends a run of wrong ones. */
+export async function clearCodeFailures(db: D1Database, userId: string): Promise<void> {
+  await db.prepare('UPDATE users SET totp_failures = 0, totp_locked_until = NULL WHERE id = ?1 AND (totp_failures > 0 OR totp_locked_until IS NOT NULL)')
+    .bind(userId).run()
 }
 
 export async function countRecoveryCodes(db: D1Database, userId: string): Promise<number> {
@@ -103,8 +132,10 @@ export async function disableMfa(db: D1Database, change: { userId: string; secre
  * Exactly one of two concurrent submissions of the same code gets true.
  */
 export async function consumeStep(db: D1Database, userId: string, secret: string, step: number): Promise<boolean> {
-  const result = await db.prepare('UPDATE users SET totp_last_step = ?3 WHERE id = ?1 AND totp_secret = ?2 AND totp_last_step < ?3')
-    .bind(userId, secret, step).run()
+  const result = await db.prepare(
+    `UPDATE users SET totp_last_step = ?3, totp_failures = 0, totp_locked_until = NULL
+     WHERE id = ?1 AND totp_secret = ?2 AND totp_last_step < ?3`,
+  ).bind(userId, secret, step).run()
   return result.meta.changes > 0
 }
 
@@ -129,16 +160,20 @@ export async function replaceRecoveryCodes(db: D1Database, userId: string, secre
   return (inserted?.meta.changes ?? 0) > 0
 }
 
-export async function insertChallenge(db: D1Database, challenge: { idHash: string; userId: string; credentialVersion: number; method: string; next: string; now: number; expiresAt: number }): Promise<void> {
+export async function insertChallenge(db: D1Database, challenge: {
+  idHash: string; userId: string; credentialVersion: number; method: string; next: string; activeOrgId: string | null; now: number; expiresAt: number
+}): Promise<void> {
   await db.prepare(
-    `INSERT INTO mfa_challenges (id_hash, user_id, credential_version, method, next, created_at, expires_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
-  ).bind(challenge.idHash, challenge.userId, challenge.credentialVersion, challenge.method, challenge.next, challenge.now, challenge.expiresAt).run()
+    `INSERT INTO mfa_challenges (id_hash, user_id, credential_version, method, next, active_org_id, created_at, expires_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+  ).bind(challenge.idHash, challenge.userId, challenge.credentialVersion, challenge.method, challenge.next, challenge.activeOrgId,
+    challenge.now, challenge.expiresAt).run()
 }
 
 export function findChallenge(db: D1Database, idHash: string, now: number): Promise<ChallengeRow | null> {
   return db.prepare(
-    'SELECT id_hash, user_id, credential_version, method, next, attempts, expires_at FROM mfa_challenges WHERE id_hash = ?1 AND expires_at > ?2',
+    `SELECT id_hash, user_id, credential_version, method, next, active_org_id, attempts, expires_at FROM mfa_challenges
+     WHERE id_hash = ?1 AND expires_at > ?2`,
   ).bind(idHash, now).first<ChallengeRow>()
 }
 

@@ -179,16 +179,20 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **Enterprise SSO.** An owner's verified domains decide where "Sign in with SSO" goes; the SAML ACS is the only form
   exempt from the Origin check (the identity provider posts it from another site), so its request is single use and
   bound to a host-only `__Host-insulin_sso` cookie (`SameSite=None`), and the signature must cover the element that is
-  read. SCIM has its own JSON dispatch with per-organization bearer tokens. Domain verification and OIDC discovery and
-  token calls are the gateway's only outside fetches besides Google, Turnstile and the integration proxy; none follows
-  a redirect.
+  read. Responses over 256 KB or nested deeper than 64 elements are refused before parsing. SCIM has its own JSON
+  dispatch with per-organization bearer tokens, and reaches only addresses in a currently verified domain. "Require
+  SSO" is checked early in each form, and again in `finishSignIn` and the code step (`src/sso/required.ts`) against the
+  account's stored address. Domain verification and OIDC discovery and token calls are the gateway's only outside
+  fetches besides Google, Turnstile and the integration proxy; none follows a redirect.
 - **Two-step sign-in.** With an authenticator app turned on, `finishSignIn` gives the browser a 10-minute challenge and
   a host-only `__Host-insulin_mfa` cookie instead of a session; only a code (or a recovery code) at `/login/mfa` starts
   the session, under the credential version the first step verified. A used time step, a recovery code and a
   challenge are each spent by one conditional statement, so two concurrent answers can't both pass; five wrong answers
-  end a challenge. The secret is sealed with `GATEWAY_SECRET_KEY` (purpose `totp`); turning the feature on or off
-  raises the credential version, which ends every other session. Enterprise SSO skips this step: the identity provider
-  owns MFA there.
+  end a challenge, and ten wrong app codes in a row, across challenges, pause app codes for an hour (`users.totp_failures`,
+  `totp_locked_until`, one statement). The secret is sealed with `GATEWAY_SECRET_KEY` (purpose `totp`); turning the
+  feature on needs the password (or a sign-in in the last ten minutes for an account without one), and turning it on
+  or off raises the credential version, which ends every other session. Enterprise SSO asks for the code too, and the
+  challenge carries its organization.
 - **Credential version.** Every password set, change or reset (and clearing a password when Google takes over an
   unconfirmed account) raises `users.credential_version`. A session is valid only while its version matches, and
   session inserts and password writes are conditional on the version the request verified, so a sign-in or password

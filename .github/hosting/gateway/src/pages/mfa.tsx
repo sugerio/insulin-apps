@@ -96,6 +96,8 @@ export function mfaUnavailablePage(ctx: Context): Html {
 export interface SecurityState {
   /** GATEWAY_SECRET_KEY is set: two-step sign-in can be turned on. */
   available: boolean
+  /** Turning it on asks for the password; an account without one needs a recent sign-in instead. */
+  needsPassword: boolean
   enabledAt: number | null
   /** A secret being set up: its key and otpauth URI, for the QR code. */
   setup: { secret: string; uri: string } | null
@@ -169,8 +171,8 @@ export function securityPage(ctx: Context, session: Session, state: SecurityStat
                 </Badge>
               </CardTitle>
               <CardDescription>
-                On since {formatDate(state.enabledAt!)}. Signing in with your password or Google also asks for a code from your authenticator
-                app. You have {state.recoveryLeft === 1 ? "1 recovery code" : `${state.recoveryLeft} recovery codes`} left.
+                On since {formatDate(state.enabledAt!)}. Signing in with your password, Google or single sign-on also asks for a code from your
+                authenticator app. You have {state.recoveryLeft === 1 ? "1 recovery code" : `${state.recoveryLeft} recovery codes`} left.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -239,11 +241,14 @@ export function securityPage(ctx: Context, session: Session, state: SecurityStat
                 <span className="text-muted-foreground">Time-based, 6 digits, every 30 seconds.</span>
               </div>
             </div>
-            <form method="post" action="/account/security/enable" className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <TextField label="Code from your app" name="code" autoComplete="one-time-code" inputMode="numeric" maxLength={10} error={errors.setup} />
+            <form method="post" action="/account/security/enable" className="flex flex-col gap-4">
+              <TextField label="Code from your app" name="code" autoComplete="one-time-code" inputMode="numeric" maxLength={10} error={errors.setup} />
+              {state.needsPassword ? (
+                <TextField id="field-enable-password" label="Your password" name="password" type="password" autoComplete="current-password" maxLength={200} />
+              ) : null}
+              <div>
+                <Button type="submit">Turn on</Button>
               </div>
-              <Button type="submit">Turn on</Button>
             </form>
           </CardContent>
           <CardFooter>
@@ -261,13 +266,23 @@ export function securityPage(ctx: Context, session: Session, state: SecurityStat
             </CardTitle>
             <CardDescription>
               {state.available
-                ? "Protect your account with a code from an authenticator app on your phone, asked for after your password or Google. Enterprise single sign-on leaves this to your organization's identity provider."
+                ? "Protect your account with a code from an authenticator app on your phone, asked for after your password, Google or single sign-on."
                 : "Two-step sign-in isn't available on this site right now."}
             </CardDescription>
           </CardHeader>
           {state.available ? (
             <CardFooter>
-              <PostButton action="/account/security/setup">Set up two-step sign-in</PostButton>
+              <form method="post" action="/account/security/setup" className="flex w-full flex-col gap-4">
+                {state.needsPassword ? (
+                  <TextField id="field-setup-password" label="Your password" name="password" type="password" autoComplete="current-password" maxLength={200}
+                    hint="To make sure it's you, not someone using a session left open." />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Your account has no password, so this works within ten minutes of signing in.</p>
+                )}
+                <div>
+                  <Button type="submit">Set up two-step sign-in</Button>
+                </div>
+              </form>
             </CardFooter>
           ) : null}
         </Card>

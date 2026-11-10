@@ -23,7 +23,7 @@ import { credentialsChangedPage, home, rateLimitedPage } from '../pages/status.t
 import { allowAuth } from '../ratelimit.ts'
 import { TURNSTILE_FIELD, verifyTurnstile } from '../turnstile.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
-import { ssoRequired, ssoRequiredResponse } from '../sso/flow.ts'
+import { ssoRequired, ssoRequiredResponse } from '../sso/required.ts'
 import { endSession, loadSession } from './session.ts'
 import { finishSignIn } from './sign-in.ts'
 

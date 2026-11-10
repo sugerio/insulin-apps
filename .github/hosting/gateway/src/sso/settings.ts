@@ -180,7 +180,7 @@ function httpsUrl(value: string): string | null {
 }
 
 /** The connection a form asks for. Turning it on needs everything its protocol uses; off, it may be incomplete. */
-async function readConnection(ctx: Context, stored: { secret: boolean; certificates: boolean }): Promise<ConnectionInput | { problem: string }> {
+async function readConnection(ctx: Context, stored: { secret: boolean; certificates: boolean; issuer: string | null; clientId: string | null }): Promise<ConnectionInput | { problem: string }> {
   const form = ctx.form
   const protocol = field(form, 'protocol')
   if (protocol !== 'saml' && protocol !== 'oidc') return { problem: 'Choose SAML or OpenID Connect.' }
@@ -209,7 +209,13 @@ async function readConnection(ctx: Context, stored: { secret: boolean; certifica
   if (enabled && protocol === 'saml' && (!samlEntityId || !samlSsoUrl || (!samlCertificates && !stored.certificates))) {
     return { problem: 'To turn SAML on, fill in the identity provider\'s entity ID, sign-in URL and certificate.' }
   }
-  if (enabled && protocol === 'oidc' && (!oidcIssuer || !oidcClientId || (!oidcClientSecret && !stored.secret))) {
+  // A stored secret belongs to the issuer and client it was given for: changing either drops it (saveConnection), so
+  // a changed issuer can't receive the old secret at its token endpoint.
+  const secretKept = stored.secret && oidcIssuer === stored.issuer && oidcClientId === stored.clientId
+  if (protocol === 'oidc' && stored.secret && !secretKept && !oidcClientSecret && (oidcIssuer || oidcClientId)) {
+    return { problem: 'The issuer or client ID changed, so enter the client secret again.' }
+  }
+  if (enabled && protocol === 'oidc' && (!oidcIssuer || !oidcClientId || (!oidcClientSecret && !secretKept))) {
     return { problem: 'To turn OpenID Connect on, fill in the issuer, client ID and client secret.' }
   }
   return { protocol, enabled, requireSso, defaultRole, samlEntityId, samlSsoUrl, samlCertificates, oidcIssuer, oidcClientId, oidcClientSecret }
@@ -221,7 +227,12 @@ export async function saveSsoConnection(ctx: Context, [orgId]: string[]): Promis
   const { session, membership } = found
   const db = ctx.config.db
   const existing = await findConnection(db, membership.org_id)
-  const input = await readConnection(ctx, { secret: Boolean(existing?.oidc_client_secret), certificates: Boolean(existing?.saml_certificates) })
+  const input = await readConnection(ctx, {
+    secret: Boolean(existing?.oidc_client_secret),
+    certificates: Boolean(existing?.saml_certificates),
+    issuer: existing?.oidc_issuer ?? null,
+    clientId: existing?.oidc_client_id ?? null,
+  })
   if ('problem' in input) return render(ctx, session, membership, { error: input.problem, status: 400 })
   if (!(await saveConnection(db, { id: existing?.id ?? newId(), orgId: membership.org_id, input, actorId: session.user.id, now: ctx.now }))) {
     return (await actorChanged(ctx, session, membership)) ?? notFoundPage(ctx)

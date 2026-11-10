@@ -7,7 +7,7 @@ import type { Context } from '../context.ts'
 import { apexUrl } from '../context.ts'
 import { UUID_PATTERN, newId, sha256Hex } from '../crypto.ts'
 import {
-  confirmByIdentityProvider, domainOf, findConnection, findScimUser, isVerifiedDomain, joinOrg, leaveBySso, linkScimUser,
+  confirmByIdentityProvider, domainOf, findConnection, findScimUser, isVerifiedDomain, joinOrgByScim, leaveBySso, linkScimUser,
   listScimUsers, unlinkScimUser, useScimToken, type ScimUserRow,
 } from '../db/sso.ts'
 import { findUserByEmail, insertUser, setUserName } from '../db/users.ts'
@@ -231,12 +231,15 @@ async function defaultRole(ctx: Context, orgId: string): Promise<'EDITOR' | 'VIE
   return (await findConnection(ctx.config.db, orgId))?.default_role ?? 'VIEWER'
 }
 
-/** Makes membership follow `active`: joins with the default role, or leaves (never the last owner). */
+/**
+ * Makes membership follow `active`: joins with the default role, or leaves (never the last owner). Joining re-checks,
+ * in the same statement, that the address is in one of the organization's verified domains now.
+ */
 async function setActive(ctx: Context, orgId: string, userId: string, active: boolean): Promise<Response | null> {
   const db = ctx.config.db
   if (active) {
-    if (!(await joinOrg(db, orgId, userId, await defaultRole(ctx, orgId), ctx.now, MEMBER_LIMIT))) {
-      return problem(409, `The organization has reached its limit of ${MEMBER_LIMIT} members.`)
+    if (!(await joinOrgByScim(db, orgId, userId, await defaultRole(ctx, orgId), ctx.now, MEMBER_LIMIT))) {
+      return problem(409, `The person can't join: the organization has reached its limit of ${MEMBER_LIMIT} members, or their address is no longer in one of its verified domains.`)
     }
     return null
   }
@@ -252,6 +255,8 @@ async function createUser(ctx: Context, orgId: string): Promise<Response> {
   const db = ctx.config.db
   const email = emailFrom(body)
   if (!email) return problem(400, 'userName must be an e-mail address.', 'invalidValue')
+  // SCIM compares domains as stored (punycode), so an address must use that form too.
+  if (domainOf(email) !== email.slice(email.lastIndexOf('@') + 1)) return problem(400, 'Write the address\'s domain in its ASCII (punycode) form.', 'invalidValue')
   if (!(await isVerifiedDomain(db, orgId, domainOf(email)))) return problem(400, 'The address isn\'t in one of the organization\'s verified domains.', 'invalidValue')
   let user = await findUserByEmail(db, email)
   if (user && await findScimUser(db, orgId, user.id)) return problem(409, 'This user already exists in the organization.', 'uniqueness')
@@ -270,7 +275,8 @@ async function createUser(ctx: Context, orgId: string): Promise<Response> {
   }
   await linkScimUser(db, orgId, user.id, text(body.externalId, 200), ctx.now)
   log('scim_user_provisioned', { org: orgId, user: user.id })
-  const row = (await findScimUser(db, orgId, user.id))!
+  const row = await findScimUser(db, orgId, user.id)
+  if (!row) return problem(409, 'The address is no longer in one of the organization\'s verified domains.', 'invalidValue')
   return scim(resource(ctx, row), 201, { Location: apexUrl(ctx, `${SCIM_BASE}/Users/${row.id}`) })
 }
 

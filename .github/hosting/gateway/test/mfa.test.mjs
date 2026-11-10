@@ -39,10 +39,10 @@ async function freshCode(harness, person, secret) {
 
 /** Turns two-step sign-in on for `person`; returns the key and the recovery codes the page showed once. */
 async function enable(harness, person) {
-  assert.equal((await person.client.post(harness.url('auth', '/account/security/setup'), {})).status, 303)
+  assert.equal((await person.client.post(harness.url('auth', '/account/security/setup'), { password: PASSWORD })).status, 303)
   const page = await person.client.get(harness.url('auth', '/account/security'))
   const secret = /<code[^>]*>([A-Z2-7 ]+)<\/code>/.exec(page.text)[1].replaceAll(' ', '')
-  const enabled = await person.client.post(harness.url('auth', '/account/security/enable'), { code: await hotp(base32Decode(secret), timeStep(Date.now()) - 1) })
+  const enabled = await person.client.post(harness.url('auth', '/account/security/enable'), { code: await hotp(base32Decode(secret), timeStep(Date.now()) - 1), password: PASSWORD })
   assert.equal(enabled.status, 200, enabled.text.slice(0, 300))
   const codes = [...enabled.text.matchAll(RECOVERY)].map((match) => match[1])
   return { secret, codes, page: enabled }
@@ -66,7 +66,11 @@ test('turning it on: a QR code and key, a code from the app, ten recovery codes 
   const off = await person.client.get(h.url('auth', '/account/security'))
   assert.match(off.text, /Set up two-step sign-in/)
   assert.match((await person.client.get(h.url('auth', '/account'))).text, /<h2>Two-step sign-in<\/h2>[\s\S]*?>Off</)
-  assert.equal((await person.client.post(h.url('auth', '/account/security/setup'), {})).status, 303)
+  const unproven = await person.client.post(h.url('auth', '/account/security/setup'), { password: 'not the password' })
+  assert.equal(unproven.status, 403, 'a session alone, without the password, sets nothing up')
+  assert.match(unproven.text, /That password isn&#x27;t right/)
+  assert.equal((await h.sql('SELECT totp_pending FROM users WHERE id = ?1', person.id))[0].totp_pending, null)
+  assert.equal((await person.client.post(h.url('auth', '/account/security/setup'), { password: PASSWORD })).status, 303)
   const setup = await person.client.get(h.url('auth', '/account/security'))
   assert.match(setup.text, /<svg[^>]*role="img"[^>]*aria-label="QR code for your authenticator app"/)
   assert.doesNotMatch(setup.text, /\sstyle=/, 'no inline styles, the QR code included')
@@ -77,10 +81,12 @@ test('turning it on: a QR code and key, a code from the app, ten recovery codes 
   assert.ok(!pending.totp_pending.includes(secret))
   assert.equal(pending.totp_secret, null, 'not on until a code confirms it')
 
-  const wrong = await person.client.post(h.url('auth', '/account/security/enable'), { code: '000000' })
+  const wrong = await person.client.post(h.url('auth', '/account/security/enable'), { code: '000000', password: PASSWORD })
   assert.equal(wrong.status, 400)
   assert.match(wrong.text, /That code didn&#x27;t work/)
-  const enabled = await person.client.post(h.url('auth', '/account/security/enable'), { code: await hotp(base32Decode(secret), timeStep(Date.now())) })
+  const noPassword = await person.client.post(h.url('auth', '/account/security/enable'), { code: await hotp(base32Decode(secret), timeStep(Date.now())) })
+  assert.equal(noPassword.status, 403, 'confirming needs the password too')
+  const enabled = await person.client.post(h.url('auth', '/account/security/enable'), { code: await hotp(base32Decode(secret), timeStep(Date.now())), password: PASSWORD })
   assert.equal(enabled.status, 200)
   const codes = [...enabled.text.matchAll(RECOVERY)].map((match) => match[1])
   assert.equal(codes.length, 10)
@@ -323,4 +329,43 @@ test('the code prompt and the security page are ordinary pages: one h1, labelled
   const menu = await person.client.get(h.url('auth', '/account'))
   assert.match(menu.text, /href="http:\/\/insulinapps\.localhost\/account\/security"/, 'the account menu links Security')
   assert.equal((await h.client().get(h.url('auth', '/login/mfa'))).status, 410, 'no challenge, nothing to answer')
+})
+
+test('review: an account without a password turns it on only within ten minutes of signing in', async () => {
+  const person = await h.user({ name: 'No Password' })
+  await h.sql('UPDATE users SET password_hash = NULL WHERE id = ?1', person.id)
+  const page = await person.client.get(h.url('auth', '/account/security'))
+  assert.match(page.text, /within ten minutes of signing in/)
+  await h.sql('UPDATE sessions SET created_at = ?2 WHERE user_id = ?1', person.id, Date.now() - 11 * 60 * 1000)
+  const stale = await person.client.post(h.url('auth', '/account/security/setup'), {})
+  assert.equal(stale.status, 403, 'an old session alone sets nothing up')
+  assert.match(stale.text, /sign in again/)
+  await h.sql('UPDATE sessions SET created_at = ?2 WHERE user_id = ?1', person.id, Date.now())
+  assert.equal((await person.client.post(h.url('auth', '/account/security/setup'), {})).status, 303, 'a fresh sign-in is enough')
+})
+
+test('review: ten wrong app codes in a row, across sign-ins, pause app codes for an hour; a recovery code still works', async () => {
+  const person = await h.user({ name: 'Mfa Guessed' })
+  const { secret, codes } = await enable(h, person)
+  let client = h.client()
+  for (let wrong = 0; wrong < 10; wrong += 1) {
+    if (wrong % 5 === 0) {
+      client = h.client()
+      assert.equal((await h.signIn(client, { email: person.email })).status, 303)
+    }
+    const answer = await client.post(h.url('auth', '/login/mfa'), { code: '000000' })
+    assert.ok([400, 429].includes(answer.status), String(answer.status))
+  }
+  const [user] = await h.sql('SELECT totp_failures, totp_locked_until FROM users WHERE id = ?1', person.id)
+  assert.ok(user.totp_locked_until > Date.now(), 'locked')
+  assert.equal(user.totp_failures, 0, 'the count starts again after the lock')
+  assert.equal((await h.mails(person.email)).filter((mail) => /Too many wrong sign-in codes/.test(mail.subject)).length, 1, 'told once')
+  const next = h.client()
+  assert.equal((await h.signIn(next, { email: person.email })).status, 303)
+  const refused = await next.post(h.url('auth', '/login/mfa'), { code: await freshCode(h, person, secret) })
+  assert.equal(refused.status, 429, 'even a right app code waits out the hour')
+  assert.match(refused.text, /paused for an hour/)
+  const recovered = await next.post(h.url('auth', '/login/mfa'), { code: codes[0] })
+  assert.equal(recovered.status, 303, 'a recovery code still signs in')
+  assert.deepEqual((await h.sql('SELECT totp_failures, totp_locked_until FROM users WHERE id = ?1', person.id))[0], { totp_failures: 0, totp_locked_until: null })
 })

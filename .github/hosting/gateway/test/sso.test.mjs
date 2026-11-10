@@ -4,8 +4,10 @@
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { GOOGLE_CLIENT_ID, PASSWORD, TOKENS, UUID, startGateway, uniqueEmail } from './helpers/harness.mjs'
+import { GOOGLE_CLIENT_ID, PASSWORD, SECRET_KEY, TOKENS, UUID, startGateway, uniqueEmail } from './helpers/harness.mjs'
 import { encode, makeIdentityProviderKey, requestIdFrom, samlResponse, signResponse } from './helpers/saml-idp.mjs'
+import { seal } from '../src/crypto.ts'
+import { base32Decode, hotp, timeStep } from '../src/auth/totp.ts'
 
 let h
 before(async () => { h = await startGateway() })
@@ -390,4 +392,113 @@ test('the login page offers single sign-on, and the settings page shows what the
   assert.equal((await post(owner, `/orgs/${orgId}/sso/connection/delete`)).status, 303)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM sso_connections WHERE org_id = ?1', orgId))[0].n, 0)
   assert.equal(uniqueEmail('x').endsWith('@example.test'), true)
+})
+
+/** Turns two-step sign-in on for a user directly: a sealed secret, as Account → Security stores it. */
+const MFA_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
+async function withMfa(userId) {
+  const sealed = await seal(Buffer.from(SECRET_KEY, 'base64'), 'totp', MFA_SECRET)
+  await h.sql('UPDATE users SET totp_secret = ?2, totp_enabled_at = ?3 WHERE id = ?1', userId, sealed, Date.now())
+}
+const mfaCode = () => hotp(base32Decode(MFA_SECRET), timeStep(Date.now()))
+
+test('review: single sign-on asks for the code too when two-step sign-in is on, and signs in to its organization after it', async () => {
+  const domain = 'saml-mfa.test'
+  const { owner, orgId } = await orgWithDomain(domain, 'MFA SSO Org')
+  const sp = await samlConnection(owner, orgId)
+  const person = await h.user({ email: `mfa.person@${domain}`, name: 'Mfa Person' })
+  await h.org(person.client, 'Personal Org')
+  await withMfa(person.id)
+  const client = h.client()
+  const { target } = await startSso(client, person.email)
+  const signed = await acsPost(client, sp.acs, signResponse(samlResponse({ acs: sp.acs, entityId: sp.entityId, requestId: requestIdFrom(target).id, email: person.email }), IDP_KEY))
+  assert.equal(signed.status, 303, signed.text.slice(0, 300))
+  assert.equal(signed.location, h.url('apex', '/login/mfa'), 'a code first: the identity provider is no way around it')
+  assert.equal(signed.cookies.filter((cookie) => cookie.startsWith('insulin_session=')).length, 0)
+  const [challenge] = await h.sql('SELECT method, active_org_id FROM mfa_challenges WHERE user_id = ?1', person.id)
+  assert.deepEqual(challenge, { method: 'sso', active_org_id: orgId })
+  const answered = await client.post(h.url('apex', '/login/mfa'), { code: await mfaCode() })
+  assert.equal(answered.status, 303, answered.text.slice(0, 300))
+  const echo = JSON.parse((await client.get(h.url('captable', '/api/echo'))).text)
+  assert.equal(echo.headers['x-suger-organization-id'], orgId, "the code step keeps single sign-on's organization")
+
+  // An account with its own password learns, once, that the organization's identity provider can now sign it in.
+  const mails = (await h.mails(person.email)).filter((mail) => /single sign-on/.test(mail.subject))
+  assert.equal(mails.length, 1)
+  assert.match(mails[0].text, /MFA SSO Org/)
+  await h.sql('UPDATE users SET totp_secret = NULL WHERE id = ?1', person.id)
+  const again = h.client()
+  const { target: next } = await startSso(again, person.email)
+  assert.equal((await acsPost(again, sp.acs, signResponse(samlResponse({ acs: sp.acs, entityId: sp.entityId, requestId: requestIdFrom(next).id, email: person.email }), IDP_KEY))).status, 303)
+  assert.equal((await h.mails(person.email)).filter((mail) => /single sign-on/.test(mail.subject)).length, 1, 'only the first time')
+  // An account single sign-on made itself has nothing to be told.
+  const fresh = h.client()
+  const newcomer = `newcomer@${domain}`
+  const { target: third } = await startSso(fresh, newcomer)
+  assert.equal((await acsPost(fresh, sp.acs, signResponse(samlResponse({ acs: sp.acs, entityId: sp.entityId, requestId: requestIdFrom(third).id, email: newcomer }), IDP_KEY))).status, 303)
+  assert.equal((await h.mails(newcomer)).length, 0)
+})
+
+test('review: "require SSO" holds at the one place sign-ins finish: a Google match by subject, a waiting code step, a punycode domain', async () => {
+  const domain = 'required-choke.test'
+  const { owner, orgId } = await orgWithDomain(domain, 'Choke Org')
+  const person = await h.user({ email: `choke@${domain}` })
+  await h.sql("UPDATE users SET google_sub = 'sub-choke' WHERE id = ?1", person.id)
+  // A code step started before the requirement, answered after it: refused at the end too.
+  await withMfa(person.id)
+  const waiting = h.client()
+  assert.equal((await h.signIn(waiting, { email: person.email })).location, h.url('apex', '/login/mfa'))
+  await samlConnection(owner, orgId, { require_sso: 'on' })
+  const answered = await waiting.post(h.url('apex', '/login/mfa'), { code: await mfaCode() })
+  assert.equal(answered.status, 403, 'the requirement applies to a challenge that was already waiting')
+  assert.equal(answered.cookies.filter((cookie) => cookie.startsWith('insulin_session=')).length, 0)
+  await h.sql('UPDATE users SET totp_secret = NULL WHERE id = ?1', person.id)
+
+  // Google finds the account by its subject; its address at Google has since changed, but the account's hasn't.
+  const google = h.client()
+  const start = await google.get(h.url('auth', '/auth/google/start'))
+  const authorize = new URL(start.location)
+  const now = Math.floor(Date.now() / 1000)
+  h.outbound.google = () => ({
+    id_token: jwt({ iss: 'https://accounts.google.com', aud: GOOGLE_CLIENT_ID, exp: now + 300, iat: now, nonce: authorize.searchParams.get('nonce'), email_verified: true, sub: 'sub-choke', email: 'choke.personal@example.com', name: 'Choke' }),
+  })
+  const callback = await google.get(h.url('auth', `/auth/google/callback?${new URLSearchParams({ state: authorize.searchParams.get('state'), code: 'c' })}`))
+  assert.equal(callback.status, 403)
+  assert.equal(callback.cookies.filter((cookie) => cookie.startsWith('insulin_session=')).length, 0)
+
+  // A domain is compared as stored, in punycode, whichever form the address was typed in.
+  const idn = await orgWithDomain('xn--bcher-kva.test', 'Bücher Org')
+  const reader = await h.user({ email: 'anna@xn--bcher-kva.test' })
+  await h.sql("UPDATE users SET email = 'anna@bücher.test' WHERE id = ?1", reader.id)
+  await samlConnection(idn.owner, idn.orgId, { require_sso: 'on' })
+  assert.equal((await h.signIn(h.client(), { email: 'anna@bücher.test' })).status, 403)
+})
+
+test('review: a stored OIDC client secret belongs to its issuer and client; changing either asks for it again', async () => {
+  const issuer = 'https://oidc-secret.example.test'
+  const { owner, orgId } = await oidcSetup('oidc-secret.test', issuer)
+  const save = (fields) => post(owner, `/orgs/${orgId}/sso/connection`, { protocol: 'oidc', default_role: 'VIEWER', enabled: 'on', ...fields })
+  const stored = async () => (await h.sql('SELECT oidc_issuer, oidc_client_secret FROM sso_connections WHERE org_id = ?1', orgId))[0]
+  const before = await stored()
+  assert.equal((await save({ oidc_issuer: issuer, oidc_client_id: 'insulin-client' })).status, 303, 'unchanged: the secret stays')
+  assert.equal((await stored()).oidc_client_secret, before.oidc_client_secret)
+  const moved = await save({ oidc_issuer: 'https://attacker.example.test', oidc_client_id: 'insulin-client' })
+  assert.equal(moved.status, 400)
+  assert.match(moved.text, /enter the client secret again/)
+  assert.deepEqual(await stored(), before, 'nothing changed')
+  assert.equal((await save({ oidc_issuer: issuer, oidc_client_id: 'another-client', enabled: undefined })).status, 400, 'a new client id too')
+  assert.equal((await save({ oidc_issuer: 'https://idp2.example.test', oidc_client_id: 'insulin-client', oidc_client_secret: 'a new synthetic secret' })).status, 303)
+  assert.notEqual((await stored()).oidc_client_secret, before.oidc_client_secret)
+})
+
+test('review: SAML responses that are too large or nested too deeply get a plain refusal before any walk of the document', async () => {
+  const { owner, orgId } = await orgWithDomain('saml-limits.test', 'Limits Org')
+  const sp = await samlConnection(owner, orgId)
+  const deep = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Version="2.0">${'<a>'.repeat(200)}${'</a>'.repeat(200)}</samlp:Response>`
+  const tooDeep = await acsPost(h.client(), sp.acs, deep)
+  assert.equal(tooDeep.status, 400)
+  assert.match(tooDeep.text, /nested too deeply/)
+  const huge = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Version="2.0"><x>${'a'.repeat(300 * 1024)}</x></samlp:Response>`
+  const tooLarge = await h.client().post(sp.acs, { SAMLResponse: encode(huge) }, { origin: IDP_ORIGIN })
+  assert.ok([400, 413].includes(tooLarge.status), String(tooLarge.status))
 })

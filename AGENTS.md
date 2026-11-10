@@ -1,11 +1,7 @@
 # AGENTS.md
 
-This repository holds open-source Insulin apps, one per top-level directory (today: `captable/`). These rules apply to
+This repository holds open-source Insulin apps, one per top-level directory (today: `captable/` and `esign/`). These rules apply to
 every app. Each app also has its own `AGENTS.md` with app-specific rules; read both before changing anything.
-
-## Experimental E-sign service
-
-`esign/` is a temporary exception while the independent E-sign service is developed and tested locally. It is not yet an Insulin AppBuilder app, and the app layout, in-app Docs, workflow and app checker requirements below do not apply to it until its integration path is decided. Its own `AGENTS.md` applies. Do not treat this exception as permission to deploy or to weaken security requirements.
 
 ## Every app
 

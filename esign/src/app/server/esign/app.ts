@@ -32,8 +32,13 @@ export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & {
   TEST_MAIL?: BlobStore;
   /** The local preview: no console identity means its stand-in owner (identity.ts). */
   IDENTITY_PREVIEW?: boolean;
-  /** "true": finish each envelope in the signing request itself (see envelope-completion.ts). */
+  /** "true": finish each envelope once its signature is accepted (see envelope-completion.ts). */
   COMPLETE_AFTER_SIGN?: string;
+  /**
+   * The request's waitUntil, when the runtime gives one (Nitro on Workers puts it on the request): finishing an
+   * envelope then runs after the signer's response instead of before it.
+   */
+  WAIT_UNTIL?: (work: Promise<unknown>) => void;
   /** Space-separated host origins that may embed the signing page and the editor (ESIGN_FRAME_ANCESTORS). */
   SIGNING_PAGE_FRAME_ANCESTORS?: string;
   /** dev only: other origins the signing page may run on, for local UI development. */

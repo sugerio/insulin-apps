@@ -4,7 +4,8 @@ E-sign
 E-sign is distributed under the MIT License: see the LICENSE file at the
 root of this repository. It includes or derives from the third-party material
 listed below. npm installs the packages; nothing below is copied into the
-source except the two bitmap atlases derived from fonts.
+source except the shadcn/ui components and theme, and the two bitmap atlases
+derived from fonts.
 
 PDF.js (pdfjs-dist) 5.4.624
 ---------------------------
@@ -13,6 +14,38 @@ Where:     the signing page and the editor render PDFs with it (src/app/ui/pdf.t
 Copyright: Mozilla Foundation and contributors
 License:   Apache License, Version 2.0; the text is in node_modules/pdfjs-dist/LICENSE
            and at https://www.apache.org/licenses/LICENSE-2.0
+
+shadcn/ui (components and theme)
+--------------------------------
+
+Where:     src/app/components/ui/ (button, card, input, label, textarea, badge,
+           alert, table, separator, native-select, the new-york style, rewritten
+           with React.createElement) and the theme tokens in src/app/styles.css
+Copyright: shadcn
+License:   MIT; https://github.com/shadcn-ui/ui/blob/main/LICENSE.md
+
+Tailwind CSS 4.3.3 (tailwindcss, @tailwindcss/postcss)
+------------------------------------------------------
+
+Where:     compiles src/app/styles.css; its base styles are in the built CSS
+Copyright: Tailwind Labs, Inc.
+License:   MIT; the text is in node_modules/tailwindcss/LICENSE
+
+Lucide (lucide-react) 1.55.0
+----------------------------
+
+Where:     the icons of the member pages and the copy page
+Copyright: Lucide Icons and Contributors
+License:   ISC; the text is in node_modules/lucide-react/LICENSE
+
+class-variance-authority 0.7.1, clsx 2.1.1, tailwind-merge 3.7.0
+----------------------------------------------------------------
+
+Where:     the components' class names (src/app/lib/utils.ts)
+Copyright: Joe Bell (class-variance-authority); Luke Edwards (clsx); Dany Castillo
+           (tailwind-merge)
+License:   Apache License, Version 2.0 (class-variance-authority); MIT (clsx,
+           tailwind-merge); the texts are in each package's LICENSE file
 
 pdf-lib 1.17.1
 --------------

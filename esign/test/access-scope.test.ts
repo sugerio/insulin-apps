@@ -112,8 +112,8 @@ test('signing APIs refuse editor codes and tokens, editor APIs refuse recipient 
   const editorToken=((await editorExchange.json()) as {token:string}).token;
 
   // Tokens at the wrong APIs.
-  const asRecipient=(token:string)=>({origin:host,authorization:`Bearer ${token}`});
-  const asEditor=(token:string)=>({origin:self,authorization:`Bearer ${token}`});
+  const asRecipient=(token:string)=>({origin:host,'x-esign-session':token});
+  const asEditor=(token:string)=>({origin:self,'x-esign-session':token});
   assert.equal((await req('/api/public/signing/current',{headers:asRecipient(recipientToken)})).status,200);
   assert.equal((await req('/api/public/editor/current',{headers:asEditor(editorToken)})).status,200);
   assert.equal((await req('/api/public/signing/current',{headers:asRecipient(editorToken)})).status,401);

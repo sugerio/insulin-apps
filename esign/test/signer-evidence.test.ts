@@ -44,7 +44,7 @@ async function harness() {
     assert.equal(view.status, 201);
     const { code } = await view.json() as { code: string };
     const { token } = await (await req('/api/public/page-sessions/exchange', json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
-    const headers = { origin: ORIGIN, authorization: `Bearer ${token}`, ...SIGNER };
+    const headers = { origin: ORIGIN, 'x-esign-session': token, ...SIGNER };
     if (views) await views(headers);
     const { messageId } = await (await req('/api/public/signing/otp', json({}, headers))).json() as { messageId: string };
     const { otp } = await (await req(`/api/test-mail/${messageId}`, { headers: auth })).json() as { otp: string };
@@ -152,7 +152,7 @@ test('page views are recorded once per page before the code, and the certificate
 test('page views need a live page session', async () => {
   const h = await harness();
   try {
-    const res = await h.req('/api/public/signing/page-views', h.json({ pages: [1], total: 1 }, { origin: ORIGIN, authorization: `Bearer ${'a'.repeat(64)}` }));
+    const res = await h.req('/api/public/signing/page-views', h.json({ pages: [1], total: 1 }, { origin: ORIGIN, 'x-esign-session': 'a'.repeat(64) }));
     assert.equal(res.status, 401);
   } finally { await h.mf.dispose(); }
 });

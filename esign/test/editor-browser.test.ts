@@ -19,12 +19,12 @@ import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 import {signedPdf} from './helpers/signed-pdf.ts';
 import {processEnvelopeStep,finalizeEnvelopeStep} from '../src/app/server/esign/envelope-completion.ts';
 import {setEditorOrigins} from './helpers/editor-origins.ts';
+import {pageHeaders} from '../src/app/server/page-policy.ts';
 const chrome=process.env.ESIGN_TEST_CHROME??['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium'].find(existsSync);
 const sleep=(n:number)=>new Promise(r=>setTimeout(r,n));
-// On the app's page shell the editor embeds, exchanges its code, renders and validates, but the
-// toolbar drag (CDP mouse events into a scrolled cross-origin frame) no longer lands; skipped until
-// the editor is restyled and this test is re-measured against it.
-test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed messages fail',{skip:!chrome||'toolbar drag geometry to re-measure on the app page shell',timeout:120000},async()=>{
+// The window is tall enough for the toolbar and the page it drags onto to be on screen together:
+// CDP mouse events outside the viewport never reach the cross-origin frame.
+test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed messages fail',{skip:!chrome,timeout:120000},async()=>{
  const temp=await mkdtemp(join(tmpdir(),'esign-editor-browser-'));const output=join(temp,'build');
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  let releaseSave!:()=>void,releaseBefore!:()=>void,saveHeld=false,beforeHeld=false,holdNextSave=true;const saveGate=new Promise<void>(r=>{releaseSave=r;});const beforeGate=new Promise<void>(r=>{releaseBefore=r;});
@@ -43,7 +43,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   const signingApp=app;
   const records:{origin:string;path:string;requestOrigin:string|null;referer:string|null;status:number;secretLeaked:boolean}[]=[];
   proxy=createServer(async(req,res)=>{try{
-   const url=new URL(req.url!);if(url.origin==='http://127.0.0.1:5175'){req.url=url.pathname+url.search;vite.middlewares(req,res);return;}const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));const headers=new Headers();for(const [k,v] of Object.entries(req.headers))if(v!==undefined&&k!=='host'&&k!=='connection')headers.set(k,Array.isArray(v)?v.join(','):v);
+   const url=new URL(req.url!);if(url.origin==='http://127.0.0.1:5175'){if(url.pathname==='/'){res.writeHead(200,{'content-type':'text/html'}).end('<!doctype html><title>Renderer</title>');return;}req.url=url.pathname+url.search;vite.middlewares(req,res);return;}const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));const headers=new Headers();for(const [k,v] of Object.entries(req.headers))if(v!==undefined&&k!=='host'&&k!=='connection')headers.set(k,Array.isArray(v)?v.join(','):v);
    let response:Response;
    if(url.pathname==='/api/public/editor/save'&&holdNextSave){beforeHeld=true;await beforeGate;}
    if(url.origin==='http://127.0.0.1:5173'&&url.pathname==='/host/editor-demo-session'){
@@ -57,7 +57,12 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    else if(url.origin==='http://127.0.0.1:5173'&&url.pathname==='/editor-host.html'){response=new Response(await readFile(join(output,'editor-host.html')),{headers:{'content-type':'text/html'}});}
    else if(url.origin==='http://127.0.0.1:5173'&&url.pathname.startsWith('/assets/'))response=await asset(url.pathname);
    // The app's origin: its API, and otherwise the built pages, as the platform serves them (index.html for every page path).
-   else if(url.origin==='http://127.0.0.1:8787'&&!url.pathname.startsWith('/api/'))response=await asset(url.pathname.startsWith('/assets/')?url.pathname:'/index.html');
+   else if(url.origin==='http://127.0.0.1:8787'&&!url.pathname.startsWith('/api/')){
+    response=await asset(url.pathname.startsWith('/assets/')?url.pathname:'/index.html');
+    // The headers the app's page middleware (src/app/server/page-headers.ts) adds behind the gateway.
+    const page=await pageHeaders(url.pathname,response.headers.get('content-type'),{frameAncestors:'',viaGateway:true,editorParent:async id=>(await db.prepare('SELECT parent_origin FROM editor_sessions WHERE id = ?').bind(id).first<{parent_origin:string}>())?.parent_origin??null});
+    if(page)for(const [name,value] of Object.entries(page))response.headers.set(name,value);
+   }
    else if(url.origin==='http://127.0.0.1:8787'){response=await signingApp.fetch(new Request(url,{method:req.method,headers,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})}),env);if(url.pathname==='/api/public/signing/otp'&&req.method==='POST')response=await withLocalTestOtp(response,env.TEST_MAIL);}
    else if(url.origin==='http://127.0.0.1:5174')response=new Response('<html><body>hostile</body></html>',{headers:{'content-type':'text/html'}});
    else response=new Response(null,{status:404});
@@ -65,7 +70,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    records.push({origin:url.origin,path:url.pathname+url.search,requestOrigin:headers.get('origin'),referer:headers.get('referer'),status:response.status,secretLeaked:Buffer.concat(chunks).includes('synthetic-sensitive-token')||JSON.stringify([...headers]).includes('synthetic-sensitive-token')});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
   }catch{res.writeHead(500).end();}});
   proxy.listen(0,'127.0.0.1');await once(proxy,'listening');const port=(proxy.address() as import('node:net').AddressInfo).port;
-  browser=spawn(chrome!,['--headless=new','--disable-gpu','--no-first-run','--disable-background-networking','--remote-debugging-port=0',`--user-data-dir=${temp}/chrome`,`--proxy-server=http://127.0.0.1:${port}`,'--proxy-bypass-list=<-loopback>','about:blank'],{stdio:'ignore'});
+  browser=spawn(chrome!,['--headless=new','--window-size=1280,1100','--disable-gpu','--no-first-run','--disable-background-networking','--remote-debugging-port=0',`--user-data-dir=${temp}/chrome`,`--proxy-server=http://127.0.0.1:${port}`,'--proxy-bypass-list=<-loopback>','about:blank'],{stdio:'ignore'});
   let debug='';for(let i=0;i<200;i++){try{debug=(await readFile(join(temp,'chrome/DevToolsActivePort'),'utf8')).split('\n')[0];break;}catch{await sleep(100);}}assert.ok(debug);
   const target=await(await fetch(`http://127.0.0.1:${debug}/json/new?http://127.0.0.1:5173/editor-host.html`,{method:'PUT'})).json() as any;ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise<void>((r,j)=>{ws!.onopen=()=>r();ws!.onerror=()=>j(new Error('CDP'));});
   let seq=0;const pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void}>();ws.onmessage=e=>{const m=JSON.parse(String(e.data));if(m.id&&pending.has(m.id)){const p=pending.get(m.id)!;pending.delete(m.id);m.error?p.reject(new Error(m.error.message)):p.resolve(m.result);}};
@@ -297,7 +302,8 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    await evaluate("document.documentElement.style.zoom='';document.querySelector('input[type=checkbox]').click()");await wait(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Sign document'&&!b.disabled)"),'sign ready');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Sign document').click()");await wait(()=>evaluate("document.body.innerText.includes('Signature recorded.')"),'signature recorded');assert.equal(await processEnvelopeStep(env.DB,env.ARTIFACTS,'tenant',envelope.id,true),'processed');
   }
   assert.equal(await finalizeEnvelopeStep(env,'tenant',envelope.id),'finalized');const finalBytes=new Uint8Array(await signedPdf(env.DB,env.ARTIFACTS,envelope.id));
-  // Render both PDFs with the page's own renderer, loaded from the UI source on the Vite origin.
+  // Render both PDFs with the page's own renderer, loaded from the UI source on the Vite origin, from a blank page of
+  // the proxy's (Vite's own 404 page has a CSP of default-src 'none', which would refuse the import).
   await call('Page.navigate',{url:'http://127.0.0.1:5175/'});await wait(()=>evaluate("document.readyState==='complete'"),'renderer origin');
   const renderAsset='pdf.ts';
   const metrics=await evaluate(`(async()=>{const {renderPdf}=await import('/${renderAsset}'),decode=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)),make=async b=>{const d=document.createElement('div');await renderPdf(new Blob([decode(b)],{type:'application/pdf'}),d,new AbortController().signal);return d.querySelector('canvas');},a=await make(${JSON.stringify(varied64)}),b=await make(${JSON.stringify(Buffer.from(finalBytes).toString('base64'))}),base=a.getContext('2d',{willReadFrequently:true}).getImageData(0,0,a.width,a.height).data,out=b.getContext('2d',{willReadFrequently:true}).getImageData(0,0,b.width,b.height).data,fields=${JSON.stringify(savedFields)};let originalChanged=0;for(let y=0;y<${visualEvidence.bottom}/800.63*a.height+2;y++)for(let x=0;x<a.width;x++){const k=(y*a.width+x)*4;if(base[k]<150&&base[k+1]<150&&base[k+2]<150&&Math.max(Math.abs(base[k]-out[k]),Math.abs(base[k+1]-out[k+1]),Math.abs(base[k+2]-out[k+2]))>40)originalChanged++;}const metrics=fields.map(f=>{const r=f.rect;let left=Infinity,top=Infinity,right=-1,bottom=-1,count=0;for(let y=Math.floor(r.y*a.height);y<Math.ceil((r.y+r.height)*a.height);y++)for(let x=Math.floor(r.x*a.width);x<Math.ceil((r.x+r.width)*a.width);x++){const k=(y*a.width+x)*4;if(Math.max(Math.abs(base[k]-out[k]),Math.abs(base[k+1]-out[k+1]),Math.abs(base[k+2]-out[k+2]))>40&&out[k]<120&&out[k+1]<120&&out[k+2]<120){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);count++;}}return {id:f.id,count,left:left/a.width*600.37,right:right/a.width*600.37,top:top/a.height*800.63,bottom:bottom/a.height*800.63};});return {metrics,originalChanged};})()`);

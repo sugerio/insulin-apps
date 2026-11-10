@@ -58,7 +58,7 @@ async function finishedEnvelope() {
     const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[index];
     const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN }, auth))).json() as { code: string };
     const { token } = await (await req('/api/public/page-sessions/exchange', json({ code }, { origin: ORIGIN }))).json() as { token: string };
-    const headers = { origin: ORIGIN, authorization: `Bearer ${token}` };
+    const headers = { origin: ORIGIN, 'x-esign-session': token };
     const { messageId } = await (await req('/api/public/signing/otp', json({}, headers))).json() as { messageId: string };
     const { otp } = await (await req(`/api/test-mail/${messageId}`, { headers: auth })).json() as { otp: string };
     await req('/api/public/signing/otp/verify', json({ otp }, headers));

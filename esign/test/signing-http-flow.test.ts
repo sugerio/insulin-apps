@@ -43,13 +43,15 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     async function sign(task:any,index:number) {
       const view=await req(`/api/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,json({origin},management));assert.equal(view.status,201,await view.clone().text());const {code}=await view.json();
       const exchange=await req('/api/public/page-sessions/exchange',json({code},{origin}));assert.equal(exchange.status,200);const {token}=await exchange.json();
-      const headers={origin,authorization:`Bearer ${token}`};
+      const headers={origin,'x-esign-session':token};
       // The document can be read before the code; signing it cannot (below, and in the record layer).
       assert.equal((await req('/api/public/signing/pdf',{headers})).status,200);
       const early=await (await req('/api/public/signing/current',{headers})).json();assert.equal(early.verified,false);
       assert.equal((await req('/api/public/signing/sign',json({artifactId:early.id,artifactHash:early.sha256,consent:true},headers))).status,409);
       assert.equal((await req('/api/public/signing/decline',json({reason:'No'},headers))).status,401);
       assert.equal((await req('/api/public/signing/current',{headers:{origin,authorization:management.authorization}})).status,401);
+      assert.equal((await req('/api/public/signing/current',{headers:{origin,authorization:`Bearer ${token}`}})).status,401,'a page session in Authorization never arrives: the gateway drops that header on public paths');
+      assert.equal((await req('/api/public/signing/current',{headers:{origin,'x-esign-session':token,'x-suger-user-id':'spoofed','x-suger-organization-id':'other-org','x-suger-app-role':'ADMIN'}})).status,200,'spoofed identity headers are stripped, and the page session still works');
       assert.equal((await req('/api/public/signing/current',{headers:{...headers,origin:'https://wrong.example.com'}})).status,403);
       const send=await app.fetch(new Request('https://public.example.com/api/public/signing/otp',json({},headers)),env);assert.equal(send.status,202);
       const shown=await send.json();assert.deepEqual(Object.keys(shown),['messageId','testMailbox']);
@@ -135,7 +137,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
       const task2=(await (await req(`/api/envelopes/${envelope2.id}`,{headers:management})).json()).tasks[0];
       const view2=await (await req(`/api/envelopes/${envelope2.id}/tasks/${task2.id}/recipient-view`,json({origin},management))).json();
       const session2=await (await req('/api/public/page-sessions/exchange',json({code:view2.code},{origin}))).json();
-      sessions.push({origin,authorization:`Bearer ${session2.token}`});
+      sessions.push({origin,'x-esign-session':session2.token});
     }
     const sends=await Promise.all(sessions.map(headers=>req('/api/public/signing/otp',json({},headers))));
     assert.deepEqual(sends.map(r=>r.status),[202,202]);

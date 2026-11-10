@@ -41,7 +41,7 @@ async function setup(extra:Record<string,unknown>){
   for(let i=0;i<n;i++){
    const {code}=await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`,json({origin:ORIGIN},auth))).json() as {code:string};
    const {token}=await (await req('/api/public/page-sessions/exchange',json({code},{origin:ORIGIN}))).json() as {token:string};
-   out.push({origin:ORIGIN,authorization:`Bearer ${token}`});
+   out.push({origin:ORIGIN,'x-esign-session':token});
   }
   return out;
  }
@@ -143,7 +143,7 @@ test('prod signs nothing until it is fully configured, and never with a test mai
   for(const extra of [{...relay.env,TEST_MAIL:bucket},{...relay.env,KMS_KEY_ARN:''},{...relay.env,SUGER_MAIL_URL:'http://mail.example.test/v1/send'},{...relay.env,OTP_KEY:''},{}]){
    const w=await setup({...PROD,...extra});
    try {
-    const otp=await w.req('/api/public/signing/otp',w.json({},{origin:ORIGIN,authorization:`Bearer ${'a'.repeat(64)}`}));
+    const otp=await w.req('/api/public/signing/otp',w.json({},{origin:ORIGIN,'x-esign-session':'a'.repeat(64)}));
     assert.equal(otp.status,404,JSON.stringify(Object.entries(extra).map(([k,v])=>[k,typeof v==='string'?v:typeof v])));
     assert.deepEqual(await otp.json(),{error:'signing_disabled'});
     assert.deepEqual(await (await w.req('/api/public/signing-page')).json(),{hosts:[ORIGIN],signingEnabled:false});

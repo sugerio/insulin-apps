@@ -17,7 +17,7 @@ Run from `esign/` unless noted.
 
 | When | Run |
 |---|---|
-| After any TypeScript change | `npm run typecheck` (the source and the test helpers; tests run with Node's type stripping) |
+| After any TypeScript change | `npm run typecheck` (the source and the test helpers; tests run with Node's type stripping, which can't run JSX, so the UI is `.ts` with `React.createElement`; only `App.tsx` is TSX) |
 | Before you finish, and after every behaviour change | `npm test` |
 | After changing `src/app/db/schema.ts` | `npm run db:generate` |
 | To check what publishing will build | `NITRO_PRESET=cloudflare_module npm run build` |
@@ -28,25 +28,30 @@ Run from `esign/` unless noted.
 
 | Path | What |
 |---|---|
-| `src/app/App.tsx` | The pages: `/sign` (signing), `/editor/page/:id` (embedded editor), `/copy` (a signer's copy), `/` (the member page) |
-| `src/app/ui/` | The React pages and their parts: `RecipientPage.ts`, `FieldEditor.ts`, `EditorPage.ts`, `CopyPage.ts`, `DemoPage.ts`, `pdf.ts` |
+| `src/app/App.tsx` | The pages: `/sign` (signing), `/editor/page/:id` (embedded editor), `/copy` (a signer's copy), and every other path the members' app |
+| `src/app/member/` | The members' app: `MemberApp.ts` (header, navigation, routes), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `api.ts`, `router.ts` (pushState, no router library) |
+| `src/app/pages/docs/`, `src/app/components/Docs.ts` | The in-app Docs: one file per topic, `topics.ts` (reading order), `parts.ts`, and the Docs component |
+| `src/app/ui/` | The public pages and their parts: `RecipientPage.ts`, `SigningHelp.ts` ("About signing"), `FieldEditor.ts`, `EditorPage.ts`, `CopyPage.ts`, `CompletionCertificate.ts`, `pdf.ts`, `esign-theme.css` (layout hooks) |
+| `src/app/components/ui/`, `src/app/lib/utils.ts`, `src/app/styles.css` | shadcn/ui components (copied, as `.ts`), `cn()`, and Tailwind with the shadcn neutral theme, light and dark |
+| `nitro.config.ts`, `src/app/server/page-headers.ts`, `page-policy.ts` | The pages' security headers (CSP, framing, referrer, caching), set by a Nitro middleware without touching the platform files |
 | `src/app/server/router.ts` | `handleAppRequest(request)`: builds the bindings from `#platform` and hands every `/api/**` request to the Hono app |
 | `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due` |
 | `src/app/server/esign/identity.ts` | The platform identity, the two permissions and `can()` |
-| `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`) |
+| `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |
 | `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the KMS + TSA seal |
 | `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql`) |
 | `scripts/` | The bitmap atlas generators (macOS, Swift) |
-| `test/`, `test/helpers/` | Tests (`node --test`); `helpers/platform.ts` plays the platform, `helpers/gateway.ts` a host's service account |
+| `test/`, `test/helpers/` | Tests (`node --test`); `helpers/platform.ts` plays the platform, `helpers/gateway.ts` the gateway and a host's service account, `helpers/member.ts` renders the members' app |
 
 ## Platform files: leave them alone
 
 `index.html`, `src/main.tsx`, `src/api.ts`, `src/platform.local.ts`, `src/platform.worker.ts`, `src/local-d1.ts`,
 `src/cloudflare-workers.d.ts`, `src/suger-app-builder-runtime.tsx`, `vite.config.ts` and `drizzle.config.ts` come from
 the Insulin template and stay byte-identical to it (`test/framework-template.test.ts` pins the ones under `src/`). All
-app code goes under `src/app/`. Keep the export of `handleAppRequest` in `src/app/server/router.ts`; import
+app code goes under `src/app/`; `nitro.config.ts` (the page-headers middleware) and `postcss.config.mjs` (Tailwind) are
+the app's own. Keep the export of `handleAppRequest` in `src/app/server/router.ts`; import
 `@fours/app/server` only from server code; read configuration with `readAppEnv(name)` from `#platform`. Never put a
 secret in source.
 
@@ -55,8 +60,9 @@ secret in source.
 - **Runtime:** one D1 database, static assets, outbound `fetch` and environment values. No cron, R2, KV, Queues,
   Durable Objects or email binding: objects live in D1 (`blob-store.ts`), mail goes through the relay (`mail.ts`), and
   due work runs in requests and with `POST /api/process-due`.
-- **The member page runs in a sandboxed iframe in the console:** no `window.open`, `alert`, `confirm`, `prompt` or
-  top-level navigation; downloads use `<a download>`; no fonts, scripts or images from CDNs.
+- **The members' app runs in a sandboxed iframe in the console:** no `window.open`, `alert`, `confirm`, `prompt` or
+  top-level navigation (it moves with `history.pushState`); downloads use `<a download>`; no fonts, scripts or images
+  from CDNs.
 - **Stored source:** at most 2,000 files, 1 MiB each and 10 MiB in total, UTF-8 text only. Binary fixtures are base64
   in JSON (`test/fixtures/digicert-tsa-2026-11-06/fixture.json`); build PDFs in code.
 - **Dependencies:** exact versions from registry.npmjs.org, pure JavaScript, no install scripts.
@@ -71,8 +77,11 @@ secret in source.
 - **Public paths** (`insulin.publicPaths`): `/sign`, `/editor/`, `/copy`, `/assets/`, `/api/public/`. They carry a
   one-time code or token, never an identity; a request the gateway marks public never reaches a management route.
   At most 10, and never `/`, `/api`, `/settings*`, `/mcp*`, `/.well-known*` or `/__insulin*`.
-- **Embedding:** the pages report who frames them at their code exchange, and the exchange refuses an origin that is
-  neither the app nor in `ESIGN_FRAME_ANCESTORS` (the session's parent for the editor).
+- **Embedding:** the pages report every origin that frames them (`ancestorOrigins`) at their code exchange, and the
+  exchange refuses any that is neither the app nor in `ESIGN_FRAME_ANCESTORS` (the session's parent for the editor).
+  Behind the gateway, the pages' CSP `frame-ancestors` says the same; member pages can't be framed.
+- **Page sessions** travel in the `x-esign-session` header, never `Authorization` (the gateway drops it on public
+  paths) and never an `x-suger-*` name (the gateway strips those). `helpers/gateway.ts` behaves the same way.
 - **No login of our own.** The preview Owner exists only in the local preview.
 
 ## Evidence and storage
@@ -104,7 +113,15 @@ Every Insulin app ships a **Docs** entry in its navigation:
 - a change that alters behaviour updates the Docs topic that describes it in the same change;
 - tests cover the Docs entry for each role and every topic rendering.
 
-Cap Table is the reference: `captable/src/app/pages/docs/` and `captable/src/app/components/Docs.tsx`.
+E-sign's Docs are `src/app/pages/docs/` and `src/app/components/Docs.ts`, tested in `test/docs.test.ts`; the signing
+page's "About signing" panel is `src/app/ui/SigningHelp.ts`. Cap Table is the reference: `captable/src/app/pages/docs/`
+and `captable/src/app/components/Docs.tsx` (E-sign's are `.ts` for the reason under Commands).
+
+## UI
+
+New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default neutral theme, light and dark: the components
+in `src/app/components/ui/` (add one by copying it from shadcn/ui into `.ts`, and record it in `NOTICE`), `cn()` from
+`src/app/lib/utils.ts`, icons from `lucide-react`. No CDNs.
 
 ## Public repository
 

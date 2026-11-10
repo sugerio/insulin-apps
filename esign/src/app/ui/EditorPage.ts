@@ -16,7 +16,7 @@ type Session={headers:Record<string,string>;details:{roles:string[];fields:Field
 async function openSession(pageId:string,code:string):Promise<Session>{
   const exchange=await fetch('/api/public/editor/exchange',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pageId,code,...embedding(window,document.referrer)}),cache:'no-store'});
   if(!exchange.ok)throw new Error('Expired or invalid link');
-  const {token}=await exchange.json() as {token:string};const headers={authorization:`Bearer ${token}`};
+  const {token}=await exchange.json() as {token:string};const headers={'x-esign-session':token};
   const current=await fetch('/api/public/editor/current',{headers,cache:'no-store'});if(!current.ok)throw new Error('Session unavailable');
   const details=await current.json() as Session['details'];
   if(!details.sourceTemplateId&&!details.hasStagedSource)throw new Error('Source unavailable');
@@ -46,7 +46,7 @@ export function EditorPage(){
     openSession(pageId,code).then(value=>{if(live)setSession(value);}).catch(()=>{if(live)setFailed(true);});
     return()=>{live=false;};
   },[]);
-  if(failed)return h('p',{role:'alert'},'Editor session unavailable. Ask the host to open a new session.');
-  if(!session)return h('p',{role:'status'},'Loading the editor…');
+  if(failed)return h('p',{role:'alert',className:'p-6 text-sm text-destructive'},'Editor session unavailable. Ask the host to open a new session.');
+  if(!session)return h('p',{role:'status',className:'p-6 text-sm text-muted-foreground'},'Loading the editor…');
   return h(EmbeddedEditor,{session});
 }

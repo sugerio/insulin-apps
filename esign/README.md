@@ -30,6 +30,22 @@ certificate and the timestamp service still need review before real documents ar
   on. The finished envelope is sealed with an AWS KMS signature and an RFC 3161 timestamp, and the
   certificate of completion lists the signers, the audit trail and how it was sealed.
 
+## The pages
+
+Members open E-sign from their organization's Insulin apps:
+
+- **Envelopes**: every envelope with its status; one envelope's signers, audit trail and, once
+  completed, the signed PDF and certificate. Those who manage send new ones, void, open the active
+  signer's signing page, and run the due work.
+- **Templates**: upload a PDF with its roles, signed on an added page or in fields placed in the
+  editor.
+- **Docs**: getting started, the main tasks, what signers see, statuses, evidence, roles, background
+  on electronic signatures (general information, not legal advice) and a glossary. Every role can
+  open them.
+
+Signers use three public pages: the signing page (`/sign`, with an "About signing" panel), the copy
+link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).
+
 ## Who can do what
 
 | Role | E-sign permission | Can |
@@ -39,6 +55,11 @@ certificate and the timestamp service still need review before real documents ar
 
 A custom role is built from these two permissions. Recipients don't need an account: their link and
 emailed code are their access, to their own task only.
+
+**Hosts call `POST /api/process-due` on a schedule** (every few minutes, with a service account).
+An envelope is normally finished right after its last signature, after the signer's response; the
+call finishes any that a request couldn't (a CPU limit, an outage), expires envelopes past their
+deadline and retries completion notices. E-sign has no scheduled jobs of its own.
 
 ## For developers
 
@@ -79,11 +100,17 @@ The secrets (`ESIGN_*`) are declared in `package.json` under `insulin.secrets` a
 [docs/architecture.md](docs/architecture.md#configuration). A published app signs nothing until the
 code pepper, the mail relay and the KMS key are configured.
 
+### UI
+
+[shadcn/ui](https://ui.shadcn.com) components (copied into `src/app/components/ui/`) on Tailwind CSS
+v4 with the default neutral theme, light and dark, and Lucide icons; no CDNs. The UI files are `.ts`
+with `React.createElement`, because the tests run on Node's type stripping, which can't run JSX.
+
 ### How it works
 
-[docs/architecture.md](docs/architecture.md): the app on the platform, the signing lifecycle, the
-data model, how writes commit, codes and sessions, evidence and seals, the API and the embedded
-editor.
+[docs/architecture.md](docs/architecture.md): the app on the platform, the pages and their headers,
+the signing lifecycle, the data model, how writes commit, codes and sessions, evidence and seals, the
+API and the embedded editor.
 
 ## License
 

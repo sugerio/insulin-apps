@@ -221,8 +221,8 @@ test('the page talks to its own origin only, and tells the exchange how it is fr
    // The old local hosts are gone: a fragment never moves the page to another API.
    ['https://esign.example.test','#code=test-code&synthetic=1',null,{embedded:false,embedder:''}],
    ['http://127.0.0.1:5173','#code=test-code&upload=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',null,{embedded:false,embedder:''}],
-   // Framed: the framing page's origin, from ancestorOrigins, else the referrer.
-   ['https://esign.example.test','#code=test-code',{ancestorOrigins:['https://host.example.test']},{embedded:true,embedder:'https://host.example.test'}],
+   // Framed: the framing page's origin, from ancestorOrigins (with every ancestor, for the exchange to check each), else the referrer.
+   ['https://esign.example.test','#code=test-code',{ancestorOrigins:['https://host.example.test']},{embedded:true,embedder:'https://host.example.test',embedders:['https://host.example.test']}],
    ['https://esign.example.test','#code=test-code',{referrer:'https://host.example.test/deals/1'},{embedded:true,embedder:'https://host.example.test'}],
    ['https://esign.example.test','#code=test-code',{},{embedded:true,embedder:''}],
   ] as const) {
@@ -495,4 +495,20 @@ test('the code card shows a wrong code and a refused send beside the boxes, and 
     await enterCode(renderer,act,'1');
     assert.equal(alert(),'');
   } finally {await act(async()=>{renderer?.unmount();});globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});
+
+test('About signing explains the steps, the code, declining and the copy link, and closes again', async()=>{
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ try {
+  const p=await reviewPage({id:'a1',sha256:'ab'.repeat(32),documentName:'Mutual NDA',signerName:'Ana Partner'},()=>undefined);
+  const dialog=()=>p.renderer.root.findAll((n:any)=>n.props?.role==='dialog'&&n.props['aria-label']==='About signing')[0];
+  assert.equal(dialog(),undefined);
+  await p.act(async()=>{p.button('About signing').props.onClick();});
+  const help=visibleText(dialog().children);
+  assert.match(help,/asked you to sign Mutual NDA/);
+  for(const words of [/Review/,/6-digit code/,/10 minutes/,/Decline to sign/,/once, within 30 days/,/audit trail/])assert.match(help,words);
+  await p.act(async()=>{p.button('Close').props.onClick();});
+  assert.equal(dialog(),undefined);
+  await p.act(async()=>{p.renderer.unmount();});
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });

@@ -26,10 +26,14 @@ seals the finished envelope and emails each signer a link to their copy.
   small store over D1 (`blob-store.ts`): a key in a bucket points to one upload's 256 KiB chunks,
   with R2's create-only put (`onlyIf: { etagDoesNotMatch: '*' }`). The local preview's test mailbox
   is a second bucket, `test-mail`.
-- **Work in requests.** There is no cron. A signature is rendered, and the envelope sealed, in the
-  signing request after its response is ready; `POST /api/process-due` (manage permission) expires
-  envelopes past a deadline, finishes any envelope a request did not, and retries completion
-  notices. A host or a scheduled caller runs it.
+- **Work in requests.** There is no cron. Once a signature is accepted it is rendered, and after the
+  last one the envelope sealed (KMS and the timestamp authority), through the request's `waitUntil`
+  that Nitro puts on the request on Workers: the signer gets their response first and never waits
+  for the seal. Without one (the tests) it runs in the request. Work cut short, by a CPU limit or an
+  outage, leaves the signature `PENDING` or the envelope `FINALIZING`. `POST /api/process-due`
+  (manage permission) expires envelopes past a deadline, finishes any envelope a request did not,
+  and retries completion notices. **Hosts call it on a schedule**, every few minutes, with a service
+  account.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization. Only a 202
   counts as sent; a refusal (502 `send_failed`, 503, 429, anything else) is retried later and never
@@ -65,6 +69,30 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | `ESIGN_TSA_SIGNER_SPKI_SHA256` | The pinned signer keys of the timestamp authority |
 
 The platform provides `SUGER_MAIL_URL` and `SUGER_APP_TOKEN`.
+
+## The members' app and the Docs
+
+- **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` (envelopes),
+  `/envelopes/new`, `/envelopes/:id`, `/templates` and `/docs/:topic?`. It moves with
+  `history.pushState` (`router.ts`), the only navigation the console's sandboxed iframe allows. Every
+  call is a same-origin request as the signed-in member; there is no key in the browser.
+- **Roles.** What a role can't do is hidden (`canManage(me)`), and the server refuses it anyway.
+  `/api/me` answering 401 shows a sign-in message; the Docs open without it.
+- **Hosting the public pages.** The envelope page opens the active signer's `/sign` in a dialog
+  with a recipient view for its own origin and follows its `esign.signing.*` messages; the Templates
+  page opens the editor for its own origin and confirms the editor's save with
+  `GET /api/template-editing-sessions/:id`. Both behave exactly as a host product would.
+- **Sending.** A send carries an `Idempotency-Key` that a retry of the same form reuses. An
+  optional sign-by day becomes every signer's `expiresAt` (the end of that day, the member's time).
+- **Docs.** Static topics in `src/app/pages/docs/` (one file each; `topics.ts` sets the reading
+  order) rendered by `src/app/components/Docs.ts`, with no request to the server. The background
+  topic carries the general-information note. The signing page's "About signing" panel
+  (`src/app/ui/SigningHelp.ts`) says the same as the signers topic in brief.
+- **UI.** shadcn/ui components in `src/app/components/ui/`, `cn()` in `src/app/lib/utils.ts`,
+  Tailwind v4 through `postcss.config.mjs` with the neutral theme in `src/app/styles.css`.
+  `src/app/ui/esign-theme.css` keeps the public pages' layout hooks on the same tokens. All UI is
+  `.ts` with `React.createElement`: the tests run on Node's type stripping, which doesn't transform
+  JSX.
 
 ## The signing lifecycle
 
@@ -294,13 +322,27 @@ request names another allowed one; in the local preview only, `SIGNING_PAGE_ORIG
 for UI development. The page calls only its own origin's API. Browsers send no `Origin` on
 same-origin GETs, so the signing API then takes the origin from `Sec-Fetch-Site: same-origin`.
 
-**Who may frame the pages.** The pages are static (the platform serves `index.html` for every page
-path), so they can't send a per-deployment `frame-ancestors` header. Instead each page reports at
-its code exchange whether it is framed and by whom (`location.ancestorOrigins`, else the referrer's
-origin), and the exchange refuses a framed page whose embedder is neither the app nor allowed:
-`ESIGN_FRAME_ANCESTORS` for the signing page, the session's parent origin for the editor
-(`embedderAllowed` in `src/app/server/esign/signing-page.ts`). A frame that hides its origin is
-refused.
+**The pages' headers.** Nitro serves the same `index.html` for every page path; a middleware it
+reads from `nitro.config.ts` (`src/app/server/page-headers.ts`, policy in `page-policy.ts`) gives
+each page its Content-Security-Policy: scripts, styles, workers and requests only from this origin,
+no `eval`, `object-src 'none'`, `base-uri 'none'`. Behind insulinapps.com's gateway (the request
+has `x-suger-access-via`) it adds who may frame the page: the signing page this origin and
+`ESIGN_FRAME_ANCESTORS`, the editor this origin and its session's parent, the signed-copy page and
+the members' pages nobody, so another page can't frame them and trick a signed-in member into
+sending or voiding. The Insulin console frames its own preview, so there it leaves framing to the
+console. The signing, editor and copy pages also get `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer`.
+
+**Who may frame the pages, at the exchange too.** Each page also reports at its code exchange
+whether it is framed and by whom: every ancestor in `location.ancestorOrigins` (Chromium, Safari),
+else the referrer's origin. The exchange refuses a framed page with any ancestor that is neither the
+app nor allowed: `ESIGN_FRAME_ANCESTORS` for the signing page, the session's parent origin for the
+editor (`embedderAllowed` in `src/app/server/esign/signing-page.ts`). A frame that hides its origin
+is refused.
+
+**The page session's header.** A signing page or an editor sends its page session in
+`x-esign-session` (`session-header.ts`), never in `Authorization`: the gateway forwards public paths
+without that header, and strips every `x-suger-*` one.
 
 **Emailed code (OTP).** Six digits, valid for ten minutes, used once. Only an HMAC is stored, keyed
 by `OTP_KEY` over the task, the task's email and the code, so it verifies only while the task has
@@ -385,7 +427,7 @@ is enabled.
 | `GET /api/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
 | `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{origin?, hostAuthentication?}`; returns `{code}` for the active task |
 | `GET /api/envelopes/:id/delivery-pdf` † | The signed PDF with its certificate, for a `COMPLETED` envelope |
-| `GET /api/envelopes/:id/certificate` † | The completion certificate as JSON (used by the member page), verified on every read |
+| `GET /api/envelopes/:id/certificate` † | The completion certificate as JSON (shown on the envelope page), verified on every read |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 
@@ -411,7 +453,8 @@ by the same live session with the same input and values, and returns the same si
 | `GET /api/public/editor/current`, `GET /api/public/editor/pdf`, `POST /api/public/editor/save` | Editor token, same origin | The session, its source PDF, and one save |
 
 **Pages** (the React app, `src/app/App.tsx`): `/sign` (the signing page), `/editor/page/:id` (the
-editor), `/copy` (a signer's copy) and `/`, the member page. **Public API** (declared in
+editor), `/copy` (a signer's copy) and, at every other path, the members' app (see "The members'
+app and the Docs"). **Public API** (declared in
 `insulin.publicPaths`): `/api/public/*` and `GET /api/health` (`{"status": "ok", "service": "esign"}`).
 
 ## Embedded editor

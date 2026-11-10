@@ -1,1 +1,0 @@
-ALTER TABLE templates ADD COLUMN fields_json TEXT NOT NULL DEFAULT '[]';

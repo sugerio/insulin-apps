@@ -1,8 +1,8 @@
-.dev.vars*
-!.dev.vars.example
-dist/
-dist-ui/
-
-.deploy/
-# The management key that provision-tenant.ts writes for the local walkthrough (README.md).
-.local-key
+node_modules
+.output
+.nitro
+.wrangler
+.suger/data/
+.env
+.env.*
+.DS_Store

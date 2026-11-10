@@ -73,6 +73,7 @@ const TAB_PATHS: Record<SettingsTab, string> = {
   users: '/settings/users',
   roles: '/settings/roles',
   organization: '/settings/organization',
+  sso: '/settings/sso',
 }
 
 export function settingsUrl(ctx: Context, tab: SettingsTab, orgId: string, notice?: string): string {
@@ -84,7 +85,7 @@ export function backTo(ctx: Context, tab: SettingsTab, orgId: string, notice: st
 }
 
 /** The organization a settings page shows: `?org=` when the user is a member of it, else the active one. */
-async function settingsOrg(ctx: Context): Promise<{ session: Session; membership: MembershipRow } | Response> {
+export async function settingsOrg(ctx: Context): Promise<{ session: Session; membership: MembershipRow } | Response> {
   const session = await requireSession(ctx)
   if (session instanceof Response) return session
   const wanted = ctx.url.searchParams.get('org')

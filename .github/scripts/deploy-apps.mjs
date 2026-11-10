@@ -186,6 +186,8 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
     name: GATEWAY_NAME,
     main: resolve(gatewayDirectory, 'src', 'index.ts'),
     compatibility_date: COMPATIBILITY_DATE,
+    // SAML's XML signature library (xml-crypto) needs Node's crypto module.
+    compatibility_flags: ['nodejs_compat'],
     workers_dev: false,
     preview_urls: false,
     routes: [

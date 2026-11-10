@@ -1,5 +1,7 @@
 // E-mail and password accounts: sign-up, sign-in, sign-out, e-mail confirmation, resend, forgotten and reset passwords.
-// Nothing here reveals whether an address has an account, except to someone who knows its password.
+// Nothing here reveals whether an address has an account, except to someone who knows its password. An address whose
+// organization requires its single sign-on (sso/flow.ts) is sent there by every one of these, before any credential
+// is looked at; that depends on the address's domain alone.
 import type { Context } from '../context.ts'
 import { apexUrl } from '../context.ts'
 import { burnPasswordCheck, hashPassword, isToken, newId, randomToken, sha256Hex, verifyPassword } from '../crypto.ts'
@@ -21,6 +23,7 @@ import { credentialsChangedPage, home, rateLimitedPage } from '../pages/status.t
 import { allowAuth } from '../ratelimit.ts'
 import { TURNSTILE_FIELD, verifyTurnstile } from '../turnstile.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
+import { ssoRequired, ssoRequiredResponse } from '../sso/flow.ts'
 import { endSession, loadSession } from './session.ts'
 import { finishSignIn } from './sign-in.ts'
 
@@ -92,6 +95,7 @@ export async function signup(ctx: Context): Promise<Response> {
   if (!(await verifyTurnstile(ctx, field(ctx.form, TURNSTILE_FIELD), 'signup'))) {
     return htmlResponse(signupPage(ctx, { values, returnTo, errors: { form: TURNSTILE_FAILED } }), { status: 400 })
   }
+  if (await ssoRequired(ctx, email)) return ssoRequiredResponse(ctx, email, returnTo)
 
   // Both branches hash once and send one e-mail, and both answer "Check your inbox".
   let outcome: SendOutcome
@@ -136,6 +140,7 @@ export async function login(ctx: Context): Promise<Response> {
   if (!(await verifyTurnstile(ctx, field(ctx.form, TURNSTILE_FIELD), 'login'))) {
     return htmlResponse(loginPage(ctx, { values, returnTo, errors: { form: TURNSTILE_FAILED } }), { status: 400 })
   }
+  if (await ssoRequired(ctx, email)) return ssoRequiredResponse(ctx, email, returnTo)
   const user = await findUserByEmail(db, email)
   let valid = false
   if (user?.password_hash) valid = await verifyPassword(password, user.password_hash)
@@ -166,6 +171,9 @@ export async function verifyEmail(ctx: Context): Promise<Response> {
   const db = ctx.config.db
   if (!(await allowAuth(ctx, 'verify'))) return rateLimitedPage(ctx)
   const token = field(ctx.form, 'token')
+  // A confirmation signs in, so an address that must use single sign-on goes there instead; the link stays unused.
+  const pending = isToken(token) ? await findUsableToken(db, await sha256Hex(token), 'verify_email', ctx.now) : null
+  if (pending && await ssoRequired(ctx, pending.email)) return ssoRequiredResponse(ctx, pending.email, safeReturnTo(ctx, pending.return_to))
   const row = isToken(token) ? await consumeToken(db, await sha256Hex(token), 'verify_email', ctx.now) : null
   const user = row ? await findUserById(db, row.user_id) : null
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'verify'), { status: 400 })
@@ -216,6 +224,7 @@ export async function forgot(ctx: Context): Promise<Response> {
   if (!(await verifyTurnstile(ctx, field(ctx.form, TURNSTILE_FIELD), 'forgot'))) {
     return htmlResponse(forgotPage(ctx, { values, errors: { form: TURNSTILE_FAILED } }), { status: 400 })
   }
+  if (await ssoRequired(ctx, email)) return ssoRequiredResponse(ctx, email, null)
   ctx.exec.waitUntil(sendReset(ctx, email).catch((error) => logError('forgot_failed', error)))
   return htmlResponse(forgotPage(ctx, { done: true }))
 }
@@ -230,6 +239,7 @@ export async function resetForm(ctx: Context): Promise<Response> {
   const token = ctx.url.searchParams.get('token')
   const row = isToken(token) ? await findUsableToken(ctx.config.db, await sha256Hex(token), 'reset_password', ctx.now) : null
   if (!row || !isToken(token)) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })
+  if (await ssoRequired(ctx, row.email)) return ssoRequiredResponse(ctx, row.email, null)
   return htmlResponse(resetPage(ctx, token, row.email))
 }
 
@@ -247,6 +257,8 @@ export async function reset(ctx: Context): Promise<Response> {
     if (!row) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })
     return htmlResponse(resetPage(ctx, token, row.email, problem), { status: 400 })
   }
+  const pending = await findUsableToken(db, tokenHash, 'reset_password', ctx.now)
+  if (pending && await ssoRequired(ctx, pending.email)) return ssoRequiredResponse(ctx, pending.email, null)
   const row = await consumeToken(db, tokenHash, 'reset_password', ctx.now)
   const user = row ? await findUserById(db, row.user_id) : null
   if (!row || !user || user.email !== row.email) return htmlResponse(linkInvalidPage(ctx, 'reset'), { status: 400 })

@@ -321,6 +321,7 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   const gateway = JSON.parse(await readFile(join(out, 'gateway.wrangler.json'), 'utf8'))
   assert.equal(gateway.name, 'insulin-apps-gateway')
   assert.equal(gateway.compatibility_date, '2026-10-13')
+  assert.deepEqual(gateway.compatibility_flags, ['nodejs_compat'], "SAML's XML signature library needs Node's crypto")
   assert.equal(gateway.workers_dev, false)
   assert.equal(gateway.preview_urls, false)
   assert.deepEqual(gateway.routes, [

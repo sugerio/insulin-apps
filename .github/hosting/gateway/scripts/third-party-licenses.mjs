@@ -1,6 +1,6 @@
 // npm run build:licenses: writes THIRD_PARTY_LICENSES with the full licence text of every package bundled into the
-// gateway Worker (its runtime dependencies, React's scheduler, and Tailwind CSS, whose base styles are in the compiled
-// stylesheet).
+// gateway Worker (its runtime dependencies, React's scheduler, xml-crypto's xpath and is-dom-node, and Tailwind CSS,
+// whose base styles are in the compiled stylesheet).
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,7 +11,7 @@ export const LICENSES_FILE = join(gatewayDir, 'THIRD_PARTY_LICENSES')
 /** The packages whose code or generated output ships in the deployed Worker. */
 export function bundledPackages() {
   const manifest = JSON.parse(readFileSync(join(gatewayDir, 'package.json'), 'utf8'))
-  return [...Object.keys(manifest.dependencies), 'scheduler', 'tailwindcss'].sort()
+  return [...Object.keys(manifest.dependencies), 'scheduler', 'xpath', '@xmldom/is-dom-node', 'tailwindcss'].sort()
 }
 
 function licenceText(name) {

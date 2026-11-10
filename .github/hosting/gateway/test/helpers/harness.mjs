@@ -6,7 +6,7 @@ import { request as httpRequest } from 'node:http'
 import { readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { Log, LogLevel, Miniflare, convertV4MiniflareOptions } from 'miniflare'
-import { COMPATIBILITY_DATE, bundlePath, gatewayDir } from './bundle.mjs'
+import { COMPATIBILITY_DATE, COMPATIBILITY_FLAGS, bundlePath, gatewayDir } from './bundle.mjs'
 
 export const PASSWORD = 'correct horse battery staple'
 /** The id format: random (version 4) UUIDs for users, organizations and invitations. */
@@ -278,6 +278,7 @@ export class Harness {
           modulesRoot: dirname(bundle),
           scriptPath: bundle,
           compatibilityDate: COMPATIBILITY_DATE,
+          compatibilityFlags: COMPATIBILITY_FLAGS,
           bindings: this.vars,
           ...(this.omit.has('DB') ? {} : { d1Databases: { DB: 'gateway' } }),
           ratelimits,

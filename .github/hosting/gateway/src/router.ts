@@ -30,6 +30,13 @@ import {
   changeMemberRole, createOrg, deleteOrg, leaveOrg, newOrgForm, orgOverview, organizationSettings, removeMember,
   renameOrg, rolesSettings, switchOrg, usersSettings,
 } from './orgs/orgs.ts'
+import { oidcCallback, samlAcs, samlMetadata, ssoForm, ssoStart } from './sso/flow.ts'
+import { MAX_RESPONSE_BYTES } from './sso/saml.ts'
+import { SCIM_BASE, scimRoutes } from './sso/scim.ts'
+import {
+  claimSsoDomain, createScimToken, deleteSsoConnection, removeSsoDomain, revokeScimToken, saveSsoConnection, ssoSettings,
+  verifySsoDomain,
+} from './sso/settings.ts'
 
 type Handler = (ctx: Context, params: string[]) => Promise<Response> | Response
 
@@ -37,6 +44,11 @@ interface Route {
   method: 'GET' | 'POST'
   pattern: RegExp
   handler: Handler
+  /**
+   * A form another site posts here (a SAML response from an identity provider): no Origin check, a larger body. The
+   * handler stands on its own proof instead (a signed response tied to a pending sign-in and this browser).
+   */
+  crossSite?: boolean
 }
 
 // Organization, user and invitation ids are UUIDs; anything else in their place is a 404 without a database lookup.
@@ -44,9 +56,11 @@ const ORG = UUID_PATTERN
 const USER = UUID_PATTERN
 const INVITATION = UUID_PATTERN
 const ROLE = UUID_PATTERN
+const CONNECTION = UUID_PATTERN
+const SCIM_TOKEN = UUID_PATTERN
 
-function route(method: 'GET' | 'POST', path: string, handler: Handler): Route {
-  return { method, pattern: new RegExp(`^${path}$`), handler }
+function route(method: 'GET' | 'POST', path: string, handler: Handler, options: { crossSite?: boolean } = {}): Route {
+  return { method, pattern: new RegExp(`^${path}$`), handler, ...options }
 }
 
 // The favicon at the root of the gateway's own hosts (app hosts answer for their own).
@@ -93,6 +107,19 @@ const APEX_ROUTES: Route[] = [
   route('GET', '/settings/users', usersSettings),
   route('GET', '/settings/roles', rolesSettings),
   route('GET', '/settings/organization', organizationSettings),
+  route('GET', '/settings/sso', ssoSettings),
+  route('POST', `/orgs/(${ORG})/sso/domains`, claimSsoDomain),
+  route('POST', `/orgs/(${ORG})/sso/domains/verify`, verifySsoDomain),
+  route('POST', `/orgs/(${ORG})/sso/domains/remove`, removeSsoDomain),
+  route('POST', `/orgs/(${ORG})/sso/connection`, saveSsoConnection),
+  route('POST', `/orgs/(${ORG})/sso/connection/delete`, deleteSsoConnection),
+  route('POST', `/orgs/(${ORG})/sso/scim-tokens`, createScimToken),
+  route('POST', `/orgs/(${ORG})/sso/scim-tokens/(${SCIM_TOKEN})/revoke`, revokeScimToken),
+  route('GET', '/sso', ssoForm),
+  route('POST', '/sso', ssoStart),
+  route('GET', `/sso/saml/(${CONNECTION})/metadata`, samlMetadata),
+  route('POST', `/sso/saml/(${CONNECTION})/acs`, samlAcs, { crossSite: true }),
+  route('GET', `/sso/oidc/(${CONNECTION})/callback`, oidcCallback),
   route('GET', `/invitations/(${INVITATION})`, invitationView),
   route('POST', `/invitations/(${INVITATION})/accept`, acceptInvitation),
   route('POST', `/invitations/(${INVITATION})/decline`, declineInvitation),
@@ -155,6 +182,8 @@ async function dispatch(ctx: Context): Promise<Response> {
   if (ctx.site === 'auth') return authRedirect(ctx)
   if (path === '/__insulin' || path.startsWith('/__insulin/')) return reservedRoutes(ctx)
   if (ctx.site === 'app') return isGatewayAppPath(path) ? runRoutes(ctx, APP_SETTINGS_ROUTES) : proxyToApp(ctx, ctx.app!)
+  // SCIM speaks JSON with a bearer token, not forms: it has its own dispatch and checks (sso/scim.ts).
+  if (path === SCIM_BASE || path.startsWith(`${SCIM_BASE}/`)) return scimRoutes(ctx)
   return runRoutes(ctx, APEX_ROUTES)
 }
 
@@ -177,7 +206,7 @@ async function runRoutes(ctx: Context, routes: Route[]): Promise<Response> {
       continue
     }
     if (candidate.method === 'POST') {
-      const rejected = await readPostForm(ctx)
+      const rejected = await readPostForm(ctx, candidate.crossSite === true)
       if (rejected) return rejected
     }
     return candidate.handler(ctx, match.slice(1))
@@ -186,15 +215,18 @@ async function runRoutes(ctx: Context, routes: Route[]): Promise<Response> {
   return notFoundPage(ctx)
 }
 
-/** Form POSTs to the apex: from the apex's own pages, as a small urlencoded form. Otherwise 403, 415 or 413. */
-async function readPostForm(ctx: Context): Promise<Response | null> {
-  if (!isSameOrigin(ctx)) {
+/**
+ * Form POSTs to the apex: from the apex's own pages, as a small urlencoded form. Otherwise 403, 415 or 413. A
+ * cross-site route skips the Origin check and takes a SAML-sized body.
+ */
+async function readPostForm(ctx: Context, crossSite: boolean): Promise<Response | null> {
+  if (!crossSite && !isSameOrigin(ctx)) {
     log('origin_rejected', { site: ctx.site, path: ctx.url.pathname })
     return forbiddenPage(ctx)
   }
   if (!isFormBody(ctx.request)) return badRequestPage(ctx, 415, 'Please submit the form on this site.')
   try {
-    ctx.form = new URLSearchParams(await readText(ctx.request, FORM_LIMIT_BYTES))
+    ctx.form = new URLSearchParams(await readText(ctx.request, crossSite ? MAX_RESPONSE_BYTES * 2 : FORM_LIMIT_BYTES))
   } catch (error) {
     if (error instanceof BodyTooLarge) return badRequestPage(ctx, 413, 'That form is too large.')
     throw error

@@ -63,6 +63,16 @@ export const ALLOWED = [
     lineSha256: '384d17b1d79699b14c3b5573bf11ff5f4b2cf41ca7f0bd52bf8238e7edcc517d',
     why: "clsx's copyright notice, which its MIT license requires the bundled gateway to carry verbatim, author address included.",
   },
+  {
+    file: '.github/hosting/gateway/THIRD_PARTY_LICENSES',
+    lineSha256: 'bb2e160e7310c9bb82099700bd1adc0e3636049806914c1afca79eb63dc016f9',
+    why: "@xmldom/xmldom's copyright notice (SAML), which its MIT license requires the bundled gateway to carry verbatim, author address included.",
+  },
+  {
+    file: '.github/hosting/gateway/THIRD_PARTY_LICENSES',
+    lineSha256: '98a2d78446603f0cf368bef24c4ea988faf3941de40963768b1f6e9ea411e8bc',
+    why: "xml-crypto's copyright notice (SAML), which its MIT license requires the bundled gateway to carry verbatim, author address included.",
+  },
 ]
 
 // Reserved for documentation and testing (RFC 2606, RFC 6761), so they never reach a real mailbox.

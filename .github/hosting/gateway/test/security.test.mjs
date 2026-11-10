@@ -218,6 +218,8 @@ test('without required configuration every host answers 503 and redirects nowher
     { mode: 'production', omit: ['EMAIL'] },
     { omit: ['DB'] },
     { omit: ['RL_APP'] },
+    { omit: ['RL_PUBLIC'] },
+    { vars: { SITE_APPS: JSON.stringify([{ name: 'captable', scheduled: '/settings/tick' }]) } },
   ]) {
     const broken = await startGateway(options)
     try {

@@ -1,0 +1,96 @@
+{
+  "name": "insulin-esign",
+  "displayName": "E-sign",
+  "version": "0.1.0",
+  "description": "Electronic signatures: templates with placed fields, envelopes signed in order with emailed one-time codes, a sealed signed PDF and a certificate of completion",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vite --configLoader native --host 0.0.0.0 --port 3000",
+    "build": "vite build --configLoader native",
+    "db:generate": "drizzle-kit generate",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "insulin": {
+    "permissions": [
+      {
+        "key": "esign.manage",
+        "label": "Send and manage envelopes",
+        "description": "Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing.",
+        "role": "EDITOR"
+      },
+      {
+        "key": "esign.view",
+        "label": "View envelopes",
+        "description": "See templates, envelopes and their status, the audit trail, signed documents and certificates of completion.",
+        "role": "VIEWER"
+      }
+    ],
+    "publicPaths": [
+      "/sign",
+      "/editor/",
+      "/copy",
+      "/assets/",
+      "/api/public/"
+    ],
+    "scheduled": "/api/scheduled",
+    "secrets": [
+      "ESIGN_OTP_KEY",
+      "ESIGN_FRAME_ANCESTORS",
+      "ESIGN_KMS_KEY_ARN",
+      "ESIGN_KMS_PUBLIC_KEY",
+      "ESIGN_KMS_TRUSTED_KEY_SHA256",
+      "ESIGN_AWS_ROLE_ARN",
+      "ESIGN_AWS_ACCESS_KEY_ID",
+      "ESIGN_AWS_SECRET_ACCESS_KEY",
+      "ESIGN_TSA_SIGNER_SPKI_SHA256"
+    ]
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "3.1161.0",
+    "@fours/app": "0.1.0-beta.0",
+    "@smithy/signature-v4": "5.7.5",
+    "asn1js": "3.0.6",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "drizzle-orm": "0.45.3",
+    "hono": "4.13.16",
+    "jose": "6.2.3",
+    "lucide-react": "1.55.0",
+    "nitro": "3.0.260610-beta",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "5.4.624",
+    "pkijs": "3.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwind-merge": "3.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261103.1",
+    "@rolldown/binding-wasm32-wasi": "1.2.14",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/react-test-renderer": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "esbuild": "0.28.2",
+    "lightningcss": "npm:lightningcss-wasm@1.33.0",
+    "miniflare": "4.20260730.0",
+    "react-test-renderer": "19.3.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.3.4"
+  },
+  "overrides": {
+    "rolldown": "1.2.14",
+    "source-map-js": "1.2.2",
+    "undici": "7.30.1",
+    "sharp": "0.35.5"
+  }
+}

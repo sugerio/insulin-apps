@@ -337,10 +337,11 @@ test('dry-run writes private app configs, the complete gateway config, and a red
     { binding: 'APP_BETA', service: 'insulin-apps-beta' },
   ])
   assert.deepEqual(gateway.send_email, [{ name: 'EMAIL', allowed_sender_addresses: ['sender@example.com'] }])
-  assert.deepEqual(gateway.triggers, { crons: ['17 3 * * *'] })
+  assert.deepEqual(gateway.triggers, { crons: ['*/5 * * * *', '17 3 * * *'] }, "the apps' five-minute tick and the daily cleanup")
   assert.deepEqual(gateway.ratelimits, [
     { name: 'RL_AUTH', namespace_id: '730101', simple: { limit: 20, period: 60 } },
     { name: 'RL_APP', namespace_id: '730102', simple: { limit: 600, period: 60 } },
+    { name: 'RL_PUBLIC', namespace_id: '730103', simple: { limit: 60, period: 60 } },
   ])
   assert.equal(gateway.vars.SITE_APPS[0].source, 'https://github.com/sugerio/insulin-apps/tree/main/alpha-app')
   assert.ok(!('SITE_ENV' in gateway.vars))
@@ -506,6 +507,80 @@ test('with GATEWAY_SECRET_KEY, the gateway gets it and each app its own integrat
   assert.throws(() => readSettings(settings({ GATEWAY_SECRET_KEY: Buffer.alloc(16).toString('base64') })), /GATEWAY_SECRET_KEY/)
 })
 
+test("an app's declared secrets come from the environment's secrets, then its variables, and nothing else does", async () => {
+  const key = Buffer.alloc(32, 7).toString('base64')
+  const root = await fixtureRepository()
+  const manifest = JSON.parse(await readFile(join(root, 'alpha-app', 'package.json'), 'utf8'))
+  manifest.insulin = { publicPaths: ['/sign', '/api/public/'], scheduled: '/api/scheduled', secrets: ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION', 'ALPHA_APP_MISSING'] }
+  await writeFile(join(root, 'alpha-app', 'package.json'), JSON.stringify(manifest))
+  const gateway = join(root, '.github', 'hosting', 'gateway')
+  await mkdir(join(gateway, 'node_modules', '.bin'), { recursive: true })
+  await mkdir(join(gateway, 'src'), { recursive: true })
+  await mkdir(join(gateway, 'migrations'), { recursive: true })
+  await writeFile(join(gateway, 'node_modules', '.bin', 'wrangler'), '')
+  await writeFile(join(gateway, 'src', 'index.ts'), 'export default {}\n')
+  await writeFile(join(gateway, 'migrations', '0001_init.sql'), 'CREATE TABLE fixture (id TEXT PRIMARY KEY);\n')
+  const environment = settings({
+    GATEWAY_SECRET_KEY: key,
+    APP_SECRETS_JSON: JSON.stringify({ ALPHA_APP_KMS_KEY: 'kms-secret-value-1234', CLOUDFLARE_API_TOKEN: 'dummy-api-token-value', BETA_TOKEN: 'not-declared-anywhere' }),
+    APP_VARS_JSON: JSON.stringify({ ALPHA_APP_REGION: 'region-value-5678', ALPHA_APP_KMS_KEY: 'loses-to-the-secret' }),
+  })
+  const secretFiles = new Map()
+  const databases = new Map()
+  const spawn = (command, args, options) => {
+    for (const name of ['APP_SECRETS_JSON', 'APP_VARS_JSON']) assert.ok(!(name in options.env), `${name} never reaches a command`)
+    if (args[0] === 'd1' && args[1] === 'list') {
+      return { status: 0, stdout: JSON.stringify([...databases].map(([name, uuid]) => ({ name, uuid }))), stderr: '' }
+    }
+    if (args[0] === 'd1' && args[1] === 'create') {
+      databases.set(args[2], `fixture-${args[2]}-db`)
+      return { status: 0, stdout: '', stderr: '' }
+    }
+    if (args[0] === 'deploy') secretFiles.set(basename(args[2]), JSON.parse(readFileSync(args[args.indexOf('--secrets-file') + 1], 'utf8')))
+    if (args[0] === 'secret' && args[1] === 'list') return { status: 0, stdout: '[]', stderr: '' }
+    return { status: 0, stdout: '', stderr: '' }
+  }
+  const result = await deployApps({ root, environment, skipBuild: true, spawn, fetchImpl: cloudflareMock().fetch })
+  temporary.push(result.outputDirectory)
+  assert.deepEqual(secretFiles.get('alpha-app.wrangler.json'), {
+    ALPHA_APP_KMS_KEY: 'kms-secret-value-1234',
+    ALPHA_APP_REGION: 'region-value-5678',
+    SUGER_APP_TOKEN: appToken(key, 'alpha-app'),
+  }, 'declared names only, a secret before a variable, a missing one skipped')
+  assert.deepEqual(secretFiles.get('beta.wrangler.json'), { SUGER_APP_TOKEN: appToken(key, 'beta') }, 'another app gets none of them')
+  const alpha = JSON.parse(readFileSync(join(result.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
+  assert.equal(alpha.vars.SUGER_MAIL_URL, 'https://apps.example.com/__insulin/mail')
+  const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
+  const site = gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'alpha-app')
+  assert.deepEqual(site.publicPaths, ['/sign', '/api/public/'])
+  assert.equal(site.scheduled, '/api/scheduled', 'the path the gateway ticks')
+  assert.equal(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').scheduled, null, 'an app without one has none')
+  assert.equal('secrets' in site, false, "the gateway never learns an app's secret names")
+
+  const out = await tempDirectory('deploy-apps-app-secrets-plan-')
+  await deployApps({ root, out, environment, dryRun: true, skipBuild: true, only: 'alpha-app', spawn: () => assert.fail('spawned') })
+  const planText = await readFile(join(out, 'plan.json'), 'utf8')
+  for (const secret of ['kms-secret-value-1234', 'region-value-5678']) assert.ok(!planText.includes(secret), 'the plan never holds a value')
+  const deploy = JSON.parse(planText).commands.find(({ args }) => args[0] === 'deploy')
+  assert.deepEqual(deploy.secretNames, ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION', 'SUGER_APP_TOKEN'], 'it lists their names')
+
+  const withoutKey = new Map()
+  const plain = await deployApps({
+    root, environment: { ...environment, GATEWAY_SECRET_KEY: '' }, skipBuild: true, only: 'alpha-app', fetchImpl: cloudflareMock().fetch,
+    spawn: (command, args) => {
+      if (args[0] === 'deploy') withoutKey.set(basename(args[2]), JSON.parse(readFileSync(args[args.indexOf('--secrets-file') + 1], 'utf8')))
+      if (args[0] === 'd1' && args[1] === 'list') return { status: 0, stdout: JSON.stringify([{ name: 'insulin-apps-alpha-app', uuid: 'fixture-db' }]), stderr: '' }
+      return { status: 0, stdout: '', stderr: '' }
+    },
+  })
+  temporary.push(plain.outputDirectory)
+  assert.deepEqual(Object.keys(withoutKey.get('alpha-app.wrangler.json')).sort(), ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION'], 'secrets need no gateway key')
+  await assert.rejects(
+    () => deployApps({ root, environment: { ...environment, APP_SECRETS_JSON: '{"ALPHA_APP_KMS_KEY": "kms-secret-value-1234"' }, dryRun: true, skipBuild: true, only: 'alpha-app' }),
+    (error) => /APP_SECRETS_JSON is not valid JSON/.test(error.message) && !error.message.includes('kms-secret-value-1234'),
+  )
+})
+
 test('the app token is a stable HMAC of the app name under the key, as the gateway derives it', () => {
   const key = Buffer.alloc(32, 0x5a).toString('base64')
   assert.equal(appToken(key, 'captable'), appToken(key, 'captable'))
@@ -518,14 +593,14 @@ test('--build-only builds every app without any deploy setting reaching the buil
   const commands = []
   const spawn = (command, args, options) => {
     commands.push([command, ...args])
-    for (const name of ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY']) {
+    for (const name of ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY', 'APP_SECRETS_JSON', 'APP_VARS_JSON']) {
       assert.ok(!(name in options.env), `${name} reached the build`)
     }
     assert.equal(options.env.NITRO_PRESET, 'cloudflare_module')
     return { status: 0, stdout: '', stderr: '' }
   }
 
-  const result = await deployApps({ root, environment: settings(), buildOnly: true, spawn })
+  const result = await deployApps({ root, environment: settings({ APP_SECRETS_JSON: '{"ALPHA_APP_X":"secret"}', APP_VARS_JSON: '{}' }), buildOnly: true, spawn })
   assert.deepEqual(result.built, ['alpha-app', 'beta'])
   assert.deepEqual(commands, [
     ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund'],

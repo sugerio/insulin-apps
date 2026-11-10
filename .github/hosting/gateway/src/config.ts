@@ -30,6 +30,16 @@ export interface HostedApp {
   service: Fetcher | null
   /** The app's permission catalog; empty when it has none (it then has no custom roles). */
   permissions: Permission[]
+  /**
+   * Paths people without an account use (an e-sign recipient, say), forwarded with no identity (DESIGN.md §8.1): the
+   * app authenticates them with its own codes. Empty for most apps.
+   */
+  publicPaths: string[]
+  /**
+   * The path the gateway POSTs to every five minutes, with no identity (`x-suger-access-via: schedule`), so the app can
+   * run its due work (DESIGN.md §8.5); null for an app that has none.
+   */
+  scheduled: string | null
 }
 
 export interface Config {
@@ -54,6 +64,8 @@ export interface Config {
   email: SendEmail | null
   rlAuth: RateLimit
   rlApp: RateLimit
+  /** The stricter per-IP limit on requests to public paths that change something (anything but GET and HEAD). */
+  rlPublic: RateLimit
   /** GATEWAY_SECRET_KEY's 32 bytes, or null: features that encrypt or derive secrets then say they aren't set up. */
   secretKey: Uint8Array | null
 }
@@ -63,6 +75,8 @@ export type ConfigResult = { ok: true; config: Config } | { ok: false; problems:
 export const RESERVED_APP_NAMES = new Set([
   'auth', 'www', 'api', 'admin', 'app', 'apps', 'mail', 'email', 'cf-bounce', 'gateway', 'static', 'assets',
   'status', 'docs', 'help', 'support',
+  // An app's secrets are named <APP>_*; these would collide with the platform's own settings (DESIGN.md §8.3).
+  'cloudflare', 'google', 'turnstile', 'github', 'site', 'suger', 'actions', 'runner',
 ])
 
 const DEFAULT_SENDER_NAME = 'Insulin Apps'
@@ -120,6 +134,94 @@ export function issuesUrlFrom(apps: HostedApp[]): string | null {
 
 const PERMISSION_KEY = /^[a-z][a-z0-9_.-]{0,63}$/
 const PERMISSION_LIMIT = 50
+const PUBLIC_PATH_LIMIT = 10
+// Never public: the gateway's own paths on an app host and the platform's routes inside the app.
+const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
+
+/**
+ * Why an entry of `insulin.publicPaths` is refused, or null. The same rule as .github/scripts/list-apps.mjs: a path
+ * starting with `/`, without `..`, a query or a fragment, that neither is nor covers the API as a whole or a reserved
+ * path (compared without regard to case).
+ */
+export function publicPathProblem(entry: unknown): string | null {
+  if (typeof entry !== 'string' || !entry.startsWith('/') || entry.length > 200) return 'must be a path starting with /'
+  if (/[?#%\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
+    return 'must not hold a query, a fragment, a percent sign, a backslash, whitespace, an empty or a dot segment'
+  }
+  const lower = entry.toLowerCase()
+  const bare = lower.replace(/\/+$/, '')
+  if (bare === '' || bare === '/api') return 'must not cover every path or the whole API'
+  for (const reserved of RESERVED_PREFIXES) {
+    const insideReserved = bare === reserved || bare.startsWith(`${reserved}/`)
+    const coversReserved = reserved.startsWith(`${bare}/`)
+    if (insideReserved || coversReserved) return `must not reach ${reserved}`
+  }
+  return null
+}
+
+export function parsePublicPaths(raw: unknown, where: string, problems: string[]): string[] {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw) || raw.length > PUBLIC_PATH_LIMIT) {
+    problems.push(`${where} (expected an array of at most ${PUBLIC_PATH_LIMIT})`)
+    return []
+  }
+  const paths: string[] = []
+  for (const [index, entry] of raw.entries()) {
+    if (publicPathProblem(entry) || paths.includes(entry as string)) {
+      problems.push(`${where}[${index}]`)
+      continue
+    }
+    paths.push(entry as string)
+  }
+  return paths
+}
+
+/**
+ * Why an app's `insulin.scheduled` is refused, or null. The same rule as .github/scripts/list-apps.mjs: one path under
+ * `/api/`, passing the rules of a public path (publicPathProblem), without a trailing slash, and neither one of the
+ * app's public paths nor under one (whatever reaches it must come from the gateway's own tick).
+ */
+export function scheduledProblem(entry: unknown, publicPaths: string[]): string | null {
+  if (typeof entry !== 'string' || !entry.startsWith('/api/') || entry.endsWith('/')) return 'must be a path under /api/, without a trailing slash'
+  const problem = publicPathProblem(entry)
+  if (problem) return problem
+  // Compared without regard to case, so no spelling of the path is public.
+  if (isPublicPath({ publicPaths: publicPaths.map((path) => path.toLowerCase()) }, entry.toLowerCase())) {
+    return 'must not be one of the app\'s public paths or under one'
+  }
+  return null
+}
+
+export function parseScheduled(raw: unknown, publicPaths: string[], where: string, problems: string[]): string | null {
+  if (raw === undefined || raw === null) return null
+  if (scheduledProblem(raw, publicPaths)) {
+    problems.push(where)
+    return null
+  }
+  return raw as string
+}
+
+/**
+ * Whether a request path is one of the app's public paths: equal to an entry, below an entry that ends in `/`, or
+ * below `entry/`. Never a reserved path, whatever its case, and never a path whose segments hide a dot segment or a
+ * slash in their encoding (such a request falls through to the normal checks).
+ */
+export function isPublicPath(app: Pick<HostedApp, 'publicPaths'>, path: string): boolean {
+  if (!app.publicPaths.length) return false
+  const lower = path.toLowerCase()
+  if (RESERVED_PREFIXES.some((reserved) => lower === reserved || lower.startsWith(`${reserved}/`))) return false
+  const hidden = path.split('/').some((segment) => {
+    if (!segment.includes('%')) return false
+    try {
+      const decoded = decodeURIComponent(segment)
+      return decoded === '.' || decoded === '..' || /[/\\]/.test(decoded)
+    } catch {
+      return true
+    }
+  })
+  if (hidden) return false
+  return app.publicPaths.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry || path.startsWith(`${entry}/`)))
+}
 
 /** An app's permission catalog; a malformed one is a configuration problem (custom roles would mean the wrong thing). */
 export function parsePermissions(raw: unknown, where: string, problems: string[]): Permission[] {
@@ -192,6 +294,7 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
     }
     const service = env[binding as `APP_${string}`]
     if (!hasMethod(service, 'fetch')) log('config_app_binding_missing', { app: name, binding })
+    const publicPaths = parsePublicPaths(item.publicPaths, `SITE_APPS[${index}].publicPaths`, problems)
     apps.push({
       name,
       title: truncate(cleanText(item.title), 80) || name,
@@ -202,6 +305,8 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       appId: `insulin-apps-${name}`,
       service: hasMethod(service, 'fetch') ? (service as Fetcher) : null,
       permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
+      publicPaths,
+      scheduled: parseScheduled(item.scheduled, publicPaths, `SITE_APPS[${index}].scheduled`, problems),
     })
   })
   return apps
@@ -240,6 +345,7 @@ export function readConfig(env: Env): ConfigResult {
   if (!testMode && !hasMethod(env.EMAIL, 'send')) problems.push('EMAIL')
   if (!hasMethod(env.RL_AUTH, 'limit')) problems.push('RL_AUTH')
   if (!hasMethod(env.RL_APP, 'limit')) problems.push('RL_APP')
+  if (!hasMethod(env.RL_PUBLIC, 'limit')) problems.push('RL_PUBLIC')
 
   // Optional, but a value that is set must be usable: a wrong key would encrypt with something nobody can recover.
   const gatewayKey = parseSecretKey(env.GATEWAY_SECRET_KEY)
@@ -264,6 +370,7 @@ export function readConfig(env: Env): ConfigResult {
       email: testMode ? null : env.EMAIL!,
       rlAuth: env.RL_AUTH!,
       rlApp: env.RL_APP!,
+      rlPublic: env.RL_PUBLIC!,
       secretKey: gatewayKey,
     },
   }

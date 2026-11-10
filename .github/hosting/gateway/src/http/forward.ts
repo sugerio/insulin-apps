@@ -10,8 +10,13 @@ export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([
   SESSION_COOKIE, 'insulin_oauth', '__host-insulin_oauth', 'insulin_mfa', '__host-insulin_mfa', 'insulin_sso', '__host-insulin_sso',
 ])
 
-/** How a request reached the app (x-suger-access-via): apps keep people, billing and integrations to `browser`. */
-export type AccessVia = 'browser' | 'mcp' | 'api'
+/**
+ * How a request reached the app (x-suger-access-via): apps keep people, billing and integrations to `browser`.
+ * `public` is a request on one of the app's public paths, from someone the gateway doesn't know (DESIGN.md §8.1).
+ * `schedule` is the gateway's own five-minute tick to the app's `insulin.scheduled` path (DESIGN.md §8.5): it never
+ * comes from outside, since every incoming x-suger-* header is removed and app Workers have no public route.
+ */
+export type AccessVia = 'browser' | 'mcp' | 'api' | 'public' | 'schedule'
 
 /** Who a request acts as: a person, or a service account (DESIGN.md §5.3). */
 export interface Actor {
@@ -38,9 +43,23 @@ export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, acc
   return headers
 }
 
-/** The original request (same URL and method, body streamed, not buffered) with the identity headers in place. */
-export function forwardRequest(request: Request, identity: Record<string, string>): Request {
+/** What a request on a public path carries: the app it is for and that nobody is signed in. Nothing else. */
+export function publicHeaders(app: HostedApp): Record<string, string> {
+  return { 'x-suger-app-id': app.appId, 'x-suger-access-via': 'public' }
+}
+
+/** What the gateway's tick carries: the app it is for and that it is the schedule. No person, organization or role. */
+export function scheduleHeaders(app: HostedApp): Record<string, string> {
+  return { 'x-suger-app-id': app.appId, 'x-suger-access-via': 'schedule' }
+}
+
+/**
+ * The original request (same URL and method, body streamed, not buffered) with the identity headers in place.
+ * `dropAuthorization` leaves the caller's Authorization header out (a public request never passes a credential on).
+ */
+export function forwardRequest(request: Request, identity: Record<string, string>, { dropAuthorization = false } = {}): Request {
   const headers = new Headers(request.headers)
+  if (dropAuthorization) headers.delete('Authorization')
   for (const name of [...headers.keys()]) {
     if (name.toLowerCase().startsWith('x-suger-')) headers.delete(name)
   }

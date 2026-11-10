@@ -23,7 +23,9 @@ const REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, '..', '..')
 const GATEWAY_NAME = 'insulin-apps-gateway'
 const COMPATIBILITY_DATE = '2026-10-13'
 const GATEWAY_REQUIRED_SETTINGS = ['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'EMAIL_FROM']
-const SECRET_SETTINGS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY', 'GATEWAY_SECRET_KEY']
+// The whole GitHub environment, as JSON, from which an app's declared secrets are picked (appSecretValues).
+const ENVIRONMENT_JSON_SETTINGS = ['APP_SECRETS_JSON', 'APP_VARS_JSON']
+const SECRET_SETTINGS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY', 'GATEWAY_SECRET_KEY', ...ENVIRONMENT_JSON_SETTINGS]
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4'
 const APP_CONFIG_KEYS = new Set(['compatibility_date', 'compatibility_flags', 'rules', 'no_bundle', 'assets'])
 const APP_ASSET_KEYS = new Set(['binding', 'html_handling', 'not_found_handling', 'run_worker_first'])
@@ -33,7 +35,12 @@ const ALLOWED_COMPATIBILITY_FLAGS = new Set(['nodejs_compat'])
 const RATE_LIMITS = [
   { name: 'RL_AUTH', namespace_id: '730101', simple: { limit: 20, period: 60 } },
   { name: 'RL_APP', namespace_id: '730102', simple: { limit: 600, period: 60 } },
+  // Requests to an app's public paths that change something (anything but GET and HEAD), per app and IP.
+  { name: 'RL_PUBLIC', namespace_id: '730103', simple: { limit: 60, period: 60 } },
 ]
+// The apps' five-minute tick (`insulin.scheduled`, DESIGN.md §8.5) and the daily cleanup of expired sessions, tokens
+// and mail records, for quiet days. The gateway's scheduled handler tells them apart by the cron.
+const GATEWAY_CRONS = ['*/5 * * * *', '17 3 * * *']
 
 export function readSettings(environment = process.env, { gateway = true } = {}) {
   const token = environment.CLOUDFLARE_API_TOKEN?.trim() ?? ''
@@ -90,7 +97,37 @@ export function appToken(gatewaySecretKey, app) {
   return createHmac('sha256', key).update(app).digest('base64url')
 }
 
-export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null }) {
+/**
+ * An app's declared secrets (`insulin.secrets`, DESIGN.md §8.3), taken from the GitHub environment: each name from its
+ * secrets (APP_SECRETS_JSON, `toJSON(secrets)`), else its variables (APP_VARS_JSON). Only declared names are read;
+ * names that aren't set are returned in `missing`. The JSON is never logged, and a malformed one is reported without
+ * its contents.
+ */
+export function appSecretValues(app, environment) {
+  const read = (name) => {
+    const text = environment[name]?.trim()
+    if (!text) return {}
+    let value
+    try {
+      value = JSON.parse(text)
+    } catch {
+      throw new Error(`${name} is not valid JSON`)
+    }
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  }
+  const secrets = read('APP_SECRETS_JSON')
+  const vars = read('APP_VARS_JSON')
+  const values = {}
+  const missing = []
+  for (const name of app.secrets ?? []) {
+    const value = [secrets[name], vars[name]].find((candidate) => typeof candidate === 'string' && candidate !== '')
+    if (value === undefined) missing.push(name)
+    else values[name] = value
+  }
+  return { values, missing }
+}
+
+export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null, mailUrl = null }) {
   const outputDirectory = join(appDirectory, '.output')
   const { config: generatedConfig, ignoredKeys } = sanitizeAppBaseConfig(baseConfig)
   if (ignoredKeys.length) {
@@ -112,7 +149,11 @@ export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {},
         migrations_dir: resolve(appDirectory, 'src', 'app', 'db', 'migrations'),
       },
     ],
-    vars: { SUGER_ACCESS_MODE: 'console', ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}) },
+    vars: {
+      SUGER_ACCESS_MODE: 'console',
+      ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}),
+      ...(mailUrl ? { SUGER_MAIL_URL: mailUrl } : {}),
+    },
     workers_dev: false,
     preview_urls: false,
   }
@@ -194,7 +235,8 @@ export function sanitizeAppBaseConfig(baseConfig) {
 
 export function buildGatewayConfig({ root, apps, settings, databaseId }) {
   const gatewayDirectory = join(root, '.github', 'hosting', 'gateway')
-  const siteApps = apps.map((app) => ({
+  // The gateway needs the permissions, public paths and scheduled path, never the names of an app's secrets.
+  const siteApps = apps.map(({ secrets: _secrets, ...app }) => ({
     ...app,
     binding: serviceBinding(app.name),
     source: `https://github.com/sugerio/insulin-apps/tree/main/${app.name}`,
@@ -228,8 +270,7 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
     ],
     send_email: [{ name: 'EMAIL', allowed_sender_addresses: [settings.senderAddress] }],
     ratelimits: RATE_LIMITS,
-    // The daily run of the gateway's cleanup of expired sessions, tokens and mail records, for quiet days.
-    triggers: { crons: ['17 3 * * *'] },
+    triggers: { crons: GATEWAY_CRONS },
     vars: {
       SITE_DOMAIN: settings.siteDomain,
       SITE_APPS: siteApps,
@@ -286,13 +327,20 @@ export async function deployApps({
   delete childEnvironment.GOOGLE_CLIENT_SECRET
   delete childEnvironment.TURNSTILE_SECRET_KEY
   delete childEnvironment.GATEWAY_SECRET_KEY
+  for (const name of ENVIRONMENT_JSON_SETTINGS) delete childEnvironment[name]
 
   const appTokens = new Map(settings.gatewaySecretKey ? apps.map(({ name }) => [name, appToken(settings.gatewaySecretKey, name)]) : [])
+  const appSecrets = new Map(appsToDeploy.map((app) => [app.name, appSecretValues(app, environment)]))
+  for (const [name, { missing }] of appSecrets) {
+    if (missing.length) process.stdout.write(`::notice::${name}: not set in the environment, skipped: ${missing.join(', ')}\n`)
+  }
   const runner = new CommandRunner({
     dryRun,
     spawn,
-    secrets: [settings.cloudflareApiToken, settings.googleClientSecret, settings.turnstileSecretKey, settings.gatewaySecretKey, ...appTokens.values()]
-      .filter(Boolean),
+    secrets: [
+      settings.cloudflareApiToken, settings.googleClientSecret, settings.turnstileSecretKey, settings.gatewaySecretKey, ...appTokens.values(),
+      ...[...appSecrets.values()].flatMap(({ values }) => Object.values(values)),
+    ].filter(Boolean),
   })
 
   if (!skipBuild) buildApps(runner, root, appsToDeploy, environment)
@@ -332,14 +380,19 @@ export async function deployApps({
     }
 
     const integrationsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/integrations` : null
-    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl }))
+    const mailUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/mail` : null
+    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl, mailUrl }))
     runner.run(wrangler, ['d1', 'migrations', 'apply', workerName(app.name), '--remote', '--config', configPath], {
       cwd: root,
       env: childEnvironment,
     })
-    if (appTokens.size) {
-      // The token travels with the deploy itself, so no version of the app runs without it.
-      deployWithSecrets(runner, wrangler, configPath, { SUGER_APP_TOKEN: appTokens.get(app.name) }, { cwd: root, env: childEnvironment, dryRun })
+    const secretValues = {
+      ...appSecrets.get(app.name).values,
+      ...(appTokens.size ? { SUGER_APP_TOKEN: appTokens.get(app.name) } : {}),
+    }
+    if (Object.keys(secretValues).length) {
+      // The secrets travel with the deploy itself, so no version of the app runs without them.
+      deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd: root, env: childEnvironment, dryRun })
     } else {
       runner.run(wrangler, ['deploy', '--config', configPath], { cwd: root, env: childEnvironment })
     }
@@ -408,12 +461,13 @@ class CommandRunner {
     this.plan = []
   }
 
-  run(command, args, { cwd, env, condition, capture = false, recordArgs = args, sensitive = false } = {}) {
+  run(command, args, { cwd, env, condition, capture = false, recordArgs = args, sensitive = false, secretNames } = {}) {
     this.record(command, recordArgs, {
       cwd,
       ...(condition ? { condition } : {}),
       ...(command.endsWith('wrangler') ? { environment: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] } : {}),
       ...(sensitive ? { input: '<redacted>' } : {}),
+      ...(secretNames ? { secretNames } : {}),
     })
     if (this.dryRun || condition) return { stdout: '', stderr: '' }
 
@@ -455,11 +509,15 @@ async function findApps(root, only) {
   return { apps, selectedApps: only ? apps.filter(({ name }) => name === only) : apps }
 }
 
-/** `wrangler deploy --secrets-file`, from a mode-600 file in a fresh directory removed right after; redacted in plans. */
+/**
+ * `wrangler deploy --secrets-file`, from a mode-600 file in a fresh directory removed right after; redacted in plans,
+ * which list the secrets' names only.
+ */
 function deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd, env, dryRun }) {
   const args = (secretFile) => ['deploy', '--config', configPath, '--secrets-file', secretFile]
+  const secretNames = Object.keys(secretValues).sort()
   if (dryRun) {
-    runner.run(wrangler, args('<redacted-secret-file>'), { cwd, env, sensitive: true })
+    runner.run(wrangler, args('<redacted-secret-file>'), { cwd, env, sensitive: true, secretNames })
     return
   }
   const secretDirectory = mkdtempSync(join(tmpdir(), 'insulin-apps-secrets-'))
@@ -467,7 +525,7 @@ function deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd, en
   try {
     writeFileSync(secretFile, `${JSON.stringify(secretValues)}\n`, { mode: 0o600 })
     chmodSync(secretFile, 0o600)
-    runner.run(wrangler, args(secretFile), { cwd, env, recordArgs: args('<redacted-secret-file>'), sensitive: true })
+    runner.run(wrangler, args(secretFile), { cwd, env, recordArgs: args('<redacted-secret-file>'), sensitive: true, secretNames })
   } finally {
     rmSync(secretDirectory, { recursive: true, force: true })
   }

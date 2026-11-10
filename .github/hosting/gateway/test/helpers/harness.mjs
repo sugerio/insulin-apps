@@ -229,7 +229,11 @@ export async function startGateway(options = {}) {
 export class Harness {
   logs = []
 
-  constructor({ mode = 'test', vars = {}, omit = [], authLimit = 1000, appLimit = 1000, apps = APPS, scheme } = {}) {
+  /**
+   * `stubBindings` names more service bindings (`APP_<NAME>`) that reach the stub app, besides APP_CAPTABLE: apps that
+   * are deployed in a test. `publicLimit` is RL_PUBLIC's allowance (requests to public paths that change something).
+   */
+  constructor({ mode = 'test', vars = {}, omit = [], authLimit = 1000, appLimit = 1000, publicLimit = 1000, apps = APPS, stubBindings = [], scheme } = {}) {
     this.mode = mode
     this.domain = vars.SITE_DOMAIN ?? (mode === 'test' ? 'insulinapps.localhost' : 'example.test')
     this.scheme = scheme ?? (this.domain.endsWith('.localhost') ? 'http:' : 'https:')
@@ -247,7 +251,8 @@ export class Harness {
       ...(mode === 'test' ? { SITE_ENV: 'test' } : {}),
     }
     this.vars = Object.fromEntries(Object.entries({ ...base, ...vars }).filter(([, value]) => value !== undefined))
-    this.limits = { authLimit, appLimit }
+    this.limits = { authLimit, appLimit, publicLimit }
+    this.stubBindings = stubBindings
   }
 
   /** The old sign-in host, which only redirects to the apex now. */
@@ -264,7 +269,8 @@ export class Harness {
     const ratelimits = {}
     if (!this.omit.has('RL_AUTH')) ratelimits.RL_AUTH = { namespace_id: '1001', simple: { limit: this.limits.authLimit, period: 60 } }
     if (!this.omit.has('RL_APP')) ratelimits.RL_APP = { namespace_id: '1002', simple: { limit: this.limits.appLimit, period: 60 } }
-    const serviceBindings = { APP_CAPTABLE: 'stub-app' }
+    if (!this.omit.has('RL_PUBLIC')) ratelimits.RL_PUBLIC = { namespace_id: '1003', simple: { limit: this.limits.publicLimit, period: 60 } }
+    const serviceBindings = { APP_CAPTABLE: 'stub-app', ...Object.fromEntries(this.stubBindings.map((binding) => [binding, 'stub-app'])) }
     if (this.mode === 'production' && !this.omit.has('EMAIL')) serviceBindings.EMAIL = { name: 'mail-stub', entrypoint: 'Mailer' }
     this.mf = new Miniflare(convertV4MiniflareOptions({
       log: new Log(LogLevel.WARN),
@@ -299,6 +305,12 @@ export class Harness {
 
   async close() {
     await this.mf?.dispose()
+  }
+
+  /** What the stub app received as the gateway's tick (x-suger-access-via: schedule), oldest first. */
+  async ticks() {
+    const stub = await this.mf.getWorker('stub-app')
+    return (await stub.fetch('http://stub-app/__stub/ticks')).json()
   }
 
   client(options) {

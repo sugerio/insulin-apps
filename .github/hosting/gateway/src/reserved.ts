@@ -2,6 +2,7 @@
 // inside app pages with same-origin fetch, so the app's CSP (connect-src 'self') allows them.
 import { appAccess } from './access.ts'
 import { integrationProxy } from './integrations/proxy.ts'
+import { appMailRelay } from './mail/relay.ts'
 import type { Context } from './context.ts'
 import { apexUrl, appSettingsPath } from './context.ts'
 import { listCapturedMail } from './db/mail.ts'
@@ -21,6 +22,9 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
   // The integration proxy (integrations/proxy.ts), called by app Workers with their own token: any method, apex only.
   if (ctx.url.pathname.startsWith('/__insulin/integrations/')) return integrationProxy(ctx)
   switch (ctx.url.pathname) {
+    // The mail relay (mail/relay.ts), called by app Workers with their own token: POST, apex only.
+    case '/__insulin/mail':
+      return appMailRelay(ctx)
     case '/__insulin/me':
       return method === 'GET' || method === 'HEAD' ? me(ctx) : methodNotAllowed(ctx, ['GET', 'HEAD'])
     case '/__insulin/switch-org':

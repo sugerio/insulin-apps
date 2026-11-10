@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repository holds open-source Insulin apps, one per top-level directory (today: `captable/`). These rules apply to
+This repository holds open-source Insulin apps, one per top-level directory (today: `captable/` and `esign/`). These rules apply to
 every app. Each app also has its own `AGENTS.md` with app-specific rules; read both before changing anything.
 
 ## Every app
@@ -85,6 +85,23 @@ client-credentials token.
 **Outside services.** Credentials for outside APIs are stored by the platform on the app's integrations page. Call the
 service with `integrationFetch(key)` from `@fours/app/server`, passing the request's `x-suger-organization-id`; never
 keep such secrets in the app's database or source.
+
+**Beyond D1** (`.github/hosting/DESIGN.md` §8). An app gets one D1 database and static assets, nothing else. It asks
+the platform for the rest in `package.json` under `insulin`:
+
+- **Public paths** (`insulin.publicPaths`) are only for people who have no account, such as an e-sign recipient. The
+  gateway forwards them with no identity (`x-suger-access-via: public`), so the app authenticates them with its own
+  short-lived codes and lets them reach only what those codes are for. Never use one to skip sign-in for members.
+- **Mail** goes through the gateway's relay: `POST` to `SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the request's
+  `x-suger-organization-id`, one message at a time. There is no e-mail binding.
+- **Runtime secrets** are names in `insulin.secrets`, each starting with the app's name in upper case (`ESIGN_…`). The
+  deploy copies them from the GitHub environment, and the app reads them with `readAppEnv(name)`; never put a value in
+  source.
+- **Scheduled work** gets a five-minute tick instead of a cron: declare one path in `insulin.scheduled` (under `/api/`,
+  never one of the public paths), and the gateway POSTs to it every five minutes with only `x-suger-app-id` and
+  `x-suger-access-via: schedule`, an empty body and a 25-second timeout. Refuse the route unless `x-suger-access-via` is
+  exactly `schedule` and no identity is present, treat a request marked `schedule` as nobody on every other route,
+  keep it out of `/api/catalog`, and do every organization's due work there, idempotent and bounded per tick.
 
 **One deployment, many organizations.** Scope every query by `getCurrentUser().organizationId`, so one organization
 never reads another's data.

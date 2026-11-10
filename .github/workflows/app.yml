@@ -142,8 +142,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulinapps.com' }}
-          # Optional: derives the app's SUGER_APP_TOKEN for the gateway's integration proxy.
+          # Optional: derives the app's SUGER_APP_TOKEN for the gateway's integration proxy and mail relay.
           GATEWAY_SECRET_KEY: ${{ secrets.GATEWAY_SECRET_KEY }}
+          # The environment's secrets and variables, from which the deploy picks only the names the app declares in
+          # its package.json (insulin.secrets). Only this step sees them; the build ran in the checks job, without them.
+          APP_SECRETS_JSON: ${{ toJSON(secrets) }}
+          APP_VARS_JSON: ${{ toJSON(vars) }}
 
   gateway:
     if: inputs.deploy

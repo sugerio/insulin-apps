@@ -13,12 +13,13 @@ import {
   verifyPassword,
 } from '../src/crypto.ts'
 import { cookieValues, serializeCookie, setCookieName, withoutCookies } from '../src/http/cookies.ts'
-import { bindingName, isAppName, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig } from '../src/config.ts'
+import { bindingName, isAppName, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig, isPublicPath, parsePublicPaths, publicPathProblem, scheduledProblem } from '../src/config.ts'
 import { safeReturnTo } from '../src/http/return-to.ts'
 import { createContext } from '../src/context.ts'
 import { escapeHtml, html } from '../src/pages/html.ts'
 import { checkIdToken, decodeJwtPayload } from '../src/auth/id-token.ts'
-import { forwardRequest, identityHeaders, isNavigation } from '../src/http/forward.ts'
+import { forwardRequest, identityHeaders, isNavigation, scheduleHeaders } from '../src/http/forward.ts'
+import { tickApp, tickApps } from '../src/scheduled.ts'
 import { logError } from '../src/log.ts'
 import { appToken } from '../../../scripts/deploy-apps.mjs'
 import {
@@ -261,7 +262,7 @@ test('configuration: app names, bindings, sender, and failing closed', () => {
 
   const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
   const env = {
-    DB: binding, RL_AUTH: binding, RL_APP: binding, EMAIL: binding, APP_CAPTABLE: binding,
+    DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding,
     SITE_DOMAIN: 'example.test', SITE_APPS: [{ name: 'captable', title: 'Cap Table', binding: 'APP_CAPTABLE' }],
     TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
   }
@@ -279,6 +280,7 @@ test('configuration: app names, bindings, sender, and failing closed', () => {
     [{ SITE_APPS: [{ name: 'captable', binding: 'APP_OTHER' }] }, 'SITE_APPS[0].binding'],
     [{ EMAIL: undefined }, 'EMAIL'],
     [{ DB: undefined }, 'DB'],
+    [{ RL_PUBLIC: undefined }, 'RL_PUBLIC'],
     [{ EMAIL_FROM: 'nope' }, 'EMAIL_FROM'],
   ]) {
     const result = readConfig({ ...env, ...change })
@@ -303,7 +305,7 @@ test('configuration: app names, bindings, sender, and failing closed', () => {
 function ctxFor(url, { testMode = false } = {}) {
   const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
   const result = readConfig({
-    DB: binding, RL_AUTH: binding, RL_APP: binding, EMAIL: binding, APP_CAPTABLE: binding,
+    DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding,
     SITE_DOMAIN: testMode ? 'insulinapps.localhost' : 'example.test', SITE_APPS: [{ name: 'captable' }],
     TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test', ...(testMode ? { SITE_ENV: 'test' } : {}),
   })
@@ -412,4 +414,101 @@ test('error logs carry a known error name, an identifier-like kind and code, and
   assert.deepEqual(JSON.parse(lines[2]), { event: 'odd', error: 'unknown' })
   assert.deepEqual(JSON.parse(lines[3]), { event: 'thrown', error: 'unknown' })
   assert.ok(lines.every((line) => !line.includes('@') && !line.includes('token')))
+})
+
+test('public paths: the same rule as the deploy, matched at segment boundaries, never reaching a reserved path', () => {
+  for (const good of ['/sign', '/editor/', '/api/public/', '/assets/']) assert.equal(publicPathProblem(good), null, good)
+  for (const bad of ['/', '/api', '/api/', '/API', '/api/__suger', '/__insulin/x', '/settings', '/Settings/users', '/mcp', '/.well-known/x',
+    'sign', '/a/../b', '/a?b', '/a#b', '/a//b', '/a b', 7, null]) {
+    assert.notEqual(publicPathProblem(bad), null, String(bad))
+  }
+  const problems = []
+  assert.deepEqual(parsePublicPaths(['/sign', '/api/', '/sign'], 'p', problems), ['/sign'])
+  assert.deepEqual(problems, ['p[1]', 'p[2]'], 'a refused or repeated entry is a problem, not ignored')
+  assert.deepEqual(parsePublicPaths(undefined, 'p', []), [])
+  const tooMany = []
+  parsePublicPaths(Array.from({ length: 11 }, (_, i) => `/p${i}`), 'p', tooMany)
+  assert.equal(tooMany.length, 1)
+
+  const app = { publicPaths: ['/sign', '/api/public/'] }
+  for (const path of ['/sign', '/sign/', '/sign/step', '/api/public/', '/api/public/codes/1']) assert.equal(isPublicPath(app, path), true, path)
+  for (const path of ['/signature', '/api/public', '/api/echo', '/', '/sign/%2e%2e/api/echo', '/sign/%2E%2E', '/sign/a%2fb', '/sign/%zz']) {
+    assert.equal(isPublicPath(app, path), false, path)
+  }
+  assert.equal(isPublicPath({ publicPaths: [] }, '/sign'), false)
+
+  const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
+  const env = {
+    DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding, SITE_DOMAIN: 'example.test',
+    TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
+  }
+  assert.deepEqual(readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/sign'] }] }).config.apps[0].publicPaths, ['/sign'])
+  const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/settings/'] }] })
+  assert.equal(refused.ok, false, 'a malformed list fails closed')
+  assert.ok(refused.problems.includes('SITE_APPS[0].publicPaths[0]'))
+})
+
+test("an app's scheduled path: one path under /api/, never reserved, never public; anything else fails closed", () => {
+  const publicPaths = ['/sign', '/api/public/', '/api/hooks']
+  for (const good of ['/api/scheduled', '/api/jobs/due', '/api/hooksmith']) assert.equal(scheduledProblem(good, publicPaths), null, good)
+  for (const bad of [
+    '/api/', '/api', '/scheduled', 'api/scheduled', '/api/scheduled/', '/api/__suger/tick', '/api/__SUGER/tick', '/api/a/../b',
+    '/api/a?b', '/api/a%2fb', '/api//a', '/api/a b', '/api/public/tick', '/API/Public/tick', '/api/hooks', '/api/hooks/tick',
+    '/sign', 42, ['/api/scheduled'], '',
+  ]) {
+    assert.notEqual(scheduledProblem(bad, publicPaths), null, String(bad))
+  }
+
+  const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
+  const env = {
+    DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding, SITE_DOMAIN: 'example.test',
+    TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
+  }
+  const declared = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/api/public/'], scheduled: '/api/scheduled' }] })
+  assert.equal(declared.config.apps[0].scheduled, '/api/scheduled')
+  assert.equal(readConfig({ ...env, SITE_APPS: [{ name: 'captable' }] }).config.apps[0].scheduled, null, 'most apps have none')
+  assert.equal(readConfig({ ...env, SITE_APPS: [{ name: 'captable', scheduled: null }] }).config.apps[0].scheduled, null)
+  for (const scheduled of ['/api/public/tick', '/mcp', '/api/__suger/x', '/api/', 7]) {
+    const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/api/public/'], scheduled }] })
+    assert.equal(refused.ok, false, `${scheduled} fails closed`)
+    assert.ok(refused.problems.includes('SITE_APPS[0].scheduled'), String(scheduled))
+  }
+})
+
+test("the tick: POST to the app's own host with the app id and schedule only, a timeout, and a log of app and status", async () => {
+  assert.deepEqual(scheduleHeaders({ appId: 'insulin-apps-esign' }), { 'x-suger-app-id': 'insulin-apps-esign', 'x-suger-access-via': 'schedule' })
+  const seen = []
+  const app = (name, scheduled, fetch) => ({ name, appId: `insulin-apps-${name}`, host: `${name}.example.test`, scheduled, service: fetch ? { fetch } : null })
+  const answering = (status) => async (request) => { seen.push(request); return new Response('{}', { status }) }
+  const lines = []
+  const original = console.log
+  console.log = (line) => lines.push(JSON.parse(line))
+  try {
+    await tickApp({ testMode: false }, app('esign', '/api/scheduled', answering(200)))
+    const [request] = seen
+    assert.equal(request.method, 'POST')
+    assert.equal(request.url, 'https://esign.example.test/api/scheduled')
+    assert.deepEqual([...request.headers].sort(), [['x-suger-access-via', 'schedule'], ['x-suger-app-id', 'insulin-apps-esign']])
+    assert.equal(request.body, null, 'an empty body')
+    assert.ok(request.signal instanceof AbortSignal, 'with a timeout')
+
+    const hanging = (request) => new Promise((_, reject) => request.signal.addEventListener('abort', () => reject(request.signal.reason)))
+    await tickApp({ testMode: false }, app('slow', '/api/scheduled', hanging), 20)
+    await tickApp({ testMode: false }, app('broken', '/api/scheduled', async () => { throw new TypeError('synthetic') }))
+    assert.deepEqual(lines, [
+      { event: 'app_scheduled', app: 'esign', status: 200 },
+      { event: 'app_scheduled', app: 'slow', status: 'timeout' },
+      { event: 'app_scheduled', app: 'broken', status: 'unreachable' },
+    ])
+
+    lines.length = 0
+    seen.length = 0
+    const work = []
+    tickApps({ testMode: true, apps: [app('a', '/api/scheduled', answering(204)), app('b', null, answering(200)), app('c', '/api/tick', null)] }, (promise) => work.push(promise))
+    assert.equal(work.length, 1, 'only an app with a path and a binding')
+    await Promise.all(work)
+    assert.equal(seen[0].url, 'http://a.example.test/api/scheduled', 'http only on a local test domain')
+  } finally {
+    console.log = original
+  }
 })

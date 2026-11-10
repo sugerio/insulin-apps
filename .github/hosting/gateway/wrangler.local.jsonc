@@ -17,8 +17,11 @@
   ],
   "ratelimits": [
     { "name": "RL_AUTH", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
-    { "name": "RL_APP", "namespace_id": "1002", "simple": { "limit": 600, "period": 60 } }
+    { "name": "RL_APP", "namespace_id": "1002", "simple": { "limit": 600, "period": 60 } },
+    { "name": "RL_PUBLIC", "namespace_id": "1003", "simple": { "limit": 60, "period": 60 } }
   ],
+  // As production: the five-minute tick of the apps that declare `scheduled`, and the daily cleanup (src/scheduled.ts).
+  "triggers": { "crons": ["*/5 * * * *", "17 3 * * *"] },
   // The app Worker, from the second config: scripts/app-config.mjs writes it (the stub app or a built Cap Table).
   "services": [
     { "binding": "APP_CAPTABLE", "service": "insulin-apps-captable" }

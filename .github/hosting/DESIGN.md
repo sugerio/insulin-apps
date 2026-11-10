@@ -13,7 +13,7 @@ are in the repository's [AGENTS.md](../../AGENTS.md).
 | `insulinapps.com` | The single entry for everything that is not an app: landing, privacy and terms; sign-up, sign-in, MFA, Google and enterprise SSO; account and organizations; `/settings/users` and `/settings/roles` (the organization's people and roles); `/settings/sso` (SAML or OIDC and SCIM); each app's people and integrations at `/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`; the OAuth authorization server for MCP clients and service accounts; SCIM. |
 | `auth.insulinapps.com` | A 308 redirect to the same path on the apex, so links in e-mails already sent keep working. |
 | `www.insulinapps.com` | A 301 redirect to the apex. |
-| `<app>.insulinapps.com` | The app, plus the gateway's endpoints on that host: `/mcp` and its OAuth metadata, and `/settings/users` and `/settings/integrations`, which only redirect (GET) to the app's settings on the apex. Everything else goes to the app Worker. |
+| `<app>.insulinapps.com` | The app, plus the gateway's endpoints on that host: `/mcp` and its OAuth metadata, and `/settings/users` and `/settings/integrations`, which only redirect (GET) to the app's settings on the apex. Everything else goes to the app Worker: after sign-in, or, on the paths the app declares public (§8.1), for anyone, with no identity. |
 
 Paths the gateway keeps on every app host, so apps must not use them: `/__insulin/*`, `/settings/users`,
 `/settings/integrations` (and everything below both), `/mcp`, and `/.well-known/oauth-*`.
@@ -85,7 +85,7 @@ The gateway forwards each request with the identity contract of `@fours/app` plu
 | `x-suger-app-id` | `insulin-apps-<app>` |
 | `x-suger-app-role` | `ADMIN`, `EDITOR` or `VIEWER`. For a custom role: the least built-in role that covers its permissions |
 | `x-suger-app-permissions` | Apps with a catalog only: the permissions, space-separated. For built-in roles, every permission at or below the role; for a custom role, its own |
-| `x-suger-access-via` | `browser`, `mcp` or `api` |
+| `x-suger-access-via` | `browser`, `mcp` or `api`; `public` on an app's public paths (§8.1), where it and `x-suger-app-id` are the only headers |
 
 Apps treat `x-suger-app-permissions` as a **narrowing** of the role, never a widening: effective permissions are the
 role's permissions intersected with the header. Behind the gateway the header is always set; elsewhere (the Insulin
@@ -257,7 +257,114 @@ An organization's owners set this up under `insulinapps.com/settings/sso`.
   SCIM provisioned on it, and their SCIM links, in the same batch. Roles stay managed on `/settings/users`. SCIM calls
   are rate limited per token.
 
-## 8. Data
+## 8. What apps can use beyond D1
+
+An app gets one D1 database and static assets, nothing else: no R2, KV, queues, cron triggers or e-mail binding
+(`check-insulin-app.mjs` refuses a build that declares one). What an app needs beyond that, the gateway provides,
+declared in the app's `package.json` under `insulin`:
+
+```json
+"insulin": {
+  "permissions": [ … ],
+  "publicPaths": ["/sign", "/api/public/", "/assets/"],
+  "scheduled": "/api/scheduled",
+  "secrets": ["ESIGN_KMS_KEY_ARN", "ESIGN_OTP_KEY"]
+}
+```
+
+The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths` and
+`scheduled` again and fails closed.
+
+### 8.1 Public paths
+
+Some apps serve people who have no account and never will, such as an e-sign recipient who signs on a page that a
+host product frames. Such paths are listed in `insulin.publicPaths`, at most ten. A request path matches an entry if
+it equals the entry, starts with it when the entry ends in `/`, or starts with `entry/` when it doesn't. A path whose
+segments hide a dot segment or a slash in their encoding never matches. An entry may not be `/`, `/api` or `/api/`,
+and may not be or cover anything under `/__insulin`, `/settings`, `/mcp`, `/.well-known` or `/api/__suger`, in any
+case.
+
+On a public path the gateway looks at no session and no token, and the app gets `x-suger-app-id` and
+`x-suger-access-via: public` only: no person, organization, role or permissions, even when a signed-in person or a
+token sent the request. Incoming `x-suger-*` headers, the gateway's cookies and `Authorization` are removed as always.
+HTML gets no account bar, the app's own headers (its CSP and `frame-ancestors`) are kept, and requests are limited per
+IP address (`RL_APP`). A request that isn't GET or HEAD (an e-sign code exchange, a code sent or checked) also counts
+against a stricter limit per app and IP address, `RL_PUBLIC` (60 a minute suggested), and gets 429
+`{ "error": "rate_limited" }` with `Retry-After: 60` past it, while reading goes on. That is defence in depth: the app
+still limits what its codes allow. The gateway's own paths always win over a public path.
+
+The app authenticates these requests itself, with its own short-lived codes (an e-mailed one-time code, a code in the
+link a member generated), and they reach only what those codes are for. A public path is never a way around sign-in
+for the app's members.
+
+### 8.2 Mail relay
+
+Apps have no e-mail binding. An app Worker that must write to someone (a one-time code, a link to a signed copy)
+sends one message per request to `POST https://insulinapps.com/__insulin/mail`, with its `SUGER_APP_TOKEN` as a bearer
+token and the organization it serves in `x-suger-organization-id`:
+
+```json
+{ "to": "one address", "subject": "≤ 200 characters", "text": "≤ 20,000 characters", "html": "optional, ≤ 100,000", "replyTo": "optional address" }
+```
+
+- **Sender.** It goes from the gateway's `EMAIL_FROM` address, named "`<App title>` via Insulin Apps", with the app's
+  `replyTo` if it gave one.
+- **Limits.** Apps' mail has its own per-recipient allowance (ten an hour, all apps together), counted apart from the
+  gateway's own sign-in and security mail so an app can never crowd those out; 500 messages a day for each organization
+  and app, 5,000 a day for each app across organizations, and `RL_AUTH`
+  per app and organization.
+- **Responses.** 202 `{ "status": "sent" }`. Otherwise an error: 400 `invalid_request`, 401 `unauthorized`, 404
+  `unknown_organization`, 429 `rate_limited`, 502 `send_failed`, or 503 `not_configured` without
+  `GATEWAY_SECRET_KEY`.
+- **Privacy.** Logs carry the app, the organization and the kind, never an address or the text.
+- **Configuration.** The deploy gives each app `SUGER_MAIL_URL` next to `SUGER_INTEGRATIONS_URL` and
+  `SUGER_APP_TOKEN`, when `GATEWAY_SECRET_KEY` is set.
+
+As with the integration proxy (§6), the token is per app, so the app chooses the organization.
+
+### 8.3 App secrets
+
+An app lists the secrets it needs at runtime in `insulin.secrets`: at most 30 names, each starting with the app's name
+in upper case (`ESIGN_…` for `esign`). The app deploy takes each from the GitHub `production` environment, a secret of
+that exact name or else a variable, and uploads it with the Worker's `--secrets-file`; names that aren't set are skipped
+and logged by name. The workflow hands the deploy step the environment's secrets and variables as JSON
+(`toJSON(secrets)`, `toJSON(vars)`), and the script picks only the declared names: never another app's (a name inside a
+longer app's prefix, `ESIGN_PRO_…` next to an app `esign-pro`, is refused), never the platform's (apps can't be named
+`cloudflare`, `google`, `turnstile`, `github`, `site`, `suger` and the like, and the platform's setting names are refused
+outright), never logged, and never visible to the build, which runs in a job without them. The app reads them with
+`readAppEnv(name)`. The gateway never learns an app's secret names.
+
+### 8.4 Integrations
+
+Credentials for outside services are stored by the platform and used through the integration proxy (§6), not kept in
+the app.
+
+### 8.5 Scheduled work
+
+Apps have no cron trigger. An app with work that falls due (deadlines that pass, work a request was cut short of,
+mail to retry) declares one path in `insulin.scheduled`, and the gateway calls it every five minutes.
+
+- **The path.** One path that starts with `/api/`, without a trailing slash, passing the rules of a public path
+  (§8.1: never `/api/__suger/…`, no dot segment, query or percent sign). It must not be one of the app's public paths
+  or under one, compared without regard to case. `list-apps.mjs`, `check-insulin-app.mjs` and the gateway's configuration check it; the
+  gateway refuses to start with a bad one.
+- **The tick.** The gateway's `scheduled` handler runs on the cron `*/5 * * * *`. For every app that declares a path
+  and has a service binding it POSTs to `https://<app>.<domain><path>` over the binding, all apps at once (each in
+  `waitUntil`, so one failing or slow app never holds up another), with an empty body and a 25-second timeout. The
+  request carries `x-suger-app-id` and `x-suger-access-via: schedule` only: no person, organization, role or
+  permissions. The log line names the app and the status (the HTTP status, `timeout` or `unreachable`), nothing else.
+- **Nobody else can send it.** The gateway removes every incoming `x-suger-*` header (a browser's, a token's, a public
+  request's), and app Workers have no public route, so a request marked `schedule` can only be the gateway's own
+  tick. The app still checks: it refuses the path unless `x-suger-access-via` is exactly `schedule` and no identity
+  is present, and treats a request marked `schedule` as nobody everywhere else.
+- **What the app does.** Its due work for every organization, since the tick belongs to none. It must be safe to
+  repeat and to overlap with requests (the next tick picks up what one leaves), and should finish well within the
+  timeout, doing a bounded amount per tick. An app can keep a route of its own (E-sign's `POST /api/process-due`) for
+  someone to finish their organization's due work at once.
+- **The daily cleanup** keeps its own cron, `17 3 * * *`: the gateway's retention cleanup runs on it and the tick
+  doesn't.
+
+## 9. Data
 
 All in the gateway's D1 database; migrations are forward-only.
 
@@ -268,12 +375,15 @@ All in the gateway's D1 database; migrations are forward-only.
 | `0005_mfa` | TOTP columns on `users`, `mfa_recovery_codes`, `mfa_challenges` |
 | `0006_sso` | `sso_domains`, `sso_connections`, `sso_requests`, `scim_tokens`, `scim_users` |
 
-## 9. Configuration added
+## 10. Configuration added
 
 | Name | Kind | Notes |
 |---|---|---|
 | `GATEWAY_SECRET_KEY` | secret | 32 random bytes, base64. Encrypts TOTP secrets, stored credentials and OIDC client secrets; derives the apps' `SUGER_APP_TOKEN`. Without it MFA, stored credentials and OIDC can't be set up (the rest works) |
-| `SITE_APPS[].permissions` | var | From each app's `package.json` (§2.3) |
+| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled` | var | From each app's `package.json` (§2.3, §8.1, §8.5) |
+| `RL_PUBLIC` | ratelimit | Requests to public paths that aren't GET or HEAD, per app and IP; 60 a minute suggested (§8.1) |
+| Cron triggers | trigger | `*/5 * * * *` (the apps' tick, §8.5) and `17 3 * * *` (the daily cleanup) |
+| App secrets | GitHub environment | Each app's `insulin.secrets`, by name (§8.3) |
 | `nodejs_compat` | flag | For SAML's XML signature library |
 
 Changing the domain of sign-in means registering `https://insulinapps.com/auth/google/callback` with Google (the

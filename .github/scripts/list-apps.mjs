@@ -21,6 +21,15 @@ export const RESERVED_APP_NAMES = new Set([
   'docs',
   'help',
   'support',
+  // An app's secrets are named <APP>_*; these would collide with the platform's own settings (DESIGN.md §8.3).
+  'cloudflare',
+  'google',
+  'turnstile',
+  'github',
+  'site',
+  'suger',
+  'actions',
+  'runner',
 ])
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -54,10 +63,37 @@ export async function listApps(root = repositoryRoot) {
     const title = typeof manifest.displayName === 'string' && manifest.displayName.trim() ? manifest.displayName.trim() : entry.name
     const summary = typeof manifest.description === 'string' ? manifest.description.trim() : ''
     const permissions = readPermissions(entry.name, manifest.insulin?.permissions)
-    apps.push({ name: entry.name, title, summary, permissions })
+    const publicPaths = readPublicPaths(entry.name, manifest.insulin?.publicPaths)
+    const scheduled = readScheduled(entry.name, manifest.insulin?.scheduled, publicPaths)
+    const secrets = readSecretNames(entry.name, manifest.insulin?.secrets)
+    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, secrets })
   }
 
+  checkSecretNamespaces(apps)
   return apps
+}
+
+/**
+ * Settings and secrets the platform's own workflows use: never an app's, whatever its name (the reserved app names
+ * already keep app prefixes off them; this is the second lock).
+ */
+export const PLATFORM_SETTING_NAMES = new Set([
+  'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SITE_KEY',
+  'TURNSTILE_SECRET_KEY', 'EMAIL_FROM', 'SUPPORT_EMAIL', 'SITE_DOMAIN', 'GATEWAY_SECRET_KEY', 'GITHUB_TOKEN',
+])
+const PLATFORM_SETTING_PREFIXES = ['SUGER_', 'GITHUB_', 'ACTIONS_', 'RUNNER_']
+
+/**
+ * One app's secret names never fall in another app's namespace: `esign` may not declare `ESIGN_PRO_KEY` when an app
+ * `esign-pro` exists, since that name is the longer prefix's.
+ */
+export function checkSecretNamespaces(apps) {
+  for (const app of apps) {
+    for (const name of app.secrets ?? []) {
+      const owner = apps.filter((other) => other !== app && name.startsWith(secretPrefix(other.name)) && secretPrefix(other.name).length > secretPrefix(app.name).length)[0]
+      if (owner) throw new Error(`App ${JSON.stringify(app.name)}: insulin.secrets name ${name} belongs to app ${JSON.stringify(owner.name)}`)
+    }
+  }
 }
 
 const PERMISSION_KEY = /^[a-z][a-z0-9_.-]{0,63}$/
@@ -83,6 +119,99 @@ export function readPermissions(app, raw) {
     if (typeof description !== 'string' || description.length > 300) throw new Error(`${where}.description must be at most 300 characters`)
     if (!PERMISSION_ROLES.has(role)) throw new Error(`${where}.role must be ADMIN, EDITOR or VIEWER`)
     return { key, label: label.trim(), description: description.trim(), role }
+  })
+}
+
+// Never public: the gateway's own paths on an app host and the platform's routes inside the app (DESIGN.md §8.1).
+const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
+
+/**
+ * Why an entry of `insulin.publicPaths` is refused, or null: a path starting with `/`, without `..`, a query or a
+ * fragment, that neither is nor covers the API as a whole or a reserved path (compared without regard to case). The
+ * gateway applies the same rule (publicPathProblem in its src/config.ts) and refuses to start otherwise.
+ */
+export function publicPathProblem(entry) {
+  if (typeof entry !== 'string' || !entry.startsWith('/') || entry.length > 200) return 'must be a path starting with /'
+  if (/[?#%\\\s]/.test(entry) || entry.includes('//') || entry.split('/').some((segment) => segment === '..' || segment === '.')) {
+    return 'must not hold a query, a fragment, a percent sign, a backslash, whitespace, an empty or a dot segment'
+  }
+  const bare = entry.toLowerCase().replace(/\/+$/, '')
+  if (bare === '' || bare === '/api') return 'must not cover every path or the whole API'
+  for (const reserved of RESERVED_PREFIXES) {
+    if (bare === reserved || bare.startsWith(`${reserved}/`) || reserved.startsWith(`${bare}/`)) return `must not reach ${reserved}`
+  }
+  return null
+}
+
+/**
+ * The paths an app opens to people without an account, `insulin.publicPaths` in its package.json (DESIGN.md §8.1):
+ * at most 10, each passing `publicPathProblem`. The gateway forwards them with no identity at all.
+ */
+export function readPublicPaths(app, raw) {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > 10) throw new Error(`App ${JSON.stringify(app)}: insulin.publicPaths must be an array of at most 10`)
+  const seen = new Set()
+  return raw.map((entry, index) => {
+    const problem = publicPathProblem(entry)
+    if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.publicPaths[${index}] ${problem}`)
+    if (seen.has(entry)) throw new Error(`App ${JSON.stringify(app)}: insulin.publicPaths[${index}] is listed twice`)
+    seen.add(entry)
+    return entry
+  })
+}
+
+/**
+ * Why an app's `insulin.scheduled` is refused, or null: one path under `/api/`, passing `publicPathProblem`, without a
+ * trailing slash, and neither one of the app's public paths nor under one, compared without regard to case. The
+ * gateway applies the same rule (scheduledProblem in its src/config.ts) and refuses to start otherwise.
+ */
+export function scheduledProblem(entry, publicPaths = []) {
+  if (typeof entry !== 'string' || !entry.startsWith('/api/') || entry.endsWith('/')) return 'must be a path under /api/, without a trailing slash'
+  const problem = publicPathProblem(entry)
+  if (problem) return problem
+  const path = entry.toLowerCase()
+  const covered = publicPaths.some((raw) => {
+    const publicPath = raw.toLowerCase()
+    return publicPath.endsWith('/') ? path.startsWith(publicPath) : path === publicPath || path.startsWith(`${publicPath}/`)
+  })
+  return covered ? "must not be one of the app's public paths or under one" : null
+}
+
+/**
+ * The path the gateway POSTs to every five minutes with no identity (`x-suger-access-via: schedule`), so the app can
+ * run its due work: `insulin.scheduled` in its package.json (DESIGN.md §8.5), or null when it has none.
+ */
+export function readScheduled(app, raw, publicPaths = []) {
+  if (raw === undefined || raw === null) return null
+  const problem = scheduledProblem(raw, publicPaths)
+  if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.scheduled ${problem}`)
+  return raw
+}
+
+/** The prefix an app's secret names must carry: its name upper-cased, with `-` as `_`. */
+export function secretPrefix(app) {
+  return `${app.toUpperCase().replaceAll('-', '_')}_`
+}
+
+/**
+ * The secrets an app needs at runtime, `insulin.secrets` in its package.json (DESIGN.md §8.3): at most 30 names, each
+ * `<APP>_…` in upper case. The deploy copies each from the GitHub environment, when present, as a Worker secret.
+ */
+export function readSecretNames(app, raw) {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > 30) throw new Error(`App ${JSON.stringify(app)}: insulin.secrets must be an array of at most 30`)
+  const pattern = new RegExp(`^${secretPrefix(app)}[A-Z0-9_]{1,60}$`)
+  const seen = new Set()
+  return raw.map((name, index) => {
+    if (typeof name !== 'string' || !pattern.test(name)) {
+      throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] must match ${pattern.source}`)
+    }
+    if (PLATFORM_SETTING_NAMES.has(name) || PLATFORM_SETTING_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+      throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] names a setting of the platform itself`)
+    }
+    if (seen.has(name)) throw new Error(`App ${JSON.stringify(app)}: insulin.secrets[${index}] is listed twice`)
+    seen.add(name)
+    return name
   })
 }
 

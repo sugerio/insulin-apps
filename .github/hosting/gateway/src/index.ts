@@ -7,6 +7,7 @@ import { housekeeping } from './housekeeping.ts'
 import { secure } from './http/secure.ts'
 import { logError } from './log.ts'
 import { handleRequest } from './router.ts'
+import { HOUSEKEEPING_CRON, tickApps } from './scheduled.ts'
 
 export default {
   /** Every response, uncaught failures included, leaves through `secure` (HSTS and the common security headers). */
@@ -21,9 +22,17 @@ export default {
     return secure(request, response)
   },
 
-  /** Optional: with a cron trigger, the retention cleanup also runs on a schedule, in larger batches. */
-  async scheduled(_controller, env, ctx): Promise<void> {
+  /**
+   * The daily cron (HOUSEKEEPING_CRON) runs the retention cleanup in larger batches; every other trigger, the
+   * five-minute one (TICK_CRON), ticks the apps that declare a scheduled path (scheduled.ts, DESIGN.md §8.5).
+   */
+  async scheduled(controller, env, ctx): Promise<void> {
     const loaded = loadConfig(env)
-    if (loaded.ok) ctx.waitUntil(housekeeping(loaded.config.db, Date.now(), 2000).catch((error) => logError('housekeeping_failed', error)))
+    if (!loaded.ok) return
+    if (controller.cron === HOUSEKEEPING_CRON) {
+      ctx.waitUntil(housekeeping(loaded.config.db, Date.now(), 2000).catch((error) => logError('housekeeping_failed', error)))
+      return
+    }
+    tickApps(loaded.config, (work) => ctx.waitUntil(work))
   },
 } satisfies ExportedHandler<Env>

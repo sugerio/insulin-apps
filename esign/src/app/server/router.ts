@@ -1,0 +1,45 @@
+import { openAppD1, readAppEnv } from '#platform'
+import app, { type Bindings } from './esign/app.ts'
+import { D1BlobStore } from './esign/blob-store.ts'
+import { waitUntilOf } from './wait-until.ts'
+
+// The local preview runs without the deployment's secrets: these synthetic keys let it sign and seal
+// with the HMAC test seal. They are never used published (ESIGN_ENV is prod there, and prod needs
+// the real ESIGN_OTP_KEY and the managed seal).
+const PREVIEW_OTP_KEY = 'local-preview-otp-pepper-not-for-real-documents'
+const PREVIEW_SEAL_KEY = 'local-preview-hmac-seal-key-not-for-real-documents'
+
+/** What E-sign runs with, from the platform: the D1 binding, the ESIGN_* secrets and the mail relay. */
+async function bindings(request: Request): Promise<Bindings> {
+  const db = (await openAppD1()) as unknown as D1Database
+  const dev = import.meta.env.DEV && readAppEnv('SUGER_ACCESS_MODE') !== 'console'
+  const secret = (name: string) => readAppEnv(name)?.trim() || undefined
+  return {
+    DB: db,
+    ARTIFACTS: new D1BlobStore(db, 'artifacts'),
+    ...(dev ? { TEST_MAIL: new D1BlobStore(db, 'test-mail') } : {}),
+    ESIGN_ENV: dev ? 'dev' : 'prod',
+    IDENTITY_PREVIEW: dev,
+    COMPLETE_AFTER_SIGN: 'true',
+    // Nitro on Workers puts the invocation's waitUntil on the request (srvx does in the local preview, when it has one).
+    WAIT_UNTIL: waitUntilOf(request),
+    APP_ORIGIN: new URL(request.url).origin,
+    OTP_KEY: secret('ESIGN_OTP_KEY') ?? (dev ? PREVIEW_OTP_KEY : undefined),
+    TEST_SEAL_KEY: dev ? PREVIEW_SEAL_KEY : undefined,
+    SIGNING_PAGE_FRAME_ANCESTORS: secret('ESIGN_FRAME_ANCESTORS'),
+    KMS_KEY_ARN: secret('ESIGN_KMS_KEY_ARN'),
+    KMS_PUBLIC_KEY: secret('ESIGN_KMS_PUBLIC_KEY'),
+    KMS_TRUSTED_KEY_SHA256: secret('ESIGN_KMS_TRUSTED_KEY_SHA256'),
+    AWS_ROLE_ARN: secret('ESIGN_AWS_ROLE_ARN'),
+    AWS_ACCESS_KEY_ID: secret('ESIGN_AWS_ACCESS_KEY_ID'),
+    AWS_SECRET_ACCESS_KEY: secret('ESIGN_AWS_SECRET_ACCESS_KEY'),
+    TSA_SIGNER_SPKI_SHA256: secret('ESIGN_TSA_SIGNER_SPKI_SHA256'),
+    SUGER_MAIL_URL: secret('SUGER_MAIL_URL'),
+    SUGER_APP_TOKEN: secret('SUGER_APP_TOKEN'),
+  }
+}
+
+/** Every `/api/**` request of the app (src/api.ts): E-sign's Hono app, with the platform's bindings. */
+export async function handleAppRequest(request: Request): Promise<Response> {
+  return app.fetch(request, await bindings(request))
+}

@@ -9,7 +9,8 @@
 // 10 MiB in total, text files only, one npm package with an exact, registry-only
 // lockfile, and only the D1 binding and static assets at runtime.
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
-import { join, relative, sep } from 'node:path'
+import { basename, join, relative, resolve, sep } from 'node:path'
+import { readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
 
 const [appArg, ...flags] = process.argv.slice(2)
 if (!appArg) {
@@ -47,6 +48,11 @@ const REQUIRED_FILES = [
   'src/app/db/schema.ts',
   'src/app/db/client.ts',
   'src/app/db/migrations/meta/_journal.json',
+]
+const BINDING_KEYS = [
+  'd1_databases', 'r2_buckets', 'kv_namespaces', 'queues', 'durable_objects', 'services', 'send_email', 'triggers', 'ai',
+  'vectorize', 'hyperdrive', 'analytics_engine_datasets', 'browser', 'workflows', 'dispatch_namespaces',
+  'mtls_certificates', 'unsafe', 'tail_consumers', 'images', 'secrets_store_secrets', 'ratelimits', 'version_metadata',
 ]
 const FORBIDDEN_FILES = [
   'pnpm-lock.yaml',
@@ -110,6 +116,24 @@ try {
   fail(`package.json is not valid JSON: ${error.message}`)
 }
 if (manifest.workspaces) fail('package.json must not declare workspaces: one package per app')
+// What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §8): checked as the deploy will check it.
+const appName = basename(resolve(app))
+const declared = {}
+for (const [field, readField] of [['permissions', readPermissions], ['publicPaths', readPublicPaths], ['secrets', readSecretNames]]) {
+  try {
+    declared[field] = readField(appName, manifest.insulin?.[field])
+  } catch (error) {
+    fail(error.message)
+  }
+}
+// The scheduled path (§8.5) must not be public, so it is checked against the public paths (as declared, when the list
+// itself was refused above).
+const declaredPublicPaths = declared.publicPaths ?? (Array.isArray(manifest.insulin?.publicPaths) ? manifest.insulin.publicPaths.filter((entry) => typeof entry === 'string') : [])
+try {
+  readScheduled(appName, manifest.insulin?.scheduled, declaredPublicPaths)
+} catch (error) {
+  fail(error.message)
+}
 const scripts = manifest.scripts ?? {}
 for (const name of ['dev', 'build', 'db:generate', 'typecheck']) {
   if (!scripts[name]) fail(`package.json is missing the "${name}" script`)
@@ -182,6 +206,10 @@ if (built) {
     fail('.output/server/wrangler.json is missing: build with NITRO_PRESET=cloudflare_module')
   } else {
     const wrangler = JSON.parse(readFileSync(wranglerPath, 'utf8'))
+    // Apps get the D1 binding the deploy adds and static assets, nothing else (the platform has no other bindings).
+    for (const key of BINDING_KEYS) {
+      if (wrangler[key] !== undefined) fail(`wrangler.json declares ${key}; apps get only the D1 binding and static assets`)
+    }
     const flagsUsed = wrangler.compatibility_flags ?? []
     for (const flag of flagsUsed) {
       if (flag !== 'nodejs_compat') fail(`compatibility flag ${flag} is not allowed (only nodejs_compat)`)

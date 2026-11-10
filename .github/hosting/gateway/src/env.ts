@@ -12,9 +12,14 @@ export interface Env {
   RL_AUTH?: RateLimit
   /** Per-user throttle on proxied app requests. */
   RL_APP?: RateLimit
+  /** Per-IP throttle on requests to an app's public paths that aren't GET or HEAD, on top of RL_APP's. */
+  RL_PUBLIC?: RateLimit
 
   SITE_DOMAIN?: string
-  /** JSON: [{ name, title, summary, binding, source, permissions }]. A wrangler `vars` object arrives already parsed. */
+  /**
+   * JSON: [{ name, title, summary, binding, source, permissions, publicPaths, scheduled }]. A wrangler `vars` object
+   * arrives already parsed.
+   */
   SITE_APPS?: unknown
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string

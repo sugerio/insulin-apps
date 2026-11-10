@@ -6,7 +6,7 @@ import { captureMail, releaseMailSlot, reserveMailSlot } from '../db/mail.ts'
 import { errorCode, log } from '../log.ts'
 import type { MailContent } from './templates.ts'
 
-export type MailKind = 'verify_email' | 'signup_exists' | 'reset_password' | 'invitation'
+export type MailKind = 'verify_email' | 'signup_exists' | 'reset_password' | 'invitation' | 'mfa_changed'
 export type SendOutcome = 'sent' | 'capped' | 'failed'
 
 export async function sendMail(ctx: Context, kind: MailKind, to: string, content: MailContent, orgId: string | null = null): Promise<SendOutcome> {

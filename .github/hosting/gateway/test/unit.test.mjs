@@ -20,6 +20,40 @@ import { escapeHtml, html } from '../src/pages/html.ts'
 import { checkIdToken, decodeJwtPayload } from '../src/auth/id-token.ts'
 import { forwardRequest, identityHeaders, isNavigation } from '../src/http/forward.ts'
 import { logError } from '../src/log.ts'
+import {
+  base32Decode, base32Encode, codeDigits, groupedSecret, hotp, matchTotp, newRecoveryCode, newTotpSecret,
+  normalizeRecoveryCode, otpauthUri, timeStep,
+} from '../src/auth/totp.ts'
+
+test('TOTP: the RFC 6238 SHA-1 vectors, a window of one step either side, and base32 keys', async () => {
+  const rfc = new TextEncoder().encode('12345678901234567890')
+  for (const [seconds, expected] of [[59, '94287082'], [1111111109, '07081804'], [1111111111, '14050471'], [1234567890, '89005924'], [2000000000, '69279037'], [20000000000, '65353130']]) {
+    assert.equal(await hotp(rfc, timeStep(seconds * 1000), 8), expected, String(seconds))
+  }
+  const secret = base32Encode(rfc)
+  assert.equal(secret, 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 'the RFC 4648 encoding of the test key')
+  assert.deepEqual([...base32Decode(secret.toLowerCase().match(/.{1,4}/g).join(' '))], [...rfc], 'case and spaces are ignored')
+  assert.equal(base32Decode('not base32!'), null)
+  const now = 1_700_000_000_000
+  const step = timeStep(now)
+  for (const offset of [-1, 0, 1]) assert.equal(await matchTotp(secret, await hotp(rfc, step + offset), now), step + offset, `offset ${offset}`)
+  for (const offset of [-2, 2]) assert.equal(await matchTotp(secret, await hotp(rfc, step + offset), now), null, `offset ${offset}`)
+  assert.equal(newTotpSecret().length, 32, '20 random bytes in base32')
+  assert.equal(codeDigits(' 123 456 '), '123456')
+  assert.equal(codeDigits('12345'), null)
+  assert.equal(groupedSecret('ABCDEFGHIJ'), 'ABCD EFGH IJ')
+  assert.equal(otpauthUri('ABCD', 'ada+mfa@example.test'),
+    'otpauth://totp/Insulin%20Apps:ada%2Bmfa%40example.test?secret=ABCD&issuer=Insulin%20Apps&algorithm=SHA1&digits=6&period=30')
+})
+
+test('recovery codes are 80 random bits in four groups, and typed ones normalize to the stored form', () => {
+  const code = newRecoveryCode()
+  assert.match(code, /^[a-z2-7]{4}-[a-z2-7]{4}-[a-z2-7]{4}-[a-z2-7]{4}$/)
+  assert.notEqual(newRecoveryCode(), code)
+  assert.equal(normalizeRecoveryCode(code.toUpperCase().replaceAll('-', ' ')), code.replaceAll('-', ''))
+  assert.equal(normalizeRecoveryCode('123456'), null)
+  assert.equal(normalizeRecoveryCode('abcd-efgh-ijkl'), null)
+})
 
 test('e-mail addresses are trimmed, lower-cased and shape-checked', () => {
   assert.equal(normalizeEmail('  Ada.Lovelace@Example.TEST '), 'ada.lovelace@example.test')

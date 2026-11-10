@@ -3,6 +3,7 @@
 import type { Context } from '../context.ts'
 import { redirect } from '../http/response.ts'
 import { afterPost } from '../pages/status.tsx'
+import { mfaEnabled, startChallenge } from './mfa.ts'
 import { startSession } from './session.ts'
 
 export type SignInMethod = 'password' | 'google' | 'reset' | 'verify' | 'sso'
@@ -10,8 +11,14 @@ export type SignInMethod = 'password' | 'google' | 'reset' | 'verify' | 'sso'
 /**
  * Signs `user` in under the credential version the request verified and continues to `next` (a redirect after a GET,
  * afterPost after a POST). `changed` answers when the credentials changed meanwhile and no session was created.
+ *
+ * With two-step sign-in on, there is no session yet: the browser gets a challenge to answer with a code (auth/mfa.ts).
+ * That holds for every method but SSO, where the organization's identity provider is responsible for the second
+ * factor. A confirmation link only signs in an account that has just been created, which can't have it on yet, but an
+ * older link must not get around it either.
  */
-export async function finishSignIn(ctx: Context, user: { id: string; credential_version: number }, _method: SignInMethod, next: string, changed: () => Response): Promise<Response> {
+export async function finishSignIn(ctx: Context, user: { id: string; credential_version: number }, method: SignInMethod, next: string, changed: () => Response): Promise<Response> {
+  if (method !== 'sso' && await mfaEnabled(ctx.config.db, user.id)) return startChallenge(ctx, user, method, next)
   if (!(await startSession(ctx, user))) return changed()
   return ctx.request.method === 'GET' ? redirect(next, 302) : afterPost(ctx, next)
 }

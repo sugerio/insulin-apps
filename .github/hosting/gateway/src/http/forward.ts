@@ -6,7 +6,9 @@ import { withoutCookies } from './cookies.ts'
 import { SESSION_COOKIE } from '../auth/session.ts'
 
 // Lower-case names of the gateway's own cookies: never forwarded to an app, never set by one.
-export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([SESSION_COOKIE, 'insulin_oauth', '__host-insulin_oauth'])
+export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([
+  SESSION_COOKIE, 'insulin_oauth', '__host-insulin_oauth', 'insulin_mfa', '__host-insulin_mfa',
+])
 
 /** How a request reached the app (x-suger-access-via): apps keep people, billing and integrations to `browser`. */
 export type AccessVia = 'browser' | 'mcp' | 'api'

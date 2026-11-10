@@ -34,10 +34,10 @@ export const ACME_NOW = Date.UTC(2026, 9, 21, 20)
 export const SEED_USER_ID = '10000000-0000-4000-8000-00000000a001'
 export const OWNER_USER_ID = '10000000-0000-4000-8000-00000000a002'
 export const ADMIN_USER_ID = '10000000-0000-4000-8000-00000000a003'
-export const EDITOR_USER_ID = '10000000-0000-4000-8000-00000000a004'
+export const READER_USER_ID = '10000000-0000-4000-8000-00000000a004'
 export const OWNER_EMAIL = 'owner@example.test'
 export const ADMIN_EMAIL = 'admin@example.test'
-export const EDITOR_EMAIL = 'editor@example.test'
+export const READER_EMAIL = 'reader@example.test'
 export const VS1_TEMPLATE_ID = uuid('template:VS-1')
 export const ORIGIN = 'http://app.test'
 /** The request configuration the app derives for the test origin, for calls that bypass the router. */
@@ -47,10 +47,12 @@ const IMPORT_ACTOR = 'import:seed'
 
 export type Identity = Record<string, string>
 
-/** OWNER and ADMIN manage the cap table (admin_rw); EDITOR reads everything (admin_ro). */
+/** OWNER and ADMIN manage the cap table (admin_rw); a custom role with only "View the cap table" reads everything (admin_ro). */
 export const OWNER: Identity = consoleHeaders({ userId: OWNER_USER_ID, role: 'OWNER', email: OWNER_EMAIL, name: 'Owner Example' })
 export const ADMIN: Identity = consoleHeaders({ userId: ADMIN_USER_ID, role: 'ADMIN', email: ADMIN_EMAIL, name: 'Admin Example' })
-export const EDITOR: Identity = consoleHeaders({ userId: EDITOR_USER_ID, role: 'EDITOR', email: EDITOR_EMAIL, name: 'Editor Example' })
+export const READER: Identity = consoleHeaders({
+  userId: READER_USER_ID, role: 'EDITOR', permissions: 'captable.view', email: READER_EMAIL, name: 'Reader Example',
+})
 
 /** A console USER/VIEWER: holder access only while the e-mail matches a stakeholder's own address. */
 export function holderIdentity(email: string, overrides: Partial<ConsoleIdentity> = {}): Identity {
@@ -493,18 +495,18 @@ export interface LedgerHarness extends AcmeSeed {
   sa: Identity
   /** ADMIN (admin_rw). */
   rw: Identity
-  /** EDITOR (admin_ro). */
+  /** A custom role with only "View the cap table" (admin_ro). */
   ro: Identity
   path: (suffix: string) => string
   api: (method: string, path: string, identity?: Identity | null, body?: unknown, headers?: Record<string, string>) => Promise<Response>
 }
 
-/** The Acme org at 13:00 on the demo's day, with OWNER, ADMIN and EDITOR console identities already known to the app. */
+/** The Acme org at 13:00 on the demo's day, with OWNER, ADMIN and read-only console identities already known to the app. */
 export async function ledgerHarness(options: Parameters<typeof seedAcme>[1] & { now?: number } = {}): Promise<LedgerHarness> {
   const { db, clock } = await openTestApp(options.now ?? ACME_NOW)
   const seed = await seedAcme(db, options)
   // Each console identity becomes a user row on its first request; tests that call the ledger directly need them.
-  for (const identity of [OWNER, ADMIN, EDITOR]) expect((await sendApi('GET', '/api/me', identity)).status).toBe(200)
+  for (const identity of [OWNER, ADMIN, READER]) expect((await sendApi('GET', '/api/me', identity)).status).toBe(200)
   return {
     ...seed,
     db,
@@ -512,7 +514,7 @@ export async function ledgerHarness(options: Parameters<typeof seedAcme>[1] & { 
     config: TEST_CONFIG,
     sa: OWNER,
     rw: ADMIN,
-    ro: EDITOR,
+    ro: READER,
     path: (suffix: string) => `/api/orgs/${seed.orgId}${suffix}`,
     api: (method, path, identity = OWNER, body, headers = {}) => sendApi(method, path, identity, body, headers),
   }

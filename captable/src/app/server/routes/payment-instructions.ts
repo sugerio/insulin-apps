@@ -35,7 +35,8 @@ export function paymentInstructionRoutes(deps: AppDeps) {
        FROM payment_instructions p LEFT JOIN users u ON u.id = p.updated_by
        WHERE p.org_id = ?`,
     ).bind(c.req.param('orgId')).first<PaymentRow>()
-    return c.json(output(row, c.get('auth').consoleRole === 'EDITOR'))
+    // Read-only administrators see the bank details masked; those who record changes see them in full.
+    return c.json(output(row, c.get('org').access !== 'admin_rw'))
   })
 
   routes.post('/payment-instructions', async (c) => {

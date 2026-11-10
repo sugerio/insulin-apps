@@ -92,7 +92,7 @@ describe('console identity and one-company setup', () => {
     })
   })
 
-  it('maps EDITOR to read-only and a matching VIEWER to holder access', async () => {
+  it('maps EDITOR to read/write, a "View the cap table" custom role to read-only, and a matching VIEWER to holder access', async () => {
     const company = await setupCompany()
     const created = await jsonRequest(`/api/orgs/${company.id}/stakeholders`, 'POST', {
       kind: 'individual', displayName: 'Holder Example', relationship: 'investor',
@@ -103,11 +103,19 @@ describe('console identity and one-company setup', () => {
 
     const editorIdentity = consoleHeaders({ role: 'EDITOR', userId: 'editor-1', email: 'editor@example.test' })
     const editor = await appRequest('/api/me', {}, editorIdentity)
-    expect(await editor.json()).toMatchObject({ access: 'admin_ro', pii: true })
+    expect(await editor.json()).toMatchObject({ access: 'admin_rw', pii: true })
     const editorWrite = await jsonRequest(`/api/orgs/${company.id}/stakeholders`, 'POST', {
-      kind: 'individual', displayName: 'Denied Write', relationship: 'investor', emails: [],
+      kind: 'individual', displayName: 'Editor Write', relationship: 'investor', emails: [],
     }, editorIdentity)
-    expect(editorWrite.status).toBe(403)
+    expect(editorWrite.status).toBe(201)
+
+    const readerIdentity = consoleHeaders({ role: 'EDITOR', permissions: 'captable.view', userId: 'reader-1', email: 'reader@example.test' })
+    const reader = await appRequest('/api/me', {}, readerIdentity)
+    expect(await reader.json()).toMatchObject({ access: 'admin_ro', pii: true, permissions: ['captable.view'] })
+    const readerWrite = await jsonRequest(`/api/orgs/${company.id}/stakeholders`, 'POST', {
+      kind: 'individual', displayName: 'Denied Write', relationship: 'investor', emails: [],
+    }, readerIdentity)
+    expect(readerWrite.status).toBe(403)
 
     const viewerIdentity = consoleHeaders({
       role: 'VIEWER', userId: 'viewer-1', email: 'HOLDER@example.test', name: 'Holder Example',

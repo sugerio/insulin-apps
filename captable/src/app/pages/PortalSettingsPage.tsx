@@ -19,7 +19,7 @@ import { useResource } from "../lib/useResource.ts";
 
 // Stakeholder Portal settings (Hire and Retain › Stakeholder Portal): the company contact, the
 // holder documents (company resources every holder sees), counsel's notice of exercise form and privacy notice
-// (picked among those resources), the How to exercise text and what holders see. Owners and admins edit; editors view.
+// (picked among those resources), the How to exercise text and what holders see. Owners, admins and editors edit; read-only roles view.
 // Publishing a company resource is done here.
 
 type Dialog =
@@ -49,7 +49,7 @@ export function PortalSettingsPage() {
   return (
     <Page title="Stakeholder Portal" crumbs={[["Hire and Retain"], ["Stakeholder Portal"]]}>
       <Card>
-        <PageHead title="Stakeholder Portal" sub={readOnly ? "What every holder sees in the portal. View only — owners and admins edit." : "What every holder sees in the portal. Owners and admins edit; editors view."} />
+        <PageHead title="Stakeholder Portal" sub={readOnly ? "What every holder sees in the portal. View only — owners, admins and editors edit." : "What every holder sees in the portal. Owners, admins and editors edit; read-only roles view."} />
         <ResourceView resource={org}>
           {(data) => {
             const stale = stalePicks(data, resources ? new Set(resources.map((document) => document.id)) : null);

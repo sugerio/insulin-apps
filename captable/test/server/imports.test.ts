@@ -239,18 +239,24 @@ describe('company import routes', () => {
     expect(pulley.response.status, JSON.stringify(pulley.body)).toBe(201)
     expect(pulley.body.preview).toMatchObject({ canImport: true, counts: { stakeholders: 4, shareClasses: 2 } })
 
-    expect((await appRequest('/api/import/template', {}, consoleHeaders({ role: 'EDITOR', userId: 'import-editor' }))).status).toBe(403)
-    expect((await appRequest('/api/import/template', {}, consoleHeaders({ role: 'USER', userId: 'import-user' }))).status).toBe(403)
-    expect((await appRequest('/api/import/template', {}, consoleHeaders({ role: 'VIEWER', userId: 'import-viewer' }))).status).toBe(403)
+    // Only those who record changes import: a read-only custom role, USER and VIEWER are refused; EDITOR may.
+    const refused = {
+      reader: consoleHeaders({ role: 'EDITOR', permissions: 'captable.view', userId: 'import-reader' }),
+      user: consoleHeaders({ role: 'USER', userId: 'import-user' }),
+      viewer: consoleHeaders({ role: 'VIEWER', userId: 'import-viewer' }),
+    }
+    for (const identity of Object.values(refused)) {
+      expect((await appRequest('/api/import/template', {}, identity)).status).toBe(403)
+    }
+    expect((await appRequest('/api/import/template', {}, consoleHeaders({ role: 'EDITOR', userId: 'import-editor' }))).status).toBe(200)
     expect((await appRequest('/api/import/template', {}, {})).status).toBe(401)
-    for (const role of ['EDITOR', 'USER', 'VIEWER'] as const) {
-      const identity = consoleHeaders({ role, userId: `import-${role.toLowerCase()}` })
+    for (const [who, identity] of Object.entries(refused)) {
       expect((await appRequest('/api/import/preview', {
         method: 'POST', body: importForm('template', [templateFile()]),
       }, identity)).status).toBe(403)
       expect((await appRequest(`/api/import/runs/${own.body.runId}`, {}, identity)).status).toBe(403)
       expect((await appRequest(`/api/import/runs/${own.body.runId}/commit`, {
-        method: 'POST', headers: { 'Idempotency-Key': `forbidden-${role.toLowerCase()}` },
+        method: 'POST', headers: { 'Idempotency-Key': `forbidden-${who}` },
         body: commitForm([templateFile()]),
       }, identity)).status).toBe(403)
     }

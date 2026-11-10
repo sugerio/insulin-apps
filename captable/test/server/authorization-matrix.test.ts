@@ -26,12 +26,12 @@ describe('authorization matrix over the pruned route table', () => {
     }
   }, 30_000)
 
-  it('refuses every administrator write to EDITOR before parsing its body', async () => {
+  it('refuses every administrator write to a read-only custom role before parsing its body', async () => {
     harness = await readHarness()
     const writes = api.ROUTE_TABLE.filter((route) => route.auth === 'admin' && !route.access.includes('admin_ro') && route.method !== 'GET')
     expect(writes.length).toBeGreaterThan(0)
     for (const route of writes) {
-      const response = await harness.api(route.method, pathFor(route, harness.orgId), harness.editor, {})
+      const response = await harness.api(route.method, pathFor(route, harness.orgId), harness.reader, {})
       expect.soft(response.status, route.id).toBe(403)
       expect.soft(await response.json(), route.id).toMatchObject({ error: { code: 'forbidden' } })
     }

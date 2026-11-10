@@ -45,8 +45,8 @@ export function orgRoutes(deps: AppDeps) {
   const routes = new Hono<AppEnv>()
 
   routes.post('/', async (c) => {
-    if (!['OWNER', 'ADMIN'].includes(c.get('auth').consoleRole)) {
-      throw new ApiError('forbidden', 'An owner or administrator must set up the company')
+    if (!c.get('auth').fullAccess) {
+      throw new ApiError('forbidden', 'Someone who can record changes must set up the company')
     }
     const input = await readJson(c, api.createOrgRequestSchema)
     const mutation = await prepareIdempotency(c, 'global', 'POST /api/orgs', input)

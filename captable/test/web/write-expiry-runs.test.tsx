@@ -91,9 +91,9 @@ describe("expiry runs: reading them", () => {
 
   it("shows an editor the runs and their proposals, with nothing to confirm", async () => {
     const { callsTo } = renderPage("expiry-runs", handlers(unused), { role: "admin_ro" });
-    expect(await screen.findByText(/Only an owner or admin confirms a run\./)).toBeTruthy();
+    expect(await screen.findByText(/Only someone who records changes confirms a run\./)).toBeTruthy();
     const table = await openRun("View");
-    expect(screen.getByText("Only an owner or admin can confirm an expiry run. This is what it proposes, and what confirming would cancel today.")).toBeTruthy();
+    expect(screen.getByText("Only someone who records changes can confirm an expiry run. This is what it proposes, and what confirming would cancel today.")).toBeTruthy();
     // What confirming would cancel today, and nothing for the one exercised since.
     expect(within(rowOf(table, "OPT-21")).getAllByText("30,000")).toHaveLength(2);
     expect(rowOf(table, "OPT-18").textContent).toContain("Nothing left to expire");

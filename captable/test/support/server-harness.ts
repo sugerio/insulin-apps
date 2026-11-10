@@ -63,6 +63,10 @@ export interface ConsoleIdentity {
   role: 'OWNER' | 'ADMIN' | 'EDITOR' | 'USER' | 'VIEWER'
   email: string
   name: string
+  /** `x-suger-app-permissions`, as the hosting platform sends it for a custom role (space-separated); absent by default. */
+  permissions?: string
+  /** `x-suger-access-via`: browser, mcp or api; absent by default, as from the Insulin console. */
+  via?: string
 }
 
 export const CONSOLE_USER: ConsoleIdentity = {
@@ -85,6 +89,8 @@ export function consoleHeaders(overrides: Partial<ConsoleIdentity> = {}): Record
     'x-suger-app-role': user.role,
     'x-suger-user-email': user.email,
     'x-suger-user-name': user.name,
+    ...(user.permissions === undefined ? {} : { 'x-suger-app-permissions': user.permissions }),
+    ...(user.via === undefined ? {} : { 'x-suger-access-via': user.via }),
   }
 }
 

@@ -37,6 +37,10 @@ export const ADMIN = consoleHeaders({
 export const EDITOR = consoleHeaders({
   userId: 'editor-user', role: 'EDITOR', email: 'editor@example.test', name: 'Editor Example',
 })
+/** A custom role with only "View the cap table": the whole company, read only (admin_ro). */
+export const READER = consoleHeaders({
+  userId: 'reader-user', role: 'EDITOR', permissions: 'captable.view', email: 'reader@example.test', name: 'Reader Example',
+})
 
 export function holderIdentity(email: string, overrides: Partial<ConsoleIdentity> = {}): Record<string, string> {
   return consoleHeaders({
@@ -366,7 +370,10 @@ export interface ReadHarness extends AcmeSeed {
   testDb: TestDatabase
   owner: Record<string, string>
   admin: Record<string, string>
+  /** EDITOR: records changes, like ADMIN. */
   editor: Record<string, string>
+  /** A custom role with only "View the cap table" (admin_ro). */
+  reader: Record<string, string>
   path: (suffix: string) => string
   api: (
     method: string,
@@ -409,6 +416,7 @@ export async function readHarness(
     owner: OWNER,
     admin: ADMIN,
     editor: EDITOR,
+    reader: READER,
     path: (suffix: string) => `/api/orgs/${seed.orgId}${suffix}`,
     api: apiRequest,
     close: async () => {

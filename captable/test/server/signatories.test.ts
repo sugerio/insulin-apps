@@ -24,7 +24,7 @@ describe('signatories', () => {
   it('lists the company signatories to an editor, active first', async () => {
     harness = await readHarness()
     await seedSignatories(harness.db, harness.orgId, Date.now())
-    const body = await getJson<api.OrgSignatoryList>(harness, harness.editor, '/signatories')
+    const body = await getJson<api.OrgSignatoryList>(harness, harness.reader, '/signatories')
     expect(body.items).toEqual([
       { id: '00000000-0000-4000-8000-000000000102', name: 'Morgan Vale', title: 'Chief Executive Officer', capabilities: ['options_signatory', 'certificate_primary'], active: true, importedFromPulley: true },
       { id: '00000000-0000-4000-8000-000000000101', name: 'Taylor Former', title: null, capabilities: ['safes_signatory'], active: false, importedFromPulley: false },
@@ -40,7 +40,7 @@ describe('signatories', () => {
   it('answers 404 for another or malformed company id', async () => {
     harness = await readHarness()
     const other = '00000000-0000-4000-8000-0000000000aa'
-    expect((await harness.api('GET', `/api/orgs/${other}/signatories`, harness.editor)).status).toBe(404)
-    expect((await harness.api('GET', '/api/orgs/not-a-uuid/signatories', harness.editor)).status).toBe(404)
+    expect((await harness.api('GET', `/api/orgs/${other}/signatories`, harness.reader)).status).toBe(404)
+    expect((await harness.api('GET', '/api/orgs/not-a-uuid/signatories', harness.reader)).status).toBe(404)
   })
 })

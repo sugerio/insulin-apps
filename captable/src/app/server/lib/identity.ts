@@ -1,4 +1,5 @@
 import { getCurrentUser, type AppRole } from '@fours/app/server'
+import { api } from '#shared'
 import { readAppEnv } from '#platform'
 import { resolveAccess } from './access/resolve.ts'
 import type { AuthContext } from '../types.ts'
@@ -15,6 +16,29 @@ const PREVIEW = {
 function storableEmail(value: string | null): string | null {
   const email = value?.trim().toLowerCase() || null
   return email !== null && email.length <= 254 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : null
+}
+
+export interface PlatformGrant {
+  /** The effective permissions: the role's own, narrowed by `x-suger-app-permissions` when the platform sends it. */
+  permissions: ReadonlySet<api.Permission>
+  accessVia: api.AccessVia
+}
+
+/**
+ * What the hosting platform sends beyond `getCurrentUser`: the only place that reads identity headers directly.
+ *
+ * `x-suger-app-permissions` (space-separated keys) can only take permissions away: the result is the role's own set
+ * intersected with the header, unknown keys ignored. A request that forged the header therefore gains nothing its
+ * role didn't already give. `x-suger-access-via` says whether a person in the browser, an AI agent (MCP) or an API
+ * client sent the request; the Insulin console sends neither, which means the role's full set, in the browser.
+ */
+export function readPlatformGrant(request: Request, role: AppRole): PlatformGrant {
+  const own = api.rolePermissions(role)
+  const header = request.headers.get('x-suger-app-permissions')
+  const listed = header === null ? null : new Set(header.split(/[\s,]+/).filter(Boolean))
+  const permissions = new Set(listed === null ? own : own.filter((permission) => listed.has(permission)))
+  const via = api.accessViaSchema.safeParse(request.headers.get('x-suger-access-via')?.trim().toLowerCase())
+  return { permissions, accessVia: via.success ? via.data : 'browser' }
 }
 
 export async function resolveCurrentIdentity(
@@ -43,8 +67,9 @@ export async function resolveCurrentIdentity(
      WHERE users.display_name IS NOT excluded.display_name`,
   ).bind(current.userId, storedEmail, displayName, now, now).run()
 
+  const grant = readPlatformGrant(request, current.role)
   const access = await resolveAccess(db, {
-    role: current.role,
+    permissions: grant.permissions,
     email: current.email,
     organizationId: current.organizationId,
   })
@@ -52,9 +77,11 @@ export async function resolveCurrentIdentity(
     user: { id: current.userId, email: current.email, displayName: current.name },
     consoleOrganizationId: current.organizationId,
     consoleRole: current.role as AppRole,
+    permissions: grant.permissions,
+    accessVia: grant.accessVia,
     preview,
     authMethod: 'console',
-    fullAccess: current.role === 'OWNER' || current.role === 'ADMIN',
+    fullAccess: grant.permissions.has('captable.manage'),
     orgAccess: access.orgAccess,
     portalMatches: access.portalMatches,
   }

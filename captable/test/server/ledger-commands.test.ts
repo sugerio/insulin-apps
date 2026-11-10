@@ -255,7 +255,7 @@ describe('schedule-termination and cancel-scheduled-termination', () => {
     expect(await violations(l, l.rw, 'terminate-stakeholder', terminationBody(l, 'S14'))).toContain('ALREADY_TERMINATED')
     expect(await violations(l, l.rw, 'schedule-termination', { ...body, terminationDate: '2026-10-21' })).toContain('TERMINATION_DATE_NOT_IN_FUTURE')
 
-    // A read-only EDITOR can't cancel; a write administrator cancels with the version it read; a stale version is refused.
+    // A read-only custom role can't cancel; a write administrator cancels with the version it read; a stale version is refused.
     const cancelBodyFor = (version: number) => ({ scheduledTerminationId: stored.scheduledTerminationId, version, note: 'Retention agreement signed' })
     expect((await l.api('POST', l.path('/commands/cancel-scheduled-termination'), l.ro, cancelBodyFor(1))).status).toBe(403)
     const stale = await l.api('POST', l.path('/commands/cancel-scheduled-termination'), l.sa, cancelBodyFor(2))
@@ -395,7 +395,7 @@ describe('grant-equity-compensation', () => {
     await l.db.prepare('UPDATE documents SET archived_at = ?, version = version + 1 WHERE id = ?').bind(l.clock.time, consent).run()
     expect(await v({ board: { approvalDate: '2026-10-20', consentDocumentId: consent } })).toContain('MISSING_BOARD_CONSENT')
     // Every write administrator may override with counsel's memo (there is no separate super-administrator any more);
-    // a read-only EDITOR can't even preview a grant.
+    // a read-only custom role can't even preview a grant.
     const memo = await addDocument(l.db, l.orgId, 'COUNSEL_MEMO')
     for (const identity of [l.rw, l.sa]) {
       const override = await dryRun(l, identity, 'grant-equity-compensation', await grantBody(l, { valuationId: l.id('V4'), exercisePrice: '0.95', counselMemoDocumentId: memo }))
@@ -547,7 +547,7 @@ describe('set-plan-terms', () => {
 })
 
 describe('authorization of the commands', () => {
-  it('refuses a read-only EDITOR every command, the write-administrator ones included', async () => {
+  it('refuses a read-only custom role every command, the write-administrator ones included', async () => {
     const l = await ledgerHarness()
     const terminate = await l.api('POST', l.path('/commands/terminate-stakeholder?dryRun=true'), l.ro, terminationBody(l, 'S10'))
     expect(terminate.status).toBe(403)

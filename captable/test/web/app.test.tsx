@@ -96,9 +96,15 @@ describe("the shell", () => {
     expect(screen.queryByText(/sign (in|out)/i)).toBeNull();
   });
 
-  it("offers no write entry points to an editor", async () => {
-    renderRoute(DASHBOARD, me("admin_ro"));
+  it("offers write entry points to an editor", async () => {
+    renderRoute(DASHBOARD, me("editor"));
     expect(await screen.findByText("Editor")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /New/ })).toBeTruthy();
+  });
+
+  it("offers no write entry points to a custom role that only views the cap table", async () => {
+    renderRoute(DASHBOARD, me("admin_ro"));
+    expect(await screen.findByText("Custom role")).toBeTruthy();
     await screen.findByText("ESSENTIALS");
     await screen.findByRole("heading", { name: "Acme Robotics, Inc." });
     expect(screen.queryByRole("button", { name: /New/ })).toBeNull();

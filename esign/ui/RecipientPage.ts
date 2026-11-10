@@ -11,7 +11,7 @@ const workerApiOrigin=()=>meta('esign-api');
 const workerHosts=()=>meta('esign-hosts');
 /** Local UI development is framed by a host on this machine (a console on localhost). */
 const LOOPBACK_HOST=/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?$/;
-class RequestFailed extends Error {readonly status:number;readonly code:string;constructor(status:number,code=''){super('Request failed');this.status=status;this.code=code;}}
+class RequestFailed extends Error {readonly status:number;readonly code:string;readonly detail:Record<string,unknown>;constructor(status:number,code='',detail:Record<string,unknown>={}){super('Request failed');this.status=status;this.code=code;this.detail=detail;}}
 
 type SignatureField = {id:string;type:'Signature'|'Title'|'Date signed';page:number;required:boolean;rect:{x:number;y:number;width:number;height:number}};
 /** The consent to sign electronically, as the server words it (src/disclosure.ts). */
@@ -60,6 +60,8 @@ type RenderDocument = (blob:Blob, container:HTMLElement, signal:AbortSignal)=>Pr
 const defaultRender:RenderDocument=async (blob,container,signal)=>{const {renderPdf}=await import('./pdf');signal.throwIfAborted();return renderPdf(blob,container,signal);};
 /** A code lasts as long as the Worker keeps it (OTP_TTL_MS). */
 const CODE_TTL_MS=10*60*1000, CODE_LENGTH=6;
+/** Sends are a minute apart (the Worker's OTP_RESEND_MS). */
+const RESEND_MS=60*1000;
 /** "9:05": minutes and seconds left. */
 export function codeTimeLeft(ms:number):string{const s=Math.max(0,Math.ceil(ms/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;}
 /**
@@ -67,22 +69,42 @@ export function codeTimeLeft(ms:number):string{const s=Math.max(0,Math.ceil(ms/1
  * More than two digits at once is a paste (or autofill) and fills from that box on.
  */
 export function nextCode(code:string,index:number,raw:string):string{
-  const typed=raw.replace(/\D/g,''),at=Math.min(index,code.length);
+  const typed=codeDigits(raw),at=Math.min(index,code.length);
   if(!typed)return code.slice(0,at);
   const current=code[at]??'';
   const digit=typed.length===2&&current?(typed.replace(current,'')||typed.slice(-1)):typed;
   return (code.slice(0,at)+(digit.length>2?digit:digit.slice(-1))+(digit.length>2?'':code.slice(at+1))).slice(0,CODE_LENGTH);
 }
+/** The ASCII digits in `raw`; full-width digits (an East Asian input method) count as digits. */
+export function codeDigits(raw:string):string{return raw.normalize('NFKC').replace(/\D/g,'');}
+/**
+ * What the page says when a code cannot be sent or is not accepted, from the Worker's error
+ * (signing-routes.ts), and whether the boxes are cleared for a new entry. Unknown failures (a lost
+ * response) keep the code, since entering it again may still work.
+ */
+export function codeProblem(status:number,code:string,detail:Record<string,unknown>,when:'send'|'verify'):{text:string;clear:boolean;retryAfterMs:number}{
+  const wait=Number(detail.retryAfterSeconds),retryAfterMs=Number.isFinite(wait)&&wait>0?wait*1000:0,inTime=retryAfterMs?` in ${codeTimeLeft(retryAfterMs)}`:' shortly';
+  if(code==='otp_rate_limited')return {text:`Too many codes were asked for. You can ask for a new code${inTime}.`,clear:false,retryAfterMs};
+  if(code==='otp_attempts_exhausted')return {text:`Too many wrong codes. You can ask for a new code${inTime}.`,clear:true,retryAfterMs};
+  if(code==='invalid_otp'){const left=Number(detail.attemptsLeft);return {text:`That code is not right. Use the code in the latest email.${Number.isInteger(left)&&left>0?` ${left} ${left===1?'try':'tries'} left.`:''}`,clear:true,retryAfterMs:0};}
+  if(code==='otp_expired')return {text:'This code has expired. Ask for a new code.',clear:true,retryAfterMs:0};
+  if(code==='otp_superseded')return {text:'A newer code was sent for this signing in another window, so this one no longer works. Ask for a new code to continue here.',clear:true,retryAfterMs:0};
+  if(code==='invalid_session'||(status===401&&when==='send'))return {text:'This signing session has ended. Close and open the signing page again.',clear:false,retryAfterMs:0};
+  return when==='send'?{text:'Could not send a code. Wait a minute, then ask for a new code.',clear:false,retryAfterMs:0}:{text:'Code verification unavailable. Retry the same code.',clear:false,retryAfterMs:0};
+}
 /** Six boxes, one digit each; typing moves on, Backspace moves back, a paste fills them all. */
-function CodeBoxes({value,onChange,disabled,onEnter}:{value:string;onChange:(code:string)=>void;disabled:boolean;onEnter:()=>void}){
+function CodeBoxes({value,onChange,disabled,onEnter,focusSignal}:{value:string;onChange:(code:string)=>void;disabled:boolean;onEnter:()=>void;focusSignal:number}){
   const boxes=useRef<(HTMLInputElement|null)[]>([]);
   const focus=(i:number)=>{const box=boxes.current[Math.max(0,Math.min(CODE_LENGTH-1,i))];if(typeof box?.focus==='function')box.focus();};
+  // A code was just sent, or the last one was refused: the next digit goes in without a click.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focuses on the signal only
+  useEffect(()=>{if(focusSignal&&!disabled)focus(value.length);},[focusSignal,disabled]);
   return h('div',{className:'esign-code-boxes',role:'group','aria-label':'Verification code'},...Array.from({length:CODE_LENGTH},(_,i)=>h('input',{
     key:i,ref:(el:HTMLInputElement|null)=>{boxes.current[i]=el;},'aria-label':`Digit ${i+1} of ${CODE_LENGTH}`,value:value[i]??'',disabled,
     inputMode:'numeric',autoComplete:i===0?'one-time-code':'off',
     onFocus:(e:React.FocusEvent<HTMLInputElement>)=>{if(i>value.length){focus(value.length);return;}e.target.select();},
     onChange:(e:React.ChangeEvent<HTMLInputElement>)=>{const next=nextCode(value,i,e.target.value);onChange(next);if(next.length>value.length)focus(next.length);},
-    onPaste:(e:React.ClipboardEvent<HTMLInputElement>)=>{e.preventDefault();const next=(value.slice(0,Math.min(i,value.length))+e.clipboardData.getData('text').replace(/\D/g,'')).slice(0,CODE_LENGTH);onChange(next);focus(next.length);},
+    onPaste:(e:React.ClipboardEvent<HTMLInputElement>)=>{e.preventDefault();const next=(value.slice(0,Math.min(i,value.length))+codeDigits(e.clipboardData.getData('text'))).slice(0,CODE_LENGTH);onChange(next);focus(next.length);},
     onKeyDown:(e:React.KeyboardEvent<HTMLInputElement>)=>{
       if(e.key==='Backspace'&&!value[i]&&i>0){e.preventDefault();onChange(value.slice(0,i-1));focus(i-1);}
       else if(e.key==='ArrowLeft'){e.preventDefault();focus(i-1);}
@@ -110,6 +132,8 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
   const [signing,setSigning]=useState(false),[verified,setVerified]=useState(false), [finished,setFinished]=useState(false), [messageId,setMessageId]=useState(''), [testOtp,setTestOtp]=useState('');
   // When the code was sent (its expiry counts down from there), whether it went by email, and the clock.
+  // What went wrong with the code, shown beside the boxes; when Resend works again; a send in flight; focus the boxes.
+  const [codeNote,setCodeNote]=useState(''),[resendAt,setResendAt]=useState(0),[sending,setSending]=useState(false),[focusSignal,setFocusSignal]=useState(0);
   const [sentAt,setSentAt]=useState(0),[emailed,setEmailed]=useState(false),[testMailbox,setTestMailbox]=useState(false),[now,setNow]=useState(()=>Date.now()),autoSent=useRef(false);
   // Signing for a company: the signer's title (the host's, editable) and their confirmation of authority.
   const [signerTitle,setSignerTitle]=useState(''),[authority,setAuthority]=useState(false);
@@ -183,18 +207,24 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   },[pdf,renderDocument]);
   async function request(path:string, init:RequestInit={}) {
     const response=await fetch(`${api.current}${path}`,{...init,headers:{...init.headers,authorization:`Bearer ${token}`}});
-    if(!response.ok){let code='';try{const body=await response.json() as {error?:unknown};if(typeof body?.error==='string')code=body.error;}catch{}throw new RequestFailed(response.status,code);}return response;
+    if(!response.ok){let code='',detail:Record<string,unknown>={};try{const body=await response.json() as Record<string,unknown>;if(body&&typeof body==='object'){detail=body;if(typeof body.error==='string')code=body.error;}}catch{}throw new RequestFailed(response.status,code,detail);}return response;
   }
-  async function send(announce=true) {try {
+  async function send(announce=true) {if(sending)return;setSending(true);setCodeNote('');try {
     const result=await (await request('/v1/signing/otp',{method:'POST'})).json() as {messageId:string;testOtp?:string;emailed?:boolean;testMailbox?:boolean};
-    setMessageId(result.messageId);setTestOtp(result.testOtp ?? '');setSent(true);setSentAt(Date.now());setNow(Date.now());setOtp('');setEmailed(!!result.emailed);setTestMailbox(!!result.testMailbox);
+    const at=Date.now();
+    setMessageId(result.messageId);setTestOtp(result.testOtp ?? '');setSent(true);setSentAt(at);setNow(at);setOtp('');setEmailed(!!result.emailed);setTestMailbox(!!result.testMailbox);
+    // The Worker allows the next send a minute later (OTP_RESEND_MS).
+    setResendAt(at+RESEND_MS);setFocusSignal(n=>n+1);
     if(announce)setMessage(result.emailed?'Verification code sent by email.':'Test code saved to the test mailbox.');
-  } catch {setMessage('Could not send a code. Wait a minute, then resend.');}}
+  } catch (error) {
+    const problem=error instanceof RequestFailed?codeProblem(error.status,error.code,error.detail,'send'):codeProblem(0,'',{},'send');
+    setCodeNote(problem.text);setMessage('');if(problem.retryAfterMs){const at=Date.now();setResendAt(at+problem.retryAfterMs);setNow(at);}
+  } finally {setSending(false);}}
   // Reaching "Confirm it's you" sends the code once; Resend asks for another.
   // biome-ignore lint/correctness/useExhaustiveDependencies: send once per page session
   useEffect(()=>{if(!token||verified||finished||autoSent.current||(step!==2&&!docNeedsCode))return;autoSent.current=true;void send(docNeedsCode);},[token,step,docNeedsCode,verified,finished]);
   // The countdown to the code's expiry, while one is waiting to be entered.
-  useEffect(()=>{if(!sent||verified)return;const timer=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(timer);},[sent,verified]);
+  useEffect(()=>{if((!sent&&resendAt<=Date.now())||verified)return;const timer=setInterval(()=>setNow(Date.now()),1000);return ()=>clearInterval(timer);},[sent,verified,resendAt]);
   async function loadDocument() {
     const sequence=++loadSequence.current;renderController.current?.abort();container.current?.replaceChildren();setDocFailed(false);
     setRendered(false);setConsent(false);setSignatures({});setPreviews({});setPageHosts([]);setImageUrls({});setSignatureSizes({});setSignatureReceipts({});setTextReceipts({});setFieldErrors({});setArtifact(null);setPdf(null);setMessage('Loading document…');
@@ -240,8 +270,13 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   },[rendered,pageEls,token]);
   async function verify() {if(otp.length!==CODE_LENGTH)return;try {
     await request('/v1/signing/otp/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({otp})});
-    setVerified(true);setOtp('');setTestOtp('');setMessage('');
-  } catch {setMessage('Code verification unavailable. Retry the same code.');return;}
+    setVerified(true);setOtp('');setTestOtp('');setMessage('');setCodeNote('');
+  } catch (error) {
+    const problem=error instanceof RequestFailed?codeProblem(error.status,error.code,error.detail,'verify'):codeProblem(0,'',{},'verify');
+    setCodeNote(problem.text);setMessage('');
+    if(problem.retryAfterMs){const at=Date.now();setResendAt(at+problem.retryAfterMs);setNow(at);}
+    if(problem.clear){setOtp('');setFocusSignal(n=>n+1);}
+    return;}
     // A host that needed the code first shows the document now.
     if(docNeedsCode||!artifact){await loadDocument();setStep(1);return;}
     if(pendingDecline){setPendingDecline(false);setStep(1);await decline();return;}
@@ -287,10 +322,11 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       h('p',{className:'esign-code-label'},sent?`Enter the 6-digit code we sent to ${sentTo}`:`Sending a 6-digit code to ${sentTo}…`),
       sent&&testMailbox&&h('p',{className:'esign-code-note'},"Test environment: the code goes to this environment's test mailbox, not to the signer."),
       testOtp&&h('p',{className:'esign-code-note'},'Local test verification code: ',testOtp,' (test only)'),
-      h(CodeBoxes,{value:otp,onChange:setOtp,disabled:!sent,onEnter:()=>void verify()}),
+      h(CodeBoxes,{value:otp,onChange:(code:string)=>{setOtp(code);if(code)setCodeNote('');},disabled:!sent,onEnter:()=>void verify(),focusSignal}),
+      codeNote&&h('p',{role:'alert',className:'esign-code-error'},codeNote),
       h('p',{className:'esign-code-meta'},
         sent&&(codeLeft>0?`Code expires in ${codeTimeLeft(codeLeft)}`:'This code has expired.'),sent&&' · ',
-        h('button',{type:'button',className:'esign-link',onClick:()=>void send()},'Resend code')))),
+        h('button',{type:'button',className:'esign-link',disabled:sending||now<resendAt,onClick:()=>void send()},sending?'Sending…':now<resendAt?`Resend code in ${codeTimeLeft(resendAt-now)}`:'Resend code')))),
     h('div',{className:'esign-why'},h('h3',null,'Why we ask'),
       h('p',null,auth?"Your sign-in and the email code are recorded in the agreement's audit trail, with the time, your IP address and browser. That record is what makes the signature hold up."
         :"The email code is recorded in the agreement's audit trail, with the time, your IP address and browser. That record is what makes the signature hold up."),

@@ -65,8 +65,49 @@ export async function sendRecipientOtp(db: D1Database, token: string, origin: st
     WHERE (otp_challenges.used_at IS NULL OR otp_challenges.session_hash <> excluded.session_hash) AND (${newWindow} OR
       (otp_challenges.attempts<${OTP_MAX_ATTEMPTS} AND otp_challenges.sends<${OTP_MAX_SENDS} AND otp_challenges.last_sent_at + ${OTP_RESEND_MS} <= excluded.last_sent_at))`)
     .bind(await otpHash(pepper, s.task_id, otp, s.recipient_email), now + OTP_TTL_MS, now, now, sessionHash, origin, now, s.recipient_email).run();
-  if (result.meta.changes !== 1) throw new Error('OTP unavailable');
+  if (result.meta.changes !== 1) {
+    const wait = await sendWait(db, s.task_id, sessionHash, now);
+    throw wait === null ? new Error('OTP unavailable') : new OtpSendRefused(wait);
+  }
   await send(s.recipient_email, otp);
+}
+/** A send the task's budget refuses for now: the next one is allowed `retryAfterMs` from now. */
+export class OtpSendRefused extends Error {
+  readonly retryAfterMs: number;
+  constructor(retryAfterMs: number) { super('OTP send limited'); this.retryAfterMs = retryAfterMs; }
+}
+type Challenge = { session_hash: string; expires_at: number; used_at: number | null; attempts: number; sends: number; window_started_at: number; last_sent_at: number };
+const challengeOf = (db: D1Database, taskId: string) =>
+  db.prepare('SELECT session_hash, expires_at, used_at, attempts, sends, window_started_at, last_sent_at FROM otp_challenges WHERE task_id=?').bind(taskId).first<Challenge>();
+/** How long until the task's budget allows a send (the rule in sendRecipientOtp), or null when the budget is not what refused it. */
+async function sendWait(db: D1Database, taskId: string, sessionHash: string, now: number): Promise<number | null> {
+  const c = await challengeOf(db, taskId);
+  if (!c || (c.used_at !== null && c.session_hash === sessionHash)) return null;
+  const windowEnd = c.window_started_at + OTP_WINDOW_MS;
+  if (windowEnd <= now) return null;
+  const at = c.attempts >= OTP_MAX_ATTEMPTS || c.sends >= OTP_MAX_SENDS ? windowEnd : c.last_sent_at + OTP_RESEND_MS;
+  return at > now ? at - now : null;
+}
+/**
+ * Why a code this session entered was not accepted, read after verifyRecipientOtp said no, so the
+ * page can say what to do: `superseded`, a later send (another page session of this task) replaced
+ * the code; `locked`, the window's 5 entries are spent, and a new code can be asked for in
+ * `retryAfterMs`; `expired`, ask for a new code; `wrong`, the code is not the one sent, with the
+ * entries left. Throws when the session is not live (as verifyRecipientOtp does).
+ */
+export type OtpEntryRefusal =
+  | { reason: 'superseded' }
+  | { reason: 'locked'; retryAfterMs: number }
+  | { reason: 'expired' }
+  | { reason: 'wrong'; attemptsLeft: number };
+export async function otpEntryRefusal(db: D1Database, token: string, origin: string, now: number): Promise<OtpEntryRefusal> {
+  const s = await session(db, token, origin, now), sessionHash = await digest(token);
+  const c = await challengeOf(db, s.task_id);
+  if (!c) return { reason: 'expired' };
+  if (c.session_hash !== sessionHash) return { reason: 'superseded' };
+  if (c.attempts >= OTP_MAX_ATTEMPTS) return { reason: 'locked', retryAfterMs: Math.max(0, c.window_started_at + OTP_WINDOW_MS - now) };
+  if (c.expires_at <= now) return { reason: 'expired' };
+  return { reason: 'wrong', attemptsLeft: OTP_MAX_ATTEMPTS - c.attempts };
 }
 /**
  * Checks a code entered in this session. One batch of compare-and-set statements:

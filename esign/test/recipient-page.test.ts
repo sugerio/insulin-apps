@@ -458,3 +458,55 @@ test('the code countdown shows minutes and seconds and stops at zero', ()=>{
   assert.equal(page.codeTimeLeft(4_200),'0:05');
   assert.equal(page.codeTimeLeft(-1),'0:00');
 });
+
+test('full-width digits from an East Asian input method count as digits', ()=>{
+  assert.equal(page.codeDigits('１２３ ４５６'),'123456');
+  assert.equal(page.nextCode('',0,'４'),'4');
+  assert.equal(page.nextCode('',0,'１２３４５６'),'123456');
+});
+
+test('a refused code or send says what to do next', ()=>{
+  assert.deepEqual(page.codeProblem(401,'invalid_otp',{attemptsLeft:4},'verify'),{text:'That code is not right. Use the code in the latest email. 4 tries left.',clear:true,retryAfterMs:0});
+  assert.match(page.codeProblem(401,'invalid_otp',{attemptsLeft:1},'verify').text,/1 try left/);
+  assert.deepEqual(page.codeProblem(429,'otp_rate_limited',{retryAfterSeconds:42},'send'),{text:'Too many codes were asked for. You can ask for a new code in 0:42.',clear:false,retryAfterMs:42000});
+  assert.equal(page.codeProblem(429,'otp_attempts_exhausted',{retryAfterSeconds:600},'verify').text,'Too many wrong codes. You can ask for a new code in 10:00.');
+  assert.match(page.codeProblem(409,'otp_superseded',{},'verify').text,/newer code was sent/);
+  assert.match(page.codeProblem(401,'otp_expired',{},'verify').text,/expired/);
+  assert.match(page.codeProblem(401,'invalid_session',{},'verify').text,/session has ended/);
+  // A lost response: the same code may still work.
+  assert.equal(page.codeProblem(0,'',{},'verify').text,'Code verification unavailable. Retry the same code.');
+  assert.match(page.codeProblem(429,'otp_unavailable',{},'send').text,/Could not send a code/);
+});
+
+test('the code card shows a wrong code and a refused send beside the boxes, and Resend waits', async()=>{
+  const {default:Renderer,act}=await import('react-test-renderer');
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+  let renderer:any;
+  const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+  try {
+    (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test-code',pathname:'/'},history:{replaceState(){}}};
+    let sends=0;
+    globalThis.fetch=async (input:any)=>{const path=new URL(String(input)).pathname;
+      if(path==='/v1/page-sessions/exchange') return Response.json({token:'test-token'});
+      if(path==='/v1/signing/otp') return ++sends===1?Response.json({messageId:'m',emailed:true},{status:202}):Response.json({error:'otp_rate_limited',retryAfterSeconds:42},{status:429});
+      if(path==='/v1/signing/otp/verify') return Response.json({error:'invalid_otp',attemptsLeft:3},{status:401});
+      if(path==='/v1/signing/current') return Response.json({id:'d0',sha256:'h0'});
+      if(path==='/v1/signing/pdf') return new Response(new Blob(['pdf'],{type:'application/pdf'}));
+      throw new Error('Unexpected request');};
+    await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:async()=>{}}),{createNodeMock:()=>({ownerDocument:{createElement:()=>({})},replaceChildren(){},focus(){}})});}); await settle(act);
+    const button=(text:RegExp)=>renderer.root.findAllByType('button').find((b:any)=>text.test(visibleText(b.children)));
+    const alert=()=>renderer.root.findAll((n:any)=>n.type==='p'&&n.props.role==='alert').map((n:any)=>visibleText(n.children)).join(' ');
+    const digits=()=>renderer.root.findAll((n:any)=>n.type==='input'&&/^Digit/.test(n.props['aria-label'])).map((n:any)=>n.props.value).join('');
+    await act(async()=>{button(/^Continue$/).props.onClick();});
+    await enterCode(renderer,act);
+    // Resend waits the minute the Worker asks for between sends.
+    assert.match(visibleText(button(/^Resend code/).children),/^Resend code in (0:59|1:00)$/);
+    assert.equal(button(/^Resend code/).props.disabled,true);
+    await act(async()=>{await button(/^Verify code$/).props.onClick();});
+    assert.equal(alert(),'That code is not right. Use the code in the latest email. 3 tries left.');
+    assert.equal(digits(),'','the boxes are cleared for the right code');
+    // Typing clears the note.
+    await enterCode(renderer,act,'1');
+    assert.equal(alert(),'');
+  } finally {await act(async()=>{renderer?.unmount();});globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});

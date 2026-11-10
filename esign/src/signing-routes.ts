@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import {PDFDocument} from 'pdf-lib';
 import { bodyLimit } from 'hono/body-limit';
-import { issueRecipientCode, exchangeRecipientCode, authorizeRecipientSession, sendRecipientOtp, verifyRecipientOtp } from './otp.ts';
+import { issueRecipientCode, exchangeRecipientCode, authorizeRecipientSession, sendRecipientOtp, verifyRecipientOtp, otpEntryRefusal, OtpSendRefused } from './otp.ts';
 import { DateChanged, recordSignature, retrySignature } from './signature-record.ts';
 import { assertNoOverlappingFields, validateFields, validateFieldPlacement, validateFieldsPdf, type TemplateField } from './fields.ts';
 import { assertSignatureGeometrySafe, assertTextFits, renderText, renderTypedSignature, signatureGeometry, signaturePreviewHash, textGeometry, TextDoesNotFitError } from './field-render.ts';
@@ -127,7 +127,11 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       // page says the code is in the test mailbox. dev without a sink emails the signer like prod.
       const toSigner=!!mailer&&(prod||!(c.env.MAIL_SINK??'').trim());
       return c.json({messageId,...(mailer?{emailed:true}:{}),...(toSigner?{}:{testMailbox:true})},202);
-    } catch {return c.json({error:'otp_unavailable'},429);}
+    } catch (error) {
+      // The task's send budget (60 seconds apart, 3 per 15 minutes): say when the next send is allowed.
+      if (error instanceof OtpSendRefused) {const retryAfterSeconds=Math.ceil(error.retryAfterMs/1000);return c.json({error:'otp_rate_limited',retryAfterSeconds},429,{'Retry-After':String(retryAfterSeconds)});}
+      return c.json({error:'otp_unavailable'},429);
+    }
   });
   // The test mailbox (dev only), read back by the tenant whose recipient was sent the code.
   // Management-key authenticated (see worker.ts). prod keeps no codes.
@@ -146,7 +150,14 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     let body: {otp?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.otp !== 'string') return c.json({error:'invalid_request'},400);
     try {const ok=await verifyRecipientOtp(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now(),otpKey(c.env)!,body.otp);
-      if(!ok)return c.json({error:'invalid_otp'},401);
+      if(!ok){
+        // Why, so the page can say what to do next.
+        const refusal=await otpEntryRefusal(c.env.DB,tokenFrom(c.req.header('authorization')),requestOrigin(c),Date.now());
+        if(refusal.reason==='superseded')return c.json({error:'otp_superseded'},409);
+        if(refusal.reason==='locked'){const retryAfterSeconds=Math.ceil(refusal.retryAfterMs/1000);return c.json({error:'otp_attempts_exhausted',retryAfterSeconds},429,{'Retry-After':String(retryAfterSeconds)});}
+        if(refusal.reason==='expired')return c.json({error:'otp_expired'},401);
+        return c.json({error:'invalid_otp',attemptsLeft:refusal.attemptsLeft},401);
+      }
       // Identity confirmed: the emailed code, and the host's sign-in from the link this signer was last given.
       const session=await sessionContext(c.env.DB,tokenFrom(c.req.header('authorization')));if(session){const hostAuthentication=await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId);await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw),...(hostAuthentication?{detail:{hostAuthentication}}:{})});}
       return c.body(null,204);}

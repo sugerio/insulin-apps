@@ -27,7 +27,9 @@ async function setup(extra:Record<string,unknown>){
  const req=(path:string,init:RequestInit={})=>app.fetch(new Request(ORIGIN+path,init),env);
  const json=(body:unknown,headers:Record<string,string>={})=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
  /** A recipient page session for the first signer, whose address is `email`. */
- async function session(email:string){
+ async function session(email:string){return (await sessions(email,1))[0];}
+ /** `n` recipient page sessions for the first signer of one envelope (the signer opening the page `n` times). */
+ async function sessions(email:string,n:number){
   const pdf=await PDFDocument.create();pdf.addPage();
   const form=new FormData();form.set('file',new File([await pdf.save()],'synthetic.pdf',{type:'application/pdf'}));form.set('roles','["partner"]');
   const template=await (await req('/v1/templates',{method:'POST',headers:auth,body:form})).json() as {id:string};
@@ -36,9 +38,13 @@ async function setup(extra:Record<string,unknown>){
   const {id}=await created.json() as {id:string};
   assert.equal((await req(`/v1/envelopes/${id}/prepare`,{method:'POST',headers:auth})).status,204);
   const task=(await (await req(`/v1/envelopes/${id}`,{headers:auth})).json() as {tasks:{id:string}[]}).tasks[0];
-  const {code}=await (await req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`,json({origin:ORIGIN},auth))).json() as {code:string};
-  const {token}=await (await req('/v1/page-sessions/exchange',json({code},{origin:ORIGIN}))).json() as {token:string};
-  return {origin:ORIGIN,authorization:`Bearer ${token}`};
+  const out:{origin:string;authorization:string}[]=[];
+  for(let i=0;i<n;i++){
+   const {code}=await (await req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`,json({origin:ORIGIN},auth))).json() as {code:string};
+   const {token}=await (await req('/v1/page-sessions/exchange',json({code},{origin:ORIGIN}))).json() as {token:string};
+   out.push({origin:ORIGIN,authorization:`Bearer ${token}`});
+  }
+  return out;
  }
  /** A recipient-view request for the first signer of a new envelope, for a page on `origin`. */
  async function recipientView(origin:string){
@@ -49,7 +55,7 @@ async function setup(extra:Record<string,unknown>){
   const task=(await (await req(`/v1/envelopes/${id}`,{headers:auth})).json() as {tasks:{id:string}[]}).tasks[0];
   return req(`/v1/envelopes/${id}/tasks/${task.id}/recipient-view`,json({origin},auth));
  }
- return {mf,env,req,auth,json,session,recipientView};
+ return {mf,env,db,req,auth,json,session,sessions,recipientView};
 }
 
 test('with a sink, a code for any address is emailed to the sink, says whom it is for, and stays readable for tests', async()=>{
@@ -163,4 +169,54 @@ test('only dev lets SIGNING_PAGE_ORIGINS host the signing page; prod keeps it on
   assert.equal((await prod.recipientView(local)).status,400);
   assert.equal((await prod.recipientView(ORIGIN)).status,201);
  } finally {await prod.mf.dispose();}
+});
+
+test('a refused send or code says why: wait for the next send, a wrong code with the tries left, a replaced, expired or used-up code', async()=>{
+ const w=await setup({SEND_EMAIL:{send:async()=>({messageId:'x'})},MAIL_FROM:FROM,MAIL_SINK:SINK});
+ try {
+  const [first,second]=await w.sessions('ana.partner@partner.example',2);
+  const codeOf=async(response:Response)=>{const {messageId}=await response.json() as {messageId:string};return (await (await w.req(`/v1/test-mail/${messageId}`,{headers:w.auth})).json() as {otp:string}).otp;};
+  const send=(headers:Record<string,string>)=>w.req('/v1/signing/otp',w.json({},headers));
+  const verify=(headers:Record<string,string>,otp:string)=>w.req('/v1/signing/otp/verify',w.json({otp},headers));
+  const backdate=()=>w.db.prepare('UPDATE otp_challenges SET last_sent_at=last_sent_at-61000').run();
+  const sent=await send(first);
+  assert.equal(sent.status,202);
+  const firstCode=await codeOf(sent);
+  // A second send within the minute: refused, with when the next is allowed.
+  const again=await send(first);
+  assert.equal(again.status,429);
+  const limited=await again.json() as {error:string;retryAfterSeconds:number};
+  assert.equal(limited.error,'otp_rate_limited');
+  assert.ok(limited.retryAfterSeconds>0&&limited.retryAfterSeconds<=60,String(limited.retryAfterSeconds));
+  assert.equal(again.headers.get('retry-after'),String(limited.retryAfterSeconds));
+  // A wrong code: how many tries are left.
+  const wrongCode=firstCode==='000000'?'111111':'000000';
+  const wrong=await verify(first,wrongCode);
+  assert.equal(wrong.status,401);
+  assert.deepEqual(await wrong.json(),{error:'invalid_otp',attemptsLeft:4});
+  // The signer opens the page again and gets a new code: the first window's code no longer works.
+  await backdate();
+  const secondSend=await send(second);
+  assert.equal(secondSend.status,202);
+  const secondCode=await codeOf(secondSend);
+  const replaced=await verify(first,firstCode);
+  assert.equal(replaced.status,409);
+  assert.deepEqual(await replaced.json(),{error:'otp_superseded'});
+  // An expired code, then a used-up window (5 entries).
+  await w.db.prepare('UPDATE otp_challenges SET expires_at=0').run();
+  const expired=await verify(second,secondCode);
+  assert.equal(expired.status,401);
+  assert.deepEqual(await expired.json(),{error:'otp_expired'});
+  await w.db.prepare('UPDATE otp_challenges SET expires_at=?, attempts=5').bind(Date.now()+60000).run();
+  const locked=await verify(second,secondCode);
+  assert.equal(locked.status,429);
+  const lockedBody=await locked.json() as {error:string;retryAfterSeconds:number};
+  assert.equal(lockedBody.error,'otp_attempts_exhausted');
+  assert.ok(lockedBody.retryAfterSeconds>0&&lockedBody.retryAfterSeconds<=15*60,String(lockedBody.retryAfterSeconds));
+  // A send refused for the used-up window waits for that window to end, not the minute.
+  await backdate();
+  const windowLimited=await (await send(second)).json() as {error:string;retryAfterSeconds:number};
+  assert.equal(windowLimited.error,'otp_rate_limited');
+  assert.ok(windowLimited.retryAfterSeconds>60,String(windowLimited.retryAfterSeconds));
+ } finally {await w.mf.dispose();}
 });

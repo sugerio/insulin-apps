@@ -14,11 +14,43 @@ export function bundledPackages() {
   return [...Object.keys(manifest.dependencies), 'scheduler', 'tailwindcss'].sort()
 }
 
+/**
+ * Packages that publish no licence file and state their licence in a source header instead: the MIT text, with the
+ * copyright line from that header.
+ */
+const HEADER_LICENSED = {
+  'qrcode-generator': { copyright: 'Copyright (c) 2009 Kazuhiko Arase', source: 'dist/qrcode.mjs' },
+}
+
+const MIT_TEXT = `Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`
+
 function licenceText(name) {
   const directory = join(gatewayDir, 'node_modules', name)
   const file = readdirSync(directory).find((entry) => /^(licen[cs]e|copying)(\.(md|txt))?$/i.test(entry))
-  if (!file) throw new Error(`No licence file in ${name}`)
-  return readFileSync(join(directory, file), 'utf8').trim()
+  if (file) return readFileSync(join(directory, file), 'utf8').trim()
+  const header = HEADER_LICENSED[name]
+  if (!header) throw new Error(`No licence file in ${name}`)
+  const source = readFileSync(join(directory, header.source), 'utf8')
+  if (!source.includes(header.copyright) || !source.includes('Licensed under the MIT license')) {
+    throw new Error(`${name}: ${header.source} no longer states "${header.copyright}" under the MIT license`)
+  }
+  return [`MIT License (stated in the header of ${header.source}; the package has no licence file)`, '', header.copyright, '', MIT_TEXT].join('\n')
 }
 
 export function licencesDocument() {

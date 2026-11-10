@@ -21,6 +21,8 @@ import {
   verifyEmailForm,
 } from './auth/accounts.ts'
 import { googleCallback, googleStart } from './auth/google.ts'
+import { mfaForm, mfaVerify } from './auth/mfa.ts'
+import { cancelSetup, disable as disableMfa, enable as enableMfa, regenerateCodes, securityView, startSetup } from './auth/security.ts'
 import { acceptInvitation, declineInvitation, invitationView, invite, resendInvitation, revokeInvitation } from './orgs/invitations.ts'
 import {
   changeAppRole, inviteToApp, removeFromApp, resendAppInvitation, revokeAppInvitation, appUsers,
@@ -64,6 +66,8 @@ const APEX_ROUTES: Route[] = [
   route('POST', '/signup', signup),
   route('GET', '/login', loginForm),
   route('POST', '/login', login),
+  route('GET', '/login/mfa', mfaForm),
+  route('POST', '/login/mfa', mfaVerify),
   route('POST', '/logout', logout),
   route('GET', '/verify-email', verifyEmailForm),
   route('POST', '/verify-email', verifyEmail),
@@ -100,6 +104,12 @@ const APEX_ROUTES: Route[] = [
   route('POST', '/account/name', updateName),
   route('POST', '/account/password', updatePassword),
   route('POST', '/account/delete', deleteAccount),
+  route('GET', '/account/security', securityView),
+  route('POST', '/account/security/setup', startSetup),
+  route('POST', '/account/security/cancel', cancelSetup),
+  route('POST', '/account/security/enable', enableMfa),
+  route('POST', '/account/security/recovery-codes', regenerateCodes),
+  route('POST', '/account/security/disable', disableMfa),
 ]
 
 /** The gateway's own pages on every app host (DESIGN.md §1); everything else there goes to the app. */

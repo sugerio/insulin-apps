@@ -95,3 +95,24 @@ export function invitationMail(inviter: string, orgName: string, access: string,
     ], { label: 'Open the invitation', url: link }),
   }
 }
+
+/** After two-step sign-in is turned on or off: so the owner of the address notices a change they didn't make. */
+export function mfaChangedMail(name: string, enabled: boolean, securityUrl: string): MailContent {
+  const what = enabled ? 'turned on' : 'turned off'
+  const after = enabled
+    ? 'From now on, signing in with your password or Google also asks for a code from your authenticator app.'
+    : 'Signing in now needs only your password or Google again.'
+  return {
+    subject: `Two-step sign-in was ${what} for your ${PRODUCT} account`,
+    text: textBody([
+      `Hi ${name},`,
+      `Two-step sign-in was ${what} for your ${PRODUCT} account. ${after} Your other sessions were signed out.`,
+      `If this wasn't you, reset your password and review your account's security: ${securityUrl}`,
+    ]),
+    html: htmlBody([
+      html`Hi ${name},`,
+      html`Two-step sign-in was ${what} for your ${PRODUCT} account. ${after} Your other sessions were signed out.`,
+      html`If this wasn't you, reset your password and review your account's security.`,
+    ], { label: 'Review your account security', url: securityUrl }),
+  }
+}

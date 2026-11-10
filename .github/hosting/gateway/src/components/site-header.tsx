@@ -1,7 +1,7 @@
 // The top bar of every gateway page: the mark and name, a link to Insulin, and the account controls (sign-in links,
 // or the organization switcher and the account menu). Everything works without JavaScript: links, plain form POSTs
 // and <details> menus (menu.tsx).
-import { ArrowUpRight, Building2, Check, ChevronsUpDown, LogOut, Plus, UserRound, Users } from "lucide-react"
+import { ArrowUpRight, Building2, Check, ChevronsUpDown, LogOut, Plus, ShieldCheck, UserRound, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -127,6 +127,10 @@ function AccountMenu({ ctx, account }: { ctx: Context; account: HeaderAccount })
         <a className={menuItemClass} href={apexUrl(ctx, "/account")}>
           <UserRound />
           Account
+        </a>
+        <a className={menuItemClass} href={apexUrl(ctx, "/account/security")}>
+          <ShieldCheck />
+          Security
         </a>
         <MenuSeparator />
         {/* Sign-out posts to the page's own host, so the Origin check and the CSP's form-action both allow it. */}

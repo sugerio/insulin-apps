@@ -33,9 +33,10 @@ Every app has a **Connect AI** page with everything you need to connect an agent
 `https://insulinapps.com/apps/<app>/settings/connect-ai`, for example
 `https://insulinapps.com/apps/captable/settings/connect-ai`. You reach it three ways:
 
-- inside the app, from **Connect AI** in the account bar;
+- inside the app, from **Settings** → **Connect AI** in its navigation (or **Connect AI** in the account bar, in an
+  app without the navigation);
 - from **Account** → **AI agents**, with **Connect AI** next to each app you can use in your active organization;
-- from the **Connect AI** tab of the app's settings, next to **People**, **Integrations** and **API access**.
+- from the app's settings pages, where it is next to **People**, **Integrations** and **API access**.
 
 Everyone who can use the app can open it, Viewers and people with access to specific apps included. It shows:
 

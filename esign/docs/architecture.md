@@ -86,15 +86,18 @@ The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY
   call is a same-origin request as the signed-in member; there is no key in the browser.
 - **Navigation.** `src/app/member/Shell.ts` draws DESIGN.md §3.2's two levels around every member
   page: level 1 is the organization switcher (from the gateway's `/__insulin/me`, switching through
-  `/__insulin/switch-org`), the sections of `package.json` `insulin.navigation` that the member's role
-  sees (`navigation.ts` reads and checks the manifest), Docs, Settings and the person (Account, Sign
-  out through `/__insulin/logout`); level 2 is the open section's items (the Envelopes views, the
-  Docs topics, or Settings' People, Integrations, API access and Connect AI on the apex), and the
-  page header carries the breadcrumb. Each level collapses to icons, remembered in localStorage
-  `insulin-nav`; below 768px a menu button opens both levels in a drawer. The root carries
-  `data-insulin-shell` so the gateway's account bar stays out of the way. Where `/__insulin/me`
-  isn't answered (the local preview, the console), level 1 shows the app's name and the person from
-  `/api/me`, and Settings links to the app host's `/settings/*`, which the gateway redirects.
+  `/__insulin/switch-org`, with All apps), the sections of `package.json` `insulin.navigation` that
+  the member's role reaches, lowered by their permissions (`navigationRole`: without `esign.manage`
+  a Viewer's, with neither permission none; `navigation.ts` reads and checks the manifest), Docs,
+  Settings and the person (Account, Sign out through `/__insulin/logout`); level 2 is the open
+  section's items (the Envelopes views, the Docs topics and a link to the public docs on the apex,
+  or Settings' People, Integrations, API access and Connect AI, at the addresses `/__insulin/me`
+  gives or else on the apex), and the page header carries the breadcrumb. Each level collapses to
+  icons, remembered in localStorage `insulin-nav`; below 768px a menu button opens both levels in a
+  drawer. The root carries `data-insulin-shell` so the gateway's account bar stays out of the way.
+  Where `/__insulin/me` isn't answered (the local preview, the console), level 1 shows the app's
+  name and the person from `/api/me`, and Settings lists its pages without links: Esign has no
+  `/settings/*` of its own.
 - **Roles.** What a role can't do is hidden (`canManage(me)`), and the server refuses it anyway.
   `/api/me` answering 401 shows a sign-in message; the Docs open without it.
 - **Hosting the public pages.** The envelope page opens the active signer's `/sign` in a dialog

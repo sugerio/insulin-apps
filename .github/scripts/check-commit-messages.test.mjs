@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -56,4 +57,14 @@ test("reads the commits between a pull request's base and head, with their whole
   assert.deepEqual(commits.map(({ message }) => message.trim()), ['Second\n\nA mention of [skip ci] in passing.', 'First\n\nBody line one.\nBody line two.'])
   assert.deepEqual(findSkipDirectives({ commits }).map(({ line }) => line), ['A mention of [skip ci] in passing.'])
   assert.throws(() => commitsBetween('no-such-ref', 'HEAD', root), /Couldn't list the commits no-such-ref\.\.HEAD/)
+})
+
+test("its workflow runs on pull_request_target, read-only, and never checks out the pull request's code", () => {
+  const workflow = readFileSync(new URL('../workflows/commit-messages.yml', import.meta.url), 'utf8')
+  // GitHub skips pull_request workflows when the head commit holds a skip string; pull_request_target it doesn't.
+  assert.match(workflow, /^on:\n {2}pull_request_target:\n {4}types: \[opened, synchronize, reopened, edited\]$/m)
+  assert.match(workflow, /^permissions:\n {2}contents: read$/m, 'a read-only token, no secrets')
+  assert.doesNotMatch(workflow, /^\s+ref:|github\.head_ref|pull_request\.head\.(?:ref|repo)|npm (?:ci|install)/m, "the default branch's code only: the pull request's commits are read as data")
+  assert.match(workflow, /node \.github\/scripts\/check-commit-messages\.mjs "\$BASE" "\$HEAD"/)
+  assert.doesNotMatch(readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'), /check-commit-messages/, 'not in CI, which runs on pull_request')
 })

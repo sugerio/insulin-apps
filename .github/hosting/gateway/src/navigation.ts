@@ -112,7 +112,8 @@ export function navReturnPath(ctx: Context, value: string | null): string | null
   } catch {
     return null
   }
-  if (url.origin !== ownOrigin(ctx)) return null
+  // Resolving dot segments can turn `/.//host` into `//host`, which a browser follows to that host.
+  if (url.origin !== ownOrigin(ctx) || url.pathname.startsWith('//')) return null
   return `${url.pathname}${url.search}`
 }
 

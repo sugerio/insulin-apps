@@ -150,8 +150,10 @@ delete a `v*` tag, or publish or edit one of those releases, by hand or from ano
 each app's own workflow, named after the app, run on a push to `main`, and each is in release.yml's `workflow_run`
 list; `node .github/scripts/check-app-workflows.mjs` checks both. Pull requests are squash merged, and the squash
 commit carries every commit message, so none of them, nor the title or body, may hold a line telling GitHub to skip
-workflows: the merge would start no push workflow and be neither checked on `main` nor released. CI's "Commit
-messages" job refuses one.
+workflows: the merge would start no push workflow and be neither checked on `main` nor released. The
+"Commit messages" workflow refuses one; it runs on `pull_request_target`, which such a line in a pull request's last
+commit doesn't stop, and never runs the pull request's code (the repository needs an Actions event policy allowing
+that event for this workflow alone: `.github/hosting/README.md`, "Owner setup").
 
 ## Before you finish
 

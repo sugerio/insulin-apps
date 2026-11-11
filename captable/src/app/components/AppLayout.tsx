@@ -10,7 +10,7 @@ import {
   writeNavCollapse, type NavCollapse, type NavLink,
 } from "../lib/navigation.ts";
 import {
-  createOrganizationLink, httpUrl, initials, settingsLinks, signOut, switchOrganization, usePlatformAccount,
+  createOrganizationLink, httpUrl, initials, PlatformAccountContext, settingsLinks, signOut, switchOrganization, usePlatformAccount,
   type PlatformAccount, type SettingsPage,
 } from "../lib/platform.ts";
 import { BrandMark } from "./BrandMark.tsx";
@@ -123,7 +123,7 @@ export function AppLayout() {
               </button>
             ) : null}
             <nav aria-label="Primary" className="nav-primary">
-              {groupNavigation(NAVIGATION, items).map((group, index) => (
+              {groupNavigation(items).map((group, index) => (
                 <div className="nav-block" key={`${group.heading ?? ""}-${index}`}>
                   {group.heading ? <div className="nav-heading" id={`insulin-nav-group-${index}`}>{group.heading}</div> : null}
                   <ul className="nav-list" aria-labelledby={group.heading ? `insulin-nav-group-${index}` : undefined}>
@@ -162,7 +162,7 @@ export function AppLayout() {
             </Level2>
           ) : section ? (
             <Level2 title={section.label} collapsed={l2Collapsed} onToggle={() => toggle("l2")}>
-              {groupNavigation(NAVIGATION.find((item) => item.key === section.key)?.children ?? [], section.children ?? []).map((group, index) => (
+              {groupNavigation(section.children ?? []).map((group, index) => (
                 <div className="nav-block" key={`${group.heading ?? ""}-${index}`}>
                   {group.heading ? <div className="nav-heading" id={`insulin-nav-subgroup-${index}`}>{group.heading}</div> : null}
                   <ul className="nav-list" aria-labelledby={group.heading ? `insulin-nav-subgroup-${index}` : undefined}>
@@ -185,9 +185,11 @@ export function AppLayout() {
           <div className="shell-crumbs" ref={setCrumbSlot} />
         </header>
         <main id="main" className="main" tabIndex={-1}>
-          <CrumbSlotContext value={crumbSlot}>
-            <ShellWriteContext value={setWorkspaceWrite}><Outlet /></ShellWriteContext>
-          </CrumbSlotContext>
+          <PlatformAccountContext value={platform}>
+            <CrumbSlotContext value={crumbSlot}>
+              <ShellWriteContext value={setWorkspaceWrite}><Outlet /></ShellWriteContext>
+            </CrumbSlotContext>
+          </PlatformAccountContext>
           {newPanel && canWrite && companyBase ? <NewPanel companyBase={companyBase} onClose={() => setNewPanel(false)} /> : null}
         </main>
       </div>
@@ -305,6 +307,7 @@ function OrgSwitcher({ me, platform, collapsed }: { me: Me; platform: PlatformAc
     return <div className="org-switcher"><div className="org-button static" title={collapsed ? name : undefined}>{face}</div></div>;
   }
   const create = createOrganizationLink(platform);
+  const apps = httpUrl(platform.links.apps);
   async function choose(orgId: string) {
     setStatus("Switching…");
     try {
@@ -334,6 +337,7 @@ function OrgSwitcher({ me, platform, collapsed }: { me: Me; platform: PlatformAc
             </li>
           ))}
         </ul>
+        {apps ? <a className="menu-row" href={apps}><Icon name="grid" />All apps</a> : null}
         {create ? <a className="menu-row" href={create}><Icon name="plus" />Create organization</a> : null}
         <p className="menu-status" role="status" aria-live="polite">{status}</p>
       </div>

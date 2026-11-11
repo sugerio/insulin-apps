@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    # `edited` too, so a title or body changed later is checked again (Commit messages).
-    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -34,25 +32,3 @@ jobs:
         run: node .github/scripts/check-app-workflows.mjs
       - name: Scan tracked files
         run: node .github/scripts/check-public-content.mjs
-
-  commit-messages:
-    # Pull requests are squash merged, and the squash commit carries every commit message: a line telling GitHub to skip
-    # workflows in any of them, or in the title or body, would start no push workflow for the merge, so nothing would be
-    # checked on main, released or deployed.
-    name: Commit messages
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-      - name: No directive to skip workflows
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: node .github/scripts/check-commit-messages.mjs "$BASE" "$HEAD"

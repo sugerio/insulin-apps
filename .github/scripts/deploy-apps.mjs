@@ -16,7 +16,7 @@ import {
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { listApps } from './list-apps.mjs'
+import { gatewayNavigation, listApps } from './list-apps.mjs'
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, '..', '..')
@@ -246,6 +246,7 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
   // The gateway needs the permissions, public paths, scheduled path and navigation, never the names of an app's secrets.
   const siteApps = apps.map(({ secrets: _secrets, ...app }) => ({
     ...app,
+    navigation: gatewayNavigation(app.navigation),
     binding: serviceBinding(app.name),
     source: `https://github.com/sugerio/insulin-apps/tree/main/${app.name}`,
   }))

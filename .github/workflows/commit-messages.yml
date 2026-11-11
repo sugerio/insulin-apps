@@ -1,0 +1,45 @@
+name: Commit messages
+
+# Pull requests are squash merged, and the squash commit carries every commit message: a line telling GitHub to skip
+# workflows in any of them, or in the title or body, would start no push workflow for the merge, so nothing would be
+# checked on main, released or deployed.
+#
+# This runs on pull_request_target, not pull_request: GitHub skips pull_request workflows when the pull request's head
+# commit holds such a line, the likeliest place for one, and pull_request_target it doesn't. That also means it runs in
+# the default branch's context: it runs the default branch's script and reads the pull request's commits as data. Never
+# check out, install or run the pull request's code here. GitHub blocks pull_request_target in public repositories
+# without an Actions event policy allowing it for this workflow (from December 2, 2026): .github/hosting/README.md,
+# "Owner setup", step 8.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commit-messages-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Fetch the pull request's commits
+        env:
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "+refs/pull/${NUMBER}/head:refs/remotes/pull/head"
+      - name: No directive to skip workflows
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node .github/scripts/check-commit-messages.mjs "$BASE" "$HEAD"

@@ -158,7 +158,7 @@ test('only the background on electronic signatures is general information, and i
 
 test('the Docs describe the navigation: both columns, Settings on Insulin Apps, the breadcrumb, collapsing and narrow screens',()=>{
  const text=textOf(render('getting-started'));
- for(const words of [/switch to one, or create a new one/,/Envelopes and Templates, then Docs and Settings/,/All envelopes, New envelope \(for roles that send\)/,/People, Integrations, API access and Connect AI/,/Envelopes › Completed/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
+ for(const words of [/switch to one, go to All apps \(your home page on Insulin Apps\), or create a new one/,/For Docs: the topics, then Public docs/,/Envelopes and Templates, then Docs and Settings/,/All envelopes, New envelope \(for roles that send\)/,/People, Integrations, API access and Connect AI/,/Envelopes › Completed/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
   assert.match(text,words);
  assert.match(textOf(render('roles')),/New envelope, for example, is only in the navigation of roles that send/);
 });

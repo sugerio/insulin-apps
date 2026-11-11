@@ -49,7 +49,7 @@ Then, for everyone:
   Apps' pages (`https://insulinapps.com/apps/captable/settings/...`), which open with Cap Table's navigation beside
   them; what you can change there follows your role.
 - **The organization switcher** at the top: your organization, the others you belong to (choosing one opens Cap Table
-  in it, with that organization's company) and a link to create one.
+  in it, with that organization's company), **All apps** (your home page on Insulin Apps) and a link to create one.
 - **You**, at the bottom: your name and role ("Custom role" when your organization narrowed it), with **Account**,
   **Switch theme** and **Sign out**.
 

@@ -162,9 +162,9 @@ export const gettingStarted: DocTopic = {
           </p>
           <ul>
             <li><b>+ New</b>, at the top for everyone who records changes, to record a signed option grant.</li>
-            <li><b>Docs:</b> these pages, for everyone.</li>
+            <li><b>Docs:</b> these pages, for everyone. On insulinapps.com their topic list ends with <b>Public docs</b>, Cap Table's documentation on the web.</li>
             <li><b>Settings:</b> Cap Table's pages on Insulin Apps: <b>People</b> (who can use Cap Table, with their roles), <b>Integrations</b>, <b>API access</b> (API clients for other systems) and <b>Connect AI</b> (connecting an AI agent). They open on insulinapps.com, where your role there decides what you can change. In the console's preview they are listed without links.</li>
-            <li><b>The organization switcher</b> at the top, with your organization's name. On insulinapps.com it lists your other organizations, opens Cap Table in the one you choose, and links to creating an organization.</li>
+            <li><b>The organization switcher</b> at the top, with your organization's name. On insulinapps.com it lists your other organizations, opens Cap Table in the one you choose, and links to <b>All apps</b> (your home page there) and to creating an organization.</li>
             <li><b>You</b>, at the bottom: your name and role ("Custom role" when your organization narrowed it). Its menu has your e-mail address, <b>Switch theme</b> and, on insulinapps.com, <b>Account</b> and <b>Sign out</b>.</li>
           </ul>
           <p>

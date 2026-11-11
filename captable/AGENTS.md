@@ -224,9 +224,10 @@ pages), and the person at the bottom; each level collapses to icons. In Cap Tabl
   render. A page that belongs in the navigation is an item or a child there: `key` (`[a-z0-9-]+`, unique), `label` (1 to
   40 characters), `icon` (one of `NAV_ICONS` in `lib/navigation.ts`, the Lucide names the gateway bundles, each drawn
   in `components/Icon.tsx`), `path` (an app-root path such as `/vesting`, never `/__insulin/*`, `/settings/*`, `/mcp` or
-  `/.well-known/*`), and optionally `group` (a heading over it and the items after it) and `role` (the least app role
-  that sees it: `EDITOR` for the company's pages, `VIEWER` for the holder's `/portfolio` ones). At most 12 items, and 12
-  children each. `test/web/navigation.test.tsx` checks it, and that every path leads to a page.
+  `/.well-known/*`), and optionally `group` (a heading, shared by consecutive items with the same group, so every item
+  names its own), `role` (the least app role that sees it: `EDITOR` for the company's pages, `VIEWER` for the holder's
+  `/portfolio` ones) and `maxRole` (the most: `VIEWER` for the holder's, since editors and admins never hold equity
+  here). At most 12 items, and 12 children each. `test/web/navigation.test.tsx` checks it, and that every path leads to a page.
 - **App-root paths lead to the company's page.** `/x` resolves to `/companies/:orgId/x` and `/portfolio/x` to
   `/portfolio/:orgId/x`; the router answers every manifest path with that redirect, because the gateway links to them.
 - **Docs and Settings are the platform's**, added by the shell and never in the manifest. Settings only links to the

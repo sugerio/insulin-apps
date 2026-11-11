@@ -214,6 +214,8 @@ test('the toggle endpoint: a host-only cookie of valid states, and a 303 back to
     'l1=collapsed&return=https%3A%2F%2Finsulinapps.localhost%2F', 'l1=collapsed&return=http%3A%2F%2Fcaptable.insulinapps.localhost%2F',
     'l1=collapsed&return=javascript%3Aalert(1)', 'l1=collapsed&return=settings', 'l1=collapsed&return=%2Fa%0D%0ASet-Cookie%3A%20x%3D1',
     'l1=collapsed&return=', 'l1=collapsed&return=%2F&return=%2Fsettings',
+    // Paths that only become `//host` once the dot segments are resolved.
+    'l1=collapsed&return=%2F.%2F%2Fevil.example%2F', 'l1=collapsed&return=%2Fa%2F..%2F%2Fevil.example', 'l1=collapsed&return=%2F%252e%2F%2Fevil.example',
   ]) {
     const refused = await client.get(h.url('apex', `/__insulin/nav?${query}`))
     assert.equal(refused.status, 400, query)

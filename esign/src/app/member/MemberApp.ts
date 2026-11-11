@@ -69,7 +69,7 @@ export function MemberApp() {
   else page = h(EnvelopesPage, { me, status })
 
   return h(Shell, {
-    pathname: path, search, role: me?.role, user: me?.user ?? null,
+    pathname: path, search, role: me?.role, permissions: me?.permissions, user: me?.user ?? null,
     roleLabel: me ? ROLE_LABELS[me.role ?? ''] ?? me.role : undefined,
     title: pageTitle(current, status),
   }, page)

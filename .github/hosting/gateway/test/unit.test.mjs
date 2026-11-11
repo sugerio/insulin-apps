@@ -15,7 +15,7 @@ import {
 import { cookieValues, serializeCookie, setCookieName, withoutCookies } from '../src/http/cookies.ts'
 import { bindingName, isAppName, isGatewayAppPath, issuesUrlFrom, navigationPathProblem, parseNavigation, parsePermissions, parseSecretKey, parseSender, readConfig, isPublicPath, parsePublicPaths, publicPathProblem, scheduledProblem } from '../src/config.ts'
 import { NAV_ICON_NAMES, isNavIconName } from '../src/nav-icons.ts'
-import { NAVIGATION_ICONS, listApps, navigationPathProblem as listAppsNavigationPathProblem, readNavigation } from '../../../scripts/list-apps.mjs'
+import { NAVIGATION_ICONS, gatewayNavigation, listApps, navigationPathProblem as listAppsNavigationPathProblem, readNavigation } from '../../../scripts/list-apps.mjs'
 import { gatewayConfig } from '../scripts/app-config.mjs'
 import { safeReturnTo } from '../src/http/return-to.ts'
 import { createContext } from '../src/context.ts'
@@ -548,12 +548,13 @@ test("an app's navigation: the gateway bundles exactly list-apps.mjs's icons, an
   assert.ok(refused.problems.includes('SITE_APPS[0].navigation[0]'))
 })
 
-test("a local run's gateway config carries each app's navigation, as the deploy's does", async () => {
+test("a local run's gateway config carries each app's level 1, as the deploy's does", async () => {
   const apps = await listApps()
   const local = await gatewayConfig(apps.map(({ name }) => name))
   for (const app of apps) {
     const entry = local.vars.SITE_APPS.find(({ name }) => name === app.name)
-    assert.deepEqual(entry.navigation, app.navigation, app.name)
+    assert.deepEqual(entry.navigation, gatewayNavigation(app.navigation), `${app.name}: level 1`)
+    assert.ok(entry.navigation.every((item) => !('children' in item)), `${app.name}: never level 2`)
     assert.equal('secrets' in entry, false, `${app.name}: never the names of its secrets`)
   }
 })

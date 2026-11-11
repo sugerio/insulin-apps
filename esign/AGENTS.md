@@ -149,9 +149,9 @@ and the person at the bottom; each level collapses to icons. In Esign:
   items and 12 children. A new section needs its route in `MemberApp.ts`. Docs and Settings aren't in the manifest.
 - **`src/app/member/Shell.ts` draws it** around every member page, with the breadcrumb in the page header; signers'
   public pages (`/sign`, `/editor/page/:id`, `/copy`) have none. The root carries `data-insulin-shell`.
-- **Settings stays on the apex**: People, Integrations, API access and Connect AI link to
-  `https://<apex>/apps/esign/settings/{users,integrations,api,connect-ai}`, the apex taken from `/__insulin/me`. Never
-  build those pages, or a page at `/settings/*`, in the app.
+- **Settings stays on the apex**: People, Integrations, API access and Connect AI link to the pages `/__insulin/me`
+  gives, else `https://<apex>/apps/esign/settings/{users,integrations,api,connect-ai}`; where the gateway doesn't
+  answer, Settings lists them without links. Never build those pages, or a page at `/settings/*`, in the app.
 - **The platform's controls** (switching organization, Account, Sign out) come from the gateway's `/__insulin/me`,
   `/__insulin/switch-org` and `/__insulin/logout`, and show only where the gateway answers; elsewhere (the local
   preview, the console) level 1 shows Esign's name and the person from `/api/me`.

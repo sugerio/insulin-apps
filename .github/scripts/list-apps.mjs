@@ -285,6 +285,14 @@ export function readNavigation(app, raw) {
   return raw.map((entry, index) => navigationItem(app, entry, `insulin.navigation[${index}]`, keys, 1))
 }
 
+/**
+ * An app's navigation as the gateway gets it in SITE_APPS: level 1 without children. The gateway draws only an app's
+ * level 1 (DESIGN.md §3.2), and a Worker variable is limited to 5 KB, which SITE_APPS passed with the children.
+ */
+export function gatewayNavigation(navigation) {
+  return navigation.map(({ children: _children, ...item }) => item)
+}
+
 /** The prefix an app's secret names must carry: its name upper-cased, with `-` as `_`. */
 export function secretPrefix(app) {
   return `${app.toUpperCase().replaceAll('-', '_')}_`

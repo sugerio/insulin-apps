@@ -55,15 +55,15 @@ signed copy (`/copy`) and, for host products, the embedded field editor (`/edito
 ## The navigation
 
 The navigation on the left has two columns, as in every Insulin app. The first column has the organization switcher at
-the top (your organization's name; choose it to switch to another of your organizations or create one), then
+the top (your organization's name; choose it to switch to another of your organizations, go to **All apps** or create one), then
 **Envelopes** and **Templates** under the heading Esign, then **Docs** and **Settings**, and at the bottom your name and
 role, with your Insulin Apps **Account** and **Sign out**. The second column lists what the open section holds:
 
 | Section | Second column |
 | --- | --- |
 | **Envelopes** | **All envelopes**, **New envelope** (only for roles that send), and under Status one view per status: **Out for signature**, **Finishing**, **Completed**, **Declined**, **Expired**, **Voided**. A view is an address such as `/envelopes?status=completed`, the same as choosing that status in the list's filter. |
-| **Docs** | The topics, under Using Esign and Electronic signatures. |
-| **Settings** | **People**, **Integrations**, **API access** and **Connect AI**, links to the platform's pages. |
+| **Docs** | The topics, under Using Esign and Electronic signatures, then **Public docs**, a link to these pages. |
+| **Settings** | **People**, **Integrations**, **API access** and **Connect AI**, links to the platform's pages (in the console's preview, listed without links). |
 | **Templates** | None. |
 
 The bar above the page shows where you are, such as Envelopes › Completed; the section's name goes back to it.

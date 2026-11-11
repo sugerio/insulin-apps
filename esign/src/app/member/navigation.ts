@@ -1,6 +1,6 @@
 // What the members' navigation shows, as data (Shell.ts draws it): the app's sections from its navigation manifest
 // (package.json `insulin.navigation`, DESIGN.md §3.2, which the gateway renders from too), filtered by the member's app
-// role; the platform's Settings items, which link to the gateway's pages on the apex; which item an address opens; and
+// role and permissions; the platform's Settings items, which link to the gateway's pages on the apex; which item an address opens; and
 // the collapsed or expanded state of each level, remembered in this browser (localStorage `insulin-nav`).
 import packageJson from '../../../package.json' with { type: 'json' }
 
@@ -67,6 +67,17 @@ export function appRole(role: string | undefined | null): AppRole {
   if (role === 'OWNER' || role === 'ADMIN') return 'ADMIN'
   if (role === 'EDITOR') return 'EDITOR'
   return 'VIEWER'
+}
+
+/**
+ * The member's role for the manifest: their app role, lowered by what their permissions leave them (a custom role
+ * without `esign.manage` is a Viewer here, whatever its base role), or null for one that may not even view, who sees
+ * no section. Before /api/me answers there are no permissions yet, and the role decides.
+ */
+export function navigationRole(role: string | undefined | null, permissions: readonly string[] | undefined): AppRole | null {
+  const byRole = appRole(role)
+  if (!permissions || permissions.includes('esign.manage')) return byRole
+  return permissions.includes('esign.view') ? 'VIEWER' : null
 }
 
 const sees = (role: AppRole, item: NavChild) =>
@@ -140,6 +151,8 @@ export type PlatformMe = {
   organizations: PlatformOrganization[]
   links?: { account?: string | null; apps?: string | null; organizations?: string | null; members?: string | null }
   apex?: string | null
+  /** This app's settings pages on the apex. */
+  settings?: { users?: string | null; integrations?: string | null; api?: string | null; connectAi?: string | null } | null
 }
 
 /** An http(s) address as a URL, or null for anything else (a javascript: link from a confused proxy, say). */
@@ -161,20 +174,24 @@ export function apexOrigin(me: PlatformMe | null): string | null {
   return null
 }
 
-/** Settings' level 2: the gateway's pages for this app on the apex (DESIGN.md §3). */
+/** Settings' level 2: the gateway's pages for this app on the apex (DESIGN.md §3), and their field in /__insulin/me. */
 export const SETTINGS_ITEMS = [
-  { key: 'users', label: 'People', icon: 'users' },
-  { key: 'integrations', label: 'Integrations', icon: 'plug' },
-  { key: 'api', label: 'API access', icon: 'key' },
-  { key: 'connect-ai', label: 'Connect AI', icon: 'bot' },
-] as const satisfies readonly { key: string; label: string; icon: IconName }[]
+  { key: 'users', label: 'People', icon: 'users', field: 'users' },
+  { key: 'integrations', label: 'Integrations', icon: 'plug', field: 'integrations' },
+  { key: 'api', label: 'API access', icon: 'key', field: 'api' },
+  { key: 'connect-ai', label: 'Connect AI', icon: 'bot', field: 'connectAi' },
+] as const satisfies readonly { key: string; label: string; icon: IconName; field: keyof NonNullable<PlatformMe['settings']> }[]
 
 /**
- * Where each Settings item links: `https://<apex>/apps/esign/settings/<page>`. Before the apex is known (or where the
- * gateway doesn't answer /__insulin/me), the same path on the app's host, which the gateway redirects to the apex.
+ * Where each Settings item links: the page /__insulin/me gives, else `https://<apex>/apps/esign/settings/<page>`. Where
+ * the gateway doesn't answer (the local preview, the console) there is no apex and no link: Esign has no such pages.
  */
-export function settingsLinks(apex: string | null): { key: string; label: string; icon: IconName; href: string }[] {
-  return SETTINGS_ITEMS.map((item) => ({ ...item, href: `${apex ?? ''}${apex ? `/apps/${APP_NAME}` : ''}/settings/${item.key}` }))
+export function settingsLinks(me: PlatformMe | null): { key: string; label: string; icon: IconName; href: string | null }[] {
+  const apex = apexOrigin(me)
+  return SETTINGS_ITEMS.map(({ field, ...item }) => ({
+    ...item,
+    href: httpUrl(me?.settings?.[field])?.href ?? (apex ? `${apex}/apps/${APP_NAME}/settings/${item.key}` : null),
+  }))
 }
 
 /** Up to two initials: the first letters of the first two words of the name, else the address's first letter. */

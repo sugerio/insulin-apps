@@ -8,7 +8,7 @@ import { AuthProvider } from "../../src/app/auth/AuthProvider.tsx";
 import { Icon, NAV_ICON } from "../../src/app/components/Icon.tsx";
 import {
   NAVIGATION, NAV_ICONS, NAV_STORAGE_KEY, appRootPath, groupNavigation, isPortfolioPath, matchNavigation, navigationFor,
-  navigationPaths, navigationRole, navigationSchema, readNavCollapse, resolveNavPath, type NavItem,
+  navigationPaths, navigationRole, navigationSchema, readNavCollapse, resolveNavPath, type NavItem, type NavLink,
 } from "../../src/app/lib/navigation.ts";
 import { browser, settingsLinks } from "../../src/app/lib/platform.ts";
 import { routes } from "../../src/app/router.tsx";
@@ -72,10 +72,13 @@ describe("the navigation manifest", () => {
     }
   });
 
-  it("lists the workspace's sections for editors and up, then the holder's own items for everyone", () => {
+  it("lists the workspace's sections for editors and up, then the holder's own items for viewers", () => {
     expect(NAVIGATION.map((item) => item.key)).toEqual([...WORKSPACE_KEYS, ...HOLDER_KEYS]);
     for (const item of NAVIGATION) expect(item.role).toBe(HOLDER_KEYS.includes(item.key) ? "VIEWER" : "EDITOR");
-    expect(NAVIGATION.filter((item) => item.group).map((item) => [item.key, item.group])).toEqual([["dashboard", "Essentials"], ["portfolio", "My equity"]]);
+    // Only Viewers hold equity here: editors and admins never get holdings (see resolveAccess on the server).
+    for (const item of NAVIGATION) expect(item.maxRole).toBe(HOLDER_KEYS.includes(item.key) ? "VIEWER" : undefined);
+    // Every item names its group: the gateway shows a heading only over items that carry one.
+    for (const item of NAVIGATION) expect(item.group).toBe(HOLDER_KEYS.includes(item.key) ? "My equity" : "Essentials");
     expect(NAVIGATION.find((item) => item.key === "cap-table")!.children!.map((child) => child.label)).toEqual(["Cap Table", "Share Classes", "Equity Plans", "Securities Status", "Vesting"]);
   });
 
@@ -133,9 +136,9 @@ describe("who sees which items", () => {
   it("shows the workspace's sections to editors and admins who have it, and the holder's items to whoever holds equity", () => {
     const keys = (items: NavItem[]) => items.map((item) => item.key);
     expect(keys(navigationFor(NAVIGATION, "ADMIN", { workspace: true, portfolio: false }))).toEqual(WORKSPACE_KEYS);
-    // A holder's own pages stop at Editor (maxRole), so an admin never sees them, even with holdings.
+    // A holder's own pages are for Viewers only (maxRole), so an editor or admin never sees them, whatever the data says.
     expect(keys(navigationFor(NAVIGATION, "ADMIN", { workspace: true, portfolio: true }))).toEqual(WORKSPACE_KEYS);
-    expect(keys(navigationFor(NAVIGATION, "EDITOR", { workspace: true, portfolio: true }))).toEqual([...WORKSPACE_KEYS, ...HOLDER_KEYS]);
+    expect(keys(navigationFor(NAVIGATION, "EDITOR", { workspace: true, portfolio: true }))).toEqual(WORKSPACE_KEYS);
     expect(keys(navigationFor(NAVIGATION, "VIEWER", { workspace: false, portfolio: true }))).toEqual(HOLDER_KEYS);
     // The role decides even where the data would allow more, and nothing is left before setup.
     expect(keys(navigationFor(NAVIGATION, "VIEWER", { workspace: true, portfolio: false }))).toEqual([]);
@@ -156,18 +159,22 @@ describe("who sees which items", () => {
     expect(navigationFor(items, "ADMIN", { workspace: true, portfolio: false })[0]!.children!.map((child) => child.key)).toEqual(["summary", "audit"]);
   });
 
-  it("keeps each item under the heading before it, even when the item that starts the heading is hidden", () => {
-    const holder = navigationFor(NAVIGATION, "VIEWER", { workspace: false, portfolio: true });
-    expect(groupNavigation(NAVIGATION, holder).map((group) => [group.heading, group.items.length])).toEqual([["My equity", 3]]);
-    const both = navigationFor(NAVIGATION, "EDITOR", { workspace: true, portfolio: true });
-    expect(groupNavigation(NAVIGATION, both).map((group) => [group.heading, group.items.length])).toEqual([["Essentials", 7], ["My equity", 3]]);
-    const withoutDashboard = both.filter((item) => item.key !== "dashboard");
-    expect(groupNavigation(NAVIGATION, withoutDashboard)[0]).toMatchObject({ heading: "Essentials" });
+  it("puts consecutive items with the same group under one heading, as the gateway does", () => {
+    const heads = (items: readonly NavLink[]) => groupNavigation(items).map((group) => [group.heading, group.items.map((item) => item.key)]);
+    expect(heads(navigationFor(NAVIGATION, "VIEWER", { workspace: false, portfolio: true }))).toEqual([["My equity", HOLDER_KEYS]]);
+    const workspace = navigationFor(NAVIGATION, "EDITOR", { workspace: true, portfolio: true });
+    expect(heads(workspace)).toEqual([["Essentials", WORKSPACE_KEYS]]);
+    expect(heads(workspace.filter((item) => item.key !== "dashboard"))).toEqual([["Essentials", WORKSPACE_KEYS.slice(1)]]);
+    // An item without a group has no heading, and a group that comes back after another starts a new heading.
+    const link = (key: string, group?: string): NavLink => ({ key, label: key, icon: "list", path: `/${key}`, ...(group ? { group } : {}) });
+    expect(heads([link("a"), link("b", "One"), link("c", "One"), link("d"), link("e", "One")]))
+      .toEqual([[null, ["a"]], ["One", ["b", "c"]], [null, ["d"]], ["One", ["e"]]]);
   });
 });
 
 describe("where a page sits in the navigation", () => {
-  const items = navigationFor(NAVIGATION, "EDITOR", { workspace: true, portfolio: true });
+  // Every item, whoever sees it: where a page sits doesn't depend on the role.
+  const items = NAVIGATION;
   const at = (root: string, preferred: string | null = null) => {
     const found = matchNavigation(items, root, preferred);
     return found ? [found.section.key, found.child?.key ?? null] : null;
@@ -290,7 +297,7 @@ describe("the organization switcher", () => {
     expect(screen.queryByRole("button", { name: /Organization:/ })).toBeNull();
   });
 
-  it("lists the person's organizations and the link to create one, and switches through the gateway", async () => {
+  it("lists the person's organizations, All apps and the link to create one, and switches through the gateway", async () => {
     const assign = vi.spyOn(browser, "assign").mockImplementation(() => {});
     const { platformRequests } = renderPage("dashboard", dashboardHandlers(), { platform: platformAccount() });
     const switcher = await screen.findByRole("button", { name: /Organization: Acme Robotics/ });
@@ -298,6 +305,7 @@ describe("the organization switcher", () => {
     expect(switcher.getAttribute("aria-expanded")).toBe("true");
     const menu = document.getElementById("insulin-org-menu")!;
     expect(within(menu).getByRole("button", { name: /Acme Robotics/ }).getAttribute("aria-current")).toBe("true");
+    expect(within(menu).getByRole("link", { name: "All apps" }).getAttribute("href")).toBe(`${APEX}/`);
     expect(within(menu).getByRole("link", { name: "Create organization" }).getAttribute("href")).toBe(`${APEX}/orgs/new`);
     fireEvent.click(within(menu).getByRole("button", { name: /Nimbus Ledger Labs/ }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));

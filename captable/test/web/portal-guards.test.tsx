@@ -1,5 +1,5 @@
 import "./setup.ts";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { api } from "#shared";
@@ -69,24 +69,15 @@ describe("holder access", () => {
 });
 
 describe("admins and editors who hold equity", () => {
-  it("lets an editor who holds equity switch between the workspace and their portfolio", async () => {
+  it("keeps the holder's items out of an editor's navigation, even where the data lists holdings", async () => {
+    // The server finds holdings only for people who are neither admins nor editors (resolveAccess); the role decides here too.
     const adminHolder = holderMe([DANIEL], { email: "daniel@acmerobotics.example", access: "admin_ro" });
     const { router } = renderAt("/", adminHolder, handlers([DANIEL]));
     await waitFor(() => expect(router.state.location.pathname).toBe(DASHBOARD));
-    // Both in one navigation: the workspace's sections, then their own equity.
     const nav = await screen.findByRole("navigation", { name: "Primary" });
     expect(within(nav).getByText("Essentials")).toBeTruthy();
-    expect(within(nav).getByText("My equity")).toBeTruthy();
-    expect(within(nav).getByRole("link", { name: "Portfolio" }).getAttribute("href")).toBe(PORTFOLIO);
-    cleanup();
-    const portfolio = renderAt(PORTFOLIO, adminHolder, handlers([DANIEL]));
-    expect(await screen.findAllByRole("heading", { name: "Acme Robotics", level: 1 })).toBeTruthy();
-    const there = screen.getByRole("navigation", { name: "Primary" });
-    expect(within(there).getByRole("link", { name: "Portfolio" }).getAttribute("aria-current")).toBe("page");
-    expect(within(there).getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe(DASHBOARD);
-    // In the portfolio the docs are the holder's.
-    expect(within(there).getByRole("link", { name: "Docs" }).getAttribute("href")).toBe(`${PORTFOLIO}/docs`);
-    expect(portfolio.router.state.location.pathname).toBe(PORTFOLIO);
+    expect(within(nav).queryByText("My equity")).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Portfolio" })).toBeNull();
   });
 
   it("offers no portfolio to an admin whose e-mail matches no stakeholder", async () => {

@@ -15,7 +15,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Archive, Award, Bell, BookOpen, Bot, Building, Calendar, ChartPie, CheckCircle, ChevronRight, ChevronsUpDown, Clock,
-  FilePen, FileText, Files, Folder, Heart, Home, Inbox, Key, Layers, LayoutDashboard, List, LogOut, Menu, PanelLeftClose,
+  FilePen, FileText, Files, Folder, Heart, Home, Inbox, Key, Layers, LayoutDashboard, LayoutGrid, List, LogOut, Menu, PanelLeftClose,
   PanelLeftOpen, Plug, Plus, Search, Send, Settings, Shield, Signature, Table, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react'
 import { sidebarGroupLabel, sidebarIconButton, sidebarMenuButton } from '../components/ui/sidebar.ts'
@@ -23,7 +23,7 @@ import { docsNavigation } from '../components/Docs.ts'
 import { cn } from '../lib/utils.ts'
 import { Link } from './router.ts'
 import {
-  apexOrigin, appRole, grouped, httpUrl, initials, isAt, isWithin, NAVIGATION, readNavState, settingsLinks, visibleNavigation,
+  APP_NAME, apexOrigin, grouped, httpUrl, initials, isAt, isWithin, NAVIGATION, navigationRole, readNavState, settingsLinks, visibleNavigation,
   writeNavState, type IconName, type NavState, type PlatformMe,
 } from './navigation.ts'
 
@@ -49,6 +49,8 @@ type Entry = {
   active: boolean
   current?: 'page' | 'true'
   expanded?: boolean
+  /** Listed, but there is nowhere to go (Settings where the gateway doesn't answer). */
+  disabled?: boolean
 }
 
 type Level2 = { key: string; label: string; entries: Entry[] }
@@ -58,6 +60,8 @@ export type ShellProps = {
   search: string
   /** The member's app role from /api/me (undefined until it answers, or for someone not signed in). */
   role?: string
+  /** Its effective permissions from /api/me: a custom role's narrow what the role shows. */
+  permissions?: readonly string[]
   /** The member from /api/me, shown at the bottom where /__insulin/me isn't answered (the local preview). */
   user?: { name: string | null; email: string | null } | null
   roleLabel?: string
@@ -91,7 +95,7 @@ const postPlatform = (path: string, body: Record<string, string>, json: boolean)
 
 const assign = (url: string) => { try { window.location.assign(url) } catch { /* not a real window */ } }
 
-export function Shell({ pathname, search, role, user, roleLabel, title, children }: ShellProps) {
+export function Shell({ pathname, search, role, permissions, user, roleLabel, title, children }: ShellProps) {
   const [nav, setNav] = useState<NavState>(() => readNavState(storage()))
   const [platform, setPlatform] = useState<PlatformMe | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -112,12 +116,18 @@ export function Shell({ pathname, search, role, user, roleLabel, title, children
     return next
   })
 
-  // Level 1: the sections the role sees, then Docs and Settings.
-  const sections = visibleNavigation(NAVIGATION, appRole(role))
+  // Level 1: the sections the role and its permissions reach, then Docs and Settings.
+  const reach = navigationRole(role, permissions)
+  const sections = reach ? visibleNavigation(NAVIGATION, reach) : []
   const routeSection = sections.find((item) => isWithin(item.path, pathname)) ?? (isWithin('/docs', pathname) ? PLATFORM_ITEMS.docs : null)
   const docSlug = pathname.replace(/\/+$/, '').split('/')[2] ?? 'getting-started'
+  const apex = apexOrigin(platform)
   const routeChildren: Entry[] = routeSection?.key === 'docs'
-    ? docsNavigation().map((item) => ({ ...item, to: item.path, active: item.key === docSlug }))
+    ? [
+        ...docsNavigation().map((item) => ({ ...item, to: item.path, active: item.key === docSlug })),
+        // Esign's public docs, where the gateway says where the apex is.
+        ...apex ? [{ key: 'public-docs', label: 'Public docs', icon: 'book-open' as const, group: 'On the web', href: `${apex}/docs/${APP_NAME}/`, active: false }] : [],
+      ]
     : (sections.find((item) => item.key === routeSection?.key)?.children ?? []).map((item) => ({ ...item, to: item.path, active: isAt(item.path, pathname, search) }))
   const childIsPage = routeChildren.some((entry) => entry.active)
   for (const entry of routeChildren) if (entry.active) entry.current = 'page'
@@ -133,9 +143,8 @@ export function Shell({ pathname, search, role, user, roleLabel, title, children
   ]
 
   // Level 2: Settings while it is open, else the page's section when it has items.
-  const apex = apexOrigin(platform)
   const level2: Level2 | null = settingsOpen
-    ? { key: 'settings', label: 'Settings', entries: settingsLinks(apex).map((item) => ({ ...item, active: false })) }
+    ? { key: 'settings', label: 'Settings', entries: settingsLinks(platform).map(({ href, ...item }) => ({ ...item, href: href ?? undefined, disabled: !href, active: false })) }
     : routeSection && routeChildren.length ? { key: routeSection.key, label: routeSection.label, entries: routeChildren } : null
 
   const crumbs: { label: string; to?: string }[] = routeSection && routeSection.label !== title ? [{ label: routeSection.label, to: routeSection.path }, { label: title }] : [{ label: title }]
@@ -209,6 +218,7 @@ function EntryControl({ entry, collapsed, controls, wrap }: { entry: Entry; coll
   }
   const content = [h(Icon, { key: 'icon', 'aria-hidden': true }), h('span', { key: 'label', className: cn(collapsed && 'md:sr-only') }, entry.label)]
   if (entry.onSelect) return h('button', { ...props, type: 'button', 'aria-expanded': entry.expanded ?? false, 'aria-controls': controls, onClick: entry.onSelect }, ...content)
+  if (entry.disabled) return h('span', { ...props, className: cn(props.className, 'pointer-events-none opacity-50'), 'aria-disabled': 'true' }, ...content)
   if (entry.href) return h('a', { ...props, href: entry.href }, ...content)
   return h(Link, { ...props, to: entry.to ?? '/', 'aria-current': entry.current }, ...content)
 }
@@ -230,6 +240,8 @@ function Tile({ children, round = false }: { children?: React.ReactNode; round?:
  * The organization switcher: the organization's mark (its initial), its name and a chevron, opening the person's
  * organizations and the link to create one. Where the gateway doesn't answer /__insulin/me, the app's own name.
  */
+const menuLink = 'flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring [&>svg]:size-4'
+
 function OrgSwitcher({ id, platform, apex, collapsed, open, setOpen }: { id: string; platform: PlatformMe | null; apex: string | null; collapsed: boolean; open: boolean; setOpen: (open: boolean) => void }) {
   const [status, setStatus] = useState('')
   const button = useRef<HTMLButtonElement>(null)
@@ -251,6 +263,7 @@ function OrgSwitcher({ id, platform, apex, collapsed, open, setOpen }: { id: str
     } catch { setStatus('Couldn’t switch organization. Please try again.') }
   }
   const create = apex ? `${apex}/orgs/new` : null
+  const apps = httpUrl(platform.links?.apps)?.href ?? null
   return h('div', { ref: panel, className: 'relative w-full', onKeyDown },
     h('button', {
       ref: button, type: 'button', className: sidebarMenuButton({ size: 'lg', collapsed }),
@@ -274,7 +287,9 @@ function OrgSwitcher({ id, platform, apex, collapsed, open, setOpen }: { id: str
           className: 'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-100 aria-[current=true]:font-medium',
           onClick: () => void switchTo(item.id),
         }, h('span', { className: 'min-w-0 flex-1 truncate' }, item.name), item.roleLabel ? h('span', { className: 'text-xs text-muted-foreground' }, item.roleLabel) : null)))),
-      create ? h('a', { href: create, className: 'mt-1 flex items-center gap-2 rounded-sm border-t px-2 py-1.5 text-sm outline-hidden hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring [&>svg]:size-4' }, h(Plus, { 'aria-hidden': true }), 'Create an organization') : null,
+      apps || create ? h('div', { className: 'mt-1 border-t pt-1' },
+        apps ? h('a', { href: apps, className: menuLink }, h(LayoutGrid, { 'aria-hidden': true }), 'All apps') : null,
+        create ? h('a', { href: create, className: menuLink }, h(Plus, { 'aria-hidden': true }), 'Create an organization') : null) : null,
       h('p', { role: 'status', className: cn('px-2 text-xs text-muted-foreground', status && 'py-1.5') }, status)))
 }
 

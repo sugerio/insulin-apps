@@ -31,7 +31,7 @@ const routes=(who:unknown,platform:PlatformMe|null=null,extra:(c:Call)=>Response
  if(c.path==='/api/templates')return json({templates:[]});
 };
 
-for(const [who,session,editor] of [['an Admin',me('ADMIN',['esign.manage','esign.view']),true],['an Editor',EDITOR,true],['a Viewer',VIEWER,false],['a custom role on Viewer',me('VIEWER',['esign.view']),false]] as const){
+for(const [who,session,editor] of [['an Admin',me('ADMIN',['esign.manage','esign.view']),true],['an Editor',EDITOR,true],['a Viewer',VIEWER,false],['a custom role on Viewer',me('VIEWER',['esign.view']),false],['a custom role on Editor that may only view',me('EDITOR',['esign.view']),false]] as const){
  test(`the shell for ${who}: Envelopes with its views, the breadcrumb, Templates without a level 2`,async()=>{
   const app=await renderMember('/',routes(session));
   try{
@@ -66,6 +66,28 @@ for(const [who,session,editor] of [['an Admin',me('ADMIN',['esign.manage','esign
   }finally{await app.unmount();}
  });
 }
+
+test('a custom role with no permission here sees no section, only Docs and Settings',async()=>{
+ const app=await renderMember('/docs',routes(me('EDITOR',[])));
+ try{
+  const primary=app.byLabel('Primary');
+  assert.deepEqual(links(primary),[['Docs','/docs']]);
+  assert.ok(named(primary,'button','Settings'));
+ }finally{await app.unmount();}
+});
+
+test('the Docs\' level 2 lists the topics, then Esign\'s public docs on the apex where the gateway answers',async()=>{
+ const app=await renderMember('/docs',routes(VIEWER,PLATFORM));
+ try{
+  const section=links(app.byLabel('Section'));
+  assert.deepEqual(section.at(-1),['Public docs',`${APEX}/docs/esign/`]);
+  assert.ok(section.slice(0,-1).every(([,href]:[string,string])=>href.startsWith('/docs/')),'the topics first, in the app');
+ }finally{await app.unmount();}
+ const preview=await renderMember('/docs',routes(VIEWER));
+ try{
+  assert.ok(links(preview.byLabel('Section')).every(([,href]:[string,string])=>href.startsWith('/docs/')),'without /__insulin/me, no apex to link to');
+ }finally{await preview.unmount();}
+});
 
 test('a page outside the navigation keeps its section: an envelope, a new envelope, an address that isn\'t a page',async()=>{
  const ID='11111111-1111-4111-8111-111111111111';
@@ -109,7 +131,10 @@ test('Settings opens People, Integrations, API access and Connect AI on the apex
  const preview=await renderMember('/',routes(EDITOR));
  try{
   await preview.click(named(preview.byLabel('Primary'),'button','Settings'),'Settings');
-  assert.deepEqual(links(preview.byLabel('Section')).map(([,href]:[string,string])=>href),['/settings/users','/settings/integrations','/settings/api','/settings/connect-ai'],'without /__insulin/me, the paths the gateway redirects');
+  const section=preview.byLabel('Section');
+  assert.deepEqual(links(section),[],'without /__insulin/me, no link to pages Esign doesn\'t have');
+  const unavailable=section.findAll((n:any)=>n.type==='span'&&n.props['aria-disabled']==='true');
+  assert.deepEqual(unavailable.map((n:any)=>visibleText(n.children).trim()),['People','Integrations','API access','Connect AI'],'listed, unavailable');
   await preview.click(named(preview.byLabel('Primary'),'a','Templates'),'Templates');
   assert.equal(byId(preview,'insulin-nav-l2').props.hidden,true,'moving to a page closes Settings');
  }finally{await preview.unmount();}
@@ -159,7 +184,7 @@ test('the organization switcher and the person come from /__insulin/me, switchin
   const menu=byId(app,'insulin-org-menu');
   assert.equal(menu.props.hidden,false);
   assert.equal(named(menu,'button','Northwind Example Admin').props['aria-current'],'true');
-  assert.deepEqual(links(menu),[['Create an organization',`${APEX}/orgs/new`]]);
+  assert.deepEqual(links(menu),[['All apps',`${APEX}/`],['Create an organization',`${APEX}/orgs/new`]]);
   await app.click(named(menu,'button','Southwind Example Viewer'),'Southwind');
   assert.match(app.text(),/Couldn’t switch organization\. Please try again\./);assert.deepEqual(app.assigned,[]);
   await app.click(named(byId(app,'insulin-org-menu'),'button','Southwind Example Viewer'),'Southwind again');

@@ -8,7 +8,7 @@ import {route} from '../src/app/member/MemberApp.ts';
 import {ICONS} from '../src/app/member/Shell.ts';
 import {statusFilter} from '../src/app/member/api.ts';
 import {
- ICON_NAMES,NAVIGATION,NAV_STORAGE_KEY,apexOrigin,appRole,grouped,isAt,isWithin,navigationProblems,readNavState,settingsLinks,visibleNavigation,writeNavState,
+ ICON_NAMES,NAVIGATION,NAV_STORAGE_KEY,apexOrigin,appRole,grouped,isAt,isWithin,navigationProblems,navigationRole,readNavState,settingsLinks,visibleNavigation,writeNavState,
  type NavItem,type PlatformMe,
 } from '../src/app/member/navigation.ts';
 
@@ -73,6 +73,17 @@ test('each role sees the items its role reaches: New envelope is for editors and
  assert.deepEqual(grouped([{group:'X'},{group:'X'},{},{},{group:'Y'}] as {group?:string}[]).map(r=>[r.heading,r.items.length]),[['X',2],[undefined,2],['Y',1]]);
 });
 
+test('the role is lowered by what the permissions leave: without esign.manage a Viewer, without either nobody',()=>{
+ assert.equal(navigationRole('ADMIN',['esign.manage','esign.view']),'ADMIN');
+ assert.equal(navigationRole('EDITOR',['esign.manage']),'EDITOR','managing includes viewing');
+ assert.equal(navigationRole('EDITOR',['esign.view']),'VIEWER','a custom role on Editor that may only view');
+ assert.equal(navigationRole('OWNER',['esign.view']),'VIEWER');
+ assert.equal(navigationRole('VIEWER',['esign.view']),'VIEWER');
+ assert.equal(navigationRole('EDITOR',[]),null,'a custom role with no permission sees no section');
+ assert.equal(navigationRole(undefined,undefined),'VIEWER','before /api/me answers, the least role');
+ assert.equal(navigationRole('EDITOR',undefined),'EDITOR');
+});
+
 test('an address opens its section and names its item',()=>{
  assert.ok(isAt('/envelopes','/',''),'/ is the Envelopes list');
  assert.ok(isAt('/envelopes','/envelopes/',''));
@@ -98,11 +109,14 @@ test('each level\'s state is read and written as localStorage insulin-nav, and s
  assert.deepEqual(readNavState(null),{l1:'expanded',l2:'expanded'});
 });
 
-test('Settings links to the gateway\'s pages for Esign on the apex, or to the app host\'s paths that lead there',()=>{
- assert.deepEqual(settingsLinks(APEX).map(l=>[l.label,l.href]),[
+test('Settings links to the gateway\'s pages for Esign on the apex, and without the gateway lists them unlinked',()=>{
+ assert.deepEqual(settingsLinks(PLATFORM).map(l=>[l.label,l.href]),[
   ['People',`${APEX}/apps/esign/settings/users`],['Integrations',`${APEX}/apps/esign/settings/integrations`],
   ['API access',`${APEX}/apps/esign/settings/api`],['Connect AI',`${APEX}/apps/esign/settings/connect-ai`]]);
- assert.deepEqual(settingsLinks(null).map(l=>l.href),['/settings/users','/settings/integrations','/settings/api','/settings/connect-ai']);
+ const given={users:'https://apex.example.test/apps/esign/settings/users',integrations:'https://apex.example.test/apps/esign/settings/integrations',api:'javascript:alert(1)',connectAi:null};
+ assert.deepEqual(settingsLinks({...PLATFORM,settings:given}).map(l=>l.href),[given.users,given.integrations,`${APEX}/apps/esign/settings/api`,`${APEX}/apps/esign/settings/connect-ai`],'the gateway\'s own links first, never a script address');
+ // No /__insulin/me (the local preview, the console): Esign has no /settings/* pages, so nothing to link to.
+ assert.deepEqual(settingsLinks(null).map(l=>l.href),[null,null,null,null]);
  assert.equal(apexOrigin(PLATFORM),APEX);
  assert.equal(apexOrigin({...PLATFORM,apex:'https://apex.example.test'}),'https://apex.example.test','an explicit apex first');
  assert.equal(apexOrigin({...PLATFORM,links:{apps:'javascript:alert(1)',account:`${APEX}/account`}}),APEX,'never a script address');

@@ -79,17 +79,11 @@ export function navigationFor(items: readonly NavItem[], role: AppRole, has: { w
   return items.filter(sees).map((item) => (item.children ? { ...item, children: item.children.filter(sees) } : item));
 }
 
-/** Items in order, each under its heading: an item's `group` starts a heading that the items after it share. */
-export function groupNavigation<T extends NavLink>(all: readonly T[], visible: readonly T[]): { heading: string | null; items: T[] }[] {
-  const headings = new Map<string, string | null>();
-  let current: string | null = null;
-  for (const item of all) {
-    current = item.group ?? current;
-    headings.set(item.key, current);
-  }
+/** Items in order, under headings: consecutive items with the same `group` share one; an item without one has none. */
+export function groupNavigation<T extends NavLink>(items: readonly T[]): { heading: string | null; items: T[] }[] {
   const groups: { heading: string | null; items: T[] }[] = [];
-  for (const item of visible) {
-    const heading = headings.get(item.key) ?? null;
+  for (const item of items) {
+    const heading = item.group ?? null;
     const last = groups.at(-1);
     if (last && last.heading === heading) last.items.push(item);
     else groups.push({ heading, items: [item] });

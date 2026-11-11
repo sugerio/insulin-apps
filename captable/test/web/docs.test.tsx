@@ -11,6 +11,7 @@ import { routes } from "../../src/app/router.tsx";
 import { dashboard, me, org, ORG_ID, VALUATIONS } from "./support/acme.ts";
 import { mock, mockApi, type MockHandler } from "./support/mockApi.ts";
 import { COMPANY_RESOURCES, NADIA, holderMe, howToExercise, overview } from "./support/portal.ts";
+import { APEX, platformAccount } from "./support/platform.ts";
 import { base, renderPage } from "./support/render.tsx";
 
 type Me = api.MeResponse;
@@ -146,6 +147,17 @@ describe("the topics", () => {
     expect(within(topicList()).getByRole("link", { name: topic.title }).getAttribute("aria-current")).toBe("page");
     const note = within(article).queryByText("General information, not advice");
     expect(note !== null).toBe(topic.generalInformation === true);
+  });
+
+  it("links Cap Table's public docs on Insulin Apps from the topic list, where the gateway serves the app", async () => {
+    renderPage("docs/equity-basics", [], { platform: platformAccount() });
+    await title("Equity basics");
+    await waitFor(() => expect(within(topicList()).getByRole("link", { name: "Public docs" }).getAttribute("href")).toBe(`${APEX}/docs/captable/`));
+    cleanup();
+    // Without Insulin Apps around the app (the console), there is no apex to link to.
+    renderPage("docs/equity-basics", []);
+    await title("Equity basics");
+    expect(within(topicList()).queryByRole("link", { name: "Public docs" })).toBeNull();
   });
 
   it("puts the general-information note on the equity topics", async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 import { z } from "zod";
 
 // The Insulin Apps account around the app: on insulinapps.com the gateway answers `/__insulin/*` on the app's own host
@@ -58,6 +58,9 @@ export async function loadPlatformAccount(signal?: AbortSignal): Promise<Platfor
     return null;
   }
 }
+
+/** The account the shell read, for the pages inside it. */
+export const PlatformAccountContext = createContext<PlatformAccount | null | undefined>(undefined);
 
 /** The account once it has been read: undefined while reading, null when there is none. */
 export function usePlatformAccount(): PlatformAccount | null | undefined {
@@ -142,6 +145,12 @@ export function settingsLinks(account: PlatformAccount | null | undefined): { ke
     const usable = given && (link !== "members" || APP_SETTINGS_PAGE.test(new URL(given).pathname)) ? given : null;
     return { key, label, href: fromSettings ?? usable ?? (apex && app ? `${apex}/apps/${app}/settings/${key}` : null) };
   });
+}
+
+/** Cap Table's public docs on the apex (`<apex>/docs/captable/`), or null without the platform's account. */
+export function publicDocsLink(account: PlatformAccount | null | undefined): string | null {
+  const apex = account ? apexOrigin(account) : null;
+  return apex ? `${apex}/docs/captable/` : null;
 }
 
 /** Where to create another organization, on the apex. */

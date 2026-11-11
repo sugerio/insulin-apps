@@ -289,7 +289,8 @@ const APP_SETTINGS: { tab: AppSettingsTab; label: string; icon: NavIconName }[] 
 export function appPrimary(ctx: Context, app: HostedApp, role: AppRole): NavGroup[] {
   const groups: NavGroup[] = []
   for (const item of app.navigation) {
-    if (!roleHas(role, item.role)) continue
+    // Between the least and the most role that see it (a holder's own pages are for viewers only).
+    if (!roleHas(role, item.role) || (role !== item.maxRole && roleHas(role, item.maxRole))) continue
     const link: NavLink = { key: item.key, label: item.label, icon: item.icon, href: appUrl(ctx, app, item.path), current: false }
     const last = groups.at(-1)
     if (last && last.heading === item.group) last.items.push(link)

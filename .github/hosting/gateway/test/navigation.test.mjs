@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { APPS, startGateway } from './helpers/harness.mjs'
 import { parseNavCookie } from '../src/navigation.ts'
 
-/** Cap Table with a navigation manifest: an item for every role, one for editors and one for admins, in groups. */
+/** Cap Table with a navigation manifest: an item for every role, one for editors, one for admins and one for viewers only, in groups. */
 const NAVIGATION = [
   { key: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', path: '/' },
   { key: 'stakeholders', label: 'Stakeholders', icon: 'users', path: '/stakeholders', group: 'Equity', children: [
@@ -15,6 +15,7 @@ const NAVIGATION = [
   ] },
   { key: 'grants', label: 'Grants', icon: 'award', path: '/grants?status=active', group: 'Equity', role: 'EDITOR' },
   { key: 'audit', label: 'Audit log', icon: 'history', path: '/audit', group: 'Admin', role: 'ADMIN' },
+  { key: 'mine', label: 'My holdings', icon: 'chart-pie', path: '/portfolio', group: 'Mine', maxRole: 'VIEWER' },
 ]
 
 let h
@@ -120,7 +121,7 @@ test("the account pages: the organization's level 1, and Account's pages in leve
 
 test("an app's settings pages show the app's own level 1, as the person's role in it allows, with Settings open", async () => {
   const expected = {
-    VIEWER: ['Dashboard', '# Equity', 'Stakeholders', 'Docs', 'Settings'],
+    VIEWER: ['Dashboard', '# Equity', 'Stakeholders', '# Mine', 'My holdings', 'Docs', 'Settings'],
     EDITOR: ['Dashboard', '# Equity', 'Stakeholders', 'Grants', 'Docs', 'Settings'],
     ADMIN: ['Dashboard', '# Equity', 'Stakeholders', 'Grants', '# Admin', 'Audit log', 'Docs', 'Settings'],
   }

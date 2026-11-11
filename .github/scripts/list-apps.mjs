@@ -208,8 +208,9 @@ const NAVIGATION_ICON_SET = new Set(NAVIGATION_ICONS)
 export const NAVIGATION_LIMIT = 12
 const NAVIGATION_KEY = /^[a-z0-9-]{1,40}$/
 const NAVIGATION_TEXT_MAX = 40
-const NAVIGATION_ROLES = new Set(['VIEWER', 'EDITOR', 'ADMIN'])
-const NAVIGATION_FIELDS = new Set(['key', 'label', 'icon', 'path', 'group', 'role', 'children'])
+const NAVIGATION_ROLE_ORDER = ['VIEWER', 'EDITOR', 'ADMIN']
+const NAVIGATION_ROLES = new Set(NAVIGATION_ROLE_ORDER)
+const NAVIGATION_FIELDS = new Set(['key', 'label', 'icon', 'path', 'group', 'role', 'maxRole', 'children'])
 // The gateway's own paths on an app host (DESIGN.md §1, §3.2): an app's navigation never links to them.
 const NAVIGATION_RESERVED = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
 
@@ -240,9 +241,9 @@ function navigationItem(app, entry, where, keys, level) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${at} must be an object`)
   if (level === 2 && 'children' in entry) throw new Error(`${at} must not have children: the navigation has two levels`)
   for (const field of Object.keys(entry)) {
-    if (!NAVIGATION_FIELDS.has(field)) throw new Error(`${at}.${field} is not a navigation field (key, label, icon, path, group, role, children)`)
+    if (!NAVIGATION_FIELDS.has(field)) throw new Error(`${at}.${field} is not a navigation field (key, label, icon, path, group, role, maxRole, children)`)
   }
-  const { key, label, icon, path, group, role = 'VIEWER', children } = entry
+  const { key, label, icon, path, group, role = 'VIEWER', maxRole = 'ADMIN', children } = entry
   if (typeof key !== 'string' || !NAVIGATION_KEY.test(key)) throw new Error(`${at}.key must match ${NAVIGATION_KEY.source}`)
   if (keys.has(key)) throw new Error(`${at}.key ${JSON.stringify(key)} is listed twice`)
   keys.add(key)
@@ -256,7 +257,9 @@ function navigationItem(app, entry, where, keys, level) {
     throw new Error(`${at}.group must be 1-${NAVIGATION_TEXT_MAX} characters`)
   }
   if (!NAVIGATION_ROLES.has(role)) throw new Error(`${at}.role must be VIEWER, EDITOR or ADMIN`)
-  const item = { key, label: label.trim(), icon, path, group: group === undefined ? null : group.trim(), role }
+  if (!NAVIGATION_ROLES.has(maxRole)) throw new Error(`${at}.maxRole must be VIEWER, EDITOR or ADMIN`)
+  if (NAVIGATION_ROLE_ORDER.indexOf(maxRole) < NAVIGATION_ROLE_ORDER.indexOf(role)) throw new Error(`${at}.maxRole must not be below its role`)
+  const item = { key, label: label.trim(), icon, path, group: group === undefined ? null : group.trim(), role, maxRole }
   if (level === 2) return item
   if (children !== undefined && (!Array.isArray(children) || children.length > NAVIGATION_LIMIT)) {
     throw new Error(`${at}.children must be an array of at most ${NAVIGATION_LIMIT}`)
@@ -266,8 +269,9 @@ function navigationItem(app, entry, where, keys, level) {
 
 /**
  * An app's level-1 navigation, `insulin.navigation` in its package.json (DESIGN.md §3.2): at most 12 items of { key,
- * label, icon, path, group?, role?, children? }, each child the same without `children`, at most 12 per item. `role`
- * is the least app role that sees the item (VIEWER by default) and `group` a heading shown above it; keys are unique
+ * label, icon, path, group?, role?, maxRole?, children? }, each child the same without `children`, at most 12 per item.
+ * `role` is the least app role that sees the item (VIEWER by default), `maxRole` the most (ADMIN by default: an item
+ * for viewers only, such as a holder's own pages, says VIEWER), and `group` a heading shown above it; keys are unique
  * across items and children. The result spells out every field: `group` null when there is none, `children` [] on an
  * item without any. The gateway checks it again and refuses to start with a malformed one, so a mistake fails here,
  * before a deploy.

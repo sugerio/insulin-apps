@@ -16,7 +16,7 @@ export const ICON_NAMES = [
 export type IconName = (typeof ICON_NAMES)[number]
 
 export type AppRole = 'ADMIN' | 'EDITOR' | 'VIEWER'
-export type NavChild = { key: string; label: string; icon: IconName; path: string; group?: string; role?: AppRole }
+export type NavChild = { key: string; label: string; icon: IconName; path: string; group?: string; role?: AppRole; maxRole?: AppRole }
 export type NavItem = NavChild & { children?: NavChild[] }
 
 const ROLES: readonly AppRole[] = ['VIEWER', 'EDITOR', 'ADMIN']
@@ -37,7 +37,7 @@ export function navigationProblems(raw: unknown): string[] {
   const check = (entry: unknown, where: string, child: boolean) => {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) { problems.push(`${where} is not an object`); return }
     const item = entry as Record<string, unknown>
-    const allowed = ['key', 'label', 'icon', 'path', 'group', 'role', ...(child ? [] : ['children'])]
+    const allowed = ['key', 'label', 'icon', 'path', 'group', 'role', 'maxRole', ...(child ? [] : ['children'])]
     for (const name of Object.keys(item)) if (!allowed.includes(name)) problems.push(`${where} has an unknown field "${name}"`)
     if (typeof item.key !== 'string' || !KEY.test(item.key)) problems.push(`${where}.key must match [a-z0-9-]+`)
     else if (keys.has(item.key)) problems.push(`${where}.key "${item.key}" is used twice`)
@@ -48,6 +48,7 @@ export function navigationProblems(raw: unknown): string[] {
     else if (RESERVED.some((pattern) => pattern.test(item.path as string))) problems.push(`${where}.path is one of the gateway's paths`)
     if (item.group !== undefined && (typeof item.group !== 'string' || item.group.trim().length === 0 || item.group.length > 40)) problems.push(`${where}.group must be 1 to 40 characters`)
     if (item.role !== undefined && !(ROLES as readonly unknown[]).includes(item.role)) problems.push(`${where}.role must be VIEWER, EDITOR or ADMIN`)
+    if (item.maxRole !== undefined && !(ROLES as readonly unknown[]).includes(item.maxRole)) problems.push(`${where}.maxRole must be VIEWER, EDITOR or ADMIN`)
     if (item.children !== undefined) {
       if (!Array.isArray(item.children) || item.children.length > MAX_ITEMS) problems.push(`${where}.children must be an array of at most ${MAX_ITEMS}`)
       else item.children.forEach((nested, index) => check(nested, `${where}.children[${index}]`, true))
@@ -68,7 +69,8 @@ export function appRole(role: string | undefined | null): AppRole {
   return 'VIEWER'
 }
 
-const sees = (role: AppRole, item: NavChild) => ROLES.indexOf(role) >= ROLES.indexOf(item.role ?? 'VIEWER')
+const sees = (role: AppRole, item: NavChild) =>
+  ROLES.indexOf(role) >= ROLES.indexOf(item.role ?? 'VIEWER') && ROLES.indexOf(role) <= ROLES.indexOf(item.maxRole ?? 'ADMIN')
 
 /** The items, and their children, a role sees: each item's `role` is the least app role that sees it. */
 export function visibleNavigation(items: readonly NavItem[], role: AppRole): NavItem[] {

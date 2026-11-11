@@ -144,15 +144,17 @@ test("reads an app's navigation manifest, filling in the defaults", async () => 
     },
     { key: 'templates', label: 'Templates', icon: 'files', path: '/templates', role: 'EDITOR' },
     { key: 'home', label: 'Home', icon: 'home', path: '/' },
+    { key: 'mine', label: 'My holdings', icon: 'chart-pie', path: '/mine', maxRole: 'VIEWER' },
   ]
   const root = await repository({ signing: { insulin: { navigation } } })
   assert.deepEqual((await listApps(root))[0].navigation, [
     {
-      key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', group: 'Signing', role: 'VIEWER',
-      children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft', group: null, role: 'VIEWER' }],
+      key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', group: 'Signing', role: 'VIEWER', maxRole: 'ADMIN',
+      children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft', group: null, role: 'VIEWER', maxRole: 'ADMIN' }],
     },
-    { key: 'templates', label: 'Templates', icon: 'files', path: '/templates', group: null, role: 'EDITOR', children: [] },
-    { key: 'home', label: 'Home', icon: 'home', path: '/', group: null, role: 'VIEWER', children: [] },
+    { key: 'templates', label: 'Templates', icon: 'files', path: '/templates', group: null, role: 'EDITOR', maxRole: 'ADMIN', children: [] },
+    { key: 'home', label: 'Home', icon: 'home', path: '/', group: null, role: 'VIEWER', maxRole: 'ADMIN', children: [] },
+    { key: 'mine', label: 'My holdings', icon: 'chart-pie', path: '/mine', group: null, role: 'VIEWER', maxRole: 'VIEWER', children: [] },
   ])
   for (const icon of ['layout-dashboard', 'home', 'table', 'layers', 'chart-pie', 'shield', 'heart', 'users', 'building', 'file-text', 'award',
     'inbox', 'files', 'file-pen', 'signature', 'send', 'clock', 'check-circle', 'archive', 'settings', 'book-open', 'plug', 'key', 'bot',
@@ -173,6 +175,8 @@ test('refuses a malformed navigation manifest, naming the item and field that ar
     [[item({ key: 'a_b' })], /\[0\]\.key must match/],
     [[item({ key: '' })], /\[0\]\.key must match/],
     [[item(), item()], /\[1\]\.key "a" is listed twice/],
+    [[item({ maxRole: 'OWNER' })], /\[0\]\.maxRole must be VIEWER, EDITOR or ADMIN/],
+    [[item({ role: 'EDITOR', maxRole: 'VIEWER' })], /\[0\]\.maxRole must not be below its role/],
     [[item({ children: [item()] })], /children\[0\]\.key "a" is listed twice/],
     [[item({ label: '' })], /\[0\]\.label must be 1-40 characters/],
     [[item({ label: '   ' })], /\[0\]\.label must be 1-40 characters/],

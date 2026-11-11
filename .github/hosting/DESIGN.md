@@ -250,7 +250,7 @@ and the gateway both render from:
 `key` matches `[a-z0-9-]+` and is unique; `label` is 1 to 40 characters; `icon` is one of the Lucide icons the
 gateway bundles (`list-apps.mjs` lists them); `path` starts with `/` on the app's host and isn't one of the gateway's
 paths (`/__insulin/*`, `/settings/*`, `/mcp`, `/.well-known/*`); `group` (optional) is a heading shown above the item;
-`role` (optional) is the least app role that sees it (VIEWER by default); `children` holds level 2, the same fields
+`role` (optional) is the least app role that sees it (VIEWER by default), and `maxRole` (optional) the most (ADMIN by default; an item for viewers only, such as a holder's own pages, says VIEWER); `children` holds level 2, the same fields
 without `children`. At most 12 items, and 12 children each. `list-apps.mjs` refuses a malformed manifest, and the
 deploy passes it to the gateway in `SITE_APPS`. Docs and Settings are added by the platform and aren't in the manifest.
 In detail: a key has at most 40 characters and is unique across items and children; a `group` is 1 to 40 characters;

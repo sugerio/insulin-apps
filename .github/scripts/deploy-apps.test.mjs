@@ -604,8 +604,8 @@ test("an app's declared secrets come from the environment's secrets, then its va
   assert.equal(site.scheduled, '/api/scheduled', 'the path the gateway ticks')
   assert.equal(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').scheduled, null, 'an app without one has none')
   assert.deepEqual(site.navigation, [{
-    key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', group: null, role: 'VIEWER',
-    children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft', group: null, role: 'VIEWER' }],
+    key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', group: null, role: 'VIEWER', maxRole: 'ADMIN',
+    children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft', group: null, role: 'VIEWER', maxRole: 'ADMIN' }],
   }], "the gateway renders the app's level 1 on its settings pages (DESIGN.md §3.2)")
   assert.deepEqual(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').navigation, [], 'an app without a manifest has none')
   assert.equal('secrets' in site, false, "the gateway never learns an app's secret names")

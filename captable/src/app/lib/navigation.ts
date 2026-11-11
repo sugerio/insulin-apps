@@ -29,6 +29,7 @@ const linkFields = {
   path: z.string().max(200).refine((path) => path.startsWith("/") && !path.startsWith("//") && !RESERVED_PATH.test(path), "must start with / and not be one of the gateway's paths"),
   group: z.string().min(1).max(40).optional(),
   role: z.enum(APP_ROLES).optional(),
+  maxRole: z.enum(APP_ROLES).optional(),
 };
 const navLinkSchema = z.strictObject(linkFields);
 const navItemSchema = z.strictObject({ ...linkFields, children: z.array(navLinkSchema).max(12).optional() });
@@ -73,7 +74,8 @@ export function isPortfolioPath(path: string): boolean {
  * have the company workspace and the portfolio's only when they hold equity in the company.
  */
 export function navigationFor(items: readonly NavItem[], role: AppRole, has: { workspace: boolean; portfolio: boolean }): NavItem[] {
-  const sees = (link: NavLink) => rank(link.role ?? "VIEWER") <= rank(role) && (isPortfolioPath(link.path) ? has.portfolio : has.workspace);
+  const sees = (link: NavLink) =>
+    rank(link.role ?? "VIEWER") <= rank(role) && rank(role) <= rank(link.maxRole ?? "ADMIN") && (isPortfolioPath(link.path) ? has.portfolio : has.workspace);
   return items.filter(sees).map((item) => (item.children ? { ...item, children: item.children.filter(sees) } : item));
 }
 

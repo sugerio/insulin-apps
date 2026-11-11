@@ -133,6 +133,8 @@ describe("who sees which items", () => {
   it("shows the workspace's sections to editors and admins who have it, and the holder's items to whoever holds equity", () => {
     const keys = (items: NavItem[]) => items.map((item) => item.key);
     expect(keys(navigationFor(NAVIGATION, "ADMIN", { workspace: true, portfolio: false }))).toEqual(WORKSPACE_KEYS);
+    // A holder's own pages stop at Editor (maxRole), so an admin never sees them, even with holdings.
+    expect(keys(navigationFor(NAVIGATION, "ADMIN", { workspace: true, portfolio: true }))).toEqual(WORKSPACE_KEYS);
     expect(keys(navigationFor(NAVIGATION, "EDITOR", { workspace: true, portfolio: true }))).toEqual([...WORKSPACE_KEYS, ...HOLDER_KEYS]);
     expect(keys(navigationFor(NAVIGATION, "VIEWER", { workspace: false, portfolio: true }))).toEqual(HOLDER_KEYS);
     // The role decides even where the data would allow more, and nothing is left before setup.

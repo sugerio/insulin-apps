@@ -25,6 +25,8 @@ export interface NavigationChild {
   group: string | null
   /** The least app role that sees it. */
   role: 'ADMIN' | 'EDITOR' | 'VIEWER'
+  /** The most app role that sees it (ADMIN unless the item is for lesser roles only, such as a holder's own pages). */
+  maxRole: 'ADMIN' | 'EDITOR' | 'VIEWER'
 }
 
 /** A level-1 entry of an app's navigation manifest. */
@@ -294,18 +296,22 @@ function navigationText(value: unknown): string | null {
   return text && text.length <= NAVIGATION_TEXT_MAX ? text : null
 }
 
+const ROLE_ORDER = ['VIEWER', 'EDITOR', 'ADMIN'] as const
+
 function navigationChild(raw: unknown, keys: Set<string>): NavigationChild | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   const item = raw as Record<string, unknown>
   const { key, icon, path } = item
   const role = item.role ?? 'VIEWER'
+  const maxRole = item.maxRole ?? 'ADMIN'
   const label = navigationText(item.label)
   const group = item.group === undefined || item.group === null ? null : navigationText(item.group)
   if (typeof key !== 'string' || !NAVIGATION_KEY.test(key) || keys.has(key) || !label || !isNavIconName(icon)
     || navigationPathProblem(path) || (item.group !== undefined && item.group !== null && !group)
-    || (role !== 'ADMIN' && role !== 'EDITOR' && role !== 'VIEWER')) return null
+    || (role !== 'ADMIN' && role !== 'EDITOR' && role !== 'VIEWER') || (maxRole !== 'ADMIN' && maxRole !== 'EDITOR' && maxRole !== 'VIEWER')
+    || ROLE_ORDER.indexOf(maxRole) < ROLE_ORDER.indexOf(role)) return null
   keys.add(key)
-  return { key, label, icon, path: path as string, group, role }
+  return { key, label, icon, path: path as string, group, role, maxRole }
 }
 
 /**

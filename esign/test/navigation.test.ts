@@ -65,6 +65,11 @@ test('each role sees the items its role reaches: New envelope is for editors and
  assert.deepEqual(visibleNavigation(synthetic,'VIEWER').map(i=>i.key),['a']);
  assert.deepEqual(visibleNavigation(synthetic,'EDITOR').map(i=>i.key),['a','c']);
  assert.deepEqual(visibleNavigation(synthetic,'ADMIN').map(i=>i.key),['a','b','c']);
+ // maxRole: the most role that sees an item (a lesser role's own pages).
+ const capped=[{key:'mine',label:'Mine',icon:'folder',path:'/mine',maxRole:'EDITOR'},{key:'all',label:'All',icon:'list',path:'/all'}] as const;
+ assert.deepEqual(visibleNavigation(capped as never,'VIEWER').map(i=>i.key),['mine','all']);
+ assert.deepEqual(visibleNavigation(capped as never,'EDITOR').map(i=>i.key),['mine','all']);
+ assert.deepEqual(visibleNavigation(capped as never,'ADMIN').map(i=>i.key),['all']);
  assert.deepEqual(grouped([{group:'X'},{group:'X'},{},{},{group:'Y'}] as {group?:string}[]).map(r=>[r.heading,r.items.length]),[['X',2],[undefined,2],['Y',1]]);
 });
 

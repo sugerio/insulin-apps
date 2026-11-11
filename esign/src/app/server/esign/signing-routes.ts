@@ -9,7 +9,7 @@ import { assertSignatureGeometrySafe, assertTextFits, renderText, renderTypedSig
 import { canonicalJson } from './canonical-json.ts';
 import { artifactObjectKey } from './signatures.ts';
 import { completeEnvelopeOfSession } from './envelope-completion.ts';
-import { otpMailer } from './mail.ts';
+import { MailRelayError, otpMailer } from './mail.ts';
 import { isProd, otpKey, signingEnabled, testSealKey } from './environment.ts';
 import { managedEvidenceFromEnv } from './seal/config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
@@ -144,6 +144,8 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     } catch (error) {
       // The task's send budget (60 seconds apart, 3 per 15 minutes): say when the next send is allowed.
       if (error instanceof OtpSendRefused) {const retryAfterSeconds=Math.ceil(error.retryAfterMs/1000);return c.json({error:'otp_rate_limited',retryAfterSeconds},429,{'Retry-After':String(retryAfterSeconds)});}
+      // Why the code wasn't sent, without the address or the code: the relay's status, or the error's kind.
+      console.warn('E-sign: a verification code was not sent', error instanceof MailRelayError ? {relayStatus:error.status} : {error:error instanceof Error ? error.name : typeof error});
       return c.json({error:'otp_unavailable'},429);
     }
   });

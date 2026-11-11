@@ -40,6 +40,7 @@ Run from `esign/` unless noted.
 | `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |
+| `src/app/server/gateway-fetch.ts` | The `SUGER_GATEWAY` service binding's fetch, which the relay is called over |
 | `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the KMS + TSA seal |
 | `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql`) |
 | `scripts/` | The bitmap atlas generators (macOS, Swift) |

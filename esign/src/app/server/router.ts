@@ -1,6 +1,7 @@
 import { openAppD1, readAppEnv } from '#platform'
 import app, { type Bindings } from './esign/app.ts'
 import { D1BlobStore } from './esign/blob-store.ts'
+import { gatewayFetchOf } from './gateway-fetch.ts'
 import { waitUntilOf } from './wait-until.ts'
 
 // The local preview runs without the deployment's secrets: these synthetic keys let it sign and seal
@@ -14,6 +15,7 @@ async function bindings(request: Request): Promise<Bindings> {
   const db = (await openAppD1()) as unknown as D1Database
   const dev = import.meta.env.DEV && readAppEnv('SUGER_ACCESS_MODE') !== 'console'
   const secret = (name: string) => readAppEnv(name)?.trim() || undefined
+  const gatewayFetch = gatewayFetchOf(request)
   return {
     DB: db,
     ARTIFACTS: new D1BlobStore(db, 'artifacts'),
@@ -36,6 +38,8 @@ async function bindings(request: Request): Promise<Bindings> {
     TSA_SIGNER_SPKI_SHA256: secret('ESIGN_TSA_SIGNER_SPKI_SHA256'),
     SUGER_MAIL_URL: secret('SUGER_MAIL_URL'),
     SUGER_APP_TOKEN: secret('SUGER_APP_TOKEN'),
+    // The relay is called through the gateway's service binding when the deploy gave the app one (gateway-fetch.ts).
+    ...(gatewayFetch ? { MAIL_FETCH: gatewayFetch } : {}),
   }
 }
 

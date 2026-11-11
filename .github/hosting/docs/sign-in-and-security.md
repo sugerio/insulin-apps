@@ -113,6 +113,10 @@ Only the organization's **owners** can set it up, under **Single sign-on** in th
 One organization at a time can hold a verified domain. **Remove** takes a domain away; it also removes from the
 organization the members (other than owners) that SCIM added with addresses in that domain.
 
+A verified domain also lets an owner limit invitations to it: **Invite only my verified domains**, on the
+**Organization** tab, off by default. See
+[Organizations and roles](/docs/platform/organizations-and-roles#who-can-be-invited).
+
 ### Step 2: Connect your identity provider
 
 Under **Identity provider**, choose the **Protocol** and the **Role for new members**, fill in the protocol's settings,
@@ -187,8 +191,10 @@ What happens to the account:
 - **An existing account with its own password or Google link**: they get an e-mail the first time they sign in through
   SSO, so they know.
 
-If someone has turned on two-step sign-in, SSO asks for their code too. Your identity provider remains responsible for
-its own second factor.
+Your identity provider asks for whatever it requires, including its own second factor if it has one. Back on Insulin
+Apps, someone who has turned on [two-step sign-in](#two-step-sign-in) for their Insulin Apps account then sees the
+**Two-step sign-in** page and enters the code from their authenticator app (or a recovery code), as after a password.
+They are signed in only once the code is accepted. Someone who hasn't turned it on is signed in straight away.
 
 ## SCIM provisioning
 

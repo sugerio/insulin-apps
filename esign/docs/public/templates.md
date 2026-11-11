@@ -97,7 +97,7 @@ work. Uploading with a signature page needs nothing more.
 
 ## Embed the editor in a host product
 
-A host product can show the field editor inside its own pages. Its backend calls E-sign's API with a service account
+A host product can show the field editor inside its own pages. Its backend calls E-sign's API with an OAuth client
 (see [API](/docs/esign/api)):
 
 1. `POST /api/template-editing-sessions` with `{"allowedParentOrigin": "https://app.example.com", "roles": ["partner",

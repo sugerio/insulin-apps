@@ -138,7 +138,7 @@ for your organization:
 
 - choose **Process due work** on **Envelopes** (it says what it did, for example "Due work done: 1 completed." or
   "Nothing was due."); or
-- call `POST /api/process-due` with a service account or an AI agent whose role can send and manage envelopes.
+- call `POST /api/process-due` with an OAuth client or an AI agent whose role can send and manage envelopes.
 
 One run looks at up to 25 envelopes to finish and 25 owing signed copies, so a backlog takes several runs.
 

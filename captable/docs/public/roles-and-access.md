@@ -26,7 +26,7 @@ own people page is at `https://insulinapps.com/apps/captable/settings/users`, an
 
 | Role in Cap Table | What they see | What they can do |
 |---|---|---|
-| **Admin** (and organization Owners and Admins) | The whole company workspace | Everything: set up and import, stakeholders, grants, exercises, terminations, cancellations, valuations, documents, settings, reports, reversals and due items. On Insulin Apps, also Cap Table's people and integrations. |
+| **Admin** (and organization Owners and Admins) | The whole company workspace | Everything: set up and import, stakeholders, grants, exercises, terminations, cancellations, valuations, documents, settings, reports, reversals and due items. On Insulin Apps, also Cap Table's people and integrations; organization Owners and Admins also manage its OAuth clients for API access. |
 | **Editor** | The whole company workspace | The same changes as an Admin inside Cap Table. Not Cap Table's people or integrations, which belong to the platform. |
 | **Viewer** | The holder view | See only their own holdings: the stakeholder records that carry the e-mail address of their account. |
 
@@ -108,19 +108,20 @@ Cap Table doesn't e-mail holders. Tell them yourself when something changes for 
 
 ## AI agents and API clients
 
-On Insulin Apps, people can connect an AI agent, such as Claude Code or Codex, to `https://captable.insulinapps.com/mcp`,
-and Cap Table's admins can create service accounts for other systems.
+On Insulin Apps, anyone who can use Cap Table can connect an AI agent, such as Claude Code or Codex, to
+`https://captable.insulinapps.com/mcp`, with the setup on Cap Table's **Connect AI** page. The organization's owners and
+admins can create OAuth clients for other systems on Cap Table's **API access** tab.
 
 - **An AI agent acts with the role and permissions of the person who connected it**, re-checked on every request. If
   the person is demoted or removed, their agent loses that access at once.
-- **A service account has the role an app admin gave it** (Admin, Editor, Viewer or a custom role). A service account
+- **An OAuth client has the role an owner or admin gave it** (Admin, Editor, Viewer or a custom role). An OAuth client
   with only **See own holdings** sees nothing, because no stakeholder carries its address; give it **View the cap
   table** for read-only access, or **Record changes** to make changes.
 - **The same rules apply as in the browser.** Neither can do anything its role can't, and an agent can't record
   changes to its person's own holdings any more than the person can.
-- **Their changes are in the history** under the person's or the service account's name, like any other change.
+- **Their changes are in the history** under the person's or the OAuth client's name, like any other change.
 
-See [AI agents](/docs/platform/ai-agents), [API and service accounts](/docs/platform/api-and-service-accounts) and
+See [AI agents](/docs/platform/ai-agents), [API access with OAuth clients](/docs/platform/api-and-service-accounts) and
 [Cap Table's API](/docs/captable/api).
 
 ## Before the company is set up

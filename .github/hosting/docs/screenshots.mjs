@@ -12,10 +12,11 @@
 // Then run `npm run build:docs` in the gateway: the pages link each image with its content hash.
 //
 // What the run does: signs up (confirming through the captured-mail page), creates an organization, adds a custom role,
-// invites people with an organization role and with specific apps, accepts an invitation, creates a service account,
-// connects an MCP client, imports Cap Table's own spreadsheet template filled with a fictional company, opens its
-// dashboard, cap table and holder view, uploads an E-sign template, places its fields, sends an envelope and signs
-// it. Light mode, a 1280 x 800 viewport.
+// invites people with an organization role and with specific apps, accepts an invitation, stores a credential, creates
+// two OAuth clients and rotates one's secret, connects an MCP client, imports Cap Table's own spreadsheet template
+// filled with a fictional company, opens its dashboard, cap table and holder view, uploads an E-sign template, places
+// its fields, sends an envelope and signs it, then creates a second organization under the same email domain, which
+// reaches the limit of two, so the next one is a request to support. Light mode, a 1280 x 800 viewport.
 //
 // The run is local and offline except for Cloudflare's Turnstile widget, which the sign-up and sign-in forms load (the
 // local config uses Cloudflare's always-passing test keys). It serves the stack over https, with wrangler's
@@ -26,6 +27,11 @@
 // One screenshot can't be taken here: E-sign seals a finished envelope with an AWS KMS signature and an RFC 3161
 // timestamp, both outside services, so an envelope never reaches Completed locally. esign-completed.png is a labelled
 // placeholder, drawn by this script, until it is captured from a deployment with a KMS key.
+//
+// Nor can a domain be verified: the gateway checks the DNS TXT record over DNS-over-HTTPS at a fixed address
+// (cloudflare-dns.com), and `wrangler dev` has no way to answer the Worker's outbound fetches with a stub (the tests do,
+// through Miniflare's outboundService). platform-organization.png therefore shows the Invitations card as an owner sees
+// it before any domain is verified.
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { request as httpsRequest } from 'node:https'
@@ -61,6 +67,8 @@ const HOLDER = { name: 'Jordan Park', email: 'jordan@example.test', password: 'l
 const DIRECTOR = { name: 'Riley Chen', email: 'riley.chen@example.test' }
 const SIGNERS = [{ name: 'Avery Patel', email: 'avery.patel@example.com', title: 'Managing Partner' }, { name: 'Sam Rivera', email: 'sam.rivera@example.com', title: 'Chief Executive Officer' }]
 const ORG = 'Northwind Robotics'
+// A second organization under the same email domain (example.com) as ORG: two is the limit for one domain.
+const SECOND_ORG = 'Northwind Labs'
 const COMPANY = 'Northwind Robotics, Inc.'
 
 // Local-only settings: a gateway key made of synthetic bytes, E-sign's code pepper, and a KMS key name in AWS's
@@ -298,7 +306,11 @@ async function main() {
     https: true,
     stdio: ['ignore', 'ignore', 'inherit'],
     // A Google client id only to show "Continue with Google", as production does; nobody signs in with it here.
-    gatewayVars: { GATEWAY_SECRET_KEY, GOOGLE_CLIENT_ID: 'local-screenshots.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'local-screenshots-only' },
+    // ORG_REQUEST_EMAIL shows the "Request more organizations" form at the limit; local mail is captured, never sent.
+    gatewayVars: {
+      GATEWAY_SECRET_KEY, GOOGLE_CLIENT_ID: 'local-screenshots.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'local-screenshots-only',
+      ORG_REQUEST_EMAIL: 'support@example.com',
+    },
     appVars: {
       esign: {
         ESIGN_OTP_KEY,
@@ -375,22 +387,47 @@ async function main() {
     await holderPage.click('button:has-text("Accept")')
     await holderPage.waitForLoadState()
 
-    // The signed-in home page, an app's people, and its integrations with a service account.
+    // The signed-in home page, an app's people, its integrations with a stored credential, and its API access.
     await page.goto(`${APEX}/`)
     await shot(page, 'platform-home')
     await page.goto(`${APEX}/apps/captable/settings/users`)
     await shot(page, 'platform-app-people')
     await page.goto(`${APEX}/apps/captable/settings/integrations`)
-    await page.fill('#new-account-name', 'Payroll sync')
-    await page.selectOption('#new-account-role', 'VIEWER')
-    await page.click('button:has-text("Create")')
+    await page.fill('#new-credential-key', 'payroll')
+    await page.fill('#new-credential-name', 'Payroll provider')
+    await page.fill('#new-credential-base', 'https://api.payroll.example.com')
+    await page.selectOption('#new-credential-scheme', 'bearer')
+    // A synthetic value, encrypted by the local gateway and never shown again.
+    await page.fill('#new-credential-secret', 'local-screenshots-not-a-secret')
+    await page.click('button:has-text("Save credential")')
     await page.waitForLoadState()
     await page.goto(`${APEX}/apps/captable/settings/integrations`)
     await shot(page, 'platform-integrations')
+
+    // API access: two OAuth clients, one of them just rotated. A secret is shown only in the answer to the POST that
+    // made it; the screenshot is of the page loaded afresh, which never shows one.
+    const api = `${APEX}/apps/captable/settings/api`
+    for (const [name, role] of [['Payroll sync', 'VIEWER'], ['Back office', 'EDITOR']]) {
+      await page.goto(api)
+      await page.fill('#new-client-name', name)
+      await page.selectOption('#new-client-role', role)
+      await page.click('form[action$="/settings/api/clients"] button[type="submit"]')
+      await page.getByText(`${name} is ready`).waitFor()
+    }
+    await page.goto(api)
+    await page.locator('tr', { hasText: 'Back office' }).locator('button', { hasText: 'Rotate secret' }).click()
+    await page.getByText('Back office has a new secret').waitFor()
+    await page.goto(api)
+    await page.getByText('The previous secret works until').waitFor()
+    await shot(page, 'platform-api-access', { fullPage: true })
+
     await page.goto(`${APEX}/account/security`)
     await shot(page, 'platform-security')
     await page.goto(`${APEX}/settings/sso?org=${orgId}`)
     await shot(page, 'platform-sso')
+    // The Organization tab, with the Invitations card as it is before a domain is verified (see the top of the file).
+    await page.goto(`${APEX}/settings/organization?org=${orgId}`)
+    await shot(page, 'platform-organization')
 
     // An MCP client: dynamic registration, then the consent page in the browser, then Account → AI agents.
     const callback = 'http://127.0.0.1:33418/callback'
@@ -411,6 +448,8 @@ async function main() {
     await page.waitForURL((url) => url.host === '127.0.0.1:33418')
     await page.goto(`${APEX}/account/agents`)
     await shot(page, 'platform-agents')
+    await page.goto(`${APEX}/apps/captable/settings/connect-ai`)
+    await shot(page, 'platform-connect-ai', { fullPage: true })
 
     // Cap Table: the setup page, its own template filled with the fictional company, the preview, the import.
     const captable = host('captable')
@@ -533,6 +572,27 @@ async function main() {
       'This image is a placeholder. A completed envelope can\'t be captured on a local run: E-sign seals a finished envelope with an AWS KMS signature and an RFC 3161 timestamp from outside services, so locally it stays Finishing.',
       'When an envelope is completed, its page shows the status Completed and two downloads: Signed PDF with certificate, and Certificate of completion.',
     ])
+
+    // A second organization under example.com reaches the limit of two. The organization menu, back in the first one,
+    // lists both; then Create an organization asks support for more instead.
+    await page.goto(`${APEX}/orgs/new`)
+    await page.fill('input[name="name"]', SECOND_ORG)
+    await page.click('button:has-text("Create organization")')
+    await page.waitForURL((url) => url.searchParams.has('org') && url.searchParams.get('org') !== orgId)
+    await page.goto(`${APEX}/`)
+    const orgMenu = page.locator('header summary', { hasText: 'Organization:' })
+    await orgMenu.click()
+    await page.locator('header form button', { hasText: ORG }).click()
+    await page.getByRole('heading', { name: `Apps in ${ORG}` }).waitFor()
+    await orgMenu.click()
+    await page.locator('header a', { hasText: 'Create an organization' }).waitFor()
+    await shot(page, 'platform-org-menu')
+    await page.goto(`${APEX}/orgs/new`)
+    await page.getByRole('heading', { name: 'Request more organizations' }).waitFor()
+    await page.fill('input[name="name"]', 'Northwind Europe')
+    await page.fill('#field-reason', 'A separate workspace for our European subsidiary, with its own cap table and its own people.')
+    await shot(page, 'platform-request-organizations')
+
     await holder.close()
     await owner.close()
     log(`${saved} screenshot(s) in ${OUT}. Now run \`npm run build:docs\` in .github/hosting/gateway.`)

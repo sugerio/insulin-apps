@@ -25,8 +25,8 @@ organizations and sign-in, see the [platform glossary](/docs/platform/glossary).
   within a set period. In Cap Table, an acceleration is recorded during a termination.
 - **AI agent:** an AI assistant, such as Claude Code or Codex, that someone connects to Cap Table over MCP. It acts with
   that person's role and permissions, and no more.
-- **API client:** another system that reads or changes Cap Table's records with a service account, with a role of its
-  own. Its changes appear in the history under its name.
+- **API client:** another system that reads or changes Cap Table's records with an OAuth client (once called a service
+  account), with a role of its own. Its changes appear in the history under its name.
 - **As-of date:** the date a figure describes. Cap Table can show the cap table as of any date; an import's as-of date
   is the date its files describe.
 - **Assumption:** in an import preview, a choice Cap Table made where the files leave something open, such as a default
@@ -204,8 +204,8 @@ organizations and sign-in, see the [platform glossary](/docs/platform/glossary).
 - **Securities Status:** the lists that need attention: grants waiting for signatures, scheduled terminations,
   repurchase windows, options of former holders, and upcoming expirations.
 - **Security:** a single holding: a share lot, an option grant, a warrant or a SAFE.
-- **Service account:** a non-human identity an app admin creates on Insulin Apps so another system can call Cap Table's
-  API with a role.
+- **Service account:** the earlier name of an OAuth client: a non-human identity an owner or admin of the organization
+  creates on Cap Table's API access tab on Insulin Apps, so another system can call Cap Table's API with a role.
 - **Share class:** a kind of share with its own terms, such as common stock or Series A preferred.
 - **Share unit:** the smallest fraction of a share the company records: whole shares unless set otherwise. It can't
   change once the first record is in.

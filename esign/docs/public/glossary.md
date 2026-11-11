@@ -82,7 +82,8 @@ sent. Not to be confused with your role in your organization, which decides what
 
 **Seal.** A completed envelope's evidence, signed with the KMS key and timestamped, so a later change shows.
 
-**Service account.** Another system that calls E-sign's API with a role of its own, such as a host product.
+**Service account.** Another system that calls E-sign's API with a role of its own, such as a host product. On Insulin
+Apps it is an OAuth client, which the organization's owners and admins create on E-sign's API access tab.
 
 **Sign-by day.** An optional deadline. If a signer hasn't signed by the end of it, the envelope expires.
 

@@ -152,10 +152,14 @@ npm run build:docs
 
 It starts the gateway with both apps over https (`wrangler dev --local-protocol https`, which E-sign's embedded editor
 needs) in a fresh local state, signs up through the captured-mail page, creates an organization, a custom role and
-invitations, connects an MCP client, imports Cap Table's own spreadsheet template filled with a fictional company,
-places E-sign fields, sends an envelope and signs it, with Cloudflare's always-passing Turnstile test widget as the
-only outside call. A completed E-sign envelope can't be captured locally (its seal needs AWS KMS and a timestamp
-service), so `esign-completed.png` is a labelled placeholder.
+invitations, stores a credential, creates two OAuth clients and rotates one's secret, connects an MCP client, imports
+Cap Table's own spreadsheet template filled with a fictional company, places E-sign fields, sends an envelope and signs
+it, then creates a second organization under the same email domain so that the next one is a request to support
+(`ORG_REQUEST_EMAIL` is set to a synthetic address; mail is captured), with Cloudflare's always-passing Turnstile test
+widget as the only outside call. A completed E-sign envelope can't be captured locally (its seal needs AWS KMS and a
+timestamp service), so `esign-completed.png` is a labelled placeholder. Nor can a domain be verified (`wrangler dev`
+can't stub the DNS-over-HTTPS lookup), so `platform-organization.png` shows the invitation setting before one is.
+`--only` writes just the named images, so a change to a few pages doesn't rewrite the rest.
 
 `npm run dev` writes `.dev/gateway.wrangler.json` (from `wrangler.local.jsonc`) and the app Worker's config, applies
 the D1 migrations locally and runs `wrangler dev --local` with the configs. Open:

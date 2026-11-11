@@ -1,12 +1,12 @@
 ---
 title: Cap Table API
-description: Cap Table's HTTP API for AI agents and service accounts, every endpoint with the access it needs, and how changes are made safely.
+description: Cap Table's HTTP API for AI agents and OAuth clients, every endpoint with the access it needs, and how changes are made safely.
 order: 5
 ---
 
 This page describes Cap Table's API: how to reach it, every endpoint grouped by area with the access it needs, how
 changes are reviewed and retried safely, and what errors look like. It is for developers connecting another system with
-a service account, and for AI agents connected over MCP. The authoritative list for any caller is `GET /api/catalog`,
+an OAuth client, and for AI agents connected over MCP. The authoritative list for any caller is `GET /api/catalog`,
 which returns only what that caller may use right now.
 
 ## Base URL and authentication
@@ -14,15 +14,19 @@ which returns only what that caller may use right now.
 The base URL is `https://captable.insulinapps.com`, and every endpoint is under `/api/`. There are two ways in besides
 the browser:
 
-- **AI agents over MCP.** Connect an MCP client to `https://captable.insulinapps.com/mcp`. The agent signs in as you and
-  acts with your role. Its `endpoints` tool shows this app's catalog, `read` sends a GET, and `change` sends a POST,
-  PUT, PATCH or DELETE with a JSON body. See [AI agents](/docs/platform/ai-agents).
-- **Service accounts.** An app admin creates a service account on Cap Table's integrations page, with a role. Your
-  program gets a token with the client-credentials grant and sends it as a Bearer token. See
-  [API and service accounts](/docs/platform/api-and-service-accounts).
+- **AI agents over MCP.** Connect an MCP client to `https://captable.insulinapps.com/mcp`. Cap Table's **Connect AI**
+  page (`https://insulinapps.com/apps/captable/settings/connect-ai`, or **Connect AI** in the account bar) has the
+  command for Claude Code, Codex, Gemini CLI and opencode, and the steps for Claude.ai and ChatGPT. The agent signs in as
+  you and acts with your role. Its `endpoints` tool shows this app's catalog, `read` sends a GET, and `change` sends a
+  POST, PUT, PATCH or DELETE with a JSON body. See [AI agents](/docs/platform/ai-agents).
+- **OAuth clients.** An owner or admin of the organization creates an OAuth client, with a role, on Cap Table's **API
+  access** tab (`https://insulinapps.com/apps/captable/settings/api`), which also shows the token URL and a curl
+  example. Your program gets a token with the client-credentials grant and sends it as a Bearer token. **Rotate
+  secret** keeps the previous secret working for 24 hours, so the program can switch over. See
+  [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ```bash
-# Get an access token (it lasts an hour), then ask what this service account may call.
+# Get an access token (it lasts an hour), then ask what this OAuth client may call.
 TOKEN=$(curl -s https://insulinapps.com/oauth/token \
   -u "$CLIENT_ID:$CLIENT_SECRET" \
   -d grant_type=client_credentials \
@@ -31,9 +35,9 @@ TOKEN=$(curl -s https://insulinapps.com/oauth/token \
 curl -s https://captable.insulinapps.com/api/catalog -H "Authorization: Bearer $TOKEN"
 ```
 
-A person's MCP token works only on `/mcp`, and a service account's token only on `/api/*`. Either way, Cap Table sees
+A person's MCP token works only on `/mcp`, and an OAuth client's token only on `/api/*`. Either way, Cap Table sees
 the same identity and role checks as in the browser, and every change appears in the history under the person's or the
-service account's name.
+OAuth client's name.
 
 ## Finding your way
 
@@ -309,7 +313,7 @@ the answer is 409 `stale_version`.
 ### What MCP can't send
 
 The MCP `change` tool sends JSON bodies only. Uploading a document (a raw file body) and running an import (a multipart
-form) need a service account or the browser.
+form) need an OAuth client or the browser.
 
 ## Errors
 

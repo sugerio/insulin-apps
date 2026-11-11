@@ -1,10 +1,10 @@
 ---
 title: E-sign API
-description: E-sign's management API for host products, service accounts and AI agents, its public signer endpoints, and how to embed the signing page.
+description: E-sign's management API for host products, OAuth clients and AI agents, its public signer endpoints, and how to embed the signing page.
 order: 7
 ---
 
-E-sign's API is what its own pages use, and what host products, service accounts and AI agents call. This page lists the
+E-sign's API is what its own pages use, and what host products, OAuth clients and AI agents call. This page lists the
 endpoints from E-sign's catalog (`GET /api/catalog`), with the permission each needs, explains the public endpoints the
 signing page and the editor use, and shows examples. It is for developers and AI agents.
 
@@ -15,8 +15,8 @@ The base URL is `https://esign.insulinapps.com`. Every endpoint is under `/api/`
 | Caller | How it authenticates | Notes |
 | --- | --- | --- |
 | A person in the browser | Their insulinapps.com session | What E-sign's own pages do. |
-| A service account | `Authorization: Bearer` with a token from `https://insulinapps.com/oauth/token` | Created by an app admin on E-sign's integrations page, with a role of its own. See [API and service accounts](/docs/platform/api-and-service-accounts). |
-| An AI agent | Through the MCP server at `https://esign.insulinapps.com/mcp` | Acts with the person's role. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
+| An OAuth client (a service account) | `Authorization: Bearer` with a token from `https://insulinapps.com/oauth/token` | Created by an owner or admin of the organization on E-sign's **API access** tab (`https://insulinapps.com/apps/esign/settings/api`), with a role of its own; the tab shows the token URL and a curl example. **Rotate secret** keeps the previous secret working for 24 hours. See [API access with OAuth clients](/docs/platform/api-and-service-accounts). |
+| An AI agent | Through the MCP server at `https://esign.insulinapps.com/mcp` | Acts with the person's role. E-sign's **Connect AI** page (`https://insulinapps.com/apps/esign/settings/connect-ai`, or **Connect AI** in the account bar) has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
 | A signer's page | A one-time code exchanged for a page session (`x-esign-session` header) | Only the public `/api/public/` endpoints. |
 
 Every management call sees only the caller's organization. An id from another organization answers `404 not_found`, as
@@ -100,7 +100,7 @@ name the signature page can't draw), `422 positioned_fields_not_supported` (the 
 
 ## Examples
 
-These examples use synthetic values. Replace the client id and secret with your service account's.
+These examples use synthetic values. Replace the client id and secret with your OAuth client's.
 
 ### Get a token
 
@@ -196,8 +196,8 @@ envelope, the agent calls `change` with:
 }
 ```
 
-The MCP tools send JSON only, so an agent can't upload a PDF; it sends envelopes from templates people or service
-accounts uploaded.
+The MCP tools send JSON only, so an agent can't upload a PDF; it sends envelopes from templates people or OAuth
+clients uploaded.
 
 ## Embed the signing page
 

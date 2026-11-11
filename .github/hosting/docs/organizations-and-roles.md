@@ -46,11 +46,11 @@ role lets you see and do. The rules are checked on the server, every time: hidin
 
 | Role | Manages people and roles | In every app |
 |---|---|---|
-| **Owner** | Invites, changes and removes anyone, owners included. Creates, edits and deletes custom roles. Sets up single sign-on and SCIM. Renames and deletes the organization. | Admin |
-| **Admin** | Invites, changes and removes admins, editors, viewers and people with specific apps. Gives custom roles. Can't change owners or edit custom roles. Manages every app's integrations. | Admin |
+| **Owner** | Invites, changes and removes anyone, owners included. Creates, edits and deletes custom roles. Sets up single sign-on and SCIM, and chooses who can be invited. Renames and deletes the organization. | Admin |
+| **Admin** | Invites, changes and removes admins, editors, viewers and people with specific apps. Gives custom roles. Can't change owners or edit custom roles. Manages every app's integrations and its OAuth clients for API access. | Admin |
 | **Editor** | Nothing. Can see the organization's people and roles. | Editor |
 | **Viewer** | Nothing. Can see the organization's people and roles. | Viewer |
-| **Specific apps** | In an app where they are Admin: that app's people and integrations. Can't see the organization's people list. | Their role in each app they were given, or no access |
+| **Specific apps** | In an app where they are Admin: that app's people and stored credentials (not its OAuth clients). Can't see the organization's people list. | Their role in each app they were given, or no access |
 
 The person who creates an organization is its first owner. An organization always keeps at least one owner: the last
 owner can't be removed, can't be given another role, and can't leave.
@@ -74,9 +74,14 @@ every app.
 ### App admins
 
 An **app admin** for an app is an organization owner or admin, or someone with specific-apps access whose role in that
-app is **Admin**. App admins manage that app's people (invite, change roles, remove) and its integrations (service
-accounts and stored credentials). A custom role never makes someone an app admin, whatever permissions it has: people
-and integrations belong to the platform, not to an app's permissions.
+app is **Admin**. App admins manage that app's people (invite, change roles, remove) and its integrations (stored
+credentials). A custom role never makes someone an app admin, whatever permissions it has: people and integrations
+belong to the platform, not to an app's permissions.
+
+The app's **OAuth clients** for API access are different: only the organization's owners and admins create, change,
+rotate and delete them, on the app's **API access** tab, because a client's secret outlives whoever made it. An app
+admin through specific apps sees the list but can't change it. See
+[API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ## Access to specific apps
 
@@ -98,8 +103,8 @@ A custom role is a role you build from an app's permissions, for when Admin, Edi
   reads them when the app is deployed.
 - **Owners create, edit and delete custom roles**, one app at a time, on `https://insulinapps.com/settings/roles`.
 - **Owners and admins give them**, and so do each app's admins for their app: when inviting someone with **Specific
-  apps**, when changing their access, on the app's people page, or to a service account.
-- **A custom role can't be deleted while it is in use** by anyone, by a pending invitation or by a service account. The
+  apps**, when changing their access, or on the app's people page. Owners and admins also give them to OAuth clients.
+- **A custom role can't be deleted while it is in use** by anyone, by a pending invitation or by an OAuth client. The
   **Roles** page shows **Not used**, **Used once** or how many times.
 
 ### The permission catalogs
@@ -169,7 +174,10 @@ organization role can open it; only owners see the forms to create, edit and del
 
 Each app has its own people page on the apex: `https://insulinapps.com/apps/<app>/settings/users`, for example
 `https://insulinapps.com/apps/captable/settings/users`. The app's own address `https://<app>.insulinapps.com/settings/users`
-leads there too, and so does **People** in the app's account bar.
+leads there too, and so does **People** in the app's account bar. It is the first of the app's settings tabs: **People**,
+**Integrations** (stored credentials, see [Integrations](/docs/platform/integrations)), **API access** (OAuth clients,
+see [API access with OAuth clients](/docs/platform/api-and-service-accounts)) and **Connect AI** (see
+[AI agents](/docs/platform/ai-agents#the-connect-ai-page)).
 
 It lists everyone who can use the app in your active organization:
 
@@ -201,6 +209,34 @@ Everyone who can use the app can open its people page and see who else uses it. 
 Every change is checked again against your current role at the moment it is saved. If your role was lowered or you
 were removed while the page was open, nothing changes.
 
+## Who can be invited
+
+By default, owners and admins can invite anyone, at any e-mail address. An owner can limit invitations to the
+organization's **verified domains**: the e-mail domains it has proved it owns, under **Single sign-on** (see
+[Sign-in and security](/docs/platform/sign-in-and-security#step-1-verify-your-domain)). It is off by default.
+
+The setting is under **Invitations** on the **Organization** tab (`https://insulinapps.com/settings/organization`), for
+owners only:
+
+- Until the organization has a verified domain, the card explains that you can limit invitations to your own e-mail
+  domains once you verify one under **Single sign-on**.
+- With a verified domain, it shows **Any address** and **Invite only my verified domains**. Choose it to turn the limit
+  on; **Allow any address** turns it off again.
+
+![The Organization tab with the organization's name, the Invitations card and Leave](/docs/assets/screenshots/platform-organization.png "The Organization tab")
+
+While the limit is on:
+
+- every new invitation, from the organization's People page or from an app's, must be for an address in one of the
+  domains verified right now. Others are refused with "This organization only invites people with an address in its
+  verified domains";
+- an invitation sent earlier to another address can no longer be accepted: the person sees the same message;
+- people who are already members keep their access, and an app admin can still give an existing member with specific
+  apps another app;
+- if no verified domain is left, nobody can be invited until an owner verifies a domain or turns the limit off.
+
+SCIM provisioning and single sign-on already work only for addresses in verified domains.
+
 ## Leaving an organization
 
 Go to the **Organization** tab (`https://insulinapps.com/settings/organization`) and choose **Leave this organization**.
@@ -226,6 +262,6 @@ Both are on the **Organization** tab, for owners only.
 | Invitation e-mails per organization per day | 30 |
 | Resending one invitation | once every 10 minutes |
 | How long an invitation is valid | 7 days |
-| Organizations one account can create | 10 |
+| Organizations per owner e-mail domain (by address at public mail providers like `gmail.com`) | 2; [ask support for more](/docs/platform/getting-started#how-many-organizations-you-can-create) |
 | Custom role name / description | 60 / 200 characters |
 | Organization name | 80 characters |

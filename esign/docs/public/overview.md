@@ -30,7 +30,7 @@ before it and to the PDF it was made on, so a later change to any step shows.
 
 - **People who send documents for signature**: they upload templates, send envelopes and follow them.
 - **People who only need to see what was signed**: they read envelopes, audit trails and certificates.
-- **Host products**: another system your organization uses can send envelopes through the API with a service account,
+- **Host products**: another system your organization uses can send envelopes through the API with an OAuth client,
   show the signing page and the field editor inside its own pages, and follow each envelope's status.
 - **AI agents**: an assistant connected over MCP can list templates and envelopes, send envelopes and read their status,
   with the role of the person who connected it.
@@ -87,5 +87,5 @@ E-sign is an open-source Insulin app. On insulinapps.com it runs at `https://esi
 - [Getting started](/docs/esign/getting-started): your first template and envelope.
 - [Templates and fields](/docs/esign/templates) and [Sending envelopes](/docs/esign/sending-envelopes).
 - [Signing](/docs/esign/signing): what a signer sees.
-- [API](/docs/esign/api): for host products, service accounts and AI agents.
+- [API](/docs/esign/api): for host products, OAuth clients and AI agents.
 - [How it works](/docs/esign/how-it-works): evidence, seals and certificates.

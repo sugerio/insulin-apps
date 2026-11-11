@@ -64,14 +64,35 @@ an owner sets this up.
 
 If someone has already invited you, skip to [Step 4](#step-4-accept-an-invitation): you join their organization instead.
 
-1. When you are signed in, choose **Create an organization** on your home page (or go to `https://insulinapps.com/orgs/new`).
+1. When you are signed in, choose **Create an organization**. Before you belong to any organization, your home page
+   offers it. Once you do, it is in the top bar's organization menu (see [Your home page and the organization
+   menu](#your-home-page-and-the-organization-menu)). You can also go to `https://insulinapps.com/orgs/new`.
 2. Enter the **Organization name**, for example "Northwind Robotics". You can rename it later.
 3. Choose **Create organization**.
 
 You are the organization's **Owner**: you can do everything, in every app. The new organization becomes your active
-organization, and you land on its **People** page. Each account can create up to 10 organizations.
+organization, and you land on its **People** page.
 
 ![The Create an organization form with the Organization name field](/docs/assets/screenshots/platform-new-organization.png "Create an organization")
+
+### How many organizations you can create
+
+There can be at most **two organizations per owner email domain**. The count goes by the domain of the address of the
+person who created each organization: everyone at `example.com` shares two. For public mail providers like `gmail.com`,
+it goes by address instead, so each person there has their own two. Deleting an organization frees its place.
+
+To have more, ask support. Once your domain has two, **Create an organization** shows **Request more organizations**
+instead of the usual form:
+
+1. Enter the **Organization name you want** and, under **Why you need it**, a few words about what it is for.
+2. Choose **Send request**.
+
+The request goes by e-mail to Insulin Apps support, with your name, your e-mail address, your e-mail domain and how many
+organizations it has. Support replies to your address. Once they have raised the limit, you create the organization
+yourself, as above. You can send three requests a day. If the site has no address for these requests, the page shows
+who to contact instead.
+
+![The Request more organizations form with the organization name wanted and why it is needed](/docs/assets/screenshots/platform-request-organizations.png "Asking for more organizations")
 
 ## Step 3: Invite your team
 
@@ -116,23 +137,23 @@ If you were invited:
    The invitation is tied to that address: signed in as someone else, you are asked to sign out first.
 3. On **You're invited**, check the organization and the access offered, then choose **Accept invitation**.
 
-You join the organization, and it becomes your active organization. Invitations also show on your home page, with
-**Accept** and **Decline** buttons. If the link says **This invitation is no longer valid**, it has expired, was revoked
+You join the organization, and it becomes your active organization. Invitations also show on your home page, under
+**Invitations**, with **Accept** and **Decline** buttons. If the link says **This invitation is no longer valid**, it has expired, was revoked
 or was already answered: ask the person who invited you to send a new one.
 
 ![The You're invited page showing who invited you, the organization, the access offered and the Accept invitation button](/docs/assets/screenshots/platform-invitation.png "Accepting an invitation")
 
 ## Step 5: Open an app
 
-Your home page at `https://insulinapps.com` lists your organizations and, under **Apps in** your active organization, the
-apps you can use. Choose the app's **Open** button on its card (for example **Open Cap Table**), or go straight to its
-address, such as `https://captable.insulinapps.com`.
+Your home page at `https://insulinapps.com`, **Apps in** your active organization, shows the apps you can use there.
+Choose the app's **Open** button on its card (for example **Open Cap Table**), or go straight to its address, such as
+`https://captable.insulinapps.com`.
 
-![The signed-in home page with the list of organizations and the apps of the active organization](/docs/assets/screenshots/platform-home.png "Your home page")
+![The signed-in home page, Apps in Northwind Robotics, with a card for Cap Table and one for E-sign](/docs/assets/screenshots/platform-home.png "Your home page")
 
 Inside an app, a small account bar from Insulin Apps shows who you are and which organization you are in. From it you
-can switch organization, open the app's **People** and **Integrations** settings, go back to **All apps**, open your
-**Account** or **Sign out**.
+can switch organization, open the app's **People**, **Integrations** and **Connect AI** settings, go back to **All
+apps**, open your **Account** or **Sign out**.
 
 The first time you open an app, it may ask you to set it up for your organization. For example, Cap Table asks how to
 start your company's records. The app's own docs explain this: [Cap Table](/docs/captable/overview),
@@ -141,12 +162,32 @@ start your company's records. The app's own docs explain this: [Cap Table](/docs
 If you see **You don't have access to** an app, your access in that organization is to specific apps only, and that app
 isn't one of them. Ask one of the organization's owners or admins.
 
+## Your home page and the organization menu
+
+Once you are signed in, `https://insulinapps.com` is your home page. It shows:
+
+- **Apps in** your active organization: a card for each app you can use there, with a button to open it. With access
+  to specific apps, you see only those apps.
+- **Invitations** waiting for your address, if any, with **Accept** and **Decline**.
+- If you don't belong to any organization yet, **You're not in an organization yet**, with **Create an organization**.
+
+Your organizations are in the **organization menu**, the button with your active organization's name and your role in
+the top bar of `insulinapps.com`. Open it to:
+
+- see your organizations, with your role in each and a check mark next to the active one;
+- choose another organization to switch to it;
+- open **People and roles**, the active organization's settings;
+- **Create an organization**.
+
+![The home page with the organization menu open, listing two organizations, People and roles, and Create an organization](/docs/assets/screenshots/platform-org-menu.png "The organization menu")
+
+The avatar with your initials next to it is the account menu: **Your apps**, **Account**, **Security** and **Sign out**.
+
 ## Switching organizations
 
 Every app opens in your **active organization**. If you belong to more than one:
 
-- in the top bar of `insulinapps.com`, open the organization menu and choose another organization;
-- on your home page, choose **Make active** next to an organization; or
+- in the top bar of `insulinapps.com`, open the organization menu and choose another organization; or
 - inside an app, use the account bar's **Organization** list and choose **Switch**.
 
 The app then shows that organization's data. Apps keep each organization's data apart.
@@ -155,6 +196,7 @@ The app then shows that organization's data. Apps keep each organization's data 
 
 - Set up roles that fit your team: [Organizations and roles](/docs/platform/organizations-and-roles).
 - Protect your account and your organization: [Sign-in and security](/docs/platform/sign-in-and-security).
-- Let an AI agent such as Claude Code or Codex work in an app for you: [AI agents](/docs/platform/ai-agents).
-- Connect your own software to an app: [The API and service accounts](/docs/platform/api-and-service-accounts).
+- Let an AI agent such as Claude Code or Codex work in an app for you: open the app's **Connect AI** page, and see
+  [AI agents](/docs/platform/ai-agents).
+- Connect your own software to an app: [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 - Learn an app: [Cap Table](/docs/captable/overview), [E-sign](/docs/esign/overview).

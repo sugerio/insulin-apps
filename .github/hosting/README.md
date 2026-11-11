@@ -51,6 +51,11 @@ Path-filtered workflows do not report a check on pull requests that do not touch
 therefore require an always-running check such as the repository-wide `Public content` job, not an app or gateway job
 that may be absent.
 
+Once every run a push to `main` started has passed, deploys included, `.github/workflows/release.yml` tags that commit
+with the next version and publishes a GitHub Release (the root README's "Releases"); a push with a failed or cancelled
+run gets no version. It tags with a deploy key that only its `release` environment holds, and the "Release tags"
+ruleset lets nobody else, org admins aside, create, move or delete a `v*` tag.
+
 ## Owner setup
 
 Workers Paid must be enabled for the Cloudflare account before the first deployment. The gateway runs with the
@@ -117,6 +122,20 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    deploy then attaches every hostname to the gateway and creates its DNS records; don't add records for these
    hostnames by hand.
 
+7. Lock release tags once. Signed in to the GitHub CLI as an org admin, with `ssh-keygen` installed, run from a clone of
+   the repository:
+
+   ```bash
+   .github/scripts/configure-release-tags.sh
+   ```
+
+   It creates the `release` environment, which only `main` can use and which needs no approval; a write deploy key,
+   whose private half goes straight into that environment's `RELEASE_DEPLOY_KEY` secret and is never printed; and the
+   "Release tags" ruleset, which lets only that key and org admins create, move or delete a `v*` tag. Because the
+   ruleset lets every deploy key through, it stops before changing anything if the repository has another write
+   deploy key. It prints what it set when it's done. Until it has run, `release.yml` plans releases but can't tag
+   them. It targets `sugerio/insulin-apps`; set `GH_REPO` for a fork.
+
 Manually run the `Gateway` workflow on `main` once setup is complete, then manually run each app workflow on `main`.
 Step summaries link the affected public addresses.
 
@@ -130,6 +149,9 @@ starts with the new values. After rotating the Cloudflare token, manually dispat
 `main` as well as `Gateway` to verify each independently. Never put a value in a workflow file, command argument,
 issue, or log.
 
+To replace the release deploy key, run `.github/scripts/configure-release-tags.sh --rotate` as an org admin: it adds a
+new key, stores it as `RELEASE_DEPLOY_KEY` and deletes the old one.
+
 ### Add an app
 
 Add a top-level directory with a `package.json` and `src/api.ts`. Its directory name must follow the repository app-name
@@ -140,8 +162,10 @@ Table does. Set `displayName` and `description` in `package.json`, include D1 mi
 scheduled work declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to the `production`
 environment before its first deploy. A new `insulin.scheduled` path is ticked once the gateway has been deployed with
 it (the app's workflow refreshes the gateway after every app deploy). Copy `.github/workflows/captable.yml` to
-`.github/workflows/<app>.yml`, then change the workflow name, the app path entries, and `with.app`. Repository-wide CI
-enforces that every discovered app has this workflow and that no app workflow names a missing app.
+`.github/workflows/<app>.yml`, then change the workflow name, the app path entries, and `with.app`, and add the
+workflow name to the `workflows` list in `.github/workflows/release.yml`. Repository-wide CI enforces that every
+discovered app has this workflow, that no app workflow names a missing app, and that `release.yml` starts after every
+workflow that runs on a push.
 
 On the first matching push to `main`, the app workflow creates its D1 database, deploys its private Worker, and queues a
 gateway refresh for its hostname and service binding. If one pull request adds several new apps, an early app pipeline
@@ -185,3 +209,8 @@ matching push to `main` will otherwise deploy the current repository state.
   when replacing the widget.
 - **An app is missing:** run `node .github/scripts/list-apps.mjs` and fix the directory name or required files it
   reports, then run `node .github/scripts/check-app-workflows.mjs` to verify its workflow.
+- **Release can't tag a version** (`Couldn't tag … as v…`, a permission error, or a missing `RELEASE_DEPLOY_KEY`): run
+  `.github/scripts/configure-release-tags.sh` again as an org admin; the next run of Release, at the latest hourly,
+  tags every waiting version in order. If it says the runs of the latest release's push aren't among those GitHub
+  lists, run **Actions → Release → Run workflow** on `main` with the next minor version, such as `v0.2.0`. Never
+  create the tag by hand.

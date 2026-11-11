@@ -113,8 +113,16 @@ never reads another's data.
 - Its roles mapped to the app's functions (what Admin, Editor and Viewer may do there), a permission catalog in
   `package.json` if it should support custom roles, and `GET /api/catalog` for AI agents.
 - A row in the app table of the root `README.md`.
-- A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name, paths and `app` input changed. The
-  shared pipeline runs its typecheck, tests, migration check and Cloudflare build.
+- A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name, paths and `app` input changed, and
+  that name added to the `workflows` list in `.github/workflows/release.yml`. The shared pipeline runs its typecheck,
+  tests, migration check and Cloudflare build.
+
+## Releases
+
+`.github/workflows/release.yml` makes every green push to `main` a release: it tags the commit `v0.1.1`, `v0.1.2`, …
+and publishes its GitHub Release (the root README's "Releases"). Never create, move or delete a `v*` tag, or publish
+or edit one of those releases, by hand or from another workflow. A workflow that runs on a push to `main` must be in
+release.yml's `workflow_run` list; `node .github/scripts/check-app-workflows.mjs` checks it.
 
 ## Before you finish
 

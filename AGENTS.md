@@ -110,7 +110,9 @@ the platform for the rest in `package.json` under `insulin`:
   gateway forwards them with no identity (`x-suger-access-via: public`), so the app authenticates them with its own
   short-lived codes and lets them reach only what those codes are for. Never use one to skip sign-in for members.
 - **Mail** goes through the gateway's relay: `POST` to `SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the request's
-  `x-suger-organization-id`, one message at a time. There is no e-mail binding.
+  `x-suger-organization-id`, one message at a time, sent over the `SUGER_GATEWAY` service binding the deploy adds (a
+  Worker can't fetch another Worker of its zone through the public URL; Nitro puts the binding on
+  `request.runtime.cloudflare.env`). There is no e-mail binding.
 - **Runtime secrets** are names in `insulin.secrets`, each starting with the app's name in upper case (`ESIGN_…`). The
   deploy copies them from the GitHub environment, and the app reads them with `readAppEnv(name)`; never put a value in
   source.

@@ -14,6 +14,8 @@ const limit=5*1024*1024;
 const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),n=>n.toString(16).padStart(2,'0')).join('');
 async function stagedBytes(bucket:BlobStore,key:string,hash:string){const object=await bucket.get(key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');const bytes=new Uint8Array(await object.arrayBuffer());if(await sha256(bytes)!==hash)throw new Error('Source changed');return bytes;}
 function rolesValid(value:unknown,caseSensitive=false):value is string[]{return Array.isArray(value)&&value.length>0&&value.length<=20&&value.every(r=>typeof r==='string'&&r===r.trim()&&r.length>0&&r.length<=64)&&new Set(value.map(r=>caseSensitive?r:r.toLowerCase())).size===value.length;}
+/** The origins that may host the editor: the app's own first, then ESIGN_FRAME_ANCESTORS, without repeats. */
+export function editorOrigins(own:string,frameAncestorsSetting:string|undefined,prod:boolean):string[]{return [...new Set([own,...frameAncestors(frameAncestorsSetting,prod)])];}
 function sameOrigin(request:Request){const origin=request.headers.get('origin');return !origin||origin===new URL(request.url).origin;}
 async function contextFor(c:import('hono').Context<Env>){const token=sessionToken(name=>c.req.header(name));if(!token)throw new Error('unauthorized');return editorPageContext(c.env.DB,token,Date.now());}
 /**
@@ -22,8 +24,9 @@ async function contextFor(c:import('hono').Context<Env>){const token=sessionToke
  * the page exchanges the code for an editor token and uses `/api/public/editor/*` with it.
  */
 export function mountEditorRoutes(app:Hono<Env>){
- // The editor origins the deployment allows (ESIGN_FRAME_ANCESTORS), where the editor's SQL reads them.
- const syncOrigins=async(c:import('hono').Context<Env>,next:import('hono').Next)=>{await syncEditorOrigins(c.env.DB,frameAncestors(c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)));await next();};
+ // The editor origins the deployment allows, where the editor's SQL reads them: the app's own origin,
+ // whose Templates page hosts the editor, and the hosts in ESIGN_FRAME_ANCESTORS.
+ const syncOrigins=async(c:import('hono').Context<Env>,next:import('hono').Next)=>{await syncEditorOrigins(c.env.DB,editorOrigins(new URL(c.req.url).origin,c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)));await next();};
  app.use('/api/template-editing-sessions',syncOrigins);app.use('/api/template-editing-sessions/*',syncOrigins);app.use('/api/public/editor/*',syncOrigins);
  app.post('/api/template-editing-sessions',bodyLimit({maxSize:8192}),async c=>{
   let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}

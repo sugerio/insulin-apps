@@ -358,7 +358,8 @@ An organization's owners set this up under `insulinapps.com/settings/sso`.
 ## 8. What apps can use beyond D1
 
 An app gets one D1 database and static assets, nothing else: no R2, KV, queues, cron triggers or e-mail binding
-(`check-insulin-app.mjs` refuses a build that declares one). What an app needs beyond that, the gateway provides,
+(`check-insulin-app.mjs` refuses a build that declares one). The only other binding is the deploy's own `SUGER_GATEWAY`,
+the way to the gateway's relay and proxy (§8.2). What an app needs beyond that, the gateway provides,
 declared in the app's `package.json` under `insulin`:
 
 ```json
@@ -416,7 +417,11 @@ token and the organization it serves in `x-suger-organization-id`:
   `GATEWAY_SECRET_KEY`.
 - **Privacy.** Logs carry the app, the organization and the kind, never an address or the text.
 - **Configuration.** The deploy gives each app `SUGER_MAIL_URL` next to `SUGER_INTEGRATIONS_URL` and
-  `SUGER_APP_TOKEN`, when `GATEWAY_SECRET_KEY` is set.
+  `SUGER_APP_TOKEN`, when `GATEWAY_SECRET_KEY` is set, and with them a service binding to the gateway Worker,
+  `SUGER_GATEWAY`. The app sends the request for those URLs over the binding: Cloudflare doesn't let a Worker fetch
+  another Worker of the same zone through its public URL, so a plain `fetch` from `<app>.<domain>` never reaches the
+  gateway. The gateway routes a request that comes over the binding by its URL, as it does any other. The binding is
+  the deploy's, like `DB`; an app's own build still declares none.
 
 As with the integration proxy (§6), the token is per app, so the app chooses the organization.
 

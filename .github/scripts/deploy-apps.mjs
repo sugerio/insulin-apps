@@ -21,6 +21,9 @@ import { listApps } from './list-apps.mjs'
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = resolve(SCRIPT_DIRECTORY, '..', '..')
 const GATEWAY_NAME = 'insulin-apps-gateway'
+// The service binding an app Worker reaches the gateway through (the mail relay, the integration proxy): a Worker can't
+// fetch another Worker of the same zone through its public URL, so <app>.<domain> never reaches <domain> that way.
+export const GATEWAY_BINDING = 'SUGER_GATEWAY'
 const COMPATIBILITY_DATE = '2026-10-13'
 const GATEWAY_REQUIRED_SETTINGS = ['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'EMAIL_FROM']
 // The whole GitHub environment, as JSON, from which an app's declared secrets are picked (appSecretValues).
@@ -156,6 +159,9 @@ export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {},
       ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}),
       ...(mailUrl ? { SUGER_MAIL_URL: mailUrl } : {}),
     },
+    // With the gateway's URLs, the binding to call them through: the app keeps the URL (the gateway routes by it) and
+    // sends the request over the binding instead of the internet.
+    ...(integrationsUrl || mailUrl ? { services: [{ binding: GATEWAY_BINDING, service: GATEWAY_NAME }] } : {}),
     workers_dev: false,
     preview_urls: false,
   }

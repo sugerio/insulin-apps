@@ -11,6 +11,31 @@ MIT) states its licence in its source rather than in a licence file; "QR Code"
 is a registered trademark of DENSO WAVE INCORPORATED.
 
 
+Public Suffix List (in tldts)
+-----------------------------
+
+Where:     the registrable domain of an owner domain (src/owner-domain.ts),
+           from the Public Suffix List data compiled into tldts 7.4.19
+           (MIT, Copyright (c) 2017 Thomas Parisot, 2018 Rémi Berson; full
+           text in THIRD_PARTY_LICENSES)
+Upstream:  https://publicsuffix.org/list/ (the source form of the list)
+License:   Mozilla Public License, version 2.0: https://mozilla.org/MPL/2.0/
+
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+
+Public mail providers (email-providers)
+---------------------------------------
+
+Where:     the public mail providers of src/owner-domain.ts, from
+           email-providers 2.27.0 (all.json), merged with the gateway's own
+Upstream:  https://github.com/derhuerst/email-providers
+License:   ISC, Copyright (c) 2025, Jannis R (full text in
+           THIRD_PARTY_LICENSES)
+
+
 shadcn/ui
 ---------
 

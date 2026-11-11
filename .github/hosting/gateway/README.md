@@ -25,8 +25,8 @@ edge build wrangler picks for workerd), built from [shadcn/ui](https://ui.shadcn
 Tailwind CSS. There is no client-side React: no hydration and no script bundle, and every form is a plain HTML POST.
 The runtime dependencies are only `react`, `react-dom`, `class-variance-authority`, `clsx`, `tailwind-merge`,
 `lucide-react` (icons, rendered to inline SVG), `qrcode-generator` (the authenticator-app QR code, also rendered to
-inline SVG), and `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the `nodejs_compat` flag); wrangler
-bundles them.
+inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the `nodejs_compat` flag), and `tldts`
+(the Public Suffix List) with `email-providers` (public mail providers) for owner domains; wrangler bundles them.
 
 | Path | What |
 |---|---|
@@ -38,6 +38,7 @@ bundles them.
 | `src/db/` | D1 queries, one module per table group; every race-sensitive rule is a single statement or batch |
 | `src/auth/` | sessions, email and password accounts, Google sign-in, the account page; `sign-in.ts`, where every sign-in becomes a session; `totp.ts` (RFC 6238 codes, recovery codes), `mfa.ts` (the second step at `/login/mfa`) and `security.ts` (Account → Security at `/account/security`) |
 | `src/roles.ts` | organization roles, app roles, permissions and who may give what |
+| `src/owner-domain.ts` | owner domains (registrable domain, or a provider address in Gmail's form), the public mail providers, and the strict check `allow-orgs.mjs` and the request to support apply; pure, so the script imports it too |
 | `src/access.ts` | someone's role and permissions in one app, from their organization role or their grant; every way into an app ends here |
 | `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), access in forms and words (`access-forms.ts`) |
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
@@ -237,17 +238,22 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **Invite only verified domains** (DESIGN.md §3). `orgs.invite_verified_domains_only`, which an OWNER sets on
   `/settings/organization` (the statement re-checks OWNER, and turning it on needs a verified domain), is checked inside
   the invitation insert, the resend's claim and the acceptance's membership insert (`db/orgs.ts` `invitableDomain`),
-  against the domain `db/sso.ts` `domainOf` gives (lower case, punycode). An invitation from before, or one whose domain
-  was since removed, can't be sent again or bring anyone new in; an existing member is already in. The page code checks
-  first, before claiming a resend, to word the refusal as for a new invitation.
-- **Organizations per owner domain** (DESIGN.md §3.1). `orgs.owner_domain` is the creator's domain, or their address
-  without a +tag at a public mail provider (`db/sso.ts` `SHARED_DOMAINS`). The org insert is an `INSERT … SELECT …
-  WHERE (SELECT COUNT(*) …) < COALESCE(allowance, 2)`, batched with the OWNER membership, which is written only if the
-  org was, so concurrent creations can't pass the limit. Migration 0007 filled existing rows in SQL, which can't write
-  punycode, so the count also takes the as-typed form of a non-ASCII domain. `users.orgs_created` is a record only. At
-  the limit, `/orgs/new` asks support for more (`POST /orgs/request`, mail kind `org_request`, three a day per person
-  in `mail_log.user_id`, Reply-To the requester, `RL_AUTH`); operators raise a domain's limit with
-  `.github/hosting/scripts/allow-orgs.mjs`.
+  against the domain `owner-domain.ts` `domainOf` gives (lower case, punycode). An invitation from before, or one whose
+  domain was since removed, can't be sent again or bring anyone new in; an existing member is already in. The page code
+  checks first, before claiming a resend, to word the refusal as for a new invitation.
+- **Organizations per owner domain** (DESIGN.md §3.1). `orgs.owner_domain` is the registrable domain of the creator's
+  address (`tldts`, the Public Suffix List's ICANN section), or their address without a +tag at a public mail provider
+  (Gmail without dots, at gmail.com). The providers are the gateway's list and `email-providers`; `src/owner-domain.ts`
+  holds the rules and is pure, so `allow-orgs.mjs` imports it too. The org insert is an `INSERT … SELECT … WHERE
+  (SELECT COUNT(*) …) < COALESCE(allowance, 2)`, batched with the OWNER membership, which is written only if the org
+  was, so concurrent creations can't pass the limit. Migrations 0007 and 0009 filled rows in SQL, which can't write
+  punycode or read the suffix list, so the count also takes the as-typed form of a non-ASCII domain and, for a
+  domain, rows under its subdomains (`LIKE '%.' || domain`, escaped). `users.orgs_created` is a record only. At the
+  limit, `/orgs/new` asks support for more (`POST /orgs/request`, mail kind `org_request`, Reply-To the requester,
+  `RL_AUTH`; a day's requests capped at three per person in `mail_log.user_id`, three per owner domain in
+  `mail_log.owner_domain_hash` and fifty in all, in the insert's own statement). The message's `allow-orgs.mjs`
+  command quotes the owner domain only when `checkOwnerDomain` takes it unchanged. Operators raise a domain's limit
+  with `.github/hosting/scripts/allow-orgs.mjs`.
 - **One kind of access or the other.** Triggers keep `app_grants` to specific-apps (`APPS`) memberships and drop a
   member's grants the moment they get an organization role; composite foreign keys keep a grant's custom role in the
   same organization and app, and stop a custom role from being deleted while anything uses it.

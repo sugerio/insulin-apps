@@ -158,20 +158,26 @@ new key, stores it as `RELEASE_DEPLOY_KEY` and deletes the old one.
 ### Allow a domain more organizations
 
 Each email domain may have two organizations at a time, and each address at a public mail provider two of its own
-(DESIGN.md §3.1). A request for more reaches `ORG_REQUEST_EMAIL` with the owner domain to allow; reply to the
+(DESIGN.md §3.1). The owner domain is the registrable domain of the address (`example.com` for an address at
+`eu.example.com` or at `example.com`; `example.co.uk` under `.co.uk`), and its subdomains' organizations count with it.
+A request for more reaches `ORG_REQUEST_EMAIL` with the owner domain to allow and the command to run; reply to the
 requester (the message's Reply-To) and, if you agree, allow it from the repository root with the Cloudflare credentials
 the workflow uses (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment, or `wrangler login`):
 
 ```bash
 npm ci --prefix .github/hosting/gateway
-node .github/hosting/scripts/allow-orgs.mjs --domain example.com --max 5 --note "Approved request" --remote
+node .github/hosting/scripts/allow-orgs.mjs --domain 'example.com' --max 5 --note "Approved request" --remote
 ```
 
-`--domain` is the owner domain exactly as the request names it: a domain, or for someone at a public mail provider
-their address. `--max` is the total that domain may have, from 0 to 1000 (0 closes it); running the command again
-replaces the number. Without `--remote` it changes the local development database instead. The script refuses anything
-but a plain domain or address and a short plain note, and runs `wrangler d1 execute insulin-apps-gateway`. The person
-then creates the organization themselves at `/orgs/new`. To go back to the default, set `--max 2`.
+`--domain` is the owner domain exactly as the request names it: a registrable domain, or for someone at a public mail
+provider their address (a Gmail address without dots, at gmail.com). The script refuses a subdomain, a provider's own
+domain or an address that isn't at a provider, and says which owner domain counts instead. When the request shows
+`DOMAIN` in place of the domain, its owner domain has characters the script refuses: check the address by hand before
+deciding what to allow. `--max` is the total that domain may have, from 0 to 1000 (0 closes it); running the command
+again replaces the number. Without `--remote` it changes the local development database instead. The script refuses
+anything but a plain domain or address and a short plain note, and runs the gateway's wrangler with Node, without a
+shell (`node node_modules/wrangler/bin/wrangler.js d1 execute insulin-apps-gateway`), so it works the same on Windows.
+The person then creates the organization themselves at `/orgs/new`. To go back to the default, set `--max 2`.
 
 ### Add an app
 

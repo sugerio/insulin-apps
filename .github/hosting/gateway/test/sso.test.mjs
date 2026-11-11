@@ -74,6 +74,12 @@ test('domains: claimed, proven with a DNS TXT record, held by one organization a
   const owner = await h.user()
   const orgId = await h.org(owner.client, 'Domain Org')
   assert.equal((await post(owner, `/orgs/${orgId}/sso/domains`, { domain: 'gmail.com' })).status, 400, 'a shared provider')
+  // The same list as owner domains: regional providers from email-providers too.
+  for (const domain of ['hotmail.co.uk', 'web.de', 'naver.com']) {
+    const refused = await post(owner, `/orgs/${orgId}/sso/domains`, { domain })
+    assert.equal(refused.status, 400, domain)
+    assert.match(refused.text, /Anyone can have an address at that provider, so it can&#x27;t be claimed\./, domain)
+  }
   assert.equal((await post(owner, `/orgs/${orgId}/sso/domains`, { domain: 'not a domain' })).status, 400)
   assert.equal((await post(owner, `/orgs/${orgId}/sso/domains`, { domain: 'insulinapps.localhost' })).status, 400, 'the site itself')
   assert.equal((await post(owner, `/orgs/${orgId}/sso/domains`, { domain: ' Verify-Me.TEST. ' })).status, 303)

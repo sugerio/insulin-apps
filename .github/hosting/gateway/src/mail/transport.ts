@@ -21,10 +21,13 @@ export async function sendMail(ctx: Context, kind: MailKind, to: string, content
 
 /**
  * Sends a request for more organizations (DESIGN.md §3.1) to Insulin Apps support at `to`, from the gateway's address
- * with Reply-To set to the requester: at most ORG_REQUEST_DAILY_LIMIT a day per requester.
+ * with Reply-To set to the requester: each day at most ORG_REQUEST_DAILY_LIMIT per requester,
+ * ORG_REQUEST_DOMAIN_DAILY_LIMIT per owner domain and ORG_REQUEST_GLOBAL_DAILY_LIMIT in all.
  */
-export async function sendOrgRequest(ctx: Context, to: string, requester: { id: string; email: string }, content: MailContent): Promise<SendOutcome> {
-  const slot = await reserveOrgRequestSlot(ctx.config.db, { recipientHash: await sha256Hex(to), userId: requester.id, now: ctx.now })
+export async function sendOrgRequest(ctx: Context, to: string, requester: { id: string; email: string; ownerDomain: string }, content: MailContent): Promise<SendOutcome> {
+  const slot = await reserveOrgRequestSlot(ctx.config.db, {
+    recipientHash: await sha256Hex(to), userId: requester.id, ownerDomainHash: await sha256Hex(requester.ownerDomain), now: ctx.now,
+  })
   if (slot === null) {
     log('mail_capped', { kind: 'org_request', user: requester.id })
     return 'capped'

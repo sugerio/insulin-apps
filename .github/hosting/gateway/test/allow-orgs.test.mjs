@@ -2,21 +2,33 @@
 // strict input checks, the SQL it builds (run here against the real migrations), and the wrangler call it makes.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Log, LogLevel, Miniflare, convertV4MiniflareOptions } from 'miniflare'
 import { COMPATIBILITY_DATE, gatewayDir } from './helpers/bundle.mjs'
 import { applyMigrations } from './helpers/harness.mjs'
 import {
-  DATABASE, UsageError, allowanceSql, main, parseArgs, parseMax, parseNote, parseOwnerDomain, wranglerArgs, wranglerPath,
+  DATABASE, UsageError, allowanceSql, main, parseArgs, parseMax, parseNote, parseOwnerDomain, wranglerArgs, wranglerEntry,
 } from '../../scripts/allow-orgs.mjs'
 import { orgAllowance } from '../src/db/orgs.ts'
 
 const PROVIDER = 'gmail.com'
+const GOOGLEMAIL = 'googlemail.com'
+const REGIONAL = 'yahoo.co.uk'
 
-test('the owner domain: a domain in lower case and punycode, or an address without a +tag; nothing else', () => {
+test('the owner domain: a registrable domain in lower case and punycode, or an address at a provider without a +tag; nothing else', () => {
   assert.equal(parseOwnerDomain(' Example.COM. '), 'example.com')
   assert.equal(parseOwnerDomain('bücher.example'), 'xn--bcher-kva.example')
-  assert.equal(parseOwnerDomain(`Ada.Lovelace@${PROVIDER}`), `ada.lovelace@${PROVIDER}`)
+  assert.equal(parseOwnerDomain('example.co.uk'), 'example.co.uk')
+  assert.equal(parseOwnerDomain(`Ada.Lovelace@${REGIONAL}`), `ada.lovelace@${REGIONAL}`)
+  assert.equal(parseOwnerDomain(`Ada.Lovelace@${GOOGLEMAIL}`), `adalovelace@${PROVIDER}`, 'the Gmail form the gateway counts')
+  // A subdomain, a provider, a public suffix, or an address that isn't at a provider names no owner domain as it is.
+  for (const [bad, reason] of [
+    ['eu.example.com', /counts as its registrable domain example\.com/], [PROVIDER, /public mail provider/], [REGIONAL, /public mail provider/],
+    ['co.uk', /public suffix/], ['ada@example.com', /its owner domain is example\.com/],
+  ]) {
+    assert.throws(() => parseOwnerDomain(bad), (error) => error instanceof UsageError && reason.test(error.message), bad)
+  }
   for (const bad of [
     '', 'localhost', '10.0.0.1', 'exa mple.com', "example.com'; DROP TABLE orgs; --", 'example.com/path', 'example.com:443', 'exa%6dple.com',
     '"example.com"', 'example..com', '-example.com', `${'a'.repeat(64)}.com`, `ada+work@${PROVIDER}`, `o'brien@${PROVIDER}`, `@${PROVIDER}`,
@@ -76,8 +88,8 @@ test('the SQL is one upsert with quoted, checked values, and it works against th
     await db.prepare(allowanceSql({ domain: 'allowed.example', max: 0, note: 'Closed', now: 1 })).run()
     row = await db.prepare("SELECT max_orgs, note FROM org_domain_allowances WHERE owner_domain = 'allowed.example'").first()
     assert.deepEqual(row, { max_orgs: 0, note: 'Closed' })
-    await db.prepare(allowanceSql({ domain: `grace@${PROVIDER}`, max: 4, note: null, now: 1 })).run()
-    assert.equal((await orgAllowance(db, `Grace+work@${PROVIDER}`)).max, 4, 'an address at a provider, as the gateway counts it')
+    await db.prepare(allowanceSql({ domain: `grace.h@${GOOGLEMAIL}`, max: 4, note: null, now: 1 })).run()
+    assert.equal((await orgAllowance(db, `GraceH+work@${PROVIDER}`)).max, 4, 'an address at a provider, in the form the gateway counts')
   } finally {
     await mf.dispose()
   }
@@ -97,10 +109,15 @@ test('it runs the gateway\'s wrangler on the production database by name, or on 
   }
   assert.equal(main(['--domain', 'Example.com', '--max', '5', '--note', 'Approved', '--remote'], { spawn, now: 42, out: (line) => output.push(line), err: (line) => output.push(line) }), 0)
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].program, wranglerPath())
+  // Node runs wrangler's own JavaScript entry, with no shell (so the same on Windows, where .bin/wrangler.cmd needs one).
+  assert.equal(calls[0].program, process.execPath)
+  assert.equal(calls[0].args[0], join(gatewayDir, 'node_modules', 'wrangler', 'bin', 'wrangler.js'))
+  assert.equal(calls[0].args[0], wranglerEntry())
+  assert.ok(existsSync(calls[0].args[0]))
   assert.equal(calls[0].options.cwd, gatewayDir)
-  assert.deepEqual(calls[0].args.slice(0, 5), ['d1', 'execute', DATABASE, '--remote', '--command'])
-  assert.equal(calls[0].args[5], allowanceSql({ domain: 'example.com', max: 5, note: 'Approved', now: 42 }))
+  assert.ok(!('shell' in calls[0].options), 'never through a shell')
+  assert.deepEqual(calls[0].args.slice(1, 6), ['d1', 'execute', DATABASE, '--remote', '--command'])
+  assert.equal(calls[0].args[6], allowanceSql({ domain: 'example.com', max: 5, note: 'Approved', now: 42 }))
   assert.match(output.join('\n'), /Allowing example\.com 5 organizations in the production database\./)
 
   // Bad input never reaches wrangler; a failed wrangler is the script's failure.

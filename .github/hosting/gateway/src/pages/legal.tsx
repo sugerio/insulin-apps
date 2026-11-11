@@ -89,14 +89,16 @@ export function privacyPage(ctx: Context): Html {
           <strong>Organizations:</strong> the organizations you create or join, your role in each (or the apps you were given and
           your role in each), the custom roles owners define, and invitations: the email addresses people invite, the access
           offered, who sent the invitation, and whether it was accepted. Each organization also records its owner domain: the
-          domain of the email address of the person who created it or, for an address at a public email provider such as
-          gmail.com, that address. It limits how many organizations each domain can have. Whether owners allow invitations
-          only to their verified email domains is recorded too.
+          domain of the email address of the person who created it (example.com for an address at mail.example.com) or, for
+          an address at a public email provider such as gmail.com, that address without any +tag (and, at Gmail, without
+          dots). It limits how many organizations each domain can have. Whether owners allow invitations only to their
+          verified email domains is recorded too.
         </li>
         <li>
           <strong>Requests for more organizations, if you send one:</strong> we email Insulin Apps support your name, your email
           address, your owner domain and how many organizations it has, the organization name you want and the reason you give.
-          Support replies to your email address. We record your account id with the time, to allow three requests a day.
+          Support replies to your email address. We record your account id and a one-way hash of your owner domain with the
+          time, to allow three requests a day per person and per owner domain.
         </li>
         <li>
           <strong>Single sign-on, if your organization sets it up:</strong> the email domains it claimed and their verification
@@ -119,8 +121,8 @@ export function privacyPage(ctx: Context): Html {
         </li>
         <li>
           <strong>Email records:</strong> for each email we send, a one-way hash of the recipient&apos;s address, the kind of email
-          and the time (for a request for more organizations, also your account id), so we can limit how many emails one address
-          receives and how many requests one person sends.
+          and the time (for a request for more organizations, also your account id and a one-way hash of your owner domain), so
+          we can limit how many emails one address receives and how many requests one person, or one owner domain, sends.
         </li>
         <li>
           <strong>Your IP address, briefly:</strong> used to rate-limit sign-in, sign-up and other account requests, and sent to

@@ -5,6 +5,7 @@ import { apexUrl } from '../context.ts'
 import { newId } from '../crypto.ts'
 import { customRoleUse, listCustomRoles, listOrgGrants, listUserGrants } from '../db/grants.ts'
 import { listInvitationGrants, listInvitationsFor, listOrgInvitations } from '../db/invitations.ts'
+import { ORG_REQUEST_DAILY_LIMIT, countOrgRequests } from '../db/mail.ts'
 import {
   changeRole, countOwners, createOrg as insertOrg, deleteOrg as removeOrg, findMembership, invitePolicy,
   leaveOrg as leaveMembership, listMembers, listMemberships, orgAllowance, removeMember as removeMembership,
@@ -256,8 +257,9 @@ export async function createOrg(ctx: Context): Promise<Response> {
 
 /**
  * POST /orgs/request: at the owner domain's limit, asks Insulin Apps support (ORG_REQUEST_EMAIL) for more, with the
- * requester's name, address, owner domain and its count, the name wanted and why, and Reply-To set to them. At most
- * ORG_REQUEST_DAILY_LIMIT a day per person, and RL_AUTH per person and IP.
+ * requester's name, address, owner domain and its count, the name wanted and why, and Reply-To set to them. Each day
+ * at most ORG_REQUEST_DAILY_LIMIT per person, ORG_REQUEST_DOMAIN_DAILY_LIMIT per owner domain and
+ * ORG_REQUEST_GLOBAL_DAILY_LIMIT in all (db/mail.ts), and RL_AUTH per person and IP.
  */
 export async function requestMoreOrgs(ctx: Context): Promise<Response> {
   const session = await requireSession(ctx)
@@ -274,11 +276,18 @@ export async function requestMoreOrgs(ctx: Context): Promise<Response> {
   if ('problem' in name) return again(name.problem, 400)
   if ('problem' in reason) return again(reason.problem, 400)
   if (!(await allowAuth(ctx, 'org_request', session.user.id))) return again('Too many attempts. Please wait a minute, then try again.', 429)
-  const outcome = await sendOrgRequest(ctx, to, { id: session.user.id, email: session.user.email }, orgRequestMail({
+  const requester = { id: session.user.id, email: session.user.email, ownerDomain: limit.ownerDomain }
+  const outcome = await sendOrgRequest(ctx, to, requester, orgRequestMail({
     name: session.user.name, email: session.user.email, ownerDomain: limit.ownerDomain, count: limit.count, max: limit.max,
     wanted: name.name, reason: reason.reason, site: ctx.config.domain,
   }))
-  if (outcome === 'capped') return again('You\'ve sent the most requests allowed for today. Insulin Apps support will reply to the ones you sent.', 429)
+  if (outcome === 'capped') {
+    // The person's own cap, or their owner domain's or everyone's, which the message words alike so it tells them
+    // nothing about other people's requests.
+    return await countOrgRequests(ctx.config.db, session.user.id, ctx.now) >= ORG_REQUEST_DAILY_LIMIT
+      ? again('You\'ve sent the most requests allowed for today. Insulin Apps support will reply to the ones you sent.', 429)
+      : again('Insulin Apps support can\'t take more requests for more organizations today. Please try again tomorrow.', 429)
+  }
   if (outcome === 'failed') return again(MAIL_FAILED, 503)
   log('org_request_sent', { user: session.user.id })
   return redirect(apexUrl(ctx, '/orgs/new?notice=request-sent'), 303)

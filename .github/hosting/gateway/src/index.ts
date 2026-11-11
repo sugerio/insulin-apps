@@ -5,13 +5,17 @@ import { loadConfig } from './config.ts'
 import type { Env } from './env.ts'
 import { reconcileOwnerDomains } from './db/orgs.ts'
 import { housekeeping } from './housekeeping.ts'
+import { drainUnread } from './http/request.ts'
 import { secure } from './http/secure.ts'
 import { log, logError } from './log.ts'
 import { handleRequest } from './router.ts'
 import { HOUSEKEEPING_CRON, tickApps } from './scheduled.ts'
 
 export default {
-  /** Every response, uncaught failures included, leaves through `secure` (HSTS and the common security headers). */
+  /**
+   * Every response, uncaught failures included, leaves through `secure` (HSTS and the common security headers), after
+   * any request body the handler left unread is drained (http/request.ts).
+   */
   async fetch(request, env, ctx): Promise<Response> {
     let response: Response
     try {
@@ -20,6 +24,7 @@ export default {
       logError('unhandled_error', error)
       response = new Response('Something went wrong. Please try again.\n', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
     }
+    await drainUnread(request)
     return secure(request, response)
   },
 

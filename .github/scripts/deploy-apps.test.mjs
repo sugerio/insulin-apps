@@ -359,6 +359,11 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   assert.ok(!('SITE_ENV' in gateway.vars))
   assert.equal(gateway.vars.SUPPORT_EMAIL, '', 'optional settings left unset stay empty')
   assert.equal(gateway.vars.ORG_REQUEST_EMAIL, '')
+  assert.deepEqual(gateway.assets, {
+    directory: resolve(root, '.github', 'hosting', 'docs', 'assets'),
+    binding: 'DOCS_ASSETS',
+    run_worker_first: true,
+  }, "the docs' images, behind the gateway: every request reaches the Worker first")
 
   const planText = await readFile(join(out, 'plan.json'), 'utf8')
   for (const secret of [environment.CLOUDFLARE_API_TOKEN, environment.GOOGLE_CLIENT_SECRET, environment.TURNSTILE_SECRET_KEY]) {

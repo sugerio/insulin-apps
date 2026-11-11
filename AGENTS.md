@@ -19,6 +19,15 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
 
    Cap Table is the reference: `captable/src/app/pages/docs/` and `captable/src/app/components/Docs.tsx`. Repeat this
    rule in the app's own `AGENTS.md`, because the Insulin console copies only the app's directory into a new app.
+
+   **Public docs, too.** An app's public documentation at `https://insulinapps.com/docs/<app>/` lives in
+   `<app>/docs/public/`, one Markdown page per topic with front matter (`title`, `description`, `order`), written for
+   people and AI agents: what the app does, setting it up, the main tasks, what each role sees, its API (as
+   `GET /api/catalog` publishes it) and its domain background, labelled general information, not advice. It is updated
+   in the same change as the behaviour it describes, like the in-app Docs, with synthetic data only. Then run
+   `npm run build:docs` in `.github/hosting/gateway/` and commit the regenerated `src/assets/docs-content.ts`
+   (`npm run check:docs` fails while it is stale). The platform's own pages are in `.github/hosting/docs/`; the format
+   is in the gateway's README under "The public docs".
 3. **UI.** New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default theme (the hosting gateway in
    `.github/hosting/gateway/` follows it). Apps that already have their own design keep it until they are restyled.
 4. **Public repository.** Synthetic data only (example.com or `.test` addresses, fictional people and companies), in
@@ -117,7 +126,8 @@ never reads another's data.
 ## A new app
 
 - A top-level directory with `README.md`, `AGENTS.md` (including the Docs rule and the access rules above), `NOTICE`
-  when it bundles third-party material, and the in-app Docs.
+  when it bundles third-party material, the in-app Docs, and its public docs in `docs/public/` (the docs build fails
+  for an app without them).
 - Its roles mapped to the app's functions (what Admin, Editor and Viewer may do there), a permission catalog in
   `package.json` if it should support custom roles, and `GET /api/catalog` for AI agents.
 - A row in the app table of the root `README.md`.

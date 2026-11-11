@@ -273,6 +273,9 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
     send_email: [{ name: 'EMAIL', allowed_sender_addresses: [settings.senderAddress] }],
     ratelimits: RATE_LIMITS,
     triggers: { crons: GATEWAY_CRONS },
+    // The public docs' images (Workers Static Assets). run_worker_first sends every request to the gateway first, so
+    // the directory is reachable only through the binding, which the gateway serves at /docs/assets/* alone.
+    assets: { directory: resolve(root, '.github', 'hosting', 'docs', 'assets'), binding: 'DOCS_ASSETS', run_worker_first: true },
     vars: {
       SITE_DOMAIN: settings.siteDomain,
       SITE_APPS: siteApps,

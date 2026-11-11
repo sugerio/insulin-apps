@@ -219,3 +219,7 @@ setup too. When behaviour changes, update the guide that describes it: `README.m
 `docs/architecture.md` or `src/app/db/README.md`, and the in-app Docs topic in `src/app/pages/docs/` that users read. The
 in-app Docs describe only what the app does, in plain words, and their equity topics stay general information, not
 advice.
+
+The public docs at `https://insulinapps.com/docs/captable/` are `docs/public/*.md` (front matter `title`,
+`description`, `order`), for people and AI agents; update the page that describes a behaviour in the same change, then
+run `npm run build:docs` in `.github/hosting/gateway/` and commit its `src/assets/docs-content.ts`.

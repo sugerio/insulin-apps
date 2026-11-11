@@ -1,0 +1,15 @@
+{
+  "name": "insulin-apps-docs-screenshots",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Captures the screenshots of the public docs (assets/screenshots/) from a local run of the gateway and the apps.",
+  "license": "MIT",
+  "scripts": {
+    "screenshots": "node screenshots.mjs"
+  },
+  "devDependencies": {
+    "fflate": "0.8.3",
+    "playwright-core": "1.64.1"
+  }
+}

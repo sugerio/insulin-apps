@@ -140,7 +140,7 @@ function limitSentence(limit: OrgLimitView): string {
   const count = `${limit.count} organization${limit.count === 1 ? "" : "s"}`
   return limit.personal
     ? `You've created ${count} with ${limit.ownerDomain}, the most allowed for one address at a public email provider (${limit.max}).`
-    : `People with an address at ${limit.ownerDomain} have created ${count}, the most allowed for one email domain (${limit.max}).`
+    : `People with an address at ${limit.ownerDomain} or one of its subdomains have created ${count}, the most allowed for one email domain (${limit.max}).`
 }
 
 /** At the limit: why, and the form that asks Insulin Apps support for more (or where to ask, without it). */

@@ -49,19 +49,34 @@ export async function reserveAppMailSlot(db: D1Database, slot: { recipientHash: 
 
 /** Requests for more organizations one person may send to support in a day (DESIGN.md §3.1). */
 export const ORG_REQUEST_DAILY_LIMIT = 3
+/** Requests for more organizations support takes in a day for one owner domain, from everyone there together. */
+export const ORG_REQUEST_DOMAIN_DAILY_LIMIT = 3
+/** Requests for more organizations support takes in a day from everyone. */
+export const ORG_REQUEST_GLOBAL_DAILY_LIMIT = 50
 
 /**
- * Records a request for more organizations about to be sent to support, atomically checking the requester's daily
- * cap (kind `org_request`, with their user id). Returns the log row id, or null when the cap is reached.
+ * Records a request for more organizations about to be sent to support (kind `org_request`, with the requester's user
+ * id and their owner domain's hash), atomically checking the daily caps: the requester's, their owner domain's and
+ * everyone's. Returns the log row id, or null when a cap is reached.
  */
-export async function reserveOrgRequestSlot(db: D1Database, slot: { recipientHash: string; userId: string; now: number }): Promise<number | null> {
+export async function reserveOrgRequestSlot(db: D1Database, slot: { recipientHash: string; userId: string; ownerDomainHash: string; now: number }): Promise<number | null> {
   const row = await db.prepare(
-    `INSERT INTO mail_log (recipient_hash, kind, org_id, user_id, created_at)
-     SELECT ?1, 'org_request', NULL, ?2, ?3
-     WHERE (SELECT COUNT(*) FROM mail_log WHERE user_id = ?2 AND kind = 'org_request' AND created_at > ?3 - ?4) < ?5
+    `INSERT INTO mail_log (recipient_hash, kind, org_id, user_id, owner_domain_hash, created_at)
+     SELECT ?1, 'org_request', NULL, ?2, ?3, ?4
+     WHERE (SELECT COUNT(*) FROM mail_log WHERE user_id = ?2 AND kind = 'org_request' AND created_at > ?4 - ?5) < ?6
+       AND (SELECT COUNT(*) FROM mail_log WHERE owner_domain_hash = ?3 AND kind = 'org_request' AND created_at > ?4 - ?5) < ?7
+       AND (SELECT COUNT(*) FROM mail_log WHERE kind = 'org_request' AND created_at > ?4 - ?5) < ?8
      RETURNING id`,
-  ).bind(slot.recipientHash, slot.userId, slot.now, ORG_WINDOW_MS, ORG_REQUEST_DAILY_LIMIT).first<{ id: number }>()
+  ).bind(slot.recipientHash, slot.userId, slot.ownerDomainHash, slot.now, ORG_WINDOW_MS, ORG_REQUEST_DAILY_LIMIT,
+    ORG_REQUEST_DOMAIN_DAILY_LIMIT, ORG_REQUEST_GLOBAL_DAILY_LIMIT).first<{ id: number }>()
   return row?.id ?? null
+}
+
+/** The requests for more organizations this person sent in the last day, to word a refusal. */
+export async function countOrgRequests(db: D1Database, userId: string, now: number): Promise<number> {
+  const row = await db.prepare("SELECT COUNT(*) AS count FROM mail_log WHERE user_id = ?1 AND kind = 'org_request' AND created_at > ?2")
+    .bind(userId, now - ORG_WINDOW_MS).first<{ count: number }>()
+  return row?.count ?? 0
 }
 
 export async function releaseMailSlot(db: D1Database, id: number): Promise<void> {

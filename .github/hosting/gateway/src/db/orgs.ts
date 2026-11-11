@@ -1,5 +1,5 @@
 import { owner, type GrantInput } from './grants.ts'
-import { SHARED_DOMAINS, domainOf } from './sso.ts'
+import { ownerDomainOf, registrableDomain, subdomainPattern } from '../owner-domain.ts'
 import type { Role } from '../roles.ts'
 
 export interface OrgRow {
@@ -36,52 +36,46 @@ const ANOTHER_OWNER = `(SELECT COUNT(*) FROM memberships o WHERE o.org_id = ?1 A
 export const ORGS_PER_DOMAIN = 2
 
 /**
- * The owner domain an organization created by `email` counts against: the address's domain, lower case and in
- * punycode; at a public mail provider (SHARED_DOMAINS), the address itself without a +tag, so each person there counts
- * on their own and the provider as a whole isn't limited.
+ * The forms the organizations of the owner domain of `email` (owner-domain.ts ownerDomainOf) may be recorded in, as
+ * the parameters ?1 to ?4 of OWNED: the owner domain itself; the form migrations 0007 and 0009 wrote for a non-ASCII
+ * domain (SQL can't write punycode, so it stayed as typed); and LIKE patterns for the subdomains of both, as those
+ * migrations, and the gateway before 0009, recorded the creator's whole domain.
  */
-export function ownerDomainOf(email: string): string {
-  const domain = domainOf(email)
-  if (!SHARED_DOMAINS.has(domain)) return domain
-  const local = email.slice(0, email.lastIndexOf('@')).toLowerCase()
-  const plus = local.indexOf('+')
-  return `${plus > 0 ? local.slice(0, plus) : local}@${domain}`
+function ownedForms(email: string): [string, string, string | null, string | null] {
+  const ownerDomain = ownerDomainOf(email)
+  if (ownerDomain.includes('@')) return [ownerDomain, ownerDomain, null, null]
+  const typed = email.slice(email.lastIndexOf('@') + 1).toLowerCase()
+  const legacy = registrableDomain(typed) ?? typed
+  return [ownerDomain, legacy, subdomainPattern(ownerDomain), legacy === ownerDomain ? null : subdomainPattern(legacy)]
 }
 
-/**
- * The same owner domain as migration 0007 wrote it for the organizations that existed then: SQL can't write punycode,
- * so a non-ASCII domain stayed as typed. Counting this form too keeps those organizations in their domain's count.
- */
-function legacyOwnerDomainOf(email: string): string {
-  const owned = ownerDomainOf(email)
-  return owned.includes('@') ? owned : email.slice(email.lastIndexOf('@') + 1).toLowerCase()
-}
-
-// The organizations of owner domain ?1 (or its legacy form ?2), and how many it may have (?3 by default).
-const OWNED = 'o.owner_domain IN (?1, ?2)'
-const ALLOWED = 'COALESCE((SELECT a.max_orgs FROM org_domain_allowances a WHERE a.owner_domain = ?1), ?3)'
+// The organizations of an owner domain (ownedForms: ?1 to ?4), and how many it may have (?5 by default). A subdomain
+// pattern applies to domains only, never to an address at a provider.
+const OWNED = `(o.owner_domain IN (?1, ?2)
+  OR (instr(o.owner_domain, '@') = 0 AND (o.owner_domain LIKE ?3 ESCAPE '\\' OR o.owner_domain LIKE ?4 ESCAPE '\\')))`
+const ALLOWED = 'COALESCE((SELECT a.max_orgs FROM org_domain_allowances a WHERE a.owner_domain = ?1), ?5)'
 
 /** The owner domain of someone with this address, its organizations now, and how many it may have. */
 export async function orgAllowance(db: D1Database, email: string): Promise<{ ownerDomain: string; count: number; max: number }> {
-  const ownerDomain = ownerDomainOf(email)
+  const forms = ownedForms(email)
   const row = await db.prepare(`SELECT (SELECT COUNT(*) FROM orgs o WHERE ${OWNED}) AS count, ${ALLOWED} AS max`)
-    .bind(ownerDomain, legacyOwnerDomainOf(email), ORGS_PER_DOMAIN).first<{ count: number; max: number }>()
-  return { ownerDomain, count: row?.count ?? 0, max: row?.max ?? ORGS_PER_DOMAIN }
+    .bind(...forms, ORGS_PER_DOMAIN).first<{ count: number; max: number }>()
+  return { ownerDomain: forms[0], count: row?.count ?? 0, max: row?.max ?? ORGS_PER_DOMAIN }
 }
 
 /**
  * Creates an organization with its creator as OWNER, in one batch whose insert also requires the creator's owner
- * domain (from `email`) to have fewer organizations than it may (ORGS_PER_DOMAIN, or its allowance), so concurrent
- * creations can't exceed it. The creator's `users.orgs_created` still counts up, as a record only: nothing limits by
- * it any more. False when the owner domain is at its limit.
+ * domain (from `email`; its subdomains' organizations count with it) to have fewer organizations than it may
+ * (ORGS_PER_DOMAIN, or its allowance), so concurrent creations can't exceed it. The creator's `users.orgs_created`
+ * still counts up, as a record only: nothing limits by it any more. False when the owner domain is at its limit.
  */
 export async function createOrg(db: D1Database, org: { id: string; name: string; userId: string; email: string; now: number }): Promise<boolean> {
   const [created] = await db.batch([
     db.prepare(
       `INSERT INTO orgs (id, name, created_by, owner_domain, created_at, updated_at)
-       SELECT ?4, ?5, ?6, ?1, ?7, ?7
+       SELECT ?6, ?7, ?8, ?1, ?9, ?9
        WHERE (SELECT COUNT(*) FROM orgs o WHERE ${OWNED}) < ${ALLOWED}`,
-    ).bind(ownerDomainOf(org.email), legacyOwnerDomainOf(org.email), ORGS_PER_DOMAIN, org.id, org.name, org.userId, org.now),
+    ).bind(...ownedForms(org.email), ORGS_PER_DOMAIN, org.id, org.name, org.userId, org.now),
     db.prepare(
       `INSERT INTO memberships (org_id, user_id, role, created_at, updated_at)
        SELECT ?1, ?2, 'OWNER', ?3, ?3 WHERE EXISTS (SELECT 1 FROM orgs WHERE id = ?1)`,

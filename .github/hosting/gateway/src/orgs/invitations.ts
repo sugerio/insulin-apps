@@ -143,9 +143,16 @@ export async function resendInvitation(ctx: Context, [orgId, invitationId]: stri
   const { session, membership, invitation } = found
   const db = ctx.config.db
   const problem = (error: string, status: number) => renderUsers(ctx, session, membership, { error, status })
+  // An invitation made before the organization limited invitations to its verified domains, or before its domain was
+  // removed, is refused like a new one (the claim checks it again itself).
+  const outside = await outsideVerifiedDomains(ctx, membership.org_id, invitation.email)
+  if (outside) return problem(outside, 403)
   if (ctx.now - invitation.last_sent_at < RESEND_GAP_MS) return problem('An invitation can be sent again once every 10 minutes.', 429)
   if (!(await claimResend(db, invitation, session.user.id, ctx.now, RESEND_GAP_MS, ctx.now + INVITATION_TTL_MS))) {
-    return (await actorChanged(ctx, session, membership)) ?? problem('An invitation can be sent again once every 10 minutes.', 429)
+    const changed = await actorChanged(ctx, session, membership)
+    if (changed) return changed
+    const outsideNow = await outsideVerifiedDomains(ctx, membership.org_id, invitation.email)
+    return outsideNow ? problem(outsideNow, 403) : problem('An invitation can be sent again once every 10 minutes.', 429)
   }
   const outcome = await sendMail(ctx, 'invitation', invitation.email,
     invitationMail(session.user.name, membership.org_name, accessPhrase(ctx.config, invitation.role, await grantsOf(ctx, invitation.id)), invitationLink(ctx, invitation.id)), membership.org_id)

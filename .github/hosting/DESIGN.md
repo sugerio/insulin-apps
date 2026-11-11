@@ -116,9 +116,10 @@ Apps refuse mutations of their own people, roles, billing or integrations unless
 - `insulinapps.com/settings/organization` has the name, leaving and deleting and, for owners, **who can be invited**.
   Once the organization has a verified domain (§7), an owner can invite only people with an address in its verified
   domains; it is off by default. While it is on, every new invitation, from the people page or an app's, must be for an
-  address in one of the domains verified now (compared in lower case and punycode), and accepting checks again, so an
-  invitation sent before it was turned on, or before its domain was removed, brings nobody new in. Both checks are part
-  of the insert and the acceptance statement, so neither races the setting or a domain's removal. People who are
+  address in one of the domains verified now (compared in lower case and punycode), and resending and accepting check
+  again, so an invitation sent before it was turned on, or before its domain was removed, is neither sent again (it is
+  refused like a new one) nor brings anyone new in. The checks are part of the insert, the resend's claim and the
+  acceptance statement, so none races the setting or a domain's removal. People who are
   members already keep their access, and an app admin can still give an existing specific-apps member another app.
   With no verified domain left, nobody can be invited until an owner verifies one or turns the setting off. SCIM keeps
   its own rule (§7).
@@ -132,22 +133,42 @@ removed meanwhile changes nothing (the gateway's existing rule, extended to app 
 
 ### 3.1 Organization limits
 
-- **Owner domain.** Each organization records the domain of its creator's address, lower case and in punycode. For an
-  address at a public mail provider (the providers no organization may claim in §7: gmail.com, outlook.com and the
-  like) it is the address itself, without a +tag, so each person there counts on their own and the provider as a whole
-  isn't limited.
+- **Owner domain.** Each organization records the registrable domain of its creator's address (the public suffix and
+  one label more, from the ICANN section of the Public Suffix List), lower case and in punycode: an address at
+  `one.example.com` counts as `example.com`, one at `two.example.co.uk` as `example.co.uk`. The list's private section
+  is left out, so free subdomains under a hosting or dynamic-DNS platform count with that platform. An IP address, or a
+  name that is itself a public suffix, counts as itself. For an address at a public mail provider it is the address
+  itself, lower case and without a +tag, so each person there counts on their own and the provider as a whole isn't
+  limited.
+  Gmail ignores dots and also answers at googlemail.com, so a Gmail owner domain drops the dots and is at gmail.com;
+  other providers keep the dots, as not all of them ignore dots.
+- **Public mail providers.** The providers no organization may claim in §7 either: the gateway's own list (gmail.com,
+  outlook.com and the like) together with the `email-providers` package's list of some 8,700 free and regional
+  providers (hotmail.co.uk, web.de, naver.com, comcast.net …), pinned to an exact version, and any subdomain of one.
+  The reserved example domains (example.com, .org, .net) are never a provider. The rules live in
+  `gateway/src/owner-domain.ts`, which the gateway and `allow-orgs.mjs` both use.
 - **Two per owner domain.** An owner domain may have at most two organizations at a time. The count is part of the
-  insert, so concurrent creations can't go past it; deleting an organization frees its place. Migration `0007` gave
-  existing organizations their creator's owner domain; one whose creator's account was gone counts for nobody. The old
-  per-account count (`users.orgs_created`) is kept as a record and limits nothing.
+  insert, so concurrent creations can't go past it; deleting an organization frees its place. The count includes the
+  organizations recorded under its subdomains, which migrations `0007` and `0009` and the gateway before `0009` wrote
+  with the creator's whole domain. Migration `0007` gave existing organizations their creator's owner domain; `0009`
+  gave each one still without an owner domain its creator's or, when that account was gone, its earliest current
+  owner's, and rewrote Gmail owner domains (and allowances) to the form above. An organization with neither counts for
+  nobody. Organizations
+  recorded under a provider added to the list since `0007` (as a domain such as `web.de`) count for nobody either. The
+  old per-account count (`users.orgs_created`) is kept as a record and limits nothing.
 - **Allowances.** Operators let a domain (or an address at a provider) have more, or fewer down to none, in
-  `org_domain_allowances`, with `.github/hosting/scripts/allow-orgs.mjs` ([runbook](README.md)).
+  `org_domain_allowances`, with `.github/hosting/scripts/allow-orgs.mjs` ([runbook](README.md)). It takes the owner
+  domain only in the form the gateway counts: a registrable domain that isn't a provider, or an address at a provider.
 - **Asking for more.** At the limit, `/orgs/new` shows "Request more organizations" instead of the create form: the
   name wanted and why. It e-mails Insulin Apps support at `ORG_REQUEST_EMAIL` with the requester's name and address,
-  their owner domain and how many organizations it has, from `EMAIL_FROM` with Reply-To set to the requester; at most
-  three a day per person, and `RL_AUTH`. Without `ORG_REQUEST_EMAIL` the page shows the limit and the contact
-  (`SUPPORT_EMAIL`, or the repository's issues). Support replies by e-mail; once an allowance is set, the person creates
-  the organization themselves.
+  their owner domain and how many organizations it has, from `EMAIL_FROM` with Reply-To set to the requester, and the
+  `allow-orgs.mjs` command to run: with the owner domain quoted for the shell when it passes the script's own strict
+  check, or a `DOMAIN` placeholder to fill in after checking it by hand when it doesn't (an address someone chose can
+  hold quotes or `$(…)`). Each day support takes at most three requests per person, three per owner domain (from
+  everyone there together) and fifty from everyone, counted in `mail_log` in the statement that records the request;
+  `RL_AUTH` applies too. Without `ORG_REQUEST_EMAIL` the page shows the limit and the contact (`SUPPORT_EMAIL`, or the
+  repository's issues). Support replies by e-mail; once an allowance is set, the person creates the organization
+  themselves.
 
 ## 4. What tokens may reach
 
@@ -297,7 +318,8 @@ An organization's owners set this up under `insulinapps.com/settings/sso`.
 
 - **Domains.** An owner claims an e-mail domain and proves it with a DNS TXT record (`_insulin-apps.<domain>`, value
   `insulin-apps-verification=<token>`), checked over DNS-over-HTTPS. One organization at a time can hold a verified
-  domain. Verified domains are also what an owner can limit invitations to (§3).
+  domain. A public mail provider (§3.1's list, or a subdomain of one) can't be claimed. Verified domains are also what
+  an owner can limit invitations to (§3).
 - **Connection.** One per organization, SAML 2.0 or OpenID Connect, with a default role for people it adds (Editor or
   Viewer) and an option to require SSO for the verified domains (password and Google sign-in are then refused for
   those addresses).
@@ -450,6 +472,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | `0006_sso` | `sso_domains`, `sso_connections`, `sso_requests`, `scim_tokens`, `scim_users` |
 | `0007_org_limits` | `orgs.invite_verified_domains_only` (§3) and `orgs.owner_domain`, filled from each creator's address; `org_domain_allowances`; `mail_log.user_id` for the per-person cap on requests (§3.1) |
 | `0008_api_clients` | `service_accounts.previous_secret_hash`, `previous_secret_expires_at` and `secret_rotated_at` (rotation with a 24-hour overlap, §5.3); `oauth_tokens.client_secret_hash`, the secret that issued a client's token |
+| `0009_owner_domains` | `orgs.owner_domain` filled where it was missing and Gmail owner domains (and allowances) in one form; `mail_log.owner_domain_hash` for the per-domain cap on requests (§3.1) |
 
 ## 10. Configuration added
 

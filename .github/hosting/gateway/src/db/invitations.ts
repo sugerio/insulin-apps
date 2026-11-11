@@ -160,15 +160,17 @@ export async function revokeInvitation(db: D1Database, id: string, actorId: stri
 
 /**
  * Claims a resend: succeeds once per `gap` milliseconds per invitation, even under concurrent requests, renews the
- * expiry, and requires `actorId` still to be allowed to handle the invitation. `restoreResend` undoes it when the
- * e-mail could not be sent.
+ * expiry, and requires `actorId` still to be allowed to handle the invitation and, while the organization invites only
+ * people in its verified domains, the address to be in one of them now. `restoreResend` undoes it when the e-mail
+ * could not be sent.
  */
 export async function claimResend(db: D1Database, invitation: InvitationRow, actorId: string, now: number, gap: number, expiresAt: number, app: string | null = null): Promise<boolean> {
   const result = await db.prepare(
     `UPDATE invitations SET last_sent_at = ?3, expires_at = ?4
      WHERE id = ?1 AND status = 'pending' AND last_sent_at = ?2 AND ?3 - last_sent_at >= ?5
-       AND ${mayHandle('invitations.org_id', '?6', '?7')}`,
-  ).bind(invitation.id, invitation.last_sent_at, now, expiresAt, gap, actorId, app).run()
+       AND ${mayHandle('invitations.org_id', '?6', '?7')}
+       AND ${invitableDomain('invitations.org_id', '?8')}`,
+  ).bind(invitation.id, invitation.last_sent_at, now, expiresAt, gap, actorId, app, domainOf(invitation.email)).run()
   return result.meta.changes > 0
 }
 

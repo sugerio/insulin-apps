@@ -241,10 +241,17 @@ export async function resendAppInvitation(ctx: Context, [invitationId]: string[]
   const db = ctx.config.db
   const invitation = await appInvitation(ctx, app, found, invitationId!)
   if (!invitation) return notFoundPage(ctx)
+  // Outside the verified domains the organization now invites only from: refused like a new invitation (the claim
+  // checks it again itself).
+  const outside = await outsideVerifiedDomains(ctx, invitation.org_id, invitation.email)
+  if (outside) return renderAppUsers(ctx, app, found, { error: outside, status: 403 })
   const tooSoon = 'An invitation can be sent again once every 10 minutes.'
   if (ctx.now - invitation.last_sent_at < RESEND_GAP_MS) return renderAppUsers(ctx, app, found, { error: tooSoon, status: 429 })
   if (!(await claimResend(db, invitation, found.session.user.id, ctx.now, RESEND_GAP_MS, ctx.now + INVITATION_TTL_MS, app.name))) {
-    return (await stillAdmin(ctx, app, found)) ?? renderAppUsers(ctx, app, found, { error: tooSoon, status: 429 })
+    const changed = await stillAdmin(ctx, app, found)
+    if (changed) return changed
+    const outsideNow = await outsideVerifiedDomains(ctx, invitation.org_id, invitation.email)
+    return renderAppUsers(ctx, app, found, outsideNow ? { error: outsideNow, status: 403 } : { error: tooSoon, status: 429 })
   }
   const grants = (await listInvitationGrants(db, [invitation.id])).get(invitation.id) ?? []
   const outcome = await sendMail(ctx, 'invitation', invitation.email,

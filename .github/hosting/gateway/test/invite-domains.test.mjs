@@ -1,10 +1,10 @@
 // "Invite only people in our verified domains" (DESIGN.md §3): off by default, an owner's setting once a domain is
-// verified, and checked inside the statements that invite and accept, for the organization and for each app.
+// verified, and checked inside the statements that invite, resend and accept, for the organization and for each app.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { startGateway, uniqueEmail } from './helpers/harness.mjs'
-import { acceptInvitation, findInvitation, insertInvitation } from '../src/db/invitations.ts'
+import { acceptInvitation, claimResend, findInvitation, insertInvitation } from '../src/db/invitations.ts'
 import { invitePolicy, setInviteVerifiedDomainsOnly } from '../src/db/orgs.ts'
 
 let h
@@ -208,4 +208,45 @@ test('the domain check is inside the insert and the acceptance: a setting turned
   assert.equal(await flag(orgId), 1)
   assert.equal(await setInviteVerifiedDomainsOnly(h.db, orgId, owner.id, false, Date.now()), true)
   assert.equal(await setInviteVerifiedDomainsOnly(h.db, orgId, owner.id, true, Date.now()), false, 'and turning it on needs a verified domain')
+})
+
+test('resending an invitation follows it too: outside the verified domains it is refused like a new one, before it is claimed', async () => {
+  const { owner, orgId } = await orgWith('resend-corp.test', 'Resend Corp')
+  const outsider = uniqueEmail('resend-outsider')
+  const appOutsider = uniqueEmail('resend-app')
+  const insider = address('resend-corp.test')
+  assert.equal((await invite(owner, orgId, outsider)).status, 303)
+  assert.equal((await invite(owner, orgId, insider)).status, 303)
+  assert.equal((await appPost(owner, '/settings/users/invite', { org_id: orgId, email: appOutsider, role: 'VIEWER' })).status, 303)
+  await turnOn(owner, orgId)
+  // Sent long enough ago that only the domains can stop a resend.
+  await h.sql('UPDATE invitations SET last_sent_at = last_sent_at - ?2 WHERE org_id = ?1', orgId, 11 * 60 * 1000)
+  const pending = async (email) => (await h.sql(
+    "SELECT id, last_sent_at, expires_at FROM invitations WHERE org_id = ?1 AND email = ?2 AND status = 'pending'", orgId, email,
+  ))[0]
+  const resendOrg = (id) => post(owner, `/orgs/${orgId}/invitations/${id}/resend`)
+  const resendApp = (id) => appPost(owner, `/settings/users/invitations/${id}/resend`, { org_id: orgId })
+
+  for (const [email, resend] of [[outsider, resendOrg], [appOutsider, resendApp]]) {
+    const before = await pending(email)
+    const refused = await resend(before.id)
+    assert.equal(refused.status, 403, email)
+    assert.ok(refused.text.includes(MESSAGE('resend-corp.test')), email)
+    assert.deepEqual(await pending(email), before, 'nothing claimed: the time sent and the expiry stay')
+    assert.equal((await h.mails(email)).length, 1, 'only the first invitation was emailed')
+  }
+  assert.equal((await resendOrg((await pending(insider)).id)).status, 303, 'an address in the domain is resent')
+  assert.equal((await h.mails(insider)).length, 2)
+
+  // The claim checks the domains itself: a resend that read the setting while it was off claims nothing.
+  const stale = await findInvitation(h.db, (await pending(outsider)).id)
+  assert.equal(await claimResend(h.db, stale, owner.id, Date.now(), 10 * 60 * 1000, Date.now() + DAY), false)
+  assert.equal((await pending(outsider)).last_sent_at, stale.last_sent_at)
+
+  // Turned off, both are resent again.
+  assert.equal((await post(owner, `/orgs/${orgId}/invite-domains`, { only: 'off' })).status, 303)
+  assert.equal((await resendOrg((await pending(outsider)).id)).status, 303)
+  assert.equal((await resendApp((await pending(appOutsider)).id)).status, 303)
+  assert.equal((await h.mails(outsider)).length, 2)
+  assert.equal((await h.mails(appOutsider)).length, 2)
 })

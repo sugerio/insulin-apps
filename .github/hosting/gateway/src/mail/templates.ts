@@ -147,3 +147,36 @@ export function mfaChangedMail(name: string, enabled: boolean, securityUrl: stri
     ], { label: 'Review your account security', url: securityUrl }),
   }
 }
+
+/**
+ * To Insulin Apps support (ORG_REQUEST_EMAIL): someone whose owner domain has all the organizations it may have asks
+ * for more (DESIGN.md §3.1). It goes out with Reply-To set to them, so support answers them directly.
+ */
+export function orgRequestMail(request: {
+  name: string
+  email: string
+  ownerDomain: string
+  count: number
+  max: number
+  wanted: string
+  reason: string
+  site: string
+}): MailContent {
+  const { name, email, ownerDomain, count, max, wanted, reason, site } = request
+  const command = `node .github/hosting/scripts/allow-orgs.mjs --domain ${ownerDomain} --max <number> --remote`
+  return {
+    subject: `Request for more organizations on ${PRODUCT}: ${ownerDomain}`,
+    text: textBody([
+      `${name} <${email}> asks for more organizations on ${site}.`,
+      `Owner domain: ${ownerDomain}\nOrganizations it has: ${count} (limit ${max})\nName wanted: ${wanted}`,
+      `Why: ${reason}`,
+      `Reply to this email to answer them. To allow more, run this from the repository (the hosting runbook, "Allow a domain more organizations"): ${command}. They then create the organization themselves.`,
+    ]),
+    html: htmlBody([
+      html`<strong>${name}</strong> &lt;${email}&gt; asks for more organizations on ${site}.`,
+      html`Owner domain: ${ownerDomain}<br>Organizations it has: ${count} (limit ${max})<br>Name wanted: ${wanted}`,
+      html`Why: ${reason}`,
+      html`Reply to this email to answer them. To allow more, run this from the repository (the hosting runbook, &quot;Allow a domain more organizations&quot;): <code>${command}</code>. They then create the organization themselves.`,
+    ]),
+  }
+}

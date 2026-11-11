@@ -60,6 +60,17 @@ export function passwordProblem(input: unknown): string | null {
   return null
 }
 
+/** The reason given when asking for more organizations (DESIGN.md §3.1). */
+export const ORG_REQUEST_REASON_MAX = 1000
+
+/** That reason: 1–1,000 characters after cleaning (line breaks become spaces). */
+export function checkOrgRequestReason(input: unknown): { reason: string } | { problem: string } {
+  const reason = cleanText(input)
+  if (!reason) return { problem: 'Say why you need another organization.' }
+  if (length(reason) > ORG_REQUEST_REASON_MAX) return { problem: `Use at most ${ORG_REQUEST_REASON_MAX} characters for the reason.` }
+  return { reason }
+}
+
 export const ROLE_NAME_MAX = 60
 export const ROLE_DESCRIPTION_MAX = 200
 

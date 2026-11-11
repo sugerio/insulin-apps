@@ -3,8 +3,9 @@
 import type { Context } from '../context.ts'
 import { newId, randomToken, seal, sha256Hex } from '../crypto.ts'
 import {
-  claimDomain, deleteConnection, findConnection, insertScimToken, listDomains, listScimTokens, markDomainVerified,
-  removeDomain, revokeScimToken as deleteScimToken, saveConnection, verifiedElsewhere, type ConnectionInput,
+  SHARED_DOMAINS, claimDomain, deleteConnection, findConnection, insertScimToken, listDomains, listScimTokens,
+  markDomainVerified, removeDomain, revokeScimToken as deleteScimToken, saveConnection, verifiedElsewhere,
+  type ConnectionInput,
 } from '../db/sso.ts'
 import type { MembershipRow } from '../db/orgs.ts'
 import { listMemberships } from '../db/orgs.ts'
@@ -25,13 +26,6 @@ export const DOMAIN_LIMIT = 20
 export const SCIM_TOKEN_LIMIT = 10
 const DNS_TIMEOUT_MS = 5000
 const DOH_URL = 'https://cloudflare-dns.com/dns-query'
-
-/** Consumer mail providers: anyone can have an address there, so no organization may claim one. */
-const SHARED_DOMAINS = new Set([
-  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com', 'icloud.com',
-  'me.com', 'mac.com', 'aol.com', 'proton.me', 'protonmail.com', 'pm.me', 'gmx.com', 'gmx.de', 'gmx.net', 'mail.com',
-  'yandex.com', 'yandex.ru', 'qq.com', '163.com', '126.com', 'zoho.com', 'fastmail.com', 'hey.com', 'tutanota.com',
-])
 
 const NOTICES: Record<string, string> = {
   'domain-claimed': 'Domain added. Publish the DNS record below, then verify it.',

@@ -1,4 +1,5 @@
-import type { GrantInput } from './grants.ts'
+import { owner, type GrantInput } from './grants.ts'
+import { SHARED_DOMAINS, domainOf } from './sso.ts'
 import type { Role } from '../roles.ts'
 
 export interface OrgRow {
@@ -31,13 +32,97 @@ const ANOTHER_OWNER = `(SELECT COUNT(*) FROM memberships o WHERE o.org_id = ?1 A
 // Every privileged mutation re-reads the actor's role inside its own statement (the organization is ?1). The page
 // checked the role earlier, but a member whose role was lowered, or who was removed, since then must change nothing.
 
-export async function createOrg(db: D1Database, org: { id: string; name: string; userId: string; now: number }): Promise<void> {
-  await db.batch([
-    db.prepare('INSERT INTO orgs (id, name, created_by, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)')
-      .bind(org.id, org.name, org.userId, org.now),
-    db.prepare("INSERT INTO memberships (org_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, 'OWNER', ?3, ?3)")
+/** How many organizations an owner domain may have, unless `org_domain_allowances` says otherwise (DESIGN.md §3.1). */
+export const ORGS_PER_DOMAIN = 2
+
+/**
+ * The owner domain an organization created by `email` counts against: the address's domain, lower case and in
+ * punycode; at a public mail provider (SHARED_DOMAINS), the address itself without a +tag, so each person there counts
+ * on their own and the provider as a whole isn't limited.
+ */
+export function ownerDomainOf(email: string): string {
+  const domain = domainOf(email)
+  if (!SHARED_DOMAINS.has(domain)) return domain
+  const local = email.slice(0, email.lastIndexOf('@')).toLowerCase()
+  const plus = local.indexOf('+')
+  return `${plus > 0 ? local.slice(0, plus) : local}@${domain}`
+}
+
+/**
+ * The same owner domain as migration 0007 wrote it for the organizations that existed then: SQL can't write punycode,
+ * so a non-ASCII domain stayed as typed. Counting this form too keeps those organizations in their domain's count.
+ */
+function legacyOwnerDomainOf(email: string): string {
+  const owned = ownerDomainOf(email)
+  return owned.includes('@') ? owned : email.slice(email.lastIndexOf('@') + 1).toLowerCase()
+}
+
+// The organizations of owner domain ?1 (or its legacy form ?2), and how many it may have (?3 by default).
+const OWNED = 'o.owner_domain IN (?1, ?2)'
+const ALLOWED = 'COALESCE((SELECT a.max_orgs FROM org_domain_allowances a WHERE a.owner_domain = ?1), ?3)'
+
+/** The owner domain of someone with this address, its organizations now, and how many it may have. */
+export async function orgAllowance(db: D1Database, email: string): Promise<{ ownerDomain: string; count: number; max: number }> {
+  const ownerDomain = ownerDomainOf(email)
+  const row = await db.prepare(`SELECT (SELECT COUNT(*) FROM orgs o WHERE ${OWNED}) AS count, ${ALLOWED} AS max`)
+    .bind(ownerDomain, legacyOwnerDomainOf(email), ORGS_PER_DOMAIN).first<{ count: number; max: number }>()
+  return { ownerDomain, count: row?.count ?? 0, max: row?.max ?? ORGS_PER_DOMAIN }
+}
+
+/**
+ * Creates an organization with its creator as OWNER, in one batch whose insert also requires the creator's owner
+ * domain (from `email`) to have fewer organizations than it may (ORGS_PER_DOMAIN, or its allowance), so concurrent
+ * creations can't exceed it. The creator's `users.orgs_created` still counts up, as a record only: nothing limits by
+ * it any more. False when the owner domain is at its limit.
+ */
+export async function createOrg(db: D1Database, org: { id: string; name: string; userId: string; email: string; now: number }): Promise<boolean> {
+  const [created] = await db.batch([
+    db.prepare(
+      `INSERT INTO orgs (id, name, created_by, owner_domain, created_at, updated_at)
+       SELECT ?4, ?5, ?6, ?1, ?7, ?7
+       WHERE (SELECT COUNT(*) FROM orgs o WHERE ${OWNED}) < ${ALLOWED}`,
+    ).bind(ownerDomainOf(org.email), legacyOwnerDomainOf(org.email), ORGS_PER_DOMAIN, org.id, org.name, org.userId, org.now),
+    db.prepare(
+      `INSERT INTO memberships (org_id, user_id, role, created_at, updated_at)
+       SELECT ?1, ?2, 'OWNER', ?3, ?3 WHERE EXISTS (SELECT 1 FROM orgs WHERE id = ?1)`,
+    ).bind(org.id, org.userId, org.now),
+    db.prepare('UPDATE users SET orgs_created = orgs_created + 1, updated_at = ?3 WHERE id = ?2 AND EXISTS (SELECT 1 FROM orgs WHERE id = ?1)')
       .bind(org.id, org.userId, org.now),
   ])
+  return (created?.meta.changes ?? 0) > 0
+}
+
+/**
+ * SQL: organization `org` may take in someone whose address is in domain `domain` (lower case and punycode, the form
+ * sso_domains keeps and domainOf writes): it invites anyone, or only addresses in its verified domains and this is
+ * one of them now (DESIGN.md §3). Each argument names a parameter or column.
+ */
+export function invitableDomain(org: string, domain: string): string {
+  return `(COALESCE((SELECT io.invite_verified_domains_only FROM orgs io WHERE io.id = ${org}), 0) = 0
+    OR EXISTS (SELECT 1 FROM sso_domains vd WHERE vd.org_id = ${org} AND vd.verified_at IS NOT NULL AND vd.domain = ${domain}))`
+}
+
+/** Whether the organization invites only addresses in its verified domains, and its verified domains now. */
+export async function invitePolicy(db: D1Database, orgId: string): Promise<{ verifiedOnly: boolean; domains: string[] }> {
+  const row = await db.prepare(
+    `SELECT o.invite_verified_domains_only AS only,
+       (SELECT json_group_array(domain) FROM (SELECT d.domain FROM sso_domains d WHERE d.org_id = o.id AND d.verified_at IS NOT NULL
+         ORDER BY d.domain)) AS domains
+     FROM orgs o WHERE o.id = ?1`,
+  ).bind(orgId).first<{ only: number; domains: string }>()
+  return { verifiedOnly: row?.only === 1, domains: row ? (JSON.parse(row.domains) as string[]) : [] }
+}
+
+/**
+ * Turns "invite only people in our verified domains" on or off while the actor is still an OWNER; turning it on also
+ * needs a verified domain now. False otherwise.
+ */
+export async function setInviteVerifiedDomainsOnly(db: D1Database, orgId: string, actorId: string, on: boolean, now: number): Promise<boolean> {
+  const result = await db.prepare(
+    `UPDATE orgs SET invite_verified_domains_only = ?2, updated_at = ?3 WHERE id = ?1 AND ${owner('?1', '?4')}
+       AND (?2 = 0 OR EXISTS (SELECT 1 FROM sso_domains d WHERE d.org_id = ?1 AND d.verified_at IS NOT NULL))`,
+  ).bind(orgId, on ? 1 : 0, now, actorId).run()
+  return result.meta.changes > 0
 }
 
 export function findMembership(db: D1Database, orgId: string, userId: string): Promise<MembershipRow | null> {

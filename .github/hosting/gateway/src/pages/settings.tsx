@@ -7,11 +7,14 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
+import { ContactLink } from "@/components/contact"
 import { ErrorSummary, Hidden, Notice, PostButton, SelectField, TextField, type Choice } from "@/components/forms"
-import { AuthCard, Container, PageHeader } from "@/components/layout"
+import { AuthCard, Container, PageHeader, proseLinks } from "@/components/layout"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
 import { apexUrl, appSettingsPath, withReturnTo } from "../context.ts"
@@ -22,10 +25,10 @@ import { accessPhrase, accessSummary, grantChoices, grantField, grantLabel, gran
 import {
   APP_ROLES, APP_ROLE_LABELS, APP_ROLE_SUMMARIES, ROLES, ROLE_LABELS, ROLE_SUMMARIES, canChangeRole, canDeleteOrg,
   canHandleInvitation, canManageCustomRoles, canManageMembers, canManageSso, canRemoveMember, canRenameOrg, canSeeMembers,
-  grantableRoles, roleHas, type Role,
+  canSetInvitePolicy, grantableRoles, roleHas, type Role,
 } from "../roles.ts"
 import type { Session } from "../auth/session.ts"
-import { ORG_NAME_MAX, ROLE_DESCRIPTION_MAX, ROLE_NAME_MAX } from "../validate.ts"
+import { ORG_NAME_MAX, ORG_REQUEST_REASON_MAX, ROLE_DESCRIPTION_MAX, ROLE_NAME_MAX } from "../validate.ts"
 import type { Html } from "./html.ts"
 import { accountOf, page } from "./document.tsx"
 import { InvitationList } from "./home.tsx"
@@ -112,7 +115,76 @@ export function SettingsFrame({ ctx, data, tab, children }: { ctx: Context; data
   )
 }
 
-export function newOrgPage(ctx: Context, session: Session, invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, state: { name?: string; error?: string | null; returnTo?: string | null } = {}): Html {
+/** An owner domain that has all the organizations it may have (DESIGN.md §3.1). */
+export interface OrgLimitView {
+  ownerDomain: string
+  /** The owner domain is the person's own address, at a public mail provider. */
+  personal: boolean
+  count: number
+  max: number
+  /** ORG_REQUEST_EMAIL is set, so the request form is shown; otherwise the page points to the contact. */
+  canRequest: boolean
+}
+
+export interface NewOrgState {
+  name?: string
+  error?: string | null
+  returnTo?: string | null
+  notice?: string | null
+  /** Set when the owner domain is at its limit: the page asks for more instead of offering the create form. */
+  limit?: OrgLimitView | null
+  reason?: string
+}
+
+function limitSentence(limit: OrgLimitView): string {
+  const count = `${limit.count} organization${limit.count === 1 ? "" : "s"}`
+  return limit.personal
+    ? `You've created ${count} with ${limit.ownerDomain}, the most allowed for one address at a public email provider (${limit.max}).`
+    : `People with an address at ${limit.ownerDomain} have created ${count}, the most allowed for one email domain (${limit.max}).`
+}
+
+/** At the limit: why, and the form that asks Insulin Apps support for more (or where to ask, without it). */
+function RequestMoreCard({ ctx, limit, state }: { ctx: Context; limit: OrgLimitView; state: NewOrgState }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>Request more organizations</h2>
+        </CardTitle>
+        <CardDescription className={proseLinks}>
+          {limitSentence(limit)} Deleting one of them frees its place.{" "}
+          {limit.canRequest ? (
+            "To create more, ask Insulin Apps support below."
+          ) : (
+            <>
+              To create more, contact Insulin Apps support: <ContactLink ctx={ctx} />.
+            </>
+          )}
+        </CardDescription>
+      </CardHeader>
+      {limit.canRequest ? (
+        <CardContent>
+          <form method="post" action="/orgs/request" className="flex flex-col gap-6">
+            <TextField label="Organization name you want" name="name" value={state.name} maxLength={ORG_NAME_MAX} autoComplete="organization" />
+            <Field>
+              <FieldLabel htmlFor="field-reason">Why you need it</FieldLabel>
+              <Textarea id="field-reason" name="reason" rows={4} required maxLength={ORG_REQUEST_REASON_MAX} defaultValue={state.reason || undefined} aria-describedby="field-reason-hint" />
+              <FieldDescription id="field-reason-hint">
+                We email this to Insulin Apps support with your name, email address, email domain and how many organizations it has. They
+                reply to your email address.
+              </FieldDescription>
+            </Field>
+            <div>
+              <Button type="submit">Send request</Button>
+            </div>
+          </form>
+        </CardContent>
+      ) : null}
+    </Card>
+  )
+}
+
+export function newOrgPage(ctx: Context, session: Session, invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, state: NewOrgState = {}): Html {
   return page(ctx, { title: "Create an organization", user: accountOf(session) }, (
     <Container width="prose" className="flex flex-col gap-8 py-10 sm:py-12">
       <PageHeader
@@ -120,27 +192,34 @@ export function newOrgPage(ctx: Context, session: Session, invitations: Invitati
         description="An organization is a shared workspace across every app. You'll be its owner, and you choose who else gets in: with a role in every app, or in specific apps only."
       />
       <ErrorSummary errors={[state.error]} />
+      {state.notice ? <Notice kind="ok">{state.notice}</Notice> : null}
       <InvitationList ctx={ctx} invitations={invitations} grants={grants} returnTo={state.returnTo ?? null} />
-      <Card>
-        {invitations.length ? (
-          <CardHeader>
-            <CardTitle>
-              <h2>Or start your own</h2>
-            </CardTitle>
-          </CardHeader>
-        ) : null}
-        <CardContent>
-          <form method="post" action="/orgs/new" className="flex flex-col gap-6">
-            <TextField label="Organization name" name="name" value={state.name} maxLength={ORG_NAME_MAX} autoComplete="organization" error={state.error} />
-            <Hidden name="return_to" value={state.returnTo} />
-            <div>
-              <Button type="submit">Create organization</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {state.limit ? <RequestMoreCard ctx={ctx} limit={state.limit} state={state} /> : <CreateOrgCard invitations={invitations} state={state} />}
     </Container>
   ))
+}
+
+function CreateOrgCard({ invitations, state }: { invitations: InvitationRow[]; state: NewOrgState }) {
+  return (
+    <Card>
+      {invitations.length ? (
+        <CardHeader>
+          <CardTitle>
+            <h2>Or start your own</h2>
+          </CardTitle>
+        </CardHeader>
+      ) : null}
+      <CardContent>
+        <form method="post" action="/orgs/new" className="flex flex-col gap-6">
+          <TextField label="Organization name" name="name" value={state.name} maxLength={ORG_NAME_MAX} autoComplete="organization" error={state.error} />
+          <Hidden name="return_to" value={state.returnTo} />
+          <div>
+            <Button type="submit">Create organization</Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
 }
 
 export interface UsersPageData extends OrgFrame {
@@ -616,6 +695,52 @@ export function rolesPage(ctx: Context, session: Session, data: RolesPageData, o
 
 export interface OrgSettingsData extends OrgFrame {
   ownerCount: number
+  /** Whether invitations are limited to the verified domains, and those domains now (DESIGN.md §3). */
+  invitePolicy: { verifiedOnly: boolean; domains: string[] }
+}
+
+/**
+ * Owners only: "invite only people in our verified domains". Offered once a domain is verified; while it is on with no
+ * verified domain left, nobody can be invited, so the card stays to turn it off.
+ */
+function InvitePolicyCard({ ctx, data }: { ctx: Context; data: OrgSettingsData }) {
+  const { verifiedOnly, domains } = data.invitePolicy
+  const list = domains.join(", ")
+  const sso = apexUrl(ctx, `/settings/sso?org=${data.orgId}`)
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>Invitations</h2>
+        </CardTitle>
+        <CardDescription className={proseLinks}>
+          {!domains.length && !verifiedOnly ? (
+            <>
+              You can limit invitations to people with an address in your own email domains. Verify a domain under{" "}
+              <a href={sso}>Single sign-on</a> first.
+            </>
+          ) : verifiedOnly && domains.length ? (
+            `Only people with an address in your verified domains (${list}) can be invited or accept an invitation, here and in every app.`
+          ) : verifiedOnly ? (
+            <>
+              Invitations are limited to your verified domains, but none is verified right now, so nobody can be invited. Verify a domain
+              under <a href={sso}>Single sign-on</a>, or turn this off.
+            </>
+          ) : (
+            `Anyone can be invited now. You can allow only people with an address in your verified domains (${list}), here and in every app. Invitations already sent to other addresses can then no longer be accepted.`
+          )}
+        </CardDescription>
+      </CardHeader>
+      {domains.length || verifiedOnly ? (
+        <CardFooter className="flex-wrap gap-3">
+          <Badge variant={verifiedOnly ? "secondary" : "outline"}>{verifiedOnly ? "Verified domains only" : "Any address"}</Badge>
+          <PostButton action={`/orgs/${data.orgId}/invite-domains`} fields={{ only: verifiedOnly ? "off" : "on" }} variant="outline">
+            {verifiedOnly ? "Allow any address" : "Invite only my verified domains"}
+          </PostButton>
+        </CardFooter>
+      ) : null}
+    </Card>
+  )
 }
 
 export function orgSettingsPage(ctx: Context, session: Session, data: OrgSettingsData, orgs?: readonly MembershipRow[]): Html {
@@ -641,6 +766,7 @@ export function orgSettingsPage(ctx: Context, session: Session, data: OrgSetting
           </CardContent>
         </Card>
       ) : null}
+      {canSetInvitePolicy(data.role) ? <InvitePolicyCard ctx={ctx} data={data} /> : null}
       <Card>
         <CardHeader>
           <CardTitle>

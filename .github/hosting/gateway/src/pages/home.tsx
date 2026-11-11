@@ -1,10 +1,10 @@
-// The apex's `/`: the landing page for visitors, the home page (organizations, invitations, apps) once signed in.
+// The apex's `/`: the landing page for visitors, the home page (the active organization's apps, invitations) once
+// signed in. Organizations are switched and created from the top bar.
 import { ArrowRight, Building2, ChartPie, LayoutGrid, Plus, ShieldCheck, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { GitHubMark } from "@/components/brand"
 import { ContactLink } from "@/components/contact"
 import { Notice, PostButton } from "@/components/forms"
@@ -15,7 +15,6 @@ import { apexUrl, appUrl, withReturnTo } from "../context.ts"
 import type { InvitationGrantRow, InvitationRow } from "../db/invitations.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import { accessPhrase } from "../orgs/access-forms.ts"
-import { ROLE_LABELS } from "../roles.ts"
 import type { ActiveOrg, Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
 import { accountOf, page } from "./document.tsx"
@@ -25,7 +24,8 @@ const APP_ICONS: Record<string, LucideIcon> = {
   captable: ChartPie,
 }
 
-function AppCards({ ctx, apps }: { ctx: Context; apps: HostedApp[] }) {
+/** The apps as cards; each card's title is an h3 under a section's h2, or an h2 right under the page's h1. */
+function AppCards({ ctx, apps, level = 3 }: { ctx: Context; apps: HostedApp[]; level?: 2 | 3 }) {
   if (!apps.length) return <p className="text-muted-foreground">No apps are deployed yet.</p>
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -37,9 +37,7 @@ function AppCards({ ctx, apps }: { ctx: Context; apps: HostedApp[] }) {
               <div className="flex size-10 items-center justify-center rounded-lg border bg-muted text-foreground">
                 <Icon className="size-5" />
               </div>
-              <CardTitle className="text-base">
-                <h3>{app.title}</h3>
-              </CardTitle>
+              <CardTitle className="text-base">{level === 2 ? <h2>{app.title}</h2> : <h3>{app.title}</h3>}</CardTitle>
               {app.summary ? <CardDescription>{app.summary}</CardDescription> : null}
             </CardHeader>
             <CardFooter className="mt-auto flex-wrap gap-2">
@@ -158,100 +156,58 @@ const HOME_NOTICES: Record<string, string> = {
   verified: "Your email address is confirmed.",
 }
 
+/** For someone in no organization: what to do first. Their invitations, if any, are listed below it. */
+function NoOrgCard({ session, invitations }: { session: Session; invitations: InvitationRow[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>You&apos;re not in an organization yet</h2>
+        </CardTitle>
+        <CardDescription>
+          {invitations.length
+            ? "The apps open in an organization. Accept one of your invitations below, or create your own organization."
+            : `The apps open in an organization. Create one, or ask someone to invite ${session.user.email}.`}
+        </CardDescription>
+      </CardHeader>
+      <CardFooter className="flex-wrap gap-2">
+        <a className={buttonVariants()} href="/orgs/new">
+          <Plus />
+          Create an organization
+        </a>
+        {invitations.length ? (
+          <a className={buttonVariants({ variant: "outline" })} href="#invitations">
+            See your invitations
+          </a>
+        ) : null}
+      </CardFooter>
+    </Card>
+  )
+}
+
 /**
  * `apps`: the apps the user can use in the active organization (all of them with an organization role); the others
- * aren't listed.
+ * aren't listed. The organizations themselves are in the top bar's switcher, with "Create an organization".
  */
 export function homePage(ctx: Context, session: Session, memberships: MembershipRow[], invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, active: ActiveOrg | null, apps: HostedApp[]): Html {
   const message = HOME_NOTICES[ctx.url.searchParams.get("notice") ?? ""]
-  return page(ctx, { title: "Your organizations", user: { ...accountOf(session, memberships), org: active } }, (
+  return page(ctx, { title: "Your apps", user: { ...accountOf(session, memberships), org: active } }, (
     <Container className="flex flex-col gap-8 py-10 sm:py-12">
       <PageHeader
-        title={`Welcome, ${session.user.name}`}
-        description="Your organizations, your invitations and the apps."
-        actions={
-          <a className={buttonVariants()} href="/orgs/new">
-            <Plus />
-            Create an organization
-          </a>
-        }
+        title={active ? `Apps in ${active.name}` : "Your apps"}
+        description={active ? "Each app opens in this organization. Switch organizations from the top bar." : undefined}
       />
       {message ? <Notice kind="ok">{message}</Notice> : null}
-      <InvitationList ctx={ctx} invitations={invitations} grants={grants} returnTo={null} />
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>Your organizations</h2>
-          </CardTitle>
-          <CardDescription>
-            {memberships.length
-              ? "Apps open in your active organization. You can also switch from the account bar inside an app."
-              : "You're not in an organization yet. Create one to start using the apps, or accept an invitation."}
-          </CardDescription>
-        </CardHeader>
-        {memberships.length ? (
-          <CardContent>
-            <Table>
-              <TableCaption className="sr-only">Organizations you belong to</TableCaption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col">Organization</TableHead>
-                  <TableHead scope="col" className="max-sm:hidden">
-                    Your role
-                  </TableHead>
-                  <TableHead scope="col">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {memberships.map((membership) => {
-                  const isActive = active?.id === membership.org_id
-                  return (
-                    <TableRow key={membership.org_id}>
-                      <TableCell className="whitespace-normal">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <a
-                            className="font-medium underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-foreground"
-                            href={`/settings/users?org=${membership.org_id}`}
-                          >
-                            {membership.org_name}
-                          </a>
-                          {isActive ? <Badge variant="secondary">Active</Badge> : null}
-                          {/* On a phone the role sits here, and its column is hidden. */}
-                          <Badge variant="outline" className="sm:hidden">
-                            {ROLE_LABELS[membership.role]}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-sm:hidden">
-                        <Badge variant="outline">{ROLE_LABELS[membership.role]}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {isActive ? null : (
-                          <PostButton action="/orgs/switch" fields={{ org_id: membership.org_id }} variant="outline" size="sm">
-                            Make active
-                          </PostButton>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        ) : null}
-      </Card>
       {active ? (
-        <section className="flex flex-col gap-4">
-          <SectionTitle>Apps in {active.name}</SectionTitle>
-          {apps.length ? (
-            <AppCards ctx={ctx} apps={apps} />
-          ) : (
-            <p className="text-muted-foreground">You don&apos;t have access to any app in this organization yet. Ask one of its owners or admins.</p>
-          )}
-        </section>
-      ) : null}
+        apps.length ? (
+          <AppCards ctx={ctx} apps={apps} level={2} />
+        ) : (
+          <p className="text-muted-foreground">You don&apos;t have access to any app in this organization yet. Ask one of its owners or admins.</p>
+        )
+      ) : (
+        <NoOrgCard session={session} invitations={invitations} />
+      )}
+      <InvitationList ctx={ctx} invitations={invitations} grants={grants} returnTo={null} />
     </Container>
   ))
 }
@@ -260,7 +216,7 @@ export function homePage(ctx: Context, session: Session, memberships: Membership
 export function InvitationList({ ctx, invitations, grants, returnTo }: { ctx: Context; invitations: InvitationRow[]; grants: Map<string, InvitationGrantRow[]>; returnTo: string | null }) {
   if (!invitations.length) return null
   return (
-    <Card>
+    <Card id="invitations">
       <CardHeader>
         <CardTitle>
           <h2>Invitations</h2>

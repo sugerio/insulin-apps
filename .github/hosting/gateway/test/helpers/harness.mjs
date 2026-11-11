@@ -300,6 +300,10 @@ export class Harness {
     if (!this.omit.has('DB')) {
       this.db = await this.mf.getD1Database('DB')
       await applyMigrations(this.db)
+      // Every test person's address is at example.test (uniqueEmail), and each owner domain may have only two
+      // organizations (DESIGN.md §3.1): the harness gives example.test room, as an operator would. The limit's own
+      // tests use other domains.
+      await this.db.prepare("INSERT INTO org_domain_allowances (owner_domain, max_orgs, note, created_at) VALUES ('example.test', 1000, 'test harness', 0)").run()
     }
   }
 

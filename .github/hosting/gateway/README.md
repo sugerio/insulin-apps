@@ -60,6 +60,7 @@ bundles them.
 | `scripts/build-css.mjs`, `scripts/build-icons.mjs` | `npm run build:css` and `npm run build:icons`: regenerate those two modules |
 | `components.json` | the shadcn CLI's settings, for adding a component later |
 | `migrations/` | D1 migrations (wrangler format) |
+| `../scripts/allow-orgs.mjs` | the operator's command that lets an owner domain have more organizations (its tests are `test/allow-orgs.test.mjs`) |
 
 ## Configuration
 
@@ -82,6 +83,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `TURNSTILE_SECRET_KEY` | secret | required |
 | `EMAIL_FROM` | var | `Name <address>` or a bare address (the name then is "Insulin Apps") |
 | `SUPPORT_EMAIL` | var | optional contact on the landing, privacy and terms pages; empty points to the repository's issues |
+| `ORG_REQUEST_EMAIL` | var | optional; Insulin Apps support's address, which gets requests for more organizations (DESIGN.md §3.1) with Reply-To the requester. Empty: the page at the limit shows the contact above instead. An unusable value is ignored and logged by name |
 | `GATEWAY_SECRET_KEY` | secret | optional, base64 of 32 random bytes; seals stored secrets (AES-256-GCM, a key per purpose) and derives per-app secrets. A value that isn't 32 bytes fails closed |
 | `SITE_ENV` | var | **local development and tests only**: `test` captures mail and relaxes cookies on `http://*.localhost`. Any non-empty value is a configuration error unless it is `test` and `SITE_DOMAIN` ends in `.localhost` |
 
@@ -224,6 +226,20 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   app-admin rule in `db/grants.ts` `appAdmin`, and owner-only custom roles) in the same statement, and the
   50-pending-invitation cap sits inside the insert. A member whose role is lowered, or who is removed, mid-request
   changes nothing.
+- **Invite only verified domains** (DESIGN.md §3). `orgs.invite_verified_domains_only`, which an OWNER sets on
+  `/settings/organization` (the statement re-checks OWNER, and turning it on needs a verified domain), is checked inside
+  the invitation insert and inside the acceptance's membership insert (`db/orgs.ts` `invitableDomain`), against the
+  domain `db/sso.ts` `domainOf` gives (lower case, punycode). An invitation from before, or one whose domain was since
+  removed, can't bring anyone new in; an existing member is already in. The page code checks first only to word the
+  refusal.
+- **Organizations per owner domain** (DESIGN.md §3.1). `orgs.owner_domain` is the creator's domain, or their address
+  without a +tag at a public mail provider (`db/sso.ts` `SHARED_DOMAINS`). The org insert is an `INSERT … SELECT …
+  WHERE (SELECT COUNT(*) …) < COALESCE(allowance, 2)`, batched with the OWNER membership, which is written only if the
+  org was, so concurrent creations can't pass the limit. Migration 0007 filled existing rows in SQL, which can't write
+  punycode, so the count also takes the as-typed form of a non-ASCII domain. `users.orgs_created` is a record only. At
+  the limit, `/orgs/new` asks support for more (`POST /orgs/request`, mail kind `org_request`, three a day per person
+  in `mail_log.user_id`, Reply-To the requester, `RL_AUTH`); operators raise a domain's limit with
+  `.github/hosting/scripts/allow-orgs.mjs`.
 - **One kind of access or the other.** Triggers keep `app_grants` to specific-apps (`APPS`) memberships and drop a
   member's grants the moment they get an organization role; composite foreign keys keep a grant's custom role in the
   same organization and app, and stop a custom role from being deleted while anything uses it.

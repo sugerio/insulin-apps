@@ -29,6 +29,11 @@ export interface Env {
   EMAIL_FROM?: string
   /** Optional contact address shown on the landing, privacy and terms pages. */
   SUPPORT_EMAIL?: string
+  /**
+   * Optional address of Insulin Apps support that receives requests for more organizations (DESIGN.md §3.1); an
+   * e-mail address, or it is ignored.
+   */
+  ORG_REQUEST_EMAIL?: string
   /** Base64 of 32 random bytes: encrypts stored secrets and derives the apps' integration tokens. Optional. */
   GATEWAY_SECRET_KEY?: string
   /** Local development and tests only (`test`); the deploy never sets it. */

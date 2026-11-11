@@ -81,6 +81,9 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    - `EMAIL_FROM`
    - `SUPPORT_EMAIL`: the contact shown on the landing, privacy and terms pages (optional; without it those pages
      point to the repository's issues)
+   - `ORG_REQUEST_EMAIL`: Insulin Apps support's address, which receives requests for more organizations from people
+     whose email domain has all it may have (DESIGN.md §3.1), with Reply-To set to the requester. Optional; without it
+     the page at the limit points to `SUPPORT_EMAIL` or the issues instead. Set it here only, never in the repository
    - `SITE_DOMAIN` only when the domain is not `insulinapps.com`
 
    **App secrets.** An app that lists names under `insulin.secrets` in its `package.json` (DESIGN.md §8.3), such as
@@ -151,6 +154,24 @@ issue, or log.
 
 To replace the release deploy key, run `.github/scripts/configure-release-tags.sh --rotate` as an org admin: it adds a
 new key, stores it as `RELEASE_DEPLOY_KEY` and deletes the old one.
+
+### Allow a domain more organizations
+
+Each email domain may have two organizations at a time, and each address at a public mail provider two of its own
+(DESIGN.md §3.1). A request for more reaches `ORG_REQUEST_EMAIL` with the owner domain to allow; reply to the
+requester (the message's Reply-To) and, if you agree, allow it from the repository root with the Cloudflare credentials
+the workflow uses (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment, or `wrangler login`):
+
+```bash
+npm ci --prefix .github/hosting/gateway
+node .github/hosting/scripts/allow-orgs.mjs --domain example.com --max 5 --note "Approved request" --remote
+```
+
+`--domain` is the owner domain exactly as the request names it: a domain, or for someone at a public mail provider
+their address. `--max` is the total that domain may have, from 0 to 1000 (0 closes it); running the command again
+replaces the number. Without `--remote` it changes the local development database instead. The script refuses anything
+but a plain domain or address and a short plain note, and runs `wrangler d1 execute insulin-apps-gateway`. The person
+then creates the organization themselves at `/orgs/new`. To go back to the default, set `--max 2`.
 
 ### Add an app
 

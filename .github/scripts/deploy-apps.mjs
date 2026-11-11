@@ -76,6 +76,8 @@ export function readSettings(environment = process.env, { gateway = true } = {})
     turnstileSecretKey: environment.TURNSTILE_SECRET_KEY.trim(),
     emailFrom: environment.EMAIL_FROM.trim(),
     supportEmail: environment.SUPPORT_EMAIL?.trim() ?? '',
+    // Where requests for more organizations go (DESIGN.md §3.1); optional, like SUPPORT_EMAIL.
+    orgRequestEmail: environment.ORG_REQUEST_EMAIL?.trim() ?? '',
   })
   settings.senderAddress = emailAddress(settings.emailFrom)
   return settings
@@ -278,6 +280,7 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
       TURNSTILE_SITE_KEY: settings.turnstileSiteKey,
       EMAIL_FROM: settings.emailFrom,
       SUPPORT_EMAIL: settings.supportEmail,
+      ORG_REQUEST_EMAIL: settings.orgRequestEmail,
     },
   }
 }

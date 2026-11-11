@@ -45,15 +45,11 @@ test('creating an organization makes you its owner and your active organization'
   }
 })
 
-test('a user can create 10 organizations in total; deleting one does not give the slot back', async () => {
-  const { client } = await h.user()
-  const ids = []
-  for (let i = 1; i <= 10; i += 1) ids.push(await h.org(client, `Org ${i}`))
-  const eleventh = await client.post(h.url('auth', '/orgs/new'), { name: 'One too many' })
-  assert.equal(eleventh.status, 409)
-  assert.match(eleventh.text, /limit of 10 organizations/)
-  await client.post(h.url('auth', `/orgs/${ids[0]}/delete`), { confirm: 'Org 1' })
-  assert.equal((await client.post(h.url('auth', '/orgs/new'), { name: 'Still too many' })).status, 409)
+test('there is no per-account limit any more: an account counts the organizations it created, as a record only', async () => {
+  // example.test may have many organizations here (the harness's allowance); the per-domain limit is in org-limits.test.mjs.
+  const { client, id } = await h.user()
+  for (let i = 1; i <= 11; i += 1) await h.org(client, `Org ${i}`)
+  assert.equal((await h.sql('SELECT orgs_created FROM users WHERE id = ?1', id))[0].orgs_created, 11)
 })
 
 test('every organization role sees the people and roles; only owners and admins manage them', async () => {

@@ -5,6 +5,10 @@ export interface UserRow {
   password_hash: string | null
   email_verified_at: number | null
   google_sub: string | null
+  /**
+   * How many organizations the user has created, as a record. It used to be a per-account limit; organizations are now
+   * limited per owner domain instead (db/orgs.ts createOrg), and nothing limits by this count.
+   */
   orgs_created: number
   /** Raised by every password set, change or reset and other security changes; sessions must match it. */
   credential_version: number
@@ -118,17 +122,6 @@ export async function linkGoogle(db: D1Database, id: string, sub: string, now: n
 /** Undoes a sign-up whose verification e-mail could not be sent, so trying again starts afresh. */
 export async function deleteUnverifiedUser(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM users WHERE id = ?1 AND email_verified_at IS NULL').bind(id).run()
-}
-
-/** Counts one more organization against the user's lifetime limit; false when the limit is reached. */
-export async function reserveOrgCreation(db: D1Database, id: string, limit: number, now: number): Promise<boolean> {
-  const result = await db.prepare('UPDATE users SET orgs_created = orgs_created + 1, updated_at = ?3 WHERE id = ?1 AND orgs_created < ?2')
-    .bind(id, limit, now).run()
-  return result.meta.changes > 0
-}
-
-export async function releaseOrgCreation(db: D1Database, id: string): Promise<void> {
-  await db.prepare('UPDATE users SET orgs_created = orgs_created - 1 WHERE id = ?1 AND orgs_created > 0').bind(id).run()
 }
 
 // An organization the user may not leave behind: they are its only OWNER and it has other members.

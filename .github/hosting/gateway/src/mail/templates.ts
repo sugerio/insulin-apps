@@ -163,20 +163,20 @@ export function orgRequestMail(request: {
   site: string
 }): MailContent {
   const { name, email, ownerDomain, count, max, wanted, reason, site } = request
-  const script = `allow-orgs.mjs --domain ${ownerDomain} --max <number> --remote`
+  const command = `node .github/hosting/scripts/allow-orgs.mjs --domain ${ownerDomain} --max <number> --remote`
   return {
     subject: `Request for more organizations on ${PRODUCT}: ${ownerDomain}`,
     text: textBody([
       `${name} <${email}> asks for more organizations on ${site}.`,
       `Owner domain: ${ownerDomain}\nOrganizations it has: ${count} (limit ${max})\nName wanted: ${wanted}`,
       `Why: ${reason}`,
-      `Reply to this email to answer them. To allow more, run the hosting scripts' ${script} (see the runbook, "Allow a domain more organizations"); they then create the organization themselves.`,
+      `Reply to this email to answer them. To allow more, run this from the repository (the hosting runbook, "Allow a domain more organizations"): ${command}. They then create the organization themselves.`,
     ]),
     html: htmlBody([
       html`<strong>${name}</strong> &lt;${email}&gt; asks for more organizations on ${site}.`,
       html`Owner domain: ${ownerDomain}<br>Organizations it has: ${count} (limit ${max})<br>Name wanted: ${wanted}`,
       html`Why: ${reason}`,
-      html`Reply to this email to answer them. To allow more, run the hosting scripts' <code>${script}</code> (see the runbook, &quot;Allow a domain more organizations&quot;); they then create the organization themselves.`,
+      html`Reply to this email to answer them. To allow more, run this from the repository (the hosting runbook, &quot;Allow a domain more organizations&quot;): <code>${command}</code>. They then create the organization themselves.`,
     ]),
   }
 }

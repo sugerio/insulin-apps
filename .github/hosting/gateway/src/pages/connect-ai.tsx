@@ -63,7 +63,7 @@ function ClientSetup({ app, url, domain }: { app: HostedApp; url: string; domain
   return (
     <section aria-labelledby="clients-heading" className="flex flex-col gap-4">
       <h2 id="clients-heading" className="text-lg font-semibold">Set up your AI client</h2>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ClientCard title="Claude Code">
           <Code>{`claude mcp add --transport http ${name} ${url}`}</Code>
           <p className={muted}>

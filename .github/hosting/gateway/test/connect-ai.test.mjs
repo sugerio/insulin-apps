@@ -60,6 +60,9 @@ test('Connect AI opens for an organization Viewer and a specific-apps Viewer, wi
     assert.match(text, /Add custom connector/)
     assert.match(text, /Add custom MCP server/)
     assert.match(text, /<pre class="[^"]*select-all[^"]*"/, 'the blocks are selectable')
+    // Below lg the cards sit in one column that can shrink (minmax(0, 1fr)), so a long command scrolls inside its block
+    // instead of widening the page on a phone.
+    assert.match(text, /<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">/, `${person.name}: the setup cards' grid`)
     assert.match(text, /You haven&#x27;t connected an agent to Cap Table in Connect Org yet/)
     assert.equal(/Everyone&#x27;s agents/.test(text), person === owner, `${person.name}: everyone's agents only for owners and admins`)
     assert.equal(text.match(/<h1[\s>]/g)?.length, 1)

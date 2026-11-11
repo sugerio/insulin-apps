@@ -24,7 +24,14 @@ export type SealKey = {
   until?: string;
 };
 
-export const SEAL_KEYS: readonly SealKey[] = [];
+export const SEAL_KEYS: readonly SealKey[] = [
+  {
+    // The first seal key, put on insulin-apps-esign with scripts/put-seal-key.mjs.
+    id: '1ba5307352412d37bc32b516dc6b00fb787198efa4b164076e6232a7587d449b',
+    spki: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGzfr9ysfRzD8OZGdiO1xB97ppTsIYVJjFuqDnQJRkoMLKLMj1zyerHv9FTdoZMYcl+dMm0D2bqYve6NgxsZzWw==',
+    from: '2026-11-11T08:06:53.424Z',
+  },
+];
 
 const time = (iso: string | undefined) => (iso === undefined ? undefined : Date.parse(iso));
 

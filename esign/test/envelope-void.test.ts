@@ -48,8 +48,9 @@ test('voiding an envelope in progress ends it for everyone and records who asked
     const voided = await h.req(`/api/envelopes/${id}/void`, h.json({ reason: 'Wrong version of the amendment' }, h.auth));
     assert.equal(voided.status, 200);
     assert.deepEqual(await voided.json(), { id, status: 'VOIDED' });
-    const envelope = await (await h.req(`/api/envelopes/${id}`, { headers: h.auth })).json() as { status: string };
+    const envelope = await (await h.req(`/api/envelopes/${id}`, { headers: h.auth })).json() as { status: string; tasks: { status: string }[] };
     assert.equal(envelope.status, 'VOIDED');
+    assert.deepEqual(envelope.tasks.map(t => t.status), ['ACTIVE'], 'the signer keeps their status; the envelope says it ended');
 
     assert.notEqual((await h.req(`/api/envelopes/${id}/tasks/${taskId}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).status, 201, 'no new signing link');
     assert.notEqual((await h.req('/api/public/signing/current', { headers: signer })).status, 200, 'an open signing page can no longer load the document to sign');

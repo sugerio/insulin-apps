@@ -20,7 +20,7 @@ export const statuses: DocTopic = {
           ['Finishing', 'Everyone has signed, and E-sign is sealing the signed PDF. This usually takes seconds.'],
           ['Completed', 'Sealed. The signed PDF and the certificate of completion can be downloaded, and each signer has been sent a link to their copy.'],
           ['Voided', 'Someone who manages envelopes withdrew it before everyone had signed.'],
-          ['Declined', 'The signer whose turn it was declined to sign.'],
+          ['Declined', 'The signer whose turn it was declined to sign, with a reason.'],
           ['Expired', 'A signer\'s sign-by deadline passed before they signed.'],
         ],
       }),
@@ -28,18 +28,18 @@ export const statuses: DocTopic = {
     {
       id: 'signer-statuses',
       title: 'Signer statuses',
-      body: h(DocTable, {
-        label: 'Signer statuses',
-        columns: ['Status', 'What it means'],
-        rows: [
-          ['Waiting for an earlier signer', 'Someone before them in the order hasn\'t signed yet.'],
-          ['Asked to sign', 'It is their turn. The envelope\'s page also shows when they opened the signing page, and their deadline if there is one.'],
-          ['Signed', 'Their signature is recorded.'],
-          ['Declined', 'They declined, with a reason, which the audit trail shows.'],
-          ['Expired', 'Their deadline passed before they signed.'],
-          ['Voided', 'The envelope was voided before they signed.'],
-        ],
-      }),
+      body: [
+        h(DocTable, {
+          label: 'Signer statuses',
+          columns: ['Status', 'What it means'],
+          rows: [
+            ['Waiting for an earlier signer', 'Someone before them in the order hasn\'t signed yet.'],
+            ['Asked to sign', 'It is their turn. The envelope\'s page also shows when they opened the signing page, and their deadline if there is one.'],
+            ['Signed', 'Their signature is recorded.'],
+          ],
+        }),
+        p('These are the only signer statuses. When an envelope ends early (voided, declined or expired), signers who hadn\'t signed keep the status they had, so the signer who declined still shows ', b('Asked to sign'), '. The envelope\'s status says how it ended, and its audit trail says who, when and, for a void or a decline, the reason.'),
+      ],
     },
     {
       id: 'voiding',

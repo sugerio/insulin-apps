@@ -35,7 +35,7 @@ export function consentPage(ctx: Context, session: Session, data: ConsentData, o
   return page(ctx, { title: `Connect ${data.clientName}`, user: accountOf(session, orgs) }, (
     <AuthCard
       title={`Allow ${data.clientName} to use ${data.app.title} as you?`}
-      description={`It will read and change what you can in ${data.app.title}, with your role there, for 30 days or until you disconnect it under Account → AI agents.`}
+      description={`It will read and change what you can in ${data.app.title}, with your role there, for 30 days or until you disconnect it under Account → AI agents or on ${data.app.title}'s Connect AI page.`}
     >
       <dl className="grid gap-3 text-sm">
         <div>

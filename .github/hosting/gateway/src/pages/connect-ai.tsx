@@ -29,10 +29,10 @@ function day(ms: number | null): string {
   return ms === null ? "Not yet" : new Date(ms).toISOString().slice(0, 10)
 }
 
-/** A command or address to copy: a selectable block. */
-function Code({ label, children }: { label: string; children: string }) {
+/** A command or address to copy: a selectable block, named by the heading of its card. */
+function Code({ children }: { children: string }) {
   return (
-    <pre className={codeBlock} aria-label={label}>
+    <pre className={codeBlock}>
       <code>{children}</code>
     </pre>
   )
@@ -65,42 +65,42 @@ function ClientSetup({ app, url, domain }: { app: HostedApp; url: string; domain
       <h2 id="clients-heading" className="text-lg font-semibold">Set up your AI client</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         <ClientCard title="Claude Code">
-          <Code label="Claude Code command">{`claude mcp add --transport http ${name} ${url}`}</Code>
+          <Code>{`claude mcp add --transport http ${name} ${url}`}</Code>
           <p className={muted}>
             Then run <code className="font-mono">/mcp</code> in Claude Code, choose <code className="font-mono">{name}</code> and sign in in the browser
             window it opens. Add <code className="font-mono">--scope user</code> to the command to have it in every project.
           </p>
         </ClientCard>
         <ClientCard title="Codex CLI">
-          <Code label="Codex CLI commands">{`codex mcp add ${name} --url ${url}\ncodex mcp login ${name}`}</Code>
+          <Code>{`codex mcp add ${name} --url ${url}\ncodex mcp login ${name}`}</Code>
           <p className={muted}>The second command opens {domain} in your browser to sign in and allow it.</p>
         </ClientCard>
         <ClientCard title="Gemini CLI">
-          <Code label="Gemini CLI command">{`gemini mcp add --transport http ${name} ${url}`}</Code>
+          <Code>{`gemini mcp add --transport http ${name} ${url}`}</Code>
           <p className={muted}>
             Then run <code className="font-mono">/mcp auth {name}</code> in Gemini CLI to sign in. The command adds it to the current project; add{" "}
             <code className="font-mono">--scope user</code> for every project.
           </p>
         </ClientCard>
         <ClientCard title="opencode">
-          <Code label="opencode commands">{`opencode mcp add ${name} --url ${url}\nopencode mcp auth ${name}`}</Code>
+          <Code>{`opencode mcp add ${name} --url ${url}\nopencode mcp auth ${name}`}</Code>
           <p className={muted}>The second command opens {domain} in your browser to sign in and allow it.</p>
         </ClientCard>
         <ClientCard title="Claude.ai and ChatGPT">
-          <Code label="Server address for a custom connector">{url}</Code>
+          <Code>{url}</Code>
           <p className={muted}>
-            Claude.ai: Customize, Connectors, Add, then Add custom connector; paste the address and connect. On Team and Enterprise plans an owner adds
-            it under Organization settings, Connectors, and members then connect it.
+            Claude.ai: Customize → Connectors → Add → Add custom connector; paste the address and connect. On Team and Enterprise plans an owner adds
+            it under Organization settings → Connectors, and members then connect it.
           </p>
           <p className={muted}>
-            ChatGPT: where your plan or workspace allows custom MCP servers (Plugins, then Add custom MCP server), paste the address and choose OAuth to
+            ChatGPT: where your plan or workspace allows custom MCP servers (Plugins → Add custom MCP server), paste the address and choose OAuth to
             sign in.
           </p>
         </ClientCard>
       </div>
       <p className="text-sm text-muted-foreground">
-        Any other MCP client works the same way: Streamable HTTP at the address above, with OAuth sign-in. Its sign-in must come back to the same computer
-        (<code className="font-mono">http://localhost</code> or <code className="font-mono">127.0.0.1</code>), or be Claude.ai&apos;s or ChatGPT&apos;s.
+        Any other MCP client works the same way: Streamable HTTP at the address above, with OAuth sign-in. Its sign-in has to return to the same computer
+        (<code className="font-mono">http://localhost</code> or <code className="font-mono">127.0.0.1</code>), or to Claude.ai or ChatGPT.
       </p>
     </section>
   )
@@ -116,7 +116,7 @@ function ServerCard({ app, data, url, domain }: { app: HostedApp; data: ConnectA
         <CardDescription>Add this address to Claude, Codex, Gemini, opencode, ChatGPT or another AI agent that speaks MCP.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        <Code label={`${app.title}'s MCP server`}>{url}</Code>
+        <Code>{url}</Code>
         <p>
           The first time the agent connects, it opens {domain} in your browser: you sign in, choose the organization, and allow it. It then acts
           as you in {app.title}, with your current role in that organization, for 30 days or until you disconnect it. In {data.orgName} your role is{" "}
@@ -142,7 +142,7 @@ function OwnAgents({ app, data }: { app: HostedApp; data: ConnectAiData }) {
           {data.own.length
             ? `The agents you connected to ${app.title} in ${data.orgName}. Disconnect ends the agent's access at once.`
             : `You haven't connected an agent to ${app.title} in ${data.orgName} yet.`}{" "}
-          Your agents for every app and organization are under <a className="underline underline-offset-4 hover:text-foreground" href="/account/agents">Account, AI agents</a>.
+          Your agents for every app and organization are under <a className="underline underline-offset-4 hover:text-foreground" href="/account/agents">Account → AI agents</a>.
         </CardDescription>
       </CardHeader>
       {data.own.length ? (

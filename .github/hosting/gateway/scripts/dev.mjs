@@ -23,13 +23,15 @@ function run(args, { stdio = 'inherit', state }) {
  * `npm run dev` and by the docs' screenshots (.github/hosting/docs/screenshots.mjs), which pass their own state
  * directory, variables and stdio.
  */
-export async function startDev({ apps = ['stub'], port = '8787', state = DEV_STATE, gatewayVars, appVars, stdio = 'inherit' } = {}) {
+export async function startDev({ apps = ['stub'], port = '8787', state = DEV_STATE, gatewayVars, appVars, stdio = 'inherit', https = false } = {}) {
   const configs = await writeDevConfigs(apps, { gatewayVars, appVars })
   await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', configs.gateway], { stdio, state })
   for (const [index, app] of apps.entries()) {
     if (app !== 'stub') await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', configs.apps[index]], { stdio, state })
   }
   const args = ['dev', '--config', configs.gateway, ...configs.apps.flatMap((config) => ['--config', config]), '--local', '--persist-to', state, '--ip', '127.0.0.1', '--port', port]
+  // https (wrangler's self-signed certificate): what E-sign needs to accept its own origin for the embedded editor.
+  if (https) args.push('--local-protocol', 'https')
   return spawn(wrangler, args, { cwd: gatewayDir, stdio, env })
 }
 

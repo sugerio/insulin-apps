@@ -36,11 +36,19 @@ boolean `no_bundle`, and the primitive `assets` settings `binding`, `html_handli
 `run_worker_first`. It logs and ignores every other generated key. The deploy itself always supplies the Worker name,
 absolute entry and asset paths, D1 binding, console access mode, and disabled `workers.dev` and preview settings.
 
-The gateway has its own path-filtered workflow. Pull requests that change the gateway or its deployment and discovery
-scripts run gateway typechecks and tests. A matching push to `main`, or a manual dispatch on `main`, also migrates and
-deploys the gateway with all discovered app bindings. Custom domains are managed by the Worker deployment; there is no
-manual DNS provisioning. After deploying the gateway, the workflow lists its remote secrets and fails if `SITE_ENV`
-is present, because a retained secret is not removed merely by omitting it from a new configuration.
+The gateway has its own path-filtered workflow. Pull requests that change the gateway, its deployment and discovery
+scripts, or the public docs (`.github/hosting/docs/` and every app's `docs/public/`) run gateway typechecks and tests,
+which fail while the generated docs module is stale. A matching push to `main`, or a manual dispatch on `main`, also
+migrates and deploys the gateway with all discovered app bindings. Custom domains are managed by the Worker deployment;
+there is no manual DNS provisioning. After deploying the gateway, the workflow lists its remote secrets and fails if
+`SITE_ENV` is present, because a retained secret is not removed merely by omitting it from a new configuration.
+
+The gateway deploy also uploads the docs' images: `.github/hosting/docs/assets/` is the Worker's static-assets
+directory (binding `DOCS_ASSETS`, `run_worker_first: true`), uploaded by `wrangler deploy` with the Worker, so the
+same Workers Scripts permission covers it. Every request still reaches the gateway first; it serves the directory only
+at `https://insulinapps.com/docs/assets/*`. The pages themselves are compiled into the Worker
+(`src/assets/docs-content.ts`), so docs reach `https://insulinapps.com/docs/` with the next gateway deploy. Keep only
+images in that directory: everything in it is uploaded.
 
 After every app Worker deploy, the pipeline also uses the Cloudflare API to remove any custom domain or zone route
 still attached to that Worker and disables its `workers.dev` and preview URLs. It re-lists all three kinds of public

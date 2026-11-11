@@ -22,7 +22,7 @@ export interface Context {
   app: HostedApp | null
   /** https: everywhere, except http: for *.localhost when SITE_ENV=test. */
   scheme: 'https:' | 'http:'
-  /** `:<port>` on a local development server, otherwise empty. */
+  /** `:<port>` on a local development server (SITE_ENV=test on *.localhost, http or https), otherwise empty. */
   portSuffix: string
   /** SITE_ENV=test on http://*.localhost: cookies drop Secure and the __Host- prefix. Never in production. */
   relaxed: boolean
@@ -40,7 +40,8 @@ export function createContext(request: Request, env: Env, exec: ExecutionContext
   const host = url.hostname.toLowerCase()
   const app = config.appsByHost.get(host) ?? null
   const site: Site = host === config.domain ? 'apex' : host === config.authHost ? 'auth' : app ? 'app' : 'other'
-  const relaxed = config.testMode && url.protocol === 'http:' && (host === 'localhost' || host.endsWith('.localhost'))
+  const local = config.testMode && (host === 'localhost' || host.endsWith('.localhost'))
+  const relaxed = local && url.protocol === 'http:'
   return {
     env,
     config,
@@ -51,7 +52,9 @@ export function createContext(request: Request, env: Env, exec: ExecutionContext
     site,
     app,
     scheme: relaxed ? 'http:' : 'https:',
-    portSuffix: relaxed && url.port ? `:${url.port}` : '',
+    // A local server keeps its port, over http or over wrangler's https (`--local-protocol https`, as the docs'
+    // screenshots run it); production origins never carry one.
+    portSuffix: local && url.port ? `:${url.port}` : '',
     relaxed,
     now: Date.now(),
     clientIp: request.headers.get('CF-Connecting-IP'),

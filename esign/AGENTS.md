@@ -122,6 +122,10 @@ E-sign's Docs are `src/app/pages/docs/` and `src/app/components/Docs.ts`, tested
 page's "About signing" panel is `src/app/ui/SigningHelp.ts`. Cap Table is the reference: `captable/src/app/pages/docs/`
 and `captable/src/app/components/Docs.tsx` (E-sign's are `.ts` for the reason under Commands).
 
+The public docs at `https://insulinapps.com/docs/esign/` are `docs/public/*.md` (front matter `title`, `description`,
+`order`), for people and AI agents; update the page that describes a behaviour in the same change, then run
+`npm run build:docs` in `.github/hosting/gateway/` and commit its `src/assets/docs-content.ts`.
+
 ## UI
 
 New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default neutral theme, light and dark: the components

@@ -7,7 +7,7 @@ over a service binding with the console identity headers. The apps need no hosti
 
 | Host | What it serves |
 |---|---|
-| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; each app's `/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`; invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
+| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; the public docs at `/docs/` (every page, `/docs/llms.txt`, `/docs/llms-full.txt`, each page's `.md`, and the images at `/docs/assets/*`); sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; each app's `/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`; invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
 | `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users` and `/settings/integrations`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
@@ -52,11 +52,13 @@ bundles them.
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
 | `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (top bar, footer, favicon links); `settings.tsx` the organization's settings, `app-settings.tsx` the pages on an app host |
 | `src/pages/html.ts` | the `html` tag, which escapes the HTML of the e-mails (React escapes the pages) |
+| `src/docs.ts`, `src/pages/docs.tsx` | `/docs/` on the apex: the pages from `src/assets/docs-content.ts` in the shared document, `llms.txt`, `llms-full.txt`, each page's `.md`, and `/docs/assets/*` from the `DOCS_ASSETS` binding |
+| `scripts/build-docs.mjs`, `scripts/docs/` | `npm run build:docs`: the Markdown of `.github/hosting/docs/` and every app's `docs/public/` rendered with React (`markdown.mjs`, `layout.mjs`) into `src/assets/docs-content.ts`, with the diagram blocks drawn as SVG (`diagram.mjs`) |
 | `src/components/ui/` | shadcn/ui components (new-york style), as the shadcn CLI writes them; see "shadcn/ui" below |
 | `src/components/` | the gateway's own pieces: top bar, footer, `<details>` menus, form fields, brand marks |
 | `src/lib/utils.ts` | `cn()`, shadcn's class-name helper (`clsx` and `tailwind-merge`) |
 | `src/styles/gateway.css` | the Tailwind CSS source: shadcn's neutral theme tokens, light and dark |
-| `src/assets/` | what the Worker serves itself: the compiled stylesheet (`gateway-css.ts`, generated), the mark (`icon.ts`) and its PNG renderings (`icons.ts`, generated), and the account bar (script and stylesheet) |
+| `src/assets/` | what the Worker serves itself: the compiled stylesheet (`gateway-css.ts`, generated), the docs (`docs-content.ts`, generated), the mark (`icon.ts`) and its PNG renderings (`icons.ts`, generated), and the account bar (script and stylesheet) |
 | `scripts/build-css.mjs`, `scripts/build-icons.mjs` | `npm run build:css` and `npm run build:icons`: regenerate those two modules |
 | `components.json` | the shadcn CLI's settings, for adding a component later |
 | `migrations/` | D1 migrations (wrangler format) |
@@ -72,6 +74,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `RL_AUTH` | ratelimit | suggested `limit: 10, period: 60`; keys per action and IP, and per action and email (hashed) |
 | `RL_APP` | ratelimit | suggested `limit: 600, period: 60`; keyed per user (and per IP on public paths) |
 | `RL_PUBLIC` | ratelimit | suggested `limit: 60, period: 60`; requests to an app's public paths that aren't GET or HEAD, keyed per app and IP (`public-post:<app>:<ip>`), on top of `RL_APP` |
+| `DOCS_ASSETS` | assets | Workers Static Assets: `{ directory: .github/hosting/docs/assets, binding: DOCS_ASSETS, run_worker_first: true }`. The docs' images; `run_worker_first` sends every request to the Worker first (Wrangler 4.149 sets `invoke_user_worker_ahead_of_assets`), so the directory is reached only through the binding, which `src/docs.ts` serves at `/docs/assets/*` and nowhere else. Optional: without it the docs show no images |
 | crons | trigger | `*/5 * * * *` (the apps' tick, `src/scheduled.ts`) and `17 3 * * *` (the daily cleanup) |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
@@ -105,18 +108,57 @@ npm test                       # builds with wrangler, then runs the tests in Mi
 npm run dev                    # the gateway with the stub app, on port 8787
 npm run build:css              # after changing a class in src/components or src/pages, or src/styles/gateway.css
 npm run check:css              # fails while src/assets/gateway-css.ts is stale (npm test checks it too)
+npm run build:docs             # after changing any docs page, image or the renderer (writes src/assets/docs-content.ts)
+npm run check:docs             # fails while src/assets/docs-content.ts is stale (npm test checks it too)
 npm run build:icons            # after changing the mark in src/assets/icon.ts (renders the PNGs with resvg)
 ```
 
 The stylesheet is compiled ahead of time and committed as a module (`src/assets/gateway-css.ts`), so the deploy needs
-no CSS step: wrangler bundles it with everything else. Tailwind scans only `src/components` and `src/pages` for
-classes. The favicon PNGs are committed the same way (`src/assets/icons.ts`), because the Worker has no static-assets
-binding.
+no CSS step: wrangler bundles it with everything else. Tailwind scans `src/components`, `src/pages` and the docs
+renderer (`scripts/docs`) for classes. The favicon PNGs are committed the same way (`src/assets/icons.ts`); the
+static-assets binding holds only the docs' images.
 
-`npm run dev` writes `.dev/app.wrangler.json` (the app Worker's config), applies the D1 migrations locally and runs
-`wrangler dev --local` with both configs. Open:
+### The public docs
+
+`https://insulinapps.com/docs/` is generated from Markdown kept next to what it describes: the platform's pages in
+`.github/hosting/docs/*.md` and each app's in `<app>/docs/public/*.md` (apps found by `list-apps.mjs`, each its own
+section after Platform). A page is front matter (`title`, `description`, `order`) and Markdown: `##` to `####`
+headings (the title is the page's only `<h1>`), lists, GFM tables, code, GitHub callouts (`> [!NOTE]`), links to
+`/docs/<section>/<page>` (checked: a missing page or heading fails the build), images under `/docs/assets/` (checked
+too, and linked with their content hash, so they are cached for good), and ` ```diagram ` blocks: boxes, groups and
+arrows in a small language described at the top of `scripts/docs/diagram.mjs`, drawn as inline SVG coloured only by
+the stylesheet's `--diagram-*` tokens. Raw HTML fails the build.
+
+`npm run build:docs` renders each page with React in the gateway's shadcn style (the navigation, the article, its table
+of contents, previous and next) and refuses any script, style attribute or event handler in the result. The gateway
+puts a page into the shared document per request (`src/pages/docs.tsx`), so the top bar shows the visitor's sign-in
+links or account; the pages are public, indexable and under the usual CSP. `/docs/llms.txt` lists every page for AI
+agents, `/docs/llms-full.txt` holds all of them, and each page's Markdown is at its address with `.md`. Commit the
+regenerated module with the change; `npm test` fails while it is stale, and the gateway workflow runs when a docs page
+changes.
+
+The screenshots in `.github/hosting/docs/assets/screenshots/` come from a real local run, driven in Chrome with
+Playwright through synthetic data (`.github/hosting/docs/screenshots.mjs`, a small package with its own lockfile):
+
+```bash
+(cd ../../../captable && npm ci && NITRO_PRESET=cloudflare_module npm run build)
+(cd ../../../esign && npm ci && NITRO_PRESET=cloudflare_module npm run build)
+(cd ../docs && npm ci && node screenshots.mjs)   # --only <name,...>, --headed, --debug <dir>, --chrome <path>
+npm run build:docs
+```
+
+It starts the gateway with both apps over https (`wrangler dev --local-protocol https`, which E-sign's embedded editor
+needs) in a fresh local state, signs up through the captured-mail page, creates an organization, a custom role and
+invitations, connects an MCP client, imports Cap Table's own spreadsheet template filled with a fictional company,
+places E-sign fields, sends an envelope and signs it, with Cloudflare's always-passing Turnstile test widget as the
+only outside call. A completed E-sign envelope can't be captured locally (its seal needs AWS KMS and a timestamp
+service), so `esign-completed.png` is a labelled placeholder.
+
+`npm run dev` writes `.dev/gateway.wrangler.json` (from `wrangler.local.jsonc`) and the app Worker's config, applies
+the D1 migrations locally and runs `wrangler dev --local` with the configs. Open:
 
 - `http://insulinapps.localhost:8787/`: the landing page, sign-in, accounts, organizations and their settings
+- `http://insulinapps.localhost:8787/docs/`: the public docs
 - `http://captable.insulinapps.localhost:8787/`: the app (the stub echoes the identity headers it receives); its
   people and integrations are at `http://insulinapps.localhost:8787/apps/captable/settings/users` and `.../integrations`
 - `http://insulinapps.localhost:8787/__insulin/dev/mail`: mail captured instead of sent (`?format=json` for JSON)
@@ -133,13 +175,16 @@ call. Google sign-in is off locally.
 npm run dev -- --app captable
 ```
 
-or by hand, which is what the script does:
+Several built apps run together, each on its own host, with `--app captable --app esign`: the gateway's config then
+gets a service binding and a `SITE_APPS` entry for each, read from its `package.json` as the deploy reads it. E-sign
+runs as it does when published, so it signs nothing until its settings are configured (the docs' screenshot script
+passes local ones). By hand, which is what the script does:
 
 ```bash
-node scripts/app-config.mjs --app captable        # writes .dev/app.wrangler.json
-npx wrangler d1 migrations apply DB --local -c wrangler.local.jsonc --persist-to .dev/state
-npx wrangler d1 migrations apply DB --local -c .dev/app.wrangler.json --persist-to .dev/state
-npx wrangler dev -c wrangler.local.jsonc -c .dev/app.wrangler.json --local --persist-to .dev/state
+node scripts/app-config.mjs --app captable        # writes .dev/gateway.wrangler.json and .dev/captable.wrangler.json
+npx wrangler d1 migrations apply DB --local -c .dev/gateway.wrangler.json --persist-to .dev/state
+npx wrangler d1 migrations apply DB --local -c .dev/captable.wrangler.json --persist-to .dev/state
+npx wrangler dev -c .dev/gateway.wrangler.json -c .dev/captable.wrangler.json --local --persist-to .dev/state
 ```
 
 Both Workers bind `DB`, so each local config gives its database a distinct `database_id`; without one, wrangler keys
@@ -244,6 +289,14 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   value; `dangerouslySetInnerHTML` is never used, and a test checks it. The top bar's organization switcher and
   account menu are `<details>`/`<summary>` menus styled like shadcn's DropdownMenu: keyboard-operable, exclusive
   (`<details name>`), and closed by a click anywhere outside (the open trigger's `::before` covers the window).
+- **The docs are rendered at build time.** A docs page is the one place the gateway puts HTML into a page that React
+  didn't render during the request: `src/pages/docs.tsx` renders the shared document around a placeholder element and
+  swaps in the page from `src/assets/docs-content.ts`, which React rendered from the repository's Markdown at build
+  time. Nothing from a request reaches it, and the build fails on a script, a `style` attribute or an event handler.
+  Images are the only thing served from the static-assets binding, at `/docs/assets/*`, as images only.
+- **Local https.** With `SITE_ENV=test` on `*.localhost`, origins keep the port over https too, so a local run behind
+  `wrangler dev --local-protocol https` (the docs' screenshots) passes the Origin check; production origins never
+  carry a port.
 - **Logs** carry event names, ids, error class names and identifier-like codes; never exception messages.
 - **Retention.** Expired sessions, used or expired links and mail-log rows older than two days are deleted in batches
   of at most 200 per table after each POST (`src/housekeeping.ts`). The daily cron (`17 3 * * *`) runs the same

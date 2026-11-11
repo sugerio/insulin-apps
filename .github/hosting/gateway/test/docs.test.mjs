@@ -165,6 +165,9 @@ test('/docs/assets/* comes from the DOCS_ASSETS binding with long caching, and n
   assert.equal((await bare.client().get(bare.url('apex', '/docs/'))).status, 200, 'the pages still render')
 })
 
+/** A diagram: an SVG in a figure of the article (the top bar's mark is an SVG too, with its own colours). */
+const DIAGRAM = /<figure class="mt-8 first:mt-0"><div[^>]*><svg[\s\S]*?<\/svg>/g
+
 test('every image a page shows is served, and every diagram is themed SVG without colours of its own', async () => {
   const seen = new Set()
   for (const { path } of pages) {
@@ -176,7 +179,7 @@ test('every image a page shows is served, and every diagram is themed SVG withou
       const image = await fetchBytes(h, h.url('apex', src))
       assert.equal(image.status, 200, `${path}: ${src}`)
     }
-    for (const [svg] of page.text.matchAll(/<svg viewBox[\s\S]*?<\/svg>/g)) {
+    for (const [svg] of page.text.matchAll(DIAGRAM)) {
       assert.match(svg, /role="img" aria-labelledby="[^"]+-title [^"]+-desc"/, `${path}: an accessible diagram`)
       assert.match(svg, /<title id="[^"]+">[^<]+<\/title><desc id="[^"]+">[^<]+<\/desc>/, `${path}: title and description`)
       assert.doesNotMatch(svg, /\s(?:fill|stroke|color|stop-color)="(?!none")[^"]*"/, `${path}: colours come from classes only`)
@@ -184,7 +187,7 @@ test('every image a page shows is served, and every diagram is themed SVG withou
   }
   assert.ok(seen.size >= 10, 'the pages show screenshots')
   const diagrams = await Promise.all(['/docs/platform/how-it-works', '/docs/platform/organizations-and-roles', '/docs/captable/how-it-works', '/docs/esign/how-it-works']
-    .map(async (path) => ((await h.client().get(h.url('apex', path))).text.match(/<svg viewBox/g) ?? []).length))
+    .map(async (path) => ((await h.client().get(h.url('apex', path))).text.match(DIAGRAM) ?? []).length))
   assert.deepEqual(diagrams, [2, 1, 1, 1], 'the architecture diagrams')
 })
 

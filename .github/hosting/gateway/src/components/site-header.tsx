@@ -1,6 +1,6 @@
-// The top bar of every gateway page: the mark and name, the docs, a link to Insulin, and the account controls (sign-in links,
-// or the organization switcher and the account menu). Everything works without JavaScript: links, plain form POSTs
-// and <details> menus (menu.tsx).
+// The top bar of every gateway page: the mark and name, the docs, a link to Insulin, and the account controls (sign-in
+// links, or the organization switcher and the account menu). Everything works without JavaScript: links, plain form
+// POSTs and <details> menus (menu.tsx).
 import { ArrowUpRight, Building2, Check, ChevronsUpDown, LogOut, Plus, ShieldCheck, UserRound, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"

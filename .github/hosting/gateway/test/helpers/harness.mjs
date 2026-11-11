@@ -293,8 +293,11 @@ export class Harness {
           serviceBindings,
           outboundService: (request) => this.outbound.handle(request),
           stripCfConnectingIp: false,
-          // As production (deploy-apps.mjs): the docs' images behind the gateway, which sees every request first.
-          ...(this.omit.has('DOCS_ASSETS') ? {} : { assets: { directory: DOCS_ASSETS_DIR, binding: 'DOCS_ASSETS', run_worker_first: true } }),
+          // As production (deploy-apps.mjs): the docs' images behind the gateway, which sees every request first. This is
+          // the router configuration wrangler derives from `run_worker_first: true` (invoke_user_worker_ahead_of_assets).
+          ...(this.omit.has('DOCS_ASSETS') ? {} : {
+            assets: { directory: DOCS_ASSETS_DIR, binding: 'DOCS_ASSETS', routerConfig: { has_user_worker: true, invoke_user_worker_ahead_of_assets: true } },
+          }),
         },
         { name: 'stub-app', modules: true, modulesRoot: join(gatewayDir, 'dev'), scriptPath: join(gatewayDir, 'dev', 'stub-app.mjs'), compatibilityDate: COMPATIBILITY_DATE },
         { name: 'mail-stub', modules: true, modulesRoot: join(gatewayDir, 'test', 'helpers'), scriptPath: join(gatewayDir, 'test', 'helpers', 'mail-stub.mjs'), compatibilityDate: COMPATIBILITY_DATE },

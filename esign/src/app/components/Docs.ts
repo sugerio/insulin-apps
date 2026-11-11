@@ -53,7 +53,7 @@ export function Docs({ topic: slug }: { topic: string | undefined }) {
               to: docHref(item.slug), 'aria-current': current ? 'page' : undefined,
               className: cn('block rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground', current && 'bg-accent font-medium text-accent-foreground'),
             }, item.title))
-          })))),
+          }))))),
     h('article', { 'aria-labelledby': 'docs-title', className: 'flex min-w-0 flex-col gap-6' },
       h('header', { className: 'flex flex-col gap-2' },
         h('h1', { id: 'docs-title', ref: title, tabIndex: -1, className: 'text-2xl font-semibold tracking-tight outline-none' }, topic.title),
@@ -72,7 +72,7 @@ export function Docs({ topic: slug }: { topic: string | undefined }) {
           h('span', { className: 'font-medium' }, before.title)) : h('span'),
         after ? h(Link, { to: docHref(after.slug), className: 'ml-auto flex flex-col items-end gap-0.5 rounded-lg border px-4 py-3 text-sm hover:bg-accent' },
           h('span', { className: 'inline-flex items-center gap-1 text-xs text-muted-foreground' }, 'Next', h(ArrowRight, { className: 'size-3', 'aria-hidden': true })),
-          h('span', { className: 'font-medium' }, after.title)) : null))))
+          h('span', { className: 'font-medium' }, after.title)) : null)))
 }
 
 /** On the background topic: what the page is, and who gives advice. */

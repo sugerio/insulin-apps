@@ -167,6 +167,22 @@ test('the glossary defines each term once, A to Z, each with its own anchor',()=
  assert.deepEqual(topic.sections.map(s=>s.title),[...new Set(names.map(n=>n[0].toUpperCase()))]);
 });
 
+// Esign's Docs at https://esign.insulinapps.com/docs showed everything in one narrow column: a misplaced parenthesis
+// rendered the article inside the topic list's <nav>, so the two-column grid had one child, in its 13rem column.
+test('the topic list and the topic are the grid\'s two columns: the article is never inside the navigation',()=>{
+ for(const topic of [undefined,...DOC_TOPICS.map(t=>t.slug)]){
+  const html=render(topic);
+  const stack:string[]=[];let parents:string[]|undefined;
+  for(const [,close,name,self] of html.matchAll(/<(\/?)([a-z0-9]+)\b[^>]*?(\/?)>/g)){
+   if(self||['br','img','input','path','circle','rect','line','polyline'].includes(name))continue;
+   if(close){stack.pop();continue;}
+   if(name==='article'){parents=[...stack];break;}
+   stack.push(name);
+  }
+  assert.deepEqual(parents,['div'],`${topic ?? '/docs'}: the article is a column of the grid, beside the topic list`);
+ }
+});
+
 test('a topic that does not exist says so and points to the start',()=>{
  const html=render('no-such-topic');
  assert.match(html,/Topic not found/);

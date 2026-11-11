@@ -116,9 +116,10 @@ Apps refuse mutations of their own people, roles, billing or integrations unless
 - `insulinapps.com/settings/organization` has the name, leaving and deleting and, for owners, **who can be invited**.
   Once the organization has a verified domain (§7), an owner can invite only people with an address in its verified
   domains; it is off by default. While it is on, every new invitation, from the people page or an app's, must be for an
-  address in one of the domains verified now (compared in lower case and punycode), and accepting checks again, so an
-  invitation sent before it was turned on, or before its domain was removed, brings nobody new in. Both checks are part
-  of the insert and the acceptance statement, so neither races the setting or a domain's removal. People who are
+  address in one of the domains verified now (compared in lower case and punycode), and resending and accepting check
+  again, so an invitation sent before it was turned on, or before its domain was removed, is neither sent again (it is
+  refused like a new one) nor brings anyone new in. The checks are part of the insert, the resend's claim and the
+  acceptance statement, so none races the setting or a domain's removal. People who are
   members already keep their access, and an app admin can still give an existing specific-apps member another app.
   With no verified domain left, nobody can be invited until an owner verifies one or turns the setting off. SCIM keeps
   its own rule (§7).

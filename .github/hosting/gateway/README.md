@@ -236,10 +236,10 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   changes nothing.
 - **Invite only verified domains** (DESIGN.md §3). `orgs.invite_verified_domains_only`, which an OWNER sets on
   `/settings/organization` (the statement re-checks OWNER, and turning it on needs a verified domain), is checked inside
-  the invitation insert and inside the acceptance's membership insert (`db/orgs.ts` `invitableDomain`), against the
-  domain `db/sso.ts` `domainOf` gives (lower case, punycode). An invitation from before, or one whose domain was since
-  removed, can't bring anyone new in; an existing member is already in. The page code checks first only to word the
-  refusal.
+  the invitation insert, the resend's claim and the acceptance's membership insert (`db/orgs.ts` `invitableDomain`),
+  against the domain `db/sso.ts` `domainOf` gives (lower case, punycode). An invitation from before, or one whose domain
+  was since removed, can't be sent again or bring anyone new in; an existing member is already in. The page code checks
+  first, before claiming a resend, to word the refusal as for a new invitation.
 - **Organizations per owner domain** (DESIGN.md §3.1). `orgs.owner_domain` is the creator's domain, or their address
   without a +tag at a public mail provider (`db/sso.ts` `SHARED_DOMAINS`). The org insert is an `INSERT … SELECT …
   WHERE (SELECT COUNT(*) …) < COALESCE(allowance, 2)`, batched with the OWNER membership, which is written only if the

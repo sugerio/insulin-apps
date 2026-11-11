@@ -50,7 +50,7 @@ export interface HostedApp {
   /** The app's permission catalog; empty when it has none (it then has no custom roles). */
   permissions: Permission[]
   /**
-   * Paths people without an account use (an e-sign recipient, say), forwarded with no identity (DESIGN.md §8.1): the
+   * Paths people without an account use (an Esign recipient, say), forwarded with no identity (DESIGN.md §8.1): the
    * app authenticates them with its own codes. Empty for most apps.
    */
   publicPaths: string[]

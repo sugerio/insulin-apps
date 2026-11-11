@@ -220,7 +220,8 @@ test('voiding asks first, sends the reason, and the envelope says it is voided',
   if(c.path==='/api/me')return json(EDITOR);
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(state);
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:state.status==='VOIDED'?[{type:'VOIDED',at:'2026-11-07T01:00:00.000Z',detail:{reason:'Wrong version'}}]:[]});
-  if(c.path===`/api/envelopes/${ENV_ID}/void`){state=envelope('VOIDED',[['Ana','VOIDED']]);return new Response(null,{status:204});}
+  // Voiding changes the envelope's status; the signer's task keeps its own (the API never sets a task to VOIDED).
+  if(c.path===`/api/envelopes/${ENV_ID}/void`){state=envelope('VOIDED',[['Ana','ACTIVE']]);return new Response(null,{status:204});}
  });
  try{
   await app.click(app.button('Void envelope'),'Void');
@@ -232,7 +233,9 @@ test('voiding asks first, sends the reason, and the envelope says it is voided',
   const call=app.calls.find(c=>c.path.endsWith('/void'))!;
   assert.equal(call.method,'POST');assert.deepEqual(JSON.parse(String(call.body)),{reason:'Wrong version'});
   assert.match(app.text(),/The envelope is voided/);assert.match(app.text(),/Reason: Wrong version/);assert.match(app.text(),/Voided/);
+  assert.match(app.text(),/Asked to sign/,'the signer keeps the status they had');
   assert.equal(app.button('Void envelope'),undefined);
+  assert.equal(app.button("Open Ana's signing page"),undefined,'nobody can sign a voided envelope');
  }finally{await app.unmount();}
 });
 

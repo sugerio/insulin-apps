@@ -52,8 +52,8 @@ change their access to **Specific apps** on the organization's **People** page a
 ### Why can't an admin change an owner?
 
 Owners are the top of the organization: only an owner can invite, change or remove another owner, give the Owner role,
-edit custom roles, set up single sign-on, rename the organization or delete it. An organization always keeps at least one
-owner.
+edit custom roles, set up single sign-on, choose who can be invited, rename the organization or delete it. An
+organization always keeps at least one owner.
 
 ### I was given Viewer in Cap Table but see only my own holdings. Is that a bug?
 
@@ -63,10 +63,29 @@ address. To see the whole cap table without changing it, ask an owner for a cust
 
 ### Can I be in more than one organization?
 
-Yes. Apps open in your active organization. Switch it from the top bar, your home page, or the account bar inside an app.
-Each account can create up to 10 organizations.
+Yes. Apps open in your active organization. Switch it from the organization menu in the top bar of `insulinapps.com`, or
+from the account bar inside an app. The same menu has **Create an organization**.
+
+### How many organizations can we create?
+
+Two per owner e-mail domain, counted by the domain of the creator's address (for public mail providers like
+`gmail.com`, by address). Deleting one frees its place. For more, ask support: at the limit, **Create an organization**
+shows a **Request more organizations** form that e-mails Insulin Apps support, who reply to you. See
+[Getting started](/docs/platform/getting-started#how-many-organizations-you-can-create).
+
+### Can we stop people outside our company from being invited?
+
+Yes. Once your organization has verified its e-mail domain under **Single sign-on**, an owner can choose **Invite only
+my verified domains** on the **Organization** tab. It is off by default. See
+[Organizations and roles](/docs/platform/organizations-and-roles#who-can-be-invited).
 
 ## AI agents and the API
+
+### How do I connect my AI agent to an app?
+
+Open the app's **Connect AI** page, from **Connect AI** in the account bar inside the app or from **Account** → **AI
+agents**. It has the command for Claude Code, Codex, Gemini CLI and opencode, and the steps for Claude.ai and ChatGPT.
+See [AI agents](/docs/platform/ai-agents#the-connect-ai-page).
 
 ### Why do I sign in again for each app my agent uses?
 
@@ -81,19 +100,26 @@ if the person's role is lowered, so is the agent's.
 
 ### Can an agent invite people or change roles?
 
-No. People, roles, custom roles, integrations, single sign-on and organization settings are browser-only. Tokens never
-reach those pages.
+No. People, roles, custom roles, integrations, API access, single sign-on and organization settings are browser-only.
+Tokens never reach those pages.
 
 ### How do I stop an agent?
 
-Go to **Account** → **AI agents** and choose **Disconnect**. It stops at once. Changing your password or turning two-step
-sign-in on or off disconnects all your agents.
+Go to **Account** → **AI agents**, or the app's **Connect AI** page, and choose **Disconnect**. It stops at once. The
+organization's owners and admins can disconnect anyone's agent on an app's Connect AI page. Changing your password or
+turning two-step sign-in on or off disconnects all your agents.
 
-### What is the difference between an AI agent and a service account?
+### What is the difference between an AI agent and an OAuth client?
 
-An AI agent acts as you, with your role, and you allow it in your browser. A service account is a program's own
-identity in one app, with a role an app admin gives it and a client secret instead of a person. Use a service account for
-integrations between systems. See [The API and service accounts](/docs/platform/api-and-service-accounts).
+An AI agent acts as you, with your role, and you allow it in your browser. An OAuth client (once called a service
+account) is a program's own identity in one app, with a role and a client secret instead of a person. The organization's
+owners and admins create it on the app's **API access** tab. Use an OAuth client for integrations between systems. See
+[API access with OAuth clients](/docs/platform/api-and-service-accounts).
+
+### How do I change an OAuth client's secret without breaking the program that uses it?
+
+Choose **Rotate secret** on the app's **API access** tab. The previous secret keeps working for 24 hours, so you can
+switch the program over; then choose **Revoke previous secret now**, or let the 24 hours run out.
 
 ## Data
 

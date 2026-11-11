@@ -5,7 +5,7 @@ order: 7
 ---
 
 This page describes how Insulin Apps is built: which address serves what, how a request reaches an app, what the app
-learns about the caller, and how sign-in, agents and service accounts fit in. It is for technical readers, IT and
+learns about the caller, and how sign-in, agents and OAuth clients fit in. It is for technical readers, IT and
 security reviewers, people who build apps, and AI agents that need the exact contract. Everything here is open source.
 
 ## The big picture
@@ -17,11 +17,11 @@ D1 database, and has no public address of its own: the gateway is the only way i
 
 ```diagram
 title: How a request reaches an app
-description: People, AI agents, service accounts and signers all reach Insulin Apps through one gateway Worker. On insulinapps.com it signs people in and keeps accounts, organizations and roles in its own D1 database; on each app's host it checks the session or token, works out the caller's role and forwards the request with the x-suger-* identity headers over a private service binding to the app's Worker, which has its own D1 database. Signers on an app's public paths reach it with no identity.
+description: People, AI agents, OAuth clients and signers all reach Insulin Apps through one gateway Worker. On insulinapps.com it signs people in and keeps accounts, organizations and roles in its own D1 database; on each app's host it checks the session or token, works out the caller's role and forwards the request with the x-suger-* identity headers over a private service binding to the app's Worker, which has its own D1 database. Signers on an app's public paths reach it with no identity.
 size: 740 x 545
 box people 20 20 160 60 "People" "web browser"
 box agents 200 20 160 60 "AI agents" "MCP clients"
-box services 380 20 160 60 "Service accounts" "API clients"
+box services 380 20 160 60 "OAuth clients" "programs, API"
 box signers 560 20 160 60 dashed "Signers" "no account"
 group gateway 20 130 700 230 "Gateway Worker"
 box apex 40 170 320 76 accent "insulinapps.com" "sign-in, organizations, roles, docs" "OAuth server, SCIM, mail relay"
@@ -55,12 +55,13 @@ arrow esign.r -> esdb.l
 
 | Host | Serves |
 |---|---|
-| `insulinapps.com` | Everything that isn't an app: the landing page, these docs, privacy and terms; sign-up, sign-in, two-step sign-in, Google and enterprise SSO; your account and organizations; the organization's people, roles, settings and single sign-on; each app's people and integrations at `/apps/<app>/settings/...`; the OAuth authorization server for AI agents and service accounts; SCIM at `/scim/v2`. |
-| `<app>.insulinapps.com` | The app itself, plus the gateway's endpoints there: `/mcp` and its OAuth metadata, and `/settings/users` and `/settings/integrations`, which only redirect to the app's settings on the apex. |
+| `insulinapps.com` | Everything that isn't an app: the landing page, these docs, privacy and terms; sign-up, sign-in, two-step sign-in, Google and enterprise SSO; your account and organizations; the organization's people, roles, settings and single sign-on; each app's settings at `/apps/<app>/settings/...` (people, integrations, API access and Connect AI); the OAuth authorization server for AI agents and OAuth clients; SCIM at `/scim/v2`. |
+| `<app>.insulinapps.com` | The app itself, plus the gateway's endpoints there: `/mcp` and its OAuth metadata, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which only redirect to the app's settings on the apex. |
 | `www.insulinapps.com` | A permanent redirect to `insulinapps.com`. |
 | `auth.insulinapps.com` | A redirect to the same path on `insulinapps.com`, where sign-in used to live, so links in older e-mails keep working. |
 
-The settings pages for an app's people and integrations are served on `insulinapps.com`, never on the app's own host.
+An app's settings pages (people, integrations, API access and Connect AI) are served on `insulinapps.com`, never on the
+app's own host.
 The session cookie also reaches app hosts, so code an app serves could otherwise read those pages (including secrets shown
 once) or post their forms as you.
 
@@ -69,7 +70,7 @@ once) or post their forms as you.
 Apps can't use these paths, because the gateway answers them first:
 
 - `/__insulin/*`: the gateway's stylesheet, icon, account bar, and its sign-out and organization switch;
-- `/settings/users` and `/settings/integrations` (and everything below them);
+- `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai` (and everything below them);
 - `/mcp` and `/.well-known/oauth-*`.
 
 ## How a request reaches an app
@@ -79,30 +80,30 @@ When your browser opens a page of an app:
 1. The gateway removes every incoming `x-suger-*` header and its own cookies from the request, so nobody can pose as
    someone else.
 2. If the path is one of the app's [public paths](#public-paths), it forwards the request with no identity (see below).
-3. If the request carries a bearer token, it is an AI agent or a service account: see
+3. If the request carries a bearer token, it is an AI agent or an OAuth client: see
    [Tokens](#tokens-for-agents-and-programs).
 4. Otherwise it checks your session. Signed out, a page navigation is sent to sign in and comes back; anything else gets
    `401`.
 5. It finds your active organization and your role in this app. With no organization you are sent to create one; with
    no access to the app you see **You don't have access to** the app.
 6. It forwards the request to the app Worker over its service binding, with the identity headers.
-7. On an HTML page, it adds the small account bar (organization switch, the app's people and integrations, your account,
-   sign out). The bar runs under the app's own content security policy.
+7. On an HTML page, it adds the small account bar (organization switch, the app's people, integrations and Connect AI
+   pages, your account, sign out). The bar runs under the app's own content security policy.
 
 ## The identity headers
 
-These headers reach the app on every request from a person, an AI agent or a service account:
+These headers reach the app on every request from a person, an AI agent or an OAuth client:
 
 | Header | Value |
 |---|---|
-| `x-suger-user-id` | The person's id, or the service account's |
-| `x-suger-user-email` | Their e-mail address, URL-encoded. A service account's is `<id>@service-accounts.invalid` |
+| `x-suger-user-id` | The person's id, or the OAuth client's |
+| `x-suger-user-email` | Their e-mail address, URL-encoded. An OAuth client's is `<id>@service-accounts.invalid` |
 | `x-suger-user-name` | Their name, URL-encoded |
 | `x-suger-organization-id` | The organization the request acts in |
 | `x-suger-app-id` | `insulin-apps-<app>` |
 | `x-suger-app-role` | `ADMIN`, `EDITOR` or `VIEWER`. For a custom role, the least built-in role that covers its permissions |
 | `x-suger-app-permissions` | Apps with a permission catalog only: the effective permissions, space-separated |
-| `x-suger-access-via` | `browser`, `mcp` (an AI agent) or `api` (a service account); `public` and `schedule` are described below |
+| `x-suger-access-via` | `browser`, `mcp` (an AI agent) or `api` (an OAuth client); `public` and `schedule` are described below |
 
 User and organization ids are random UUIDs. An app reads these with `getCurrentUser(request)` from `@fours/app/server`.
 
@@ -110,8 +111,8 @@ Apps treat `x-suger-app-permissions` as a narrowing of the role, never a widenin
 permissions that are also in the header. Apps also refuse changes to their own people, roles, billing or integrations
 unless `x-suger-access-via` is `browser`.
 
-AI agents and service accounts also send a `User-Agent` that names them: `Insulin Apps MCP: <client name>` or
-`Insulin Apps API: <service account name>`, for the app's audit trail.
+AI agents and OAuth clients also send a `User-Agent` that names them: `Insulin Apps MCP: <client name>` or
+`Insulin Apps API: <OAuth client name>`, for the app's audit trail.
 
 ## Sign-in and tokens
 
@@ -119,11 +120,11 @@ There are three kinds of caller, and all of them end up with the same identity h
 
 ```diagram
 title: Three kinds of caller, one set of headers
-description: A person signs in on insulinapps.com with a password, Google or single sign-on (and a two-step code if it is on) and gets a session cookie for every app host. An AI agent registers with the OAuth server, sends the person through sign-in and consent, and gets an hour-long token for one app's /mcp, where it acts as that person. A service account, created by an app admin, trades its client id and secret for a token and calls the app's /api/*. The app receives the same identity headers in every case, with x-suger-access-via set to browser, mcp or api.
+description: A person signs in on insulinapps.com with a password, Google or single sign-on (and a two-step code if it is on) and gets a session cookie for every app host. An AI agent registers with the OAuth server, sends the person through sign-in and consent, and gets an hour-long token for one app's /mcp, where it acts as that person. An OAuth client, created by an owner or admin of the organization, trades its client id and secret for a token and calls the app's /api/*. The app receives the same identity headers in every case, with x-suger-access-via set to browser, mcp or api.
 size: 740 x 490
 box person 20 20 220 56 "Person" "web browser"
 box agent 260 20 220 56 "AI agent" "MCP client"
-box account 500 20 220 56 "Service account" "a program"
+box account 500 20 220 56 "OAuth client" "a program"
 group auth 10 100 720 118 "insulinapps.com"
 box signin 20 134 220 72 accent "Sign-in" "password, Google or SSO," "then a two-step code if on"
 box consent 260 134 220 72 accent "Authorize and allow" "register, sign in, choose" "the organization, Allow"
@@ -150,19 +151,20 @@ text 370 478 small muted "Every request checks the person's or the account's cur
 - **AI agents** (MCP clients) register with the authorization server on `insulinapps.com`, send the person through
   sign-in and consent, and get tokens for one app's `/mcp`. They act as that person. See
   [AI agents](/docs/platform/ai-agents).
-- **Service accounts** get a token with their client id and secret (`client_credentials`) and call one app's `/api/*`.
-  They act with the role an app admin gave them. See [The API and service accounts](/docs/platform/api-and-service-accounts).
+- **OAuth clients** (once called service accounts) get a token with their client id and secret (`client_credentials`)
+  and call one app's `/api/*`. They act with the role the organization's owners or admins gave them on the app's **API
+  access** tab. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ### Tokens for agents and programs
 
 - Each app is its own OAuth protected resource: `https://<app>.insulinapps.com/mcp` for agents and
-  `https://<app>.insulinapps.com` for service accounts. `insulinapps.com` is the one authorization server for all of them.
+  `https://<app>.insulinapps.com` for OAuth clients. `insulinapps.com` is the one authorization server for all of them.
 - Tokens are 32 random bytes; only their SHA-256 is stored. Access tokens last an hour.
-- Every call re-checks the grant or the service account and the caller's current role, so a removed or demoted person's
+- Every call re-checks the grant or the OAuth client and the caller's current role, so a removed or demoted person's
   agent loses access or power at once.
 - Tokens reach only the app's own API, `/api/*` (minus the platform's `/api/__suger/*`). They never reach the gateway's
-  pages, so people, roles, integrations and single sign-on stay browser-only by construction.
-- A person's token works only on `/mcp`; a service account's only on `/api/*`.
+  pages, so people, roles, integrations, API access and single sign-on stay browser-only by construction.
+- A person's token works only on `/mcp`; an OAuth client's only on `/api/*`.
 
 ## Public paths
 
@@ -232,7 +234,7 @@ organization and app, and 5,000 a day per app. The relay answers `202 { "status"
 ## Data
 
 - The gateway's database holds accounts, sessions, organizations, memberships, roles, invitations, AI agent grants,
-  service accounts, stored credentials (encrypted), single sign-on settings and a short mail log.
+  OAuth clients (hashed secrets), stored credentials (encrypted), single sign-on settings and a short mail log.
 - Each app's database holds what you enter in that app, for every organization, each organization's rows marked with its
   id.
 - Nothing is reset. Data stays until you delete it. Deleting an organization removes it from sign-in; the apps keep its

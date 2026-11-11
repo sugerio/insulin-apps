@@ -1,12 +1,12 @@
 ---
 title: Integrations
-description: An app's integrations page, stored credentials for outside services, and the platform services apps use beyond their database.
+description: An app's integrations page with its stored credentials for outside services, and the platform services apps use beyond their database.
 order: 6
 ---
 
-This page covers what an app connects to beyond its own data: the app's **Integrations** page, with its service accounts
-and its stored credentials for outside services, and the services the platform gives every app (public pages, mail,
-scheduled work and secrets). The first part is for app admins; the last part is for people who build or change apps.
+This page covers what an app connects to beyond its own data: the app's **Integrations** page, with its stored
+credentials for outside services, and the services the platform gives every app (public pages, mail, scheduled work and
+secrets). The first part is for app admins; the last part is for people who build or change apps.
 
 ## The Integrations page
 
@@ -14,21 +14,19 @@ Each app has an **Integrations** page on the apex: `https://insulinapps.com/apps
 example `https://insulinapps.com/apps/esign/settings/integrations`. The app's own
 `https://<app>.insulinapps.com/settings/integrations` leads there, and so does **Integrations** in the app's account bar.
 
-It has two parts:
+It holds the app's **stored credentials**: secrets for outside services that the app calls, such as another company's
+API. Programs that call the app's own API don't belong here: they use OAuth clients, on the app's **API access** tab,
+which the page links to under **API clients**. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
-- **Service accounts**: programs that call the app's API in your organization, each with a role in the app. See
-  [The API and service accounts](/docs/platform/api-and-service-accounts).
-- **Stored credentials**: secrets for outside services that the app calls, such as another company's API.
-
-![The Integrations page with the Service accounts and Stored credentials cards](/docs/assets/screenshots/platform-integrations.png "An app's Integrations page")
+![The Integrations page with the Stored credentials card and the API clients card that links to API access](/docs/assets/screenshots/platform-integrations.png "An app's Integrations page")
 
 ### Who can see and change it
 
 | Who | What they can do |
 |---|---|
-| App admins: the organization's owners and admins, and people whose role in the app is **Admin** | Create, edit and delete service accounts and stored credentials |
+| App admins: the organization's owners and admins, and people whose role in the app is **Admin** | Create, edit and delete stored credentials |
 | Everyone else who can use the app | See names, kinds, hosts and when each was last used. Never a secret. |
-| AI agents and service accounts | Nothing: tokens never reach this page |
+| AI agents and OAuth clients | Nothing: tokens never reach this page |
 
 The page lives on `insulinapps.com`, not on the app's own address, so no code an app serves can read it or post its forms.
 Secrets are shown once, right after they are made, and never again.

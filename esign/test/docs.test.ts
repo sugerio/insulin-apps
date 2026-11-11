@@ -10,6 +10,7 @@ import {Docs} from '../src/app/components/Docs.ts';
 import {TOPIC_SLUGS,anchorId} from '../src/app/pages/docs/parts.ts';
 import {DOC_TOPICS,docTopic} from '../src/app/pages/docs/topics.ts';
 import {json,me,renderMember,visibleText} from './helpers/member.ts';
+import {statusLabel,taskLabel} from '../src/app/member/api.ts';
 
 const render=(topic:string|undefined)=>renderToStaticMarkup(React.createElement(Docs,{topic}));
 const textOf=(html:string)=>html.replace(/<[^>]+>/g,' ').replace(/&#x27;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/\s+/g,' ');
@@ -121,6 +122,35 @@ test('the Docs cover the main tasks, what each role sees, signers, statuses, evi
   assert.doesNotMatch(text,/Hosts call POST \/api\/process-due on a schedule/,`${slug} no longer asks hosts to schedule it`);
  }
  assert.match(textOf(render('roles')),/Every role can read these Docs/);
+});
+
+// The first column of the table labelled `label` in a rendered topic.
+const tableRows=(html:string,label:string)=>{
+ const table=new RegExp(`<table aria-label="${label}"[\\s\\S]*?</table>`).exec(html)?.[0];
+ assert.ok(table,`the ${label} table`);
+ return [...table.matchAll(/<th scope="row"[^>]*>([^<]*)<\/th>/g)].map(m=>textOf(m[1]).trim());
+};
+// Every source file of the server, to read which statuses it writes.
+const serverSources=()=>{
+ const dir=new URL('../src/app/server/',import.meta.url);
+ return (readdirSync(dir,{recursive:true}) as string[]).filter(name=>name.endsWith('.ts')).map(name=>readFileSync(new URL(name,dir),'utf8')).join('\n');
+};
+
+test('the statuses topic lists exactly the envelope and signer statuses the API sets, and says signers keep theirs when an envelope ends early',()=>{
+ const html=render('statuses');
+ const envelopeStatuses=['IN_PROGRESS','FINALIZING','COMPLETED','VOIDED','DECLINED','EXPIRED'];
+ assert.deepEqual(tableRows(html,'Envelope statuses'),envelopeStatuses.map(statusLabel));
+ // A signer's task is created PENDING or ACTIVE and only ever updated to ACTIVE or SIGNED: voiding, declining and
+ // expiring change the envelope's status, never a task's.
+ const source=serverSources();
+ const written=new Set([...source.matchAll(/UPDATE tasks SET status\s*=\s*'([A-Z_]+)'/g)].map(m=>m[1]));
+ assert.deepEqual([...written].sort(),['ACTIVE','SIGNED'],'the task statuses the server updates to');
+ assert.match(source,/index === 0 \? 'ACTIVE' : 'PENDING'/,'a new envelope\'s tasks start ACTIVE (the first) or PENDING');
+ assert.deepEqual(tableRows(html,'Signer statuses'),['PENDING','ACTIVE','SIGNED'].map(taskLabel));
+ assert.deepEqual(tableRows(html,'Signer statuses'),['Waiting for an earlier signer','Asked to sign','Signed']);
+ const text=textOf(html);
+ assert.match(text,/signers who hadn't signed keep the status they had/);
+ assert.match(text,/the signer who declined still shows Asked to sign/);
 });
 
 test('the glossary defines each term once, A to Z, each with its own anchor',()=>{

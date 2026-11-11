@@ -20,7 +20,7 @@ Every ledger entry carries:
 
 - **what happened**, as a typed transaction with its details;
 - **its effective date**, the legal date the fact took effect, in the company's time zone;
-- **who recorded it and how**: the person, AI agent or service account, or the import;
+- **who recorded it and how**: the person, AI agent or OAuth client, or the import;
 - **a fingerprint** (a SHA-256 hash) of its contents, chained to the entry before it.
 
 The ledger is **append-only**. Database rules refuse any edit or deletion of an entry, and each entry must link to the
@@ -38,7 +38,7 @@ them one by one, checking the rules as it goes.
 
 ```diagram
 title: The ledger and the replay
-description: Every change, whether made in the app's forms, by an AI agent or service account through the API, or by an import, is first checked by replaying the whole ledger with the new entry, and refused if a rule breaks. Accepted changes are appended to the ledger, where each entry records what happened, its effective date, who recorded it, and a SHA-256 hash chained to the entry before; a mistake is undone by a reversal entry, never by an edit. Replaying the ledger in date order up to any date produces the cap table, each holder's holdings and vesting, and the reports and deadlines.
+description: Every change, whether made in the app's forms, by an AI agent or OAuth client through the API, or by an import, is first checked by replaying the whole ledger with the new entry, and refused if a rule breaks. Accepted changes are appended to the ledger, where each entry records what happened, its effective date, who recorded it, and a SHA-256 hash chained to the entry before; a mistake is undone by a reversal entry, never by an edit. Replaying the ledger in date order up to any date produces the cap table, each holder's holdings and vesting, and the reports and deadlines.
 size: 740 x 545
 box people 20 20 220 56 "People" "forms in the app"
 box agents 260 20 220 56 "AI agents, API clients" "ledger commands"
@@ -169,8 +169,8 @@ One copy of Cap Table serves every organization on Insulin Apps, and each organi
 ## The audit log and verification
 
 - **Recent Activity** lists every change: what changed (before and after), who made it and when. Downloads of reports
-  and documents are recorded too. The audit log also keeps each request's user agent, which for an AI agent or a
-  service account names the client (`Insulin Apps MCP: <client>` or `Insulin Apps API: <account>`). Nothing in it can
+  and documents are recorded too. The audit log also keeps each request's user agent, which for an AI agent or an
+  OAuth client names the client (`Insulin Apps MCP: <client>` or `Insulin Apps API: <account>`). Nothing in it can
   be edited or removed. The **Audit log** report downloads it as CSV.
 - **Ledger verification** re-checks a company's whole ledger from the raw records: every fingerprint, the unbroken
   chain, every command's completeness, every reversal, and a full replay with every rule. Anyone who records changes

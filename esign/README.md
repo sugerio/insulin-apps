@@ -50,8 +50,8 @@ link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).
 
 | Role | E-sign permission | Can |
 | --- | --- | --- |
-| Owner, Admin, Editor | `esign.manage` | send, void and follow envelopes, upload templates, open signing pages for testing |
-| User, Viewer | `esign.view` | see the organization's templates and envelopes |
+| Editor and above (Owner, Admin, Editor) | `esign.manage` | send, void and follow envelopes, upload templates, open signing pages for testing |
+| Viewer | `esign.view` | see the organization's templates and envelopes |
 
 A custom role is built from these two permissions. Recipients don't need an account: their link and
 emailed code are their access, to their own task only.

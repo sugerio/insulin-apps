@@ -5,9 +5,9 @@ order: 4
 ---
 
 This page shows how to let an AI agent work in an Insulin app for you: Claude Code, Codex, Gemini CLI, opencode, or a
-hosted connector such as Claude or ChatGPT. It gives the exact commands, explains the sign-in step, lists the tools the
-agent gets, and sets out what an agent may and may not do. It is for anyone who uses an AI agent, and for the agents
-themselves.
+hosted connector such as Claude.ai or ChatGPT. It shows each app's **Connect AI** page, gives the exact commands,
+explains the sign-in step, lists the tools the agent gets, and sets out what an agent may and may not do. It is for
+anyone who uses an AI agent, and for the agents themselves.
 
 ## How it works
 
@@ -19,17 +19,42 @@ Every app is its own MCP server, at `/mcp` on the app's address:
 | E-sign | `https://esign.insulinapps.com/mcp` |
 | Any app | `https://<app>.insulinapps.com/mcp` |
 
-You add the server to your agent once. The first time the agent connects, it opens `insulinapps.com` in your browser.
+You add the server to your agent once: each app's [Connect AI page](#the-connect-ai-page) has the command for your
+client, ready to copy. The first time the agent connects, it opens `insulinapps.com` in your browser.
 You sign in (with two-step sign-in, if you use it), choose the organization, and choose **Allow**. From then on the
 agent works in that app, in that organization, **as you**: with your role there, re-checked on every call.
 
 Each app is connected separately. Connecting Cap Table doesn't connect E-sign, and an agent you connect in one
 organization can't see another.
 
+## The Connect AI page
+
+Every app has a **Connect AI** page with everything you need to connect an agent to it:
+`https://insulinapps.com/apps/<app>/settings/connect-ai`, for example
+`https://insulinapps.com/apps/captable/settings/connect-ai`. You reach it three ways:
+
+- inside the app, from **Connect AI** in the account bar;
+- from **Account** → **AI agents**, with **Connect AI** next to each app you can use in your active organization;
+- from the **Connect AI** tab of the app's settings, next to **People**, **Integrations** and **API access**.
+
+Everyone who can use the app can open it, Viewers and people with access to specific apps included. It shows:
+
+- **The app's MCP server**: its address, what connecting does, and your role in the app in your active organization,
+  which is what your agent may do there.
+- **Set up your AI client**: the commands for Claude Code, Codex CLI, Gemini CLI and opencode, and the steps for
+  Claude.ai and ChatGPT, with the app's name and address already filled in. The page runs no script, so there is no
+  copy button: select a command and copy it.
+- **Your agents**: the agents you connected to this app in this organization, when each was connected, last used and
+  when it expires, each with **Disconnect**.
+- **Everyone's agents**, for the organization's owners and admins only: every agent anyone in the organization connected
+  to this app, with who connected it, each with **Disconnect**.
+
+![The Connect AI page of Cap Table with the MCP server address, the setup for each AI client and the agents connected](/docs/assets/screenshots/platform-connect-ai.png "An app's Connect AI page")
+
 ## Connect your agent
 
-The examples use Cap Table. For another app, change both the name and the address, for example `esign` and
-`https://esign.insulinapps.com/mcp`.
+These are the commands the Connect AI page shows. The examples use Cap Table; for another app, change both the name and
+the address, for example `esign` and `https://esign.insulinapps.com/mcp`, or copy them from that app's Connect AI page.
 
 ### Claude Code
 
@@ -37,8 +62,8 @@ The examples use Cap Table. For another app, change both the name and the addres
 claude mcp add --transport http captable https://captable.insulinapps.com/mcp
 ```
 
-Then start Claude Code, run `/mcp`, choose `captable` and authenticate. Your browser opens the consent page. Add
-`--scope user` to the command to have the server in every project, not only the current one.
+Then run `/mcp` in Claude Code, choose `captable` and sign in in the browser window it opens. Add `--scope user` to the
+command to have the server in every project, not only the current one.
 
 ### Codex CLI
 
@@ -47,15 +72,7 @@ codex mcp add captable --url https://captable.insulinapps.com/mcp
 codex mcp login captable
 ```
 
-`codex mcp login` opens your browser to sign in and allow the connection. The same server in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.captable]
-url = "https://captable.insulinapps.com/mcp"
-```
-
-Older Codex releases needed `experimental_use_rmcp_client = true` at the top of `config.toml` for servers reached by
-URL. If `codex mcp login` isn't available, update Codex.
+The second command opens `insulinapps.com` in your browser to sign in and allow the connection.
 
 ### Gemini CLI
 
@@ -63,56 +80,41 @@ URL. If `codex mcp login` isn't available, update Codex.
 gemini mcp add --transport http captable https://captable.insulinapps.com/mcp
 ```
 
-Then start Gemini CLI and run `/mcp auth captable` to sign in and allow the connection. The same server in
-`.gemini/settings.json` (this project) or `~/.gemini/settings.json` (every project):
-
-```json
-{
-  "mcpServers": {
-    "captable": {
-      "httpUrl": "https://captable.insulinapps.com/mcp"
-    }
-  }
-}
-```
+Then run `/mcp auth captable` in Gemini CLI to sign in. The command adds the server to the current project; add
+`--scope user` for every project.
 
 ### opencode
 
-Add the server to `opencode.json` in your project, or to `~/.config/opencode/opencode.json` for every project:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "captable": {
-      "type": "remote",
-      "url": "https://captable.insulinapps.com/mcp",
-      "enabled": true
-    }
-  }
-}
-```
-
-Then run:
-
 ```bash
+opencode mcp add captable --url https://captable.insulinapps.com/mcp
 opencode mcp auth captable
 ```
 
-### Hosted connectors: Claude and ChatGPT
+The second command opens `insulinapps.com` in your browser to sign in and allow the connection.
 
-Claude (on claude.ai and claude.com) and ChatGPT can connect to an app as a custom connector, from their own servers.
-Add a custom connector and give it the app's MCP address, such as `https://captable.insulinapps.com/mcp`. The connector
-sends you to `insulinapps.com` to sign in and allow it, like any other agent.
+### Claude.ai and ChatGPT
 
-Insulin Apps accepts these connectors' registered callbacks:
+Claude.ai and ChatGPT connect from their own servers, as a custom connector that takes the app's MCP address, such as
+`https://captable.insulinapps.com/mcp`.
+
+- **Claude.ai**: **Customize** → **Connectors** → **Add** → **Add custom connector**; paste the address and connect. On
+  Team and Enterprise plans an owner adds it under **Organization settings** → **Connectors**, and members then connect
+  it.
+- **ChatGPT**: where your plan or workspace allows custom MCP servers (**Plugins** → **Add custom MCP server**), paste the
+  address and choose OAuth to sign in.
+
+The connector sends you to `insulinapps.com` to sign in and allow it, like any other agent. Insulin Apps accepts these
+connectors' registered callbacks:
 
 - `https://claude.ai/api/mcp/auth_callback`
 - `https://claude.com/api/mcp/auth_callback`
 - `https://chatgpt.com/connector_platform_oauth_redirect`
 
-Other agents must run on your computer and receive the sign-in on a loopback address (`http://localhost`,
-`http://127.0.0.1` or `http://[::1]`, any port), which is what the command-line agents above do.
+### Any other MCP client
+
+Any other MCP client works the same way: Streamable HTTP at the app's MCP address, with OAuth sign-in. Its sign-in has to
+return to the same computer, on a loopback address (`http://localhost`, `http://127.0.0.1` or `http://[::1]`, any port),
+or to Claude.ai or ChatGPT.
 
 ## The consent screen
 
@@ -184,8 +186,8 @@ for each new change, and the same key again only when you retry that same change
   refused (`no_app_access`). A Viewer's agent can't change anything a Viewer can't.
 - **Only the app's own API.** Tools reach paths under `/api/` on that app, never the platform's `/api/__suger/`, and never
   the pages of `insulinapps.com`.
-- **Never people, roles, integrations or billing.** Inviting people, changing roles, custom roles, service accounts,
-  stored credentials, single sign-on and organization settings are browser-only. Apps also refuse their own changes of
+- **Never people, roles, integrations or billing.** Inviting people, changing roles, custom roles, OAuth clients for API
+  access, stored credentials, single sign-on and organization settings are browser-only. Apps also refuse their own changes of
   that kind unless they come from a browser.
 - **The app knows it's an agent.** The app receives `x-suger-access-via: mcp` and a `User-Agent` of
   `Insulin Apps MCP: <the agent's name>`, so its audit trail can record that the agent did it on your behalf.
@@ -208,13 +210,21 @@ and the agent must connect again. After 30 days, the agent asks you to sign in a
 
 ## See and disconnect your agents
 
-**Account** → **AI agents** (`https://insulinapps.com/account/agents`) lists every agent you connected, with its app,
-organization, when it was connected, until when, and when it was last used. **Disconnect** stops it at once.
+**Account** → **AI agents** (`https://insulinapps.com/account/agents`) lists every agent you connected, in every app and
+organization, with its app, organization, when it was connected, until when, and when it was last used. **Disconnect**
+stops it at once. Under **Connect an agent**, it lists the apps you can use in your active organization, each with its
+MCP address and a **Connect AI** button that opens that app's Connect AI page.
 
-![The AI agents page listing a connected agent with its app, organization and a Disconnect button](/docs/assets/screenshots/platform-agents.png "Account → AI agents")
+![The AI agents page listing a connected agent with its app and organization, and the apps to connect an agent to](/docs/assets/screenshots/platform-agents.png "Account → AI agents")
+
+Each app's [Connect AI page](#the-connect-ai-page) lists the same agents for that app and organization under **Your
+agents**, with **Disconnect**. The organization's owners and admins also see **Everyone's agents** there: every agent
+anyone in the organization connected to the app, with who connected it, and they can disconnect any of them. An admin
+of one app only (through access to specific apps) sees just their own.
 
 A grant also ends when:
 
+- an owner or admin of the organization disconnects it under **Everyone's agents**;
 - 30 days have passed;
 - you leave the organization or are removed from it (a later invitation doesn't bring old agents back);
 - you set, change or reset your password, or turn two-step sign-in on or off (this ends **all** your agents, so an agent
@@ -237,5 +247,5 @@ A grant also ends when:
   `resource=https://<app>.insulinapps.com/mcp` (the app's origin is accepted too). The answer carries `iss`.
 - **Tokens**: `POST https://insulinapps.com/oauth/token` with `authorization_code` or `refresh_token`.
   `POST https://insulinapps.com/oauth/revoke` revokes a token; revoking a refresh token ends the grant.
-- A person's token works only on `/mcp`, never directly on `/api/*`. Programs that call the API directly use a
-  [service account](/docs/platform/api-and-service-accounts).
+- A person's token works only on `/mcp`, never directly on `/api/*`. Programs that call the API directly use an
+  [OAuth client](/docs/platform/api-and-service-accounts) from the app's **API access** page.

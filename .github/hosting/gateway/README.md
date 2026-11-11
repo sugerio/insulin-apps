@@ -81,7 +81,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | crons | trigger | `*/5 * * * *` (the apps' tick, `src/scheduled.ts`) and `17 3 * * *` (the daily cleanup) |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
-| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`) and `scheduled` the path its tick goes to, or null (`insulin.scheduled`); a malformed list fails closed |
+| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled", "navigation" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`), `scheduled` the path its tick goes to, or null (`insulin.scheduled`), and `navigation` its level 1, which the app's settings pages show (`insulin.navigation`, DESIGN.md §3.2; missing in an older list, it is empty); a malformed list fails closed |
 | `GOOGLE_CLIENT_ID` | var | optional; empty hides Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | secret | required when `GOOGLE_CLIENT_ID` is set |
 | `TURNSTILE_SITE_KEY` | var | required |

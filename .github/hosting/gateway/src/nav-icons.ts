@@ -1,6 +1,7 @@
 // The icons an app's navigation manifest may name (DESIGN.md §3.2): exactly .github/scripts/list-apps.mjs's
 // NAVIGATION_ICONS, which a unit test keeps in step. components/nav-icon.tsx maps each to its Lucide component, so the
-// gateway draws an app's level 1 with the icons the app itself uses.
+// gateway draws an app's level 1 with the icons the app itself uses. Also each app's own icon, which the public docs'
+// build (scripts/build-docs.mjs) reads too, so this module imports nothing.
 export const NAV_ICON_NAMES = [
   'activity', 'archive', 'award', 'banknote', 'bell', 'book-open', 'bot', 'briefcase', 'building', 'calendar',
   'chart-bar', 'chart-pie', 'check-circle', 'circle-check', 'clipboard-list', 'clock', 'download', 'file-pen',
@@ -15,4 +16,11 @@ const NAMES: ReadonlySet<string> = new Set(NAV_ICON_NAMES)
 
 export function isNavIconName(value: unknown): value is NavIconName {
   return typeof value === 'string' && NAMES.has(value)
+}
+
+/** Each app's icon where the gateway lists it (its level 1, its card on the home page, its docs section). */
+const APP_ICONS: Readonly<Record<string, NavIconName>> = { captable: 'chart-pie', esign: 'signature' }
+
+export function appIconName(name: string): NavIconName {
+  return APP_ICONS[name] ?? 'layout-grid'
 }

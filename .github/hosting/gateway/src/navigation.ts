@@ -7,7 +7,7 @@ import { apexUrl, appSettingsPath, appUrl, ownOrigin, type AppSettingsTab } from
 import { listUserGrants } from './db/grants.ts'
 import { listMemberships, type MembershipRow } from './db/orgs.ts'
 import { cookieValues, serializeCookie } from './http/cookies.ts'
-import type { NavIconName } from './nav-icons.ts'
+import { appIconName, type NavIconName } from './nav-icons.ts'
 import { canManageSso, canSeeMembers, roleHas, type AppRole } from './roles.ts'
 import { activeOrg, type ActiveOrg, type Session } from './auth/session.ts'
 
@@ -143,10 +143,8 @@ export function navToggle(ctx: Context): Response | { code: 'params' | 'state' |
 }
 
 /** Each app's icon where the gateway lists it (its level 1, its card on the home page). */
-const APP_ICONS: Record<string, NavIconName> = { captable: 'chart-pie', esign: 'signature' }
-
 export function appIcon(app: HostedApp): NavIconName {
-  return APP_ICONS[app.name] ?? 'layout-grid'
+  return appIconName(app.name)
 }
 
 /**

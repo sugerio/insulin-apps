@@ -557,7 +557,8 @@ test("an app's declared secrets come from the environment's secrets, then its va
   const key = Buffer.alloc(32, 7).toString('base64')
   const root = await fixtureRepository()
   const manifest = JSON.parse(await readFile(join(root, 'alpha-app', 'package.json'), 'utf8'))
-  manifest.insulin = { publicPaths: ['/sign', '/api/public/'], scheduled: '/api/scheduled', secrets: ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION', 'ALPHA_APP_MISSING'] }
+  const navigation = [{ key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft' }] }]
+  manifest.insulin = { publicPaths: ['/sign', '/api/public/'], scheduled: '/api/scheduled', navigation, secrets: ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION', 'ALPHA_APP_MISSING'] }
   await writeFile(join(root, 'alpha-app', 'package.json'), JSON.stringify(manifest))
   const gateway = join(root, '.github', 'hosting', 'gateway')
   await mkdir(join(gateway, 'node_modules', '.bin'), { recursive: true })
@@ -602,6 +603,11 @@ test("an app's declared secrets come from the environment's secrets, then its va
   assert.deepEqual(site.publicPaths, ['/sign', '/api/public/'])
   assert.equal(site.scheduled, '/api/scheduled', 'the path the gateway ticks')
   assert.equal(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').scheduled, null, 'an app without one has none')
+  assert.deepEqual(site.navigation, [{
+    key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', group: null, role: 'VIEWER',
+    children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft', group: null, role: 'VIEWER' }],
+  }], "the gateway renders the app's level 1 on its settings pages (DESIGN.md §3.2)")
+  assert.deepEqual(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').navigation, [], 'an app without a manifest has none')
   assert.equal('secrets' in site, false, "the gateway never learns an app's secret names")
 
   const out = await tempDirectory('deploy-apps-app-secrets-plan-')

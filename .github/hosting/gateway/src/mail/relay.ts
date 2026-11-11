@@ -1,5 +1,5 @@
 // The mail relay for apps (DESIGN.md §8.2): POST https://<apex>/__insulin/mail. Apps get no e-mail binding, so an app
-// Worker that must write to someone (an e-sign recipient's one-time code, say) sends one message at a time here, with
+// Worker that must write to someone (an Esign recipient's one-time code, say) sends one message at a time here, with
 // its SUGER_APP_TOKEN and the organization it is serving. The gateway sends it from its own address, named after the
 // app, under the per-recipient caps and a daily cap per organization and app.
 import type { Context } from '../context.ts'

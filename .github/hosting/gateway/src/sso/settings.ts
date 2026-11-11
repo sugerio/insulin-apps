@@ -8,7 +8,6 @@ import {
   type ConnectionInput,
 } from '../db/sso.ts'
 import type { MembershipRow } from '../db/orgs.ts'
-import { listMemberships } from '../db/orgs.ts'
 import { isPublicMailDomain } from '../owner-domain.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse } from '../http/response.ts'
@@ -16,9 +15,9 @@ import { log } from '../log.ts'
 import { ssoSettingsPage } from '../pages/sso.tsx'
 import { notFoundPage } from '../pages/status.tsx'
 import { canManageSso } from '../roles.ts'
-import { activeOrg, type Session } from '../auth/session.ts'
+import type { Session } from '../auth/session.ts'
 import { cleanText, truncate } from '../validate.ts'
-import { actorChanged, backTo, memberOf, notAllowed, settingsOrg, type Problem } from '../orgs/orgs.ts'
+import { actorChanged, backTo, frame, memberOf, notAllowed, settingsOrg, type Problem } from '../orgs/orgs.ts'
 import { providerDetails } from './flow.ts'
 import { normalizeIssuer } from './oidc.ts'
 import { parseCertificates } from './saml.ts'
@@ -80,14 +79,14 @@ async function txtRecords(name: string): Promise<string[] | null> {
 async function render(ctx: Context, session: Session, membership: MembershipRow, problem: Problem | null = null, newToken: string | null = null): Promise<Response> {
   const db = ctx.config.db
   const orgId = membership.org_id
-  const [domains, connection, tokens, active, memberships] = await Promise.all([
-    listDomains(db, orgId), findConnection(db, orgId), listScimTokens(db, orgId), activeOrg(ctx, session), listMemberships(db, session.user.id),
+  const [domains, connection, tokens, chrome] = await Promise.all([
+    listDomains(db, orgId), findConnection(db, orgId), listScimTokens(db, orgId), frame(ctx, session, membership),
   ])
   return htmlResponse(ssoSettingsPage(ctx, session, {
     orgId,
     orgName: membership.org_name,
     role: membership.role,
-    active: active?.id === orgId,
+    active: chrome.active,
     domains,
     connection,
     details: providerDetails(ctx, connection),
@@ -96,7 +95,7 @@ async function render(ctx: Context, session: Session, membership: MembershipRow,
     secretKeyReady: ctx.config.secretKey !== null,
     notice: problem || newToken ? null : NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null,
     error: problem?.error ?? null,
-  }, memberships), { status: problem?.status ?? (newToken ? 201 : 200) })
+  }, chrome.shell), { status: problem?.status ?? (newToken ? 201 : 200) })
 }
 
 export async function ssoSettings(ctx: Context): Promise<Response> {

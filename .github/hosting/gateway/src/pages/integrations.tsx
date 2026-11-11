@@ -15,8 +15,8 @@ import type { AuthScheme, IntegrationRow } from "../db/integrations.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { AppSettingsFrame, type AppFrame } from "./app-settings.tsx"
-import { accountOf, page } from "./document.tsx"
+import { AppSettingsFrame, appSettingsShell, type AppFrame } from "./app-settings.tsx"
+import { page } from "./document.tsx"
 
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
 const disclosure = "inline-flex cursor-pointer items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -197,9 +197,9 @@ function CredentialsCard({ data, app }: { data: IntegrationsData; app: HostedApp
   )
 }
 
-export function integrationsPage(ctx: Context, session: Session, app: HostedApp, data: IntegrationsData, orgs?: readonly MembershipRow[]): Html {
-  return page(ctx, { title: `Integrations · ${app.title}`, user: accountOf(session, orgs) }, (
-    <AppSettingsFrame ctx={ctx} app={app} data={data} tab="integrations">
+export function integrationsPage(ctx: Context, session: Session, app: HostedApp, data: IntegrationsData, orgs: readonly MembershipRow[]): Html {
+  return page(ctx, { title: `Integrations · ${app.title}`, shell: appSettingsShell(ctx, session, app, data, orgs, "integrations") }, (
+    <AppSettingsFrame ctx={ctx} app={app} data={data}>
       {data.access.admin ? null : (
         <Notice>Only {app.title}&apos;s admins add, change and delete stored credentials. You can see what is connected.</Notice>
       )}

@@ -12,10 +12,11 @@ secrets). The first part is for app admins; the last part is for people who buil
 
 Each app has an **Integrations** page on the apex: `https://insulinapps.com/apps/<app>/settings/integrations`, for
 example `https://insulinapps.com/apps/esign/settings/integrations`. The app's own
-`https://<app>.insulinapps.com/settings/integrations` leads there, and so does **Integrations** in the app's account bar.
+`https://<app>.insulinapps.com/settings/integrations` leads there, and so does **Settings** → **Integrations** in the
+app's navigation.
 
 It holds the app's **stored credentials**: secrets for outside services that the app calls, such as another company's
-API. Programs that call the app's own API don't belong here: they use OAuth clients, on the app's **API access** tab,
+API. Programs that call the app's own API don't belong here: they use OAuth clients, on the app's **API access** page,
 which the page links to under **API clients**. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ![The Integrations page with the Stored credentials card and the API clients card that links to API access](/docs/assets/screenshots/platform-integrations.png "An app's Integrations page")

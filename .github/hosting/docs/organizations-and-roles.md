@@ -79,7 +79,7 @@ credentials). A custom role never makes someone an app admin, whatever permissio
 belong to the platform, not to an app's permissions.
 
 The app's **OAuth clients** for API access are different: only the organization's owners and admins create, change,
-rotate and delete them, on the app's **API access** tab, because a client's secret outlives whoever made it. An app
+rotate and delete them, on the app's **API access** page, because a client's secret outlives whoever made it. An app
 admin through specific apps sees the list but can't change it. See
 [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
@@ -152,7 +152,8 @@ People are managed on `insulinapps.com`, never inside an app, so that no app can
 ### The organization's People page
 
 `https://insulinapps.com/settings/users` shows your active organization (add `?org=<id>` for another one). The settings
-have four tabs: **People**, **Roles**, **Organization** and, for owners, **Single sign-on**.
+have four pages, under **Settings** in the navigation: **People**, **Roles** (for everyone with an organization role),
+**Organization** and, for owners, **Single sign-on**.
 
 On **People**, everyone with an organization role sees every member and their access. Owners and admins also see:
 
@@ -174,10 +175,12 @@ organization role can open it; only owners see the forms to create, edit and del
 
 Each app has its own people page on the apex: `https://insulinapps.com/apps/<app>/settings/users`, for example
 `https://insulinapps.com/apps/captable/settings/users`. The app's own address `https://<app>.insulinapps.com/settings/users`
-leads there too, and so does **People** in the app's account bar. It is the first of the app's settings tabs: **People**,
-**Integrations** (stored credentials, see [Integrations](/docs/platform/integrations)), **API access** (OAuth clients,
-see [API access with OAuth clients](/docs/platform/api-and-service-accounts)) and **Connect AI** (see
-[AI agents](/docs/platform/ai-agents#the-connect-ai-page)).
+leads there too, and so does **Settings** in the app's navigation. It is the first of the app's settings pages, which
+the second column of the navigation lists: **People**, **Integrations** (stored credentials, see
+[Integrations](/docs/platform/integrations)), **API access** (OAuth clients, see
+[API access with OAuth clients](/docs/platform/api-and-service-accounts)) and **Connect AI** (see
+[AI agents](/docs/platform/ai-agents#the-connect-ai-page)). These pages are on `insulinapps.com`, but the
+navigation's first column is the app's own, so they read as part of the app.
 
 It lists everyone who can use the app in your active organization:
 
@@ -215,7 +218,7 @@ By default, owners and admins can invite anyone, at any e-mail address. An owner
 organization's **verified domains**: the e-mail domains it has proved it owns, under **Single sign-on** (see
 [Sign-in and security](/docs/platform/sign-in-and-security#step-1-verify-your-domain)). It is off by default.
 
-The setting is under **Invitations** on the **Organization** tab (`https://insulinapps.com/settings/organization`), for
+The setting is under **Invitations** on the **Organization** page (`https://insulinapps.com/settings/organization`), for
 owners only:
 
 - Until the organization has a verified domain, the card explains that you can limit invitations to your own e-mail
@@ -223,7 +226,7 @@ owners only:
 - With a verified domain, it shows **Any address** and **Invite only my verified domains**. Choose it to turn the limit
   on; **Allow any address** turns it off again.
 
-![The Organization tab with the organization's name, the Invitations card and Leave](/docs/assets/screenshots/platform-organization.png "The Organization tab")
+![The Organization page with the organization's name, the Invitations card and Leave](/docs/assets/screenshots/platform-organization.png "The Organization page")
 
 While the limit is on:
 
@@ -239,13 +242,14 @@ SCIM provisioning and single sign-on already work only for addresses in verified
 
 ## Leaving an organization
 
-Go to the **Organization** tab (`https://insulinapps.com/settings/organization`) and choose **Leave this organization**.
-You lose access to it in every app, and your AI agents' access there ends. A member who manages the organization can
-invite you again. The only owner can't leave: make another member an owner first, or delete the organization.
+Go to the **Organization** page (`https://insulinapps.com/settings/organization`) and choose **Leave this
+organization**. You lose access to it in every app, and your AI agents' access there ends. A member who manages the
+organization can invite you again. The only owner can't leave: make another member an owner first, or delete the
+organization.
 
 ## Renaming and deleting an organization
 
-Both are on the **Organization** tab, for owners only.
+Both are on the **Organization** page, for owners only.
 
 - **Rename**: change the **Organization name** and choose **Rename**.
 - **Delete**: under **Danger zone**, type the organization's name exactly as shown and choose **Delete organization**.

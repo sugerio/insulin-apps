@@ -186,7 +186,9 @@ section open in it).
   - then the platform's items, in every app: **Docs** (the app's in-app Docs) and **Settings**, whose level 2 is
     People, Integrations, API access and Connect AI. Those four stay the gateway's pages on the apex
     (`insulinapps.com/apps/<app>/settings/...`, §3), so an app's code can never read or submit them; the app links to
-    them, and they render with that app's own level 1, so they read as part of the app;
+    them (`/__insulin/me` gives their addresses as `settings: { users, integrations, api, connectAi }`, null where the
+    person can't use the app, and the apex's origin as `apex`), and they render with that app's own level 1, so they
+    read as part of the app;
   - at the bottom, the person: their initials and name, with Account and Sign out.
 - **Level 2, the section column** (224px; 56px collapsed): shown when the open level-1 item has sub-items, which it
   lists under optional group headings, with a header naming the section. The page's own header carries the breadcrumb
@@ -204,7 +206,30 @@ section open in it).
 - **Look.** The gateway and shadcn apps use shadcn's sidebar colours and spacing; an app with its own design keeps it
   but has the same structure and behaviour.
 - **The account bar** (`/__insulin/bar.js`) floats on app pages that have no navigation of their own. An app that
-  renders this navigation marks its root with `data-insulin-shell`, and the bar stays out of the way.
+  renders this navigation marks its root with `data-insulin-shell`, and the bar stays out of the way (it also leaves
+  when a single-page app renders the mark after the bar's script ran).
+
+**On the gateway** (`gateway/src/navigation.ts`, `components/shell.tsx`). The navigation surrounds the home page, the
+account pages, creating an organization, the organization's settings and each app's settings pages; the signed-out
+pages (landing, sign-in, the docs), invitations, the consent page and the message pages keep the top bar.
+
+- **The organization's pages**: level 1 is Home; **Apps**, the deployed apps the person can use in that organization,
+  each opening on its own host; **Settings**: People and Organization for everyone, Roles for an organization role,
+  Single sign-on for owners; and the platform's Docs at the bottom. No level 2; the breadcrumb is Settings › the page.
+- **The account pages**: the organization's level 1, and **Account** in level 2: Profile, Security, AI agents.
+- **An app's settings pages**: the app's level 1 with the items the person's role in that app reaches (a custom role
+  counts as the built-in role it is sent as, §2.4), consecutive items of one `group` under one heading, and no
+  children (they are the app's own level 2); then Docs (`https://<app>.insulinapps.com/docs`) and Settings. The
+  breadcrumb starts with the app: Cap Table › Settings › People.
+- The open level-1 item whose level 2 holds the page has `aria-current="true"`; the page's own item `"page"`.
+- The organization switcher also links **All apps** (the home page). Switching from a page opened with `?org=` comes
+  back without it, so the page shows the organization just chosen.
+- **The cookie** is `insulin_nav=<l1>.<l2>`, each `expanded` or `collapsed` (anything else reads as both expanded):
+  host-only on the apex, `HttpOnly`, `SameSite=Lax`, `Secure` (but on local http), for 400 days, and one of the
+  gateway's cookies, so it is never forwarded to an app nor set by one. `GET /__insulin/nav` answers on the apex only.
+  It takes `l1`, `l2` (at least one; a level left out keeps its state) and `return`, a path on the same host (`/` when
+  left out); an unknown, repeated or invalid parameter, or a `return` that is an absolute URL, another host, `//…` or
+  holds a backslash, is a 400 that remembers nothing.
 
 **The navigation manifest.** An app declares its level 1 in `package.json`, under `insulin.navigation`, which the app
 and the gateway both render from:
@@ -223,6 +248,11 @@ paths (`/__insulin/*`, `/settings/*`, `/mcp`, `/.well-known/*`); `group` (option
 `role` (optional) is the least app role that sees it (VIEWER by default); `children` holds level 2, the same fields
 without `children`. At most 12 items, and 12 children each. `list-apps.mjs` refuses a malformed manifest, and the
 deploy passes it to the gateway in `SITE_APPS`. Docs and Settings are added by the platform and aren't in the manifest.
+In detail: a key has at most 40 characters and is unique across items and children; a `group` is 1 to 40 characters;
+any other field is refused; a `path` may carry a query but no fragment, before its query holds no `%`, empty or dot
+segment, and stays off `/api/__suger/*` too; `home` and `check-circle`, Lucide's older names for `house` and
+`circle-check`, are accepted as well. `check-insulin-app.mjs` checks it as the deploy does; the gateway checks it again
+(a malformed one fails it closed, like the other fields), and a `SITE_APPS` from before the manifest loads with none.
 
 ## 4. What tokens may reach
 
@@ -298,9 +328,10 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
 - People see and disconnect their own agents under Account → AI agents, for every app and organization, and on each
   app's Connect AI page.
 
-**Connect AI.** Every app has a Connect AI page, `insulinapps.com/apps/<app>/settings/connect-ai` (a tab of the app's
-settings, and a link in the account bar on the app's host; `<app>.insulinapps.com/settings/connect-ai` leads there),
-which everyone who can use the app opens: Viewers and specific-apps members included.
+**Connect AI.** Every app has a Connect AI page, `insulinapps.com/apps/<app>/settings/connect-ai` (in the level 2 of
+the app's Settings, §3.2, and a link in the account bar on an app host without the navigation;
+`<app>.insulinapps.com/settings/connect-ai` leads there), which everyone who can use the app opens: Viewers and
+specific-apps members included.
 
 - **The server.** The app's MCP server URL, and in plain words what connecting does: the agent signs in at the apex,
   the person chooses the organization and allows it, and it then acts as them, with their current role in this app

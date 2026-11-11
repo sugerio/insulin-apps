@@ -2,6 +2,7 @@
 // the whole gateway answer 503 (index.ts): it fails closed and never guesses.
 import type { Env } from './env.ts'
 import { log } from './log.ts'
+import { isNavIconName, type NavIconName } from './nav-icons.ts'
 import { cleanText, normalizeEmail, truncate } from './validate.ts'
 
 /** One entry of an app's permission catalog (its package.json `insulin.permissions`, DESIGN.md §2.3). */
@@ -11,6 +12,24 @@ export interface Permission {
   description: string
   /** The least built-in role that has it. */
   role: 'ADMIN' | 'EDITOR' | 'VIEWER'
+}
+
+/** A level-2 entry of an app's navigation manifest (`insulin.navigation`, DESIGN.md §3.2). */
+export interface NavigationChild {
+  key: string
+  label: string
+  icon: NavIconName
+  /** A path on the app's host, with an optional query; never one of the gateway's paths. */
+  path: string
+  /** The heading shown above it, or null. */
+  group: string | null
+  /** The least app role that sees it. */
+  role: 'ADMIN' | 'EDITOR' | 'VIEWER'
+}
+
+/** A level-1 entry of an app's navigation manifest. */
+export interface NavigationItem extends NavigationChild {
+  children: NavigationChild[]
 }
 
 export interface HostedApp {
@@ -31,7 +50,7 @@ export interface HostedApp {
   /** The app's permission catalog; empty when it has none (it then has no custom roles). */
   permissions: Permission[]
   /**
-   * Paths people without an account use (an e-sign recipient, say), forwarded with no identity (DESIGN.md §8.1): the
+   * Paths people without an account use (an Esign recipient, say), forwarded with no identity (DESIGN.md §8.1): the
    * app authenticates them with its own codes. Empty for most apps.
    */
   publicPaths: string[]
@@ -40,6 +59,11 @@ export interface HostedApp {
    * run its due work (DESIGN.md §8.5); null for an app that has none.
    */
   scheduled: string | null
+  /**
+   * The app's level 1 (DESIGN.md §3.2), which the gateway renders on the app's settings pages so they read as part of
+   * the app; empty for an app without a manifest (or a SITE_APPS from before it existed).
+   */
+  navigation: NavigationItem[]
 }
 
 export interface Config {
@@ -236,6 +260,89 @@ export function isPublicPath(app: Pick<HostedApp, 'publicPaths'>, path: string):
   return app.publicPaths.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry || path.startsWith(`${entry}/`)))
 }
 
+const NAVIGATION_LIMIT = 12
+const NAVIGATION_KEY = /^[a-z0-9-]{1,40}$/
+const NAVIGATION_TEXT_MAX = 40
+// The gateway's own paths on an app host: an app's navigation never links to them.
+const NAVIGATION_RESERVED = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
+
+/**
+ * Why a navigation item's `path` is refused, or null. The same rule as .github/scripts/list-apps.mjs: a path on the
+ * app's own host, starting with a single `/`, at most 200 characters, without a backslash, whitespace, a control
+ * character or a fragment; before its query, no percent sign, empty or dot segment; and not one of the gateway's paths,
+ * compared without regard to case.
+ */
+export function navigationPathProblem(entry: unknown): string | null {
+  if (typeof entry !== 'string' || !entry.startsWith('/') || entry.startsWith('//') || entry.length > 200) {
+    return "must be a path on the app's host, starting with a single / (at most 200 characters)"
+  }
+  if (/[\\\s#\u0000-\u001f\u007f]/.test(entry)) return 'must not hold a backslash, whitespace, a control character or a fragment'
+  const pathname = entry.split('?', 1)[0]!
+  if (pathname.includes('%') || pathname.includes('//') || pathname.split('/').some((segment) => segment === '.' || segment === '..')) {
+    return 'must not hold a percent sign, an empty or a dot segment before its query'
+  }
+  const bare = pathname.toLowerCase().replace(/\/+$/, '')
+  for (const reserved of NAVIGATION_RESERVED) {
+    if (bare === reserved || bare.startsWith(`${reserved}/`)) return `must not be one of the gateway's paths (${reserved})`
+  }
+  return null
+}
+
+function navigationText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const text = value.trim()
+  return text && text.length <= NAVIGATION_TEXT_MAX ? text : null
+}
+
+function navigationChild(raw: unknown, keys: Set<string>): NavigationChild | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const item = raw as Record<string, unknown>
+  const { key, icon, path } = item
+  const role = item.role ?? 'VIEWER'
+  const label = navigationText(item.label)
+  const group = item.group === undefined || item.group === null ? null : navigationText(item.group)
+  if (typeof key !== 'string' || !NAVIGATION_KEY.test(key) || keys.has(key) || !label || !isNavIconName(icon)
+    || navigationPathProblem(path) || (item.group !== undefined && item.group !== null && !group)
+    || (role !== 'ADMIN' && role !== 'EDITOR' && role !== 'VIEWER')) return null
+  keys.add(key)
+  return { key, label, icon, path: path as string, group, role }
+}
+
+/**
+ * An app's navigation manifest (DESIGN.md §3.2), as list-apps.mjs checked it: at most 12 items, each with at most 12
+ * children that have no children of their own. A malformed one is a configuration problem, like the other fields.
+ */
+export function parseNavigation(raw: unknown, where: string, problems: string[]): NavigationItem[] {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw) || raw.length > NAVIGATION_LIMIT) {
+    problems.push(`${where} (expected an array of at most ${NAVIGATION_LIMIT})`)
+    return []
+  }
+  const keys = new Set<string>()
+  const items: NavigationItem[] = []
+  for (const [index, entry] of raw.entries()) {
+    const item = navigationChild(entry, keys)
+    if (!item) {
+      problems.push(`${where}[${index}]`)
+      continue
+    }
+    const children = (entry as Record<string, unknown>).children ?? []
+    if (!Array.isArray(children) || children.length > NAVIGATION_LIMIT) {
+      problems.push(`${where}[${index}].children (expected an array of at most ${NAVIGATION_LIMIT})`)
+      continue
+    }
+    const parsed: NavigationChild[] = []
+    for (const [childIndex, child] of children.entries()) {
+      const nested = typeof child === 'object' && child !== null && 'children' in child
+      const value = nested ? null : navigationChild(child, keys)
+      if (value) parsed.push(value)
+      else problems.push(`${where}[${index}].children[${childIndex}]`)
+    }
+    items.push({ ...item, children: parsed })
+  }
+  return items
+}
+
 /** An app's permission catalog; a malformed one is a configuration problem (custom roles would mean the wrong thing). */
 export function parsePermissions(raw: unknown, where: string, problems: string[]): Permission[] {
   if (raw === undefined || raw === null) return []
@@ -320,6 +427,7 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
       publicPaths,
       scheduled: parseScheduled(item.scheduled, publicPaths, `SITE_APPS[${index}].scheduled`, problems),
+      navigation: parseNavigation(item.navigation, `SITE_APPS[${index}].navigation`, problems),
     })
   })
   return apps

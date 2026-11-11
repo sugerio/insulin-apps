@@ -42,7 +42,7 @@ test('Connect AI opens for an organization Viewer and a specific-apps Viewer, wi
     const response = await page(person)
     assert.equal(response.status, 200, person.name)
     const text = response.text
-    assert.match(text, /aria-current="page"[^>]*>Connect AI<\/a>/, `${person.name}: the Connect AI tab`)
+    assert.match(text, /aria-current="page"[^>]*><svg[^>]*>(?:(?!<\/svg>)[\s\S])*<\/svg><span>Connect AI<\/span><\/a>/, `${person.name}: Connect AI, open in the navigation`)
     assert.ok(text.includes(`<code>${MCP}</code>`), `${person.name}: the server's address`)
     assert.match(text, new RegExp(`In Connect Org your role is <span[^>]*>${role}</span>`), `${person.name}: the role the agent gets`)
     assert.match(text, /choose the organization, and allow it/)

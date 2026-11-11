@@ -2,39 +2,41 @@
 // (security.ts), linked from here.
 import type { Context } from '../context.ts'
 import { hashPassword, verifyPassword } from '../crypto.ts'
-import { listMemberships } from '../db/orgs.ts'
+import { loadShell } from '../navigation.ts'
 import { changePassword, deleteAccount as removeAccount, findUserById, orgsBlockingDeletion, setUserName } from '../db/users.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
 import { log } from '../log.ts'
-import { accountDeletedPage, accountPage } from '../pages/account.tsx'
+import { accountDeletedPage, accountPage, type AccountState } from '../pages/account.tsx'
 import { RATE_LIMITED } from '../pages/auth.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { checkName, normalizeEmail, passwordProblem } from '../validate.ts'
 import { requireSession } from './guard.ts'
 import { mfaEnabled } from './mfa.ts'
-import { activeOrg, clearSessionCookie } from './session.ts'
+import { clearSessionCookie, type Session } from './session.ts'
 
 const ACCOUNT_NOTICES: Record<string, string> = {
   name: 'Your name is saved.',
   password: 'Your password is saved. Your other sessions are signed out.',
 }
 
+/** The account page with `state`, in the navigation (its organization switcher lists every membership). */
+async function show(ctx: Context, session: Session, state: AccountState, status = 200): Promise<Response> {
+  return htmlResponse(accountPage(ctx, session, state, await loadShell(ctx, session)), { status })
+}
+
 export async function accountView(ctx: Context): Promise<Response> {
   const session = await requireSession(ctx)
   if (session instanceof Response) return session
-  // The top bar's organization switcher lists every membership and shows the active one.
-  const [memberships, mfaOn] = await Promise.all([
-    listMemberships(ctx.config.db, session.user.id), mfaEnabled(ctx.config.db, session.user.id), activeOrg(ctx, session),
-  ])
-  return htmlResponse(accountPage(ctx, session, { notice: ACCOUNT_NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null, mfaOn }, memberships))
+  const mfaOn = await mfaEnabled(ctx.config.db, session.user.id)
+  return show(ctx, session, { notice: ACCOUNT_NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null, mfaOn })
 }
 
 export async function updateName(ctx: Context): Promise<Response> {
   const session = await requireSession(ctx)
   if (session instanceof Response) return session
   const checked = checkName(field(ctx.form, 'name'))
-  if ('problem' in checked) return htmlResponse(accountPage(ctx, session, { errors: { name: checked.problem } }), { status: 400 })
+  if ('problem' in checked) return show(ctx, session, { errors: { name: checked.problem } }, 400)
   await setUserName(ctx.config.db, session.user.id, checked.name, ctx.now)
   return redirect('/account?notice=name', 303)
 }
@@ -52,15 +54,15 @@ export async function updatePassword(ctx: Context): Promise<Response> {
   if (!user || user.credential_version !== session.credentialVersion) return redirect('/login', 303)
   if (user.password_hash) {
     if (!(await allowAuth(ctx, 'password', user.id))) {
-      return htmlResponse(accountPage(ctx, session, { errors: { current: RATE_LIMITED } }), { status: 429 })
+      return show(ctx, session, { errors: { current: RATE_LIMITED } }, 429)
     }
     if (!(await verifyPassword(field(ctx.form, 'current_password'), user.password_hash))) {
-      return htmlResponse(accountPage(ctx, session, { errors: { current: 'Your current password is incorrect.' } }), { status: 400 })
+      return show(ctx, session, { errors: { current: 'Your current password is incorrect.' } }, 400)
     }
   }
   const password = field(ctx.form, 'password')
   const problem = passwordProblem(password)
-  if (problem) return htmlResponse(accountPage(ctx, session, { errors: { password: problem } }), { status: 400 })
+  if (problem) return show(ctx, session, { errors: { password: problem } }, 400)
   const changed = await changePassword(db, {
     userId: user.id,
     passwordHash: await hashPassword(password),
@@ -69,7 +71,7 @@ export async function updatePassword(ctx: Context): Promise<Response> {
     now: ctx.now,
   })
   if (!changed) {
-    return htmlResponse(accountPage(ctx, session, { errors: { password: 'Your password was changed somewhere else in the meantime. Sign in again to set a new one.' } }), { status: 409 })
+    return show(ctx, session, { errors: { password: 'Your password was changed somewhere else in the meantime. Sign in again to set a new one.' } }, 409)
   }
   log('password_changed', { user: user.id })
   return redirect('/account?notice=password', 303)
@@ -80,11 +82,11 @@ export async function deleteAccount(ctx: Context): Promise<Response> {
   if (session instanceof Response) return session
   const db = ctx.config.db
   if (normalizeEmail(field(ctx.form, 'confirm')) !== session.user.email) {
-    return htmlResponse(accountPage(ctx, session, { errors: { delete: 'Type your email address exactly to confirm.' } }), { status: 400 })
+    return show(ctx, session, { errors: { delete: 'Type your email address exactly to confirm.' } }, 400)
   }
   const blockingOrgs = await orgsBlockingDeletion(db, session.user.id)
   if (blockingOrgs.length || !(await removeAccount(db, session.user.id))) {
-    return htmlResponse(accountPage(ctx, session, { blockingOrgs: blockingOrgs.length ? blockingOrgs : await orgsBlockingDeletion(db, session.user.id) }), { status: 409 })
+    return show(ctx, session, { blockingOrgs: blockingOrgs.length ? blockingOrgs : await orgsBlockingDeletion(db, session.user.id) }, 409)
   }
   clearSessionCookie(ctx)
   log('account_deleted', { user: session.user.id })

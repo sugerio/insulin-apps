@@ -8,6 +8,8 @@ import { SESSION_COOKIE } from '../auth/session.ts'
 // Lower-case names of the gateway's own cookies: never forwarded to an app, never set by one.
 export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([
   SESSION_COOKIE, 'insulin_oauth', '__host-insulin_oauth', 'insulin_mfa', '__host-insulin_mfa', 'insulin_sso', '__host-insulin_sso',
+  // The navigation's collapse state (navigation.ts): host-only on the apex, so an app never sees it, nor sets it.
+  'insulin_nav',
 ])
 
 /**

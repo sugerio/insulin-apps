@@ -88,7 +88,8 @@ When your browser opens a page of an app:
    no access to the app you see **You don't have access to** the app.
 6. It forwards the request to the app Worker over its service binding, with the identity headers.
 7. On an HTML page, it adds the small account bar (organization switch, the app's people, integrations and Connect AI
-   pages, your account, sign out). The bar runs under the app's own content security policy.
+   pages, your account, sign out). The bar runs under the app's own content security policy, and draws nothing on a
+   page that has the navigation of its own (marked `data-insulin-shell`).
 
 ## The identity headers
 
@@ -153,7 +154,7 @@ text 370 478 small muted "Every request checks the person's or the account's cur
   [AI agents](/docs/platform/ai-agents).
 - **OAuth clients** (once called service accounts) get a token with their client id and secret (`client_credentials`)
   and call one app's `/api/*`. They act with the role the organization's owners or admins gave them on the app's **API
-  access** tab. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
+  access** page. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ### Tokens for agents and programs
 

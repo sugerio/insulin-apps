@@ -243,7 +243,7 @@ export function sanitizeAppBaseConfig(baseConfig) {
 
 export function buildGatewayConfig({ root, apps, settings, databaseId }) {
   const gatewayDirectory = join(root, '.github', 'hosting', 'gateway')
-  // The gateway needs the permissions, public paths and scheduled path, never the names of an app's secrets.
+  // The gateway needs the permissions, public paths, scheduled path and navigation, never the names of an app's secrets.
   const siteApps = apps.map(({ secrets: _secrets, ...app }) => ({
     ...app,
     binding: serviceBinding(app.name),

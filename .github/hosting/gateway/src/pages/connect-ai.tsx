@@ -13,8 +13,8 @@ import type { AppGrantRow, GrantRow } from "../db/oauth.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { AppSettingsFrame, type AppFrame } from "./app-settings.tsx"
-import { accountOf, page } from "./document.tsx"
+import { AppSettingsFrame, appSettingsShell, type AppFrame } from "./app-settings.tsx"
+import { page } from "./document.tsx"
 
 const codeBlock = "overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs select-all"
 
@@ -236,10 +236,10 @@ function EveryonesAgents({ app, data, everyone, session }: { app: HostedApp; dat
   )
 }
 
-export function connectAiPage(ctx: Context, session: Session, app: HostedApp, data: ConnectAiData, orgs?: readonly MembershipRow[]): Html {
+export function connectAiPage(ctx: Context, session: Session, app: HostedApp, data: ConnectAiData, orgs: readonly MembershipRow[]): Html {
   const url = appUrl(ctx, app, "/mcp")
-  return page(ctx, { title: `Connect AI · ${app.title}`, user: accountOf(session, orgs) }, (
-    <AppSettingsFrame ctx={ctx} app={app} data={data} tab="connect-ai">
+  return page(ctx, { title: `Connect AI · ${app.title}`, shell: appSettingsShell(ctx, session, app, data, orgs, "connect-ai") }, (
+    <AppSettingsFrame ctx={ctx} app={app} data={data}>
       <ServerCard app={app} data={data} url={url} domain={ctx.config.domain} />
       <ClientSetup app={app} url={url} domain={ctx.config.domain} />
       <OwnAgents app={app} data={data} />

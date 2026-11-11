@@ -6,11 +6,13 @@
 // addresses and organization names are user input.
 import type { ReactElement, ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { Shell } from "@/components/shell"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader, type HeaderAccount } from "@/components/site-header"
 import type { Session } from "../auth/session.ts"
 import type { Context } from "../context.ts"
 import type { MembershipRow } from "../db/orgs.ts"
+import type { ShellModel } from "../navigation.ts"
 import { Html } from "./html.ts"
 
 const SITE_NAME = "Insulin Apps"
@@ -28,6 +30,11 @@ export interface PageOptions {
   description?: string
   /** The page's canonical address, when it answers at more than one (the docs at /docs and /docs/). */
   canonical?: string
+  /**
+   * A signed-in page's two-level navigation (DESIGN.md §3.2, navigation.ts): the page is drawn inside the shell, with
+   * its breadcrumb, instead of under the top bar. `user` is then unused.
+   */
+  shell?: ShellModel
 }
 
 /** The top bar's view of a session; `orgs` lets the organization switcher list every membership. */
@@ -73,6 +80,21 @@ function Head({ title, site, options }: { title: string; site: Context["site"] |
 const BODY = "flex min-h-svh flex-col bg-background font-sans text-foreground antialiased"
 
 export function page(ctx: Context, options: PageOptions, content: ReactNode): Html {
+  if (options.shell) {
+    return renderDocument(
+      <html lang="en">
+        <Head title={options.title} site={ctx.site} options={options} />
+        <body className={BODY}>
+          <a className="skip" href="#main">
+            Skip to content
+          </a>
+          <Shell ctx={ctx} model={options.shell}>
+            {content}
+          </Shell>
+        </body>
+      </html>
+    )
+  }
   return renderDocument(
     <html lang="en">
       <Head title={options.title} site={ctx.site} options={options} />

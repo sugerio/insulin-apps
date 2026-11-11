@@ -17,8 +17,8 @@ import type { MembershipRow } from "../db/orgs.ts"
 import { grantChoices, grantLabel, grantValue } from "../orgs/access-forms.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { AppSettingsFrame, type AppFrame } from "./app-settings.tsx"
-import { accountOf, page } from "./document.tsx"
+import { AppSettingsFrame, appSettingsShell, type AppFrame } from "./app-settings.tsx"
+import { page } from "./document.tsx"
 
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
 const disclosure = "inline-flex cursor-pointer items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -247,9 +247,9 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
   )
 }
 
-export function apiAccessPage(ctx: Context, session: Session, app: HostedApp, data: ApiAccessData, orgs?: readonly MembershipRow[]): Html {
-  return page(ctx, { title: `API access · ${app.title}`, user: accountOf(session, orgs) }, (
-    <AppSettingsFrame ctx={ctx} app={app} data={data} tab="api">
+export function apiAccessPage(ctx: Context, session: Session, app: HostedApp, data: ApiAccessData, orgs: readonly MembershipRow[]): Html {
+  return page(ctx, { title: `API access · ${app.title}`, shell: appSettingsShell(ctx, session, app, data, orgs, "api") }, (
+    <AppSettingsFrame ctx={ctx} app={app} data={data}>
       {data.secret ? <SecretCard ctx={ctx} app={app} secret={data.secret} /> : null}
       {data.manage ? null : (
         <Notice>Only the owners and admins of {data.orgName} create, change, rotate and delete OAuth clients. You can see which exist.</Notice>

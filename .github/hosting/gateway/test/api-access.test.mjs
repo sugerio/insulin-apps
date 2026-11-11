@@ -100,7 +100,7 @@ test('API access: everyone who can use the app sees the OAuth clients without se
     for (const shown of ['Nightly export', 'Board sync', nightly.clientId, board.clientId, 'Not rotated']) assert.ok(page.text.includes(shown), `${person.name}: ${shown}`)
     assert.ok(!SECRET.test(page.text), `${person.name}: no secret on the list`)
     assert.ok(!page.text.includes(stored.secret_hash), `${person.name}: nor a secret's hash`)
-    assert.match(page.text, /aria-current="page"[^>]*>API access<\/a>/, `${person.name}: the API access tab`)
+    assert.match(page.text, /aria-current="page"[^>]*><svg[^>]*>(?:(?!<\/svg>)[\s\S])*<\/svg><span>API access<\/span><\/a>/, `${person.name}: API access, open in the navigation`)
     // How a program gets a token and calls the API, with placeholder credentials.
     assert.ok(page.text.includes('http://insulinapps.localhost/oauth/token'), person.name)
     assert.ok(page.text.includes('grant_type=client_credentials'), person.name)

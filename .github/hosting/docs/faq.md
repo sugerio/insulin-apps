@@ -63,8 +63,9 @@ address. To see the whole cap table without changing it, ask an owner for a cust
 
 ### Can I be in more than one organization?
 
-Yes. Apps open in your active organization. Switch it from the organization menu in the top bar of `insulinapps.com`, or
-from the account bar inside an app. The same menu has **Create an organization**.
+Yes. Apps open in your active organization. Switch it from the organization menu at the top of the navigation, on
+`insulinapps.com` and inside an app (or from the account bar, in an app without the navigation). The same menu has
+**Create an organization**.
 
 ### How many organizations can we create?
 
@@ -76,16 +77,16 @@ shows a **Request more organizations** form that e-mails Insulin Apps support, w
 ### Can we stop people outside our company from being invited?
 
 Yes. Once your organization has verified its e-mail domain under **Single sign-on**, an owner can choose **Invite only
-my verified domains** on the **Organization** tab. It is off by default. See
+my verified domains** on the **Organization** page. It is off by default. See
 [Organizations and roles](/docs/platform/organizations-and-roles#who-can-be-invited).
 
 ## AI agents and the API
 
 ### How do I connect my AI agent to an app?
 
-Open the app's **Connect AI** page, from **Connect AI** in the account bar inside the app or from **Account** → **AI
-agents**. It has the command for Claude Code, Codex, Gemini CLI and opencode, and the steps for Claude.ai and ChatGPT.
-See [AI agents](/docs/platform/ai-agents#the-connect-ai-page).
+Open the app's **Connect AI** page, from **Settings** → **Connect AI** in the app's navigation (or **Connect AI** in
+its account bar) or from **Account** → **AI agents**. It has the command for Claude Code, Codex, Gemini CLI and
+opencode, and the steps for Claude.ai and ChatGPT. See [AI agents](/docs/platform/ai-agents#the-connect-ai-page).
 
 ### Why do I sign in again for each app my agent uses?
 
@@ -113,12 +114,12 @@ turning two-step sign-in on or off disconnects all your agents.
 
 An AI agent acts as you, with your role, and you allow it in your browser. An OAuth client (once called a service
 account) is a program's own identity in one app, with a role and a client secret instead of a person. The organization's
-owners and admins create it on the app's **API access** tab. Use an OAuth client for integrations between systems. See
+owners and admins create it on the app's **API access** page. Use an OAuth client for integrations between systems. See
 [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ### How do I change an OAuth client's secret without breaking the program that uses it?
 
-Choose **Rotate secret** on the app's **API access** tab. The previous secret keeps working for 24 hours, so you can
+Choose **Rotate secret** on the app's **API access** page. The previous secret keeps working for 24 hours, so you can
 switch the program over; then choose **Revoke previous secret now**, or let the 24 hours run out.
 
 ## Data

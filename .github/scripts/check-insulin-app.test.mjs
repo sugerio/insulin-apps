@@ -31,6 +31,16 @@ test('the manifest fields the gateway reads are checked as the deploy checks the
   assert.doesNotMatch(fine, /insulin\./)
 })
 
+test("an app's navigation manifest is checked as the deploy checks it", async () => {
+  const report = await check('signing', { insulin: { navigation: [{ key: 'people', label: 'People', icon: 'users', path: '/settings/users' }] } })
+  assert.match(report, /insulin\.navigation\[0\]\.path must not be one of the gateway's paths \(\/settings\)/)
+  assert.match(await check('signing', { insulin: { navigation: [{ key: 'a', label: 'A', icon: 'rocket', path: '/a' }] } }), /insulin\.navigation\[0\]\.icon must be one of/)
+  const fine = await check('signing', {
+    insulin: { navigation: [{ key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft' }] }] },
+  })
+  assert.doesNotMatch(fine, /insulin\./)
+})
+
 test("an app's scheduled path is checked as the deploy checks it, against its public paths", async () => {
   assert.match(await check('signing', { insulin: { publicPaths: ['/api/public/'], scheduled: '/api/public/tick' } }), /insulin\.scheduled must not be one of the app's public paths/)
   assert.match(await check('signing', { insulin: { scheduled: '/tick' } }), /insulin\.scheduled must be a path under \/api\//)

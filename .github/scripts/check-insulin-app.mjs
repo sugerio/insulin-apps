@@ -10,7 +10,7 @@
 // lockfile, and only the D1 binding and static assets at runtime.
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, join, relative, resolve, sep } from 'node:path'
-import { readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
+import { readNavigation, readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
 
 const [appArg, ...flags] = process.argv.slice(2)
 if (!appArg) {
@@ -116,10 +116,10 @@ try {
   fail(`package.json is not valid JSON: ${error.message}`)
 }
 if (manifest.workspaces) fail('package.json must not declare workspaces: one package per app')
-// What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §8): checked as the deploy will check it.
+// What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §3.2, §8): checked as the deploy will check it.
 const appName = basename(resolve(app))
 const declared = {}
-for (const [field, readField] of [['permissions', readPermissions], ['publicPaths', readPublicPaths], ['secrets', readSecretNames]]) {
+for (const [field, readField] of [['permissions', readPermissions], ['publicPaths', readPublicPaths], ['secrets', readSecretNames], ['navigation', readNavigation]]) {
   try {
     declared[field] = readField(appName, manifest.insulin?.[field])
   } catch (error) {

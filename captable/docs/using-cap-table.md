@@ -28,32 +28,46 @@ To set up a company in the first place, see [Importing your cap table](importing
 
 ## Finding your way around
 
-The sidebar:
+Cap Table has the two-column navigation every Insulin app shares (the repository's `.github/hosting/DESIGN.md`, §3.2).
+The first column lists the sections; when the section you open has pages of its own, the second column lists them, and
+the header above each page shows where you are (section › page). The company workspace's sections, under
+**Essentials**:
 
 - **Dashboard:** company totals, how much of each equity plan is granted, ownership by group, the largest
   stakeholders, recent activity, and **Needs attention**: grants waiting for signatures, scheduled terminations, ISO
   deadlines within 30 days, repurchase windows that are open, the state of your 409A valuation, and expiry runs to
   confirm. While nothing is recorded yet, it offers **Import the cap table** instead.
 - **Cap Table:** ownership by stakeholder, and a tab for each kind of security (shares, options, SAFEs, warrants). Pick
-  any date under **As of** to see the cap table as it stood that day, and **Download** it as a spreadsheet. Under it:
+  any date under **As of** to see the cap table as it stood that day, and **Download** it as a spreadsheet. Beside it:
   **Share Classes**, **Equity Plans**, **Securities Status** (lists that need attention) and **Vesting** (the vesting
   schedules in use).
 - **Compliance & Tax:** your 409A valuations.
 - **Hire and Retain:** **Exercise Requests**, **Equity Plans** and **Stakeholder Portal** (what holders see).
 - **Stakeholders.**
-- **Company:** **Profile & Settings**, and under it **Documents**, **Reports** and **Recent Activity**.
+- **Company:** **Profile & Settings**, **Documents**, **Reports** and **Recent Activity**.
 - **Certificates**, with **Legends** and **Terms**.
-- **Docs**, last, in a section of its own: how to use Cap Table, what holders see, and the basics of equity (vesting,
-  ISOs and NSOs, 409A valuations, SAFEs, dilution and more), with a glossary. Holders have **Docs** in their navigation
-  too, and the setup page links to it as **Learn about cap tables**.
 
-**+ New** at the top of the sidebar records a signed option grant. Most other changes are made from the page of the
+Holders see **Portfolio**, **How to exercise** and **Documents**, under **My equity**. Then, for everyone:
+
+- **Docs:** how to use Cap Table, what holders see, and the basics of equity (vesting, ISOs and NSOs, 409A valuations,
+  SAFEs, dilution and more), with a glossary. The setup page links to it as **Learn about cap tables**.
+- **Settings:** **People**, **Integrations**, **API access** and **Connect AI**, which are Insulin Apps' pages for Cap
+  Table on insulinapps.com (`/apps/captable/settings/...`). In the console's preview they are listed without links.
+- **The organization switcher** at the top. On insulinapps.com it lists your organizations (choosing one opens Cap
+  Table in it) and links to creating one.
+- **You**, at the bottom: your name and role ("Custom role" when your organization narrowed it), with **Switch theme**
+  and, on insulinapps.com, **Account** and **Sign out**.
+
+Each column collapses to its icons (the names show as tooltips), remembered in your browser; on a narrow screen, the
+menu button in the top bar opens both. Each section also has an address on Cap Table's host that leads to the page in
+your organization's company, such as `/vesting` or `/portfolio/documents`.
+
+**+ New** at the top of the navigation records a signed option grant. Most other changes are made from the page of the
 thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.
 Before anything is saved, Cap Table shows a review of exactly what will change, including any problem that stops it.
 
-Your name and role are in the menu at the top right ("Custom role" when your organization narrowed it). If you also hold
-equity, you can't record changes to your own stakeholder record or holdings: someone else who manages the cap table has
-to.
+If you also hold equity, you can't record changes to your own stakeholder record or holdings: someone else who manages
+the cap table has to.
 
 ## Processing due items
 

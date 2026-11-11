@@ -66,8 +66,8 @@ export const gettingStarted: DocTopic = {
           <h3 id="custom-roles" tabIndex={-1}>Access to Cap Table only, and custom roles</h3>
           <p>
             On insulinapps.com, your organization's owners and admins can give someone access to Cap Table alone, as an Admin,
-            Editor or Viewer of the app, instead of a role across the whole organization. The organization's owner can also make
-            custom roles for Cap Table from three permissions:
+            Editor or Viewer of the app, instead of a role across the whole organization: <b>Settings › People</b> in Cap Table's
+            navigation opens that page. The organization's owner can also make custom roles for Cap Table from three permissions:
           </p>
           <DocTable
             label="The permissions a custom role is made from"
@@ -84,10 +84,11 @@ export const gettingStarted: DocTopic = {
           </p>
           <h3 id="ai-agents" tabIndex={-1}>AI agents and API clients</h3>
           <p>
-            On insulinapps.com, people can connect an AI agent, such as Claude or Codex, to Cap Table, and app admins can set up
-            API clients for other systems. An AI agent acts with the role and permissions of the person who connected it, and an
-            API client with the role it was given: neither can do anything that role can't. Their changes appear in the history
-            under the person's or the client's name, like any other change.
+            On insulinapps.com, people can connect an AI agent, such as Claude or Codex, to Cap Table (<b>Settings › Connect AI</b>),
+            and your organization's owners and admins can set up API clients for other systems (<b>Settings › API access</b>). An
+            AI agent acts with the role and permissions of the person who connected it, and an API client with the role it was
+            given: neither can do anything that role can't. Their changes appear in the history under the person's or the
+            client's name, like any other change.
           </p>
           <h3 id="preview-mode" tabIndex={-1}>Preview mode</h3>
           <p>
@@ -105,8 +106,9 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Cap Table keeps one company's cap table for each Insulin organization. Switching organizations in the Insulin
-            console switches the company Cap Table opens; each organization sets up or imports its own company independently.
+            Cap Table keeps one company's cap table for each Insulin organization. Switching organizations (with the switcher at
+            the top of the navigation on insulinapps.com, or in the Insulin console) switches the company Cap Table opens; each
+            organization sets up or imports its own company independently.
           </p>
           <p>The first owner, admin or editor of each organization to open the published app chooses how to start:</p>
           <ul>
@@ -141,18 +143,33 @@ export const gettingStarted: DocTopic = {
       title: "Finding your way around",
       body: (
         <>
-          <p>Owners, admins and editors, and anyone whose custom role lets them view the cap table, see the company workspace. Its sidebar has:</p>
+          <p>
+            The navigation has two columns. The first lists the parts of Cap Table you can use. When the part you open has pages of
+            its own, the second column lists them, with the part's name at the top, and the header above each page shows where you
+            are, such as <b>Cap Table › Share Classes</b>.
+          </p>
+          <p>Owners, admins and editors, and anyone whose custom role lets them view the cap table, see the company workspace, under <b>Essentials</b>:</p>
           <ul>
             <li><b>Dashboard:</b> company totals, how much of each equity plan is granted, ownership by group, the largest stakeholders, recent activity, and <b>Needs attention</b>.</li>
-            <li><b>Cap Table:</b> ownership by stakeholder and a tab for each kind of security, as of any date. Under it: <b>Share Classes</b>, <b>Equity Plans</b>, <b>Securities Status</b> (lists that need attention) and <b>Vesting</b>.</li>
+            <li><b>Cap Table:</b> ownership by stakeholder and a tab for each kind of security, as of any date. Beside it: <b>Share Classes</b>, <b>Equity Plans</b>, <b>Securities Status</b> (lists that need attention) and <b>Vesting</b>.</li>
             <li><b>Compliance &amp; Tax:</b> your 409A valuations.</li>
             <li><b>Hire and Retain:</b> <b>Exercise Requests</b>, <b>Equity Plans</b> and <b>Stakeholder Portal</b> (what holders see).</li>
-            <li><b>Stakeholders</b>, <b>Company</b> (with <b>Documents</b>, <b>Reports</b> and <b>Recent Activity</b>) and <b>Certificates</b> (with <b>Legends</b> and <b>Terms</b>).</li>
+            <li><b>Stakeholders</b>, <b>Company</b> (<b>Profile &amp; Settings</b>, <b>Documents</b>, <b>Reports</b> and <b>Recent Activity</b>) and <b>Certificates</b> (with <b>Legends</b> and <b>Terms</b>).</li>
           </ul>
           <p>
-            Everyone who records changes also has <b>+ New</b> at the top of the sidebar, to record a signed option grant. Holders see{" "}
-            <b>Portfolio</b>, <b>How to exercise</b> and <b>Documents</b>. Everyone finds <b>Docs</b> at the bottom of the
-            sidebar, and their name, role and the theme switch in the menu at the top right.
+            Holders see their own equity, under <b>My equity</b>: <b>Portfolio</b>, <b>How to exercise</b> and <b>Documents</b>.
+            Also in the navigation:
+          </p>
+          <ul>
+            <li><b>+ New</b>, at the top for everyone who records changes, to record a signed option grant.</li>
+            <li><b>Docs:</b> these pages, for everyone.</li>
+            <li><b>Settings:</b> Cap Table's pages on Insulin Apps: <b>People</b> (who can use Cap Table, with their roles), <b>Integrations</b>, <b>API access</b> (API clients for other systems) and <b>Connect AI</b> (connecting an AI agent). They open on insulinapps.com, where your role there decides what you can change. In the console's preview they are listed without links.</li>
+            <li><b>The organization switcher</b> at the top, with your organization's name. On insulinapps.com it lists your other organizations, opens Cap Table in the one you choose, and links to creating an organization.</li>
+            <li><b>You</b>, at the bottom: your name and role ("Custom role" when your organization narrowed it). Its menu has your e-mail address, <b>Switch theme</b> and, on insulinapps.com, <b>Account</b> and <b>Sign out</b>.</li>
+          </ul>
+          <p>
+            Each column folds down to its icons with the button at its edge (point at an icon to see its name), and Cap Table remembers
+            your choice in this browser. On a phone or a narrow window, the menu button at the top opens both columns.
           </p>
         </>
       ),

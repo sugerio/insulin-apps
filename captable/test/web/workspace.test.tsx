@@ -14,29 +14,50 @@ const capTableHandlers = [
 ];
 
 describe("sidebar navigation", () => {
-  it("opens the active group and marks the current sub-item", async () => {
+  it("opens the active section's items beside level 1 and marks the current one", async () => {
     renderPage("share-classes", [mock(api.routes.listStockClasses, { ...ECHO, items: [stockClass(), SEED_CLASS] })]);
-    const nav = await screen.findByRole("navigation", { name: "Primary" });
-    const current = within(nav).getByRole("link", { name: "Share Classes" });
-    expect(current.getAttribute("aria-current")).toBe("page");
-    expect(within(nav).getByRole("link", { name: "Cap Table" }).className).toContain("parent-active");
-    const toggle = within(nav).getByRole("button", { name: "Collapse Cap Table" });
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    fireEvent.click(toggle);
-    expect(within(nav).queryByRole("link", { name: "Share Classes" })).toBeNull();
-    fireEvent.click(within(nav).getByRole("button", { name: "Expand Cap Table" }));
-    expect(within(nav).getByRole("link", { name: "Share Classes" })).toBeTruthy();
+    const primary = await screen.findByRole("navigation", { name: "Primary" });
+    const cap = within(primary).getByRole("link", { name: "Cap Table" });
+    expect(cap.getAttribute("aria-current")).toBe("true");
+    expect(cap.className).toContain("active");
+    const section = screen.getByRole("navigation", { name: "Section" });
+    expect(within(section).getAllByRole("link").map((link) => link.textContent)).toEqual(["Cap Table", "Share Classes", "Equity Plans", "Securities Status", "Vesting"]);
+    expect(within(section).getByRole("link", { name: "Share Classes" }).getAttribute("aria-current")).toBe("page");
+    expect(within(section).getByRole("link", { name: "Vesting" }).getAttribute("href")).toBe(`${base}/vesting`);
+    expect(document.getElementById("insulin-nav-section")?.textContent).toContain("Cap Table");
   });
 
-  it("expands Hire and Retain, which has no page of its own", async () => {
-    renderPage("dashboard", [mock(api.routes.getDashboard, () => apiError(503, "unavailable", "Down")), mock(api.routes.listValuations, { items: [] })]);
-    const nav = await screen.findByRole("navigation", { name: "Primary" });
-    const hire = within(nav).getByRole("button", { name: "Hire and Retain" });
-    expect(hire.getAttribute("aria-expanded")).toBe("false");
+  it("shows no second level for a section without items, and opens Hire and Retain's on its first page", async () => {
+    const { router } = renderPage("dashboard", [mock(api.routes.getDashboard, () => apiError(503, "unavailable", "Down")), mock(api.routes.listValuations, { items: [] })]);
+    const primary = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(primary).getByRole("link", { name: "Dashboard" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.queryByRole("navigation", { name: "Section" })).toBeNull();
+    const hire = within(primary).getByRole("link", { name: "Hire and Retain" });
+    expect(hire.getAttribute("href")).toBe(`${base}/exercise-requests`);
     fireEvent.click(hire);
-    expect(within(nav).getByRole("link", { name: "Exercise Requests" }).getAttribute("href")).toBe(`${base}/exercise-requests`);
-    expect(within(nav).getByRole("link", { name: "Stakeholder Portal" })).toBeTruthy();
-    expect(within(nav).getByRole("link", { name: "Dashboard" }).getAttribute("aria-current")).toBe("page");
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/exercise-requests`));
+    const section = await screen.findByRole("navigation", { name: "Section" });
+    expect(within(section).getAllByRole("link").map((link) => link.textContent)).toEqual(["Exercise Requests", "Equity Plans", "Stakeholder Portal"]);
+    expect(within(section).getByRole("link", { name: "Exercise Requests" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("keeps Equity Plans in the section it was chosen from", async () => {
+    const { router } = renderPage("exercise-requests", []);
+    const section = await screen.findByRole("navigation", { name: "Section" });
+    fireEvent.click(within(section).getByRole("link", { name: "Equity Plans" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/equity-plans`));
+    const primary = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(primary).getByRole("link", { name: "Hire and Retain" }).getAttribute("aria-current")).toBe("true");
+    expect(within(primary).getByRole("link", { name: "Cap Table" }).getAttribute("aria-current")).toBeNull();
+    expect(within(screen.getByRole("navigation", { name: "Section" })).getByRole("link", { name: "Equity Plans" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("puts a security's page under Cap Table, with no item of level 2 marked", async () => {
+    renderPage(`securities/${IDS.opt1}`, []);
+    const primary = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(primary).getByRole("link", { name: "Cap Table" }).getAttribute("aria-current")).toBe("page");
+    const section = screen.getByRole("navigation", { name: "Section" });
+    expect(within(section).getAllByRole("link").filter((link) => link.hasAttribute("aria-current"))).toEqual([]);
   });
 
   it.each([

@@ -14,7 +14,7 @@ everything described here but can't change anything. Holders see only their own 
 
 - **Review, then confirm.** Before anything is saved, Cap Table shows exactly what will change, including any problem
   that stops it. Some changes ask you to type the record's ID (such as `OPT-33`) to confirm.
-- **Start from the record.** **+ New** at the top of the sidebar records a signed option grant. Most other changes start
+- **Start from the record.** **+ New** at the top of the navigation records a signed option grant. Most other changes start
   on the page of the thing they concern: record an exercise from the option, terminate someone from their stakeholder
   page, and so on.
 - **Not your own holdings.** If you hold equity, someone else who manages the cap table records changes to it, so nobody
@@ -27,21 +27,38 @@ everything described here but can't change anything. Holders see only their own 
 
 ## Finding your way around
 
-The sidebar of the company workspace has:
+Cap Table has the two-column navigation every Insulin app shares. The first column lists Cap Table's sections; when
+the section you open has pages of its own, the second column lists them, and the header above each page shows where
+you are (for example **Cap Table › Share Classes**). The company workspace's sections, under **Essentials**:
 
 - **Dashboard:** company totals, how much of each equity plan is granted, ownership by group, the largest
   stakeholders, recent activity, and **Needs attention** (grants waiting for signatures, scheduled terminations, ISO
   deadlines within 30 days, open repurchase windows, the state of your 409A valuation, and expiry runs to confirm).
-- **Cap Table:** ownership by stakeholder and a tab for each kind of security. Under it: **Share Classes**, **Equity
+- **Cap Table:** ownership by stakeholder and a tab for each kind of security. Beside it: **Share Classes**, **Equity
   Plans**, **Securities Status** (lists that need attention) and **Vesting** (the vesting schedules in use).
 - **Compliance & Tax:** your 409A valuations.
 - **Hire and Retain:** **Exercise Requests**, **Equity Plans** and **Stakeholder Portal** (what holders see).
 - **Stakeholders.**
-- **Company:** **Profile & Settings**, and under it **Documents**, **Reports** and **Recent Activity**.
+- **Company:** **Profile & Settings**, **Documents**, **Reports** and **Recent Activity**.
 - **Certificates**, with **Legends** and **Terms**.
-- **Docs**, last: how to use Cap Table, what holders see, and the basics of equity.
 
-Your name and role are in the menu at the top right ("Custom role" when your organization narrowed it).
+Then, for everyone:
+
+- **Docs:** how to use Cap Table, what holders see, and the basics of equity.
+- **Settings:** Cap Table's **People**, **Integrations**, **API access** and **Connect AI** pages. They are Insulin
+  Apps' pages (`https://insulinapps.com/apps/captable/settings/...`), which open with Cap Table's navigation beside
+  them; what you can change there follows your role.
+- **The organization switcher** at the top: your organization, the others you belong to (choosing one opens Cap Table
+  in it, with that organization's company) and a link to create one.
+- **You**, at the bottom: your name and role ("Custom role" when your organization narrowed it), with **Account**,
+  **Switch theme** and **Sign out**.
+
+Each column collapses to its icons with the button at its edge, and the item names show as tooltips; Cap Table
+remembers the choice in your browser. On a narrow screen, the menu button in the top bar opens both columns.
+
+Each section also has an address of its own on Cap Table's host, which leads to that page of your organization's
+company: `https://captable.insulinapps.com/vesting` opens **Vesting**, and `/portfolio/documents` a holder's
+**Documents**.
 
 ## See the cap table as of a date
 

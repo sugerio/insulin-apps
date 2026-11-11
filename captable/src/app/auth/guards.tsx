@@ -1,10 +1,16 @@
-import { Navigate, Outlet, useParams } from "react-router";
+import { Navigate, Outlet, useMatches, useParams } from "react-router";
 import { useAuth, useMe } from "./AuthProvider.tsx";
 import { hasAdminAccess } from "./access.ts";
 import { OpenFromConsolePage } from "../pages/Pages.tsx";
 
+/** The route `handle` of the app's shell, which shows the preview strip in its own column. */
+export interface ShellHandle {
+  shell: true;
+}
+
 export function RequireAuth() {
   const { state, refresh } = useAuth();
+  const inShell = useMatches().some((match) => (match.handle as Partial<ShellHandle> | undefined)?.shell === true);
   if (state.status === "loading") return <div className="center-page" role="status">Loading Cap Table…</div>;
   // Signing in is the console's: without its identity every page gives way to the one message that helps.
   if (state.status === "unauthenticated") return <OpenFromConsolePage onRetry={() => void refresh()} />;
@@ -21,14 +27,17 @@ export function RequireAuth() {
   }
   return (
     <>
-      {state.me.preview ? <PreviewStrip /> : null}
+      {state.me.preview && !inShell ? <PreviewStrip /> : null}
       <Outlet />
     </>
   );
 }
 
-/** Above every page, setup included, while the app runs without a console identity (the console's preview). */
-function PreviewStrip() {
+/**
+ * Above every page, setup included, while the app runs without a console identity (the console's preview). Inside the
+ * shell it heads the page's column, beside the navigation.
+ */
+export function PreviewStrip() {
   return (
     <div className="preview-mode" role="status">
       <b>Preview mode.</b> You're using the app as a stand-in owner, with no console account. Once published, everyone opens it from the Insulin console with their own role.

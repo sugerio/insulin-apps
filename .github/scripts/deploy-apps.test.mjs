@@ -596,6 +596,7 @@ test("an app's declared secrets come from the environment's secrets, then its va
   assert.deepEqual(secretFiles.get('beta.wrangler.json'), { SUGER_APP_TOKEN: appToken(key, 'beta') }, 'another app gets none of them')
   const alpha = JSON.parse(readFileSync(join(result.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
   assert.equal(alpha.vars.SUGER_MAIL_URL, 'https://apps.example.com/__insulin/mail')
+  assert.deepEqual(alpha.services, [{ binding: 'SUGER_GATEWAY', service: 'insulin-apps-gateway' }], 'the app calls the gateway over a service binding, not its public URL')
   const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
   const site = gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'alpha-app')
   assert.deepEqual(site.publicPaths, ['/sign', '/api/public/'])
@@ -621,6 +622,8 @@ test("an app's declared secrets come from the environment's secrets, then its va
   })
   temporary.push(plain.outputDirectory)
   assert.deepEqual(Object.keys(withoutKey.get('alpha-app.wrangler.json')).sort(), ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION'], 'secrets need no gateway key')
+  const plainAlpha = JSON.parse(readFileSync(join(plain.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
+  assert.equal(plainAlpha.services, undefined, 'without the gateway key there is no relay or proxy to bind')
   await assert.rejects(
     () => deployApps({ root, environment: { ...environment, APP_SECRETS_JSON: '{"ALPHA_APP_KMS_KEY": "kms-secret-value-1234"' }, dryRun: true, skipBuild: true, only: 'alpha-app' }),
     (error) => /APP_SECRETS_JSON is not valid JSON/.test(error.message) && !error.message.includes('kms-secret-value-1234'),

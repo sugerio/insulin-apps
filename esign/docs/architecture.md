@@ -41,7 +41,8 @@ seals the finished envelope and emails each signer a link to their copy.
   `POST /api/process-due` (manage permission) does the same work at once, for the caller's
   organization only.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
-  relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization. Only a 202
+  relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the
+  `SUGER_GATEWAY` service binding when the deploy gave one (`gateway-fetch.ts`). Only a 202
   counts as sent; a refusal (502 `send_failed`, 503, 429, anything else) is retried later and never
   marked sent. Notices carry a link, not an attachment: the signer's copy downloads once, within 30
   days, from the public `/copy` page (`signed-copies.ts`).
@@ -74,7 +75,7 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | `ESIGN_AWS_ROLE_ARN`, `ESIGN_AWS_ACCESS_KEY_ID`, `ESIGN_AWS_SECRET_ACCESS_KEY` | The credentials that assume the role allowed to sign with the key |
 | `ESIGN_TSA_SIGNER_SPKI_SHA256` | The pinned signer keys of the timestamp authority |
 
-The platform provides `SUGER_MAIL_URL` and `SUGER_APP_TOKEN`.
+The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY` service binding they are used over.
 
 ## The members' app and the Docs
 

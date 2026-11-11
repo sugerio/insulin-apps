@@ -1,4 +1,4 @@
-// The top bar of every gateway page: the mark and name, a link to Insulin, and the account controls (sign-in links,
+// The top bar of every gateway page: the mark and name, the docs, a link to Insulin, and the account controls (sign-in links,
 // or the organization switcher and the account menu). Everything works without JavaScript: links, plain form POSTs
 // and <details> menus (menu.tsx).
 import { ArrowUpRight, Building2, Check, ChevronsUpDown, LogOut, Plus, ShieldCheck, UserRound, Users } from "lucide-react"
@@ -179,6 +179,9 @@ export function SiteHeader({ ctx, account }: { ctx: Context; account: HeaderAcco
           <span className="max-sm:sr-only">Insulin Apps</span>
         </a>
         <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
+          <a className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 sm:px-3")} href={apexUrl(ctx, "/docs/")}>
+            Docs
+          </a>
           <a className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 text-muted-foreground sm:px-3")} href={INSULIN_URL}>
             <span>
               <span className="max-md:hidden">Built with </span>Insulin

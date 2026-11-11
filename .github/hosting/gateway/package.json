@@ -11,6 +11,8 @@
     "test": "node test/run.mjs",
     "build:css": "node scripts/build-css.mjs",
     "check:css": "node scripts/build-css.mjs --check",
+    "build:docs": "node scripts/build-docs.mjs",
+    "check:docs": "node scripts/build-docs.mjs --check",
     "build:icons": "node scripts/build-icons.mjs",
     "build:licenses": "node scripts/third-party-licenses.mjs"
   },
@@ -20,6 +22,7 @@
     "@tailwindcss/cli": "4.3.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "marked": "18.1.2",
     "miniflare": "5.20261006.1-alpha",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",

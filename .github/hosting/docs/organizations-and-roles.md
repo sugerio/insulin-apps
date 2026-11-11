@@ -1,0 +1,215 @@
+---
+title: Organizations and roles
+description: Organization roles, access to specific apps, custom roles, and the pages where owners and admins manage people.
+order: 2
+---
+
+This page explains who can do what on Insulin Apps: the organization roles, access to specific apps, custom roles, and
+the pages where you manage people. It is for owners and admins who decide on access, and for anyone who wants to know
+why they can or can't do something.
+
+## How access works
+
+Every member of an organization has exactly one of two kinds of access:
+
+- **An organization role**: Owner, Admin, Editor or Viewer. It applies in every app, including apps added later.
+- **Specific apps**: access to the apps they were given and no others, with a role in each app (Admin, Editor, Viewer or
+  a custom role).
+
+Never both at once. Giving someone an organization role removes their app-by-app access in the same step, and app-by-app
+access needs the member to be on **Specific apps**.
+
+```diagram
+todo: roles-model
+```
+
+Insulin Apps works out your role in an app and passes it to the app with every request. The app then decides what that
+role lets you see and do. The rules are checked on the server, every time: hiding a button is never the only protection.
+
+## Organization roles
+
+| Role | Manages people and roles | In every app |
+|---|---|---|
+| **Owner** | Invites, changes and removes anyone, owners included. Creates, edits and deletes custom roles. Sets up single sign-on and SCIM. Renames and deletes the organization. | Admin |
+| **Admin** | Invites, changes and removes admins, editors, viewers and people with specific apps. Gives custom roles. Can't change owners or edit custom roles. Manages every app's integrations. | Admin |
+| **Editor** | Nothing. Can see the organization's people and roles. | Editor |
+| **Viewer** | Nothing. Can see the organization's people and roles. | Viewer |
+| **Specific apps** | In an app where they are Admin: that app's people and integrations. Can't see the organization's people list. | Their role in each app they were given, or no access |
+
+The person who creates an organization is its first owner. An organization always keeps at least one owner: the last
+owner can't be removed, can't be given another role, and can't leave.
+
+## App roles
+
+Each app interprets three built-in roles:
+
+| App role | What it means |
+|---|---|
+| **Admin** | Everything in the app, including its people and integrations. |
+| **Editor** | Uses the app fully, except its people, roles and integrations. |
+| **Viewer** | Read only. The app decides what that shows. |
+
+What "read only" shows is up to each app. For example, a Viewer in [Cap Table](/docs/captable/overview) sees only their
+own holdings, while a Viewer in [E-sign](/docs/esign/overview) sees the organization's templates and envelopes.
+
+Owners and admins of the organization are **Admin** in every app. Editors are **Editor** and viewers are **Viewer** in
+every app.
+
+### App admins
+
+An **app admin** for an app is an organization owner or admin, or someone with specific-apps access whose role in that
+app is **Admin**. App admins manage that app's people (invite, change roles, remove) and its integrations (service
+accounts and stored credentials). A custom role never makes someone an app admin, whatever permissions it has: people
+and integrations belong to the platform, not to an app's permissions.
+
+## Access to specific apps
+
+Use **Specific apps** for people who need one or two apps and nothing else, such as an outside counsel who only uses
+E-sign, or an employee who only looks at their own equity in Cap Table.
+
+- They see only the apps they were given, on their home page and when they open an app.
+- They don't see the organization's people list. On **People** they see **Your apps** instead, with a link to each app's
+  own people page.
+- Their role can differ per app, for example Editor in E-sign and Viewer in Cap Table.
+- Taking away their last app removes them from the organization.
+
+## Custom roles
+
+A custom role is a role you build from an app's permissions, for when Admin, Editor and Viewer don't fit. For example, a
+"Board observer" in Cap Table who may view the whole cap table but not record changes.
+
+- **Only apps with a permission catalog have custom roles.** An app lists its permissions in its code, and the platform
+  reads them when the app is deployed.
+- **Owners create, edit and delete custom roles**, one app at a time, on `https://insulinapps.com/settings/roles`.
+- **Owners and admins give them**, and so do each app's admins for their app: when inviting someone with **Specific
+  apps**, when changing their access, on the app's people page, or to a service account.
+- **A custom role can't be deleted while it is in use** by anyone, by a pending invitation or by a service account. The
+  **Roles** page shows **Not used**, **Used once** or how many times.
+
+### The permission catalogs
+
+These are the permissions each app offers today. The last column is the least built-in role that already has the
+permission: a role higher up has it too, and Admin has every permission.
+
+| App | Permission | Label | What it allows | Least built-in role |
+|---|---|---|---|---|
+| Cap Table | `captable.manage` | Record changes | Record and reverse equity changes, run imports and manage documents. Includes viewing the whole cap table. | Editor |
+| Cap Table | `captable.view` | View the cap table | See the whole cap table, stakeholders, reports and documents, read only. | Editor |
+| Cap Table | `portfolio.view` | See own holdings | See their own holdings in the holder view, matched by their e-mail address. | Viewer |
+| E-sign | `esign.manage` | Send and manage envelopes | Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing. | Editor |
+| E-sign | `esign.view` | View envelopes | See templates, envelopes and their status, the audit trail, signed documents and certificates of completion. | Viewer |
+
+### How an app sees a custom role
+
+An app receives two things: a built-in role and a list of permissions.
+
+- The **role** sent for a custom role is the least built-in role that covers all of its permissions. A Cap Table custom
+  role with only **View the cap table** is sent as Editor, because `captable.view` needs at least Editor. One with only
+  **See own holdings** is sent as Viewer.
+- The **permissions** are exactly the custom role's own. The app allows only what both the role and the permissions
+  allow, so the "Board observer" above can view the cap table but can't record changes, even though its role is Editor.
+
+Permissions can only narrow a role, never widen it.
+
+### Create a custom role
+
+1. Go to **Roles** (`https://insulinapps.com/settings/roles`). You must be an owner to see the forms.
+2. Find the app's card. It shows each permission and which built-in roles have it, then the app's custom roles.
+3. Under **New custom role for** the app, enter a **Name** and, if you want, a **Description (optional)**.
+4. Tick the **Permissions** the role should have.
+5. Choose **Create role**.
+
+To change a role, open **Edit** under it, change its name, description or permissions, and choose **Save role**.
+Changes apply to everyone who has the role at their next request. **Delete** is available only while the role isn't used.
+
+![The Roles page with the organization roles, the app roles and Cap Table's permissions and custom roles](/docs/assets/screenshots/platform-roles.png "The Roles page")
+
+## The people pages
+
+People are managed on `insulinapps.com`, never inside an app, so that no app can read or change these pages.
+
+### The organization's People page
+
+`https://insulinapps.com/settings/users` shows your active organization (add `?org=<id>` for another one). The settings
+have four tabs: **People**, **Roles**, **Organization** and, for owners, **Single sign-on**.
+
+On **People**, everyone with an organization role sees every member and their access. Owners and admins also see:
+
+- **Change access** under each member they may change: choose the **Access** and, for **Specific apps**, a role per
+  app, then **Save access**;
+- **Remove** next to each member they may remove;
+- **Invite people**, to send invitations with an organization role or specific apps;
+- **Pending invitations**, with **Resend** and **Revoke**.
+
+People with specific-apps access see **Your apps** instead of the member list.
+
+### The Roles page
+
+`https://insulinapps.com/settings/roles` describes the organization roles and the app roles, and for each app with a
+permission catalog, which built-in roles have each permission and the organization's custom roles. Everyone with an
+organization role can open it; only owners see the forms to create, edit and delete custom roles.
+
+### An app's People page
+
+Each app has its own people page on the apex: `https://insulinapps.com/apps/<app>/settings/users`, for example
+`https://insulinapps.com/apps/captable/settings/users`. The app's own address `https://<app>.insulinapps.com/settings/users`
+leads there too, and so does **People** in the app's account bar.
+
+It lists everyone who can use the app in your active organization:
+
+- **With access to** the app: people given this app specifically. App admins change their **Role in** the app (Admin,
+  Editor, Viewer or one of the app's custom roles) with **Change**, or take the app away with **Remove**.
+- **From the organization**: people whose organization role gives them access, with their role in the app. These are
+  changed on the organization's People page, not here.
+
+App admins also see **Invite people to** the app. The person gets that app only, with the role chosen:
+
+- someone who already has specific apps in the organization gets the app at once, with no e-mail;
+- someone new gets an e-mail with a link, valid for 7 days;
+- a member with an organization role already has every app, so inviting them here is refused.
+
+Everyone who can use the app can open its people page and see who else uses it. Only app admins see the forms.
+
+![An app's People page with the people given the app, the people with access from their organization role, and the invite form](/docs/assets/screenshots/platform-app-people.png "Cap Table's People page")
+
+## Changing and removing people
+
+- **Change someone's access** on the organization's People page with **Change access**. Moving someone from specific
+  apps to an organization role drops their per-app roles; moving them to specific apps needs at least one app.
+- **Remove someone from the organization** with **Remove** on the organization's People page. Their AI agents lose access
+  to the organization at once.
+- **Remove someone from one app only** on that app's People page, if they have specific-apps access. If it was their last
+  app, they leave the organization.
+- **Admins can't touch owners**: they can't invite, change or remove an owner, or give the Owner role.
+
+Every change is checked again against your current role at the moment it is saved. If your role was lowered or you
+were removed while the page was open, nothing changes.
+
+## Leaving an organization
+
+Go to the **Organization** tab (`https://insulinapps.com/settings/organization`) and choose **Leave this organization**.
+You lose access to it in every app, and your AI agents' access there ends. A member who manages the organization can
+invite you again. The only owner can't leave: make another member an owner first, or delete the organization.
+
+## Renaming and deleting an organization
+
+Both are on the **Organization** tab, for owners only.
+
+- **Rename**: change the **Organization name** and choose **Rename**.
+- **Delete**: under **Danger zone**, type the organization's name exactly as shown and choose **Delete organization**.
+  This removes the organization, its people, roles, invitations and connections from Insulin Apps sign-in. Apps keep the
+  data they stored for it, but nobody can reach that data again, because the organization's id is never issued again.
+  This can't be undone. To remove an app's data, delete it in the app first.
+
+## Limits
+
+| Limit | Value |
+|---|---|
+| Members per organization | 100 |
+| Pending invitations per organization | 50 |
+| Invitation e-mails per organization per day | 30 |
+| Resending one invitation | once every 10 minutes |
+| How long an invitation is valid | 7 days |
+| Organizations one account can create | 10 |
+| Custom role name / description | 60 / 200 characters |
+| Organization name | 80 characters |

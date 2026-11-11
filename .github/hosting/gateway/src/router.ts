@@ -15,6 +15,7 @@ import { log, logError } from './log.ts'
 import { badRequestPage, forbiddenPage, methodNotAllowed, notConfiguredResponse, notFoundPage } from './pages/status.tsx'
 import { proxyToApp } from './proxy.ts'
 import { landing, privacy, terms } from './site.ts'
+import { docs } from './docs.ts'
 import { accountView, deleteAccount, updateName, updatePassword } from './auth/account.ts'
 import {
   forgot, forgotForm, login, loginForm, logout, resend, resendForm, reset, resetForm, signup, signupForm, verifyEmail,
@@ -89,6 +90,8 @@ const APEX_ROUTES: Route[] = [
   route('GET', '/', landing),
   route('GET', '/privacy', privacy),
   route('GET', '/terms', terms),
+  // The public documentation, its llms.txt and its images (docs.ts).
+  route('GET', '/docs(?:/.*)?', docs),
   route('GET', '/signup', signupForm),
   route('POST', '/signup', signup),
   route('GET', '/login', loginForm),

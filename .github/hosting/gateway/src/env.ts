@@ -14,6 +14,11 @@ export interface Env {
   RL_APP?: RateLimit
   /** Per-IP throttle on requests to an app's public paths that aren't GET or HEAD, on top of RL_APP's. */
   RL_PUBLIC?: RateLimit
+  /**
+   * Workers Static Assets: the docs' images (.github/hosting/docs/assets/), with run_worker_first so the gateway handles
+   * every request and serves only /docs/assets/* from it (src/docs.ts). Without it the docs show no images.
+   */
+  DOCS_ASSETS?: Fetcher
 
   SITE_DOMAIN?: string
   /**

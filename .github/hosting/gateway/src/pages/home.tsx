@@ -108,6 +108,9 @@ export function landingPage(ctx: Context): Html {
             <a className={buttonVariants({ variant: "outline", size: "lg" })} href={login}>
               Sign in
             </a>
+            <a className={buttonVariants({ variant: "ghost", size: "lg" })} href={apexUrl(ctx, "/docs/")}>
+              Read the docs
+            </a>
           </div>
         </Container>
       </section>

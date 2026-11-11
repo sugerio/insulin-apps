@@ -24,6 +24,10 @@ export interface PageOptions {
   turnstile?: boolean
   /** Continue to this URL at once (a meta refresh; the page also links to it). */
   refreshTo?: string
+  /** A meta description, for pages that search engines index (the docs). */
+  description?: string
+  /** The page's canonical address, when it answers at more than one (the docs at /docs and /docs/). */
+  canonical?: string
 }
 
 /** The top bar's view of a session; `orgs` lets the organization switcher list every membership. */
@@ -56,6 +60,8 @@ function Head({ title, site, options }: { title: string; site: Context["site"] |
       <meta charSet="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>{`${title} · ${SITE_NAME}`}</title>
+      {options?.description ? <meta name="description" content={options.description} /> : null}
+      {options?.canonical ? <link rel="canonical" href={options.canonical} /> : null}
       {options?.refreshTo ? <meta httpEquiv="refresh" content={`0; url=${options.refreshTo}`} /> : null}
       <link rel="stylesheet" href="/__insulin/gateway.css" />
       <IconLinks site={site} />

@@ -11,6 +11,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ErrorSummary, Notice, PostButton, SelectField, TextField } from "@/components/forms"
 import { Container, PageHeader } from "@/components/layout"
+import { cn } from "@/lib/utils"
 import type { AppAccess } from "../access.ts"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
@@ -55,7 +56,10 @@ export function appSettingsShell(ctx: Context, session: Session, app: HostedApp,
 export function AppSettingsFrame({ ctx, app, data, children }: { ctx: Context; app: HostedApp; data: AppFrame; children: ReactNode }) {
   return (
     <Container className="flex flex-col gap-6 py-10 sm:py-12">
+      {/* Beside both navigation levels the content is narrower than a phone's at 768px, and 768px only from xl, so the
+          header stacks below xl and the link to everyone wraps: a long organization name can't widen the page. */}
       <PageHeader
+        className="sm:flex-col sm:items-start xl:flex-row xl:items-end"
         title={`${app.title} settings`}
         description={
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -67,7 +71,7 @@ export function AppSettingsFrame({ ctx, app, data, children }: { ctx: Context; a
         }
         actions={
           canManageMembers(data.orgRole) ? (
-            <a className={buttonVariants({ variant: "outline" })} href={apexUrl(ctx, `/settings/users?org=${data.orgId}`)}>
+            <a className={cn(buttonVariants({ variant: "outline" }), "h-auto min-h-9 max-w-full py-1.5 whitespace-normal xl:max-w-sm")} href={apexUrl(ctx, `/settings/users?org=${data.orgId}`)}>
               Everyone in {data.orgName}
               <ArrowUpRight />
             </a>
@@ -257,7 +261,8 @@ function AppInvitations({ ctx, app, data }: { ctx: Context; app: HostedApp; data
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form method="post" action={appSettingsPath(app, "users", "/invite")} className="grid gap-4 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
+          {/* Three columns only from xl, for the same reason as the header. */}
+          <form method="post" action={appSettingsPath(app, "users", "/invite")} className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_13rem_auto] xl:items-end">
             <input type="hidden" name="org_id" defaultValue={data.orgId} />
             <TextField label="Email address" name="email" type="email" autoComplete="off" maxLength={254} />
             <SelectField label={`Role in ${app.title}`} name="role" choices={grantChoices(app, data.customRoles, false)} selected="VIEWER" />

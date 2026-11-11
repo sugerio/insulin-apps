@@ -75,6 +75,25 @@ test('Connect AI opens for an organization Viewer and a specific-apps Viewer, wi
   assert.equal((await h.client().get(h.url('apex', '/apps/no-such-app/settings/connect-ai'))).status, 404)
 })
 
+test('a custom role\'s long name wraps in the server card instead of widening the page', async () => {
+  const owner = await h.user({ name: 'Rhea Owner' })
+  const orgId = await h.org(owner.client, 'Long Role Org')
+  const name = 'Quarterly board reporting reviewer for finance and audit'
+  const roleId = crypto.randomUUID()
+  await h.sql("INSERT INTO custom_roles (id, org_id, app, name, permissions, created_at, updated_at) VALUES (?1, ?2, 'captable', ?3, '[\"captable.view\"]', 1, 1)", roleId, orgId, name)
+  const reviewer = await member(orgId, 'Rex Reviewer', 'APPS')
+  await h.sql("INSERT INTO app_grants (org_id, user_id, app, role, custom_role_id, created_at, updated_at) VALUES (?1, ?2, 'captable', 'CUSTOM', ?3, 1, 1)", orgId, reviewer.id, roleId)
+
+  const response = await page(reviewer)
+  assert.equal(response.status, 200)
+  // A badge doesn't wrap, and next to two navigation columns the content is 256px wide at 768px.
+  const badge = response.text.match(new RegExp(`In Long Role Org your role is <span[^>]*\\sclass="([^"]*)"[^>]*>${name}</span>`))
+  assert.ok(badge, 'the role, by its name')
+  assert.match(badge[1], /(?:^| )whitespace-normal(?: |$)/)
+  assert.doesNotMatch(badge[1], /whitespace-nowrap/)
+  assert.match(badge[1], /(?:^| )max-w-full(?: |$)/)
+})
+
 test('own agents are listed and disconnectable; owners and admins see and disconnect everyone\'s; an Editor sees only their own', async () => {
   const owner = await h.user({ name: 'Opal Owner' })
   const orgId = await h.org(owner.client, 'Agents Here Org')

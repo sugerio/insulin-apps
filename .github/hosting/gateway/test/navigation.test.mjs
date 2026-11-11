@@ -156,6 +156,34 @@ test("an app's settings pages show the app's own level 1, as the person's role i
   assert.deepEqual(entries(shell(ledger.text).primary), ['Docs', 'Settings'])
 })
 
+test("an app's settings pages stack below xl, so a long organization name or the invite form can't widen the page", async () => {
+  // Next to both levels (240px and 224px) the content is 256px wide at 768px, while the sm: rows assume more; from xl
+  // (1280px) it is 768px, room for the rows again.
+  const has = (classes, name) => classes.split(' ').includes(name)
+  const person = await h.user({ name: 'Nell Owner' })
+  const name = 'Northwind Traders Limited Partnership for Regional Distribution and Logistics'
+  await h.org(person.client, name)
+  for (const tab of ['users', 'integrations', 'api', 'connect-ai']) {
+    const page = await person.client.get(h.url('apex', `/apps/captable/settings/${tab}`))
+    assert.equal(page.status, 200, tab)
+    const header = /<div class="([^"]*)"><div class="flex min-w-0 flex-col gap-1.5"><div data-slot="page-title"/.exec(page.text)?.[1]
+    assert.ok(header, `${tab}: the page header`)
+    assert.ok(has(header, 'sm:flex-col'), `${tab}: the header stacks`)
+    assert.doesNotMatch(header, /(?:sm|md|lg):flex-row/, tab)
+    assert.ok(has(header, 'xl:flex-row'), `${tab}: a row again from xl`)
+    const link = new RegExp(`<a class="([^"]*)" href="[^"]*/settings/users\\?org=[^"]*">Everyone in ${name}`).exec(page.text)?.[1]
+    assert.ok(link, `${tab}: the link to everyone in the organization`)
+    // It wraps, keeps a button's height on one line, and from xl leaves the title room beside it.
+    for (const wanted of ['whitespace-normal', 'max-w-full', 'h-auto', 'min-h-9', 'xl:max-w-sm']) assert.ok(has(link, wanted), `${tab}: ${wanted}`)
+    assert.doesNotMatch(link, /whitespace-nowrap|(?:^| )h-9(?: |$)/, tab)
+  }
+  const people = await person.client.get(h.url('apex', '/apps/captable/settings/users'))
+  const invite = /<form class="([^"]*)" action="\/apps\/captable\/settings\/users\/invite"/.exec(people.text)?.[1]
+  assert.ok(invite, 'the invite form')
+  assert.ok(has(invite, 'grid-cols-1') && has(invite, 'xl:grid-cols-[1fr_13rem_auto]'), `the invite form's columns: ${invite}`)
+  assert.doesNotMatch(invite, /(?:sm|md|lg):grid-cols-/)
+})
+
 test('collapsed and expanded: each level shows its icons with title and aria-label, and its toggle flips it', async () => {
   const person = people.editor
   const path = '/apps/captable/settings/api'

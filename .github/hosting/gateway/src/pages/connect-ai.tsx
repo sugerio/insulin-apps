@@ -120,7 +120,7 @@ function ServerCard({ app, data, url, domain }: { app: HostedApp; data: ConnectA
         <p>
           The first time the agent connects, it opens {domain} in your browser: you sign in, choose the organization, and allow it. It then acts
           as you in {app.title}, with your current role in that organization, for 30 days or until you disconnect it. In {data.orgName} your role is{" "}
-          <Badge variant="outline">{data.access.label}</Badge>, so that is what the agent may do there.
+          <Badge variant="outline" className="max-w-full whitespace-normal break-words">{data.access.label}</Badge>, so that is what the agent may do there.
         </p>
         <p className="text-muted-foreground">
           If your role changes, the agent&apos;s changes with it, and if you lose access, so does the agent. It uses {app.title}&apos;s own API only: it

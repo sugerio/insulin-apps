@@ -18,19 +18,27 @@ test('an editor link without its code says the session is unavailable, without a
  const React=(await import('react')).default;
  const {EditorPage}=await import('../src/app/ui/EditorPage.ts');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
- const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
- const requests:string[]=[];
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window,oldDocument=(globalThis as any).document;
+ const pathname='/editor/page/'+'b'.repeat(64);
+ // Without a document, reaching the exchange would fail on document.referrer before any request, and look like a refusal.
+ (globalThis as any).document={referrer:''};
+ const open=async(hash:string)=>{
+  const requests:string[]=[];let address='';
+  (globalThis as any).window={location:{origin:'https://esign.example.com',hash,pathname,search:''},history:{replaceState(_a:unknown,_b:string,url:string){address=url;}}};
+  globalThis.fetch=(async(input:any)=>{requests.push(String(input));return new Response('{}',{status:500});}) as typeof fetch;
+  let renderer:any;
+  await act(async()=>{renderer=Renderer.create(React.createElement(EditorPage));});
+  const alert=renderer.root.findAll((n:any)=>n.type==='p'&&n.props.role==='alert')[0]?.children.join('');
+  await act(async()=>{renderer.unmount();});
+  return {requests,address,alert};
+ };
  try{
-  for(const hash of ['','#not-a-code']){
-   (globalThis as any).window={location:{origin:'https://esign.example.com',hash,pathname:'/editor/page/'+'b'.repeat(64),search:''},history:{replaceState(){}}};
-   globalThis.fetch=(async(input:any)=>{requests.push(String(input));return new Response('{}',{status:500});}) as typeof fetch;
-   let renderer:any;
-   await act(async()=>{renderer=Renderer.create(React.createElement(EditorPage));});
-   const alert=renderer.root.findAll((n:any)=>n.type==='p'&&n.props.role==='alert')[0];
-   assert.ok(alert,`an alert for ${JSON.stringify(hash)}`);
-   assert.equal(alert.children.join(''),'Editor session unavailable. Ask the host to open a new session.');
-   await act(async()=>{renderer.unmount();});
+  for(const hash of ['','#not-a-code','#'+'a'.repeat(64)+'&x']){
+   const {requests,address,alert}=await open(hash);
+   assert.equal(alert,'Editor session unavailable. Ask the host to open a new session.',`the alert for ${JSON.stringify(hash)}`);
+   assert.deepEqual(requests,[],`no exchange for ${JSON.stringify(hash)}`);
+   assert.equal(address,pathname,`${JSON.stringify(hash)} leaves the address`);
   }
-  assert.deepEqual(requests,[],'no exchange without a code');
- }finally{globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;}
+  assert.deepEqual((await open('#'+'a'.repeat(64))).requests,['/api/public/editor/exchange'],'a valid code is exchanged');
+ }finally{globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;(globalThis as any).document=oldDocument;}
 });

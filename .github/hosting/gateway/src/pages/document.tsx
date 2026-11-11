@@ -35,6 +35,8 @@ export interface PageOptions {
    * its breadcrumb, instead of under the top bar. `user` is then unused.
    */
   shell?: ShellModel
+  /** The top bar spans the window, for a page whose navigation sits at its left edge (the docs). */
+  wideHeader?: boolean
 }
 
 /** The top bar's view of a session; `orgs` lets the organization switcher list every membership. */
@@ -102,7 +104,7 @@ export function page(ctx: Context, options: PageOptions, content: ReactNode): Ht
         <a className="skip" href="#main">
           Skip to content
         </a>
-        <SiteHeader ctx={ctx} account={options.user} />
+        <SiteHeader ctx={ctx} account={options.user} wide={options.wideHeader} />
         <main id="main" className="flex-1">
           {content}
         </main>

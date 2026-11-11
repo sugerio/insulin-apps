@@ -12,7 +12,8 @@ import { Html } from "./html.ts"
 const SLOT = '<div data-docs-slot=""></div>'
 
 export function docsDocument(ctx: Context, docs: DocsPage, canonical: string, user: HeaderAccount | null): Html {
-  const shell = page(ctx, { title: docs.title, description: docs.description, canonical, user }, <div data-docs-slot="" />).value
+  // The top bar spans the window, so its mark lines up with the docs' navigation at the left edge.
+  const shell = page(ctx, { title: docs.title, description: docs.description, canonical, user, wideHeader: true }, <div data-docs-slot="" />).value
   const at = shell.indexOf(SLOT)
   if (at === -1 || shell.indexOf(SLOT, at + 1) !== -1) throw new Error("docs_slot_missing")
   return new Html(`${shell.slice(0, at)}${docs.html}${shell.slice(at + SLOT.length)}`)

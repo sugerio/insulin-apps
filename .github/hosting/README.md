@@ -166,7 +166,11 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
 
 Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and
 the gateway (the next green merge to `main` releases and deploys too). Step summaries link the affected public
-addresses.
+addresses. On a new Cloudflare account, leave `GATEWAY_SECRET_KEY` out of the environment for that first deploy, then
+add it and run Deploy the same way again. With the key, each app is deployed with a service binding to the gateway
+Worker (`SUGER_GATEWAY`, for the mail relay and the integration proxy), and Cloudflare refuses a binding to a Worker
+that doesn't exist yet; the gateway, deployed after the apps, binds every app. Without the key, the apps go first
+with no binding, and the gateway after them; the second deploy then binds each app to it.
 
 ## Operations
 
@@ -250,6 +254,9 @@ whose latest check passed, so the next one, whatever it changes, would put the b
 - **A gateway deploy says an app Worker was not found (code 10143):** a new app wasn't deployed (its latest check
   didn't pass, so the release held it back), and the gateway can't bind it yet. Fix the app, or re-run its failed
   check; the next release then deploys it and the gateway, or run **Deploy** with the latest release.
+- **An app deploy says the gateway Worker was not found (code 10143):** the gateway doesn't exist yet, as on a first
+  deploy with `GATEWAY_SECRET_KEY` set. Deploy once without the key, then add it and deploy again (first deploy,
+  above).
 - **An app deploy cannot prove the Worker is private:** check the account and zone permissions, the `SITE_DOMAIN`
   value, and the reported Cloudflare API error. The deploy deliberately stops if any lookup, removal, or verification
   is incomplete.

@@ -38,7 +38,7 @@ import {
 import { createCustomRole, deleteCustomRole, updateCustomRole } from './orgs/custom-roles.ts'
 import {
   changeMemberRole, createOrg, deleteOrg, leaveOrg, newOrgForm, orgOverview, organizationSettings, removeMember,
-  renameOrg, rolesSettings, switchOrg, usersSettings,
+  renameOrg, requestMoreOrgs, rolesSettings, setInviteDomains, switchOrg, usersSettings,
 } from './orgs/orgs.ts'
 import { oidcCallback, samlAcs, samlMetadata, ssoForm, ssoStart } from './sso/flow.ts'
 import { MAX_RESPONSE_BYTES } from './sso/saml.ts'
@@ -108,11 +108,13 @@ const APEX_ROUTES: Route[] = [
   route('GET', '/auth/google/callback', googleCallback),
   route('GET', '/orgs/new', newOrgForm),
   route('POST', '/orgs/new', createOrg),
+  route('POST', '/orgs/request', requestMoreOrgs),
   route('POST', '/orgs/switch', switchOrg),
   route('GET', `/orgs/(${ORG})`, orgOverview),
   route('POST', `/orgs/(${ORG})/rename`, renameOrg),
   route('POST', `/orgs/(${ORG})/delete`, deleteOrg),
   route('POST', `/orgs/(${ORG})/leave`, leaveOrg),
+  route('POST', `/orgs/(${ORG})/invite-domains`, setInviteDomains),
   route('POST', `/orgs/(${ORG})/members/(${USER})/role`, changeMemberRole),
   route('POST', `/orgs/(${ORG})/members/(${USER})/remove`, removeMember),
   route('POST', `/orgs/(${ORG})/invitations`, invite),

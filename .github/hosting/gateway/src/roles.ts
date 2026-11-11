@@ -75,6 +75,11 @@ export function canManageSso(role: Role): boolean {
   return role === 'OWNER'
 }
 
+/** Whether the organization invites only people in its verified domains is the OWNERs' decision (DESIGN.md §3). */
+export function canSetInvitePolicy(role: Role): boolean {
+  return role === 'OWNER'
+}
+
 /** The roles an actor may give through an invitation or a change: OWNER any, ADMIN anything but OWNER. */
 export function grantableRoles(actor: Role): Role[] {
   if (actor === 'OWNER') return [...ROLES]

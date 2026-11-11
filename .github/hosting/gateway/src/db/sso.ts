@@ -44,6 +44,16 @@ export interface PendingSignIn {
 }
 
 /**
+ * Consumer mail providers: anyone can have an address there, so no organization may claim one, and an organization's
+ * owner domain there is the person's own address (db/orgs.ts ownerDomainOf). Migration 0007 copies this list.
+ */
+export const SHARED_DOMAINS: ReadonlySet<string> = new Set([
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com', 'icloud.com',
+  'me.com', 'mac.com', 'aol.com', 'proton.me', 'protonmail.com', 'pm.me', 'gmx.com', 'gmx.de', 'gmx.net', 'mail.com',
+  'yandex.com', 'yandex.ru', 'qq.com', '163.com', '126.com', 'zoho.com', 'fastmail.com', 'hey.com', 'tutanota.com',
+])
+
+/**
  * The part of an address after the @, which domain rules compare, in the form domains are stored: lower case and
  * punycode (so `bücher.example` and `xn--bcher-kva.example` are the same domain). Unparseable: returned as it is.
  */

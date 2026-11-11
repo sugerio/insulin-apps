@@ -1,4 +1,6 @@
 import { appAdmin, type GrantInput, type GrantRole } from './grants.ts'
+import { invitableDomain } from './orgs.ts'
+import { domainOf } from './sso.ts'
 import type { Role } from '../roles.ts'
 
 export type InvitationStatus = 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired'
@@ -95,8 +97,9 @@ export async function countOpenInvitations(db: D1Database, orgId: string, now: n
 /**
  * Creates a pending invitation, with its app grants for a specific-apps invitation, in one batch whose insert also
  * requires the inviter (`invitedBy`) still to be allowed to invite for this role (an OWNER, or an ADMIN for a non-OWNER
- * role; with `app`, that app's admin for an invitation to that app alone) and the organization to have fewer than
- * `pendingLimit` open invitations, so concurrent requests cannot exceed it. An expired pending invitation for the same
+ * role; with `app`, that app's admin for an invitation to that app alone), the organization to have fewer than
+ * `pendingLimit` open invitations, so concurrent requests cannot exceed it, and, while the organization invites only
+ * people in its verified domains, the address to be in one of them now. An expired pending invitation for the same
  * address is closed first. False when a condition fails or an open invitation for the address exists (the partial
  * unique index allows one per organization and address).
  */
@@ -125,9 +128,10 @@ export async function insertInvitation(db: D1Database, invitation: {
        SELECT ?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?7, ?6
        WHERE ${mayInvite(invitation.app, '?2', '?4', '?5', '?9')}
          AND (SELECT COUNT(*) FROM invitations p WHERE p.org_id = ?2 AND p.status = 'pending' AND p.expires_at > ?6) < ?8
+         AND ${invitableDomain('?2', '?10')}
        ON CONFLICT DO NOTHING`,
     ).bind(invitation.id, invitation.orgId, invitation.email, invitation.role, invitation.invitedBy, invitation.now,
-      invitation.expiresAt, invitation.pendingLimit, invitation.app),
+      invitation.expiresAt, invitation.pendingLimit, invitation.app, domainOf(invitation.email)),
     db.prepare(
       `INSERT INTO invitation_grants (invitation_id, org_id, app, role, custom_role_id)
        SELECT ?1, ?2, json_extract(value, '$.app'), json_extract(value, '$.role'), json_extract(value, '$.customRoleId')
@@ -175,9 +179,11 @@ export async function restoreResend(db: D1Database, invitation: InvitationRow, c
 
 /**
  * Accepts for `userId`, whose verified address must be the invited one: adds the membership (unless they are a member
- * already, whose role stays) while the organization has room; for a specific-apps member, adds the invitation's apps
- * they don't have yet; then marks the invitation accepted, in one transaction. An organization role is never mixed with
- * app grants: a member with one gains nothing from a specific-apps invitation.
+ * already, whose role stays) while the organization has room and, if it invites only people in its verified domains,
+ * while the address is in one of them (an invitation made before that, or before a domain was removed, can't bring
+ * anyone new in); for a specific-apps member, adds the invitation's apps they don't have yet; then marks the invitation
+ * accepted, in one transaction. An organization role is never mixed with app grants: a member with one gains nothing
+ * from a specific-apps invitation.
  */
 export async function acceptInvitation(db: D1Database, id: string, userId: string, email: string, now: number, memberLimit: number): Promise<boolean> {
   const [, , accepted] = await db.batch([
@@ -186,8 +192,9 @@ export async function acceptInvitation(db: D1Database, id: string, userId: strin
        SELECT i.org_id, ?2, i.role, ?3, ?3 FROM invitations i
        WHERE i.id = ?1 AND i.status = 'pending' AND i.expires_at > ?3 AND i.email = ?4
          AND (SELECT COUNT(*) FROM memberships m WHERE m.org_id = i.org_id) < ?5
+         AND ${invitableDomain('i.org_id', '?6')}
        ON CONFLICT DO NOTHING`,
-    ).bind(id, userId, now, email, memberLimit),
+    ).bind(id, userId, now, email, memberLimit, domainOf(email)),
     db.prepare(
       `INSERT INTO app_grants (org_id, user_id, app, role, custom_role_id, created_at, updated_at)
        SELECT i.org_id, ?2, g.app, g.role, g.custom_role_id, ?3, ?3

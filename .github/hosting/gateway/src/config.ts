@@ -53,6 +53,11 @@ export interface Config {
   mailFrom: { email: string; name: string }
   /** SUPPORT_EMAIL, or null: the pages then point to the repository's issues. */
   supportEmail: string | null
+  /**
+   * ORG_REQUEST_EMAIL, or null: where requests for more organizations go (DESIGN.md §3.1). Without it, the page at the
+   * limit points to the contact instead of offering the form.
+   */
+  orgRequestEmail: string | null
   /** `https://github.com/<owner>/<repo>/issues`, from the apps' source links, or null. */
   issuesUrl: string | null
   /** `https://github.com/<owner>/<repo>`, the repository those links point into, or null. */
@@ -340,6 +345,8 @@ export function readConfig(env: Env): ConfigResult {
   // Optional: an unusable value is ignored (and logged) rather than taking the site down.
   const supportEmail = text(env.SUPPORT_EMAIL) ? normalizeEmail(env.SUPPORT_EMAIL) : null
   if (text(env.SUPPORT_EMAIL) && !supportEmail) log('config_support_email_ignored')
+  const orgRequestEmail = text(env.ORG_REQUEST_EMAIL) ? normalizeEmail(env.ORG_REQUEST_EMAIL) : null
+  if (text(env.ORG_REQUEST_EMAIL) && !orgRequestEmail) log('config_org_request_email_ignored')
 
   if (!hasMethod(env.DB, 'prepare')) problems.push('DB')
   if (!testMode && !hasMethod(env.EMAIL, 'send')) problems.push('EMAIL')
@@ -363,6 +370,7 @@ export function readConfig(env: Env): ConfigResult {
       turnstile: { siteKey, secretKey },
       mailFrom,
       supportEmail,
+      orgRequestEmail,
       issuesUrl: issuesUrlFrom(apps),
       repositoryUrl: repositoryUrlFrom(apps),
       testMode,

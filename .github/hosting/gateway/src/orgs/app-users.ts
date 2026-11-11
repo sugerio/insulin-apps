@@ -29,7 +29,7 @@ import { requireSession } from '../auth/guard.ts'
 import { activeOrg, type Session } from '../auth/session.ts'
 import { normalizeEmail } from '../validate.ts'
 import { accessPhrase, grantLabel, parseGrant } from './access-forms.ts'
-import { INVITATION_TTL_MS, MEMBER_LIMIT, PENDING_LIMIT, RESEND_GAP_MS, invitationLink } from './invitations.ts'
+import { INVITATION_TTL_MS, MEMBER_LIMIT, PENDING_LIMIT, RESEND_GAP_MS, invitationLink, outsideVerifiedDomains } from './invitations.ts'
 import type { Problem } from './orgs.ts'
 
 const NOTICES: Record<string, string> = {
@@ -135,6 +135,9 @@ export async function inviteToApp(ctx: Context): Promise<Response> {
     log('app_access_added', { org: orgId, app: app.name, user: invitee.id, by: session.user.id })
     return back(app, 'access-added')
   }
+  // Someone new: while the organization invites only people in its verified domains, their address must be in one.
+  const outside = await outsideVerifiedDomains(ctx, orgId, email)
+  if (outside) return problem(outside, 403)
   if (await countMembers(db, orgId) >= MEMBER_LIMIT) return problem(`This organization has reached its limit of ${MEMBER_LIMIT} members.`, 409)
   const pendingFull = `This organization already has ${PENDING_LIMIT} pending invitations. Revoke some before inviting more people.`
   if (await countOpenInvitations(db, orgId, ctx.now) >= PENDING_LIMIT) return problem(pendingFull, 409)
@@ -147,6 +150,8 @@ export async function inviteToApp(ctx: Context): Promise<Response> {
   }))) {
     const changed = await stillAdmin(ctx, app, found)
     if (changed) return changed
+    const outsideNow = await outsideVerifiedDomains(ctx, orgId, email)
+    if (outsideNow) return problem(outsideNow, 403)
     if (await countOpenInvitations(db, orgId, ctx.now) >= PENDING_LIMIT) return problem(pendingFull, 409)
     return problem('There is already a pending invitation for that address.', 409)
   }

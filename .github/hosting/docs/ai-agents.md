@@ -6,8 +6,8 @@ order: 4
 
 This page shows how to let an AI agent work in an Insulin app for you: Claude Code, Codex, Gemini CLI, opencode, or a
 hosted connector such as Claude.ai or ChatGPT. It shows each app's **Connect AI** page, gives the exact commands,
-explains the sign-in step, lists the tools the agent gets, and sets out what an agent may and may not do. It is for anyone who uses an AI agent, and for the agents
-themselves.
+explains the sign-in step, lists the tools the agent gets, and sets out what an agent may and may not do. It is for
+anyone who uses an AI agent, and for the agents themselves.
 
 ## How it works
 

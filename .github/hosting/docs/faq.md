@@ -52,8 +52,8 @@ change their access to **Specific apps** on the organization's **People** page a
 ### Why can't an admin change an owner?
 
 Owners are the top of the organization: only an owner can invite, change or remove another owner, give the Owner role,
-edit custom roles, set up single sign-on, choose who can be invited, rename the organization or delete it. An organization always keeps at least one
-owner.
+edit custom roles, set up single sign-on, choose who can be invited, rename the organization or delete it. An
+organization always keeps at least one owner.
 
 ### I was given Viewer in Cap Table but see only my own holdings. Is that a bug?
 

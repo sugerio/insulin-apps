@@ -138,8 +138,10 @@ If you were invited:
 3. On **You're invited**, check the organization and the access offered, then choose **Accept invitation**.
 
 You join the organization, and it becomes your active organization. Invitations also show on your home page, under
-**Invitations**, with **Accept** and **Decline** buttons. If the link says **This invitation is no longer valid**, it has expired, was revoked
-or was already answered: ask the person who invited you to send a new one.
+**Invitations**, with **Accept** and **Decline** buttons. If the link says **This invitation is no longer valid**, it has
+expired, was revoked or was already answered: ask the person who invited you to send a new one. If it says the
+organization only invites people with an address in its verified domains, its owners have limited invitations to their
+company's e-mail domains: ask them about it.
 
 ![The You're invited page showing who invited you, the organization, the access offered and the Accept invitation button](/docs/assets/screenshots/platform-invitation.png "Accepting an invitation")
 

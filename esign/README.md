@@ -42,6 +42,13 @@ Members open Esign from their organization's Insulin apps:
 - **Docs**: getting started, the main tasks, what signers see, statuses, evidence, roles, background
   on electronic signatures (general information, not legal advice) and a glossary. Every role can
   open them.
+- **Settings**: People, Integrations, API access and Connect AI, the platform's pages for Esign on
+  `insulinapps.com/apps/esign/settings/`.
+
+They are in the two-level navigation every Insulin app has: the organization switcher, these
+sections (Envelopes and Templates from `insulin.navigation` in `package.json`) and the person in the
+first column; the open section's items (the Envelopes views by status, the Docs topics, Settings'
+pages) in the second; each column collapses to icons.
 
 Signers use three public pages: the signing page (`/sign`, with an "About signing" panel), the copy
 link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).

@@ -35,8 +35,9 @@ specific apps, with a role in each. See [Organizations and roles](/docs/platform
 | Specific apps, an Esign custom role | The least built-in role that covers it | Those the custom role has | What those permissions allow. |
 | Specific apps, without Esign | None | None | Esign isn't available to them. |
 
-Esign's header shows your role. What your role can't do isn't shown, and Esign refuses it on the server too, however
-it is asked: from the page, through the API or by an AI agent. A refused request answers `403 forbidden`, and the page
+The bottom of Esign's navigation shows your name and role. What your role can't do isn't shown (**New envelope** is
+only in the navigation of roles that send), and Esign refuses it on the server too, however it is asked: from the page,
+through the API or by an AI agent. A refused request answers `403 forbidden`, and the page
 says "Your role in Esign doesn't allow that."
 
 In the Insulin console, the older Owner role works like Admin and the User role like Viewer.
@@ -44,7 +45,7 @@ In the Insulin console, the older Owner role works like Admin and the User role 
 ## People and integrations live on the platform
 
 Esign has no people, role, integration, API client or AI agent settings of its own. They are Esign's settings tabs on
-the platform:
+the platform, which **Settings** in Esign's navigation links to:
 
 - **People**: `https://insulinapps.com/apps/esign/settings/users` (or `https://esign.insulinapps.com/settings/users`,
   which leads there): Esign's app admins invite someone to Esign with a role, change it, or remove them from Esign.

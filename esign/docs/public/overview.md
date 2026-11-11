@@ -40,16 +40,40 @@ to them give access to their own turn, and nothing else.
 
 ## The pages
 
-Members open Esign at `https://esign.insulinapps.com`. Its navigation has three entries:
+Members open Esign at `https://esign.insulinapps.com`. Its navigation has four entries:
 
 | Page | What it shows |
 | --- | --- |
 | **Envelopes** | Every envelope in your organization, newest first, with its status. Open one to see its signers, its audit trail and, once completed, the signed PDF and the certificate. Those who manage also find **New envelope** and **Process due work** here. |
 | **Templates** | The PDFs your organization sends, with their signer roles and placed fields. Those who manage upload new ones here. |
 | **Docs** | The built-in help: getting started, the main tasks, what signers see, statuses, evidence, roles, background on electronic signatures and a glossary. Every role can open it. |
+| **Settings** | Esign's **People**, **Integrations**, **API access** and **Connect AI** pages, which are the platform's pages on `https://insulinapps.com/apps/esign/settings/` (see [Roles and access](/docs/esign/roles-and-access#people-and-integrations-live-on-the-platform)). |
 
-Signers see only the public pages: the signing page (`/sign`), the page that downloads their signed copy (`/copy`) and,
-for host products, the embedded field editor (`/editor/page/...`).
+Signers see only the public pages, which have no navigation: the signing page (`/sign`), the page that downloads their
+signed copy (`/copy`) and, for host products, the embedded field editor (`/editor/page/...`).
+
+## The navigation
+
+The navigation on the left has two columns, as in every Insulin app. The first column has the organization switcher at
+the top (your organization's name; choose it to switch to another of your organizations or create one), then
+**Envelopes** and **Templates** under the heading Esign, then **Docs** and **Settings**, and at the bottom your name and
+role, with your Insulin Apps **Account** and **Sign out**. The second column lists what the open section holds:
+
+| Section | Second column |
+| --- | --- |
+| **Envelopes** | **All envelopes**, **New envelope** (only for roles that send), and under Status one view per status: **Out for signature**, **Finishing**, **Completed**, **Declined**, **Expired**, **Voided**. A view is an address such as `/envelopes?status=completed`, the same as choosing that status in the list's filter. |
+| **Docs** | The topics, under Using Esign and Electronic signatures. |
+| **Settings** | **People**, **Integrations**, **API access** and **Connect AI**, links to the platform's pages. |
+| **Templates** | None. |
+
+The bar above the page shows where you are, such as Envelopes › Completed; the section's name goes back to it.
+
+Each column has its own button that collapses it to icons, whose names show when you point at them. The choice is kept
+in this browser (`localStorage`, key `insulin-nav`). Below 768 pixels wide, a top bar holds the organization switcher and
+a menu button that opens both columns.
+
+Esign declares its sections in its `package.json` under `insulin.navigation`. The platform reads the same list, so
+Esign's Settings pages on insulinapps.com show the same first column.
 
 ## How it runs on Insulin Apps
 

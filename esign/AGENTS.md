@@ -29,10 +29,10 @@ Run from `esign/` unless noted.
 | Path | What |
 |---|---|
 | `src/app/App.tsx` | The pages: `/sign` (signing), `/editor/page/:id` (embedded editor), `/copy` (a signer's copy), and every other path the members' app |
-| `src/app/member/` | The members' app: `MemberApp.ts` (header, navigation, routes), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `api.ts`, `router.ts` (pushState, no router library) |
+| `src/app/member/` | The members' app: `MemberApp.ts` (routes), `Shell.ts` (the two-level navigation), `navigation.ts` (the manifest, role filtering, Settings links, the remembered collapse), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `api.ts`, `router.ts` (pushState, no router library) |
 | `src/app/pages/docs/`, `src/app/components/Docs.ts` | The in-app Docs: one file per topic, `topics.ts` (reading order), `parts.ts`, and the Docs component |
 | `src/app/ui/` | The public pages and their parts: `RecipientPage.ts`, `SigningHelp.ts` ("About signing"), `FieldEditor.ts`, `EditorPage.ts`, `CopyPage.ts`, `CompletionCertificate.ts`, `pdf.ts`, `esign-theme.css` (layout hooks) |
-| `src/app/components/ui/`, `src/app/lib/utils.ts`, `src/app/styles.css` | shadcn/ui components (copied, as `.ts`), `cn()`, and Tailwind with the shadcn neutral theme, light and dark |
+| `src/app/components/ui/`, `src/app/lib/utils.ts`, `src/app/styles.css` | shadcn/ui components (copied, as `.ts`; `sidebar.ts` is the sidebar's class names), `cn()`, and Tailwind with the shadcn neutral theme and sidebar colours, light and dark |
 | `nitro.config.ts`, `src/app/server/page-headers.ts`, `page-policy.ts` | The pages' security headers (CSP, framing, referrer, caching), set by a Nitro middleware without touching the platform files |
 | `src/app/server/router.ts` | `handleAppRequest(request)`: builds the bindings from `#platform` and hands every `/api/**` request to the Hono app |
 | `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due`, and the platform's tick `/api/scheduled` |
@@ -44,7 +44,7 @@ Run from `esign/` unless noted.
 | `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the KMS + TSA seal |
 | `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql`) |
 | `scripts/` | The bitmap atlas generators (macOS, Swift) |
-| `test/`, `test/helpers/` | Tests (`node --test`); `helpers/platform.ts` plays the platform, `helpers/gateway.ts` the gateway and a host's service account, `helpers/member.ts` renders the members' app |
+| `test/`, `test/helpers/` | Tests (`node --test`); `helpers/platform.ts` plays the platform, `helpers/gateway.ts` the gateway and a host's service account, `helpers/member.ts` renders the members' app; `navigation.test.ts` and `shell.test.ts` cover the navigation |
 
 ## Platform files: leave them alone
 
@@ -132,6 +132,34 @@ The public docs at `https://insulinapps.com/docs/esign/` are `docs/public/*.md` 
 New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default neutral theme, light and dark: the components
 in `src/app/components/ui/` (add one by copying it from shadcn/ui into `.ts`, and record it in `NOTICE`), `cn()` from
 `src/app/lib/utils.ts`, icons from `lucide-react`. No CDNs.
+
+## Navigation
+
+Every Insulin app has the two-level, collapsible navigation of
+[DESIGN.md §3.2](../.github/hosting/DESIGN.md): the organization switcher, its sections from `insulin.navigation` in
+`package.json`, then Docs and Settings (People, Integrations, API access, Connect AI, which link to the gateway's pages),
+and the person at the bottom; each level collapses to icons. In Esign:
+
+- **The manifest is `package.json` `insulin.navigation`**, which the gateway renders Esign's settings pages from too:
+  Envelopes (its level 2: All envelopes, New envelope for EDITOR and up, and a view per status, `/envelopes?status=…`)
+  and Templates. Keep it to DESIGN.md's rules (`navigationProblems` in `src/app/member/navigation.ts`, which
+  `test/navigation.test.ts` runs): a unique `key` of `[a-z0-9-]`, a `label` of 1 to 40 characters, an `icon` from the
+  gateway's Lucide set (`ICON_NAMES`), a `path` the members' app routes and that isn't the gateway's (`/__insulin/*`,
+  `/settings/*`, `/mcp`, `/.well-known/*`), optional `group` and `role` (the least app role that sees it), at most 12
+  items and 12 children. A new section needs its route in `MemberApp.ts`. Docs and Settings aren't in the manifest.
+- **`src/app/member/Shell.ts` draws it** around every member page, with the breadcrumb in the page header; signers'
+  public pages (`/sign`, `/editor/page/:id`, `/copy`) have none. The root carries `data-insulin-shell`.
+- **Settings stays on the apex**: People, Integrations, API access and Connect AI link to
+  `https://<apex>/apps/esign/settings/{users,integrations,api,connect-ai}`, the apex taken from `/__insulin/me`. Never
+  build those pages, or a page at `/settings/*`, in the app.
+- **The platform's controls** (switching organization, Account, Sign out) come from the gateway's `/__insulin/me`,
+  `/__insulin/switch-org` and `/__insulin/logout`, and show only where the gateway answers; elsewhere (the local
+  preview, the console) level 1 shows Esign's name and the person from `/api/me`.
+- **Collapsing** is remembered per browser in localStorage `insulin-nav` (`{"l1":"collapsed"|"expanded","l2":…}`),
+  written only when someone collapses or expands a level. Below 768px a menu button opens both levels in a drawer.
+- **Accessibility**: `<nav aria-label="Primary">` and `<nav aria-label="Section">`, `aria-current` on the active item,
+  toggles with `aria-expanded` and `aria-controls`, a collapsed item's label as its `title` and `aria-label`, a visible
+  focus ring, and everything reachable from the keyboard.
 
 ## Public repository
 

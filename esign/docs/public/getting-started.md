@@ -18,8 +18,9 @@ who sends documents for signature. Use a synthetic PDF and test addresses: Esign
   yet". You can still upload templates and send envelopes, but nobody can sign until whoever runs Esign adds its
   settings.
 
-Open Esign at `https://esign.insulinapps.com`, or from your organization's apps on the Insulin Apps home page. The header
-shows your role.
+Open Esign at `https://esign.insulinapps.com`, or from your organization's apps on the Insulin Apps home page. The
+navigation on the left shows your organization at the top and your name and role at the bottom; see
+[The navigation](/docs/esign/overview#the-navigation).
 
 ## 1. Upload a template
 

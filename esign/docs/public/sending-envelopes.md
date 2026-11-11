@@ -70,7 +70,9 @@ The envelope's page shows:
 - **Audit trail**: every event with its time, the signer and the IP address.
 
 The page refreshes by itself every few seconds while the envelope is out for signature or finishing. The **Envelopes**
-page lists every envelope, newest first; filter it with **Status**.
+page lists every envelope, newest first; filter it with **Status**, or choose a status's view in the navigation's second
+column (**Out for signature**, **Completed** and so on), which is the same filter at its own address, such as
+`/envelopes?status=completed`.
 
 ![An envelope's page with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "An envelope out for signature: signers in order and the audit trail")
 

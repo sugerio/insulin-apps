@@ -79,10 +79,22 @@ The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY
 
 ## The members' app and the Docs
 
-- **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` (envelopes),
-  `/envelopes/new`, `/envelopes/:id`, `/templates` and `/docs/:topic?`. It moves with
+- **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` and `/envelopes`
+  (envelopes, `?status=` filtering by status), `/envelopes/new`, `/envelopes/:id`, `/templates` and
+  `/docs/:topic?`. It moves with
   `history.pushState` (`router.ts`), the only navigation the console's sandboxed iframe allows. Every
   call is a same-origin request as the signed-in member; there is no key in the browser.
+- **Navigation.** `src/app/member/Shell.ts` draws DESIGN.md §3.2's two levels around every member
+  page: level 1 is the organization switcher (from the gateway's `/__insulin/me`, switching through
+  `/__insulin/switch-org`), the sections of `package.json` `insulin.navigation` that the member's role
+  sees (`navigation.ts` reads and checks the manifest), Docs, Settings and the person (Account, Sign
+  out through `/__insulin/logout`); level 2 is the open section's items (the Envelopes views, the
+  Docs topics, or Settings' People, Integrations, API access and Connect AI on the apex), and the
+  page header carries the breadcrumb. Each level collapses to icons, remembered in localStorage
+  `insulin-nav`; below 768px a menu button opens both levels in a drawer. The root carries
+  `data-insulin-shell` so the gateway's account bar stays out of the way. Where `/__insulin/me`
+  isn't answered (the local preview, the console), level 1 shows the app's name and the person from
+  `/api/me`, and Settings links to the app host's `/settings/*`, which the gateway redirects.
 - **Roles.** What a role can't do is hidden (`canManage(me)`), and the server refuses it anyway.
   `/api/me` answering 401 shows a sign-in message; the Docs open without it.
 - **Hosting the public pages.** The envelope page opens the active signer's `/sign` in a dialog
@@ -92,7 +104,8 @@ The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY
 - **Sending.** A send carries an `Idempotency-Key` that a retry of the same form reuses. An
   optional sign-by day becomes every signer's `expiresAt` (the end of that day, the member's time).
 - **Docs.** Static topics in `src/app/pages/docs/` (one file each; `topics.ts` sets the reading
-  order) rendered by `src/app/components/Docs.ts`, with no request to the server. The background
+  order) rendered by `src/app/components/Docs.ts`, with no request to the server; the topic list is
+  the Docs' level 2 in the navigation (`docsNavigation()`). The background
   topic carries the general-information note. The signing page's "About signing" panel
   (`src/app/ui/SigningHelp.ts`) says the same as the signers topic in brief.
 - **UI.** shadcn/ui components in `src/app/components/ui/`, `cn()` in `src/app/lib/utils.ts`,

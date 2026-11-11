@@ -356,7 +356,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
         const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
         result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey);
       }
-      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${result.metadata.format==='esign-local-delivery-v3'?'delivery-local-test':'delivery'}.pdf"`,'X-Content-Type-Options':'nosniff'});
+      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${result.metadata.format.startsWith('esign-local-delivery')?'delivery-local-test':'delivery'}.pdf"`,'X-Content-Type-Options':'nosniff'});
     } catch {return c.json({error:'unavailable'},503);}
   });
   // A signer's copy, from the link in their completion notice (signed-copies.ts): the /copy page

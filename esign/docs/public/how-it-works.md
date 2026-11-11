@@ -101,8 +101,9 @@ no independent timestamp: don't rely on it.
 
 A completed envelope's page offers two downloads:
 
-- **Signed PDF with certificate**: the signed document, page for page, followed by its certificate pages. It is the same
-  file each signer's copy link downloads.
+- **Signed PDF with certificate**: the signed document, page for page, followed by its certificate pages: the document and
+  how it was sealed, each signer with their email, how they were identified, their IP address and device, and the events
+  in order. It is the same file each signer's copy link downloads.
 - **Certificate of completion**: the certificate as a page (and **Download certificate JSON**): the seal with its key, its
   key fingerprint, its timestamp and the authority; the envelope and document fingerprints; each signer's recorded events
   and fingerprints; and the audit trail.

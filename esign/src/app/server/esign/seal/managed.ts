@@ -191,10 +191,10 @@ export async function hasManagedEvidence(db: D1Database, envelopeId: string): Pr
 /** The delivery PDF's evidence and certificate notes for a managed seal. */
 export const managedDelivery = (db: D1Database, bucket: BlobStore, tenantId: string, envelopeId: string, trust: SealTrust): DeliveryEvidence => ({
   verify: () => verifyManagedEvidence(db, bucket, tenantId, envelopeId, trust),
-  banner: 'SEALED: E-SIGN SEAL KEY SIGNATURE + RFC 3161 TIMESTAMP',
+  mark: 'Sealed by E-sign',
   notes: [
-    'The evidence (source, signing events and signed PDF hashes) is signed with E-sign\'s seal key (ECDSA P-256) and timestamped by an RFC 3161 time-stamping authority; the completion certificate gives the key fingerprint and the time.',
-    'Certificate revocation of the time-stamping authority is not checked. The seal covers the signed PDF, not this delivery PDF.',
+    'The signed PDF and its evidence (the original, each signing record and the events above) are signed with E-sign\'s seal key (ECDSA P-256) and timestamped by an RFC 3161 time-stamping authority. The seal covers the signed PDF, not these certificate pages.',
+    'The full evidence, with every fingerprint and event, is on the certificate of completion in E-sign. Revocation of the time-stamping authority\'s certificate is not checked.',
   ],
-  name: 'delivery-v1', format: 'esign-delivery-v1',
+  name: 'delivery-v2', format: 'esign-delivery-v2',
 });

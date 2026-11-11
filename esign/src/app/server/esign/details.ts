@@ -6,8 +6,8 @@
  */
 import type { DocumentVersion, Sender, SignerFacts } from './signer-facts.ts';
 
-/** What the host said about the envelope, and the certificate layout it was created with. */
-export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender; certificateVersion?: number };
+/** What the host said about the envelope. */
+export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender };
 /** What the host said about a task's signer, and what it says happens once they sign. */
 export type TaskDetails = SignerFacts & { namedBy?: string; afterSigning?: string[] };
 
@@ -28,7 +28,6 @@ export function envelopeDetails(raw: string | null | undefined): EnvelopeDetails
     documentName: text(value.documentName),
     documentVersion: label ? defined({ label, publishedAt: text(version.publishedAt) }) : undefined,
     sender: name ? defined({ name, email: text(sender.email), organization: text(sender.organization) }) : undefined,
-    certificateVersion: Number.isInteger(value.certificateVersion) ? value.certificateVersion as number : undefined,
   });
 }
 

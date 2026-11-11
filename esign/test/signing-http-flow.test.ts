@@ -83,9 +83,9 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     assert.equal((await PDFDocument.load(original)).getPageCount(),2);
     assert.equal((await req(`/api/envelopes/${envelope.id}/delivery-pdf`)).status,401);
     let failMetadata=true;
-    const failingBucket=new Proxy(bucket,{get(target,prop) {if(prop==='put') return async (key:string,...args:any[])=>{if(key.endsWith('/local-delivery-v3.json') && failMetadata) {failMetadata=false;throw new Error('simulated storage failure');}return (target.put as any)(key,...args);};const value=Reflect.get(target,prop,target);return typeof value==='function'?value.bind(target):value;}});
+    const failingBucket=new Proxy(bucket,{get(target,prop) {if(prop==='put') return async (key:string,...args:any[])=>{if(key.endsWith('/local-delivery-v4.json') && failMetadata) {failMetadata=false;throw new Error('simulated storage failure');}return (target.put as any)(key,...args);};const value=Reflect.get(target,prop,target);return typeof value==='function'?value.bind(target):value;}});
     const failedDelivery=await app.fetch(new Request(`http://localhost/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management}),{...env,ARTIFACTS:failingBucket});assert.equal(failedDelivery.status,503);
-    assert.ok(await bucket.get(`envelopes/${envelope.id}/local-delivery-v3.pdf`));
+    assert.ok(await bucket.get(`envelopes/${envelope.id}/local-delivery-v4.pdf`));
     const delivery=await req(`/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management});assert.equal(delivery.status,200);
     const deliveryBytes=await delivery.arrayBuffer();assert.ok((await PDFDocument.load(deliveryBytes)).getPageCount()>2);
     const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -95,7 +95,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     assert.equal((await req(`/api/envelopes/${envelope.id}/delivery-metadata`,{headers:management})).status,404,'no separate metadata endpoint');
     const retry=await req(`/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management});assert.deepEqual(await retry.arrayBuffer(),deliveryBytes);
     assert.deepEqual(await (await bucket.get(finalOutput!.object_key))!.arrayBuffer(),original);
-    const deliveryKey=`envelopes/${envelope.id}/local-delivery-v3.pdf`;await bucket.put(deliveryKey,'tampered');
+    const deliveryKey=`envelopes/${envelope.id}/local-delivery-v4.pdf`;await bucket.put(deliveryKey,'tampered');
     assert.equal((await req(`/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management})).status,503);
     await bucket.put(deliveryKey,deliveryBytes);
     // Each signer's notice links to their copy: the same delivery PDF, downloaded once from the app's own page.

@@ -190,9 +190,10 @@ rendering and every later re-verification fail closed if the running renderer di
 - A recipient-view request may carry `hostAuthentication` (`{method, provider?, domain?,
   signedInAt?}`, `method` an upper-case word such as `SSO`): how the host signed the recipient in.
   E-sign cannot check it; it is recorded and printed as the host's statement.
-- Certificates are versioned per envelope (`certificateVersion` in `envelopes.details_json`, now 2;
-  none means 1). A certificate is rebuilt on every read and must come out the same, so each
-  envelope keeps the layout it was created with. Change the layout only by adding a version.
+- The delivery PDF's certificate pages are stored once and rebuilt on every read, which must come
+  out byte for byte the same, so they show only what is fixed by completion: the sealed events (for
+  the local seal, those up to the last signature) and facts set at creation. A layout change
+  renames the stored file (`delivery-v2.pdf`, `local-delivery-v4.pdf`, see `delivery-pdf.ts`).
 
 ## Data model
 
@@ -223,7 +224,7 @@ JSON columns. A new optional fact about an envelope or task needs no new table o
 of `details_json` keep only known keys of the expected types. A fact that queries filter on is a
 real column (`tasks.expires_at`).
 
-- `envelopes.details_json`: `documentName`, `sender`, `certificateVersion` (`src/app/server/esign/details.ts`).
+- `envelopes.details_json`: `documentName`, `documentVersion`, `sender` (`src/app/server/esign/details.ts`).
 - `tasks.details_json`: `title`, `onBehalfOf`, `namedBy`.
 - `signatures.facts_json` (`"version": 1`): who signed and how they were identified: the task,
   role, recipient name, the email the code was verified for (the task's), the page session hash,
@@ -412,8 +413,12 @@ version, an old version is refused (`409 disclosure_changed`), and the signature
 event record the version and its SHA-256.
 
 **Delivery PDF.** `GET /api/envelopes/:id/delivery-pdf` returns the final signed PDF, page for page,
-with certificate pages appended. It is created on the first request (`envelopes/<id>/delivery-v1.pdf`
-for the managed seal, `local-delivery-v3.pdf` for the local one) with a conditional create; later
+with certificate pages appended: the document (pages, status, the seal's time, authority and key
+fingerprint, the original and signed SHA-256), each signer (sealed email, title and company, who named
+them, how they were identified, consent version, IP and device) and one table of events with who and
+from which IP. Every fingerprint and the full audit trail stay on the certificate of completion. It
+is created on the first request (`envelopes/<id>/delivery-v2.pdf` for the managed seal,
+`local-delivery-v4.pdf` for the local one) with a conditional create; later
 requests rebuild it and check the stored bytes match. The seal covers the signed PDF, not the
 delivery PDF. There is no endpoint for the signed PDF alone. After completion each signer is
 emailed a link to this PDF once (`src/app/server/esign/signed-copies.ts`), which the public `/copy`

@@ -113,16 +113,21 @@ test('verification fails when the signed PDF or the stored seal changes, and the
     await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
     const verified = await verifyManagedEvidence(e.db, e.bucket, 'tenant', e.id, config.trust);
     const delivery = await deliveryPdf(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust));
-    assert.equal(delivery.metadata.format, 'esign-delivery-v1');
+    assert.equal(delivery.metadata.format, 'esign-delivery-v2');
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const loaded = await pdfjs.getDocument({ data: new Uint8Array(delivery.bytes), useSystemFonts: true }).promise;
     const pageText = (await (await loaded.getPage(loaded.numPages)).getTextContent()).items.map((i: any) => i.str ?? '').join(' ');
-    assert.match(pageText, /E-SIGN SEAL KEY SIGNATURE/);
+    assert.match(pageText, /Sealed by E-sign/);
+    assert.match(pageText, /Certificate page 1 of 1/, 'two signers fit on one certificate page');
     assert.doesNotMatch(pageText, /LOCAL TEST ONLY/);
     const allText = (await Promise.all(Array.from({ length: loaded.numPages }, async (_, i) => (await (await loaded.getPage(i + 1)).getTextContent()).items.map((x: any) => x.str ?? '').join(' ')))).join(' ');
-    assert.match(allText, /Audit trail \(UTC\)/);
-    assert.match(allText, /otp verified/);
-    assert.match(allText, /signed · Ana Partner/);
+    assert.match(allText, /Events \(UTC\)/);
+    assert.match(allText, /Confirmed the emailed code +Ana Partner/);
+    assert.match(allText, /Signed +Marcus Seller/);
+    assert.match(allText, /Sealed and completed +E-sign/);
+    assert.ok(allText.includes(`Completed and sealed ${new Date(verified.seal.timestampTime).toISOString().slice(0, 19).replace('T', ' ')} UTC`));
+    assert.ok(allText.includes(verified.seal.keyId), 'the seal key fingerprint');
+    assert.match(allText, /Email +ana@partner\.test/, 'the sealed email');
     const finalKey = verified.signatures[verified.signatures.length - 1].object_key;
     const original = await (await e.bucket.get(finalKey))!.arrayBuffer();
     await e.bucket.put(finalKey, 'tampered');
@@ -192,7 +197,7 @@ test('once completed, each signer is emailed one link to their copy: the signed 
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const pdf = await pdfjs.getDocument({ data: Uint8Array.from(delivery.bytes), useSystemFonts: true }).promise;
     const lastPage = (await (await pdf.getPage(pdf.numPages)).getTextContent()).items.map((i: any) => i.str ?? '').join(' ');
-    assert.match(lastPage, /E-SIGN SEAL KEY SIGNATURE/, 'the copy carries the certificate pages');
+    assert.match(lastPage, /Sealed by E-sign/, 'the copy carries the certificate pages');
   } finally { await e.mf.dispose(); await tsa.dispose(); }
 });
 

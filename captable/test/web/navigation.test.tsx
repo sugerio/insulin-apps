@@ -414,6 +414,28 @@ describe("Settings", () => {
     ]);
     expect(settingsLinks(null).map((link) => link.href)).toEqual([null, null, null, null]);
   });
+
+  it("prefers the settings pages and the apex the gateway names, as Esign does", () => {
+    const other = "http://localhost:9090";
+    const named = platformAccount({
+      apex: other,
+      settings: { users: `${other}/apps/captable/settings/users`, integrations: null, api: `${other}/apps/captable/settings/api` },
+      links: { account: `${APEX}/account`, apps: `${APEX}/` },
+    });
+    expect(settingsLinks(named).map((link) => link.href)).toEqual([
+      `${other}/apps/captable/settings/users`,
+      `${other}/apps/captable/settings/integrations`,
+      `${other}/apps/captable/settings/api`,
+      `${other}/apps/captable/settings/connect-ai`,
+    ]);
+    // Only the origin of the apps link, with no settings at all: the pages on that origin.
+    expect(settingsLinks(platformAccount({ links: { apps: `${APEX}/` } })).map((link) => link.href)).toEqual([
+      `${APEX}/apps/captable/settings/users`,
+      `${APEX}/apps/captable/settings/integrations`,
+      `${APEX}/apps/captable/settings/api`,
+      `${APEX}/apps/captable/settings/connect-ai`,
+    ]);
+  });
 });
 
 describe("collapsing each level", () => {

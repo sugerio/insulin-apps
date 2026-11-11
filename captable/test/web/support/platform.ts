@@ -11,6 +11,9 @@ export interface PlatformAccountFixture {
   organization: { id: string; name: string; role: string; roleLabel: string } | null;
   organizations: { id: string; name: string; role: string; roleLabel: string; active: boolean }[];
   links: Record<string, string | null>;
+  /** The apex's origin and the app's settings pages, which a newer gateway also gives. */
+  apex?: string;
+  settings?: Record<string, string | null>;
 }
 
 /** `/__insulin/me` for Rachel, the owner, in Acme Robotics and one other organization. */

@@ -49,10 +49,10 @@ if it didn't exist.
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/templates` | View | The organization's templates, newest first: `{templates: [{id, roles, fields, createdAt}]}`. |
-| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order). Answers `201 {id, roles}`. Signed on an added signature page. |
-| `GET /api/templates/{id}` | View | A template's roles and placed fields (type, role, page, box), and whether they can be signed. |
-| `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?}`. Answers `{sessionId, url}`. |
+| `GET /api/templates` | View | The organization's templates, newest first: `{templates: [{id, name?, metadata, roles, fields, createdAt}]}`. |
+| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name` and `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)). Answers `201 {id, name?, metadata, roles}`. Signed on an added signature page. |
+| `GET /api/templates/{id}` | View | A template's name and metadata, its roles and placed fields (type, role, page, box), and whether they can be signed. |
+| `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?, name?, metadata?}`. The template it saves gets that name and metadata, or the source template's. Answers `{sessionId, url}`. |
 | `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. |
 | `GET /api/template-editing-sessions/{id}` | View | `{templateId}` once the editor has saved, else `{templateId: null}`. |
 
@@ -60,9 +60,9 @@ if it didn't exist.
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/envelopes` | View | The organization's envelopes, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?}]}`. Filter with `status`. |
+| `GET /api/envelopes` | View | The organization's envelopes, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?, metadata}]}`. Filter with `status`. |
 | `POST /api/envelopes` | Manage | Send a template for signature, one recipient per role. Needs an `Idempotency-Key` header. Answers `201 {id, status: "IN_PROGRESS"}`; the first signer's turn starts at once. |
-| `GET /api/envelopes/{id}` | View | Status and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `expiresAt`, `openedAt`. |
+| `GET /api/envelopes/{id}` | View | The status, `documentName` and `metadata`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `expiresAt`, `openedAt`. |
 | `GET /api/envelopes/{id}/audit` | View | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
 | `POST /api/envelopes/{id}/void` | Manage | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. |
 | `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Manage | A one-time code for the active signer's signing page: `{code}`. Body: `{origin?, hostAuthentication?}`. |
@@ -84,8 +84,9 @@ Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLI
 | `templateId` | Yes | The template to send. |
 | `recipients` | Yes | One per role of the template (1 to 20), each `{role, name, email}` and optionally `expiresAt` (ISO 8601, in the future, within 400 days), `title` (up to 128 characters), `onBehalfOf` (the company, up to 200), `namedBy` (who named this signer, up to 300) and `afterSigning` (up to 3 lines shown after signing). |
 | `documentName` | No | Shown to signers and named in the statement they agree to (up to 200 characters). |
-| `documentVersion` | No | `{label, publishedAt?}`, such as `{"label": "v3"}`. |
+| `documentVersion` | No | `{label, publishedAt?}`, such as `{"label": "v3"}` (a label of up to 16 characters). |
 | `sender` | No | `{name, email?, organization?}`. |
+| `metadata` | No | Your own keys and values; see [Names and metadata](#names-and-metadata). Part of the request: the same key with other metadata is a conflict. |
 
 The `Idempotency-Key` header is required: 1 to 128 letters, digits, `-` or `_`, a fresh random value for each new
 envelope. The envelope's id is derived from your organization and the key, so:
@@ -93,10 +94,19 @@ envelope. The envelope's id is derived from your organization and the key, so:
 - repeating the same request with the same key answers `201` with the same id, whatever the envelope's status is now;
 - the same key with a different request answers `409 idempotency_conflict`.
 
-Other refusals: `400 idempotency_key_required`, `422 invalid_envelope` or `invalid_recipient` (a field out of bounds),
+Other refusals: `400 idempotency_key_required`, `422 unknown_field` with the `fields` E-sign doesn't know (a request,
+or a recipient, may name only the fields above), `422 invalid_envelope` or `invalid_recipient` (a field out of bounds),
 `422 invalid_roles` (the recipients don't match the template's roles one to one), `422 unsupported_recipient_name` (a
 name the signature page can't draw), `422 positioned_fields_not_supported` (the template's placed fields can't be signed),
 `404 not_found` (no such template).
+
+## Names and metadata
+
+A template can have a **name**, up to 200 characters, shown on the Templates page. Templates and envelopes can carry
+**metadata**: your own keys and values, such as your ids for the record, so you can trace it back to yours. Metadata is
+an object of at most 20 keys (letters, digits, `_`, `.` and `-`, up to 40 characters) whose values are strings of up to
+500 characters. E-sign keeps it as given and returns it on every read; it never reads it, and it is not part of the
+sealed evidence or shown to signers. A malformed name or metadata is refused with `422`.
 
 ## Examples
 

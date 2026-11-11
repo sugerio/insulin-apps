@@ -4,6 +4,7 @@ import { AUDIT, requestFacts } from './audit.ts';
 import { expireDueEnvelopes, expireIfDue, parseDeadline } from './task-expiry.ts';
 import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedBy, parseSender, parseSignerFacts, type SignerFacts } from './signer-facts.ts';
 import { envelopeDetails, type EnvelopeDetails, type TaskDetails } from './details.ts';
+import { parseMetadata, parseTemplateName, storedMetadata, unknownKeys, type Metadata } from './metadata.ts';
 import { PDFDocument } from 'pdf-lib';
 import { assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf } from './fields.ts';
 import { assertRenderableRecipientNames } from './field-render.ts';
@@ -119,9 +120,9 @@ function page(query: (name: string) => string | undefined): { limit: number; bef
 app.get('/api/templates', async (context) => {
   const paging = page((name) => context.req.query(name));
   if (!paging) return context.json({ error: 'invalid_query' }, 400);
-  const { results } = await context.env.DB.prepare('SELECT id, roles_json, fields_json, created_at FROM templates WHERE tenant_id = ? AND created_at < ? ORDER BY created_at DESC, id LIMIT ?')
-    .bind(context.get('tenantId'), paging.before, paging.limit).all<{ id: string; roles_json: string; fields_json: string; created_at: number }>();
-  return context.json({ templates: results.map((row) => ({ id: row.id, roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at })) });
+  const { results } = await context.env.DB.prepare('SELECT id, roles_json, fields_json, created_at, name, metadata_json FROM templates WHERE tenant_id = ? AND created_at < ? ORDER BY created_at DESC, id LIMIT ?')
+    .bind(context.get('tenantId'), paging.before, paging.limit).all<{ id: string; roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string }>();
+  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at })) });
 });
 
 const ENVELOPE_STATUSES = new Set(['IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED']);
@@ -137,7 +138,7 @@ app.get('/api/envelopes', async (context) => {
   return context.json({
     envelopes: results.map((row) => {
       const details = envelopeDetails(row.details_json);
-      return { id: row.id, templateId: row.template_id, status: row.status, createdAt: row.created_at, ...(details.documentName ? { documentName: details.documentName } : {}) };
+      return { id: row.id, templateId: row.template_id, status: row.status, createdAt: row.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {} };
     }),
   });
 });
@@ -161,6 +162,16 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   const file = form.get('file');
   const rawRoles = form.get('roles');
   if (!(file instanceof File) || typeof rawRoles !== 'string' || file.size === 0) return context.json({ error: 'invalid_template' }, 400);
+  // The host's name and metadata for the template (metadata.ts), as form fields; metadata is a JSON object.
+  const unknown = unknownKeys(Object.fromEntries(Array.from(form.keys(), (key) => [key, true])), ['file', 'roles', 'name', 'metadata']);
+  if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
+  const name = parseTemplateName(form.get('name') ?? undefined);
+  let metadata: ReturnType<typeof parseMetadata> = null;
+  const rawMetadata = form.get('metadata');
+  if (rawMetadata !== null) {
+    try { metadata = typeof rawMetadata === 'string' ? parseMetadata(JSON.parse(rawMetadata)) : 'invalid'; } catch { metadata = 'invalid'; }
+  }
+  if (name === 'invalid' || metadata === 'invalid') return context.json({ error: 'invalid_template' }, 422);
   if (file.size > MAX_PDF_BYTES) return context.json({ error: 'too_large' }, 413);
   let roles: unknown;
   try { roles = JSON.parse(rawRoles); } catch { return context.json({ error: 'invalid_roles' }, 422); }
@@ -176,14 +187,14 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   if (!stored) return context.json({ error: 'storage_conflict' }, 503);
   // An ambiguous D1 failure may have committed. Keep the object for later reconciliation;
   // deleting it here could leave a committed template without its source.
-  await context.env.DB.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(id, context.get('tenantId'), key, JSON.stringify(roles), Date.now()).run();
-  return context.json({ id, roles }, 201);
+  await context.env.DB.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, context.get('tenantId'), key, JSON.stringify(roles), Date.now(), name, JSON.stringify(metadata ?? {})).run();
+  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles }, 201);
 });
 
 app.get('/api/templates/:id', async (context) => {
   const row = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?')
-    .bind(context.req.param('id'), context.get('tenantId')).first<{ id: string; roles_json: string; fields_json?: string }>();
+    .bind(context.req.param('id'), context.get('tenantId')).first<{ id: string; roles_json: string; fields_json?: string; name: string | null; metadata_json: string }>();
   if (!row) return context.json({ error: 'not_found' }, 404);
   // The response names keep the word "positioned": hosts read them.
   let hasFields = false;
@@ -197,8 +208,13 @@ app.get('/api/templates/:id', async (context) => {
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
     const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);fieldsSupported=true;
   }catch{fieldsSupported=false;}}
-  return context.json({ id: row.id, roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json) });
+  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json) });
 });
+
+/** A template's name, when it has one, and its metadata, as the API returns them. */
+function templateLabels(row: { name: string | null; metadata_json: string }): { name?: string; metadata: Metadata } {
+  return { ...(row.name ? { name: row.name } : {}), metadata: storedMetadata(row.metadata_json) };
+}
 
 /**
  * The placed fields as a host previews them: type, role, page (1-based) and the box in
@@ -222,6 +238,10 @@ function placedFields(raw: string | undefined): { type: string; role: string; pa
   return out;
 }
 
+/** The fields a create-envelope request and each of its recipients may have; any other is refused. */
+const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata'];
+const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBehalfOf', 'namedBy', 'afterSigning'];
+
 /** A created envelope starts IN_PROGRESS: its first signer's task is active. */
 const CREATED_STATUS = 'IN_PROGRESS';
 /** The response to POST /api/envelopes, for the first creation and for every retry of it alike. */
@@ -233,7 +253,13 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   let body: unknown;
   try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
-  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown };
+  // Every field must be one E-sign knows: a misspelled one is refused rather than lost.
+  const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
+  if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
+  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown };
+  // The host's own labels for the envelope (metadata.ts): kept and returned, never evidence.
+  const metadata = parseMetadata(input.metadata);
+  if (metadata === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
   // The document's name, shown to the signer and named in the intent statement.
   const documentName = parseDocumentName(input.documentName);
   if (documentName === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
@@ -250,6 +276,10 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const namedBy: (string | null)[] = [];
   const afterSigning: (string[] | null)[] = [];
   for (const recipient of input.recipients) {
+    if (recipient && typeof recipient === 'object' && !Array.isArray(recipient)) {
+      const unknownRecipientFields = unknownKeys(recipient, RECIPIENT_FIELDS);
+      if (unknownRecipientFields.length) return context.json({ error: 'unknown_field', fields: unknownRecipientFields.map((field) => `recipients[].${field}`) }, 422);
+    }
     if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || typeof recipient.name !== 'string' || typeof recipient.email !== 'string' || !recipient.name.trim() || recipient.name.length > 200 || recipient.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email)) return context.json({ error: 'invalid_recipient' }, 422);
     // A sign-by deadline for this recipient (ISO 8601, future, within 400 days).
     const deadline = parseDeadline((recipient as { expiresAt?: unknown }).expiresAt);
@@ -270,7 +300,7 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email, ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}) });
   }
   const tenantId = context.get('tenantId');
-  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}) });
+  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
   // Idempotency is by the envelope itself: its id comes from the tenant and the Idempotency-Key, and
   // it keeps the hash of the request that created it. A retry of that request gets the response a
@@ -314,7 +344,7 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   // or not at all.
   const statements = [
     // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
-    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}) } satisfies EnvelopeDetails)),
+    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}) } satisfies EnvelopeDetails)),
     ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
   ];
@@ -333,13 +363,14 @@ app.get('/api/envelopes/:id', async (context) => {
   const tenantId = context.get('tenantId');
   // A tenant's own envelope only (checked below); expiring a stranger's id is a no-op lookup.
   if (await context.env.DB.prepare('SELECT 1 FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first()) await expireIfDue(context.env.DB, id);
-  const envelope = await context.env.DB.prepare('SELECT id, template_id, status, created_at FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ id: string; template_id: string; status: string; created_at: number }>();
+  const envelope = await context.env.DB.prepare('SELECT id, template_id, status, created_at, details_json FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ id: string; template_id: string; status: string; created_at: number; details_json: string }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
   const tasks = await context.env.DB.prepare(`SELECT t.id, t.role, t.recipient_name, t.recipient_email, t.routing_order, t.status, t.expires_at,
       (SELECT MIN(a.occurred_at) FROM audit_events a WHERE a.envelope_id = t.envelope_id AND a.task_id = t.id AND a.type = ?) AS opened_at
     FROM tasks t WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; opened_at: number | null }>();
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, tasks: tasks.results.map((task) => ({ id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }) })) });
+  const details = envelopeDetails(envelope.details_json);
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, tasks: tasks.results.map((task) => ({ id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }) })) });
 });
 
 /**

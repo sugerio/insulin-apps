@@ -203,7 +203,7 @@ tables:
 
 | Table | Holds |
 | --- | --- |
-| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none) |
+| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none), the host's `name` and `metadata_json` |
 | `envelopes` | Tenant, template, status, creation time, `request_sha256`, `details_json` |
 | `tasks` | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
 | `artifacts` | Each envelope's initial document (D0): object key and SHA-256 |
@@ -212,7 +212,7 @@ tables:
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
 | `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |
-| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the saved template |
+| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template |
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
@@ -223,7 +223,11 @@ JSON columns. A new optional fact about an envelope or task needs no new table o
 of `details_json` keep only known keys of the expected types. A fact that queries filter on is a
 real column (`tasks.expires_at`).
 
-- `envelopes.details_json`: `documentName`, `documentVersion`, `sender` (`src/app/server/esign/details.ts`).
+- `envelopes.details_json`: `documentName`, `documentVersion`, `sender`, `metadata` (`src/app/server/esign/details.ts`).
+- `templates.name` and `templates.metadata_json`: the host's name and metadata for a template, which only label it
+  (`src/app/server/esign/metadata.ts`). An editing session keeps those it was opened with
+  (`editor_sessions.template_name`, `template_metadata_json`) for the template it saves; without them the saved template
+  keeps its source template's.
 - `tasks.details_json`: `title`, `onBehalfOf`, `namedBy`.
 - `signatures.facts_json` (`"version": 1`): who signed and how they were identified: the task,
   role, recipient name, the email the code was verified for (the task's), the page session hash,

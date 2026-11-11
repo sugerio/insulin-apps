@@ -9,7 +9,10 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, primaryKey, sqliteTable, text, unique, blob } from 'drizzle-orm/sqlite-core'
 
-/** A PDF with the roles that sign it and, once placed, its fields (JSON, src/app/server/esign/fields.ts). */
+/**
+ * A PDF with the roles that sign it and, once placed, its fields (JSON, src/app/server/esign/fields.ts).
+ * The host's name and metadata for it label it only (src/app/server/esign/metadata.ts).
+ */
 export const templates = sqliteTable('templates', {
   id: text('id').primaryKey().notNull(),
   tenant_id: text('tenant_id').notNull(),
@@ -17,6 +20,8 @@ export const templates = sqliteTable('templates', {
   roles_json: text('roles_json').notNull(),
   created_at: integer('created_at').notNull(),
   fields_json: text('fields_json').notNull().default('[]'),
+  name: text('name'),
+  metadata_json: text('metadata_json').notNull().default('{}'),
 }, (table) => [index('templates_by_tenant').on(table.tenant_id, table.created_at)])
 
 export const envelopes = sqliteTable('envelopes', {
@@ -27,7 +32,7 @@ export const envelopes = sqliteTable('envelopes', {
   created_at: integer('created_at').notNull(),
   /** SHA-256 (hex) of the normalized request that created it: the id comes from the tenant and the Idempotency-Key. */
   request_sha256: text('request_sha256').notNull(),
-  /** Optional facts (details.ts): document name and version, sender, certificate layout. */
+  /** Optional facts (details.ts): document name and version, sender, the host's metadata. */
   details_json: text('details_json').notNull().default('{}'),
 }, (table) => [
   index('envelopes_by_tenant').on(table.tenant_id, table.created_at),
@@ -161,6 +166,9 @@ export const editorSessions = sqliteTable('editor_sessions', {
   staged_object_key: text('staged_object_key'),
   staged_sha256: text('staged_sha256'),
   result_template_id: text('result_template_id').references(() => templates.id),
+  /** The name and metadata (JSON) the saved template gets; none means the source template's. */
+  template_name: text('template_name'),
+  template_metadata_json: text('template_metadata_json'),
 })
 
 /**

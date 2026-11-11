@@ -101,8 +101,9 @@ A host product can show the field editor inside its own pages. Its backend calls
 (see [API](/docs/esign/api)):
 
 1. `POST /api/template-editing-sessions` with `{"allowedParentOrigin": "https://app.example.com", "roles": ["partner",
-   "seller"]}` for a new PDF, or with `sourceTemplateId` to start from an existing template's copy. The answer is
-   `{sessionId, url}`; the one-time code is in the URL's fragment.
+   "seller"]}` for a new PDF, or with `sourceTemplateId` to start from an existing template's copy. Add `name` and
+   `metadata` to label the template it saves (see [Names and metadata](/docs/esign/api#names-and-metadata)); a copy
+   keeps its source's otherwise. The answer is `{sessionId, url}`; the one-time code is in the URL's fragment.
 2. For a new PDF: `POST /api/template-editing-sessions/{id}/source` with the PDF bytes
    (`Content-Type: application/pdf`), once, before the page is opened.
 3. Frame the `url` in the host page. The editor posts `esign.editor.ready` to the parent; the host sends

@@ -142,7 +142,7 @@ export function TemplatesPage({ me }: { me: Me }) {
           : h(Table, { 'aria-label': 'Templates' },
             h(TableHeader, null, h(TableRow, null, h(TableHead, { className: 'pl-6' }, 'Template'), h(TableHead, null, 'Roles'), h(TableHead, null, 'Signed on'), h(TableHead, null, 'Uploaded'), manage ? h(TableHead, { className: 'pr-6' }, h('span', { className: 'sr-only' }, 'Actions')) : null)),
             h(TableBody, null, ...templates.map((t) => h(TableRow, { key: t.id },
-              h(TableCell, { className: 'pl-6 font-mono text-xs' }, t.id),
+              h(TableCell, { className: 'pl-6 whitespace-normal' }, t.name ? h('div', { className: 'font-medium' }, t.name) : null, h('div', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id)),
               h(TableCell, { className: 'whitespace-normal' }, t.roles.join(', ')),
               h(TableCell, null, t.fields.length ? `${t.fields.length} placed ${t.fields.length === 1 ? 'field' : 'fields'}` : 'A signature page'),
               h(TableCell, { className: 'text-muted-foreground' }, dateTime(t.createdAt)),

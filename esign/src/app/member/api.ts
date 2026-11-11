@@ -3,10 +3,12 @@
 
 export type Permission = 'esign.manage' | 'esign.view'
 export type Me = { organizationId: string; user?: { id: string; email: string | null; name: string | null }; role?: string; permissions: Permission[]; signingEnabled?: boolean }
-export type TemplateSummary = { id: string; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
-export type EnvelopeSummary = { id: string; templateId: string; status: string; createdAt: number; documentName?: string }
+/** The host's own labels for a template or envelope (server/esign/metadata.ts): kept, returned, never used. */
+export type Metadata = Record<string, string>
+export type TemplateSummary = { id: string; name?: string; metadata?: Metadata; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
+export type EnvelopeSummary = { id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string }
-export type Envelope = { id: string; templateId: string; status: string; createdAt?: number; tasks: Task[] }
+export type Envelope = { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; tasks: Task[] }
 export type AuditEvent = { type: string; at: string; recipient?: { role: string; name: string; email: string }; ip?: string; userAgent?: string; detail?: Record<string, unknown> }
 
 export class RequestError extends Error {

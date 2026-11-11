@@ -14,7 +14,7 @@ import type { BlobStore } from '../blob-store.ts';
  * against the manifest rebuilt from the stored records.
  */
 
-export type TsaTrust = { url: string; roots: Uint8Array[]; policies: string[]; signerSpkiSha256: string[]; missingAccuracyMs: number };
+export type TsaTrust = { url: string; roots: Uint8Array[]; policies: string[]; issuerSpkiSha256: string[]; missingAccuracyMs: number };
 export type ManagedSeal = {
   format: 'esign-managed-seal-v2';
   manifest: string;
@@ -53,7 +53,7 @@ async function verifySignature(spki: Uint8Array, signature: Uint8Array, input: U
 
 function tsaPolicy(tsa: TsaTrust, now: number) {
   return { roots: tsa.roots, now, maxAgeMs: FRESH_WINDOW_MS, maxFutureSkewMs: FRESH_WINDOW_MS, missingAccuracyMs: tsa.missingAccuracyMs,
-    allowedPolicies: tsa.policies, allowedSignerSpkiSha256: tsa.signerSpkiSha256,
+    allowedPolicies: tsa.policies, allowedIssuerSpkiSha256: tsa.issuerSpkiSha256,
     // Revocation is not checked yet (no OCSP/CRL fetching in the Worker); stated on the certificate.
     checkRevocation: async () => true };
 }

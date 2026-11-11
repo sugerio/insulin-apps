@@ -41,8 +41,7 @@
     "scheduled": "/api/scheduled",
     "secrets": [
       "ESIGN_OTP_KEY",
-      "ESIGN_FRAME_ANCESTORS",
-      "ESIGN_TSA_SIGNER_SPKI_SHA256"
+      "ESIGN_FRAME_ANCESTORS"
     ]
   },
   "dependencies": {

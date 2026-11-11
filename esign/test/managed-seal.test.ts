@@ -19,7 +19,7 @@ async function setup({ withAccuracy = true } = {}) {
     if (request.url !== TSA_URL) throw new Error(`unexpected ${request.url}`);
     return new Response(await tsa.reply(new Uint8Array(await request.arrayBuffer())), { headers: { 'content-type': 'application/timestamp-reply' } });
   }) as typeof fetch;
-  const trustTsa = { url: TSA_URL, roots: tsa.roots, policies: [tsa.policy], signerSpkiSha256: [tsa.signerSpkiSha256], missingAccuracyMs: 1000 };
+  const trustTsa = { url: TSA_URL, roots: tsa.roots, policies: [tsa.policy], issuerSpkiSha256: [tsa.issuerSpkiSha256], missingAccuracyMs: 1000 };
   const sealer: Sealer = {
     keyId: key.entry.id,
     publicKeySpki: key.spki,
@@ -65,7 +65,7 @@ test('a stored seal is rejected when the records, the key, the signature or the 
       ['timestamp altered', { ...seal, timestamp: { ...seal.timestamp, response: flip(seal.timestamp.response) } }, MANIFEST, trust],
       ['timestamp for another nonce', { ...seal, timestamp: { ...seal.timestamp, nonce: '01' + '0'.repeat(30) } }, MANIFEST, trust],
       ['timestamp from another TSA', seal, MANIFEST, { ...trust, tsa: { ...trust.tsa, url: 'http://other.example.test/' } }],
-      ['timestamp signer not pinned', seal, MANIFEST, { ...trust, tsa: { ...trust.tsa, signerSpkiSha256: ['0'.repeat(64)] } }],
+      ['timestamp issuer not pinned', seal, MANIFEST, { ...trust, tsa: { ...trust.tsa, issuerSpkiSha256: ['0'.repeat(64)] } }],
     ];
     for (const [name, candidate, manifest, t] of cases) await assert.rejects(verifyManagedSeal(candidate as never, manifest, t), undefined, name);
   } finally { await tsa.dispose(); }

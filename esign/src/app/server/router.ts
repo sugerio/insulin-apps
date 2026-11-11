@@ -35,7 +35,6 @@ async function bindings(request: Request): Promise<Bindings> {
     // this code trusts (seal/keys.ts), never the deployment's configuration.
     SEAL_KEY: dev ? undefined : sealKeyOf(request),
     SEAL_KEYS,
-    TSA_SIGNER_SPKI_SHA256: secret('ESIGN_TSA_SIGNER_SPKI_SHA256'),
     SUGER_MAIL_URL: secret('SUGER_MAIL_URL'),
     SUGER_APP_TOKEN: secret('SUGER_APP_TOKEN'),
     // The relay is called through the gateway's service binding when the deploy gave the app one (gateway-fetch.ts).

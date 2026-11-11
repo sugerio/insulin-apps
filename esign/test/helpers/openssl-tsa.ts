@@ -8,7 +8,8 @@ import { join } from 'node:path';
 
 export type OpensslTsa = {
   roots: Uint8Array[];
-  signerSpkiSha256: string;
+  /** SHA-256 of the issuing CA's (the synthetic root's) SubjectPublicKeyInfo. */
+  issuerSpkiSha256: string;
   policy: string;
   reply(query: Uint8Array): Promise<Uint8Array>;
   dispose(): Promise<void>;
@@ -25,14 +26,14 @@ export async function startOpensslTsa({ withAccuracy = true } = {}): Promise<Ope
   run(['x509', '-in', 'root.pem', '-outform', 'DER', '-out', 'root.der']);
   await writeFile(join(dir, 'serial'), '01\n');
   await writeFile(join(dir, 'tsa.cnf'), `[tsa]\ndefault_tsa=server\n[server]\nserial=serial\nsigner_cert=tsa.pem\nsigner_key=tsa.key\nsigner_digest=sha256\ndefault_policy=1.2.3.4\ndigests=sha256\n${withAccuracy ? 'accuracy=secs:1\n' : ''}ordering=no\ntsa_name=yes\ness_cert_id_chain=no\ness_cert_id_alg=sha256\n`);
-  const signer = new X509Certificate(await readFile(join(dir, 'tsa.pem')));
-  const signerSpkiSha256 = createHash('sha256').update(signer.publicKey.export({ format: 'der', type: 'spki' })).digest('hex');
+  const issuer = new X509Certificate(await readFile(join(dir, 'root.pem')));
+  const issuerSpkiSha256 = createHash('sha256').update(issuer.publicKey.export({ format: 'der', type: 'spki' })).digest('hex');
   const roots = [new Uint8Array(await readFile(join(dir, 'root.der')))];
   // The certificates start now; a timestamp within its accuracy of their start is refused.
   await new Promise(resolve => setTimeout(resolve, 2100));
   let n = 0;
   return {
-    roots, signerSpkiSha256, policy: '1.2.3.4',
+    roots, issuerSpkiSha256, policy: '1.2.3.4',
     async reply(query) {
       const name = `q${++n}`;
       await writeFile(join(dir, name), query);

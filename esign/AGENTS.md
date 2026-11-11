@@ -104,8 +104,9 @@ secret in source.
 
 ## Secrets
 
-`insulin.secrets` declares them (`ESIGN_` prefix, at most 30): the code pepper, the origins that may embed the pages,
-and extra TSA signer pins. The HMAC test seal exists only in the local preview.
+`insulin.secrets` declares them (`ESIGN_` prefix, at most 30): the code pepper and the origins that may embed the
+pages. What a seal is verified against (seal keys, the timestamp authority) is in the code, never a secret. The HMAC
+test seal exists only in the local preview.
 
 The managed seal's private key is not among them and never in GitHub: it is the Worker's `ESIGN_SEAL_KEY` binding,
 a Cloudflare `secret_key` (`scripts/put-seal-key.mjs`). Never add it to `insulin.secrets`: the deploy would overwrite

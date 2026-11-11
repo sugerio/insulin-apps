@@ -24,7 +24,7 @@ async function sealing() {
   const tsa = await startOpensslTsa();
   const key = await makeSealKey();
   const counts = { sign: 0, tsa: 0 };
-  const tsaTrust = { url: TSA_URL, roots: tsa.roots, policies: [tsa.policy], signerSpkiSha256: [tsa.signerSpkiSha256], missingAccuracyMs: 1000 };
+  const tsaTrust = { url: TSA_URL, roots: tsa.roots, policies: [tsa.policy], issuerSpkiSha256: [tsa.issuerSpkiSha256], missingAccuracyMs: 1000 };
   const config: ManagedEvidenceConfig = {
     sealer: {
       keyId: key.entry.id, publicKeySpki: key.spki,

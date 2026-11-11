@@ -72,7 +72,6 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | --- | --- |
 | `ESIGN_OTP_KEY` | The pepper of the emailed codes (at least 32 characters) |
 | `ESIGN_FRAME_ANCESTORS` | Space-separated host origins that may embed the signing page and the editor (the app's own origin always may) |
-| `ESIGN_TSA_SIGNER_SPKI_SHA256` | The pinned signer keys of the timestamp authority |
 
 The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY` service binding they are used over.
 
@@ -389,7 +388,7 @@ again on every certificate and delivery PDF read, so a changed record, image or 
 | --- | --- | --- |
 | Used | dev (the local preview), which has no seal key | whenever the `ESIGN_SEAL_KEY` binding is there; prod allows nothing else |
 | Covers | The manifest | The manifest and the audit trail up to sealing (`esign-sealed-evidence-v2`); later events are listed as recorded after sealing |
-| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An ECDSA P-256 (SHA-256) signature with the seal key over a domain-separated message, checked against the current key's public half in `keys.ts` before anything is stored; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, signer and policy pinned in `src/app/server/esign/seal/tsa.ts` and within five minutes of the app's clock |
+| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An ECDSA P-256 (SHA-256) signature with the seal key over a domain-separated message, checked against the current key's public half in `keys.ts` before anything is stored; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, the issuing CA and the policy pinned in `src/app/server/esign/seal/tsa.ts` and within five minutes of the app's clock |
 | Stored | `envelopes/<id>/local-test-evidence.json` | `envelopes/<id>/managed-evidence.json` (`esign-managed-seal-v2`), made once and verified before it is stored; a retry reuses it |
 | Verified | Recomputed with the current key on each read, so changing the key breaks old seals | Signature and timestamp checked on each read, as of the timestamp's time, with a key `keys.ts` lists as in use at that time; retired keys stay listed, with an end, so their seals keep verifying and they seal nothing new |
 | Certificate | `mode: LOCAL TEST ONLY` | `mode: KEY_TSA`, with the key's fingerprint; records a `COMPLETED` audit event |
@@ -399,8 +398,10 @@ The seals' code is in `src/app/server/esign/seal/`: `evidence.ts` (the manifest 
 is configured, and the trust to verify with), `keys.ts` (the trusted seal keys and their time in use),
 `signing.ts` (the signed message, which keys may sign, and signing checked against the named public key)
 and `tsa.ts` (the RFC 3161
-query, the response check and the pinned DigiCert trust). Revocation of the TSA certificates is not
-checked, and the certificate says so.
+query, the response check and the pinned DigiCert trust). The pin is the CA that issues DigiCert's
+timestamping certificates, not the certificate itself, so DigiCert replacing it doesn't stop sealing;
+a new CA is a change to `tsa.ts`, and the deployment's configuration can't add one. Revocation of the
+TSA certificates is not checked, and the certificate says so.
 
 **Audit trail** (`src/app/server/esign/audit.ts`): the signing link issued, the page opened, each code sent, the
 code verified, the document fetched, pages viewed (the page posts `POST /api/public/signing/page-views`

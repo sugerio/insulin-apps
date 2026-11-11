@@ -20,7 +20,7 @@ export function timestampQuery(imprint:Uint8Array,nonce:Uint8Array):Uint8Array<A
 
 // --- Verifying the response --------------------------------------------------------------------
 /** missingAccuracyMs: accept a token without accuracy (e.g. DigiCert's), taking this as its uncertainty. */
-type Policy={missingAccuracyMs?:number;roots:Uint8Array[];now:number;maxAgeMs:number;maxFutureSkewMs:number;allowedPolicies:string[];allowedSignerSpkiSha256:string[];checkRevocation:(chain:Uint8Array[],window:{earliest:number;latest:number;checkedAt:number})=>Promise<boolean>};
+type Policy={missingAccuracyMs?:number;roots:Uint8Array[];now:number;maxAgeMs:number;maxFutureSkewMs:number;allowedPolicies:string[];allowedIssuerSpkiSha256:string[];checkRevocation:(chain:Uint8Array[],window:{earliest:number;latest:number;checkedAt:number})=>Promise<boolean>};
 const SHA256='2.16.840.1.101.3.4.2.1',RSA='1.2.840.113549.1.1.1',SHA256_RSA='1.2.840.113549.1.1.11',SHA384_RSA='1.2.840.113549.1.1.12';
 const eq=(a:Uint8Array,b:Uint8Array)=>a.length===b.length&&a.every((v,i)=>v===b[i]);
 const copy=(v:Uint8Array,max:number)=>{if(!(v instanceof Uint8Array)||!(Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype),'buffer')!.get!.call(v) instanceof ArrayBuffer))throw new Error('Invalid input');const n=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype),'length')!.get!.call(v) as number;if(!n||n>max)throw new Error('Invalid input');const out=new Uint8Array(n);out.set(v);return out;};
@@ -51,9 +51,9 @@ const der=(c:Certificate)=>new Uint8Array(c.toSchema().toBER(false));
  */
 export async function verifyRfc3161Timestamp(response:Uint8Array,input:Uint8Array,nonce:Uint8Array,policy:Policy):Promise<{status:'VERIFIED';time:number}>{
  const bytes=copy(response,65536),data=copy(input,4096),expectedNonce=copy(nonce,16);
- if(expectedNonce.length!==16||!policy||!Array.isArray(policy.roots)||!policy.roots.length||policy.roots.length>5||typeof policy.checkRevocation!=='function'||!Number.isSafeInteger(policy.now)||!Number.isSafeInteger(policy.maxAgeMs)||policy.maxAgeMs<0||policy.maxAgeMs>86400000||!Number.isSafeInteger(policy.maxFutureSkewMs)||policy.maxFutureSkewMs<0||policy.maxFutureSkewMs>300000||!Array.isArray(policy.allowedPolicies)||!policy.allowedPolicies.length||!Array.isArray(policy.allowedSignerSpkiSha256)||!policy.allowedSignerSpkiSha256.length||policy.allowedSignerSpkiSha256.some(x=>typeof x!=='string'||!/^[a-f0-9]{64}$/.test(x)))throw new Error('Timestamp policy missing');
+ if(expectedNonce.length!==16||!policy||!Array.isArray(policy.roots)||!policy.roots.length||policy.roots.length>5||typeof policy.checkRevocation!=='function'||!Number.isSafeInteger(policy.now)||!Number.isSafeInteger(policy.maxAgeMs)||policy.maxAgeMs<0||policy.maxAgeMs>86400000||!Number.isSafeInteger(policy.maxFutureSkewMs)||policy.maxFutureSkewMs<0||policy.maxFutureSkewMs>300000||!Array.isArray(policy.allowedPolicies)||!policy.allowedPolicies.length||!Array.isArray(policy.allowedIssuerSpkiSha256)||!policy.allowedIssuerSpkiSha256.length||policy.allowedIssuerSpkiSha256.some(x=>typeof x!=='string'||!/^[a-f0-9]{64}$/.test(x)))throw new Error('Timestamp policy missing');
  const roots=policy.roots.map(x=>new Certificate({schema:parse(copy(x,16384))}));
- const {now,maxAgeMs,maxFutureSkewMs,checkRevocation}=policy,allowedPolicies=[...policy.allowedPolicies],allowedSigners=[...policy.allowedSignerSpkiSha256];
+ const {now,maxAgeMs,maxFutureSkewMs,checkRevocation}=policy,allowedPolicies=[...policy.allowedPolicies],allowedIssuers=[...policy.allowedIssuerSpkiSha256];
  const tsp=new TimeStampResp({schema:parse(bytes)});
  if(tsp.status.status!==0||tsp.status.failInfo||!tsp.timeStampToken||tsp.timeStampToken.contentType!==ContentInfo.SIGNED_DATA)throw new Error('Timestamp response rejected');
  const signed=new SignedData({schema:tsp.timeStampToken.content});
@@ -78,8 +78,10 @@ export async function verifyRfc3161Timestamp(response:Uint8Array,input:Uint8Arra
  const verified=await signed.verify({signer:0,data:data.buffer,checkChain:true,passedWhenNotRevValues:true,trustedCerts:roots,extendedMode:true});
  if(verified.signatureVerified!==true||verified.signerCertificateVerified!==true||!verified.signerCertificate||verified.certificatePath.length<2||!eq(der(verified.signerCertificate),der(verified.certificatePath[0])))throw new Error('Invalid CMS signature or chain');
  const cert=verified.signerCertificate,exts=cert.extensions??[],eku=exts.filter(x=>x.extnID==='2.5.29.37');
- const spkiHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(cert.subjectPublicKeyInfo.toSchema().toBER(false)))),x=>x.toString(16).padStart(2,'0')).join('');
- if(!allowedSigners.includes(spkiHash))throw new Error('Unauthorized TSA signer');
+ // The pin is the CA that issued the signer, not the signer: the TSA replaces its signing certificate
+ // on its own schedule, and only its CA issues them.
+ const issuerSpkiHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(verified.certificatePath[1].subjectPublicKeyInfo.toSchema().toBER(false)))),x=>x.toString(16).padStart(2,'0')).join('');
+ if(!allowedIssuers.includes(issuerSpkiHash))throw new Error('Unauthorized TSA issuer');
  if(eku.length!==1||!eku[0].critical||!(eku[0].parsedValue instanceof ExtKeyUsage)||eku[0].parsedValue.keyPurposes.length!==1||eku[0].parsedValue.keyPurposes[0]!=='1.3.6.1.5.5.7.3.8')throw new Error('Invalid TSA EKU');
  const constraints=exts.filter(x=>x.extnID==='2.5.29.19'),usage=exts.filter(x=>x.extnID==='2.5.29.15');
  if(constraints.length!==1||!(constraints[0].parsedValue instanceof BasicConstraints)||constraints[0].parsedValue.cA||usage.length!==1||!usage[0].critical)throw new Error('Invalid TSA key constraints');
@@ -106,8 +108,13 @@ export async function verifyRfc3161Timestamp(response:Uint8Array,input:Uint8Arra
 
 export const DIGICERT_TSA_URL = 'http://timestamp.digicert.com';
 export const DIGICERT_TSA_POLICY = '2.16.840.1.114412.7.1';
-/** SHA-256 of each accepted signer's SubjectPublicKeyInfo; extended by TSA_SIGNER_SPKI_SHA256 when DigiCert rotates. */
-export const DIGICERT_TSA_SIGNERS = ['753596b60a629061144cbd312017bbfb77510eac20b7eadc5fafb7cabe142fd5'];
+/**
+ * SHA-256 of the SubjectPublicKeyInfo of each CA whose timestamping certificates are accepted:
+ * "DigiCert Trusted G4 TimeStamping RSA4096 SHA256 2025 CA1" (valid to 2038-01-14). DigiCert
+ * replaces the signing certificate under it without notice; a new CA needs its hash added here,
+ * and the old one kept, so seals made under it still verify.
+ */
+export const DIGICERT_TSA_ISSUERS = ['6806f8c7f9c356a294a28796c4db6425d132ca877bf4fded0c2bb00e38807c28'];
 /** Uncertainty assumed for a token without an accuracy field. */
 export const DIGICERT_MISSING_ACCURACY_MS = 1000;
 

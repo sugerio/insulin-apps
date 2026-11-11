@@ -143,14 +143,15 @@ test('RL_PUBLIC: public requests that change something are limited per app and I
   const limited = await startGateway({ apps, stubBindings: ['APP_LATER'], publicLimit: 2 })
   try {
     const client = limited.client()
-    const post = (app = 'captable', who = client) => who.request(limited.url(app, '/api/public/echo'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    // No body: a request refused before its body is read can reset the connection to workerd, which made this flaky.
+    const post = (app = 'captable', who = client) => who.request(limited.url(app, '/api/public/echo'), { method: 'POST' })
     assert.equal((await post()).status, 200)
     assert.equal((await post()).status, 200)
     const over = await post()
     assert.equal(over.status, 429)
     assert.deepEqual(JSON.parse(over.text), { error: 'rate_limited' })
     assert.equal(over.headers.get('retry-after'), '60')
-    assert.equal((await client.request(limited.url('captable', '/api/public/echo'), { method: 'PUT', body: 'x' })).status, 429, 'any method but GET and HEAD')
+    assert.equal((await client.request(limited.url('captable', '/api/public/echo'), { method: 'PUT' })).status, 429, 'any method but GET and HEAD')
     assert.equal((await client.get(limited.url('captable', '/api/public/echo'))).status, 200, 'GET keeps working')
     assert.equal((await client.request(limited.url('captable', '/sign'), { method: 'HEAD' })).status, 200, 'and HEAD')
     assert.equal((await post('later')).status, 200, 'another app has its own allowance')

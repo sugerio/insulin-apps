@@ -102,6 +102,16 @@ workflows() {
     if (!seen[$0 result]++) { printf "%s%s%s", sep, $0, result; sep = ", " }
   }'
 }
+# Why a push isn't green, for the log: the runs that didn't pass, or that CI didn't run.
+not_passed() {
+  local failed
+  failed=$(workflows 'completed (success|skipped)')
+  if [ -z "$failed" ] && ! grep -qE '^completed (success|skipped) CI$' "$RUNNER_TEMP/push-runs"; then
+    echo "CI didn't run on it"
+  else
+    echo "$failed"
+  fi
+}
 # Sets `newest` to main's newest green push among those listed, or to nothing.
 newest_green() {
   local sha
@@ -145,7 +155,7 @@ if [ -n "$latest" ] && ! has_release "$latest"; then
   if [ "$(push_state)" = green ]; then
     plan "$latest" "$released" "$previous" "$(workflows)"
   else
-    echo "::warning::$latest is tagged on $released, whose workflows haven't all passed ($(workflows 'completed (success|skipped)')): no release for it."
+    echo "::warning::$latest is tagged on $released, whose workflows haven't all passed ($(not_passed)): no release for it."
   fi
 fi
 
@@ -214,7 +224,7 @@ while read -r sha <&3; do
       exit 0
       ;;
     failed)
-      echo "Not every workflow passed for $sha ($(workflows 'completed (success|skipped)')): no version."
+      echo "Not every workflow passed for $sha ($(not_passed)): no version."
       continue
       ;;
   esac

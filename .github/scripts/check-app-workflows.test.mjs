@@ -122,8 +122,8 @@ test("requires an app's workflow to be named after it, since release.yml deploys
   await writeFile(join(root, '.github', 'workflows', 'alpha-app.yml'), workflow('alpha-app', { name: 'Alpha' }))
 
   await assert.rejects(async () => checkAppWorkflows(root), (error) => {
-    assert.match(error.message, /alpha-app\.yml must be named alpha-app, which is how release\.yml knows to deploy the app/)
-    assert.match(error.message, /alpha-app\.yml runs on a push, but only CI, Gateway and each app's own workflow may: release\.yml would take "Alpha" for an app/)
+    assert.match(error.message, /alpha-app\.yml must be named alpha-app, so a release's notes and the Actions list name the app it checks/)
+    assert.match(error.message, /alpha-app\.yml runs on a push, but only CI, Gateway and each app's own workflow may: a release waits for every workflow a push runs, so "Alpha" would hold back/)
     return true
   })
 })
@@ -137,6 +137,6 @@ test('lets only CI, Gateway and the apps\' own workflows run on a push', async (
 
   await assert.rejects(
     () => checkAppWorkflows(root),
-    /^Error: Workflow \.github\/workflows\/docs\.yml runs on a push, but only CI, Gateway and each app's own workflow may: release\.yml would take "Docs" for an app to deploy$/,
+    /^Error: Workflow \.github\/workflows\/docs\.yml runs on a push, but only CI, Gateway and each app's own workflow may: a release waits for every workflow a push runs, so "Docs" would hold back every release it fails$/,
   )
 })

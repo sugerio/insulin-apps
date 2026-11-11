@@ -148,7 +148,10 @@ publishes its GitHub Release (the root README's "Releases") and deploys it with 
 deployed: an app's or the gateway's workflow only checks a push, and no other workflow deploys. Never create, move or
 delete a `v*` tag, or publish or edit one of those releases, by hand or from another workflow. Only CI, Gateway and
 each app's own workflow, named after the app, run on a push to `main`, and each is in release.yml's `workflow_run`
-list; `node .github/scripts/check-app-workflows.mjs` checks both.
+list; `node .github/scripts/check-app-workflows.mjs` checks both. Pull requests are squash merged, and the squash
+commit carries every commit message, so none of them, nor the title or body, may hold a line telling GitHub to skip
+workflows: the merge would start no push workflow and be neither checked on `main` nor released. CI's "Commit
+messages" job refuses one.
 
 ## Before you finish
 

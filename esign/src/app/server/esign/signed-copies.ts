@@ -44,7 +44,7 @@ export async function sendSignedCopies(db: D1Database, tenantId: string, envelop
       await recordAuditQuietly(db, { envelopeId, taskId: task.id, type: AUDIT.copySent, detail: { to: task.recipient_email, delivery: 'email' } });
       sent++;
     } catch {
-      console.error(`E-sign: could not send the signed-copy notice for envelope ${envelopeId}; process-due retries it`);
+      console.error(`Esign: could not send the signed-copy notice for envelope ${envelopeId}; process-due retries it`);
     }
   }
   return { sent, skipped };

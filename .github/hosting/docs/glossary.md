@@ -6,7 +6,7 @@ order: 9
 
 The terms used across the Insulin Apps platform docs, in alphabetical order, each with a one- or two-sentence
 definition. For words specific to an app, see that app's own glossary: [Cap Table](/docs/captable/overview),
-[E-sign](/docs/esign/overview).
+[Esign](/docs/esign/overview).
 
 **Access token**: a short-lived secret, valid for one hour, that an AI agent or an OAuth client sends as
 `Authorization: Bearer …` to call an app. Insulin Apps stores only its hash.
@@ -30,7 +30,7 @@ program gets a token.
 
 **API catalog**: the list of an app's API endpoints at `GET /api/catalog`, showing only what the caller may use.
 
-**App**: one of the business applications on Insulin Apps, such as Cap Table or E-sign, at its own address
+**App**: one of the business applications on Insulin Apps, such as Cap Table or Esign, at its own address
 `<app>.insulinapps.com`.
 
 **App admin**: someone who manages an app's people and stored credentials: an organization owner or admin, or someone
@@ -108,7 +108,7 @@ roles.
 
 **PKCE**: a check in the OAuth sign-in that ties the returned code to the program that asked for it.
 
-**Public path**: a page of an app that people without an account may open, such as E-sign's signing page. It carries no
+**Public path**: a page of an app that people without an account may open, such as Esign's signing page. It carries no
 identity; the app checks its own short-lived codes.
 
 **Recovery code**: one of ten single-use codes that sign you in when you can't use your authenticator app.

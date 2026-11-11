@@ -16,7 +16,7 @@ Every app is its own MCP server, at `/mcp` on the app's address:
 | App | MCP server |
 |---|---|
 | Cap Table | `https://captable.insulinapps.com/mcp` |
-| E-sign | `https://esign.insulinapps.com/mcp` |
+| Esign | `https://esign.insulinapps.com/mcp` |
 | Any app | `https://<app>.insulinapps.com/mcp` |
 
 You add the server to your agent once: each app's [Connect AI page](#the-connect-ai-page) has the command for your
@@ -24,7 +24,7 @@ client, ready to copy. The first time the agent connects, it opens `insulinapps.
 You sign in (with two-step sign-in, if you use it), choose the organization, and choose **Allow**. From then on the
 agent works in that app, in that organization, **as you**: with your role there, re-checked on every call.
 
-Each app is connected separately. Connecting Cap Table doesn't connect E-sign, and an agent you connect in one
+Each app is connected separately. Connecting Cap Table doesn't connect Esign, and an agent you connect in one
 organization can't see another.
 
 ## The Connect AI page
@@ -147,7 +147,7 @@ Each app's MCP server offers four tools. They all act as you, in the organizatio
 | `change` | A `POST`, `PUT`, `PATCH` or `DELETE` on a path under `/api/`. Changes are real and made as you. | `method` and `path` (required), `query`, `body` (any JSON), `idempotencyKey` (1 to 200 visible characters, sent as `Idempotency-Key`) |
 
 A good agent calls `endpoints` first to learn the app's API, then `read` and `change`. Each app's docs describe its API:
-[Cap Table](/docs/captable/overview), [E-sign](/docs/esign/overview).
+[Cap Table](/docs/captable/overview), [Esign](/docs/esign/overview).
 
 An example call, as JSON-RPC over the Streamable HTTP transport:
 

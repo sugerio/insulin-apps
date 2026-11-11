@@ -151,13 +151,13 @@ Playwright through synthetic data (`.github/hosting/docs/screenshots.mjs`, a sma
 npm run build:docs
 ```
 
-It starts the gateway with both apps over https (`wrangler dev --local-protocol https`, which E-sign's embedded editor
+It starts the gateway with both apps over https (`wrangler dev --local-protocol https`, which Esign's embedded editor
 needs) in a fresh local state, signs up through the captured-mail page, creates an organization, a custom role and
 invitations, stores a credential, creates two OAuth clients and rotates one's secret, connects an MCP client, imports
-Cap Table's own spreadsheet template filled with a fictional company, places E-sign fields, sends an envelope and signs
+Cap Table's own spreadsheet template filled with a fictional company, places Esign fields, sends an envelope and signs
 it, then creates a second organization under the same email domain so that the next one is a request to support
 (`ORG_REQUEST_EMAIL` is set to a synthetic address; mail is captured), with Cloudflare's always-passing Turnstile test
-widget as the only outside call. A completed E-sign envelope can't be captured locally (its seal needs AWS KMS and a
+widget as the only outside call. A completed Esign envelope can't be captured locally (its seal needs AWS KMS and a
 timestamp service), so `esign-completed.png` is a labelled placeholder. Nor can a domain be verified (`wrangler dev`
 can't stub the DNS-over-HTTPS lookup), so `platform-organization.png` shows the invitation setting before one is.
 `--only` writes just the named images, so a change to a few pages doesn't rewrite the rest.
@@ -184,7 +184,7 @@ npm run dev -- --app captable
 ```
 
 Several built apps run together, each on its own host, with `--app captable --app esign`: the gateway's config then
-gets a service binding and a `SITE_APPS` entry for each, read from its `package.json` as the deploy reads it. E-sign
+gets a service binding and a `SITE_APPS` entry for each, read from its `package.json` as the deploy reads it. Esign
 runs as it does when published, so it signs nothing until its settings are configured (the docs' screenshot script
 passes local ones). By hand, which is what the script does:
 

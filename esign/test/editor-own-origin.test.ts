@@ -56,5 +56,5 @@ test('the editor origins are the app\'s own first, then ESIGN_FRAME_ANCESTORS, w
 
 test('a refused origin is not reported as a missing role',()=>{
  assert.match(describeError(new RequestError(403,'origin_not_allowed')),/ESIGN_FRAME_ANCESTORS/);
- assert.equal(describeError(new RequestError(403,'forbidden')),'Your role in E-sign doesn\'t allow that.');
+ assert.equal(describeError(new RequestError(403,'forbidden')),'Your role in Esign doesn\'t allow that.');
 });

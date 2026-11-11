@@ -24,9 +24,9 @@ Input: `$ARGUMENTS`.
    the run through the captured-mail page, as `@example.test` people. Google sign-in is off locally; never use a
    real Google, SSO, GitHub or AI-client account.
 2. **No real outside services.** The one outside call allowed is Cloudflare's Turnstile test widget, which the
-   local sign-up and sign-in forms load (its test keys always pass). E-sign's seal needs AWS KMS and a timestamp
+   local sign-up and sign-in forms load (its test keys always pass). Esign's seal needs AWS KMS and a timestamp
    authority, and verifying a domain needs DNS-over-HTTPS: those steps are `MANUAL`. Never type a real key, token
-   or password. The run's own secrets (`GATEWAY_SECRET_KEY`, E-sign's local settings) are generated for the run and
+   or password. The run's own secrets (`GATEWAY_SECRET_KEY`, Esign's local settings) are generated for the run and
    stay in its folder. (`git` and `gh`, signed in as they are, are only for reading and recording this PR.)
 3. **Nothing leaves the machine but the PR's record.** The local gateway captures every mail (`SITE_ENV=test`) at
    `/__insulin/dev/mail` instead of sending it. A credential stored on an integrations page during the run names an
@@ -111,13 +111,13 @@ Report the split, for example `captable: browser (holder view) · api (a Viewer 
 |---|---|---|---|
 | Gateway | `startDev` (Phase 1), on port 8797: `http://insulinapps.localhost:8797/`, docs at `/docs/`, mail at `/__insulin/dev/mail`; with no app, a stub app at `captable.insulinapps.localhost` echoes the identity headers it gets | Signed up during the run: an Owner who creates the organization, then people invited as Admin, Editor or Viewer, or to specific apps with an app role or a custom role | `npm test` in `.github/hosting/gateway/` (Miniflare) |
 | `captable` | Built, then behind the gateway: `http://captable.insulinapps.localhost:8797/` | The run's Owner (Admin in every app), an Editor, and a Viewer, who sees only their own holdings, matched by e-mail | `TZ=UTC npm test`; the workerd smoke (`.github/scripts/workerd-smoke/`, `node smoke.mjs`) |
-| `esign` | Built, then behind the gateway over https, with E-sign's local settings (Phase 1): `https://esign.insulinapps.localhost:8797/` | Members as above; signers have no account and reach the public paths with codes from the captured mail | `TZ=UTC npm test` (its editor test drives Chrome) |
+| `esign` | Built, then behind the gateway over https, with Esign's local settings (Phase 1): `https://esign.insulinapps.localhost:8797/` | Members as above; signers have no account and reach the public paths with codes from the captured mail | `TZ=UTC npm test` (its editor test drives Chrome) |
 | Public docs | `/docs/` on the local gateway, signed out | Nobody | The gateway's `npm run check:docs` |
 | CI/CD | None: GitHub Actions don't run here | None | `node --test .github/scripts/*.test.mjs`; `actionlint`; the release and deploy go in the checks after the merge (Phase 5) |
 
 - The READMEs are the source. Where one disagrees with this table, follow the README, and say so.
 - Port 8797 keeps the run apart from a developer's `npm run dev` on 8787.
-- **What can't run locally:** E-sign's seal (AWS KMS and a timestamp authority), so an envelope never completes;
+- **What can't run locally:** Esign's seal (AWS KMS and a timestamp authority), so an envelope never completes;
   verifying a domain (DNS-over-HTTPS); Google sign-in, SAML or OIDC against a real identity provider; a real AI
   client's connector. Those plans are `MANUAL`, unless the gateway's or the app's committed tests cover them with
   their stubs (Tier 1), and they go into the checks after the deploy.
@@ -158,9 +158,9 @@ Skip with `--plans-only`.
    await startDev({ apps: ['captable'], port: '8797', state: process.env.STATE,
      gatewayVars: { GATEWAY_SECRET_KEY: process.env.KEY, ORG_REQUEST_EMAIL: 'support@example.com' } })"
    ```
-   **E-sign** needs the stack over https (its embedded editor accepts only its own https origin) and its local
+   **Esign** needs the stack over https (its embedded editor accepts only its own https origin) and its local
    settings to send codes. Write `$D/stack.mjs`, which starts the stack as `.github/hosting/docs/screenshots.mjs`'s
-   `main()` does: `https: true`; E-sign's `appVars` with a run-own `ESIGN_OTP_KEY`, a placeholder
+   `main()` does: `https: true`; Esign's `appVars` with a run-own `ESIGN_OTP_KEY`, a placeholder
    `ESIGN_KMS_KEY_ARN`, `ESIGN_FRAME_ANCESTORS` set to its own origin, `SUGER_APP_TOKEN` from `appToken` in
    `.github/scripts/deploy-apps.mjs`, and `SUGER_MAIL_URL` at a relay proxy like its `startRelayProxy`. Run it with
    `run_in_background`. Note each started task in `$D/started.md`.
@@ -227,7 +227,7 @@ Skip with `--plans-only`. In this order:
 
 1. **Tier 1, the PR's own tests:** the `T` plans, in the browser or with `curl`. Then each test the PR adds or
    changes, run on its own: in the gateway, `npm test -- --test-name-pattern '<its name>'`; in Cap Table,
-   `TZ=UTC npx vitest run <file>`; in E-sign, `TZ=UTC node --test test/<file>`.
+   `TZ=UTC npx vitest run <file>`; in Esign, `TZ=UTC node --test test/<file>`.
 2. **Tier 2, edge cases:** the `E` plans, and the `P2` plans.
 3. **Tier 3, regression:** each touched area's whole committed suites, from the table, with no retries. Don't stop
    at a failure. Before blaming the PR, check whether the failure also happens where the branch started: run the

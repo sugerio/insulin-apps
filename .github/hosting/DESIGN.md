@@ -428,7 +428,7 @@ The deploy reads these with `list-apps.mjs` and refuses a malformed list; the ga
 
 ### 8.1 Public paths
 
-Some apps serve people who have no account and never will, such as an e-sign recipient who signs on a page that a
+Some apps serve people who have no account and never will, such as an Esign recipient who signs on a page that a
 host product frames. Such paths are listed in `insulin.publicPaths`, at most ten. A request path matches an entry if
 it equals the entry, starts with it when the entry ends in `/`, or starts with `entry/` when it doesn't. A path whose
 segments hide a dot segment or a slash in their encoding never matches. An entry may not be `/`, `/api` or `/api/`,
@@ -439,7 +439,7 @@ On a public path the gateway looks at no session and no token, and the app gets 
 `x-suger-access-via: public` only: no person, organization, role or permissions, even when a signed-in person or a
 token sent the request. Incoming `x-suger-*` headers, the gateway's cookies and `Authorization` are removed as always.
 HTML gets no account bar, the app's own headers (its CSP and `frame-ancestors`) are kept, and requests are limited per
-IP address (`RL_APP`). A request that isn't GET or HEAD (an e-sign code exchange, a code sent or checked) also counts
+IP address (`RL_APP`). A request that isn't GET or HEAD (an Esign code exchange, a code sent or checked) also counts
 against a stricter limit per app and IP address, `RL_PUBLIC` (60 a minute suggested), and gets 429
 `{ "error": "rate_limited" }` with `Retry-After: 60` past it, while reading goes on. That is defence in depth: the app
 still limits what its codes allow. The gateway's own paths always win over a public path.
@@ -514,7 +514,7 @@ mail to retry) declares one path in `insulin.scheduled`, and the gateway calls i
   is present, and treats a request marked `schedule` as nobody everywhere else.
 - **What the app does.** Its due work for every organization, since the tick belongs to none. It must be safe to
   repeat and to overlap with requests (the next tick picks up what one leaves), and should finish well within the
-  timeout, doing a bounded amount per tick. An app can keep a route of its own (E-sign's `POST /api/process-due`) for
+  timeout, doing a bounded amount per tick. An app can keep a route of its own (Esign's `POST /api/process-due`) for
   someone to finish their organization's due work at once.
 - **The daily cleanup** keeps its own cron, `17 3 * * *`: the gateway's retention cleanup runs on it and the tick
   doesn't.

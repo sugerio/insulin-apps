@@ -1,4 +1,4 @@
-// E-sign reaches the gateway's mail relay over the SUGER_GATEWAY service binding the deploy gives it: a Worker can't
+// Esign reaches the gateway's mail relay over the SUGER_GATEWAY service binding the deploy gives it: a Worker can't
 // fetch another Worker of the same zone through its public URL. Nitro on Workers puts the env on the request.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';

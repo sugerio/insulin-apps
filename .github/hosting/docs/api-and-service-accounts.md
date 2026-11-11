@@ -172,7 +172,7 @@ role may use. One entry of Cap Table's catalog, for example:
 | `query`, `body` | A JSON Schema of the query parameters or of the body, or `null` |
 | `idempotencyKey` | Whether the request needs an `Idempotency-Key` header |
 
-Each app's docs describe its API in words: [Cap Table](/docs/captable/overview), [E-sign](/docs/esign/overview).
+Each app's docs describe its API in words: [Cap Table](/docs/captable/overview), [Esign](/docs/esign/overview).
 
 ### Errors from the gateway
 

@@ -1,5 +1,5 @@
 // Plays the hosting platform's mail relay (src/app/server/esign/mail.ts) for tests: the bindings
-// that point E-sign at it, and every message it was asked to send. It answers `status()`: 202 once
+// that point Esign at it, and every message it was asked to send. It answers `status()`: 202 once
 // sent, or the relay's refusals (502 `send_failed`, 503 while unavailable, 429 over a limit).
 
 export type RelayedMail = { url: string; headers: Headers; body: { to: string; subject: string; text: string } };

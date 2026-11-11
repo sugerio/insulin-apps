@@ -10,7 +10,7 @@ or an operations, finance or IT lead. Each step takes a minute or two.
 
 Insulin Apps is one place to sign in for every app on `insulinapps.com`. You sign in once at `https://insulinapps.com`,
 and the same account, organization and teammates work in every app, such as [Cap Table](/docs/captable/overview) and
-[E-sign](/docs/esign/overview). Each app runs at its own address, like `https://captable.insulinapps.com`.
+[Esign](/docs/esign/overview). Each app runs at its own address, like `https://captable.insulinapps.com`.
 
 ![The Insulin Apps landing page, with Create an account and Sign in buttons above the list of apps](/docs/assets/screenshots/platform-landing.png "The landing page at insulinapps.com")
 
@@ -119,7 +119,7 @@ Which access should you choose? A quick guide:
 | Someone who manages people and integrations | **Admin** |
 | Someone who does the day-to-day work in every app | **Editor** |
 | Someone who only needs to look, such as a board member | **Viewer** |
-| An outside lawyer who only needs E-sign, or an employee who only needs to see their own equity | **Specific apps** |
+| An outside lawyer who only needs Esign, or an employee who only needs to see their own equity | **Specific apps** |
 
 Admins can invite anyone except owners. The details are in
 [Organizations and roles](/docs/platform/organizations-and-roles).
@@ -151,7 +151,7 @@ Your home page at `https://insulinapps.com`, **Apps in** your active organizatio
 Choose the app's **Open** button on its card (for example **Open Cap Table**), or go straight to its address, such as
 `https://captable.insulinapps.com`.
 
-![The signed-in home page, Apps in Northwind Robotics, with a card for Cap Table and one for E-sign](/docs/assets/screenshots/platform-home.png "Your home page")
+![The signed-in home page, Apps in Northwind Robotics, with a card for Cap Table and one for Esign](/docs/assets/screenshots/platform-home.png "Your home page")
 
 Inside an app, a small account bar from Insulin Apps shows who you are and which organization you are in. From it you
 can switch organization, open the app's **People**, **Integrations** and **Connect AI** settings, go back to **All
@@ -159,7 +159,7 @@ apps**, open your **Account** or **Sign out**.
 
 The first time you open an app, it may ask you to set it up for your organization. For example, Cap Table asks how to
 start your company's records. The app's own docs explain this: [Cap Table](/docs/captable/overview),
-[E-sign](/docs/esign/overview).
+[Esign](/docs/esign/overview).
 
 If you see **You don't have access to** an app, your access in that organization is to specific apps only, and that app
 isn't one of them. Ask one of the organization's owners or admins.
@@ -201,4 +201,4 @@ The app then shows that organization's data. Apps keep each organization's data 
 - Let an AI agent such as Claude Code or Codex work in an app for you: open the app's **Connect AI** page, and see
   [AI agents](/docs/platform/ai-agents).
 - Connect your own software to an app: [API access with OAuth clients](/docs/platform/api-and-service-accounts).
-- Learn an app: [Cap Table](/docs/captable/overview), [E-sign](/docs/esign/overview).
+- Learn an app: [Cap Table](/docs/captable/overview), [Esign](/docs/esign/overview).

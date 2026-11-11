@@ -26,7 +26,7 @@ export const templates: DocTopic = {
       body: [
         p('On ', h(PageLink, { to: '/templates' }, 'Templates'), ', choose the PDF, name the roles, then:'),
         ul(
-          [b('Upload with a signature page. '), 'Signers sign on a page E-sign adds after the document\'s last page, one after another.'],
+          [b('Upload with a signature page. '), 'Signers sign on a page Esign adds after the document\'s last page, one after another.'],
           [b('Upload and place fields. '), 'The field editor opens, so you can put each role\'s signature, title and date exactly where they belong in the document.'],
         ),
       ],
@@ -46,7 +46,7 @@ export const templates: DocTopic = {
           rows: [
             ['Signature', 'Their signature, from the full name they type. Each role needs exactly one. A long name can extend to the right of the field.'],
             ['Title', 'Their title, which they type.'],
-            ['Date signed', 'Nothing: E-sign fills in the date they sign.'],
+            ['Date signed', 'Nothing: Esign fills in the date they sign.'],
           ],
         }),
         p('The editor won\'t save until every role has its one Signature field.'),

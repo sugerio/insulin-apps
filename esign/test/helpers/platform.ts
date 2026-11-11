@@ -1,4 +1,4 @@
-// What the Insulin platform gives E-sign, for tests: the identity headers the gateway (or the
+// What the Insulin platform gives Esign, for tests: the identity headers the gateway (or the
 // console) sends, the migrations as the deployment applies them, and the D1 object store.
 import { rmSync } from 'node:fs';
 import { copyFile, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';

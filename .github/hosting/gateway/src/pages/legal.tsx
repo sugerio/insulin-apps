@@ -88,7 +88,17 @@ export function privacyPage(ctx: Context): Html {
         <li>
           <strong>Organizations:</strong> the organizations you create or join, your role in each (or the apps you were given and
           your role in each), the custom roles owners define, and invitations: the email addresses people invite, the access
-          offered, who sent the invitation, and whether it was accepted.
+          offered, who sent the invitation, and whether it was accepted. Each organization also records its owner domain: the
+          domain of the email address of the person who created it (example.com for an address at mail.example.com) or, for
+          an address at a public email provider such as gmail.com, that address without any +tag (and, at Gmail, without
+          dots). It limits how many organizations each domain can have. Whether owners allow invitations only to their
+          verified email domains is recorded too.
+        </li>
+        <li>
+          <strong>Requests for more organizations, if you send one:</strong> we email Insulin Apps support your name, your email
+          address, your owner domain and how many organizations it has, the organization name you want and the reason you give.
+          Support replies to your email address. We record your account id and a one-way hash of your owner domain with the
+          time, to allow three requests a day per person and per owner domain.
         </li>
         <li>
           <strong>Single sign-on, if your organization sets it up:</strong> the email domains it claimed and their verification
@@ -99,7 +109,8 @@ export function privacyPage(ctx: Context): Html {
         <li>
           <strong>AI agents and API access:</strong> the AI agents (MCP clients) you connect: the name and return address each
           gave itself, and each permission you allowed (you, the organization, the app, when it was allowed and last used).
-          Service accounts that an app&apos;s admins create: their name, role, who created them and when they were last used.
+          Service accounts (an app&apos;s OAuth clients) that an organization&apos;s owners and admins create: their name, role, who
+          created them, when their secret was rotated and when they were last used.
           Tokens and client secrets are stored as hashes only. Credentials for outside services that admins store for an app
           are encrypted and never shown again.
         </li>
@@ -110,7 +121,8 @@ export function privacyPage(ctx: Context): Html {
         </li>
         <li>
           <strong>Email records:</strong> for each email we send, a one-way hash of the recipient&apos;s address, the kind of email
-          and the time, so we can limit how many emails one address receives.
+          and the time (for a request for more organizations, also your account id and a one-way hash of your owner domain), so
+          we can limit how many emails one address receives and how many requests one person, or one owner domain, sends.
         </li>
         <li>
           <strong>Your IP address, briefly:</strong> used to rate-limit sign-in, sign-up and other account requests, and sent to
@@ -130,7 +142,8 @@ export function privacyPage(ctx: Context): Html {
           to sign up with your address.
         </li>
         <li>To let organizations work together: membership, roles, custom roles, invitations and single sign-on.</li>
-        <li>To let the AI agents you connect, and the service accounts admins create, use the apps with the access given.</li>
+        <li>To limit how many organizations each email domain can have, and to answer requests for more.</li>
+        <li>To let the AI agents you connect, and the service accounts owners and admins create, use the apps with the access given.</li>
         <li>To run the apps you use for your organization.</li>
         <li>To limit abuse of the service: rate limits, the bot check and email limits.</li>
       </ul>
@@ -142,6 +155,10 @@ export function privacyPage(ctx: Context): Html {
           <strong>Cloudflare</strong> runs the service and the apps (Cloudflare Workers), stores their data (Cloudflare D1), runs the
           bot check on our forms (Cloudflare Turnstile) and delivers our emails (Cloudflare Email Service). See{" "}
           <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare&apos;s privacy policy</a>.
+        </li>
+        <li>
+          <strong>Insulin Apps support</strong>, only if you ask for more organizations: they receive your request by email, as
+          described above, and reply to you.
         </li>
         <li>
           <strong>Google</strong>, only if you choose &quot;Continue with Google&quot;: Google then knows you signed in to the service.

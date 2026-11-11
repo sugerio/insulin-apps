@@ -14,6 +14,11 @@ export interface Env {
   RL_APP?: RateLimit
   /** Per-IP throttle on requests to an app's public paths that aren't GET or HEAD, on top of RL_APP's. */
   RL_PUBLIC?: RateLimit
+  /**
+   * Workers Static Assets: the docs' images (.github/hosting/docs/assets/), with run_worker_first so the gateway handles
+   * every request and serves only /docs/assets/* from it (src/docs.ts). Without it the docs show no images.
+   */
+  DOCS_ASSETS?: Fetcher
 
   SITE_DOMAIN?: string
   /**
@@ -29,6 +34,11 @@ export interface Env {
   EMAIL_FROM?: string
   /** Optional contact address shown on the landing, privacy and terms pages. */
   SUPPORT_EMAIL?: string
+  /**
+   * Optional address of Insulin Apps support that receives requests for more organizations (DESIGN.md §3.1); an
+   * e-mail address, or it is ignored.
+   */
+  ORG_REQUEST_EMAIL?: string
   /** Base64 of 32 random bytes: encrypts stored secrets and derives the apps' integration tokens. Optional. */
   GATEWAY_SECRET_KEY?: string
   /** Local development and tests only (`test`); the deploy never sets it. */

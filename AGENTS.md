@@ -19,6 +19,15 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
 
    Cap Table is the reference: `captable/src/app/pages/docs/` and `captable/src/app/components/Docs.tsx`. Repeat this
    rule in the app's own `AGENTS.md`, because the Insulin console copies only the app's directory into a new app.
+
+   **Public docs, too.** An app's public documentation at `https://insulinapps.com/docs/<app>/` lives in
+   `<app>/docs/public/`, one Markdown page per topic with front matter (`title`, `description`, `order`), written for
+   people and AI agents: what the app does, setting it up, the main tasks, what each role sees, its API (as
+   `GET /api/catalog` publishes it) and its domain background, labelled general information, not advice. It is updated
+   in the same change as the behaviour it describes, like the in-app Docs, with synthetic data only. Then run
+   `npm run build:docs` in `.github/hosting/gateway/` and commit the regenerated `src/assets/docs-content.ts`
+   (`npm run check:docs` fails while it is stale). The platform's own pages are in `.github/hosting/docs/`; the format
+   is in the gateway's README under "The public docs".
 3. **UI.** New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default theme (the hosting gateway in
    `.github/hosting/gateway/` follows it). Apps that already have their own design keep it until they are restyled.
 4. **Public repository.** Synthetic data only (example.com or `.test` addresses, fictional people and companies), in
@@ -30,16 +39,17 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
 ## Accounts, roles and access
 
 **One place signs people in.** Sign-up, sign-in, MFA, Google and enterprise SSO (SAML, OIDC, SCIM), OAuth for AI agents
-(MCP) and for service accounts all live at `https://insulinapps.com/`, in the gateway (`.github/hosting/gateway/`). An
-app never adds sign-in screens, sessions, passwords, cookies or OAuth endpoints of its own: it reads who is calling with
-`getCurrentUser(request)` from `@fours/app/server`.
+(MCP) and for API clients (service accounts) all live at `https://insulinapps.com/`, in the gateway
+(`.github/hosting/gateway/`). An app never adds sign-in screens, sessions, passwords, cookies or OAuth endpoints of its
+own: it reads who is calling with `getCurrentUser(request)` from `@fours/app/server`.
 
 **People and roles are managed in one place.** An organization's people, roles and custom roles are at
-`insulinapps.com/settings/users` and `/settings/roles`; each app's people and integrations are at
-`insulinapps.com/apps/<app>/settings/users` and `/apps/<app>/settings/integrations`, which
-`<app>.insulinapps.com/settings/users` and `/settings/integrations` redirect to. They are on the apex so that code an
-app serves can never read them or post their forms. Apps don't build their own people, role or integration
-management.
+`insulinapps.com/settings/users` and `/settings/roles`; each app's settings are under
+`insulinapps.com/apps/<app>/settings/`: `users` (people), `integrations` (stored credentials), `api` (API access: OAuth
+clients) and `connect-ai` (Connect AI), which the same paths on `<app>.insulinapps.com` (`/settings/users`,
+`/settings/integrations`, `/settings/api`, `/settings/connect-ai`) redirect to. They are on the apex so that code an
+app serves can never read them or post their forms. Apps don't build their own people, role, integration, API client
+or AI agent management.
 
 **Roles.** Each member has one organization role or access to specific apps, never both:
 
@@ -67,11 +77,18 @@ and `x-suger-access-via`.
 - **Enforce on the server.** Hiding a button isn't access control.
 
 **AI agents and API clients.** Each app is its own MCP server at `https://<app>.insulinapps.com/mcp`, with its own OAuth
-client registration per agent, and service accounts call `https://<app>.insulinapps.com/api/...` with a
-client-credentials token.
+client registration per agent, and API clients (OAuth clients, stored as service accounts) call
+`https://<app>.insulinapps.com/api/...` with a client-credentials token.
 
-- **Same role as the person.** An agent acts with its person's current role; a service account has the role an app admin
-  gave it. The app sees the same headers as for a browser, with `x-suger-access-via: mcp` or `api`, and a
+- **Connect AI.** Every app's Connect AI page (`insulinapps.com/apps/<app>/settings/connect-ai`, open to everyone who
+  can use the app) gives the MCP server and the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and
+  ChatGPT, and lists the person's agents; the organization's owners and admins see and disconnect everyone's there.
+- **API clients are the organization's.** Only the organization's Owners and Admins create, rename, change the role of,
+  rotate and delete an app's OAuth clients, on its API access page (`/apps/<app>/settings/api`); an app's Admins by
+  grant can't. Everyone who can use the app sees the list, never a secret. Rotating keeps the previous secret valid for
+  24 hours. Stored credentials stay with the app's admins, on the integrations page.
+- **Same role as the person.** An agent acts with its person's current role; an API client has the role an owner or
+  admin gave it. The app sees the same headers as for a browser, with `x-suger-access-via: mcp` or `api`, and a
   `User-Agent` naming the client (`Insulin Apps MCP: <client>` or `Insulin Apps API: <account>`) for its audit trail.
 - **Every API serves agents and clients alike**, under the same rules as the browser. The exception: mutations of
   people, roles, billing and integrations. They stay browser-only and owner- or admin-only; if an app implements any of
@@ -79,8 +96,8 @@ client-credentials token.
 - **Publish your API** at `GET /api/catalog` (`{ endpoints: [{ method, path, summary, query, body, idempotencyKey }] }`,
   only what the caller may use) so the MCP `endpoints` tool can show it, and keep it in step with the routes.
 - **Paths the gateway keeps on an app host.** Tokens reach only `/api/*`, never `/api/__suger/*`. Don't use these paths
-  in an app: `/__insulin/*`, `/settings/users` and `/settings/integrations` (the gateway redirects them to the apex),
-  `/mcp`, `/.well-known/oauth-*`.
+  in an app: `/__insulin/*`, `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`
+  (the gateway redirects them to the apex), `/mcp`, `/.well-known/oauth-*`.
 
 **Outside services.** Credentials for outside APIs are stored by the platform on the app's integrations page. Call the
 service with `integrationFetch(key)` from `@fours/app/server`, passing the request's `x-suger-organization-id`; never
@@ -109,12 +126,21 @@ never reads another's data.
 ## A new app
 
 - A top-level directory with `README.md`, `AGENTS.md` (including the Docs rule and the access rules above), `NOTICE`
-  when it bundles third-party material, and the in-app Docs.
+  when it bundles third-party material, the in-app Docs, and its public docs in `docs/public/` (the docs build fails
+  for an app without them).
 - Its roles mapped to the app's functions (what Admin, Editor and Viewer may do there), a permission catalog in
   `package.json` if it should support custom roles, and `GET /api/catalog` for AI agents.
 - A row in the app table of the root `README.md`.
-- A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name, paths and `app` input changed. The
-  shared pipeline runs its typecheck, tests, migration check and Cloudflare build.
+- A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name, paths and `app` input changed, and
+  that name added to the `workflows` list in `.github/workflows/release.yml`. The shared pipeline runs its typecheck,
+  tests, migration check and Cloudflare build.
+
+## Releases
+
+`.github/workflows/release.yml` makes every green push to `main` a release: it tags the commit `v0.1.1`, `v0.1.2`, …
+and publishes its GitHub Release (the root README's "Releases"). Never create, move or delete a `v*` tag, or publish
+or edit one of those releases, by hand or from another workflow. A workflow that runs on a push to `main` must be in
+release.yml's `workflow_run` list; `node .github/scripts/check-app-workflows.mjs` checks it.
 
 ## Before you finish
 

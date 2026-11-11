@@ -13,7 +13,7 @@ import {
   verifyPassword,
 } from '../src/crypto.ts'
 import { cookieValues, serializeCookie, setCookieName, withoutCookies } from '../src/http/cookies.ts'
-import { bindingName, isAppName, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig, isPublicPath, parsePublicPaths, publicPathProblem, scheduledProblem } from '../src/config.ts'
+import { bindingName, isAppName, isGatewayAppPath, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig, isPublicPath, parsePublicPaths, publicPathProblem, scheduledProblem } from '../src/config.ts'
 import { safeReturnTo } from '../src/http/return-to.ts'
 import { createContext } from '../src/context.ts'
 import { escapeHtml, html } from '../src/pages/html.ts'
@@ -271,6 +271,14 @@ test('configuration: app names, bindings, sender, and failing closed', () => {
   assert.equal(ok.config.apps[0].appId, 'insulin-apps-captable')
   assert.equal(ok.config.testMode, false)
   assert.equal(readConfig({ ...env, SITE_APPS: JSON.stringify(env.SITE_APPS) }).ok, true, 'SITE_APPS as a JSON string')
+  // The optional addresses: normalized when usable, ignored (never fatal) when not.
+  assert.equal(ok.config.orgRequestEmail, null)
+  assert.equal(readConfig({ ...env, ORG_REQUEST_EMAIL: ' Requests@Example.TEST ' }).config.orgRequestEmail, 'requests@example.test')
+  for (const unusable of ['not an address', 'two@@example.test', '   ']) {
+    const result = readConfig({ ...env, ORG_REQUEST_EMAIL: unusable })
+    assert.equal(result.ok, true, unusable)
+    assert.equal(result.config.orgRequestEmail, null, unusable)
+  }
   for (const [change, problem] of [
     [{ SITE_DOMAIN: undefined }, 'SITE_DOMAIN'],
     [{ TURNSTILE_SECRET_KEY: '' }, 'TURNSTILE_SECRET_KEY'],
@@ -446,6 +454,17 @@ test('public paths: the same rule as the deploy, matched at segment boundaries, 
   const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/settings/'] }] })
   assert.equal(refused.ok, false, 'a malformed list fails closed')
   assert.ok(refused.problems.includes('SITE_APPS[0].publicPaths[0]'))
+})
+
+test("the gateway's paths on an app host: its settings addresses (People, Integrations, API access, Connect AI) and below", () => {
+  for (const path of ['/settings/users', '/settings/users/', '/settings/users/invite', '/settings/integrations', '/settings/integrations/credentials',
+    '/settings/api', '/settings/api/', '/settings/api/clients', '/settings/connect-ai', '/settings/connect-ai/agents/x/disconnect']) {
+    assert.equal(isGatewayAppPath(path), true, path)
+  }
+  for (const path of ['/settings', '/settings/', '/settings/apis', '/settings/api-keys', '/settings/connect-ai-help', '/settings/profile', '/api/settings/api',
+    '/Settings/api', '/x/settings/api', '/']) {
+    assert.equal(isGatewayAppPath(path), false, path)
+  }
 })
 
 test("an app's scheduled path: one path under /api/, never reserved, never public; anything else fails closed", () => {

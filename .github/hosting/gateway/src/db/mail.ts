@@ -6,14 +6,15 @@ export const ORG_WINDOW_MS = 24 * 60 * 60 * 1000
 /**
  * Records an e-mail about to be sent, atomically checking the caps: at most RECIPIENT_LIMIT per recipient per hour and,
  * for invitations, ORG_INVITATION_LIMIT per organization per day. Returns the log row id, or null when a cap is reached.
- * Apps' mail (kind `app:*`) doesn't count here: it has its own allowance, so no app can use up the room the gateway's
- * own sign-in and security messages need.
+ * Apps' mail (kind `app:*`) and requests for more organizations (to support) don't count here: they have their own
+ * allowances, so neither can use up the room the gateway's own sign-in and security messages need.
  */
 export async function reserveMailSlot(db: D1Database, slot: { recipientHash: string; kind: string; orgId: string | null; now: number }): Promise<number | null> {
   const row = await db.prepare(
     `INSERT INTO mail_log (recipient_hash, kind, org_id, created_at)
      SELECT ?1, ?2, ?3, ?4
-     WHERE (SELECT COUNT(*) FROM mail_log WHERE recipient_hash = ?1 AND kind NOT LIKE 'app:%' AND created_at > ?4 - ?5) < ?6
+     WHERE (SELECT COUNT(*) FROM mail_log WHERE recipient_hash = ?1 AND kind NOT LIKE 'app:%' AND kind <> 'org_request'
+         AND created_at > ?4 - ?5) < ?6
        AND (?3 IS NULL OR (SELECT COUNT(*) FROM mail_log WHERE org_id = ?3 AND kind = 'invitation' AND created_at > ?4 - ?7) < ?8)
      RETURNING id`,
   ).bind(slot.recipientHash, slot.kind, slot.orgId, slot.now, RECIPIENT_WINDOW_MS, RECIPIENT_LIMIT, ORG_WINDOW_MS, ORG_INVITATION_LIMIT)
@@ -44,6 +45,38 @@ export async function reserveAppMailSlot(db: D1Database, slot: { recipientHash: 
   ).bind(slot.recipientHash, slot.kind, slot.orgId, slot.now, RECIPIENT_WINDOW_MS, APP_RECIPIENT_LIMIT, ORG_WINDOW_MS, APP_MAIL_DAILY_LIMIT, APP_MAIL_GLOBAL_DAILY_LIMIT)
     .first<{ id: number }>()
   return row?.id ?? null
+}
+
+/** Requests for more organizations one person may send to support in a day (DESIGN.md §3.1). */
+export const ORG_REQUEST_DAILY_LIMIT = 3
+/** Requests for more organizations support takes in a day for one owner domain, from everyone there together. */
+export const ORG_REQUEST_DOMAIN_DAILY_LIMIT = 3
+/** Requests for more organizations support takes in a day from everyone. */
+export const ORG_REQUEST_GLOBAL_DAILY_LIMIT = 50
+
+/**
+ * Records a request for more organizations about to be sent to support (kind `org_request`, with the requester's user
+ * id and their owner domain's hash), atomically checking the daily caps: the requester's, their owner domain's and
+ * everyone's. Returns the log row id, or null when a cap is reached.
+ */
+export async function reserveOrgRequestSlot(db: D1Database, slot: { recipientHash: string; userId: string; ownerDomainHash: string; now: number }): Promise<number | null> {
+  const row = await db.prepare(
+    `INSERT INTO mail_log (recipient_hash, kind, org_id, user_id, owner_domain_hash, created_at)
+     SELECT ?1, 'org_request', NULL, ?2, ?3, ?4
+     WHERE (SELECT COUNT(*) FROM mail_log WHERE user_id = ?2 AND kind = 'org_request' AND created_at > ?4 - ?5) < ?6
+       AND (SELECT COUNT(*) FROM mail_log WHERE owner_domain_hash = ?3 AND kind = 'org_request' AND created_at > ?4 - ?5) < ?7
+       AND (SELECT COUNT(*) FROM mail_log WHERE kind = 'org_request' AND created_at > ?4 - ?5) < ?8
+     RETURNING id`,
+  ).bind(slot.recipientHash, slot.userId, slot.ownerDomainHash, slot.now, ORG_WINDOW_MS, ORG_REQUEST_DAILY_LIMIT,
+    ORG_REQUEST_DOMAIN_DAILY_LIMIT, ORG_REQUEST_GLOBAL_DAILY_LIMIT).first<{ id: number }>()
+  return row?.id ?? null
+}
+
+/** The requests for more organizations this person sent in the last day, to word a refusal. */
+export async function countOrgRequests(db: D1Database, userId: string, now: number): Promise<number> {
+  const row = await db.prepare("SELECT COUNT(*) AS count FROM mail_log WHERE user_id = ?1 AND kind = 'org_request' AND created_at > ?2")
+    .bind(userId, now - ORG_WINDOW_MS).first<{ count: number }>()
+  return row?.count ?? 0
 }
 
 export async function releaseMailSlot(db: D1Database, id: number): Promise<void> {

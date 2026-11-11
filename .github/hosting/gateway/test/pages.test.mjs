@@ -29,18 +29,46 @@ test('the landing page presents the hosted apps, with sign-in links, and links t
   assert.ok(page.text.includes('href="https://github.com/example/insulin-apps/issues"'), 'contact falls back to the repository issues')
 })
 
-test('signed in, / is the home page with the organizations and their apps, and signs out on its own host', async () => {
+test('signed in, / is the home page with the active organization\'s apps, and signs out on its own host', async () => {
   const person = await h.user({ name: 'Landing Person' })
   await h.org(person.client, 'Landing Org')
   const page = await person.client.get(h.url('apex', '/'))
-  assert.match(page.text, /<h1>Welcome, Landing Person<\/h1>/)
-  assert.match(page.text, /<h2>Apps in Landing Org<\/h2>/)
+  assert.match(page.text, /<h1>Apps in Landing Org<\/h1>/, "the apps section's title is the page's heading")
+  assert.match(page.text, /<h2>Cap Table<\/h2>/, 'an app card right under it')
+  // The organization switcher in the top bar lists the organizations and creates one: the page doesn't repeat it.
+  assert.doesNotMatch(page.text, /Welcome, Landing Person/)
+  assert.doesNotMatch(page.text, /<h2>Your organizations<\/h2>/)
+  assert.doesNotMatch(page.text, /Make active/)
+  const main = /<main\b[\s\S]*<\/main>/.exec(page.text)[0]
+  assert.doesNotMatch(main, /Create an organization/, 'only the top bar offers it')
+  assert.match(/<header\b[\s\S]*?<\/header>/.exec(page.text)[0], /href="http:\/\/insulinapps\.localhost\/orgs\/new"[^>]*>[\s\S]*?Create an organization/)
   assert.equal(page.headers.get('x-robots-tag'), 'noindex', 'the home page is private')
   assert.match(page.text, /<form action="\/logout" method="post">/)
   const out = await person.client.post(h.url('apex', '/logout'), {})
   assert.equal(out.status, 303)
   const after = await person.client.get(h.url('apex', '/'))
   assert.match(after.text, /<title>Open-source apps, hosted · Insulin Apps<\/title>/, 'the landing page again')
+})
+
+test('signed in without an organization, / shows one short card: create one, or the invitations waiting', async () => {
+  const person = await h.user({ name: 'Orgless Person' })
+  const page = await person.client.get(h.url('apex', '/'))
+  assert.equal(page.status, 200)
+  assert.equal(page.text.match(/<h1[\s>]/g)?.length, 1)
+  assert.match(page.text, /<h1>Your apps<\/h1>/)
+  assert.match(page.text, /<h2>You&#x27;re not in an organization yet<\/h2>/)
+  assert.ok(page.text.includes(`ask someone to invite ${person.email}`))
+  assert.match(page.text, /<a [^>]*href="\/orgs\/new">[\s\S]*?Create an organization<\/a>/)
+  assert.doesNotMatch(page.text, /See your invitations/, 'no invitations to point to')
+
+  const owner = await h.user()
+  const orgId = await h.org(owner.client, 'Inviting Org')
+  assert.equal((await owner.client.post(h.url('auth', `/orgs/${orgId}/invitations`), { email: person.email, role: 'VIEWER' })).status, 303)
+  const invited = await person.client.get(h.url('apex', '/'))
+  assert.match(invited.text, /Accept one of your invitations below/)
+  assert.match(invited.text, /<a [^>]*href="#invitations">See your invitations<\/a>/)
+  assert.match(invited.text, /<div data-slot="card" class="[^"]*" id="invitations">/)
+  assert.match(invited.text, /<strong>Inviting Org<\/strong>/)
 })
 
 test('the privacy notice covers what is collected, why, processors, retention, deletion, children, changes and contact', async () => {
@@ -53,7 +81,8 @@ test('the privacy notice covers what is collected, why, processors, retention, d
   for (const fact of ['insulin_session', '__Host-insulin_oauth', 'PBKDF2', 'Google account id', 'Cloudflare Turnstile', 'Cloudflare D1', 'Cloudflare Email Service',
     'IP address', 'invited email|email addresses people invite', 'No ads', 'not reset', 'under 16', 'Delete my account', 'never issued again',
     '__Host-insulin_mfa', '__Host-insulin_sso', 'recovery codes as hashes only', 'identity provider', 'AI agents', 'Service accounts',
-    'encrypted and never shown again', 'lasts 30 days', 'DNS-over-HTTPS']) {
+    'encrypted and never shown again', 'lasts 30 days', 'DNS-over-HTTPS', 'records its owner domain', 'Requests for more organizations',
+    'your name, your email\\s+address, your owner domain', 'the reason you give', 'Insulin Apps support</strong>, only if you ask for more organizations']) {
     assert.match(page.text, new RegExp(fact), fact)
   }
   assert.ok(page.text.includes('href="http://insulinapps.localhost/account"'))

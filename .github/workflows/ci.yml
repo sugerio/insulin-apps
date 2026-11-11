@@ -8,9 +8,11 @@ on:
 permissions:
   contents: read
 
+# A newer commit cancels a pull request's run, but every push to main finishes its own: a push whose runs all pass is a
+# release (release.yml), and a cancelled one gets no version.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   public-content:

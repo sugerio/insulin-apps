@@ -163,8 +163,9 @@ test('a verified signer may decline with a reason: the envelope is DECLINED for 
     const declined = await h.req('/api/public/signing/decline', h.json({ reason: 'Our legal team needs changes to clause 4.' }, s.headers!));
     assert.equal(declined.status, 200);
     assert.deepEqual(await declined.json(), { status: 'DECLINED' });
-    const envelope = await (await h.req(`/api/envelopes/${s.id}`, { headers: h.auth })).json() as { status: string };
+    const envelope = await (await h.req(`/api/envelopes/${s.id}`, { headers: h.auth })).json() as { status: string; tasks: { id: string; status: string }[] };
     assert.equal(envelope.status, 'DECLINED');
+    assert.equal(envelope.tasks.find(t => t.id === s.taskId)?.status, 'ACTIVE', 'the signer who declined keeps their status; the envelope says it ended');
     const event = (await auditTrail(h.db, s.id!)).find(e => e.type === AUDIT.declined);
     assert.equal(event?.taskId, s.taskId);
     assert.deepEqual(event?.detail, { reason: 'Our legal team needs changes to clause 4.' });

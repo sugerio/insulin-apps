@@ -82,8 +82,8 @@ test('specific-apps access: the app sees the role given for it; another app is c
   assert.equal(page.status, 403)
   assert.match(page.text, /You don&#x27;t have access to Cap Table/)
   const home = await ledgerOnly.client.get(h.url('apex', '/'))
-  assert.match(home.text, /<h3>Ledger<\/h3>/)
-  assert.doesNotMatch(home.text, /<h3>Cap Table<\/h3>/, 'the home page lists only their apps')
+  assert.match(home.text, /<h2>Ledger<\/h2>/)
+  assert.doesNotMatch(home.text, /<h2>Cap Table<\/h2>/, 'the home page lists only their apps')
 
   const people = await ledgerOnly.client.get(h.url('auth', `/settings/users?org=${orgId}`))
   assert.match(people.text, /<h2>Your apps<\/h2>/)
@@ -229,6 +229,14 @@ test("the app's own host never serves its settings: a page view goes to the apex
   assert.equal(old.status, 302)
   assert.equal(old.location, h.url('apex', '/apps/captable/settings/users?notice=removed'))
   assert.equal((await owner.client.get(h.url('captable', '/settings/integrations'))).location, h.url('apex', '/apps/captable/settings/integrations'))
+  for (const path of ['/settings/api', '/settings/api/clients', '/settings/connect-ai', '/settings/connect-ai?notice=disconnected']) {
+    const moved = await owner.client.get(h.url('captable', path))
+    assert.equal(moved.status, 302, path)
+    assert.equal(moved.location, h.url('apex', `/apps/captable${path}`), path)
+  }
+  for (const path of ['/settings/apis', '/settings/connect-ai-help', '/settings']) {
+    assert.equal((await owner.client.get(h.url('captable', path))).status, 200, `${path} is the app's own`)
+  }
   // What code on the app's own pages could send with the visitor's cookie: a same-origin fetch to the old address, and
   // a cross-origin one to the apex.
   const invite = { org_id: orgId, email: uniqueEmail('smuggled'), role: 'ADMIN' }
@@ -238,8 +246,12 @@ test("the app's own host never serves its settings: a page view goes to the apex
     origin: h.url('captable').replace(/\/$/, ''), headers: { 'Sec-Fetch-Site': 'same-site', 'Sec-Fetch-Mode': 'cors' },
   })
   assert.equal(crossOrigin.status, 403, "the apex refuses a post from the app's origin")
-  const account = await owner.client.post(h.url('captable', '/settings/integrations/service-accounts'), { org_id: orgId, name: 'Smuggled', role: 'ADMIN' })
+  const account = await owner.client.post(h.url('captable', '/settings/api/clients'), { org_id: orgId, name: 'Smuggled', role: 'ADMIN' })
   assert.equal(account.status, 405)
+  const crossClient = await owner.client.post(h.url('apex', '/apps/captable/settings/api/clients'), { org_id: orgId, name: 'Smuggled', role: 'ADMIN' }, {
+    origin: h.url('captable').replace(/\/$/, ''), headers: { 'Sec-Fetch-Site': 'same-site', 'Sec-Fetch-Mode': 'cors' },
+  })
+  assert.equal(crossClient.status, 403, "nor does the apex take an OAuth client from the app's origin")
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM invitations WHERE org_id = ?1', orgId))[0].n, 0)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM service_accounts WHERE org_id = ?1', orgId))[0].n, 0)
   assert.equal((await owner.client.get(h.url('apex', '/apps/no-such-app/settings/users'))).status, 404)

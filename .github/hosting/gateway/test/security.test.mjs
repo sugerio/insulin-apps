@@ -49,6 +49,23 @@ test('auth POSTs take small url-encoded forms only', async () => {
   assert.equal((await h.client().post(login, { email: 'x'.repeat(17 * 1024) })).status, 413)
 })
 
+test('a refused POST leaves the connection usable: the request after it is answered', async () => {
+  // Refused before its body was read, a POST used to close the connection under the next request about one time in
+  // ten ("fetch failed"); the gateway now drains what a handler leaves unread.
+  const login = h.url('auth', '/login')
+  for (const [refusal, status] of [
+    [(client) => client.post(login, {}, { origin: 'http://evil.example', body: 'x'.repeat(2) }), 403],
+    [(client) => client.post(login, {}, { origin: 'http://evil.example', body: 'x'.repeat(70_000) }), 403],
+    [(client) => client.post(login, { email: 'x'.repeat(17 * 1024) }), 413],
+  ]) {
+    for (let round = 0; round < 30; round++) {
+      const client = h.client()
+      assert.equal((await refusal(client)).status, status)
+      assert.equal((await client.get(h.url('apex', '/'))).status, 200, `round ${round} after a ${status}`)
+    }
+  }
+})
+
 test('pages carry the strict CSP and the other security headers; only the apex pages may be indexed', async () => {
   const client = production.client()
   for (const path of ['/login', '/signup', '/forgot-password']) {

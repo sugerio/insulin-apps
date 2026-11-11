@@ -1,7 +1,8 @@
 // OAuth for MCP clients and service accounts (DESIGN.md §5.2, §5.3): registered clients, authorization requests waiting
-// for consent, grants, codes, tokens and service accounts. Tokens, codes, request ids and client secrets are stored as
-// SHA-256 only. Writes that commit together are one batch; every check that a race could defeat is inside a statement.
-import { appAdmin, type GrantInput, type GrantRole } from './grants.ts'
+// for consent, grants, codes, tokens and service accounts (the "OAuth clients" of an app's API access page). Tokens,
+// codes, request ids and client secrets are stored as SHA-256 only. Writes that commit together are one batch; every
+// check that a race could defeat is inside a statement.
+import { orgAdmin, type GrantInput, type GrantRole } from './grants.ts'
 
 export interface ClientRow {
   id: string
@@ -39,6 +40,12 @@ export interface UserGrantRow extends GrantRow {
   org_name: string
 }
 
+/** A grant for one app with the person who allowed it, for an owner's or admin's view of Connect AI. */
+export interface AppGrantRow extends GrantRow {
+  user_name: string
+  user_email: string
+}
+
 /** An access token and whoever it acts for: a person's grant, or a service account. */
 export interface AccessTokenRow {
   token_hash: string
@@ -74,6 +81,11 @@ export interface ServiceAccountRow {
   custom_role_name: string | null
   client_id: string
   secret_hash: string
+  /** The secret a rotation replaced, valid until `previous_secret_expires_at` (DESIGN.md §5.3). */
+  previous_secret_hash: string | null
+  previous_secret_expires_at: number | null
+  /** When the current secret was made by a rotation; null while the client has its first secret. */
+  secret_rotated_at: number | null
   created_at: number
   last_used_at: number | null
 }
@@ -180,6 +192,38 @@ export async function listUserGrants(db: D1Database, userId: string, now: number
   return results
 }
 
+/** The person's own live grants for one app in one organization (the app's Connect AI page). */
+export async function listOwnAppGrants(db: D1Database, grant: { userId: string; orgId: string; app: string; now: number }): Promise<GrantRow[]> {
+  const { results } = await db.prepare(`${GRANT_SELECT} WHERE g.user_id = ?1 AND g.org_id = ?2 AND g.app = ?3 AND g.expires_at > ?4 ORDER BY g.created_at DESC`)
+    .bind(grant.userId, grant.orgId, grant.app, grant.now).all<GrantRow>()
+  return results
+}
+
+/**
+ * Everyone's live grants for one app in one organization, with who allowed each, while `actorId` is still an OWNER or
+ * ADMIN there (checked in the statement): empty for anyone else.
+ */
+export async function listAppGrantsAsAdmin(db: D1Database, grant: { orgId: string; app: string; actorId: string; now: number }): Promise<AppGrantRow[]> {
+  const { results } = await db.prepare(
+    `SELECT g.id, g.client_id, c.name AS client_name, g.user_id, u.name AS user_name, u.email AS user_email, g.org_id, g.app,
+       g.created_at, g.expires_at, g.last_used_at
+     FROM oauth_grants g JOIN oauth_clients c ON c.id = g.client_id JOIN users u ON u.id = g.user_id
+     WHERE g.org_id = ?1 AND g.app = ?2 AND g.expires_at > ?3 AND ${orgAdmin('?1', '?4')}
+     ORDER BY u.name COLLATE NOCASE, g.created_at DESC`,
+  ).bind(grant.orgId, grant.app, grant.now, grant.actorId).all<AppGrantRow>()
+  return results
+}
+
+/**
+ * Ends a grant from an app's Connect AI page: the actor's own, or anyone's in that app and organization while the actor
+ * is still an OWNER or ADMIN there (checked in the statement). Its codes and tokens go with it. False otherwise.
+ */
+export async function deleteAppGrant(db: D1Database, grant: { id: string; orgId: string; app: string; actorId: string }): Promise<boolean> {
+  const result = await db.prepare(`DELETE FROM oauth_grants WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND (user_id = ?4 OR ${orgAdmin('?2', '?4')})`)
+    .bind(grant.id, grant.orgId, grant.app, grant.actorId).run()
+  return result.meta.changes > 0
+}
+
 export async function touchGrant(db: D1Database, id: string, now: number): Promise<void> {
   await db.prepare('UPDATE oauth_grants SET last_used_at = ?2 WHERE id = ?1').bind(id, now).run()
 }
@@ -246,7 +290,7 @@ export async function deleteToken(db: D1Database, hash: string): Promise<void> {
 }
 
 const SERVICE_ACCOUNT_SELECT = `SELECT s.id, s.org_id, s.app, s.name, s.role, s.custom_role_id, c.name AS custom_role_name,
-    s.client_id, s.secret_hash, s.created_at, s.last_used_at
+    s.client_id, s.secret_hash, s.previous_secret_hash, s.previous_secret_expires_at, s.secret_rotated_at, s.created_at, s.last_used_at
   FROM service_accounts s LEFT JOIN custom_roles c ON c.id = s.custom_role_id`
 
 export async function listServiceAccounts(db: D1Database, orgId: string, app: string): Promise<ServiceAccountRow[]> {
@@ -263,47 +307,95 @@ export function findServiceAccountByClientId(db: D1Database, clientId: string): 
   return db.prepare(`${SERVICE_ACCOUNT_SELECT} WHERE s.client_id = ?1`).bind(clientId).first<ServiceAccountRow>()
 }
 
-/** Creates a service account while `actorId` is still the app's admin. False otherwise. */
+/**
+ * A service account's access token, recording the secret that issued it, if that secret is still one of the account's
+ * valid ones (checked in the statement): a rotation or "Revoke previous secret now" between the caller's check and this
+ * insert leaves no token behind. False otherwise.
+ */
+export async function issueServiceToken(db: D1Database, token: { hash: string; serviceAccountId: string; secretHash: string; now: number; expiresAt: number }): Promise<boolean> {
+  const result = await db.prepare(
+    `INSERT INTO oauth_tokens (token_hash, kind, grant_id, service_account_id, client_secret_hash, created_at, expires_at)
+     SELECT ?1, 'access', NULL, ?2, ?3, ?4, ?5
+     WHERE EXISTS (SELECT 1 FROM service_accounts s WHERE s.id = ?2
+       AND (s.secret_hash = ?3 OR (s.previous_secret_hash = ?3 AND s.previous_secret_expires_at > ?4)))`,
+  ).bind(token.hash, token.serviceAccountId, token.secretHash, token.now, token.expiresAt).run()
+  return result.meta.changes > 0
+}
+
+/** Creates a service account while `actorId` is still an OWNER or ADMIN of the organization. False otherwise. */
 export async function insertServiceAccount(db: D1Database, account: {
   id: string; orgId: string; app: string; name: string; grant: GrantInput; clientId: string; secretHash: string; actorId: string; now: number
 }): Promise<boolean> {
   const result = await db.prepare(
     `INSERT INTO service_accounts (id, org_id, app, name, role, custom_role_id, client_id, secret_hash, created_by, created_at, updated_at)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10 WHERE ${appAdmin('?2', '?9', '?3')}`,
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10 WHERE ${orgAdmin('?2', '?9')}`,
   ).bind(account.id, account.orgId, account.app, account.name, account.grant.role, account.grant.customRoleId, account.clientId,
     account.secretHash, account.actorId, account.now).run()
   return result.meta.changes > 0
 }
 
-/** Renames a service account or changes its role while `actorId` is still the app's admin. */
+/** Renames a service account or changes its role while `actorId` is still an OWNER or ADMIN of the organization. */
 export async function updateServiceAccount(db: D1Database, account: {
   id: string; orgId: string; app: string; name: string; grant: GrantInput; actorId: string; now: number
 }): Promise<boolean> {
   const result = await db.prepare(
     `UPDATE service_accounts SET name = ?4, role = ?5, custom_role_id = ?6, updated_at = ?7
-     WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${appAdmin('?2', '?8', '?3')}`,
+     WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${orgAdmin('?2', '?8')}`,
   ).bind(account.id, account.orgId, account.app, account.name, account.grant.role, account.grant.customRoleId, account.now, account.actorId).run()
   return result.meta.changes > 0
 }
 
-/** A new secret for a service account while `actorId` is still the app's admin; its tokens stop in the same batch. */
-export async function rotateServiceAccount(db: D1Database, account: { id: string; orgId: string; app: string; secretHash: string; actorId: string; now: number }): Promise<boolean> {
-  const [rotated] = await db.batch([
+/**
+ * Deletes the tokens of a service account's previous secret, while it has one and `actorId` is still an OWNER or ADMIN
+ * of the organization. Tokens issued before migration 0008 recorded no secret; they count as the previous secret's (or
+ * an older one's), since only a rotation after that migration makes a previous secret at all.
+ */
+function endPreviousSecretTokens(db: D1Database, account: { id: string; orgId: string; app: string; actorId: string }): D1PreparedStatement {
+  return db.prepare(
+    `DELETE FROM oauth_tokens WHERE service_account_id = ?1
+       AND EXISTS (SELECT 1 FROM service_accounts s WHERE s.id = ?1 AND s.org_id = ?2 AND s.app = ?3 AND s.previous_secret_hash IS NOT NULL)
+       AND (client_secret_hash IS NULL OR client_secret_hash = (SELECT s.previous_secret_hash FROM service_accounts s WHERE s.id = ?1))
+       AND ${orgAdmin('?2', '?4')}`,
+  ).bind(account.id, account.orgId, account.app, account.actorId)
+}
+
+/**
+ * A new secret for a service account while `actorId` is still an OWNER or ADMIN of the organization, in one batch: the
+ * current secret becomes the previous one, valid until `previousExpiresAt`, and the tokens it issued keep working until
+ * they expire. A previous secret still there is replaced, so at most two secrets are ever valid, and its tokens end now.
+ */
+export async function rotateServiceAccount(db: D1Database, account: {
+  id: string; orgId: string; app: string; secretHash: string; previousExpiresAt: number; actorId: string; now: number
+}): Promise<boolean> {
+  const [, rotated] = await db.batch([
+    endPreviousSecretTokens(db, account),
     db.prepare(
-      `UPDATE service_accounts SET secret_hash = ?4, updated_at = ?5
-       WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${appAdmin('?2', '?6', '?3')}`,
-    ).bind(account.id, account.orgId, account.app, account.secretHash, account.now, account.actorId),
-    db.prepare(
-      `DELETE FROM oauth_tokens WHERE service_account_id = ?1
-         AND EXISTS (SELECT 1 FROM service_accounts s WHERE s.id = ?1 AND s.secret_hash = ?2)`,
-    ).bind(account.id, account.secretHash),
+      `UPDATE service_accounts SET previous_secret_hash = secret_hash, previous_secret_expires_at = ?5, secret_hash = ?4,
+         secret_rotated_at = ?6, updated_at = ?6
+       WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${orgAdmin('?2', '?7')}`,
+    ).bind(account.id, account.orgId, account.app, account.secretHash, account.previousExpiresAt, account.now, account.actorId),
   ])
   return (rotated?.meta.changes ?? 0) > 0
 }
 
-/** Deletes a service account (and its tokens) while `actorId` is still the app's admin. */
+/**
+ * Ends a service account's previous secret at once, and the tokens it issued, in one batch, while `actorId` is still an
+ * OWNER or ADMIN of the organization. False when there was no previous secret, or the actor may not.
+ */
+export async function revokePreviousSecret(db: D1Database, account: { id: string; orgId: string; app: string; actorId: string; now: number }): Promise<boolean> {
+  const [, revoked] = await db.batch([
+    endPreviousSecretTokens(db, account),
+    db.prepare(
+      `UPDATE service_accounts SET previous_secret_hash = NULL, previous_secret_expires_at = NULL, updated_at = ?4
+       WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND previous_secret_hash IS NOT NULL AND ${orgAdmin('?2', '?5')}`,
+    ).bind(account.id, account.orgId, account.app, account.now, account.actorId),
+  ])
+  return (revoked?.meta.changes ?? 0) > 0
+}
+
+/** Deletes a service account (and its tokens) while `actorId` is still an OWNER or ADMIN of the organization. */
 export async function deleteServiceAccount(db: D1Database, account: { id: string; orgId: string; app: string; actorId: string }): Promise<boolean> {
-  const result = await db.prepare(`DELETE FROM service_accounts WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${appAdmin('?2', '?4', '?3')}`)
+  const result = await db.prepare(`DELETE FROM service_accounts WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${orgAdmin('?2', '?4')}`)
     .bind(account.id, account.orgId, account.app, account.actorId).run()
   return result.meta.changes > 0
 }

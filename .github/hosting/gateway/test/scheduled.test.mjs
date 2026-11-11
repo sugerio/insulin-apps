@@ -96,9 +96,9 @@ test('the daily cron runs the cleanup only; the five-minute one ticks the apps',
   assert.equal(ticks.length, start + 4)
 })
 
-/** Creates a service account on the integrations page and returns a token for it. */
+/** Creates a service account (an OAuth client) on the API access page and returns a token for it. */
 async function serviceToken(owner, orgId) {
-  const created = await owner.client.post(h.url('apex', '/apps/captable/settings/integrations/service-accounts'), { org_id: orgId, name: 'Nightly job', role: 'ADMIN' })
+  const created = await owner.client.post(h.url('apex', '/apps/captable/settings/api/clients'), { org_id: orgId, name: 'Nightly job', role: 'ADMIN' })
   assert.equal(created.status, 200, created.text.slice(0, 300))
   const clientId = /(ia_sa_[A-Za-z0-9_-]{22})/.exec(created.text)[1]
   const secret = /(ia_sk_[A-Za-z0-9_-]{43})/.exec(created.text)[1]

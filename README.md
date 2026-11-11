@@ -14,8 +14,11 @@ D1 database.
 Every app here also runs at its own address on insulinapps.com, for example [Cap Table](https://captable.insulinapps.com).
 Sign up with an e-mail address, Google or your company's single sign-on, create an organization and invite your
 team, with a role in every app or in the apps each person needs. Connect AI agents such as Claude or Codex to an app
-over MCP, or call its API with a service account. Maintainers run it with the
-[hosting runbook](.github/hosting/README.md).
+over MCP, or call its API with a service account. **The documentation is at
+[insulinapps.com/docs](https://insulinapps.com/docs/)**: getting started, organizations and roles, sign-in and security,
+AI agents, the API and each app, for people and for AI agents (`/docs/llms.txt`). Its pages are Markdown in this
+repository, next to what they describe: [`.github/hosting/docs/`](.github/hosting/docs/) for the platform and each
+app's `docs/public/`. Maintainers run the site with the [hosting runbook](.github/hosting/README.md).
 
 ## Using an app
 
@@ -43,12 +46,16 @@ Each app is a top-level directory with its own `README.md` and `AGENTS.md`, and 
   open, before setup too. It explains in plain words how to use the app and gives the background a business user needs
   for its domain. Cap Table's `src/app/pages/docs/` shows the pattern: one static page per topic, describing only what
   the app does, updated in the same change as the behaviour it describes, and covered by tests;
+- ship **public docs** in `docs/public/`, which become its section of
+  [insulinapps.com/docs](https://insulinapps.com/docs/) (run `npm run build:docs` in `.github/hosting/gateway/`), updated
+  in the same change as the behaviour they describe;
 - leave sign-in, people and roles to the platform, and map the roles (and any custom-role permissions) to its own
   functions, as [`AGENTS.md`](AGENTS.md) describes under "Accounts, roles and access";
 - use synthetic data only, in code, tests and docs.
 
 Add the app to the table above. Copy `.github/workflows/captable.yml` to `.github/workflows/<app>.yml` and change its
-name, path filters and `app` input; CI checks this pairing. Read [`AGENTS.md`](AGENTS.md) for the full checklist.
+name, path filters and `app` input, then add that name to the `workflows` list in
+[`release.yml`](.github/workflows/release.yml); CI checks both. Read [`AGENTS.md`](AGENTS.md) for the full checklist.
 
 ## Checks
 
@@ -65,6 +72,25 @@ tests, migration check and Cloudflare build, while repository-wide CI runs the p
   addresses, local paths, cloud ids and private keys, also when split into string literals joined with `+` (its own
   tests: `node --test .github/scripts/check-public-content.test.mjs`). Names, domains and other terms specific to an
   organization go in a deny list that the maintainer keeps outside the repository and passes with `--deny-list <file>`.
+
+## Releases
+
+Every green merge to `main` is a release. A merge is green when every workflow it started passed, deploys included: CI,
+the workflow of each app it touched, and Gateway when it touched the gateway. A push to `main` deploys what it changed,
+so a release names what was deployed. [`release.yml`](.github/workflows/release.yml) tags the merge's commit with the
+next version, `v0.1.1`, then `v0.1.2` and so on, one version for the whole repository, and publishes a GitHub Release
+that lists the workflows that passed and the pull requests merged since the previous version.
+
+- Merges are numbered in the order they reached `main`, each once. One whose workflows are still running holds back
+  those after it until it finishes.
+- A merge with a failed or cancelled run (as when a newer merge replaces a deploy still waiting in its queue) gets no
+  version; the next green one takes it, and its release lists the pull requests of both.
+- To start a new minor or major version, an org admin runs **Actions → Release → Run workflow** with it, such as
+  `v0.2.0`: `main`'s latest release is released again as that version, and the next merges count on from it.
+- Only `release.yml` creates `v*` tags. The "Release tags" ruleset lets nobody else create, move or delete one (org
+  admins can bypass it in an emergency); the [hosting runbook](.github/hosting/README.md#owner-setup) sets it up.
+
+`.github/scripts/plan-release.sh` decides what to release, and `plan-release.test.mjs` tests it against a fake GitHub.
 
 ## Contributing
 

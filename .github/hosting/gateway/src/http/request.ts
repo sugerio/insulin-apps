@@ -41,7 +41,8 @@ export async function readText(request: Request, maxBytes: number): Promise<stri
     if (done) break
     total += value.byteLength
     if (total > maxBytes) {
-      await reader.cancel()
+      // The rest is left for drainUnread, so the connection survives the 413.
+      reader.releaseLock()
       throw new BodyTooLarge()
     }
     chunks.push(value)
@@ -53,6 +54,30 @@ export async function readText(request: Request, maxBytes: number): Promise<stri
     offset += chunk.byteLength
   }
   return new TextDecoder().decode(bytes)
+}
+
+/** How much of an unread request body drainUnread reads and discards; past it, the connection may close. */
+export const DRAIN_LIMIT_BYTES = 256 * 1024
+
+/**
+ * Reads and discards what a handler left unread of the request body (a refused POST, an oversized form) before the
+ * response goes out. workerd closes a connection whose request body was left unread, and the next request on it
+ * fails ("other side closed" in Miniflare). A body handed on to an app Worker is locked and left alone.
+ */
+export async function drainUnread(request: Request): Promise<void> {
+  const body = request.body
+  if (!body || body.locked) return
+  const reader = body.getReader()
+  try {
+    for (let read = 0; read <= DRAIN_LIMIT_BYTES;) {
+      const { done, value } = await reader.read()
+      if (done) return
+      read += value.byteLength
+    }
+    await reader.cancel()
+  } catch {
+    // The client went away mid-body: there is no connection left to keep.
+  }
 }
 
 /** A form field as a string, or '' when absent; repeated fields keep the first value. */

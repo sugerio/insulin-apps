@@ -204,6 +204,9 @@ test('/__insulin/me tells the account bar who is signed in and where things are'
   assert.deepEqual(me.organizations.map((org) => [org.id, org.active]), [[person.orgId, true], [second, false]])
   assert.equal(me.links.members, h.url('apex', '/apps/captable/settings/users'), "in an app, the app's own people, on the apex")
   assert.equal(me.links.integrations, h.url('apex', '/apps/captable/settings/integrations'))
+  assert.equal(me.links.connectAi, h.url('apex', '/apps/captable/settings/connect-ai'), "in an app, its Connect AI page")
+  const apex = JSON.parse((await person.client.get(h.url('apex', '/__insulin/me'))).text)
+  assert.equal(apex.links.connectAi, null, 'on the apex there is no app to connect')
   assert.equal(me.links.apps, h.url('apex', '/'))
   assert.equal(me.links.account, h.url('auth', '/account'))
 })
@@ -251,6 +254,7 @@ test('the account bar is CSP-friendly: same-origin script, shadow DOM, a linked 
   }
   assert.match(js, /fetch\('\/__insulin\/me'/)
   assert.match(js, /location\.assign/)
+  assert.match(js, /\['Connect AI', me\.links\.connectAi, ICONS\.bot\]/, "the bar links to the app's Connect AI page")
   const css = await h.client().get(h.url('captable', '/__insulin/bar.css'))
   assert.match(css.headers.get('content-type'), /^text\/css/)
   assert.match(css.text, /:host\(\[hidden\]\)/)

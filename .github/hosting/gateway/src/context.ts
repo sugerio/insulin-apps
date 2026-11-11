@@ -16,13 +16,13 @@ export interface Context {
   host: string
   site: Site
   /**
-   * The app this request is about: the app host's own, or, on the apex, the app whose people or integrations page is
-   * asked for (`/apps/<app>/settings/...`, set by the router).
+   * The app this request is about: the app host's own, or, on the apex, the app whose settings page is asked for
+   * (`/apps/<app>/settings/...`, set by the router).
    */
   app: HostedApp | null
   /** https: everywhere, except http: for *.localhost when SITE_ENV=test. */
   scheme: 'https:' | 'http:'
-  /** `:<port>` on a local development server, otherwise empty. */
+  /** `:<port>` on a local development server (SITE_ENV=test on *.localhost, http or https), otherwise empty. */
   portSuffix: string
   /** SITE_ENV=test on http://*.localhost: cookies drop Secure and the __Host- prefix. Never in production. */
   relaxed: boolean
@@ -40,7 +40,8 @@ export function createContext(request: Request, env: Env, exec: ExecutionContext
   const host = url.hostname.toLowerCase()
   const app = config.appsByHost.get(host) ?? null
   const site: Site = host === config.domain ? 'apex' : host === config.authHost ? 'auth' : app ? 'app' : 'other'
-  const relaxed = config.testMode && url.protocol === 'http:' && (host === 'localhost' || host.endsWith('.localhost'))
+  const local = config.testMode && (host === 'localhost' || host.endsWith('.localhost'))
+  const relaxed = local && url.protocol === 'http:'
   return {
     env,
     config,
@@ -51,7 +52,9 @@ export function createContext(request: Request, env: Env, exec: ExecutionContext
     site,
     app,
     scheme: relaxed ? 'http:' : 'https:',
-    portSuffix: relaxed && url.port ? `:${url.port}` : '',
+    // A local server keeps its port, over http or over wrangler's https (`--local-protocol https`, as the docs'
+    // screenshots run it); production origins never carry one.
+    portSuffix: local && url.port ? `:${url.port}` : '',
     relaxed,
     now: Date.now(),
     clientIp: request.headers.get('CF-Connecting-IP'),
@@ -73,11 +76,12 @@ export function apexUrl(ctx: Context, path = '/'): string {
   return `${originOf(ctx, ctx.config.domain)}${path}`
 }
 
-export type AppSettingsTab = 'users' | 'integrations'
+/** An app's settings pages: People, Integrations, API access and Connect AI. */
+export type AppSettingsTab = 'users' | 'integrations' | 'api' | 'connect-ai'
 
 /**
- * An app's people or integrations page, on the apex (DESIGN.md §3): never on the app's host, where code the app serves
- * shares the origin and could read the page and post its forms with the visitor's session.
+ * An app's settings page, on the apex (DESIGN.md §3): never on the app's host, where code the app serves shares the
+ * origin and could read the page and post its forms with the visitor's session.
  */
 export function appSettingsPath(app: HostedApp, tab: AppSettingsTab, rest = ''): string {
   return `/apps/${app.name}/settings/${tab}${rest}`

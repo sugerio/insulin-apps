@@ -1,4 +1,5 @@
-import type { GrantInput } from './grants.ts'
+import { owner, type GrantInput } from './grants.ts'
+import { ownerDomainOf, registrableDomain, subdomainPattern } from '../owner-domain.ts'
 import type { Role } from '../roles.ts'
 
 export interface OrgRow {
@@ -31,13 +32,91 @@ const ANOTHER_OWNER = `(SELECT COUNT(*) FROM memberships o WHERE o.org_id = ?1 A
 // Every privileged mutation re-reads the actor's role inside its own statement (the organization is ?1). The page
 // checked the role earlier, but a member whose role was lowered, or who was removed, since then must change nothing.
 
-export async function createOrg(db: D1Database, org: { id: string; name: string; userId: string; now: number }): Promise<void> {
-  await db.batch([
-    db.prepare('INSERT INTO orgs (id, name, created_by, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)')
-      .bind(org.id, org.name, org.userId, org.now),
-    db.prepare("INSERT INTO memberships (org_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, 'OWNER', ?3, ?3)")
+/** How many organizations an owner domain may have, unless `org_domain_allowances` says otherwise (DESIGN.md §3.1). */
+export const ORGS_PER_DOMAIN = 2
+
+/**
+ * The forms the organizations of the owner domain of `email` (owner-domain.ts ownerDomainOf) may be recorded in, as
+ * the parameters ?1 to ?4 of OWNED: the owner domain itself; the form migrations 0007 and 0009 wrote for a non-ASCII
+ * domain (SQL can't write punycode, so it stayed as typed); and LIKE patterns for the subdomains of both, as those
+ * migrations, and the gateway before 0009, recorded the creator's whole domain.
+ */
+function ownedForms(email: string): [string, string, string | null, string | null] {
+  const ownerDomain = ownerDomainOf(email)
+  if (ownerDomain.includes('@')) return [ownerDomain, ownerDomain, null, null]
+  const typed = email.slice(email.lastIndexOf('@') + 1).toLowerCase()
+  const legacy = registrableDomain(typed) ?? typed
+  return [ownerDomain, legacy, subdomainPattern(ownerDomain), legacy === ownerDomain ? null : subdomainPattern(legacy)]
+}
+
+// The organizations of an owner domain (ownedForms: ?1 to ?4), and how many it may have (?5 by default). A subdomain
+// pattern applies to domains only, never to an address at a provider.
+const OWNED = `(o.owner_domain IN (?1, ?2)
+  OR (instr(o.owner_domain, '@') = 0 AND (o.owner_domain LIKE ?3 ESCAPE '\\' OR o.owner_domain LIKE ?4 ESCAPE '\\')))`
+const ALLOWED = 'COALESCE((SELECT a.max_orgs FROM org_domain_allowances a WHERE a.owner_domain = ?1), ?5)'
+
+/** The owner domain of someone with this address, its organizations now, and how many it may have. */
+export async function orgAllowance(db: D1Database, email: string): Promise<{ ownerDomain: string; count: number; max: number }> {
+  const forms = ownedForms(email)
+  const row = await db.prepare(`SELECT (SELECT COUNT(*) FROM orgs o WHERE ${OWNED}) AS count, ${ALLOWED} AS max`)
+    .bind(...forms, ORGS_PER_DOMAIN).first<{ count: number; max: number }>()
+  return { ownerDomain: forms[0], count: row?.count ?? 0, max: row?.max ?? ORGS_PER_DOMAIN }
+}
+
+/**
+ * Creates an organization with its creator as OWNER, in one batch whose insert also requires the creator's owner
+ * domain (from `email`; its subdomains' organizations count with it) to have fewer organizations than it may
+ * (ORGS_PER_DOMAIN, or its allowance), so concurrent creations can't exceed it. The creator's `users.orgs_created`
+ * still counts up, as a record only: nothing limits by it any more. False when the owner domain is at its limit.
+ */
+export async function createOrg(db: D1Database, org: { id: string; name: string; userId: string; email: string; now: number }): Promise<boolean> {
+  const [created] = await db.batch([
+    db.prepare(
+      `INSERT INTO orgs (id, name, created_by, owner_domain, created_at, updated_at)
+       SELECT ?6, ?7, ?8, ?1, ?9, ?9
+       WHERE (SELECT COUNT(*) FROM orgs o WHERE ${OWNED}) < ${ALLOWED}`,
+    ).bind(...ownedForms(org.email), ORGS_PER_DOMAIN, org.id, org.name, org.userId, org.now),
+    db.prepare(
+      `INSERT INTO memberships (org_id, user_id, role, created_at, updated_at)
+       SELECT ?1, ?2, 'OWNER', ?3, ?3 WHERE EXISTS (SELECT 1 FROM orgs WHERE id = ?1)`,
+    ).bind(org.id, org.userId, org.now),
+    db.prepare('UPDATE users SET orgs_created = orgs_created + 1, updated_at = ?3 WHERE id = ?2 AND EXISTS (SELECT 1 FROM orgs WHERE id = ?1)')
       .bind(org.id, org.userId, org.now),
   ])
+  return (created?.meta.changes ?? 0) > 0
+}
+
+/**
+ * SQL: organization `org` may take in someone whose address is in domain `domain` (lower case and punycode, the form
+ * sso_domains keeps and domainOf writes): it invites anyone, or only addresses in its verified domains and this is
+ * one of them now (DESIGN.md §3). Each argument names a parameter or column.
+ */
+export function invitableDomain(org: string, domain: string): string {
+  return `(COALESCE((SELECT io.invite_verified_domains_only FROM orgs io WHERE io.id = ${org}), 0) = 0
+    OR EXISTS (SELECT 1 FROM sso_domains vd WHERE vd.org_id = ${org} AND vd.verified_at IS NOT NULL AND vd.domain = ${domain}))`
+}
+
+/** Whether the organization invites only addresses in its verified domains, and its verified domains now. */
+export async function invitePolicy(db: D1Database, orgId: string): Promise<{ verifiedOnly: boolean; domains: string[] }> {
+  const row = await db.prepare(
+    `SELECT o.invite_verified_domains_only AS only,
+       (SELECT json_group_array(domain) FROM (SELECT d.domain FROM sso_domains d WHERE d.org_id = o.id AND d.verified_at IS NOT NULL
+         ORDER BY d.domain)) AS domains
+     FROM orgs o WHERE o.id = ?1`,
+  ).bind(orgId).first<{ only: number; domains: string }>()
+  return { verifiedOnly: row?.only === 1, domains: row ? (JSON.parse(row.domains) as string[]) : [] }
+}
+
+/**
+ * Turns "invite only people in our verified domains" on or off while the actor is still an OWNER; turning it on also
+ * needs a verified domain now. False otherwise.
+ */
+export async function setInviteVerifiedDomainsOnly(db: D1Database, orgId: string, actorId: string, on: boolean, now: number): Promise<boolean> {
+  const result = await db.prepare(
+    `UPDATE orgs SET invite_verified_domains_only = ?2, updated_at = ?3 WHERE id = ?1 AND ${owner('?1', '?4')}
+       AND (?2 = 0 OR EXISTS (SELECT 1 FROM sso_domains d WHERE d.org_id = ?1 AND d.verified_at IS NOT NULL))`,
+  ).bind(orgId, on ? 1 : 0, now, actorId).run()
+  return result.meta.changes > 0
 }
 
 export function findMembership(db: D1Database, orgId: string, userId: string): Promise<MembershipRow | null> {
@@ -171,4 +250,62 @@ export async function leaveOrg(db: D1Database, orgId: string, userId: string, cu
        AND (?3 <> 'OWNER' OR ${ANOTHER_OWNER})`,
   ).bind(orgId, userId, current).run()
   return result.meta.changes > 0
+}
+
+/** At most this many organizations and allowances are looked at in one daily reconcile. */
+export const RECONCILE_LIMIT = 5000
+
+/**
+ * The canonical form of an allowance's key: an address as ownerDomainOf words it (the Gmail rule included), a domain
+ * at a public mail provider as itself, and any other domain as its registrable domain.
+ */
+export function canonicalAllowanceKey(key: string): string {
+  if (key.includes('@')) return ownerDomainOf(key)
+  return registrableDomain(key) ?? key
+}
+
+/**
+ * Owner domains written by migrations are SQL's approximation of ownerDomainOf, which SQL can't run (the public mail
+ * provider list, the Public Suffix List, the Gmail rule). Once a day this puts every organization's owner domain, and
+ * every allowance's key, in the form the limit counts by, with the same code: an organization's from its creator, or
+ * from its earliest current OWNER when the creator is gone; an allowance that meets another under one key keeps the
+ * larger number. Each change is conditional on the value it read, so a concurrent write is never overwritten.
+ */
+export async function reconcileOwnerDomains(db: D1Database): Promise<{ orgs: number; allowances: number }> {
+  const { results: orgs } = await db.prepare(
+    `SELECT o.id, o.owner_domain,
+       COALESCE((SELECT u.email FROM users u WHERE u.id = o.created_by),
+         (SELECT u.email FROM memberships m JOIN users u ON u.id = m.user_id
+          WHERE m.org_id = o.id AND m.role = 'OWNER' ORDER BY m.created_at, m.user_id LIMIT 1)) AS email
+     FROM orgs o ORDER BY o.created_at, o.id LIMIT ?1`,
+  ).bind(RECONCILE_LIMIT).all<{ id: string; owner_domain: string | null; email: string | null }>()
+  const statements: D1PreparedStatement[] = []
+  let orgChanges = 0
+  for (const org of orgs) {
+    if (!org.email) continue
+    const wanted = ownerDomainOf(org.email)
+    if (!wanted || wanted === org.owner_domain) continue
+    statements.push(db.prepare('UPDATE orgs SET owner_domain = ?2 WHERE id = ?1 AND owner_domain IS ?3').bind(org.id, wanted, org.owner_domain))
+    orgChanges += 1
+  }
+  const { results: allowances } = await db.prepare(
+    'SELECT owner_domain, max_orgs, note, created_at FROM org_domain_allowances ORDER BY owner_domain LIMIT ?1',
+  ).bind(RECONCILE_LIMIT).all<{ owner_domain: string; max_orgs: number; note: string | null; created_at: number }>()
+  let allowanceChanges = 0
+  for (const allowance of allowances) {
+    const wanted = canonicalAllowanceKey(allowance.owner_domain)
+    if (!wanted || wanted === allowance.owner_domain) continue
+    statements.push(
+      db.prepare(
+        `INSERT INTO org_domain_allowances (owner_domain, max_orgs, note, created_at)
+         SELECT ?1, max_orgs, note, created_at FROM org_domain_allowances WHERE owner_domain = ?2
+         ON CONFLICT (owner_domain) DO UPDATE SET max_orgs = max(org_domain_allowances.max_orgs, excluded.max_orgs),
+           note = COALESCE(org_domain_allowances.note, excluded.note)`,
+      ).bind(wanted, allowance.owner_domain),
+      db.prepare('DELETE FROM org_domain_allowances WHERE owner_domain = ?1').bind(allowance.owner_domain),
+    )
+    allowanceChanges += 1
+  }
+  for (let start = 0; start < statements.length; start += 50) await db.batch(statements.slice(start, start + 50))
+  return { orgs: orgChanges, allowances: allowanceChanges }
 }

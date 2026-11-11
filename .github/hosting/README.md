@@ -36,11 +36,19 @@ boolean `no_bundle`, and the primitive `assets` settings `binding`, `html_handli
 `run_worker_first`. It logs and ignores every other generated key. The deploy itself always supplies the Worker name,
 absolute entry and asset paths, D1 binding, console access mode, and disabled `workers.dev` and preview settings.
 
-The gateway has its own path-filtered workflow. Pull requests that change the gateway or its deployment and discovery
-scripts run gateway typechecks and tests. A matching push to `main`, or a manual dispatch on `main`, also migrates and
-deploys the gateway with all discovered app bindings. Custom domains are managed by the Worker deployment; there is no
-manual DNS provisioning. After deploying the gateway, the workflow lists its remote secrets and fails if `SITE_ENV`
-is present, because a retained secret is not removed merely by omitting it from a new configuration.
+The gateway has its own path-filtered workflow. Pull requests that change the gateway, its deployment and discovery
+scripts, or the public docs (`.github/hosting/docs/` and every app's `docs/public/`) run gateway typechecks and tests,
+which fail while the generated docs module is stale. A matching push to `main`, or a manual dispatch on `main`, also
+migrates and deploys the gateway with all discovered app bindings. Custom domains are managed by the Worker deployment;
+there is no manual DNS provisioning. After deploying the gateway, the workflow lists its remote secrets and fails if
+`SITE_ENV` is present, because a retained secret is not removed merely by omitting it from a new configuration.
+
+The gateway deploy also uploads the docs' images: `.github/hosting/docs/assets/` is the Worker's static-assets
+directory (binding `DOCS_ASSETS`, `run_worker_first: true`), uploaded by `wrangler deploy` with the Worker, so the
+same Workers Scripts permission covers it. Every request still reaches the gateway first; it serves the directory only
+at `https://insulinapps.com/docs/assets/*`. The pages themselves are compiled into the Worker
+(`src/assets/docs-content.ts`), so docs reach `https://insulinapps.com/docs/` with the next gateway deploy. Keep only
+images in that directory: everything in it is uploaded.
 
 After every app Worker deploy, the pipeline also uses the Cloudflare API to remove any custom domain or zone route
 still attached to that Worker and disables its `workers.dev` and preview URLs. It re-lists all three kinds of public
@@ -50,6 +58,11 @@ is sent only in the authorization header.
 Path-filtered workflows do not report a check on pull requests that do not touch their paths. Branch protection should
 therefore require an always-running check such as the repository-wide `Public content` job, not an app or gateway job
 that may be absent.
+
+Once every run a push to `main` started has passed, deploys included, `.github/workflows/release.yml` tags that commit
+with the next version and publishes a GitHub Release (the root README's "Releases"); a push with a failed or cancelled
+run gets no version. It tags with a deploy key that only its `release` environment holds, and the "Release tags"
+ruleset lets nobody else, org admins aside, create, move or delete a `v*` tag.
 
 ## Owner setup
 
@@ -76,6 +89,9 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    - `EMAIL_FROM`
    - `SUPPORT_EMAIL`: the contact shown on the landing, privacy and terms pages (optional; without it those pages
      point to the repository's issues)
+   - `ORG_REQUEST_EMAIL`: Insulin Apps support's address, which receives requests for more organizations from people
+     whose email domain has all it may have (DESIGN.md §3.1), with Reply-To set to the requester. Optional; without it
+     the page at the limit points to `SUPPORT_EMAIL` or the issues instead. Set it here only, never in the repository
    - `SITE_DOMAIN` only when the domain is not `insulinapps.com`
 
    **App secrets.** An app that lists names under `insulin.secrets` in its `package.json` (DESIGN.md §8.3), such as
@@ -117,6 +133,20 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    deploy then attaches every hostname to the gateway and creates its DNS records; don't add records for these
    hostnames by hand.
 
+7. Lock release tags once. Signed in to the GitHub CLI as an org admin, with `ssh-keygen` installed, run from a clone of
+   the repository:
+
+   ```bash
+   .github/scripts/configure-release-tags.sh
+   ```
+
+   It creates the `release` environment, which only `main` can use and which needs no approval; a write deploy key,
+   whose private half goes straight into that environment's `RELEASE_DEPLOY_KEY` secret and is never printed; and the
+   "Release tags" ruleset, which lets only that key and org admins create, move or delete a `v*` tag. Because the
+   ruleset lets every deploy key through, it stops before changing anything if the repository has another write
+   deploy key. It prints what it set when it's done. Until it has run, `release.yml` plans releases but can't tag
+   them. It targets `sugerio/insulin-apps`; set `GH_REPO` for a fork.
+
 Manually run the `Gateway` workflow on `main` once setup is complete, then manually run each app workflow on `main`.
 Step summaries link the affected public addresses.
 
@@ -130,6 +160,33 @@ starts with the new values. After rotating the Cloudflare token, manually dispat
 `main` as well as `Gateway` to verify each independently. Never put a value in a workflow file, command argument,
 issue, or log.
 
+To replace the release deploy key, run `.github/scripts/configure-release-tags.sh --rotate` as an org admin: it adds a
+new key, stores it as `RELEASE_DEPLOY_KEY` and deletes the old one.
+
+### Allow a domain more organizations
+
+Each email domain may have two organizations at a time, and each address at a public mail provider two of its own
+(DESIGN.md §3.1). The owner domain is the registrable domain of the address (`example.com` for an address at
+`eu.example.com` or at `example.com`; `example.co.uk` under `.co.uk`), and its subdomains' organizations count with it.
+A request for more reaches `ORG_REQUEST_EMAIL` with the owner domain to allow and the command to run; reply to the
+requester (the message's Reply-To) and, if you agree, allow it from the repository root with the Cloudflare credentials
+the workflow uses (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment, or `wrangler login`):
+
+```bash
+npm ci --prefix .github/hosting/gateway
+node .github/hosting/scripts/allow-orgs.mjs --domain 'example.com' --max 5 --note "Approved request" --remote
+```
+
+`--domain` is the owner domain exactly as the request names it: a registrable domain, or for someone at a public mail
+provider their address (a Gmail address without dots, at gmail.com). The script refuses a subdomain, a provider's own
+domain or an address that isn't at a provider, and says which owner domain counts instead. When the request shows
+`DOMAIN` in place of the domain, its owner domain has characters the script refuses: check the address by hand before
+deciding what to allow. `--max` is the total that domain may have, from 0 to 1000 (0 closes it); running the command
+again replaces the number. Without `--remote` it changes the local development database instead. The script refuses
+anything but a plain domain or address and a short plain note, and runs the gateway's wrangler with Node, without a
+shell (`node node_modules/wrangler/bin/wrangler.js d1 execute insulin-apps-gateway`), so it works the same on Windows.
+The person then creates the organization themselves at `/orgs/new`. To go back to the default, set `--max 2`.
+
 ### Add an app
 
 Add a top-level directory with a `package.json` and `src/api.ts`. Its directory name must follow the repository app-name
@@ -140,8 +197,10 @@ Table does. Set `displayName` and `description` in `package.json`, include D1 mi
 scheduled work declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to the `production`
 environment before its first deploy. A new `insulin.scheduled` path is ticked once the gateway has been deployed with
 it (the app's workflow refreshes the gateway after every app deploy). Copy `.github/workflows/captable.yml` to
-`.github/workflows/<app>.yml`, then change the workflow name, the app path entries, and `with.app`. Repository-wide CI
-enforces that every discovered app has this workflow and that no app workflow names a missing app.
+`.github/workflows/<app>.yml`, then change the workflow name, the app path entries, and `with.app`, and add the
+workflow name to the `workflows` list in `.github/workflows/release.yml`. Repository-wide CI enforces that every
+discovered app has this workflow, that no app workflow names a missing app, and that `release.yml` starts after every
+workflow that runs on a push.
 
 On the first matching push to `main`, the app workflow creates its D1 database, deploys its private Worker, and queues a
 gateway refresh for its hostname and service binding. If one pull request adds several new apps, an early app pipeline
@@ -185,3 +244,8 @@ matching push to `main` will otherwise deploy the current repository state.
   when replacing the widget.
 - **An app is missing:** run `node .github/scripts/list-apps.mjs` and fix the directory name or required files it
   reports, then run `node .github/scripts/check-app-workflows.mjs` to verify its workflow.
+- **Release can't tag a version** (`Couldn't tag … as v…`, a permission error, or a missing `RELEASE_DEPLOY_KEY`): run
+  `.github/scripts/configure-release-tags.sh` again as an org admin; the next run of Release, at the latest hourly,
+  tags every waiting version in order. If it says the runs of the latest release's push aren't among those GitHub
+  lists, run **Actions → Release → Run workflow** on `main` with the next minor version, such as `v0.2.0`. Never
+  create the tag by hand.

@@ -2,11 +2,11 @@
 // `mail_capture` table. Every message first takes a slot under the per-recipient (and per-organization) caps.
 import type { Context } from '../context.ts'
 import { sha256Hex } from '../crypto.ts'
-import { captureMail, releaseMailSlot, reserveMailSlot } from '../db/mail.ts'
+import { captureMail, releaseMailSlot, reserveMailSlot, reserveOrgRequestSlot } from '../db/mail.ts'
 import { errorCode, log } from '../log.ts'
 import type { MailContent } from './templates.ts'
 
-export type MailKind = 'verify_email' | 'signup_exists' | 'reset_password' | 'invitation' | 'mfa_changed' | 'mfa_locked' | 'sso_linked'
+export type MailKind = 'verify_email' | 'signup_exists' | 'reset_password' | 'invitation' | 'mfa_changed' | 'mfa_locked' | 'sso_linked' | 'org_request'
 export type SendOutcome = 'sent' | 'capped' | 'failed'
 
 export async function sendMail(ctx: Context, kind: MailKind, to: string, content: MailContent, orgId: string | null = null): Promise<SendOutcome> {
@@ -17,6 +17,22 @@ export async function sendMail(ctx: Context, kind: MailKind, to: string, content
     return 'capped'
   }
   return deliver(ctx, slot, { kind, orgId, to, from: ctx.config.mailFrom, content })
+}
+
+/**
+ * Sends a request for more organizations (DESIGN.md §3.1) to Insulin Apps support at `to`, from the gateway's address
+ * with Reply-To set to the requester: each day at most ORG_REQUEST_DAILY_LIMIT per requester,
+ * ORG_REQUEST_DOMAIN_DAILY_LIMIT per owner domain and ORG_REQUEST_GLOBAL_DAILY_LIMIT in all.
+ */
+export async function sendOrgRequest(ctx: Context, to: string, requester: { id: string; email: string; ownerDomain: string }, content: MailContent): Promise<SendOutcome> {
+  const slot = await reserveOrgRequestSlot(ctx.config.db, {
+    recipientHash: await sha256Hex(to), userId: requester.id, ownerDomainHash: await sha256Hex(requester.ownerDomain), now: ctx.now,
+  })
+  if (slot === null) {
+    log('mail_capped', { kind: 'org_request', user: requester.id })
+    return 'capped'
+  }
+  return deliver(ctx, slot, { kind: 'org_request', orgId: null, to, from: ctx.config.mailFrom, replyTo: requester.email, content })
 }
 
 /**

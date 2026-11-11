@@ -40,7 +40,7 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
 
 /**
  * What the account bar shows: who is signed in, the active organization with their role (in an app: their role in that
- * app), the other organizations, links (in an app: its own people and integrations pages).
+ * app), the other organizations, links (in an app: its own people, integrations and Connect AI pages).
  */
 async function me(ctx: Context): Promise<Response> {
   const session = await loadSession(ctx)
@@ -61,6 +61,7 @@ async function me(ctx: Context): Promise<Response> {
     links: {
       members: ctx.app && access ? apexUrl(ctx, appSettingsPath(ctx.app, 'users')) : active ? apexUrl(ctx, `/settings/users?org=${active.id}`) : apexUrl(ctx, '/orgs/new'),
       integrations: ctx.app && access ? apexUrl(ctx, appSettingsPath(ctx.app, 'integrations')) : null,
+      connectAi: ctx.app && access ? apexUrl(ctx, appSettingsPath(ctx.app, 'connect-ai')) : null,
       organizations: apexUrl(ctx, '/'),
       account: apexUrl(ctx, '/account'),
       apps: apexUrl(ctx),

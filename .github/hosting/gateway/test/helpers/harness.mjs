@@ -9,6 +9,8 @@ import { Log, LogLevel, Miniflare, convertV4MiniflareOptions } from 'miniflare'
 import { COMPATIBILITY_DATE, COMPATIBILITY_FLAGS, bundlePath, gatewayDir } from './bundle.mjs'
 
 export const PASSWORD = 'correct horse battery staple'
+/** The docs' static assets (the DOCS_ASSETS binding), as deployed. */
+export const DOCS_ASSETS_DIR = join(gatewayDir, '..', 'docs', 'assets')
 /** The id format: random (version 4) UUIDs for users, organizations and invitations. */
 export const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
 export const UUID_RE = new RegExp(`^${UUID}$`)
@@ -291,6 +293,11 @@ export class Harness {
           serviceBindings,
           outboundService: (request) => this.outbound.handle(request),
           stripCfConnectingIp: false,
+          // As production (deploy-apps.mjs): the docs' images behind the gateway, which sees every request first. This is
+          // the router configuration wrangler derives from `run_worker_first: true` (invoke_user_worker_ahead_of_assets).
+          ...(this.omit.has('DOCS_ASSETS') ? {} : {
+            assets: { directory: DOCS_ASSETS_DIR, binding: 'DOCS_ASSETS', routerConfig: { has_user_worker: true, invoke_user_worker_ahead_of_assets: true } },
+          }),
         },
         { name: 'stub-app', modules: true, modulesRoot: join(gatewayDir, 'dev'), scriptPath: join(gatewayDir, 'dev', 'stub-app.mjs'), compatibilityDate: COMPATIBILITY_DATE },
         { name: 'mail-stub', modules: true, modulesRoot: join(gatewayDir, 'test', 'helpers'), scriptPath: join(gatewayDir, 'test', 'helpers', 'mail-stub.mjs'), compatibilityDate: COMPATIBILITY_DATE },
@@ -300,6 +307,10 @@ export class Harness {
     if (!this.omit.has('DB')) {
       this.db = await this.mf.getD1Database('DB')
       await applyMigrations(this.db)
+      // Every test person's address is at example.test (uniqueEmail), and each owner domain may have only two
+      // organizations (DESIGN.md §3.1): the harness gives example.test room, as an operator would. The limit's own
+      // tests use other domains.
+      await this.db.prepare("INSERT INTO org_domain_allowances (owner_domain, max_orgs, note, created_at) VALUES ('example.test', 1000, 'test harness', 0)").run()
     }
   }
 

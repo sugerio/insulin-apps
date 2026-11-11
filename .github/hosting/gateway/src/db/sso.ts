@@ -43,18 +43,8 @@ export interface PendingSignIn {
   return_to: string | null
 }
 
-/**
- * The part of an address after the @, which domain rules compare, in the form domains are stored: lower case and
- * punycode (so `bücher.example` and `xn--bcher-kva.example` are the same domain). Unparseable: returned as it is.
- */
-export function domainOf(email: string): string {
-  const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase()
-  try {
-    return new URL(`http://${domain}`).hostname
-  } catch {
-    return domain
-  }
-}
+// Domains are compared in the form domainOf writes (lower case, punycode); it lives with the owner-domain rules.
+export { domainOf } from '../owner-domain.ts'
 
 export async function listDomains(db: D1Database, orgId: string): Promise<SsoDomainRow[]> {
   const { results } = await db.prepare('SELECT org_id, domain, token, created_at, verified_at FROM sso_domains WHERE org_id = ?1 ORDER BY domain')

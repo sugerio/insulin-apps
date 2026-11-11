@@ -2,7 +2,7 @@
 // runs; /__insulin/* checks its own (reserved.ts). index.ts wraps all of it in the outer security layer. The old auth
 // host only redirects to the apex.
 import { siteIcon, staticAsset } from './assets.ts'
-import { loadConfig } from './config.ts'
+import { isGatewayAppPath, loadConfig } from './config.ts'
 import { apexUrl, createContext, type Context } from './context.ts'
 import { UUID_PATTERN } from './crypto.ts'
 import type { Env } from './env.ts'
@@ -15,6 +15,7 @@ import { log, logError } from './log.ts'
 import { badRequestPage, forbiddenPage, methodNotAllowed, notConfiguredResponse, notFoundPage } from './pages/status.tsx'
 import { proxyToApp } from './proxy.ts'
 import { landing, privacy, terms } from './site.ts'
+import { docs } from './docs.ts'
 import { accountView, deleteAccount, updateName, updatePassword } from './auth/account.ts'
 import {
   forgot, forgotForm, login, loginForm, logout, resend, resendForm, reset, resetForm, signup, signupForm, verifyEmail,
@@ -25,9 +26,10 @@ import { googleCallback, googleStart } from './auth/google.ts'
 import { mfaForm, mfaVerify } from './auth/mfa.ts'
 import { cancelSetup, disable as disableMfa, enable as enableMfa, regenerateCodes, securityView, startSetup } from './auth/security.ts'
 import {
-  createCredential, createServiceAccount, deleteCredential, deleteServiceAccountRoute, integrations, rotateServiceAccountSecret,
-  updateCredential, updateServiceAccountDetails,
-} from './integrations/settings.ts'
+  apiAccess, createApiClient, deleteApiClient, revokePreviousApiClientSecret, rotateApiClientSecret, updateApiClient,
+} from './integrations/api-clients.ts'
+import { createCredential, deleteCredential, integrations, updateCredential } from './integrations/settings.ts'
+import { connectAi, disconnectAppAgent } from './mcp/connect-ai.ts'
 import { mcpEndpoint, protectedResourceMetadata } from './mcp/server.ts'
 import { preflight } from './oauth/http.ts'
 import { authorizationServerMetadata, authorize, decide, register, revoke, token } from './oauth/server.ts'
@@ -38,7 +40,7 @@ import {
 import { createCustomRole, deleteCustomRole, updateCustomRole } from './orgs/custom-roles.ts'
 import {
   changeMemberRole, createOrg, deleteOrg, leaveOrg, newOrgForm, orgOverview, organizationSettings, removeMember,
-  renameOrg, rolesSettings, switchOrg, usersSettings,
+  renameOrg, requestMoreOrgs, rolesSettings, setInviteDomains, switchOrg, usersSettings,
 } from './orgs/orgs.ts'
 import { oidcCallback, samlAcs, samlMetadata, ssoForm, ssoStart } from './sso/flow.ts'
 import { MAX_RESPONSE_BYTES } from './sso/saml.ts'
@@ -89,6 +91,8 @@ const APEX_ROUTES: Route[] = [
   route('GET', '/', landing),
   route('GET', '/privacy', privacy),
   route('GET', '/terms', terms),
+  // The public documentation, its llms.txt and its images (docs.ts).
+  route('GET', '/docs(?:/.*)?', docs),
   route('GET', '/signup', signupForm),
   route('POST', '/signup', signup),
   route('GET', '/login', loginForm),
@@ -108,11 +112,13 @@ const APEX_ROUTES: Route[] = [
   route('GET', '/auth/google/callback', googleCallback),
   route('GET', '/orgs/new', newOrgForm),
   route('POST', '/orgs/new', createOrg),
+  route('POST', '/orgs/request', requestMoreOrgs),
   route('POST', '/orgs/switch', switchOrg),
   route('GET', `/orgs/(${ORG})`, orgOverview),
   route('POST', `/orgs/(${ORG})/rename`, renameOrg),
   route('POST', `/orgs/(${ORG})/delete`, deleteOrg),
   route('POST', `/orgs/(${ORG})/leave`, leaveOrg),
+  route('POST', `/orgs/(${ORG})/invite-domains`, setInviteDomains),
   route('POST', `/orgs/(${ORG})/members/(${USER})/role`, changeMemberRole),
   route('POST', `/orgs/(${ORG})/members/(${USER})/remove`, removeMember),
   route('POST', `/orgs/(${ORG})/invitations`, invite),
@@ -171,7 +177,7 @@ function forApp(handler: Handler): Handler {
   }
 }
 
-/** Each app's people and integrations pages, on the apex (DESIGN.md §3, §6). */
+/** Each app's people, integrations, API access and Connect AI pages, on the apex (DESIGN.md §3, §5.2, §5.3, §6). */
 const APP_SETTINGS_ROUTES: Route[] = [
   route('GET', `/apps/(${APP})/settings/users`, forApp(appUsers)),
   route('POST', `/apps/(${APP})/settings/users/invite`, forApp(inviteToApp)),
@@ -180,18 +186,22 @@ const APP_SETTINGS_ROUTES: Route[] = [
   route('POST', `/apps/(${APP})/settings/users/invitations/(${INVITATION})/revoke`, forApp(revokeAppInvitation)),
   route('POST', `/apps/(${APP})/settings/users/invitations/(${INVITATION})/resend`, forApp(resendAppInvitation)),
   route('GET', `/apps/(${APP})/settings/integrations`, forApp(integrations)),
-  route('POST', `/apps/(${APP})/settings/integrations/service-accounts`, forApp(createServiceAccount)),
-  route('POST', `/apps/(${APP})/settings/integrations/service-accounts/(${ACCOUNT})`, forApp(updateServiceAccountDetails)),
-  route('POST', `/apps/(${APP})/settings/integrations/service-accounts/(${ACCOUNT})/rotate`, forApp(rotateServiceAccountSecret)),
-  route('POST', `/apps/(${APP})/settings/integrations/service-accounts/(${ACCOUNT})/delete`, forApp(deleteServiceAccountRoute)),
   route('POST', `/apps/(${APP})/settings/integrations/credentials`, forApp(createCredential)),
   route('POST', `/apps/(${APP})/settings/integrations/credentials/(${CREDENTIAL})`, forApp(updateCredential)),
   route('POST', `/apps/(${APP})/settings/integrations/credentials/(${CREDENTIAL})/delete`, forApp(deleteCredential)),
+  route('GET', `/apps/(${APP})/settings/api`, forApp(apiAccess)),
+  route('POST', `/apps/(${APP})/settings/api/clients`, forApp(createApiClient)),
+  route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})`, forApp(updateApiClient)),
+  route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})/rotate`, forApp(rotateApiClientSecret)),
+  route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})/revoke-previous`, forApp(revokePreviousApiClientSecret)),
+  route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})/delete`, forApp(deleteApiClient)),
+  route('GET', `/apps/(${APP})/settings/connect-ai`, forApp(connectAi)),
+  route('POST', `/apps/(${APP})/settings/connect-ai/agents/(${GRANT})/disconnect`, forApp(disconnectAppAgent)),
 ]
 
 /**
- * `<app>.<domain>/settings/users` and `/settings/integrations` (and below): a GET goes to the same page on the apex,
- * anything else is refused, so nothing on the app's host can change settings.
+ * `<app>.<domain>/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai` (and below): a
+ * GET goes to the same page on the apex, anything else is refused, so nothing on the app's host can change settings.
  */
 function appSettingsRedirect(ctx: Context): Response {
   const method = ctx.request.method
@@ -239,11 +249,6 @@ function apexMachine(ctx: Context, path: string): Promise<Response> | Response |
   const handler = endpoint.handlers[method]
   if (!handler) return new Response(null, { status: 405, headers: { Allow: endpoint.methods } })
   return handler(ctx)
-}
-
-/** Paths on an app host that belong to the gateway: the old settings addresses, which redirect to the apex. */
-export function isGatewayAppPath(path: string): boolean {
-  return /^\/settings\/(?:users|integrations)(?:\/|$)/.test(path)
 }
 
 export async function handleRequest(request: Request, env: Env, exec: ExecutionContext): Promise<Response> {

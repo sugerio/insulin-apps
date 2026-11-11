@@ -1,34 +1,27 @@
 // An app's integrations page, on the apex at /apps/<app>/settings/integrations (DESIGN.md §6; <app>.<domain>/settings/
-// integrations redirects there): the app's service accounts and stored credentials. Everyone who can use the app sees
-// them (never a secret); the app's admins create, change, rotate and delete them, each write re-checking the admin in
-// SQL. Bearer tokens never reach this page (DESIGN.md §4), and neither can code the app serves: it's another origin.
+// integrations redirects there): the app's stored credentials for outside services. Everyone who can use the app sees
+// them (never a secret); the app's admins create, change and delete them, each write re-checking the admin in SQL.
+// Bearer tokens never reach this page (DESIGN.md §4), and neither can code the app serves: it's another origin. The
+// app's OAuth clients for API access are on its API access page (api-clients.ts).
 import type { HostedApp } from '../config.ts'
 import type { Context } from '../context.ts'
 import { appSettingsPath } from '../context.ts'
 import { newId, seal } from '../crypto.ts'
-import { listCustomRoles } from '../db/grants.ts'
 import {
   deleteIntegration, findIntegration, insertIntegration, listIntegrations, updateIntegration, type AuthScheme, type IntegrationInput,
   type IntegrationRow,
 } from '../db/integrations.ts'
-import {
-  deleteServiceAccount, findServiceAccount, insertServiceAccount, listServiceAccounts, rotateServiceAccount, updateServiceAccount,
-} from '../db/oauth.ts'
 import { listMemberships } from '../db/orgs.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
 import { log } from '../log.ts'
-import { parseGrant } from '../orgs/access-forms.ts'
 import { appAdminOf, appMember, stillAdmin, type AppMember } from '../orgs/app-users.ts'
 import type { Problem } from '../orgs/orgs.ts'
-import { integrationsPage, type NewSecret } from '../pages/integrations.tsx'
+import { integrationsPage } from '../pages/integrations.tsx'
 import { notFoundPage } from '../pages/status.tsx'
-import { PREFIX, hashSecret, newIdentifier, newSecret } from '../oauth/tokens.ts'
 import { cleanText, length, truncate } from '../validate.ts'
 
 const NOTICES: Record<string, string> = {
-  'account-saved': 'The service account was saved.',
-  'account-deleted': 'The service account was deleted. Its tokens no longer work.',
   'credential-created': 'The credential was saved.',
   'credential-saved': 'The credential was saved.',
   'credential-deleted': 'The credential was deleted.',
@@ -54,13 +47,11 @@ export function secretPurpose(integrationId: string): string {
   return `integration:${integrationId}`
 }
 
-export async function renderIntegrations(ctx: Context, app: HostedApp, member: AppMember, extra: { problem?: Problem | null; secret?: NewSecret | null } = {}): Promise<Response> {
+export async function renderIntegrations(ctx: Context, app: HostedApp, member: AppMember, extra: { problem?: Problem | null } = {}): Promise<Response> {
   const db = ctx.config.db
   const orgId = member.membership.org_id
-  const [accounts, credentials, customRoles, memberships] = await Promise.all([
-    listServiceAccounts(db, orgId, app.name),
+  const [credentials, memberships] = await Promise.all([
     listIntegrations(db, orgId, app.name),
-    listCustomRoles(db, orgId),
     listMemberships(db, member.session.user.id),
   ])
   return htmlResponse(integrationsPage(ctx, member.session, app, {
@@ -68,12 +59,9 @@ export async function renderIntegrations(ctx: Context, app: HostedApp, member: A
     orgName: member.membership.org_name,
     orgRole: member.membership.role,
     access: member.access,
-    accounts,
     credentials,
-    customRoles: customRoles.filter((role) => role.app === app.name),
     sealing: ctx.config.secretKey !== null,
-    secret: extra.secret ?? null,
-    notice: extra.problem || extra.secret ? null : NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null,
+    notice: extra.problem ? null : NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null,
     error: extra.problem?.error ?? null,
   }, memberships), { status: extra.problem?.status ?? 200 })
 }
@@ -89,81 +77,11 @@ export async function integrations(ctx: Context): Promise<Response> {
   return renderIntegrations(ctx, app, found)
 }
 
-function checkName(input: string, what: string): { name: string } | { problem: string } {
+function checkName(input: string): { name: string } | { problem: string } {
   const name = cleanText(input)
-  if (!name) return { problem: `Enter a name for the ${what}.` }
+  if (!name) return { problem: 'Enter a name for the credential.' }
   if (length(name) > NAME_MAX) return { problem: `Use at most ${NAME_MAX} characters for the name.` }
   return { name }
-}
-
-/** A new client secret, shown once, and its hash to store. */
-async function freshSecret(): Promise<{ secret: string; hash: string }> {
-  const secret = newSecret(PREFIX.secret)
-  return { secret, hash: await hashSecret(secret) }
-}
-
-export async function createServiceAccount(ctx: Context): Promise<Response> {
-  const app = ctx.app!
-  const found = await appAdminOf(ctx, app)
-  if (found instanceof Response) return found
-  const problem = (error: string, status = 400) => renderIntegrations(ctx, app, found, { problem: { error, status } })
-  const name = checkName(field(ctx.form, 'name'), 'service account')
-  if ('problem' in name) return problem(name.problem)
-  const grant = parseGrant(app, field(ctx.form, 'role'), await listCustomRoles(ctx.config.db, found.membership.org_id))
-  if (!grant || grant === 'invalid') return problem('Choose a role for the service account.')
-  const id = newId()
-  const clientId = newIdentifier(PREFIX.serviceAccount)
-  const { secret, hash } = await freshSecret()
-  if (!(await insertServiceAccount(ctx.config.db, { id, orgId: found.membership.org_id, app: app.name, name: name.name, grant, clientId, secretHash: hash, actorId: found.session.user.id, now: ctx.now }))) {
-    return (await stillAdmin(ctx, app, found)) ?? problem('Nothing was saved. Reload the page and try again.', 409)
-  }
-  log('service_account_created', { org: found.membership.org_id, app: app.name, account: id, by: found.session.user.id })
-  return renderIntegrations(ctx, app, found, { secret: { kind: 'created', name: name.name, clientId, secret } })
-}
-
-export async function updateServiceAccountDetails(ctx: Context, [id]: string[]): Promise<Response> {
-  const app = ctx.app!
-  const found = await appAdminOf(ctx, app)
-  if (found instanceof Response) return found
-  const orgId = found.membership.org_id
-  if (!(await findServiceAccount(ctx.config.db, orgId, app.name, id!))) return notFoundPage(ctx)
-  const problem = (error: string) => renderIntegrations(ctx, app, found, { problem: { error, status: 400 } })
-  const name = checkName(field(ctx.form, 'name'), 'service account')
-  if ('problem' in name) return problem(name.problem)
-  const grant = parseGrant(app, field(ctx.form, 'role'), await listCustomRoles(ctx.config.db, orgId))
-  if (!grant || grant === 'invalid') return problem('Choose a role for the service account.')
-  if (!(await updateServiceAccount(ctx.config.db, { id: id!, orgId, app: app.name, name: name.name, grant, actorId: found.session.user.id, now: ctx.now }))) {
-    return (await stillAdmin(ctx, app, found)) ?? notFoundPage(ctx)
-  }
-  log('service_account_updated', { org: orgId, app: app.name, account: id, by: found.session.user.id })
-  return back(app, 'account-saved')
-}
-
-export async function rotateServiceAccountSecret(ctx: Context, [id]: string[]): Promise<Response> {
-  const app = ctx.app!
-  const found = await appAdminOf(ctx, app)
-  if (found instanceof Response) return found
-  const orgId = found.membership.org_id
-  const account = await findServiceAccount(ctx.config.db, orgId, app.name, id!)
-  if (!account) return notFoundPage(ctx)
-  const { secret, hash } = await freshSecret()
-  if (!(await rotateServiceAccount(ctx.config.db, { id: account.id, orgId, app: app.name, secretHash: hash, actorId: found.session.user.id, now: ctx.now }))) {
-    return (await stillAdmin(ctx, app, found)) ?? notFoundPage(ctx)
-  }
-  log('service_account_rotated', { org: orgId, app: app.name, account: account.id, by: found.session.user.id })
-  return renderIntegrations(ctx, app, found, { secret: { kind: 'rotated', name: account.name, clientId: account.client_id, secret } })
-}
-
-export async function deleteServiceAccountRoute(ctx: Context, [id]: string[]): Promise<Response> {
-  const app = ctx.app!
-  const found = await appAdminOf(ctx, app)
-  if (found instanceof Response) return found
-  const orgId = found.membership.org_id
-  if (!(await deleteServiceAccount(ctx.config.db, { id: id!, orgId, app: app.name, actorId: found.session.user.id }))) {
-    return (await stillAdmin(ctx, app, found)) ?? notFoundPage(ctx)
-  }
-  log('service_account_deleted', { org: orgId, app: app.name, account: id, by: found.session.user.id })
-  return back(app, 'account-deleted')
 }
 
 /** The base URL: https, no credentials, query or fragment, and not this site itself (the proxy must not loop). */
@@ -187,7 +105,7 @@ function isSiteHost(ctx: Context, host: string): boolean {
 
 /** The form's fields for a stored credential, checked; `requireSecret` on creation. */
 function checkCredential(ctx: Context, requireSecret: boolean): (IntegrationInput & { secret: string | null }) | { problem: string } {
-  const name = checkName(field(ctx.form, 'name'), 'credential')
+  const name = checkName(field(ctx.form, 'name'))
   if ('problem' in name) return name
   const base = checkBaseUrl(ctx, field(ctx.form, 'base_url'))
   if ('problem' in base) return base

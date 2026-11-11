@@ -53,6 +53,11 @@ export interface Config {
   mailFrom: { email: string; name: string }
   /** SUPPORT_EMAIL, or null: the pages then point to the repository's issues. */
   supportEmail: string | null
+  /**
+   * ORG_REQUEST_EMAIL, or null: where requests for more organizations go (DESIGN.md §3.1). Without it, the page at the
+   * limit points to the contact instead of offering the form.
+   */
+  orgRequestEmail: string | null
   /** `https://github.com/<owner>/<repo>/issues`, from the apps' source links, or null. */
   issuesUrl: string | null
   /** `https://github.com/<owner>/<repo>`, the repository those links point into, or null. */
@@ -137,6 +142,14 @@ const PERMISSION_LIMIT = 50
 const PUBLIC_PATH_LIMIT = 10
 // Never public: the gateway's own paths on an app host and the platform's routes inside the app.
 const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
+
+/**
+ * Paths on an app host that belong to the gateway: the app's settings addresses (People, Integrations, API access and
+ * Connect AI), which redirect to the same page on the apex (router.ts).
+ */
+export function isGatewayAppPath(path: string): boolean {
+  return /^\/settings\/(?:users|integrations|api|connect-ai)(?:\/|$)/.test(path)
+}
 
 /**
  * Why an entry of `insulin.publicPaths` is refused, or null. The same rule as .github/scripts/list-apps.mjs: a path
@@ -340,6 +353,8 @@ export function readConfig(env: Env): ConfigResult {
   // Optional: an unusable value is ignored (and logged) rather than taking the site down.
   const supportEmail = text(env.SUPPORT_EMAIL) ? normalizeEmail(env.SUPPORT_EMAIL) : null
   if (text(env.SUPPORT_EMAIL) && !supportEmail) log('config_support_email_ignored')
+  const orgRequestEmail = text(env.ORG_REQUEST_EMAIL) ? normalizeEmail(env.ORG_REQUEST_EMAIL) : null
+  if (text(env.ORG_REQUEST_EMAIL) && !orgRequestEmail) log('config_org_request_email_ignored')
 
   if (!hasMethod(env.DB, 'prepare')) problems.push('DB')
   if (!testMode && !hasMethod(env.EMAIL, 'send')) problems.push('EMAIL')
@@ -363,6 +378,7 @@ export function readConfig(env: Env): ConfigResult {
       turnstile: { siteKey, secretKey },
       mailFrom,
       supportEmail,
+      orgRequestEmail,
       issuesUrl: issuesUrlFrom(apps),
       repositoryUrl: repositoryUrlFrom(apps),
       testMode,

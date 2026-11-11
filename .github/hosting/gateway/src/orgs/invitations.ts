@@ -11,7 +11,8 @@ import {
   type InvitationGrantRow, type InvitationRow,
 } from '../db/invitations.ts'
 import { ORG_INVITATION_LIMIT, countOrgInvitationMail } from '../db/mail.ts'
-import { countMembers, findMembership } from '../db/orgs.ts'
+import { countMembers, findMembership, invitePolicy } from '../db/orgs.ts'
+import { domainOf } from '../db/sso.ts'
 import { findUserByEmail } from '../db/users.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
@@ -42,6 +43,23 @@ async function grantsOf(ctx: Context, invitationId: string): Promise<InvitationG
   return (await listInvitationGrants(ctx.config.db, [invitationId])).get(invitationId) ?? []
 }
 
+export function verifiedDomainsOnlyMessage(domains: string[]): string {
+  return domains.length
+    ? `This organization only invites people with an address in its verified domains: ${domains.join(', ')}.`
+    : 'This organization only invites people with an address in its verified domains, and none is verified right now.'
+}
+
+/**
+ * The refusal to show when the organization invites only people in its verified domains and `email` isn't in one of
+ * them, or null. The statements that invite and accept check the same thing themselves (db/orgs.ts invitableDomain);
+ * this is for the message.
+ */
+export async function outsideVerifiedDomains(ctx: Context, orgId: string, email: string): Promise<string | null> {
+  const policy = await invitePolicy(ctx.config.db, orgId)
+  if (!policy.verifiedOnly || policy.domains.includes(domainOf(email))) return null
+  return verifiedDomainsOnlyMessage(policy.domains)
+}
+
 export async function invite(ctx: Context, [orgId]: string[]): Promise<Response> {
   const found = await memberOf(ctx, orgId!)
   if (found instanceof Response) return found
@@ -59,6 +77,8 @@ export async function invite(ctx: Context, [orgId]: string[]): Promise<Response>
 
   const invitee = await findUserByEmail(db, email)
   if (invitee && await findMembership(db, membership.org_id, invitee.id)) return problem('That person is already a member.', 409)
+  const outside = await outsideVerifiedDomains(ctx, membership.org_id, email)
+  if (outside) return problem(outside, 403)
   if (await countMembers(db, membership.org_id) >= MEMBER_LIMIT) return problem(`This organization has reached its limit of ${MEMBER_LIMIT} members.`, 409)
   if (await countOpenInvitations(db, membership.org_id, ctx.now) >= PENDING_LIMIT) {
     return problem(`This organization already has ${PENDING_LIMIT} pending invitations. Revoke some before inviting more people.`, 409)
@@ -72,9 +92,12 @@ export async function invite(ctx: Context, [orgId]: string[]): Promise<Response>
     id, orgId: membership.org_id, email, role, grants, app: null, invitedBy: session.user.id, now: ctx.now, expiresAt: ctx.now + INVITATION_TTL_MS, pendingLimit: PENDING_LIMIT,
   })
   if (!created) {
-    // The insert re-checks the inviter's role and the pending cap itself; work out which condition stopped it.
+    // The insert re-checks the inviter's role, the pending cap and the verified domains itself; work out which
+    // condition stopped it.
     const changed = await actorChanged(ctx, session, membership)
     if (changed) return changed
+    const outsideNow = await outsideVerifiedDomains(ctx, membership.org_id, email)
+    if (outsideNow) return problem(outsideNow, 403)
     if (await countOpenInvitations(db, membership.org_id, ctx.now) >= PENDING_LIMIT) {
       return problem(`This organization already has ${PENDING_LIMIT} pending invitations. Revoke some before inviting more people.`, 409)
     }
@@ -120,9 +143,16 @@ export async function resendInvitation(ctx: Context, [orgId, invitationId]: stri
   const { session, membership, invitation } = found
   const db = ctx.config.db
   const problem = (error: string, status: number) => renderUsers(ctx, session, membership, { error, status })
+  // An invitation made before the organization limited invitations to its verified domains, or before its domain was
+  // removed, is refused like a new one (the claim checks it again itself).
+  const outside = await outsideVerifiedDomains(ctx, membership.org_id, invitation.email)
+  if (outside) return problem(outside, 403)
   if (ctx.now - invitation.last_sent_at < RESEND_GAP_MS) return problem('An invitation can be sent again once every 10 minutes.', 429)
   if (!(await claimResend(db, invitation, session.user.id, ctx.now, RESEND_GAP_MS, ctx.now + INVITATION_TTL_MS))) {
-    return (await actorChanged(ctx, session, membership)) ?? problem('An invitation can be sent again once every 10 minutes.', 429)
+    const changed = await actorChanged(ctx, session, membership)
+    if (changed) return changed
+    const outsideNow = await outsideVerifiedDomains(ctx, membership.org_id, invitation.email)
+    return outsideNow ? problem(outsideNow, 403) : problem('An invitation can be sent again once every 10 minutes.', 429)
   }
   const outcome = await sendMail(ctx, 'invitation', invitation.email,
     invitationMail(session.user.name, membership.org_name, accessPhrase(ctx.config, invitation.role, await grantsOf(ctx, invitation.id)), invitationLink(ctx, invitation.id)), membership.org_id)
@@ -170,10 +200,19 @@ export async function acceptInvitation(ctx: Context, [invitationId]: string[]): 
   const { session, invitation } = found
   const db = ctx.config.db
   if (!(await acceptForUser(db, invitation.id, session.user.id, session.user.email, ctx.now, MEMBER_LIMIT))) {
+    const fresh = await findInvitation(db, invitation.id)
+    const grants = await grantsOf(ctx, invitation.id)
+    // Someone new whose address is outside the verified domains the organization now invites only from.
+    const outside = isOpen(ctx, fresh) && !(await findMembership(db, invitation.org_id, session.user.id))
+      ? await outsideVerifiedDomains(ctx, invitation.org_id, invitation.email)
+      : null
+    if (outside) {
+      log('invitation_refused', { org: invitation.org_id, invitation: invitation.id, user: session.user.id, reason: 'verified_domains' })
+      return htmlResponse(invitationPage(ctx, session, fresh, grants, 'open', `${outside} Ask its owners about it.`), { status: 403 })
+    }
     const full = await countMembers(db, invitation.org_id) >= MEMBER_LIMIT
     const error = full ? `This organization has reached its limit of ${MEMBER_LIMIT} members. Ask its owners to make room.` : null
-    const fresh = await findInvitation(db, invitation.id)
-    return htmlResponse(invitationPage(ctx, session, fresh, await grantsOf(ctx, invitation.id), full ? 'open' : 'closed', error), { status: 409 })
+    return htmlResponse(invitationPage(ctx, session, fresh, grants, full ? 'open' : 'closed', error), { status: 409 })
   }
   const membership = await findMembership(db, invitation.org_id, session.user.id)
   if (membership) await switchActiveOrg(ctx, session, { id: membership.org_id, name: membership.org_name, role: membership.role })

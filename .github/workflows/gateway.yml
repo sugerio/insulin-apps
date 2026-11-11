@@ -5,12 +5,20 @@ on:
     branches: [main]
     paths:
       - .github/hosting/gateway/**
+      - .github/hosting/scripts/**
+      # The public docs: the platform's pages and images, and each app's pages (npm run check:docs).
+      - .github/hosting/docs/**
+      - '*/docs/public/**'
       - .github/workflows/gateway.yml
       - .github/scripts/deploy-apps.mjs
       - .github/scripts/list-apps.mjs
   pull_request:
     paths:
       - .github/hosting/gateway/**
+      - .github/hosting/scripts/**
+      # The public docs: the platform's pages and images, and each app's pages (npm run check:docs).
+      - .github/hosting/docs/**
+      - '*/docs/public/**'
       - .github/workflows/gateway.yml
       - .github/scripts/deploy-apps.mjs
       - .github/scripts/list-apps.mjs
@@ -81,3 +89,4 @@ jobs:
           GATEWAY_SECRET_KEY: ${{ secrets.GATEWAY_SECRET_KEY }}
           EMAIL_FROM: ${{ vars.EMAIL_FROM }}
           SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}
+          ORG_REQUEST_EMAIL: ${{ vars.ORG_REQUEST_EMAIL }}

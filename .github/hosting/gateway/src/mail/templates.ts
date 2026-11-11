@@ -1,5 +1,6 @@
 // The gateway's e-mails, as plain text and HTML. Names and organization names are user input: the HTML part escapes
 // them through the `html` tag, and they never contain line breaks (validate.ts removes control characters).
+import { checkOwnerDomain } from '../owner-domain.ts'
 import { html, type Html } from '../pages/html.ts'
 
 export interface MailContent {
@@ -27,6 +28,11 @@ ${button}
 
 function textBody(lines: string[]): string {
   return `${lines.join('\n\n')}\n\n-- \n${PRODUCT}: open-source apps, hosted for you.\n`
+}
+
+/** One POSIX shell word: in single quotes, each ' inside written as '\''. */
+function shellWord(text: string): string {
+  return `'${text.replaceAll("'", "'\\''")}'`
 }
 
 export function verifyEmailMail(name: string, link: string): MailContent {
@@ -145,5 +151,45 @@ export function mfaChangedMail(name: string, enabled: boolean, securityUrl: stri
       html`Two-step sign-in was ${what} for your ${PRODUCT} account. ${after} Your other sessions were signed out.`,
       html`If this wasn't you, reset your password and review your account's security.`,
     ], { label: 'Review your account security', url: securityUrl }),
+  }
+}
+
+/**
+ * To Insulin Apps support (ORG_REQUEST_EMAIL): someone whose owner domain has all the organizations it may have asks
+ * for more (DESIGN.md §3.1). It goes out with Reply-To set to them, so support answers them directly.
+ */
+export function orgRequestMail(request: {
+  name: string
+  email: string
+  ownerDomain: string
+  count: number
+  max: number
+  wanted: string
+  reason: string
+  site: string
+}): MailContent {
+  const { name, email, ownerDomain, count, max, wanted, reason, site } = request
+  // The command names the owner domain only when allow-orgs.mjs would take it exactly as it is, quoted for the shell
+  // all the same; anything else (an address someone chose with quotes or $( ) in it) is left for support to check.
+  const checked = checkOwnerDomain(ownerDomain)
+  const plain = 'ownerDomain' in checked && checked.ownerDomain === ownerDomain
+  const command = `node .github/hosting/scripts/allow-orgs.mjs --domain ${plain ? shellWord(ownerDomain) : 'DOMAIN'} --max N --remote`
+  const fill = plain
+    ? 'with N the number of organizations it may have in all'
+    : 'with N the number of organizations it may have in all, and in place of DOMAIN the owner domain after you check it by hand: it has characters the script refuses'
+  return {
+    subject: `Request for more organizations on ${PRODUCT}: ${ownerDomain}`,
+    text: textBody([
+      `${name} <${email}> asks for more organizations on ${site}.`,
+      `Owner domain: ${ownerDomain}\nOrganizations it has: ${count} (limit ${max})\nName wanted: ${wanted}`,
+      `Why: ${reason}`,
+      `Reply to this email to answer them. To allow more, run this from the repository (the hosting runbook, "Allow a domain more organizations"), ${fill}: ${command}. They then create the organization themselves.`,
+    ]),
+    html: htmlBody([
+      html`<strong>${name}</strong> &lt;${email}&gt; asks for more organizations on ${site}.`,
+      html`Owner domain: ${ownerDomain}<br>Organizations it has: ${count} (limit ${max})<br>Name wanted: ${wanted}`,
+      html`Why: ${reason}`,
+      html`Reply to this email to answer them. To allow more, run this from the repository (the hosting runbook, &quot;Allow a domain more organizations&quot;), ${fill}: <code>${command}</code>. They then create the organization themselves.`,
+    ]),
   }
 }

@@ -66,7 +66,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
  }finally{await viewerSending.unmount();}
  const visitor=await renderMember('/',c=>{if(c.path==='/api/me')return json({error:'unauthorized'},401);});
  try{
-  assert.match(visitor.text(),/Sign in to use E-sign\./);
+  assert.match(visitor.text(),/Sign in to use Esign\./);
   assert.equal(visitor.calls.length,1,'nothing else is asked for');
  }finally{await visitor.unmount();}
 });

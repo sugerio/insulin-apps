@@ -11,7 +11,7 @@ import { children, docHref, type DocTopic } from '../pages/docs/parts.ts'
 import { DOC_TOPICS, docTopic } from '../pages/docs/topics.ts'
 
 const h = React.createElement
-const GROUPS = [['app', 'Using E-sign'], ['background', 'Electronic signatures']] as const
+const GROUPS = [['app', 'Using Esign'], ['background', 'Electronic signatures']] as const
 
 // Text styles for the topics' plain markup.
 const PROSE = 'flex flex-col gap-4 text-sm leading-7 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.8125rem]'

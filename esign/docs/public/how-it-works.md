@@ -1,19 +1,19 @@
 ---
-title: How E-sign works
+title: How Esign works
 description: The signing lifecycle, the hash chain, codes and sessions, the KMS and RFC 3161 seal, the certificate of completion, what is stored, and known limits.
 order: 8
 ---
 
-This page explains what happens behind E-sign's pages: how an envelope moves from template to sealed PDF, what evidence
-E-sign keeps and how it protects it, and what it doesn't establish. It is for people who need to judge the evidence, for
-developers of host products, and for AI agents answering questions about a signing. E-sign is experimental: its evidence
+This page explains what happens behind Esign's pages: how an envelope moves from template to sealed PDF, what evidence
+Esign keeps and how it protects it, and what it doesn't establish. It is for people who need to judge the evidence, for
+developers of host products, and for AI agents answering questions about a signing. Esign is experimental: its evidence
 and wording still need review before real documents are signed.
 
 ## The signing lifecycle
 
 ```diagram
 title: From template to sealed PDF
-description: A template is a PDF with its signer roles and either placed fields or an added signature page. Sending it makes an envelope with one recipient per role, signed in order. For each signer in turn, a one-time link opens the signing page, a six-digit code emailed to the signer confirms who they are, and they agree to sign electronically and sign; the signature is drawn into the PDF and hash-chained to the previous one. After the last signer, E-sign checks the chain, seals it with an AWS KMS signature and an RFC 3161 timestamp, and the envelope is completed with the signed PDF, a certificate of completion and a copy link emailed to each signer.
+description: A template is a PDF with its signer roles and either placed fields or an added signature page. Sending it makes an envelope with one recipient per role, signed in order. For each signer in turn, a one-time link opens the signing page, a six-digit code emailed to the signer confirms who they are, and they agree to sign electronically and sign; the signature is drawn into the PDF and hash-chained to the previous one. After the last signer, Esign checks the chain, seals it with an AWS KMS signature and an RFC 3161 timestamp, and the envelope is completed with the signed PDF, a certificate of completion and a copy link emailed to each signer.
 size: 740 x 550
 box template 20 20 260 70 "Template" "a PDF and its signer roles, with" "fields or an added signature page"
 box envelope 380 20 340 70 "Envelope" "one recipient per role, signed in order;" "document name, sender, sign-by date"
@@ -36,7 +36,7 @@ arrow seal.r -> done.l
 ```
 
 1. **Template.** Someone uploads a PDF with its roles, signed on an added signature page or in placed fields.
-2. **Envelope.** Sending names one recipient per role. In the same request, E-sign copies the template's PDF to the
+2. **Envelope.** Sending names one recipient per role. In the same request, Esign copies the template's PDF to the
    envelope as its initial document, makes the first signer's task active and marks the envelope **Out for signature**
    (`IN_PROGRESS`).
 3. **The signing page.** For the active signer, a host product (or someone who manages, from the envelope's page) gets a
@@ -44,9 +44,9 @@ arrow seal.r -> done.l
 4. **Review, confirm, sign.** The signer reviews the document, enters the 6-digit code emailed to them, agrees to sign
    electronically and signs. Reading the document needs only the page session; previews, declining and signing also need
    the code.
-5. **Rendering.** E-sign saves the signature, then draws it into the PDF from exactly what it saved. Then the next
+5. **Rendering.** Esign saves the signature, then draws it into the PDF from exactly what it saved. Then the next
    signer's task becomes active, and they sign the PDF the previous signer produced.
-6. **Sealing.** After the last signature is drawn, the envelope is **Finishing** (`FINALIZING`). E-sign checks the whole
+6. **Sealing.** After the last signature is drawn, the envelope is **Finishing** (`FINALIZING`). Esign checks the whole
    chain, seals it and marks the envelope **Completed**. Each signer is then emailed a link to their copy.
 
 Rendering and sealing run after the signer gets their answer, so a signer never waits for the seal. If that work is cut
@@ -83,7 +83,7 @@ nothing to change after a signature is saved but its drawing state.
 
 ### The seal
 
-When everyone has signed, E-sign builds an evidence manifest. First it checks the whole chain: the initial document's
+When everyone has signed, Esign builds an evidence manifest. First it checks the whole chain: the initial document's
 fingerprint, every signature's order, link, input and fingerprint, every drawn PDF (drawn again, byte for byte), and every
 stored file's fingerprint. Then it seals the manifest:
 
@@ -94,7 +94,7 @@ stored file's fingerprint. Then it seals the manifest:
 | **Checked** | On every read: the signature against the pinned public key, the timestamp against the pinned authority, as of the timestamp's time | Recomputed with the current key on every read |
 | **Certificate says** | "Sealed: AWS KMS signature + RFC 3161 timestamp" | **LOCAL TEST ONLY** |
 
-A published E-sign seals only with the managed seal. The local test seal is a simulation, with server-recorded times and
+A published Esign seals only with the managed seal. The local test seal is a simulation, with server-recorded times and
 no independent timestamp: don't rely on it.
 
 ### The certificate of completion
@@ -129,15 +129,15 @@ Signers never sign in. Two kinds of short-lived credentials give them access to 
 | **Page session** | The token the page gets for that code, sent in its own header | 15 minutes, and only while the task is active and the envelope out for signature |
 | **Emailed code** | 6 digits sent to the signer's email address | 10 minutes, once; up to 3 sends and 5 tries per 15 minutes per signer, 60 seconds between sends |
 
-E-sign stores only hashes of link codes and sessions. The emailed code is stored as a keyed hash over the task, its
+Esign stores only hashes of link codes and sessions. The emailed code is stored as a keyed hash over the task, its
 email address and the code, so it works only for the address it was sent to, and a task's email address can't be changed.
 Only the page session the code was sent for can enter it, and only the session that entered the latest code can sign.
 
 The field editor opens the same way, with its own kind of code and session that the signing page never accepts.
 
-## What E-sign stores
+## What Esign stores
 
-Everything is in E-sign's one database, scoped to your organization:
+Everything is in Esign's one database, scoped to your organization:
 
 - templates (the PDF, roles and placed fields), envelopes, signer tasks and each envelope's initial document;
 - one record per signature, the drawn images and each signer's output PDF;
@@ -156,13 +156,13 @@ envelopes.
 - **Timestamp authority.** Revocation of the authority's certificates isn't checked, its terms for production use aren't
   confirmed, and the request goes over plain HTTP (the answer is signed and verified). The signed PDF carries no embedded
   (PAdES) signature.
-- **Identity.** The emailed code shows control of a mailbox, not who someone is. E-sign doesn't check identity documents.
-- **Rate limits.** Beyond the code budget and its long link codes, E-sign relies on the platform's per-IP limits on its
+- **Identity.** The emailed code shows control of a mailbox, not who someone is. Esign doesn't check identity documents.
+- **Rate limits.** Beyond the code budget and its long link codes, Esign relies on the platform's per-IP limits on its
   public pages.
 - **Retention and integrity.** No retention policy; storage writes are create-only but not write-once storage; privileged
   changes to the database or keys remain possible and are detected only where the checks above run again.
 - **Due work.** Between the platform's five-minute runs, deadlines, unfinished envelopes and unsent copies wait for the
   next request on the envelope or a **Process due work**. One run handles up to 25 envelopes to finish and 25 owing copies.
 - **Display.** The signing page draws the PDF as images, without selectable text, so it isn't an accessible reader. None
-  of this proves a person read the document: E-sign checks the session, the code, the consent and the current input, not
+  of this proves a person read the document: Esign checks the session, the code, the consent and the current input, not
   the display.

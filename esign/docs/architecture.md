@@ -1,6 +1,6 @@
-# How E-sign works
+# How Esign works
 
-E-sign is an Insulin app: one npm package (Vite, React and Nitro, with Drizzle on D1) served behind
+Esign is an Insulin app: one npm package (Vite, React and Nitro, with Drizzle on D1) served behind
 the hosting gateway at `esign.<domain>`. Members of an organization send PDFs for signature from the
 app or through its API; recipients sign on a public page that a host product can embed; the app
 verifies each signer by an emailed one-time code, records the signature, renders the signed PDF,
@@ -180,7 +180,7 @@ rendering and every later re-verification fail closed if the running renderer di
   `EXPIRED` audit event.
 - A recipient-view request may carry `hostAuthentication` (`{method, provider?, domain?,
   signedInAt?}`, `method` an upper-case word such as `SSO`): how the host signed the recipient in.
-  E-sign cannot check it; it is recorded and printed as the host's statement.
+  Esign cannot check it; it is recorded and printed as the host's statement.
 - Certificates are versioned per envelope (`certificateVersion` in `envelopes.details_json`, now 2;
   none means 1). A certificate is rebuilt on every read and must come out the same, so each
   envelope keeps the layout it was created with. Change the layout only by adding a version.

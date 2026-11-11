@@ -1,7 +1,7 @@
-E-sign
-======
+Esign
+=====
 
-E-sign is distributed under the MIT License: see the LICENSE file at the
+Esign is distributed under the MIT License: see the LICENSE file at the
 root of this repository. It includes or derives from the third-party material
 listed below. npm installs the packages; nothing below is copied into the
 source except the shadcn/ui components and theme, and the two bitmap atlases

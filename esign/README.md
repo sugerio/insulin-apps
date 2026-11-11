@@ -1,7 +1,7 @@
-# E-sign
+# Esign
 
-E-sign sends PDFs for electronic signature. A member of an organization uploads a document, names
-who signs it and in which order, and E-sign takes each signer through a signing page: it confirms
+Esign sends PDFs for electronic signature. A member of an organization uploads a document, names
+who signs it and in which order, and Esign takes each signer through a signing page: it confirms
 who they are with a code emailed to them, shows the document, records their consent and signature,
 and, once everyone has signed, seals the result and emails each signer a link to their copy with a
 certificate of completion.
@@ -32,7 +32,7 @@ certificate and the timestamp service still need review before real documents ar
 
 ## The pages
 
-Members open E-sign from their organization's Insulin apps:
+Members open Esign from their organization's Insulin apps:
 
 - **Envelopes**: every envelope with its status; one envelope's signers, audit trail and, once
   completed, the signed PDF and certificate. Those who manage send new ones, void, open the active
@@ -48,7 +48,7 @@ link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).
 
 ## Who can do what
 
-| Role | E-sign permission | Can |
+| Role | Esign permission | Can |
 | --- | --- | --- |
 | Editor and above (Owner, Admin, Editor) | `esign.manage` | send, void and follow envelopes, upload templates, open signing pages for testing |
 | Viewer | `esign.view` | see the organization's templates and envelopes |
@@ -56,7 +56,7 @@ link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).
 A custom role is built from these two permissions. Recipients don't need an account: their link and
 emailed code are their access, to their own task only.
 
-**The platform runs due work every five minutes.** E-sign declares `"scheduled": "/api/scheduled"`
+**The platform runs due work every five minutes.** Esign declares `"scheduled": "/api/scheduled"`
 under `insulin` in `package.json`, and the hosting gateway POSTs there every five minutes with no
 identity (`x-suger-access-via: schedule`). An envelope is normally finished right after its last
 signature, after the signer's response; due work finishes any that a request couldn't (a CPU limit,

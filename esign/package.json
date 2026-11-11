@@ -1,6 +1,6 @@
 {
   "name": "insulin-esign",
-  "displayName": "E-sign",
+  "displayName": "Esign",
   "version": "0.1.0",
   "description": "Electronic signatures: templates with placed fields, envelopes signed in order with emailed one-time codes, a sealed signed PDF and a certificate of completion",
   "license": "MIT",

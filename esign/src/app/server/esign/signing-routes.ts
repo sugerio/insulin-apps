@@ -145,7 +145,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       // The task's send budget (60 seconds apart, 3 per 15 minutes): say when the next send is allowed.
       if (error instanceof OtpSendRefused) {const retryAfterSeconds=Math.ceil(error.retryAfterMs/1000);return c.json({error:'otp_rate_limited',retryAfterSeconds},429,{'Retry-After':String(retryAfterSeconds)});}
       // Why the code wasn't sent, without the address or the code: the relay's status, or the error's kind.
-      console.warn('E-sign: a verification code was not sent', error instanceof MailRelayError ? {relayStatus:error.status} : {error:error instanceof Error ? error.name : typeof error});
+      console.warn('Esign: a verification code was not sent', error instanceof MailRelayError ? {relayStatus:error.status} : {error:error instanceof Error ? error.name : typeof error});
       return c.json({error:'otp_unavailable'},429);
     }
   });
@@ -305,7 +305,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     await next();
     if (c.res.status !== 202 || c.env.COMPLETE_AFTER_SIGN !== 'true') return;
     const work = completeEnvelopeOfSession(c.env,pageToken(c))
-      .catch(() => console.error('E-sign: finishing the envelope after a signature failed; process-due retries it'));
+      .catch(() => console.error('Esign: finishing the envelope after a signature failed; process-due retries it'));
     if (c.env.WAIT_UNTIL) c.env.WAIT_UNTIL(work);
     else await work;
   });

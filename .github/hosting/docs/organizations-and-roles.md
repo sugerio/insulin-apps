@@ -66,7 +66,7 @@ Each app interprets three built-in roles:
 | **Viewer** | Read only. The app decides what that shows. |
 
 What "read only" shows is up to each app. For example, a Viewer in [Cap Table](/docs/captable/overview) sees only their
-own holdings, while a Viewer in [E-sign](/docs/esign/overview) sees the organization's templates and envelopes.
+own holdings, while a Viewer in [Esign](/docs/esign/overview) sees the organization's templates and envelopes.
 
 Owners and admins of the organization are **Admin** in every app. Editors are **Editor** and viewers are **Viewer** in
 every app.
@@ -86,12 +86,12 @@ admin through specific apps sees the list but can't change it. See
 ## Access to specific apps
 
 Use **Specific apps** for people who need one or two apps and nothing else, such as an outside counsel who only uses
-E-sign, or an employee who only looks at their own equity in Cap Table.
+Esign, or an employee who only looks at their own equity in Cap Table.
 
 - They see only the apps they were given, on their home page and when they open an app.
 - They don't see the organization's people list. On **People** they see **Your apps** instead, with a link to each app's
   own people page.
-- Their role can differ per app, for example Editor in E-sign and Viewer in Cap Table.
+- Their role can differ per app, for example Editor in Esign and Viewer in Cap Table.
 - Taking away their last app removes them from the organization.
 
 ## Custom roles
@@ -117,8 +117,8 @@ permission: a role higher up has it too, and Admin has every permission.
 | Cap Table | `captable.manage` | Record changes | Record and reverse equity changes, run imports and manage documents. Includes viewing the whole cap table. | Editor |
 | Cap Table | `captable.view` | View the cap table | See the whole cap table, stakeholders, reports and documents, read only. | Editor |
 | Cap Table | `portfolio.view` | See own holdings | See their own holdings in the holder view, matched by their e-mail address. | Viewer |
-| E-sign | `esign.manage` | Send and manage envelopes | Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing. | Editor |
-| E-sign | `esign.view` | View envelopes | See templates, envelopes and their status, the audit trail, signed documents and certificates of completion. | Viewer |
+| Esign | `esign.manage` | Send and manage envelopes | Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing. | Editor |
+| Esign | `esign.view` | View envelopes | See templates, envelopes and their status, the audit trail, signed documents and certificates of completion. | Viewer |
 
 ### How an app sees a custom role
 

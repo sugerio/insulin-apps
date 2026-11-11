@@ -89,7 +89,7 @@ See [AI agents](/docs/platform/ai-agents#the-connect-ai-page).
 
 ### Why do I sign in again for each app my agent uses?
 
-Each app is its own MCP server with its own permission. Allowing an agent in Cap Table doesn't let it into E-sign, and
+Each app is its own MCP server with its own permission. Allowing an agent in Cap Table doesn't let it into Esign, and
 each connection is for one organization. That keeps an agent to exactly what you meant to give it. See
 [AI agents](/docs/platform/ai-agents).
 

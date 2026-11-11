@@ -3,7 +3,7 @@ import { isProd } from './environment.ts';
 import { OTP_TTL_MS } from './otp.ts';
 
 /**
- * Email: one-time codes and completion notices. An Insulin app has no email binding, so E-sign
+ * Email: one-time codes and completion notices. An Insulin app has no email binding, so Esign
  * sends through the hosting platform's mail relay: `POST <SUGER_MAIL_URL>` with the app's token
  * (`SUGER_APP_TOKEN`) and the organization the mail is for (`x-suger-organization-id`), one
  * recipient per message. The relay answers 202 once it has sent it; anything else (a refusal, a
@@ -54,7 +54,7 @@ export function mailerFor(env: MailEnv, tenantId: string): Mailer | null {
   return {
     async send(recipient, subject, text) {
       if (!isValidOtpEmailAddress(recipient)) throw new Error('Invalid recipient address');
-      const body = { to: recipient, subject, text: prod ? text : `${text}\n\nSent by an E-sign test deployment. Synthetic test documents only.` };
+      const body = { to: recipient, subject, text: prod ? text : `${text}\n\nSent by an Esign test deployment. Synthetic test documents only.` };
       const response = await send(relay.url, {
         method: 'POST',
         headers: { authorization: `Bearer ${relay.token}`, 'x-suger-organization-id': tenantId, 'content-type': 'application/json' },

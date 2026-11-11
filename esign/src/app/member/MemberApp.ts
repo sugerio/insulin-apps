@@ -1,4 +1,4 @@
-// The members' pages: a header with E-sign's navigation (Envelopes, Templates, Docs) and the page the address names.
+// The members' pages: a header with Esign's navigation (Envelopes, Templates, Docs) and the page the address names.
 // Who the member is comes from /api/me, the platform's identity; the server checks every request again, so what a role
 // can't do is hidden here and refused there. The Docs need no identity: they open for every role, and before sign-in.
 import React, { useEffect, useState } from 'react'
@@ -65,7 +65,7 @@ export function MemberApp() {
   return h('div', { className: 'min-h-svh bg-background text-foreground' },
     h('header', { className: 'border-b' },
       h('div', { className: 'mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6' },
-        h(Link, { to: '/', className: 'flex items-center gap-2 font-semibold' }, h(Signature, { className: 'size-5', 'aria-hidden': true }), 'E-sign'),
+        h(Link, { to: '/', className: 'flex items-center gap-2 font-semibold' }, h(Signature, { className: 'size-5', 'aria-hidden': true }), 'Esign'),
         h('nav', { 'aria-label': 'Primary', className: 'flex flex-1 items-center gap-1' },
           ...NAV.map((item) => {
             const active = item.section === current.section
@@ -80,8 +80,8 @@ export function MemberApp() {
 
 function SignIn() {
   return h('div', { className: 'flex flex-col gap-2' },
-    h('h1', { className: 'text-2xl font-semibold tracking-tight' }, 'Sign in to use E-sign.'),
-    h('p', { className: 'text-sm text-muted-foreground' }, 'E-sign is part of your organization\'s Insulin apps; open it from there. ', h(Link, { to: '/docs', className: 'font-medium text-foreground underline underline-offset-4' }, 'Read the Docs')))
+    h('h1', { className: 'text-2xl font-semibold tracking-tight' }, 'Sign in to use Esign.'),
+    h('p', { className: 'text-sm text-muted-foreground' }, 'Esign is part of your organization\'s Insulin apps; open it from there. ', h(Link, { to: '/docs', className: 'font-medium text-foreground underline underline-offset-4' }, 'Read the Docs')))
 }
 
 function NotFound() {

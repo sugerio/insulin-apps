@@ -1,24 +1,24 @@
 ---
-title: Getting started with E-sign
-description: Open E-sign, upload your first template, send an envelope and follow it to a signed PDF with its certificate.
+title: Getting started with Esign
+description: Open Esign, upload your first template, send an envelope and follow it to a signed PDF with its certificate.
 order: 2
 ---
 
-This page takes you from an empty E-sign to your first completed envelope. It is for the person in your organization
-who sends documents for signature. Use a synthetic PDF and test addresses: E-sign is experimental.
+This page takes you from an empty Esign to your first completed envelope. It is for the person in your organization
+who sends documents for signature. Use a synthetic PDF and test addresses: Esign is experimental.
 
 ## Before you start
 
 - **An account and an organization.** Sign up at `https://insulinapps.com`, create an organization or accept an
   invitation to one. See [Getting started with Insulin Apps](/docs/platform/getting-started).
 - **A role that can send.** Organization owners, admins and editors can send and manage envelopes. Someone with access
-  to specific apps needs E-sign's Admin or Editor role, or a custom role with **Send and manage envelopes**. Viewers can
+  to specific apps needs Esign's Admin or Editor role, or a custom role with **Send and manage envelopes**. Viewers can
   follow along but not send. See [Roles and access](/docs/esign/roles-and-access).
 - **Signing set up on the deployment.** If it isn't, the **Envelopes** page says "Signing isn't set up on this deployment
-  yet". You can still upload templates and send envelopes, but nobody can sign until whoever runs E-sign adds its
+  yet". You can still upload templates and send envelopes, but nobody can sign until whoever runs Esign adds its
   settings.
 
-Open E-sign at `https://esign.insulinapps.com`, or from your organization's apps on the Insulin Apps home page. The header
+Open Esign at `https://esign.insulinapps.com`, or from your organization's apps on the Insulin Apps home page. The header
 shows your role.
 
 ## 1. Upload a template
@@ -29,7 +29,7 @@ A template is a PDF and the roles that sign it, in signing order.
 2. Under **New template**, choose the **PDF** (up to 5 MB and 100 pages).
 3. Under **Signer roles, in signing order**, name each role, such as `partner` and `seller`. Use letters, digits, `-` and
    `_`, with no spaces. Choose **Add a role** for another one.
-4. Choose **Upload with a signature page** for the quickest start. Signers then sign on a page E-sign adds after the
+4. Choose **Upload with a signature page** for the quickest start. Signers then sign on a page Esign adds after the
    document's last page.
 
 Or choose **Upload and place fields** to put each role's signature, title and date exactly where they belong. See
@@ -51,14 +51,14 @@ The envelope's page opens. Its status is **Out for signature**, and the first si
 
 ## 3. Have each signer sign
 
-E-sign doesn't email an invitation to sign. The signer whose turn it is opens the signing page in one of two ways:
+Esign doesn't email an invitation to sign. The signer whose turn it is opens the signing page in one of two ways:
 
-- **In your host product**, the system your organization uses E-sign from, which shows the signing page inside its own
+- **In your host product**, the system your organization uses Esign from, which shows the signing page inside its own
   pages.
 - **From the envelope's page**: choose **Open** *name*'s **signing page** next to the active signer (for example
-  **Open Avery Patel's signing page**). Use this when the signer is with you, or to try E-sign out.
+  **Open Avery Patel's signing page**). Use this when the signer is with you, or to try Esign out.
 
-The signer reviews the document, enters the 6-digit code E-sign emails them, types their name to adopt their signature,
+The signer reviews the document, enters the 6-digit code Esign emails them, types their name to adopt their signature,
 agrees to sign electronically and chooses **Sign document**. Then the next signer's turn starts. See
 [Signing](/docs/esign/signing).
 
@@ -67,7 +67,7 @@ agrees to sign electronically and chooses **Sign document**. Then the next signe
 The envelope's page updates by itself while the envelope is out for signature: each signer's status, when they opened
 the signing page, and every event in the **Audit trail**.
 
-When the last signer has signed, the envelope shows **Finishing** for a few seconds while E-sign seals it, then
+When the last signer has signed, the envelope shows **Finishing** for a few seconds while Esign seals it, then
 **Completed**. Then:
 
 - choose **Signed PDF with certificate** to download the signed document followed by its certificate of completion;
@@ -81,7 +81,7 @@ When the last signer has signed, the envelope shows **Finishing** for a few seco
 
 With a role that only views, you see the same pages: every envelope with its status, signers and audit trail, the
 templates, and the signed PDF and certificate of a completed envelope. You can't upload templates, send, void or open a
-signing page; those buttons aren't shown, and E-sign refuses them on the server however they are asked.
+signing page; those buttons aren't shown, and Esign refuses them on the server however they are asked.
 
 If there are no templates or envelopes yet, the pages say so. Nothing is missing: nobody has sent anything yet.
 

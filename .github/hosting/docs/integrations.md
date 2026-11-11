@@ -108,7 +108,7 @@ app reads them with `getCurrentUser(request)` from `@fours/app/server`. An app t
 
 ### Public pages for people without an account
 
-Some people never get an account, such as someone who receives a document to sign in E-sign. An app lists the paths
+Some people never get an account, such as someone who receives a document to sign in Esign. An app lists the paths
 they may open in `publicPaths` (at most ten). On those paths Insulin Apps forwards the request with no identity at all
 (`x-suger-access-via: public`), and the app authenticates the visitor with its own short-lived codes, such as a code
 e-mailed to them. These requests are rate limited per IP address, and requests that change something more strictly.
@@ -125,7 +125,7 @@ ten messages an hour per recipient across all apps, 500 a day per organization a
 
 Apps have no cron jobs. An app with work that falls due (deadlines, retries) declares one `scheduled` path under `/api/`,
 and the platform calls it every five minutes, with no identity (`x-suger-access-via: schedule`), an empty body and a
-25-second timeout. The app does every organization's due work there, safely repeatable. For example, E-sign expires
+25-second timeout. The app does every organization's due work there, safely repeatable. For example, Esign expires
 envelopes past their deadline this way.
 
 ### Secrets

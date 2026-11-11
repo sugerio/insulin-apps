@@ -1,21 +1,21 @@
 ---
-title: E-sign overview
-description: What E-sign does, who it is for, its pages, and how it runs on Insulin Apps. Experimental, for synthetic documents only.
+title: Esign overview
+description: What Esign does, who it is for, its pages, and how it runs on Insulin Apps. Experimental, for synthetic documents only.
 order: 1
 ---
 
-E-sign sends PDFs for electronic signature. This page is for anyone deciding whether to use it, and for AI agents that need
+Esign sends PDFs for electronic signature. This page is for anyone deciding whether to use it, and for AI agents that need
 a map of the app before they act on it.
 
 > [!WARNING]
-> **E-sign is experimental.** Use synthetic documents and test email addresses only. The consent wording, the
+> **Esign is experimental.** Use synthetic documents and test email addresses only. The consent wording, the
 > certificate of completion and the timestamp service still need legal and operational review before real documents
 > are signed.
 
-## What E-sign does
+## What Esign does
 
 Someone in your organization uploads a PDF as a **template** and names the roles that sign it, in order. They send the
-template as an **envelope**, naming one signer for each role. Each signer, in turn, opens the signing page. E-sign:
+template as an **envelope**, naming one signer for each role. Each signer, in turn, opens the signing page. Esign:
 
 1. emails the signer a 6-digit code to confirm it is them;
 2. shows them the document, with its fingerprint (a SHA-256 hash that identifies exactly this file);
@@ -40,7 +40,7 @@ to them give access to their own turn, and nothing else.
 
 ## The pages
 
-Members open E-sign at `https://esign.insulinapps.com`. Its navigation has three entries:
+Members open Esign at `https://esign.insulinapps.com`. Its navigation has three entries:
 
 | Page | What it shows |
 | --- | --- |
@@ -53,32 +53,32 @@ for host products, the embedded field editor (`/editor/page/...`).
 
 ## How it runs on Insulin Apps
 
-E-sign is an open-source Insulin app. On insulinapps.com it runs at `https://esign.insulinapps.com`, behind the platform:
+Esign is an open-source Insulin app. On insulinapps.com it runs at `https://esign.insulinapps.com`, behind the platform:
 
 - **Sign-in is the platform's.** You sign in at `https://insulinapps.com` with email and password, Google or your
-  company's single sign-on. E-sign has no sign-in screens of its own. See
+  company's single sign-on. Esign has no sign-in screens of its own. See
   [Sign-in and security](/docs/platform/sign-in-and-security).
 - **Your role comes from your organization.** Owners, admins and editors send and manage envelopes; viewers see them.
   See [Roles and access](/docs/esign/roles-and-access).
-- **One organization at a time.** Everything you see in E-sign belongs to your active organization. Switch organization
+- **One organization at a time.** Everything you see in Esign belongs to your active organization. Switch organization
   in the top bar to see another one's templates and envelopes.
-- **Due work runs every five minutes.** The platform calls E-sign every five minutes so it can expire envelopes past
+- **Due work runs every five minutes.** The platform calls Esign every five minutes so it can expire envelopes past
   their deadline, finish envelopes a request left unfinished and retry signed-copy emails, for every organization.
-- **Mail goes through the platform.** E-sign has no mail service of its own. It sends a signer two kinds of email only:
+- **Mail goes through the platform.** Esign has no mail service of its own. It sends a signer two kinds of email only:
   their verification code and, at the end, the link to their signed copy. It doesn't email signers an invitation to
   sign.
-- **Signing must be set up.** A published E-sign signs nothing until its code pepper, the mail relay and its AWS KMS key
+- **Signing must be set up.** A published Esign signs nothing until its code pepper, the mail relay and its AWS KMS key
   are configured. Until then, the **Envelopes** page says that signing isn't set up on the deployment.
 
-![An envelope's page in E-sign, with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "One envelope: its signers in order, where each stands, and the audit trail")
+![An envelope's page in Esign, with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "One envelope: its signers in order, where each stands, and the audit trail")
 
-## What E-sign doesn't do
+## What Esign doesn't do
 
 - It doesn't email signers an invitation to sign. The signer opens the signing page in your host product, or someone who
   manages opens it for them from the envelope's page.
 - It doesn't check what kind of document is sent. Whoever sends decides whether an electronic signature fits it.
 - It doesn't verify identity documents. The emailed code shows control of the signer's mailbox at the time, and a host
-  product can tell E-sign how it signed the signer in, which E-sign records as the host's statement.
+  product can tell Esign how it signed the signer in, which Esign records as the host's statement.
 - It doesn't make advanced or qualified electronic signatures (in the EU's eIDAS terms), and the signed PDF carries no
   embedded PDF signature.
 

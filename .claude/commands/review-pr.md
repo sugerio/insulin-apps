@@ -117,7 +117,7 @@ npm cache (`--cache "$D/npm-cache"`) if `~/.npm` isn't writable.
 |---|---|
 | An app (`captable`, `esign`, …), from its directory | `npm ci --ignore-scripts --no-audit --no-fund`; `node .github/scripts/check-insulin-app.mjs <app>` (from the root); `npm run typecheck`; `TZ=UTC npm test` (CI runs in UTC, and Cap Table's spreadsheet dates fail in other time zones); `app.yml`'s "Migrations match the schema" step (drizzle-kit 0.31.11 and drizzle-orm 0.45.3 in a temporary folder, then `drizzle-kit generate` must write nothing); `NODE_ENV=production NITRO_PRESET=cloudflare_module npm run build`; `check-insulin-app.mjs <app> --built` |
 | Cap Table, also | The workerd smoke: `npm ci` in `.github/scripts/workerd-smoke/`, then `node smoke.mjs` there |
-| E-sign, also | Its `npm test` includes a browser test that needs Chrome; if Chrome can't start, report "E-sign editor browser test: not run here, CI runs it" |
+| Esign, also | Its `npm test` includes a browser test that needs Chrome; if Chrome can't start, report "Esign editor browser test: not run here, CI runs it" |
 | The gateway, from `.github/hosting/gateway/` | `npm ci --ignore-scripts --no-audit --no-fund`; `npm run typecheck`; `npm test` (Miniflare; it also fails while the CSS or docs module is stale); `npm run check:css` and `npm run check:docs` |
 | Docs (`.github/hosting/docs/`, `<app>/docs/public/`) | The gateway's `npm run check:docs` (the regenerated `src/assets/docs-content.ts` must be committed) |
 | CI and scripts (`.github/`) | `node --test .github/scripts/*.test.mjs`; `node .github/scripts/check-app-workflows.mjs`; `actionlint` if it's installed; read workflow changes against the root README's "Releases" and `.github/hosting/README.md` |

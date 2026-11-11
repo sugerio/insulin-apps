@@ -1,4 +1,4 @@
-// Plays the hosting gateway for tests that drive E-sign as a host product does. A host's key, kept
+// Plays the hosting gateway for tests that drive Esign as a host product does. A host's key, kept
 // in the test gateway's `api_keys` table (platform.ts), stands for a service account of its
 // organization: a request with `Authorization: Bearer <key>` reaches the app as that organization's
 // ADMIN identity (x-suger-* headers, `x-suger-access-via: api`), without the key, as the gateway
@@ -33,7 +33,7 @@ async function editorOrigins(db: D1Database): Promise<string> {
   }
 }
 
-/** The public paths E-sign declares in package.json `insulin.publicPaths`. */
+/** The public paths Esign declares in package.json `insulin.publicPaths`. */
 const PUBLIC_PATHS: string[] = (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { insulin: { publicPaths: string[] } }).insulin.publicPaths;
 
 /** Whether the gateway treats a path as public: the entry itself, or below it (an entry ending in / matches below only). */
@@ -46,7 +46,7 @@ export default {
     // A test that sends the platform identity itself keeps it.
     const headers = new Headers(request.headers);
     // As the production gateway does on a public path: no identity at all, whatever the request sent. Authorization is
-    // dropped and every x-suger-* header stripped, so a page session travels only in E-sign's own x-esign-session.
+    // dropped and every x-suger-* header stripped, so a page session travels only in Esign's own x-esign-session.
     if (isPublicPath(new URL(request.url).pathname)) {
       headers.delete('authorization');
       for (const name of [...headers.keys()]) if (name.startsWith('x-suger-')) headers.delete(name);

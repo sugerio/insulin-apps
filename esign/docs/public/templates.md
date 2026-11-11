@@ -20,14 +20,14 @@ or `seller`. When you send an envelope, you name one person for each role, and t
 | Roles | 1 to 20, each different |
 | Role names | Letters, digits, `-` and `_`, no spaces, up to 64 characters |
 
-The PDF must be a valid PDF; a file E-sign can't read is refused. Use synthetic documents until your organization has
-reviewed E-sign for real ones.
+The PDF must be a valid PDF; a file Esign can't read is refused. Use synthetic documents until your organization has
+reviewed Esign for real ones.
 
 ## A signature page, or placed fields
 
 A template is signed in one of two ways:
 
-- **On an added signature page.** E-sign appends a page after the document's last page. Each signer gets a block on it
+- **On an added signature page.** Esign appends a page after the document's last page. Each signer gets a block on it
   with their name and the time they signed, eight blocks to a page. This works with any PDF.
 - **In placed fields.** You put each role's **Signature**, and optionally **Title** and **Date signed**, exactly where
   they belong on the document's pages.
@@ -70,7 +70,7 @@ Choose **Close the editor** to leave without saving.
 | --- | --- | --- |
 | **Signature** | Their full name, typed | A handwriting-style image of the typed name, 30 points high. It may extend to the right of its box, so leave clear space there, but not off the page or over another field. |
 | **Title** | Their title, typed | Text that must fit inside the box. |
-| **Date signed** | Nothing | The date they sign (UTC), filled in by E-sign. It must fit inside the box. |
+| **Date signed** | Nothing | The date they sign (UTC), filled in by Esign. It must fit inside the box. |
 
 Rules the editor and the server check:
 
@@ -92,12 +92,12 @@ There is no button to delete a template.
 
 The **Templates** page hosts the editor exactly as a host product would: it opens an editing session for its own address,
 stages the PDF, frames the editor and confirms the save with the server. The deployment's list of origins allowed to
-embed E-sign's pages must therefore include E-sign's own address for **Upload and place fields** and **Place fields** to
+embed Esign's pages must therefore include Esign's own address for **Upload and place fields** and **Place fields** to
 work. Uploading with a signature page needs nothing more.
 
 ## Embed the editor in a host product
 
-A host product can show the field editor inside its own pages. Its backend calls E-sign's API with an OAuth client
+A host product can show the field editor inside its own pages. Its backend calls Esign's API with an OAuth client
 (see [API](/docs/esign/api)):
 
 1. `POST /api/template-editing-sessions` with `{"allowedParentOrigin": "https://app.example.com", "roles": ["partner",
@@ -113,7 +113,7 @@ A host product can show the field editor inside its own pages. Its backend calls
 
 Rules for embedding:
 
-- `allowedParentOrigin` must be one of the origins the deployment allows to embed E-sign (https). The editor refuses to
+- `allowedParentOrigin` must be one of the origins the deployment allows to embed Esign (https). The editor refuses to
   open inside any other page, and stops working at its next request if that origin is removed.
 - One session saves once. For another version, open a new session.
 - The editor's code works once, within two minutes. Never log codes or put them in a query string.

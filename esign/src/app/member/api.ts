@@ -37,9 +37,9 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
 /** What to tell the member when a request fails, in plain words. */
 export function describeError(error: unknown): string {
   if (error instanceof RequestError) {
-    if (error.status === 401) return 'Sign in to use E-sign.'
-    if (error.status === 403 && error.code === 'origin_not_allowed') return 'E-sign can\'t open the field editor on this page. Ask whoever runs E-sign to check its ESIGN_FRAME_ANCESTORS setting.'
-    if (error.status === 403) return 'Your role in E-sign doesn\'t allow that.'
+    if (error.status === 401) return 'Sign in to use Esign.'
+    if (error.status === 403 && error.code === 'origin_not_allowed') return 'Esign can\'t open the field editor on this page. Ask whoever runs Esign to check its ESIGN_FRAME_ANCESTORS setting.'
+    if (error.status === 403) return 'Your role in Esign doesn\'t allow that.'
     if (error.status === 404 && error.code === 'signing_disabled') return 'Signing isn\'t set up on this deployment yet.'
     if (error.status === 404) return 'That isn\'t here any more, or belongs to another organization.'
     if (error.status === 409) return 'That changed meanwhile. Reload and try again.'

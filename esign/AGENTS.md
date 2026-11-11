@@ -1,12 +1,12 @@
 # AGENTS.md
 
-Guidance for AI coding agents (including the Insulin AppBuilder) and for contributors working on E-sign. Read it before
+Guidance for AI coding agents (including the Insulin AppBuilder) and for contributors working on Esign. Read it before
 changing code. [docs/architecture.md](docs/architecture.md) explains how the app works; this file says what to do and
 what never to do.
 
 ## The app in brief
 
-E-sign is an electronic signature app on the Insulin app template: one npm package, Vite + React + Nitro, deployed as a
+Esign is an electronic signature app on the Insulin app template: one npm package, Vite + React + Nitro, deployed as a
 Cloudflare Worker with one D1 database. Members send PDFs for signature; recipients sign on a public page after an
 emailed one-time code; each signature is hash-chained, and a finished envelope is sealed with AWS KMS and an RFC 3161
 timestamp. Users, roles and permissions come from the Insulin platform; the organization is the tenant.
@@ -119,9 +119,9 @@ Every Insulin app ships a **Docs** entry in its navigation:
 - a change that alters behaviour updates the Docs topic that describes it in the same change;
 - tests cover the Docs entry for each role and every topic rendering.
 
-E-sign's Docs are `src/app/pages/docs/` and `src/app/components/Docs.ts`, tested in `test/docs.test.ts`; the signing
+Esign's Docs are `src/app/pages/docs/` and `src/app/components/Docs.ts`, tested in `test/docs.test.ts`; the signing
 page's "About signing" panel is `src/app/ui/SigningHelp.ts`. Cap Table is the reference: `captable/src/app/pages/docs/`
-and `captable/src/app/components/Docs.tsx` (E-sign's are `.ts` for the reason under Commands).
+and `captable/src/app/components/Docs.tsx` (Esign's are `.ts` for the reason under Commands).
 
 The public docs at `https://insulinapps.com/docs/esign/` are `docs/public/*.md` (front matter `title`, `description`,
 `order`), for people and AI agents; update the page that describes a behaviour in the same change, then run
@@ -140,5 +140,5 @@ Never add real names, addresses, cloud account ids, keys or internal hostnames.
 
 ## User-facing text
 
-Plain language: no internal codes, table names or status enums on the signing page. The product is called "E-sign".
+Plain language: no internal codes, table names or status enums on the signing page. The product is called "Esign".
 Explain what blocks an action and what to do next. Describe what the app does now.

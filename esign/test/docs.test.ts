@@ -15,7 +15,7 @@ import {statusLabel,taskLabel} from '../src/app/member/api.ts';
 const render=(topic:string|undefined)=>renderToStaticMarkup(React.createElement(Docs,{topic}));
 const textOf=(html:string)=>html.replace(/<[^>]+>/g,' ').replace(/&#x27;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/\s+/g,' ');
 
-// Every role as E-sign sees it, and the visitor the platform hasn't signed in.
+// Every role as Esign sees it, and the visitor the platform hasn't signed in.
 const SESSIONS:[string,unknown,number][]=[
  ['an Owner',me('OWNER',['esign.manage','esign.view']),200],
  ['an Admin',me('ADMIN',['esign.manage','esign.view']),200],
@@ -36,7 +36,7 @@ for(const [who,session,status] of SESSIONS){
   try{
    const nav=app.byLabel('Primary');assert.ok(nav,'the primary navigation');
    assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/'],['Templates','/templates'],['Docs','/docs']]);
-   if(status===401)assert.match(app.text(),/Sign in to use E-sign\./);
+   if(status===401)assert.match(app.text(),/Sign in to use Esign\./);
    else assert.match(app.text(),/No envelopes yet\./,'an organization that has sent nothing yet');
    const entry=nav.findAll((n:any)=>n.type==='a'&&n.props.href==='/docs')[0];
    assert.equal(entry.props['aria-current'],undefined);
@@ -102,12 +102,12 @@ for(const topic of DOC_TOPICS){
  });
 }
 
-test('only the background on electronic signatures is general information, and it says what E-sign does',()=>{
+test('only the background on electronic signatures is general information, and it says what Esign does',()=>{
  assert.deepEqual(DOC_TOPICS.filter(t=>t.generalInformation).map(t=>t.slug),['e-signatures']);
  const text=textOf(render('e-signatures'));
  assert.match(text,/It isn't legal advice/);
  assert.match(text,/ESIGN Act/);assert.match(text,/eIDAS/);
- assert.match(text,/In E-sign: the signer adopts their typed name/);
+ assert.match(text,/In Esign: the signer adopts their typed name/);
  assert.match(text,/doesn't make advanced or qualified signatures/);
 });
 
@@ -117,7 +117,7 @@ test('the Docs cover the main tasks, what each role sees, signers, statuses, evi
   assert.match(all,words);
  for(const slug of ['getting-started','statuses']){
   const text=textOf(render(slug));
-  assert.match(text,/The platform runs (E-sign's due work|it) for every organization every five minutes/,`${slug} says the platform runs due work every five minutes`);
+  assert.match(text,/The platform runs (Esign's due work|it) for every organization every five minutes/,`${slug} says the platform runs due work every five minutes`);
   assert.match(text,/POST \/api\/process-due/,`${slug} says process-due finishes it at once`);
   assert.doesNotMatch(text,/Hosts call POST \/api\/process-due on a schedule/,`${slug} no longer asks hosts to schedule it`);
  }

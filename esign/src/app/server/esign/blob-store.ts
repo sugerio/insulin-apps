@@ -1,8 +1,8 @@
 /**
  * Object storage on D1. An Insulin app gets one D1 database and static assets, nothing else, so the
- * PDFs, field images, seals and delivery PDFs E-sign used to keep in R2 live in two tables:
+ * PDFs, field images, seals and delivery PDFs Esign used to keep in R2 live in two tables:
  * `blob_chunks` holds an upload's bytes in 256 KiB chunks, and `blobs` names the upload a key points
- * to. The interface is the part of R2's `R2Bucket` E-sign uses (get, head, put with
+ * to. The interface is the part of R2's `R2Bucket` Esign uses (get, head, put with
  * `onlyIf: { etagDoesNotMatch: '*' }`, delete, list by prefix), so the signing code is unchanged.
  *
  * A put writes its chunks under a fresh upload id first, then points the key at them in one
@@ -32,7 +32,7 @@ export interface BlobPutOptions {
   httpMetadata?: { contentType?: string };
 }
 
-/** The R2Bucket subset E-sign stores its objects with. */
+/** The R2Bucket subset Esign stores its objects with. */
 export interface BlobStore {
   get(key: string): Promise<BlobObject | null>;
   head(key: string): Promise<BlobInfo | null>;

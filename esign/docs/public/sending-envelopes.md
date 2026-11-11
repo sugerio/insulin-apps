@@ -57,7 +57,7 @@ Signers sign one at a time, in the template's role order. Only the signer whose 
 When they have signed, their signature is drawn into the PDF, and the next signer signs that result. So every signer signs
 exactly what the signer before them produced.
 
-E-sign doesn't email signers an invitation. When it is someone's turn, they open the signing page in your host product,
+Esign doesn't email signers an invitation. When it is someone's turn, they open the signing page in your host product,
 or someone who manages opens it for them from the envelope's page with **Open** *name*'s **signing page**. See
 [Signing](/docs/esign/signing).
 
@@ -81,7 +81,7 @@ page lists every envelope, newest first; filter it with **Status**.
 | Status | API value | What it means |
 | --- | --- | --- |
 | **Out for signature** | `IN_PROGRESS` | Signers are signing in turn. The only status in which anyone can sign, decline or void. |
-| **Finishing** | `FINALIZING` | Everyone has signed, and E-sign is sealing the signed PDF. This usually takes seconds. |
+| **Finishing** | `FINALIZING` | Everyone has signed, and Esign is sealing the signed PDF. This usually takes seconds. |
 | **Completed** | `COMPLETED` | Sealed. The signed PDF and the certificate can be downloaded, and each signer is sent a link to their copy. |
 | **Voided** | `VOIDED` | Someone who manages envelopes withdrew it before everyone had signed. |
 | **Declined** | `DECLINED` | The signer whose turn it was declined to sign, with a reason. |
@@ -119,12 +119,12 @@ the signer declined.
 ## Sign-by deadlines
 
 A sign-by day applies to every signer of the envelope. If a signer who hasn't signed passes it, the envelope expires. A
-signer who has already signed is past their deadline's reach. E-sign applies an expiry when someone next opens the
+signer who has already signed is past their deadline's reach. Esign applies an expiry when someone next opens the
 envelope, and when due work runs. Through the API, each signer can have a deadline of their own (`expiresAt`).
 
 ## Due work
 
-E-sign usually finishes an envelope right after its last signature, without making the signer wait. If that can't
+Esign usually finishes an envelope right after its last signature, without making the signer wait. If that can't
 happen, for example after a time limit or an outage, the envelope stays **Finishing** until due work runs.
 
 Due work:

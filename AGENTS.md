@@ -110,7 +110,7 @@ keep such secrets in the app's database or source.
 **Beyond D1** (`.github/hosting/DESIGN.md` §8). An app gets one D1 database and static assets, nothing else. It asks
 the platform for the rest in `package.json` under `insulin`:
 
-- **Public paths** (`insulin.publicPaths`) are only for people who have no account, such as an e-sign recipient. The
+- **Public paths** (`insulin.publicPaths`) are only for people who have no account, such as an Esign recipient. The
   gateway forwards them with no identity (`x-suger-access-via: public`), so the app authenticates them with its own
   short-lived codes and lets them reach only what those codes are for. Never use one to skip sign-in for members.
 - **Mail** goes through the gateway's relay: `POST` to `SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the request's

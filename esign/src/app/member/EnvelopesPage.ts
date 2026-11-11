@@ -64,7 +64,7 @@ export function EnvelopesPage({ me }: { me: Me }) {
       envelopes === null ? h('p', { role: 'status', className: 'p-6 text-sm text-muted-foreground' }, 'Loading envelopes…')
         : envelopes.length === 0 ? h('div', { className: 'flex flex-col items-start gap-2 p-6' },
           h('p', { className: 'text-sm text-muted-foreground' }, status ? 'No envelopes with this status.' : 'No envelopes yet.'),
-          !status ? h('p', { className: 'text-sm text-muted-foreground' }, manage ? 'Upload a template, then send an envelope from it. ' : 'Envelopes your organization sends appear here. ', h(Link, { to: '/docs/getting-started', className: 'font-medium text-foreground underline underline-offset-4' }, 'How E-sign works')) : null)
+          !status ? h('p', { className: 'text-sm text-muted-foreground' }, manage ? 'Upload a template, then send an envelope from it. ' : 'Envelopes your organization sends appear here. ', h(Link, { to: '/docs/getting-started', className: 'font-medium text-foreground underline underline-offset-4' }, 'How Esign works')) : null)
           : h(Table, { 'aria-label': 'Envelopes' },
             h(TableHeader, null, h(TableRow, null,
               h(TableHead, { className: 'pl-6' }, 'Document'), h(TableHead, null, 'Status'), h(TableHead, { className: 'pr-6' }, 'Created'))),

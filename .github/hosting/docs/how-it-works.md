@@ -31,7 +31,7 @@ box cron 210 268 150 76 muted "Crons" "five-minute tick" "daily cleanup"
 group apps 20 400 700 125 "App Workers, private"
 box captable 40 442 170 58 "Cap Table" "insulin-apps-captable"
 box capdb 222 447 52 48 db "D1"
-box esign 300 442 170 58 "E-sign" "insulin-apps-esign"
+box esign 300 442 170 58 "Esign" "insulin-apps-esign"
 box esdb 482 447 52 48 db "D1"
 box more 560 442 140 58 dashed "More apps" "the same shape"
 arrow people.b -> apex.t:0.1875 "session cookie" label=0.3
@@ -168,7 +168,7 @@ text 370 478 small muted "Every request checks the person's or the account's cur
 
 ## Public paths
 
-Some apps serve people who have no account, such as a recipient signing a document in E-sign. An app declares those
+Some apps serve people who have no account, such as a recipient signing a document in Esign. An app declares those
 paths (`insulin.publicPaths` in its `package.json`, at most ten). On a public path the gateway:
 
 - looks at no session and no token, and forwards only `x-suger-app-id` and `x-suger-access-via: public`, even when a

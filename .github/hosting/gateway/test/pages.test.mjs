@@ -35,13 +35,14 @@ test('signed in, / is the home page with the active organization\'s apps, and si
   const page = await person.client.get(h.url('apex', '/'))
   assert.match(page.text, /<h1>Apps in Landing Org<\/h1>/, "the apps section's title is the page's heading")
   assert.match(page.text, /<h2>Cap Table<\/h2>/, 'an app card right under it')
-  // The organization switcher in the top bar lists the organizations and creates one: the page doesn't repeat it.
+  // The navigation's organization switcher lists the organizations and creates one: the page doesn't repeat it.
   assert.doesNotMatch(page.text, /Welcome, Landing Person/)
   assert.doesNotMatch(page.text, /<h2>Your organizations<\/h2>/)
   assert.doesNotMatch(page.text, /Make active/)
   const main = /<main\b[\s\S]*<\/main>/.exec(page.text)[0]
-  assert.doesNotMatch(main, /Create an organization/, 'only the top bar offers it')
-  assert.match(/<header\b[\s\S]*?<\/header>/.exec(page.text)[0], /href="http:\/\/insulinapps\.localhost\/orgs\/new"[^>]*>[\s\S]*?Create an organization/)
+  assert.doesNotMatch(main, /Create an organization/, 'only the organization switcher offers it')
+  const primary = /<nav aria-label="Primary" id="insulin-nav-primary"[\s\S]*?<\/nav>/.exec(page.text)[0]
+  assert.match(primary, /href="http:\/\/insulinapps\.localhost\/orgs\/new">[\s\S]*?Create an organization/)
   assert.equal(page.headers.get('x-robots-tag'), 'noindex', 'the home page is private')
   assert.match(page.text, /<form action="\/logout" method="post">/)
   const out = await person.client.post(h.url('apex', '/logout'), {})

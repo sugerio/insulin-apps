@@ -4,7 +4,6 @@
 // them and post their forms.
 import type { ReactNode } from "react"
 import { ArrowUpRight } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,15 +14,16 @@ import { Container, PageHeader } from "@/components/layout"
 import type { AppAccess } from "../access.ts"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { apexUrl, appSettingsPath, appUrl, type AppSettingsTab } from "../context.ts"
+import { apexUrl, appSettingsPath, type AppSettingsTab } from "../context.ts"
 import type { CustomRoleRow, GrantRow } from "../db/grants.ts"
 import type { InvitationGrantRow, InvitationRow } from "../db/invitations.ts"
 import type { MemberRow, MembershipRow } from "../db/orgs.ts"
+import { appShell, type ShellData, type ShellModel } from "../navigation.ts"
 import { accessSummary, grantChoices, grantLabel, grantValue } from "../orgs/access-forms.ts"
 import { APP_ROLE_LABELS, ROLE_LABELS, appRoleOf, canHandleInvitation, canManageMembers, type Role } from "../roles.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { accountOf, page } from "./document.tsx"
+import { page } from "./document.tsx"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -39,14 +39,20 @@ export interface AppFrame {
   error?: string | null
 }
 
-/** The heading, the tabs (People, Integrations, API access, Connect AI) and the page's notice or problem. */
-export function AppSettingsFrame({ ctx, app, data, tab, children }: { ctx: Context; app: HostedApp; data: AppFrame; tab: AppSettingsTab; children: ReactNode }) {
-  const tabs: { tab: AppSettingsTab; label: string; path: string }[] = [
-    { tab: "users", label: "People", path: appSettingsPath(app, "users") },
-    { tab: "integrations", label: "Integrations", path: appSettingsPath(app, "integrations") },
-    { tab: "api", label: "API access", path: appSettingsPath(app, "api") },
-    { tab: "connect-ai", label: "Connect AI", path: appSettingsPath(app, "connect-ai") },
-  ]
+/**
+ * The navigation of an app's settings page (DESIGN.md §3.2): the app's own level 1, as the person's role in it shows
+ * it, with Settings open, so the page reads as part of the app though it is served on the apex.
+ */
+export function appSettingsShell(ctx: Context, session: Session, app: HostedApp, data: AppFrame, orgs: readonly MembershipRow[], tab: AppSettingsTab): ShellModel {
+  const shell: ShellData = { orgs, org: { id: data.orgId, name: data.orgName, role: data.orgRole }, apps: [] }
+  return appShell(ctx, session, shell, app, data.access.role, tab)
+}
+
+/**
+ * The heading and the page's notice or problem. The settings pages themselves (People, Integrations, API access,
+ * Connect AI) are the navigation's level 2, and the app's own pages its level 1.
+ */
+export function AppSettingsFrame({ ctx, app, data, children }: { ctx: Context; app: HostedApp; data: AppFrame; children: ReactNode }) {
   return (
     <Container className="flex flex-col gap-6 py-10 sm:py-12">
       <PageHeader
@@ -60,34 +66,14 @@ export function AppSettingsFrame({ ctx, app, data, tab, children }: { ctx: Conte
           </p>
         }
         actions={
-          <div className="flex flex-wrap gap-2">
-            <a className={buttonVariants({ variant: "outline" })} href={appUrl(ctx, app)}>
-              Back to {app.title}
+          canManageMembers(data.orgRole) ? (
+            <a className={buttonVariants({ variant: "outline" })} href={apexUrl(ctx, `/settings/users?org=${data.orgId}`)}>
+              Everyone in {data.orgName}
+              <ArrowUpRight />
             </a>
-            {canManageMembers(data.orgRole) ? (
-              <a className={buttonVariants({ variant: "outline" })} href={apexUrl(ctx, `/settings/users?org=${data.orgId}`)}>
-                Everyone in {data.orgName}
-                <ArrowUpRight />
-              </a>
-            ) : null}
-          </div>
+          ) : null
         }
       />
-      <nav aria-label={`${app.title} settings`} className="flex gap-1 overflow-x-auto border-b">
-        {tabs.map((item) => (
-          <a
-            key={item.tab}
-            href={item.path}
-            aria-current={item.tab === tab ? "page" : undefined}
-            className={cn(
-              "-mb-px shrink-0 rounded-t-md border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-              item.tab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {item.label}
-          </a>
-        ))}
-      </nav>
       {data.notice ? <Notice kind="ok">{data.notice}</Notice> : null}
       <ErrorSummary errors={[data.error]} />
       {children}
@@ -330,9 +316,9 @@ function AppInvitations({ ctx, app, data }: { ctx: Context; app: HostedApp; data
   )
 }
 
-export function appUsersPage(ctx: Context, session: Session, app: HostedApp, data: AppUsersData, orgs?: readonly MembershipRow[]): Html {
-  return page(ctx, { title: `People · ${app.title}`, user: accountOf(session, orgs) }, (
-    <AppSettingsFrame ctx={ctx} app={app} data={data} tab="users">
+export function appUsersPage(ctx: Context, session: Session, app: HostedApp, data: AppUsersData, orgs: readonly MembershipRow[]): Html {
+  return page(ctx, { title: `People · ${app.title}`, shell: appSettingsShell(ctx, session, app, data, orgs, "users") }, (
+    <AppSettingsFrame ctx={ctx} app={app} data={data}>
       {data.access.admin ? null : (
         <Notice>Only {app.title}&apos;s admins invite people and change their roles here. You can see who uses it.</Notice>
       )}

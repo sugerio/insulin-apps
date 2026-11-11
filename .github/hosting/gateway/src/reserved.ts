@@ -10,8 +10,9 @@ import { findMembership, listMemberships } from './db/orgs.ts'
 import { BodyTooLarge, isFormBody, isJsonBody, isSameOrigin, readText, wantsJson } from './http/request.ts'
 import { htmlResponse, jsonResponse, redirect } from './http/response.ts'
 import { log } from './log.ts'
+import { navToggle } from './navigation.ts'
 import { devMailPage, mailLinks } from './pages/dev-mail.tsx'
-import { afterPost, methodNotAllowed, notFoundPage } from './pages/status.tsx'
+import { afterPost, badRequestPage, methodNotAllowed, notFoundPage } from './pages/status.tsx'
 import { ROLE_LABELS } from './roles.ts'
 import { activeOrg, endSession, loadSession, switchActiveOrg } from './auth/session.ts'
 
@@ -31,6 +32,8 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
       return method === 'POST' ? switchOrg(ctx) : methodNotAllowed(ctx, ['POST'])
     case '/__insulin/logout':
       return method === 'POST' ? logout(ctx) : methodNotAllowed(ctx, ['POST'])
+    case '/__insulin/nav':
+      return nav(ctx)
     case '/__insulin/dev/mail':
       return devMail(ctx)
     default:
@@ -115,6 +118,20 @@ async function logout(ctx: Context): Promise<Response> {
   await endSession(ctx)
   if (wantsJson(ctx.request)) return jsonResponse({ ok: true, next: apexUrl(ctx) })
   return afterPost(ctx, apexUrl(ctx))
+}
+
+/**
+ * The collapse toggles of the gateway's navigation (DESIGN.md §3.2, navigation.ts): GET only, on the apex only, where
+ * the signed-in pages are (apps keep the choice in their own localStorage).
+ */
+function nav(ctx: Context): Response {
+  if (ctx.site !== 'apex') return notFoundPage(ctx)
+  const method = ctx.request.method
+  if (method !== 'GET' && method !== 'HEAD') return methodNotAllowed(ctx, ['GET', 'HEAD'])
+  const result = navToggle(ctx)
+  if (result instanceof Response) return result
+  log('nav_refused', { reason: result.code })
+  return badRequestPage(ctx, 400, result.problem)
 }
 
 /** Local development only: SITE_ENV=test and a *.localhost host; a 404 everywhere else. */

@@ -1,6 +1,6 @@
 import { buildEvidenceManifest, commitSeal, type SignatureRow } from './evidence.ts';
 import type { BlobStore } from '../blob-store.ts';
-/** Fake HMAC adapters for local tests only; neither a managed KMS nor an external TSA. */
+/** Fake HMAC adapters for local tests only; neither the managed seal key nor an external TSA. */
 const text = new TextEncoder();
 const hex = (value:ArrayBuffer) => Array.from(new Uint8Array(value),n=>n.toString(16).padStart(2,'0')).join('');
 const digest = async (value:ArrayBuffer) => hex(await crypto.subtle.digest('SHA-256',value));

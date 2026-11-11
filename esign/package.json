@@ -42,19 +42,11 @@
     "secrets": [
       "ESIGN_OTP_KEY",
       "ESIGN_FRAME_ANCESTORS",
-      "ESIGN_KMS_KEY_ARN",
-      "ESIGN_KMS_PUBLIC_KEY",
-      "ESIGN_KMS_TRUSTED_KEY_SHA256",
-      "ESIGN_AWS_ROLE_ARN",
-      "ESIGN_AWS_ACCESS_KEY_ID",
-      "ESIGN_AWS_SECRET_ACCESS_KEY",
       "ESIGN_TSA_SIGNER_SPKI_SHA256"
     ]
   },
   "dependencies": {
-    "@aws-sdk/client-kms": "3.1161.0",
     "@fours/app": "0.1.0-beta.0",
-    "@smithy/signature-v4": "5.7.5",
     "asn1js": "3.0.6",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",

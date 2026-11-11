@@ -142,11 +142,12 @@ export const seals = sqliteTable('seals', {
   mode: text('mode').notNull(),
   object_key: text('object_key').notNull().unique(),
   sha256: text('sha256').notNull(),
-  key_arn: text('key_arn'),
+  /** The managed seal's key fingerprint (seal/keys.ts). */
+  key_id: text('key_id'),
   timestamp_time: integer('timestamp_time'),
 }, (table) => [
-  check('seals_mode', sql`${table.mode} IN ('LOCAL_TEST', 'KMS_TSA')`),
-  check('seals_managed', sql`(${table.mode} = 'KMS_TSA') = (${table.key_arn} IS NOT NULL AND ${table.timestamp_time} IS NOT NULL)`),
+  check('seals_mode', sql`${table.mode} IN ('LOCAL_TEST', 'KEY_TSA')`),
+  check('seals_managed', sql`(${table.mode} = 'KEY_TSA') = (${table.key_id} IS NOT NULL AND ${table.timestamp_time} IS NOT NULL)`),
 ])
 
 /** An embedded editing session (editor-session.ts), for one parent origin the host frames it in. */

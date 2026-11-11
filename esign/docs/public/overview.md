@@ -67,7 +67,7 @@ E-sign is an open-source Insulin app. On insulinapps.com it runs at `https://esi
 - **Mail goes through the platform.** E-sign has no mail service of its own. It sends a signer two kinds of email only:
   their verification code and, at the end, the link to their signed copy. It doesn't email signers an invitation to
   sign.
-- **Signing must be set up.** A published E-sign signs nothing until its code pepper, the mail relay and its AWS KMS key
+- **Signing must be set up.** A published E-sign signs nothing until its code pepper, the mail relay and its seal key
   are configured. Until then, the **Envelopes** page says that signing isn't set up on the deployment.
 
 ![An envelope's page in E-sign, with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "One envelope: its signers in order, where each stands, and the audit trail")

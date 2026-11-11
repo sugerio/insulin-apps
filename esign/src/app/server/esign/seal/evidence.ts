@@ -14,7 +14,7 @@ const MANIFEST_FORMAT='esign-evidence-manifest-v1';
  * The evidence manifest of a finished envelope, rebuilt from its stored signatures after checking
  * the whole chain: the source, each signature's record and event hash, its rendered PDF (rendered
  * again, byte for byte) and the files' hashes. Sealed by the local HMAC test seal (local.ts) or by
- * the managed KMS + TSA seal (managed.ts).
+ * the managed seal, a seal key signature + TSA (managed.ts).
  */
 export async function buildEvidenceManifest(db:D1Database,bucket:BlobStore,tenantId:string,envelopeId:string) {
   const envelope=await db.prepare('SELECT status FROM envelopes WHERE id=? AND tenant_id=?').bind(envelopeId,tenantId).first<{status:string}>();
@@ -49,10 +49,10 @@ export async function buildEvidenceManifest(db:D1Database,bucket:BlobStore,tenan
  * crash) is completed by the next run, from completion or the cron sweep, which reuses the seal.
  * Throws unless the envelope ends COMPLETED with exactly this seal. True when this call completed it.
  */
-export async function commitSeal(db:D1Database,tenantId:string,envelopeId:string,seal:{mode:'LOCAL_TEST'|'KMS_TSA';objectKey:string;sha256:string;keyArn?:string;timestampTime?:number}):Promise<boolean> {
+export async function commitSeal(db:D1Database,tenantId:string,envelopeId:string,seal:{mode:'LOCAL_TEST'|'KEY_TSA';objectKey:string;sha256:string;keyId?:string;timestampTime?:number}):Promise<boolean> {
   const [,completed]=await db.batch([
-    db.prepare("INSERT OR IGNORE INTO seals (envelope_id,mode,object_key,sha256,key_arn,timestamp_time) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='FINALIZING')")
-      .bind(envelopeId,seal.mode,seal.objectKey,seal.sha256,seal.keyArn??null,seal.timestampTime??null,envelopeId,tenantId),
+    db.prepare("INSERT OR IGNORE INTO seals (envelope_id,mode,object_key,sha256,key_id,timestamp_time) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='FINALIZING')")
+      .bind(envelopeId,seal.mode,seal.objectKey,seal.sha256,seal.keyId??null,seal.timestampTime??null,envelopeId,tenantId),
     db.prepare("UPDATE envelopes SET status='COMPLETED' WHERE id=? AND tenant_id=? AND status='FINALIZING' AND EXISTS (SELECT 1 FROM seals WHERE envelope_id=? AND mode=? AND object_key=? AND sha256=?)")
       .bind(envelopeId,tenantId,envelopeId,seal.mode,seal.objectKey,seal.sha256),
   ]);

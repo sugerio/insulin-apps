@@ -10,6 +10,7 @@ import {blobStore,MIGRATIONS_DIR,splitSql as unstable_splitSqlQuery} from './hel
 import {mailRelay,RELAY_URL} from './helpers/mail-relay.ts';
 import app from './helpers/gateway.ts';
 import {identity} from './helpers/platform.ts';
+import {makeSealKey} from './helpers/seal-key.ts';
 
 const ORIGIN='https://esign.example.test';
 const KEY='k'.repeat(64);
@@ -113,7 +114,8 @@ test('a code the relay could not send (502 send_failed, 503, 429) is reported as
 });
 
 // prod (ESIGN_ENV=prod): codes go to the recipient and are kept nowhere.
-const PROD={ESIGN_ENV:'prod',TEST_MAIL:undefined,TEST_SEAL_KEY:undefined,KMS_KEY_ARN:'arn:aws:kms:us-west-2:123456789012:key/00000000-0000-4000-8000-000000000000'};
+const sealKey=await makeSealKey();
+const PROD={ESIGN_ENV:'prod',TEST_MAIL:undefined,TEST_SEAL_KEY:undefined,SEAL_KEY:sealKey.privateKey,SEAL_KEYS:[sealKey.entry]};
 
 test('in prod a code is emailed to its recipient, without the test markings, and no test mailbox keeps it', async()=>{
  const relay=mailRelay();
@@ -140,7 +142,7 @@ test('prod signs nothing until it is fully configured, and never with a test mai
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  try {
   const bucket=await blobStore(mf,'test-mail');
-  for(const extra of [{...relay.env,TEST_MAIL:bucket},{...relay.env,KMS_KEY_ARN:''},{...relay.env,SUGER_MAIL_URL:'http://mail.example.test/v1/send'},{...relay.env,OTP_KEY:''},{}]){
+  for(const extra of [{...relay.env,TEST_MAIL:bucket},{...relay.env,SEAL_KEY:undefined},{...relay.env,SEAL_KEYS:[]},{...relay.env,SUGER_MAIL_URL:'http://mail.example.test/v1/send'},{...relay.env,OTP_KEY:''},{}]){
    const w=await setup({...PROD,...extra});
    try {
     const otp=await w.req('/api/public/signing/otp',w.json({},{origin:ORIGIN,'x-esign-session':'a'.repeat(64)}));

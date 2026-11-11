@@ -15,6 +15,13 @@
       "when": 1794345096760,
       "tag": "0001_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794383423288,
+      "tag": "0002_seal_key",
+      "breakpoints": true
     }
   ]
 }

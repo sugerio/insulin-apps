@@ -8,7 +8,7 @@ what never to do.
 
 E-sign is an electronic signature app on the Insulin app template: one npm package, Vite + React + Nitro, deployed as a
 Cloudflare Worker with one D1 database. Members send PDFs for signature; recipients sign on a public page after an
-emailed one-time code; each signature is hash-chained, and a finished envelope is sealed with AWS KMS and an RFC 3161
+emailed one-time code; each signature is hash-chained, and a finished envelope is sealed with E-sign's seal key and an RFC 3161
 timestamp. Users, roles and permissions come from the Insulin platform; the organization is the tenant.
 
 ## Commands
@@ -41,7 +41,7 @@ Run from `esign/` unless noted.
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |
 | `src/app/server/gateway-fetch.ts` | The `SUGER_GATEWAY` service binding's fetch, which the relay is called over |
-| `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the KMS + TSA seal |
+| `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the seal key + TSA seal, and `keys.ts`, the seal keys trusted |
 | `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql`) |
 | `scripts/` | The bitmap atlas generators (macOS, Swift) |
 | `test/`, `test/helpers/` | Tests (`node --test`); `helpers/platform.ts` plays the platform, `helpers/gateway.ts` the gateway and a host's service account, `helpers/member.ts` renders the members' app |
@@ -105,7 +105,12 @@ secret in source.
 ## Secrets
 
 `insulin.secrets` declares them (`ESIGN_` prefix, at most 30): the code pepper, the origins that may embed the pages,
-and the KMS, AWS and TSA settings of the managed seal. The HMAC test seal exists only in the local preview.
+and extra TSA signer pins. The HMAC test seal exists only in the local preview.
+
+The managed seal's private key is not among them and never in GitHub: it is the Worker's `ESIGN_SEAL_KEY` binding,
+a Cloudflare `secret_key` (`scripts/put-seal-key.mjs`). Never add it to `insulin.secrets`: the deploy would overwrite
+it with a text secret, which can't seal. Which keys a seal may be verified with is `seal/keys.ts`, in the source and
+reviewed, never configuration; never remove an entry from it, or the seals it made stop verifying.
 
 ## Docs, required by default
 

@@ -257,8 +257,8 @@ test('the completion certificate shows the managed seal, and keeps the local tes
  const {renderToStaticMarkup}=await import('react-dom/server');
  const {CompletionCertificate}=await import('../src/app/ui/CompletionCertificate.ts');
  const base={envelope:{id:'e1',template_id:'t1',created_at:Date.parse('2026-11-07T00:00:00Z'),status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'signed:x',finalSha256:'b'.repeat(64),recipients:[],signatures:[]};
- const managed=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...base,mode:'KMS_TSA',seal:{keyArn:'arn:aws:kms:us-west-2:123456789012:key/k',publicKeySha256:'c'.repeat(64),timestampTime:Date.parse('2026-11-07T01:02:03Z'),tsaUrl:'http://timestamp.digicert.com'}} as never}));
- assert.match(managed,/AWS KMS/);assert.match(managed,/2026-11-07T01:02:03.000Z/);assert.match(managed,/c{64}/);assert.match(managed,/timestamp\.digicert\.com/);
+ const managed=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...base,mode:'KEY_TSA',seal:{keyId:'c'.repeat(64),timestampTime:Date.parse('2026-11-07T01:02:03Z'),tsaUrl:'http://timestamp.digicert.com'}} as never}));
+ assert.match(managed,/E-sign seal key/);assert.doesNotMatch(managed,/KMS/);assert.match(managed,/2026-11-07T01:02:03.000Z/);assert.match(managed,/c{64}/);assert.match(managed,/timestamp\.digicert\.com/);
  assert.doesNotMatch(managed,/LOCAL TEST ONLY/);
  const local=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...base,mode:'LOCAL TEST ONLY'} as never}));
  assert.match(local,/LOCAL TEST ONLY/);
@@ -269,8 +269,8 @@ test('the completion certificate lists the audit trail, marking events recorded 
  const {CompletionCertificate}=await import('../src/app/ui/CompletionCertificate.ts');
  const event=(id:number,type:string,extra:Record<string,unknown>={})=>({id,envelopeId:'e1',taskId:'t1',type,occurredAt:Date.parse('2026-11-07T01:00:00Z')+id*1000,ip:'203.0.113.9',userAgent:'Mozilla/5.0 (Synthetic)',detail:null,...extra});
  const certificate={envelope:{id:'e1',template_id:'t1',created_at:0,status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'x',finalSha256:'b'.repeat(64),
-  recipients:[{id:'t1',role:'partner',recipient_name:'Ana Partner',recipient_email:'ana@partner.test',routing_order:1,status:'SIGNED'}],signatures:[],mode:'KMS_TSA',
-  seal:{keyArn:'arn:aws:kms:us-west-2:123456789012:key/k',publicKeySha256:'c'.repeat(64),timestampTime:0,tsaUrl:'http://timestamp.digicert.com'},
+  recipients:[{id:'t1',role:'partner',recipient_name:'Ana Partner',recipient_email:'ana@partner.test',routing_order:1,status:'SIGNED'}],signatures:[],mode:'KEY_TSA',
+  seal:{keyId:'c'.repeat(64),timestampTime:0,tsaUrl:'http://timestamp.digicert.com'},
   audit:{sealed:[event(1,'OTP_VERIFIED'),event(2,'SIGNED')],afterSeal:[event(3,'COPY_SENT',{ip:null,userAgent:null})]}};
  const html=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:certificate as never}));
  assert.match(html,/Audit trail/);

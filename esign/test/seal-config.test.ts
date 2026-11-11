@@ -1,50 +1,43 @@
+// Which seal completes envelopes (seal/config.ts): the managed seal with the Worker's seal key and the keys the code
+// trusts, nothing without the binding, and an error, not a fallback, for a binding or key list that can't seal.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { managedEvidenceFromEnv } from '../src/app/server/esign/seal/config.ts';
-import { evidenceMessage } from '../src/app/server/esign/seal/kms.ts';
+import { managedEvidenceFromEnv, sealTrustFromEnv } from '../src/app/server/esign/seal/config.ts';
 import { DIGICERT_TSA_SIGNERS, DIGICERT_TSA_URL } from '../src/app/server/esign/seal/tsa.ts';
-import { LONG_TERM_KEY_ID, TEMPORARY_KEY_ID, syntheticKeyId } from './helpers/synthetic-aws.ts';
+import { makeSealKey } from './helpers/seal-key.ts';
 
-const ARN = 'arn:aws:kms:us-west-2:123456789012:key/00000000-0000-4000-8000-000000000000';
-const ROLE = 'arn:aws:iam::123456789012:role/esign-dev-signer';
-const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-const spki = publicKey.export({ type: 'spki', format: 'der' });
-const env = { KMS_KEY_ARN: ARN, KMS_PUBLIC_KEY: spki.toString('base64'), AWS_ROLE_ARN: ROLE, AWS_ACCESS_KEY_ID: LONG_TERM_KEY_ID, AWS_SECRET_ACCESS_KEY: 'synthetic-secret' };
+const seal = await makeSealKey();
+const env = { SEAL_KEY: seal.privateKey, SEAL_KEYS: [seal.entry] };
 
-test('without KMS_KEY_ARN there is no managed seal; an incomplete KMS_TSA setup is refused', async () => {
+test('without the seal key binding there is no managed seal', async () => {
   assert.equal(await managedEvidenceFromEnv({}), null);
-  assert.equal(await managedEvidenceFromEnv({ ...env, KMS_KEY_ARN: '' }), null);
-  for (const missing of ['KMS_PUBLIC_KEY', 'AWS_ROLE_ARN', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] as const)
-    await assert.rejects(managedEvidenceFromEnv({ ...env, [missing]: '' }), /not fully configured/, missing);
+  assert.equal(await managedEvidenceFromEnv({ SEAL_KEYS: [seal.entry] }), null);
+});
+
+test('a binding that is not a usable seal key, or no current key in keys.ts, is refused', async () => {
+  const extractable = (await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign'])).privateKey;
+  for (const SEAL_KEY of ['a PKCS #8 string', extractable, {}])
+    await assert.rejects(managedEvidenceFromEnv({ ...env, SEAL_KEY }), /ESIGN_SEAL_KEY is not a non-extractable ECDSA P-256 signing key/);
+  await assert.rejects(managedEvidenceFromEnv({ ...env, SEAL_KEYS: [] }), /No current seal key/);
+  await assert.rejects(managedEvidenceFromEnv({ ...env, SEAL_KEYS: [{ ...seal.entry, until: new Date().toISOString() }] }), /No current seal key/);
   await assert.rejects(managedEvidenceFromEnv({ ...env, TSA_SIGNER_SPKI_SHA256: 'nope' }), /Invalid SHA-256 list/);
 });
 
-test('trust pins this key and DigiCert, plus any listed earlier keys and signers', async () => {
-  const earlier = 'b'.repeat(64), rotated = 'c'.repeat(64);
-  const config = (await managedEvidenceFromEnv({ ...env, KMS_TRUSTED_KEY_SHA256: earlier, TSA_SIGNER_SPKI_SHA256: rotated }))!;
-  assert.deepEqual(config.trust.publicKeySha256, [createHash('sha256').update(spki).digest('hex'), earlier]);
+test('the sealer signs with the current key; trust is keys.ts and DigiCert, plus any extra signer pins', async () => {
+  const rotated = 'c'.repeat(64);
+  const retired = await makeSealKey({ from: Date.now() - 7_200_000, until: Date.now() - 3_600_000 });
+  const keys = [retired.entry, seal.entry];
+  const config = (await managedEvidenceFromEnv({ ...env, SEAL_KEYS: keys, TSA_SIGNER_SPKI_SHA256: rotated }))!;
+  assert.equal(config.sealer.keyId, seal.entry.id);
+  assert.deepEqual(config.sealer.publicKeySpki, seal.spki);
+  const input = new TextEncoder().encode('synthetic manifest');
+  assert.equal((await config.sealer.signEvidence(input)).length, 64);
+  assert.deepEqual(config.trust.keys, keys);
   assert.equal(config.trust.tsa.url, DIGICERT_TSA_URL);
   assert.deepEqual(config.trust.tsa.signerSpkiSha256, [...DIGICERT_TSA_SIGNERS, rotated]);
-});
-
-test('signing assumes the role through STS once, then signs with KMS and checks the signature against the pinned key', async () => {
-  const input = new TextEncoder().encode('synthetic manifest');
-  const calls: string[] = [];
-  const fetcher = (async (request: Request) => {
-    const url = new URL(request.url);
-    calls.push(url.hostname);
-    if (url.hostname === 'sts.us-west-2.amazonaws.com') return new Response(`<AssumeRoleResponse><AssumeRoleResult><Credentials><AccessKeyId>${TEMPORARY_KEY_ID}</AccessKeyId><SecretAccessKey>t</SecretAccessKey><SessionToken>s</SessionToken><Expiration>${new Date(Date.now() + 3600_000).toISOString()}</Expiration></Credentials></AssumeRoleResult></AssumeRoleResponse>`);
-    if (url.hostname === 'kms.us-west-2.amazonaws.com') {
-      assert.match(request.headers.get('authorization') ?? '', new RegExp(`Credential=${TEMPORARY_KEY_ID}/`), 'KMS is called with the assumed-role credentials');
-      return new Response(JSON.stringify({ KeyId: ARN, SigningAlgorithm: 'ECDSA_SHA_256', Signature: sign('sha256', evidenceMessage(input), privateKey).toString('base64') }), { headers: { 'content-type': 'application/x-amz-json-1.1' } });
-    }
-    throw new Error(`unexpected ${request.url}`);
-  }) as typeof fetch;
-  const config = (await managedEvidenceFromEnv({ ...env, AWS_ACCESS_KEY_ID: syntheticKeyId('AKIA', 1) }, fetcher))!;
-  for (let i = 0; i < 2; i++) assert.equal((await config.sealer.signEvidence(input)).length, 64);
-  assert.deepEqual(calls, ['sts.us-west-2.amazonaws.com', 'kms.us-west-2.amazonaws.com', 'kms.us-west-2.amazonaws.com']);
-  const other = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ type: 'spki', format: 'der' });
-  const mismatched = (await managedEvidenceFromEnv({ ...env, AWS_ACCESS_KEY_ID: syntheticKeyId('AKIA', 2), KMS_PUBLIC_KEY: other.toString('base64') }, fetcher))!;
-  await assert.rejects(mismatched.sealer.signEvidence(input), 'a signature that does not match the pinned key is refused');
+  assert.deepEqual(sealTrustFromEnv({ SEAL_KEYS: keys, TSA_SIGNER_SPKI_SHA256: rotated }), config.trust, 'verifying needs no private key');
+  // The binding holds another key than keys.ts names: nothing is signed.
+  const other = await makeSealKey();
+  const mismatched = (await managedEvidenceFromEnv({ ...env, SEAL_KEY: other.privateKey }))!;
+  await assert.rejects(mismatched.sealer.signEvidence(input), { message: 'Seal signing failed' });
 });

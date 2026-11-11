@@ -39,7 +39,7 @@ export type DeliveryEvidence={verify():Promise<{source:{id:string;sha256:string}
 const localDelivery=(db:D1Database,bucket:BlobStore,tenantId:string,envelopeId:string,key:Uint8Array):DeliveryEvidence=>({
   verify:()=>finalizeLocalTestEvidence(db,bucket,tenantId,envelopeId,key,true),
   banner:'LOCAL TEST ONLY',
-  notes:['LOCAL TEST ONLY - Local simulation; not a legal guarantee or independent timestamp.','Local HMAC uses a software key, not a managed KMS or independent TSA.','The original local evidence manifest does not seal this delivery PDF.'],
+  notes:['LOCAL TEST ONLY - Local simulation; not a legal guarantee or independent timestamp.','Local HMAC uses a test key, not E-sign\'s seal key or an independent TSA.','The original local evidence manifest does not seal this delivery PDF.'],
   name:'local-delivery-v3',format:'esign-local-delivery-v3',
 });
 

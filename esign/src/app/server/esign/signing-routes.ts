@@ -11,7 +11,7 @@ import { artifactObjectKey } from './signatures.ts';
 import { completeEnvelopeOfSession } from './envelope-completion.ts';
 import { MailRelayError, otpMailer } from './mail.ts';
 import { isProd, otpKey, signingEnabled, testSealKey } from './environment.ts';
-import { managedEvidenceFromEnv } from './seal/config.ts';
+import { sealTrustFromEnv } from './seal/config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
 import { expireIfDue } from './task-expiry.ts';
 import { consentStatement, lastHostAuthentication, parseHostAuthentication, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
@@ -296,7 +296,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     return c.json({viewed:seen.size+fresh.length,total});
   });
   // COMPLETE_AFTER_SIGN: once a signature is accepted, render it and, after the last one, seal the
-  // envelope (KMS and the timestamp authority). With the request's waitUntil (Nitro on Workers) that
+  // envelope (the seal key and the timestamp authority). With the request's waitUntil (Nitro on Workers) that
   // runs after the signer's response, so they never wait for the seal; without it (the tests), in the
   // request. Work cut short (a CPU limit, an outage) leaves the signature PENDING or the envelope
   // FINALIZING, which due work finishes: the platform's five-minute tick (POST /api/scheduled), or
@@ -351,8 +351,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       // Described by the seal this envelope was completed with.
       let result;
       if (await hasManagedEvidence(c.env.DB,id)) {
-        const managed=await managedEvidenceFromEnv(c.env);if(!managed)throw new Error('Managed seal not configured');
-        result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managedDelivery(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managed.trust));
+        result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managedDelivery(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,sealTrustFromEnv(c.env)));
       } else {
         const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
         result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey);
@@ -368,10 +367,10 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const link=typeof body?.token==='string'?await useCopyLink(c.env.DB,body.token):null;
     if(!link)return c.json({error:'link_unavailable'},410);
     try {
-      const managed=await hasManagedEvidence(c.env.DB,link.envelopeId)?await managedEvidenceFromEnv(c.env):null;
+      const managed=await hasManagedEvidence(c.env.DB,link.envelopeId);
       const testKey=managed?null:testSealKey(c.env);
       if(!managed&&!testKey)throw new Error('Seal unavailable');
-      const result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed?managedDelivery(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed.trust):testKey!);
+      const result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed?managedDelivery(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,sealTrustFromEnv(c.env)):testKey!);
       await recordAuditQuietly(c.env.DB,{envelopeId:link.envelopeId,taskId:link.taskId,type:AUDIT.copyDownloaded,...requestFacts(c.req.raw)});
       return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="signed-${link.envelopeId}.pdf"`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     } catch {
@@ -387,13 +386,12 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     try {
       const recipients=async()=>(await c.env.DB.prepare('SELECT id,role,recipient_name,recipient_email,routing_order,status FROM tasks WHERE envelope_id=? ORDER BY routing_order').bind(id).all()).results;
       if (await hasManagedEvidence(c.env.DB,id)) {
-        const managed=await managedEvidenceFromEnv(c.env);if(!managed)throw new Error('Managed seal not configured');
-        const verified=await verifyManagedEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managed.trust);
-        return c.json({mode:'KMS_TSA',notice:'Sealed with an AWS KMS signature (ECDSA P-256) over the evidence and an RFC 3161 timestamp over that signature. Revocation of the time-stamping authority certificates is not checked. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the sealed manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by the seal.',envelope,recipients:await recipients(),...verified});
+        const verified=await verifyManagedEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,sealTrustFromEnv(c.env));
+        return c.json({mode:'KEY_TSA',notice:'Sealed with a signature by E-sign\'s seal key (ECDSA P-256) over the evidence and an RFC 3161 timestamp over that signature. Revocation of the time-stamping authority certificates is not checked. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the sealed manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by the seal.',envelope,recipients:await recipients(),...verified});
       }
       const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
       const verified=await finalizeLocalTestEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey,true);
-      return c.json({mode:'LOCAL TEST ONLY',notice:'Not a legal guarantee. Local HMAC is not a real KMS or TSA; the synthetic timestamp is not independent. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the existing local HMAC manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by that manifest.',envelope,recipients:await recipients(),...verified,audit:{sealed:[],afterSeal:await auditTrail(c.env.DB,id)}});
+      return c.json({mode:'LOCAL TEST ONLY',notice:'Not a legal guarantee. Local HMAC is not the real seal key or TSA; the synthetic timestamp is not independent. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the existing local HMAC manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by that manifest.',envelope,recipients:await recipients(),...verified,audit:{sealed:[],afterSeal:await auditTrail(c.env.DB,id)}});
     } catch {return c.json({error:'unavailable'},503);}
   });
 }

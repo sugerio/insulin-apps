@@ -5,11 +5,12 @@ import { environmentOf, prodProblems, signingEnabled, testSealKey } from '../src
 import { embedderAllowed, frameAncestors } from '../src/app/server/esign/signing-page.ts';
 import { MailRelayError, mailerFor, relayConfig } from '../src/app/server/esign/mail.ts';
 import { mailRelay } from './helpers/mail-relay.ts';
+import { makeSealKey } from './helpers/seal-key.ts';
 
 const KEY = 'k'.repeat(32);
 const TEST_MAIL = {};
-const KMS_KEY_ARN = 'arn:aws:kms:us-west-2:123456789012:key/00000000-0000-4000-8000-000000000000';
-const PROD = { ESIGN_ENV: 'prod', OTP_KEY: KEY, SUGER_MAIL_URL: 'https://mail.example.test/v1/send', SUGER_APP_TOKEN: 'synthetic-app-token', KMS_KEY_ARN };
+const seal = await makeSealKey();
+const PROD = { ESIGN_ENV: 'prod', OTP_KEY: KEY, SUGER_MAIL_URL: 'https://mail.example.test/v1/send', SUGER_APP_TOKEN: 'synthetic-app-token', SEAL_KEY: seal.privateKey, SEAL_KEYS: [seal.entry] };
 
 test('only "prod" is prod; unset or anything else is dev', () => {
   assert.equal(environmentOf({ ESIGN_ENV: 'prod' }), 'prod');
@@ -25,7 +26,8 @@ test('dev signs with the code pepper and a test mailbox; prod with its whole con
   assert.deepEqual(prodProblems({ OTP_KEY: KEY }), [], 'dev is lenient');
   const cases: [Record<string, unknown>, RegExp][] = [
     [{ OTP_KEY: '' }, /ESIGN_OTP_KEY/], [{ SUGER_MAIL_URL: undefined }, /mail relay/], [{ SUGER_APP_TOKEN: '' }, /mail relay/],
-    [{ TEST_MAIL }, /test mailbox is bound/], [{ KMS_KEY_ARN: '' }, /ESIGN_KMS_KEY_ARN/],
+    [{ TEST_MAIL }, /test mailbox is bound/], [{ SEAL_KEY: undefined }, /ESIGN_SEAL_KEY is not bound/],
+    [{ SEAL_KEY: '' }, /ESIGN_SEAL_KEY is not bound/], [{ SEAL_KEYS: [] }, /no current seal key/],
   ];
   for (const [change, problem] of cases) {
     const env = { ...PROD, ...change };

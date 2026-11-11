@@ -27,7 +27,7 @@ seals the finished envelope and emails each signer a link to their copy.
   with R2's create-only put (`onlyIf: { etagDoesNotMatch: '*' }`). The local preview's test mailbox
   is a second bucket, `test-mail`.
 - **Work in requests, and the platform's tick.** The app has no cron. Once a signature is accepted
-  it is rendered, and after the last one the envelope sealed (KMS and the timestamp authority),
+  it is rendered, and after the last one the envelope sealed (the seal key and the timestamp authority),
   through the request's `waitUntil` that Nitro puts on the request on Workers: the signer gets their
   response first and never waits for the seal. Without one (the tests) it runs in the request. Work
   cut short, by a CPU limit or an outage, leaves the signature `PENDING` or the envelope
@@ -55,13 +55,14 @@ published app is `prod` (`environment.ts`).
 | | dev (local preview) | prod (published) |
 | --- | --- | --- |
 | Codes | kept in the test mailbox, read back with `GET /api/test-mail/:id`; emailed only if a relay is configured; without one only synthetic addresses (`example.com`, `.test`) get a code | emailed to the recipient through the relay, kept nowhere |
-| Seal | KMS + TSA when configured, else the HMAC test seal | KMS + TSA only |
+| Seal | the seal key + TSA when bound, else the HMAC test seal | the seal key + TSA only |
 | Signing page hosts | the app, plus `SIGNING_PAGE_ORIGINS` | the app only |
 | Origins that may embed | https, or http on a loopback host | https only |
 | Identity | the platform's, or a preview Owner when there is none | the platform's |
 
-prod signs nothing until it has `ESIGN_OTP_KEY` (at least 32 characters), the mail relay and
-`ESIGN_KMS_KEY_ARN` (`prodProblems`); until then the signing routes answer 404 `signing_disabled`.
+prod signs nothing until it has `ESIGN_OTP_KEY` (at least 32 characters), the mail relay, the
+`ESIGN_SEAL_KEY` binding and a current key in `seal/keys.ts` (`prodProblems`); until then the signing
+routes answer 404 `signing_disabled`.
 
 ## Configuration
 
@@ -71,11 +72,19 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | --- | --- |
 | `ESIGN_OTP_KEY` | The pepper of the emailed codes (at least 32 characters) |
 | `ESIGN_FRAME_ANCESTORS` | Space-separated host origins that may embed the signing page and the editor (the app's own origin always may) |
-| `ESIGN_KMS_KEY_ARN`, `ESIGN_KMS_PUBLIC_KEY`, `ESIGN_KMS_TRUSTED_KEY_SHA256` | The managed seal's AWS KMS key, its public key (base64 SPKI) and the trusted key hashes |
-| `ESIGN_AWS_ROLE_ARN`, `ESIGN_AWS_ACCESS_KEY_ID`, `ESIGN_AWS_SECRET_ACCESS_KEY` | The credentials that assume the role allowed to sign with the key |
 | `ESIGN_TSA_SIGNER_SPKI_SHA256` | The pinned signer keys of the timestamp authority |
 
 The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY` service binding they are used over.
+
+**The seal key** is not one of those secrets. `ESIGN_SEAL_KEY` is a Cloudflare `secret_key` binding on the Worker: the
+private half of the managed seal's ECDSA P-256 key, which the Worker gets as a `CryptoKey` that can sign and can't be
+exported (`src/app/server/seal-key-binding.ts`). `scripts/put-seal-key.mjs` makes a key and puts it there; the private
+key is never printed, stored or held in GitHub, and Cloudflare can't give it back. `insulin.secrets` doesn't list it,
+so the deploy never overwrites it, and `wrangler deploy` keeps a Worker's `secret_key` bindings. The public half of
+every key that has sealed is in `src/app/server/esign/seal/keys.ts`, with the time it was in use: that list, reviewed
+in the source, is what seals are verified against, never the deployment's configuration. Sealing refuses a binding
+that isn't a non-extractable P-256 signing key, or one that isn't the pair of the current entry in `keys.ts`; a
+finished envelope then waits, `FINALIZING`, until it is fixed.
 
 ## The members' app and the Docs
 
@@ -202,7 +211,7 @@ tables:
 | `access_sessions` | Page sessions (hashed tokens) with the same fields and `otp_verified_at` |
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
-| `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KMS_TSA`), the seal's object key and hash, and for `KMS_TSA` the key ARN and timestamp time |
+| `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |
 | `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the saved template |
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
@@ -375,20 +384,20 @@ byte for byte, and every stored file's hash. It then builds the manifest
 (`esign-evidence-manifest-v1`) with each signature's facts and rendering. The same checks run
 again on every certificate and delivery PDF read, so a changed record, image or PDF makes them fail.
 
-| | Local test seal (`LOCAL_TEST`) | Managed seal (`KMS_TSA`) |
+| | Local test seal (`LOCAL_TEST`) | Managed seal (`KEY_TSA`) |
 | --- | --- | --- |
-| Used | dev without `KMS_KEY_ARN` (locally) | whenever `KMS_KEY_ARN` is set; prod allows nothing else |
+| Used | dev (the local preview), which has no seal key | whenever the `ESIGN_SEAL_KEY` binding is there; prod allows nothing else |
 | Covers | The manifest | The manifest and the audit trail up to sealing (`esign-sealed-evidence-v2`); later events are listed as recorded after sealing |
-| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An AWS KMS ECDSA P-256 signature over a SHA-256 digest of a domain-separated message, verified against the pinned `KMS_PUBLIC_KEY`; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, signer and policy pinned in `src/app/server/esign/seal/tsa.ts` and within five minutes of the app's clock |
-| Stored | `envelopes/<id>/local-test-evidence.json` | `envelopes/<id>/managed-evidence.json`, made once; a retry reuses it |
-| Verified | Recomputed with the current key on each read, so changing the key breaks old seals | Signature and timestamp checked on each read, as of the timestamp's time; earlier keys stay trusted through `KMS_TRUSTED_KEY_SHA256` |
-| Certificate | `mode: LOCAL TEST ONLY` | `mode: KMS_TSA`; records a `COMPLETED` audit event |
+| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An ECDSA P-256 (SHA-256) signature with the seal key over a domain-separated message, checked against the current key's public half in `keys.ts` before anything is stored; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, signer and policy pinned in `src/app/server/esign/seal/tsa.ts` and within five minutes of the app's clock |
+| Stored | `envelopes/<id>/local-test-evidence.json` | `envelopes/<id>/managed-evidence.json` (`esign-managed-seal-v2`), made once and verified before it is stored; a retry reuses it |
+| Verified | Recomputed with the current key on each read, so changing the key breaks old seals | Signature and timestamp checked on each read, as of the timestamp's time, with a key `keys.ts` lists as in use at that time; retired keys stay listed, with an end, so their seals keep verifying and they seal nothing new |
+| Certificate | `mode: LOCAL TEST ONLY` | `mode: KEY_TSA`, with the key's fingerprint; records a `COMPLETED` audit event |
 
 The seals' code is in `src/app/server/esign/seal/`: `evidence.ts` (the manifest and the seal commit), `local.ts`
 (the local test seal), `managed.ts` (the managed seal and its envelope flow), `config.ts` (which seal
-is configured), `kms.ts` (the signed message and local verification, the KMS `Sign` call and the
-conversion of its DER signature, and the assumed-role credentials: the app holds an IAM user key
-that may only assume one role, and that role may only sign with this key) and `tsa.ts` (the RFC 3161
+is configured, and the trust to verify with), `keys.ts` (the trusted seal keys and their time in use),
+`signing.ts` (the signed message, which keys may sign, and signing checked against the named public key)
+and `tsa.ts` (the RFC 3161
 query, the response check and the pinned DigiCert trust). Revocation of the TSA certificates is not
 checked, and the certificate says so.
 

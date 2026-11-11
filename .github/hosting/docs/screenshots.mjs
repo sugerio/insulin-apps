@@ -24,9 +24,10 @@
 // signing codes through the gateway's mail relay, which it reaches through a small proxy on 127.0.0.1: the app accepts
 // a relay URL over https or plain http on a loopback host, and wrangler's certificate isn't one the Worker trusts.
 //
-// One screenshot can't be taken here: E-sign seals a finished envelope with an AWS KMS signature and an RFC 3161
-// timestamp, both outside services, so an envelope never reaches Completed locally. esign-completed.png is a labelled
-// placeholder, drawn by this script, until it is captured from a deployment with a KMS key.
+// One screenshot can't be taken here: E-sign seals a finished envelope with its seal key, a Cloudflare secret_key
+// binding `wrangler dev` can't provide, and an RFC 3161 timestamp from an outside service, so an envelope never reaches
+// Completed locally. esign-completed.png is a labelled placeholder, drawn by this script, until it is captured from a
+// deployment.
 //
 // Nor can a domain be verified: the gateway checks the DNS TXT record over DNS-over-HTTPS at a fixed address
 // (cloudflare-dns.com), and `wrangler dev` has no way to answer the Worker's outbound fetches with a stub (the tests do,
@@ -71,11 +72,11 @@ const ORG = 'Northwind Robotics'
 const SECOND_ORG = 'Northwind Labs'
 const COMPANY = 'Northwind Robotics, Inc.'
 
-// Local-only settings: a gateway key made of synthetic bytes, E-sign's code pepper, and a KMS key name in AWS's
-// documentation account. None of them is a secret; nothing here ever reaches a deployment.
+// Local-only settings: a gateway key made of synthetic bytes, E-sign's code pepper, and a stand-in for its seal key
+// binding, which lets it sign but not seal. None of them is a secret; nothing here ever reaches a deployment.
 const GATEWAY_SECRET_KEY = Buffer.alloc(32, 0x42).toString('base64')
 const ESIGN_OTP_KEY = 'local-screenshots-code-pepper-0123456789abcdef'
-const ESIGN_KMS_KEY_ARN = 'arn:aws:kms:us-east-1:111122223333:key/local-screenshots'
+const ESIGN_SEAL_KEY = 'local-screenshots-no-seal-key'
 
 const log = (message) => process.stdout.write(`${message}\n`)
 
@@ -314,7 +315,7 @@ async function main() {
     appVars: {
       esign: {
         ESIGN_OTP_KEY,
-        ESIGN_KMS_KEY_ARN,
+        ESIGN_SEAL_KEY,
         ESIGN_FRAME_ANCESTORS: host('esign'),
         SUGER_APP_TOKEN: appToken(GATEWAY_SECRET_KEY, 'esign'),
         SUGER_MAIL_URL: `http://127.0.0.1:${relay.address().port}/__insulin/mail`,
@@ -569,7 +570,7 @@ async function main() {
     await page.getByRole('heading').first().waitFor()
     await shot(page, 'esign-envelope', { fullPage: true })
     await placeholder(owner, 'esign-completed', 'A completed envelope', [
-      'This image is a placeholder. A completed envelope can\'t be captured on a local run: E-sign seals a finished envelope with an AWS KMS signature and an RFC 3161 timestamp from outside services, so locally it stays Finishing.',
+      'This image is a placeholder. A completed envelope can\'t be captured on a local run: E-sign seals a finished envelope with its seal key and an RFC 3161 timestamp from an outside service, so locally it stays Finishing.',
       'When an envelope is completed, its page shows the status Completed and two downloads: Signed PDF with certificate, and Certificate of completion.',
     ])
 

@@ -30,6 +30,10 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
    is in the gateway's README under "The public docs".
 3. **UI.** New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default theme (the hosting gateway in
    `.github/hosting/gateway/` follows it). Apps that already have their own design keep it until they are restyled.
+   **Navigation:** every app has the two-level, collapsible navigation of
+   [DESIGN.md §3.2](.github/hosting/DESIGN.md): the organization switcher, its sections from `insulin.navigation` in
+   `package.json`, then Docs and Settings (People, Integrations, API access, Connect AI, which link to the gateway's
+   pages), and the person at the bottom; each level collapses to icons. Repeat this rule in the app's own `AGENTS.md`.
 4. **Public repository.** Synthetic data only (example.com or `.test` addresses, fictional people and companies), in
    code, tests, fixtures and docs. No secrets, account ids or internal hostnames.
 5. **Accounts, roles and access belong to the platform.** The rules below follow from the design in

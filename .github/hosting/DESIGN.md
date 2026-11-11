@@ -172,6 +172,58 @@ removed meanwhile changes nothing (the gateway's existing rule, extended to app 
   repository's issues). Support replies by e-mail; once an allowance is set, the person creates the organization
   themselves.
 
+### 3.2 Navigation: two levels, each collapsible
+
+Every app, and the gateway's signed-in pages, share one navigation, so moving between an app, its settings and the
+organization's pages feels like one product (the model is a two-column sidebar: a primary column, and a column for the
+section open in it).
+
+- **Level 1, the primary column** (left, 240px; 56px collapsed):
+  - at the top, the organization switcher: the mark, the organization's name and a chevron, listing the person's
+    organizations and the link to create one. In an app it reads `/__insulin/me` and switches through
+    `/__insulin/switch-org`, as the account bar does; on the gateway the page renders it;
+  - the app's sections, from its navigation manifest (below), each an icon and a label, under optional group headings;
+  - then the platform's items, in every app: **Docs** (the app's in-app Docs) and **Settings**, whose level 2 is
+    People, Integrations, API access and Connect AI. Those four stay the gateway's pages on the apex
+    (`insulinapps.com/apps/<app>/settings/...`, §3), so an app's code can never read or submit them; the app links to
+    them, and they render with that app's own level 1, so they read as part of the app;
+  - at the bottom, the person: their initials and name, with Account and Sign out.
+- **Level 2, the section column** (224px; 56px collapsed): shown when the open level-1 item has sub-items, which it
+  lists under optional group headings, with a header naming the section. The page's own header carries the breadcrumb
+  (section › item).
+- **Collapsing.** Each level has its own toggle and collapses to its icons; a collapsed item shows its label as a
+  tooltip (`title` and `aria-label`), and the organization switcher shows the organization's initial. The choice is
+  remembered per browser: apps keep it in `localStorage` (`insulin-nav`: `{"l1":"collapsed"|"expanded","l2":…}`); the
+  gateway, which sends no script of its own, keeps it in the `insulin_nav` cookie, set by the toggle's link
+  (`/__insulin/nav?l1=collapsed&return=<path>`, same host only, then a 303 back).
+- **Narrow screens** (below 768px): a top bar with the organization switcher and a menu button; the menu opens both
+  levels stacked in a drawer (a `<details>` element on the gateway).
+- **Accessibility.** `<nav aria-label="Primary">` and `<nav aria-label="Section">`, `aria-current="page"` on the
+  active item, toggles with `aria-expanded` and `aria-controls`, and a visible focus ring; everything works from the
+  keyboard.
+- **Look.** The gateway and shadcn apps use shadcn's sidebar colours and spacing; an app with its own design keeps it
+  but has the same structure and behaviour.
+- **The account bar** (`/__insulin/bar.js`) floats on app pages that have no navigation of their own. An app that
+  renders this navigation marks its root with `data-insulin-shell`, and the bar stays out of the way.
+
+**The navigation manifest.** An app declares its level 1 in `package.json`, under `insulin.navigation`, which the app
+and the gateway both render from:
+
+```json
+"navigation": [
+  { "key": "envelopes", "label": "Envelopes", "icon": "inbox", "path": "/envelopes",
+    "children": [{ "key": "drafts", "label": "Drafts", "icon": "file-pen", "path": "/envelopes?status=draft" }] },
+  { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "role": "EDITOR" }
+]
+```
+
+`key` matches `[a-z0-9-]+` and is unique; `label` is 1 to 40 characters; `icon` is one of the Lucide icons the
+gateway bundles (`list-apps.mjs` lists them); `path` starts with `/` on the app's host and isn't one of the gateway's
+paths (`/__insulin/*`, `/settings/*`, `/mcp`, `/.well-known/*`); `group` (optional) is a heading shown above the item;
+`role` (optional) is the least app role that sees it (VIEWER by default); `children` holds level 2, the same fields
+without `children`. At most 12 items, and 12 children each. `list-apps.mjs` refuses a malformed manifest, and the
+deploy passes it to the gateway in `SITE_APPS`. Docs and Settings are added by the platform and aren't in the manifest.
+
 ## 4. What tokens may reach
 
 Browser sessions reach everything their role allows. Bearer tokens (MCP and OAuth clients) reach only the app's own

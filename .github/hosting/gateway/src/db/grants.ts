@@ -50,6 +50,14 @@ export function appAdmin(org: string, actor: string, app: string): string {
       WHERE ag.org_id = ${org} AND ag.user_id = ${actor} AND ag.app = ${app} AND ag.role = 'ADMIN'))))`
 }
 
+/**
+ * The actor (?A) is still an OWNER or ADMIN of organization ?O: an app admin by grant is not. OAuth clients for API
+ * access (DESIGN.md §5.3) are the organization's to manage.
+ */
+export function orgAdmin(org: string, actor: string): string {
+  return `EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor} AND a.role IN ('OWNER', 'ADMIN'))`
+}
+
 /** The actor (?A) is still an OWNER of organization ?O. */
 export function owner(org: string, actor: string): string {
   return `EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor} AND a.role = 'OWNER')`

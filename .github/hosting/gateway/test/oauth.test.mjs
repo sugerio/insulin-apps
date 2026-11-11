@@ -175,6 +175,8 @@ test('Account → AI agents lists the person\'s agents and disconnects them; nob
   assert.match(page.text, /Codex CLI/)
   assert.match(page.text, /Agents Org/)
   assert.match(page.text, /http:\/\/captable\.insulinapps\.localhost\/mcp/)
+  assert.ok(page.text.includes('href="/apps/captable/settings/connect-ai"'), "it links to each app's Connect AI page")
+  assert.ok(!page.text.includes('href="/apps/ledger/settings/connect-ai"'), 'but not to an app that is not deployed')
   assert.match((await person.client.get(h.url('apex', '/account'))).text, /href="\/account\/agents"/)
   const [grant] = await h.sql('SELECT id FROM oauth_grants WHERE user_id = ?1', person.id)
   const stranger = await h.user()

@@ -1,6 +1,7 @@
-// An app's settings pages, on the apex at /apps/<app>/settings/... (DESIGN.md §3, §6): the app's people, and
-// (integrations.tsx) its integrations. Every form posts to the apex, with the organization's id. They are never served
-// on the app's own host, where code the app serves could read them and post their forms.
+// An app's settings pages, on the apex at /apps/<app>/settings/... (DESIGN.md §3, §5, §6): the app's people, and its
+// integrations (integrations.tsx), API access (api-access.tsx) and Connect AI (connect-ai.tsx). Every form posts to the
+// apex, with the organization's id. They are never served on the app's own host, where code the app serves could read
+// them and post their forms.
 import type { ReactNode } from "react"
 import { ArrowUpRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -38,11 +39,13 @@ export interface AppFrame {
   error?: string | null
 }
 
-/** The heading, the tabs (People, Integrations) and the page's notice or problem. */
+/** The heading, the tabs (People, Integrations, API access, Connect AI) and the page's notice or problem. */
 export function AppSettingsFrame({ ctx, app, data, tab, children }: { ctx: Context; app: HostedApp; data: AppFrame; tab: AppSettingsTab; children: ReactNode }) {
   const tabs: { tab: AppSettingsTab; label: string; path: string }[] = [
     { tab: "users", label: "People", path: appSettingsPath(app, "users") },
     { tab: "integrations", label: "Integrations", path: appSettingsPath(app, "integrations") },
+    { tab: "api", label: "API access", path: appSettingsPath(app, "api") },
+    { tab: "connect-ai", label: "Connect AI", path: appSettingsPath(app, "connect-ai") },
   ]
   return (
     <Container className="flex flex-col gap-6 py-10 sm:py-12">
@@ -70,14 +73,14 @@ export function AppSettingsFrame({ ctx, app, data, tab, children }: { ctx: Conte
           </div>
         }
       />
-      <nav aria-label={`${app.title} settings`} className="flex gap-1 border-b">
+      <nav aria-label={`${app.title} settings`} className="flex gap-1 overflow-x-auto border-b">
         {tabs.map((item) => (
           <a
             key={item.tab}
             href={item.path}
             aria-current={item.tab === tab ? "page" : undefined}
             className={cn(
-              "-mb-px rounded-t-md border-b-2 px-3 py-2 text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              "-mb-px shrink-0 rounded-t-md border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
               item.tab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >

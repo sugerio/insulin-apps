@@ -14,6 +14,8 @@ export const ACCESS_TTL_MS = 60 * 60 * 1000
 export const GRANT_TTL_MS = 30 * 24 * 60 * 60 * 1000
 export const CODE_TTL_MS = 60 * 1000
 export const REQUEST_TTL_MS = 10 * 60 * 1000
+/** How long a service account's previous secret keeps working after a rotation (DESIGN.md §5.3). */
+export const PREVIOUS_SECRET_TTL_MS = 24 * 60 * 60 * 1000
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000
 
 export const PREFIX = {

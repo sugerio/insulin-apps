@@ -2,14 +2,17 @@ name: Deploy release
 
 # Deploys a release to production: a v* tag, which only release.yml creates, on a commit of main. Nothing deploys on a
 # push; a push's workflows only check it, and once they have all passed, release.yml tags the release and calls this
-# workflow with it, naming what changed. deploy.yml calls it too, to deploy a release by hand. Both run in the
-# `release` concurrency group, so deploys never overlap and each checks what production runs while holding it.
+# workflow with it. deploy.yml calls it too, to deploy a release by hand. Both run in the `release` concurrency group,
+# so deploys never overlap and each checks what production runs while holding it.
 #
 # Each app is built from the release's commit in a job without the deploy settings, then a `production` job treats the
 # downloaded build as untrusted, applies the app's migrations and deploys its private Worker. The gateway follows once
 # every app deployed, with every app's bindings. Each Worker version is tagged with the release (`wrangler deploy --tag`),
 # so Cloudflare shows which release runs. .github/scripts/check-deploy.mjs first refuses a release that isn't on main,
-# an app it doesn't have, and going back past a migration of anything it deploys, which needs the database restored.
+# an app it doesn't have, and going back past a migration of anything it deploys, which needs the database restored;
+# and it deploys only what passed its latest check at or before the release (for a release, the rest is held back).
+#
+# "Re-run failed jobs" would reuse an earlier attempt's check, so the production jobs refuse it: run Deploy by hand.
 on:
   workflow_call:
     inputs:
@@ -22,6 +25,14 @@ on:
       gateway:
         type: boolean
         default: true
+      # A release's own deploy: what didn't pass its check is held back instead of refused.
+      release:
+        type: boolean
+        default: false
+      # Going back to a release older than the latest one, which a deploy by hand must ask for.
+      rollback:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,10 +42,14 @@ jobs:
     name: Check the release
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     outputs:
       commit: ${{ steps.check.outputs.commit }}
       apps: ${{ steps.check.outputs.apps }}
       gateway: ${{ steps.check.outputs.gateway }}
+      attempt: ${{ github.run_attempt }}
     steps:
       # main's history and tags; the release is read from its tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,13 +65,16 @@ jobs:
           VERSION: ${{ inputs.version }}
           APPS: ${{ inputs.apps }}
           GATEWAY: ${{ inputs.gateway }}
+          RELEASE: ${{ inputs.release && '--release' || '' }}
+          ROLLBACK: ${{ inputs.rollback && '--rollback' || '' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # The production environment lets only main deploy, so the release comes from the version input.
           if [ "$GITHUB_REF" != refs/heads/main ]; then
             echo "::error::Run Deploy on main, with the release to deploy as its version."
             exit 1
           fi
-          node .github/scripts/check-deploy.mjs "$VERSION" "$APPS" "$GATEWAY"
+          node .github/scripts/check-deploy.mjs "$VERSION" "$APPS" "$GATEWAY" $RELEASE $ROLLBACK
 
   build:
     name: Build ${{ matrix.app }}
@@ -114,6 +132,11 @@ jobs:
       matrix:
         app: ${{ fromJSON(needs.release.outputs.apps) }}
     steps:
+      - name: Refuse a re-run that reuses an earlier check
+        if: needs.release.outputs.attempt != github.run_attempt
+        run: |
+          echo "::error::This re-run reuses attempt ${{ needs.release.outputs.attempt }}'s check of ${{ inputs.version }}, which may be out of date. Run Deploy by hand with the latest release instead."
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release.outputs.commit }}
@@ -168,6 +191,11 @@ jobs:
     timeout-minutes: 20
     environment: production
     steps:
+      - name: Refuse a re-run that reuses an earlier check
+        if: needs.release.outputs.attempt != github.run_attempt
+        run: |
+          echo "::error::This re-run reuses attempt ${{ needs.release.outputs.attempt }}'s check of ${{ inputs.version }}, which may be out of date. Run Deploy by hand with the latest release instead."
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release.outputs.commit }}

@@ -7,17 +7,18 @@ name: Release
 #
 # A push is green when every workflow run it started passed: CI, the workflow of each
 # app it touched and Gateway. Those workflows only check a push; nothing deploys until
-# it is a release. Then the `deploy` job deploys it (deploy-release.yml): what changed,
-# then the gateway, built from its tag, so production always runs a release. .github/scripts/plan-release.sh
+# it is a release. Then the `deploy` job deploys it (deploy-release.yml), built from its
+# tag: every app, and then the gateway, whose latest check at or before it passed
+# (check-deploy.mjs), so production always runs a release, and anything an earlier
+# release couldn't deploy goes out with the next. .github/scripts/plan-release.sh
 # numbers every push to main since the latest release, oldest first: a green push
 # gets the next version, one with a failed or cancelled run gets none, and one with a
 # run still going stops the plan, so a later run numbers it and what follows. So no
-# push is skipped or numbered out of order, even when GitHub drops a queued run of
-# this workflow (it keeps one at a time) or the runs finish out of order. An hourly
-# run picks up after one that failed. When one run numbers several pushes, it deploys
-# the newest with everything their pushes changed. A deploy that fails leaves its
-# release in place: re-run the failed jobs, or run Deploy by hand with the version
-# (deploy.yml, which shares this workflow's concurrency group).
+# push is skipped or numbered out of order, even when the runs finish out of order.
+# An hourly run picks up after one that failed. When one run numbers several pushes,
+# it deploys the newest. A deploy that fails leaves its release in place: run Deploy by
+# hand with the latest release (deploy.yml), which checks it again. Release runs and deploys
+# by hand wait in one queue (the `release` concurrency group, every run kept).
 #
 # This workflow starts whenever one of the workflows a push to main runs completes,
 # so `workflows` below must name every workflow with a push trigger;
@@ -55,6 +56,7 @@ permissions:
 concurrency:
   group: release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   plan:
@@ -64,8 +66,6 @@ jobs:
     outputs:
       releases: ${{ steps.plan.outputs.releases }}
       deploy-version: ${{ steps.plan.outputs.deploy-version }}
-      deploy-apps: ${{ steps.plan.outputs.deploy-apps }}
-      deploy-gateway: ${{ steps.plan.outputs.deploy-gateway }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -148,15 +148,17 @@ jobs:
             echo "Released $version at $sha" | tee -a "$GITHUB_STEP_SUMMARY"
           done 3<<<"$RELEASES"
 
-  # The newest release just published, built from its tag: what its pushes changed, then the gateway.
+  # The newest release just published, built from its tag: every app whose latest check passed, then the gateway.
   deploy:
     needs: [plan, publish]
     if: needs.plan.outputs.deploy-version != ''
     permissions:
       contents: read
+      actions: read
     uses: ./.github/workflows/deploy-release.yml
     with:
       version: ${{ needs.plan.outputs.deploy-version }}
-      apps: ${{ needs.plan.outputs.deploy-apps }}
-      gateway: ${{ needs.plan.outputs.deploy-gateway == 'true' }}
+      apps: all
+      gateway: true
+      release: true
     secrets: inherit

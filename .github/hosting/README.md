@@ -24,22 +24,27 @@ deploys.
 
 Only releases are deployed. Once every workflow a push to `main` started has passed, `release.yml` tags it (below)
 and calls `.github/workflows/deploy-release.yml` with the version. `.github/scripts/check-deploy.mjs` first checks
-that the version is a release on `main` and that the apps exist in it. Each app that changed since the previous
-release, and whose latest check passed, is then built from the release's commit in a job without secrets (while the
-gateway's latest check fails, nothing deploys), and a separate `production` job
-treats the downloaded build as untrusted before applying that app's migrations and deploying only its private Worker.
+that the version is a release on `main` and that the apps exist in it, and which parts passed their latest check: the
+newest push run on `main` of the app's workflow, or of Gateway, at or before the release's commit. A release deploys
+every app that passed, so anything an earlier release couldn't deploy goes out with the next; an app that didn't
+keeps the version it runs, and while the gateway's latest check fails, nothing deploys. Each app is built from the
+release's commit in a job without secrets, and a separate `production` job treats the downloaded build as untrusted
+before applying that app's migrations and deploying only its private Worker.
 The archive is listed before extraction, may contain only regular files and directories under `<app>/.output`, and is
 extracted without its stored ownership or permissions. The deploy then walks the output without following links,
 rejects special files and hard links outside the output, and requires the Worker entry file and asset directory. A
 failed app deploy doesn't stop the others. Once every app has deployed, the gateway follows, so new hostnames and
 service bindings become live with them. Every Worker version is tagged with the release (`wrangler deploy --tag`).
-Deploys never overlap: a Release run, which deploys its release, and a deploy by hand (`deploy.yml`) both hold the
-`release` concurrency group.
+Deploys never overlap: Release runs, which deploy their releases, and deploys by hand (`deploy.yml`) wait in one
+queue, the `release` concurrency group, which keeps every waiting run.
 
-To retry a failed deploy, re-run its failed jobs, or run **Actions → Deploy → Run workflow** on `main` with the version,
-the apps (`all` or their names) and whether to deploy the gateway. The same goes back to an earlier release; it's
-refused when anything it would deploy has a migration since, because going back past a migration needs the database
-restored first.
+To retry a failed deploy, run **Actions → Deploy → Run workflow** on `main` with the latest release, the apps (`all` or
+their names) and whether to deploy the gateway; it checks the release again. Re-running a deploy's failed jobs is refused,
+since it would reuse an earlier attempt's check. An app or the gateway named there whose latest check didn't pass is
+refused, and `all` leaves such an app out. A check counts only if nothing its workflow watches changed between its
+run and the release (a push with `[skip ci]` starts no run). Going back to an earlier release takes the same with
+`rollback` set, and the gateway unticked unless it should go back as well (see Roll back); it's refused when anything
+it would deploy has a migration since, because going back past a migration needs the database restored first.
 
 The app deploy builds a fresh Wrangler configuration instead of trusting generated deployment metadata. It accepts
 only a valid `compatibility_date`, `nodejs_compat` as the only possible compatibility flag, validated module `rules`,
@@ -221,16 +226,17 @@ all of them.
 
 ### Roll back
 
-To go back to an earlier release, run **Actions → Deploy → Run workflow** on `main` with its version and the apps to
-deploy; it refuses when anything it would deploy has a migration since. Otherwise, Cloudflare keeps Worker versions,
-each tagged with its release. With the same account credentials used by the workflow, use the gateway package's
-pinned CLI to inspect deployments and run `wrangler rollback --name insulin-apps-<app>` for only the affected app. Roll
-back `insulin-apps-gateway` separately only when the gateway itself changed. When both need rollback, roll back the app
-Worker before the gateway. D1 migrations are forward-only and are not rolled back; confirm that the older Worker
+To go back to an earlier release, run **Actions → Deploy → Run workflow** on `main` with its version, the apps to
+deploy and `rollback` set, and untick **Deploy the gateway too** unless the gateway should go back as well (it's on by
+default). It refuses when anything it would deploy has a migration since. Otherwise, Cloudflare
+keeps Worker versions, each tagged with its release. With the same account credentials used by the workflow, use the
+gateway package's pinned CLI to inspect deployments and run `wrangler rollback --name insulin-apps-<app>` for only the
+affected app. Roll back `insulin-apps-gateway` separately only when the gateway itself changed. When both need
+rollback, roll back the app Worker before the gateway. D1 migrations are forward-only and are not rolled back; confirm that the older Worker
 remains compatible with the migrated schema.
 
-After a rollback, investigate the failed version before deploying it again. The next release that changes the app
-will otherwise deploy it.
+After a rollback, revert or fix the change on `main` before anything else merges: every release deploys every app
+whose latest check passed, so the next one, whatever it changes, would put the broken version back.
 
 ## Troubleshooting
 
@@ -238,17 +244,18 @@ will otherwise deploy it.
 - **App preflight lists a missing setting:** add `CLOUDFLARE_ACCOUNT_ID`. Gateway preflight also requires its
   Turnstile and email settings; a Google client ID requires its client secret.
 - **A custom domain fails with "externally managed DNS records" (code 100117):** delete the A, AAAA or CNAME records
-  on that hostname, then run the `Gateway` workflow again. Otherwise check the token's permissions (Workers Scripts
+  on that hostname, then run **Deploy** with the latest release. Otherwise check the token's permissions (Workers Scripts
   and, on the zone, Workers Routes and Zone read) and that the hostname is not attached to another Worker. Do not
   create manual replacement records.
-- **The first gateway deploy says an app Worker was not found (code 10143):** the gateway raced a new app's first
-  deploy. The app's own workflow refreshes the gateway once the app is deployed, or run `Gateway` again.
+- **A gateway deploy says an app Worker was not found (code 10143):** a new app wasn't deployed (its latest check
+  didn't pass, so the release held it back), and the gateway can't bind it yet. Fix the app, or re-run its failed
+  check; the next release then deploys it and the gateway, or run **Deploy** with the latest release.
 - **An app deploy cannot prove the Worker is private:** check the account and zone permissions, the `SITE_DOMAIN`
   value, and the reported Cloudflare API error. The deploy deliberately stops if any lookup, removal, or verification
   is incomplete.
 - **A gateway deploy reports `SITE_ENV`:** remove the retained production secret with
-  `wrangler secret delete SITE_ENV --config <gateway-config>`, then run the Gateway workflow again. Never configure
-  `SITE_ENV` on the production Worker.
+  `wrangler secret delete SITE_ENV --config <gateway-config>`, then run **Deploy** with the latest release. Never
+  configure `SITE_ENV` on the production Worker.
 - **A migration fails:** stop. Fix it with a new forward migration; never edit or delete a migration that may already
   have been applied.
 - **Email fails:** confirm Email Service onboarding, the approved sender, and that `EMAIL_FROM` contains that address.

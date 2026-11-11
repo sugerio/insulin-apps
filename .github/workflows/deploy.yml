@@ -1,8 +1,10 @@
 name: Deploy
 
 # Deploys a release by hand (Actions → Deploy → Run workflow, on main): to retry a deploy that failed, to go back to an
-# earlier release, or to send changed settings out. It waits for any Release run, and a Release run for it, since both
-# hold the `release` concurrency group, so a deploy by hand never overlaps a release's. See deploy-release.yml.
+# earlier release (with `rollback`), or to send changed settings out. It waits in one queue with the Release runs (the
+# `release` concurrency group, every run kept), so a deploy by hand never overlaps a release's. An app or the gateway
+# named here whose latest check at or before the version didn't pass is refused; `all` leaves such an app out. See
+# deploy-release.yml.
 on:
   workflow_dispatch:
     inputs:
@@ -15,16 +17,22 @@ on:
         type: string
         default: all
       gateway:
-        description: Deploy the gateway too
+        description: Deploy the gateway too (untick it for a rollback of apps only)
         type: boolean
         default: true
+      rollback:
+        description: Go back, if the version is older than the latest release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   deploy:
@@ -33,4 +41,5 @@ jobs:
       version: ${{ inputs.version }}
       apps: ${{ inputs.apps }}
       gateway: ${{ inputs.gateway }}
+      rollback: ${{ inputs.rollback }}
     secrets: inherit

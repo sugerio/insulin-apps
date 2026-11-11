@@ -1,0 +1,6 @@
+# GitHub's concurrency `queue` key (docs: "Control the concurrency of workflows and jobs") is newer than actionlint's
+# schema, so its "unexpected key" message is ignored, and only that one.
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'

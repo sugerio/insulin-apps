@@ -182,7 +182,8 @@ export function SiteHeader({ ctx, account }: { ctx: Context; account: HeaderAcco
           <a className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 sm:px-3")} href={apexUrl(ctx, "/docs/")}>
             Docs
           </a>
-          <a className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 text-muted-foreground sm:px-3")} href={INSULIN_URL}>
+          {/* On a phone the docs take this link's place; the footer still links Insulin. */}
+          <a className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 text-muted-foreground max-sm:hidden sm:px-3")} href={INSULIN_URL}>
             <span>
               <span className="max-md:hidden">Built with </span>Insulin
             </span>

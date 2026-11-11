@@ -3,9 +3,10 @@
 // <app>.SITE_DOMAIN (proxied to the app Worker over its APP_<APP> service binding). See README.md.
 import { loadConfig } from './config.ts'
 import type { Env } from './env.ts'
+import { reconcileOwnerDomains } from './db/orgs.ts'
 import { housekeeping } from './housekeeping.ts'
 import { secure } from './http/secure.ts'
-import { logError } from './log.ts'
+import { log, logError } from './log.ts'
 import { handleRequest } from './router.ts'
 import { HOUSEKEEPING_CRON, tickApps } from './scheduled.ts'
 
@@ -23,7 +24,8 @@ export default {
   },
 
   /**
-   * The daily cron (HOUSEKEEPING_CRON) runs the retention cleanup in larger batches; every other trigger, the
+   * The daily cron (HOUSEKEEPING_CRON) runs the retention cleanup in larger batches and reconciles owner domains
+   * (db/orgs.ts); every other trigger, the
    * five-minute one (TICK_CRON), ticks the apps that declare a scheduled path (scheduled.ts, DESIGN.md §8.5).
    */
   async scheduled(controller, env, ctx): Promise<void> {
@@ -31,6 +33,10 @@ export default {
     if (!loaded.ok) return
     if (controller.cron === HOUSEKEEPING_CRON) {
       ctx.waitUntil(housekeeping(loaded.config.db, Date.now(), 2000).catch((error) => logError('housekeeping_failed', error)))
+      // Owner domains in the form the organization limit counts by (migrations can only approximate it in SQL).
+      ctx.waitUntil(reconcileOwnerDomains(loaded.config.db)
+        .then((changed) => log('owner_domains_reconciled', changed))
+        .catch((error) => logError('owner_domains_reconcile_failed', error)))
       return
     }
     tickApps(loaded.config, (work) => ctx.waitUntil(work))

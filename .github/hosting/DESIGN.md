@@ -152,10 +152,12 @@ removed meanwhile changes nothing (the gateway's existing rule, extended to app 
   organizations recorded under its subdomains, which migrations `0007` and `0009` and the gateway before `0009` wrote
   with the creator's whole domain. Migration `0007` gave existing organizations their creator's owner domain; `0009`
   gave each one still without an owner domain its creator's or, when that account was gone, its earliest current
-  owner's, and rewrote Gmail owner domains (and allowances) to the form above. An organization with neither counts for
-  nobody. Organizations
-  recorded under a provider added to the list since `0007` (as a domain such as `web.de`) count for nobody either. The
-  old per-account count (`users.orgs_created`) is kept as a record and limits nothing.
+  owner's, and rewrote Gmail owner domains (and allowances) to the form above. SQL can only approximate that form (it
+  can't apply the provider list or the Public Suffix List), so the gateway's daily cron reconciles it with the same code
+  the limit counts by: every organization's owner domain from its creator or earliest current owner, and every
+  allowance's key, where two allowances meeting under one key keep the larger number. An organization with neither a
+  creator nor an owner counts for nobody. The old per-account count (`users.orgs_created`) is kept as a record and
+  limits nothing.
 - **Allowances.** Operators let a domain (or an address at a provider) have more, or fewer down to none, in
   `org_domain_allowances`, with `.github/hosting/scripts/allow-orgs.mjs` ([runbook](README.md)). It takes the owner
   domain only in the form the gateway counts: a registrable domain that isn't a provider, or an address at a provider.

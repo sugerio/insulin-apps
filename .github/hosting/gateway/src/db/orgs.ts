@@ -251,3 +251,61 @@ export async function leaveOrg(db: D1Database, orgId: string, userId: string, cu
   ).bind(orgId, userId, current).run()
   return result.meta.changes > 0
 }
+
+/** At most this many organizations and allowances are looked at in one daily reconcile. */
+export const RECONCILE_LIMIT = 5000
+
+/**
+ * The canonical form of an allowance's key: an address as ownerDomainOf words it (the Gmail rule included), a domain
+ * at a public mail provider as itself, and any other domain as its registrable domain.
+ */
+export function canonicalAllowanceKey(key: string): string {
+  if (key.includes('@')) return ownerDomainOf(key)
+  return registrableDomain(key) ?? key
+}
+
+/**
+ * Owner domains written by migrations are SQL's approximation of ownerDomainOf, which SQL can't run (the public mail
+ * provider list, the Public Suffix List, the Gmail rule). Once a day this puts every organization's owner domain, and
+ * every allowance's key, in the form the limit counts by, with the same code: an organization's from its creator, or
+ * from its earliest current OWNER when the creator is gone; an allowance that meets another under one key keeps the
+ * larger number. Each change is conditional on the value it read, so a concurrent write is never overwritten.
+ */
+export async function reconcileOwnerDomains(db: D1Database): Promise<{ orgs: number; allowances: number }> {
+  const { results: orgs } = await db.prepare(
+    `SELECT o.id, o.owner_domain,
+       COALESCE((SELECT u.email FROM users u WHERE u.id = o.created_by),
+         (SELECT u.email FROM memberships m JOIN users u ON u.id = m.user_id
+          WHERE m.org_id = o.id AND m.role = 'OWNER' ORDER BY m.created_at, m.user_id LIMIT 1)) AS email
+     FROM orgs o ORDER BY o.created_at, o.id LIMIT ?1`,
+  ).bind(RECONCILE_LIMIT).all<{ id: string; owner_domain: string | null; email: string | null }>()
+  const statements: D1PreparedStatement[] = []
+  let orgChanges = 0
+  for (const org of orgs) {
+    if (!org.email) continue
+    const wanted = ownerDomainOf(org.email)
+    if (!wanted || wanted === org.owner_domain) continue
+    statements.push(db.prepare('UPDATE orgs SET owner_domain = ?2 WHERE id = ?1 AND owner_domain IS ?3').bind(org.id, wanted, org.owner_domain))
+    orgChanges += 1
+  }
+  const { results: allowances } = await db.prepare(
+    'SELECT owner_domain, max_orgs, note, created_at FROM org_domain_allowances ORDER BY owner_domain LIMIT ?1',
+  ).bind(RECONCILE_LIMIT).all<{ owner_domain: string; max_orgs: number; note: string | null; created_at: number }>()
+  let allowanceChanges = 0
+  for (const allowance of allowances) {
+    const wanted = canonicalAllowanceKey(allowance.owner_domain)
+    if (!wanted || wanted === allowance.owner_domain) continue
+    statements.push(
+      db.prepare(
+        `INSERT INTO org_domain_allowances (owner_domain, max_orgs, note, created_at)
+         SELECT ?1, max_orgs, note, created_at FROM org_domain_allowances WHERE owner_domain = ?2
+         ON CONFLICT (owner_domain) DO UPDATE SET max_orgs = max(org_domain_allowances.max_orgs, excluded.max_orgs),
+           note = COALESCE(org_domain_allowances.note, excluded.note)`,
+      ).bind(wanted, allowance.owner_domain),
+      db.prepare('DELETE FROM org_domain_allowances WHERE owner_domain = ?1').bind(allowance.owner_domain),
+    )
+    allowanceChanges += 1
+  }
+  for (let start = 0; start < statements.length; start += 50) await db.batch(statements.slice(start, start + 50))
+  return { orgs: orgChanges, allowances: allowanceChanges }
+}

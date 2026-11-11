@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { Log, LogLevel, Miniflare, convertV4MiniflareOptions } from 'miniflare'
 import { COMPATIBILITY_DATE, gatewayDir } from './helpers/bundle.mjs'
 import { splitStatements, startGateway } from './helpers/harness.mjs'
-import { createOrg, orgAllowance } from '../src/db/orgs.ts'
+import { canonicalAllowanceKey, createOrg, orgAllowance, reconcileOwnerDomains } from '../src/db/orgs.ts'
 import { orgRequestMail } from '../src/mail/templates.ts'
 import { PUBLIC_MAIL_DOMAINS, checkOwnerDomain, isPublicMailDomain, ownerDomainOf, subdomainPattern } from '../src/owner-domain.ts'
 
@@ -511,4 +511,32 @@ test('migration 0009 fills missing owner domains from the creator or the earlies
   } finally {
     await mf.dispose()
   }
+})
+
+test('the daily reconcile puts owner domains and allowance keys in the form the limit counts by', async () => {
+  const now = Date.now()
+  // Provider domains as constants, so no literal address of a real provider sits in the source (check-public-content).
+  const regional = 'yahoo.co.uk'
+  const googlemail = 'googlemail.com'
+  const user = async (id, email) => h.sql('INSERT INTO users (id, email, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)', id, email, 'Reconcile Person', now)
+  await user('11111111-1111-4111-8111-111111111111', `alice@${regional}`)
+  await user('22222222-2222-4222-8222-222222222222', `j.doe+x@${googlemail}`)
+  await user('33333333-3333-4333-8333-333333333333', 'bea@team.reconcile.test')
+  const org = (id, by, domain) => h.sql('INSERT INTO orgs (id, name, created_by, owner_domain, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)', id, 'Reconcile Org', by, domain, now)
+  // As migrations left them: the provider as a whole, a dotted Gmail address, and none at all (creator gone).
+  await org('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '11111111-1111-4111-8111-111111111111', regional)
+  await org('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', '22222222-2222-4222-8222-222222222222', `j.doe@${PROVIDER}`)
+  await org('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', null, null)
+  await h.sql("INSERT INTO memberships (org_id, user_id, role, created_at, updated_at) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', '33333333-3333-4333-8333-333333333333', 'OWNER', ?1, ?1)", now)
+  await h.sql("INSERT INTO org_domain_allowances (owner_domain, max_orgs, note, created_at) VALUES (?1, 7, 'old', 1), (?2, 3, NULL, 2), ('one.reconcile.test', 4, NULL, 3)", `j.doe@${PROVIDER}`, `jdoe@${PROVIDER}`)
+
+  assert.equal(canonicalAllowanceKey(`J.Doe@${googlemail.toUpperCase()}`), `jdoe@${PROVIDER}`)
+  assert.equal(canonicalAllowanceKey('one.reconcile.test'), 'reconcile.test')
+  const changed = await reconcileOwnerDomains(h.db)
+  assert.ok(changed.orgs >= 3 && changed.allowances >= 2, JSON.stringify(changed))
+  const domains = Object.fromEntries((await h.sql("SELECT id, owner_domain FROM orgs WHERE id LIKE 'aaaaaaaa-%'")).map((row) => [row.id.slice(-1), row.owner_domain]))
+  assert.deepEqual(domains, { 1: `alice@${regional}`, 2: `jdoe@${PROVIDER}`, 3: 'reconcile.test' }, 'counted by address at a provider, in the Gmail form, from the earliest owner')
+  const allowances = Object.fromEntries((await h.sql("SELECT owner_domain, max_orgs, note FROM org_domain_allowances WHERE owner_domain LIKE ?1 OR owner_domain LIKE '%reconcile.test'", `%${PROVIDER}`)).map((row) => [row.owner_domain, [row.max_orgs, row.note]]))
+  assert.deepEqual(allowances, { [`jdoe@${PROVIDER}`]: [7, 'old'], 'reconcile.test': [4, null] }, 'colliding allowances keep the larger number, and none is left behind')
+  assert.deepEqual(await reconcileOwnerDomains(h.db), { orgs: 0, allowances: 0 }, 'a second run changes nothing')
 })

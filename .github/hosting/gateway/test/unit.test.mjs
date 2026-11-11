@@ -271,6 +271,14 @@ test('configuration: app names, bindings, sender, and failing closed', () => {
   assert.equal(ok.config.apps[0].appId, 'insulin-apps-captable')
   assert.equal(ok.config.testMode, false)
   assert.equal(readConfig({ ...env, SITE_APPS: JSON.stringify(env.SITE_APPS) }).ok, true, 'SITE_APPS as a JSON string')
+  // The optional addresses: normalized when usable, ignored (never fatal) when not.
+  assert.equal(ok.config.orgRequestEmail, null)
+  assert.equal(readConfig({ ...env, ORG_REQUEST_EMAIL: ' Requests@Example.TEST ' }).config.orgRequestEmail, 'requests@example.test')
+  for (const unusable of ['not an address', 'two@@example.test', '   ']) {
+    const result = readConfig({ ...env, ORG_REQUEST_EMAIL: unusable })
+    assert.equal(result.ok, true, unusable)
+    assert.equal(result.config.orgRequestEmail, null, unusable)
+  }
   for (const [change, problem] of [
     [{ SITE_DOMAIN: undefined }, 'SITE_DOMAIN'],
     [{ TURNSTILE_SECRET_KEY: '' }, 'TURNSTILE_SECRET_KEY'],

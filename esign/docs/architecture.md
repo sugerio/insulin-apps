@@ -69,7 +69,7 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | Secret | What |
 | --- | --- |
 | `ESIGN_OTP_KEY` | The pepper of the emailed codes (at least 32 characters) |
-| `ESIGN_FRAME_ANCESTORS` | Space-separated origins that may embed the signing page and the editor |
+| `ESIGN_FRAME_ANCESTORS` | Space-separated host origins that may embed the signing page and the editor (the app's own origin always may) |
 | `ESIGN_KMS_KEY_ARN`, `ESIGN_KMS_PUBLIC_KEY`, `ESIGN_KMS_TRUSTED_KEY_SHA256` | The managed seal's AWS KMS key, its public key (base64 SPKI) and the trusted key hashes |
 | `ESIGN_AWS_ROLE_ARN`, `ESIGN_AWS_ACCESS_KEY_ID`, `ESIGN_AWS_SECRET_ACCESS_KEY` | The credentials that assume the role allowed to sign with the key |
 | `ESIGN_TSA_SIGNER_SPKI_SHA256` | The pinned signer keys of the timestamp authority |
@@ -206,7 +206,7 @@ tables:
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
-| `app_settings` | Deployment settings SQL reads: `editor_origins`, the origins from `ESIGN_FRAME_ANCESTORS` |
+| `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
 
 JSON columns. A new optional fact about an envelope or task needs no new table or column: readers
@@ -224,8 +224,9 @@ real column (`tasks.expires_at`).
   field of the document at signing and, for each of the signer's fields, its value, renderer name
   and hash, image hash and geometry.
 - `app_settings.editor_origins`: a JSON array of the bare origins (https, or http on `localhost`
-  or `127.0.0.1`) allowed to frame the editor and the signing page. The app writes it from
-  `ESIGN_FRAME_ANCESTORS` when it changes (`syncEditorOrigins`), keeping only valid origins. Every
+  or `127.0.0.1`) allowed to start an editing session and frame the editor: the app's own origin,
+  whose Templates page hosts the editor, and those in `ESIGN_FRAME_ANCESTORS`. The editor routes
+  write it when it changes (`syncEditorOrigins`), keeping only valid origins. Every
   statement that relies on an origin checks it with `json_each` inside that statement
   (`editorOriginAllowed` in `src/app/server/esign/access.ts`), matching only string elements exactly,
   so removing an origin takes effect at its next check.

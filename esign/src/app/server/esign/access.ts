@@ -33,8 +33,8 @@ export function validAccessOrigin(origin: string): boolean {
 }
 
 /**
- * An origin the deployment may list for the editor (ESIGN_FRAME_ANCESTORS, kept in
- * `app_settings.editor_origins`): a valid access origin spelled only with lowercase host
+ * An origin the deployment may list for the editor (the app's own and ESIGN_FRAME_ANCESTORS, kept
+ * in `app_settings.editor_origins`): a valid access origin spelled only with lowercase host
  * characters, digits, dots, hyphens, an optional bracketed IPv6 literal and an optional port. It
  * therefore holds no quote, backslash, semicolon or space and is safe in SQL and in JSON. Checked
  * wherever the list is written and on every origin an editing session is started for.
@@ -54,7 +54,7 @@ export const editorOriginAllowed = (tenant: string, origin: string): string =>
   `(${tenant} IS NOT NULL AND EXISTS (SELECT 1 FROM app_settings eos, json_each(eos.value) eoo WHERE eos.name='editor_origins' AND eoo.type='text' AND eoo.value=${origin}))`;
 
 /**
- * Records the editor origins the deployment allows (`origins`, from ESIGN_FRAME_ANCESTORS) where
+ * Records the editor origins the deployment allows (`origins`: the app's own and ESIGN_FRAME_ANCESTORS) where
  * the editor's SQL reads them. Writes only when the list changed. Invalid origins are dropped.
  */
 export async function syncEditorOrigins(db: D1Database, origins: readonly string[]): Promise<void> {

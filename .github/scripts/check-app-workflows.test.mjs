@@ -21,8 +21,8 @@ async function repository(appNames = ['alpha-app'], released = appNames) {
   return root
 }
 
-function workflow(app, { path = `${app}/**`, configuredApp = app, template = './.github/workflows/app.yml' } = {}) {
-  return `name: ${app}\n\non:\n  push:\n    branches: [main]\n    paths:\n      - ${path}\n  pull_request:\n    paths:\n      - ${path}\n\njobs:\n  app:\n    uses: ${template}\n    with:\n      app: ${configuredApp}\n`
+function workflow(app, { path = `${app}/**`, configuredApp = app, template = './.github/workflows/app.yml', name = app } = {}) {
+  return `name: ${name}\n\non:\n  push:\n    branches: [main]\n    paths:\n      - ${path}\n  pull_request:\n    paths:\n      - ${path}\n\njobs:\n  app:\n    uses: ${template}\n    with:\n      app: ${configuredApp}\n`
 }
 
 function release(names) {
@@ -115,4 +115,28 @@ test('requires release.yml', async () => {
   await rm(join(root, '.github', 'workflows', 'release.yml'))
 
   await assert.rejects(() => checkAppWorkflows(root), /Missing \.github\/workflows\/release\.yml/)
+})
+
+test("requires an app's workflow to be named after it, since release.yml deploys apps by their workflows' names", async () => {
+  const root = await repository(['alpha-app'], ['Alpha'])
+  await writeFile(join(root, '.github', 'workflows', 'alpha-app.yml'), workflow('alpha-app', { name: 'Alpha' }))
+
+  await assert.rejects(async () => checkAppWorkflows(root), (error) => {
+    assert.match(error.message, /alpha-app\.yml must be named alpha-app, which is how release\.yml knows to deploy the app/)
+    assert.match(error.message, /alpha-app\.yml runs on a push, but only CI, Gateway and each app's own workflow may: release\.yml would take "Alpha" for an app/)
+    return true
+  })
+})
+
+test('lets only CI, Gateway and the apps\' own workflows run on a push', async () => {
+  const root = await repository(['alpha-app'], ['CI', 'Gateway', 'alpha-app', 'Docs'])
+  await writeFile(join(root, '.github', 'workflows', 'alpha-app.yml'), workflow('alpha-app'))
+  await writeFile(join(root, '.github', 'workflows', 'ci.yml'), CI)
+  await writeFile(join(root, '.github', 'workflows', 'gateway.yml'), CI.replace('name: CI', 'name: Gateway'))
+  await writeFile(join(root, '.github', 'workflows', 'docs.yml'), CI.replace('name: CI', 'name: Docs'))
+
+  await assert.rejects(
+    () => checkAppWorkflows(root),
+    /^Error: Workflow \.github\/workflows\/docs\.yml runs on a push, but only CI, Gateway and each app's own workflow may: release\.yml would take "Docs" for an app to deploy$/,
+  )
 })

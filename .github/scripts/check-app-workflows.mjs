@@ -7,6 +7,8 @@ import { listApps } from './list-apps.mjs'
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const APP_TEMPLATE = './.github/workflows/app.yml'
 const RELEASE = 'release.yml'
+// The workflows besides each app's own that run on a push to main.
+const PUSH_WORKFLOWS = ['CI', 'Gateway']
 
 export async function checkAppWorkflows(root = repositoryRoot) {
   root = resolve(root)
@@ -43,6 +45,10 @@ export async function checkAppWorkflows(root = repositoryRoot) {
     if (!hasPathFilter(text, `${name}/**`)) {
       errors.push(`App workflow .github/workflows/${file} must include the path filter ${name}/**`)
     }
+    // release.yml deploys the apps whose workflows passed on the released pushes, by the workflows' names.
+    if (workflowName(text) !== name) {
+      errors.push(`App workflow .github/workflows/${file} must be named ${name}, which is how release.yml knows to deploy the app`)
+    }
   }
 
   for (const [file, text] of workflows) {
@@ -57,7 +63,7 @@ export async function checkAppWorkflows(root = repositoryRoot) {
     }
   }
 
-  errors.push(...checkReleaseTriggers(workflows))
+  errors.push(...checkReleaseTriggers(workflows, appNames))
 
   if (errors.length) throw new Error(errors.join('\n'))
   return { apps: [...appNames], workflows: workflowFiles }
@@ -65,8 +71,9 @@ export async function checkAppWorkflows(root = repositoryRoot) {
 
 // release.yml numbers a push to main once every run the push started has passed, and it starts when one of those runs
 // completes. So its workflow_run trigger must name every workflow that runs on a push (each app's, CI and Gateway),
-// or a push whose last run is an unlisted workflow waits for the hourly run.
-function checkReleaseTriggers(workflows) {
+// or a push whose last run is an unlisted workflow waits for the hourly run. It then deploys every app whose workflow
+// ran, taking each name other than CI and Gateway for an app's, so no other workflow may run on a push.
+function checkReleaseTriggers(workflows, appNames) {
   const release = workflows.get(RELEASE)
   if (release === undefined) return [`Missing .github/workflows/${RELEASE}, which numbers each green push to main`]
   const listed = releaseTriggers(release)
@@ -79,7 +86,14 @@ function checkReleaseTriggers(workflows) {
     if (file === RELEASE || !triggers(text).has('push')) continue
     if (!name) {
       errors.push(`Workflow .github/workflows/${file} runs on a push, so it needs a name for ${RELEASE} to list`)
-    } else if (!listed.includes(name)) {
+      continue
+    }
+    if (!PUSH_WORKFLOWS.includes(name) && !appNames.has(name)) {
+      errors.push(
+        `Workflow .github/workflows/${file} runs on a push, but only CI, Gateway and each app's own workflow may: ${RELEASE} would take ${JSON.stringify(name)} for an app to deploy`,
+      )
+    }
+    if (!listed.includes(name)) {
       errors.push(
         `Workflow .github/workflows/${file} runs on a push, so ${RELEASE} must start after it: add ${JSON.stringify(name)} to its workflow_run workflows`,
       )

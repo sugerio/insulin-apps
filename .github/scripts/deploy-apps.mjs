@@ -316,6 +316,7 @@ export async function deployApps({
     return { skipped: true }
   }
 
+  const release = releaseArguments(environment)
   const { apps, selectedApps } = await findApps(root, only)
   const appsToDeploy = deployAppWorkers ? selectedApps : []
 
@@ -398,9 +399,9 @@ export async function deployApps({
     }
     if (Object.keys(secretValues).length) {
       // The secrets travel with the deploy itself, so no version of the app runs without them.
-      deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd: root, env: childEnvironment, dryRun })
+      deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd: root, env: childEnvironment, dryRun, release })
     } else {
-      runner.run(wrangler, ['deploy', '--config', configPath], { cwd: root, env: childEnvironment })
+      runner.run(wrangler, ['deploy', '--config', configPath, ...release], { cwd: root, env: childEnvironment })
     }
     if (dryRun) {
       runner.record('cloudflare-api', ['remove-and-verify-public-access', workerName(app.name)], {
@@ -437,7 +438,7 @@ export async function deployApps({
       TURNSTILE_SECRET_KEY: settings.turnstileSecretKey,
       ...(settings.gatewaySecretKey ? { GATEWAY_SECRET_KEY: settings.gatewaySecretKey } : {}),
     }
-    deployWithSecrets(runner, wrangler, gatewayConfigPath, secretValues, { cwd: root, env: childEnvironment, dryRun })
+    deployWithSecrets(runner, wrangler, gatewayConfigPath, secretValues, { cwd: root, env: childEnvironment, dryRun, release })
     const secretList = runner.run(wrangler, ['secret', 'list', '--config', gatewayConfigPath], {
       cwd: root,
       env: childEnvironment,
@@ -508,6 +509,19 @@ class CommandRunner {
   }
 }
 
+/**
+ * The release a deploy installs, which deploy.yml passes as RELEASE_VERSION and RELEASE_COMMIT: `wrangler deploy` tags
+ * each Worker version with it, so Cloudflare shows which release runs. Nothing outside a release deploy.
+ */
+export function releaseArguments(environment = process.env) {
+  const version = environment.RELEASE_VERSION?.trim() ?? ''
+  const commit = environment.RELEASE_COMMIT?.trim() ?? ''
+  if (!version) return []
+  if (!/^v\d+\.\d+\.\d+$/.test(version)) throw new Error('RELEASE_VERSION must be a release such as v0.1.2')
+  if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('RELEASE_COMMIT must be the release\'s full commit id')
+  return ['--tag', version, '--message', `insulin-apps ${version} (${commit.slice(0, 12)})`]
+}
+
 async function findApps(root, only) {
   const apps = await listApps(root)
   if (!apps.length) throw new Error('No apps were found')
@@ -519,8 +533,8 @@ async function findApps(root, only) {
  * `wrangler deploy --secrets-file`, from a mode-600 file in a fresh directory removed right after; redacted in plans,
  * which list the secrets' names only.
  */
-function deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd, env, dryRun }) {
-  const args = (secretFile) => ['deploy', '--config', configPath, '--secrets-file', secretFile]
+function deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd, env, dryRun, release = [] }) {
+  const args = (secretFile) => ['deploy', '--config', configPath, '--secrets-file', secretFile, ...release]
   const secretNames = Object.keys(secretValues).sort()
   if (dryRun) {
     runner.run(wrangler, args('<redacted-secret-file>'), { cwd, env, sensitive: true, secretNames })

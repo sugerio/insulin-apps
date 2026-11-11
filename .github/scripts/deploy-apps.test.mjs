@@ -425,6 +425,33 @@ test('--gateway-only deploys the gateway with every discovered app binding and n
   ])
 })
 
+test('a release deploy tags every Worker version with the release and its commit, and takes nothing else', async () => {
+  const root = await fixtureRepository()
+  const out = await tempDirectory('deploy-apps-release-')
+  const commit = 'a1b2c3d4e5'.repeat(4)
+  await deployApps({ root, out, environment: settings({ RELEASE_VERSION: 'v0.1.7', RELEASE_COMMIT: commit }), dryRun: true, skipBuild: true })
+  const deploys = JSON.parse(await readFile(join(out, 'plan.json'), 'utf8')).commands.filter(({ args }) => args[0] === 'deploy')
+  assert.equal(deploys.length, 3)
+  for (const { args } of deploys) {
+    assert.deepEqual(args.slice(args.indexOf('--tag')), ['--tag', 'v0.1.7', '--message', 'insulin-apps v0.1.7 (a1b2c3d4e5a1)'])
+  }
+
+  const plain = await tempDirectory('deploy-apps-plain-')
+  await deployApps({ root, out: plain, environment: settings(), dryRun: true, skipBuild: true })
+  const untagged = JSON.parse(await readFile(join(plain, 'plan.json'), 'utf8')).commands.filter(({ args }) => args[0] === 'deploy')
+  assert.ok(untagged.every(({ args }) => !args.includes('--tag') && !args.includes('--message')), 'outside a release, no tag')
+
+  for (const [name, value, message] of [
+    ['RELEASE_VERSION', 'main', /RELEASE_VERSION must be a release/],
+    ['RELEASE_VERSION', 'v1.2', /RELEASE_VERSION must be a release/],
+    ['RELEASE_COMMIT', '', /RELEASE_COMMIT must be/],
+    ['RELEASE_COMMIT', 'abc1234', /RELEASE_COMMIT must be/],
+  ]) {
+    const environment = settings({ RELEASE_VERSION: 'v0.1.7', RELEASE_COMMIT: commit, [name]: value })
+    await assert.rejects(() => deployApps({ root, environment, dryRun: true, skipBuild: true, spawn: () => assert.fail('spawned') }), message)
+  }
+})
+
 test('a mocked deployment creates missing databases and removes its mode-600 secret file', async () => {
   const root = await fixtureRepository()
   const gateway = join(root, '.github', 'hosting', 'gateway')

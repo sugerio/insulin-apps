@@ -54,7 +54,7 @@ Each app is a top-level directory with its own `README.md` and `AGENTS.md`, and 
 - use synthetic data only, in code, tests and docs.
 
 Add the app to the table above. Copy `.github/workflows/captable.yml` to `.github/workflows/<app>.yml` and change its
-name, path filters and `app` input, then add that name to the `workflows` list in
+name (to the app's directory name), path filters and `app` input, then add that name to the `workflows` list in
 [`release.yml`](.github/workflows/release.yml); CI checks both. Read [`AGENTS.md`](AGENTS.md) for the full checklist.
 
 ## Checks
@@ -75,22 +75,30 @@ tests, migration check and Cloudflare build, while repository-wide CI runs the p
 
 ## Releases
 
-Every green merge to `main` is a release. A merge is green when every workflow it started passed, deploys included: CI,
-the workflow of each app it touched, and Gateway when it touched the gateway. A push to `main` deploys what it changed,
-so a release names what was deployed. [`release.yml`](.github/workflows/release.yml) tags the merge's commit with the
-next version, `v0.1.1`, then `v0.1.2` and so on, one version for the whole repository, and publishes a GitHub Release
-that lists the workflows that passed and the pull requests merged since the previous version.
+Every green merge to `main` is a release, and only releases are deployed. A merge is green when every workflow it
+started passed: CI, the workflow of each app it touched, and Gateway when it touched the gateway. Those workflows only
+check it. [`release.yml`](.github/workflows/release.yml) then tags the merge's commit with the next version, `v0.1.1`,
+then `v0.1.2` and so on, one version for the whole repository, publishes a GitHub Release that lists the workflows that
+passed and the pull requests merged since the previous version, and deploys that release with
+[`deploy.yml`](.github/workflows/deploy.yml): each app that changed, built from the tag, then the gateway. Each Worker
+version carries the release as its tag, so Cloudflare shows which release runs.
 
 - Merges are numbered in the order they reached `main`, each once. One whose workflows are still running holds back
   those after it until it finishes.
-- A merge with a failed or cancelled run (as when a newer merge replaces a deploy still waiting in its queue) gets no
+- A merge with a failed or cancelled run (as when a newer merge replaces a run still waiting in its queue) gets no
   version; the next green one takes it, and its release lists the pull requests of both.
+- A release deploys what changed since the previous one, merges without a version included, but only where the
+  latest check passed: an app or the gateway whose latest run failed keeps the version it runs.
+- A deploy that fails leaves its release in place: re-run the failed jobs, or run **Actions → Deploy → Run workflow**
+  on `main` with the version. The same goes back to an earlier release, unless something it deploys has a migration
+  since, which needs the database restored first.
 - To start a new minor or major version, an org admin runs **Actions → Release → Run workflow** with it, such as
   `v0.2.0`: `main`'s latest release is released again as that version, and the next merges count on from it.
 - Only `release.yml` creates `v*` tags. The "Release tags" ruleset lets nobody else create, move or delete one (org
   admins can bypass it in an emergency); the [hosting runbook](.github/hosting/README.md#owner-setup) sets it up.
 
-`.github/scripts/plan-release.sh` decides what to release, and `plan-release.test.mjs` tests it against a fake GitHub.
+`.github/scripts/plan-release.sh` decides what to release and deploy, and `plan-release.test.mjs` tests it against a
+fake GitHub; `check-deploy.mjs` checks a deploy before anything is built.
 
 ## Contributing
 

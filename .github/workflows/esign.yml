@@ -28,6 +28,4 @@ jobs:
     uses: ./.github/workflows/app.yml
     with:
       app: esign
-      deploy: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
       workerd-smoke: false
-    secrets: inherit

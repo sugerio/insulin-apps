@@ -1,6 +1,6 @@
 # Hosting the apps on insulinapps.com
 
-Every app in this repository runs at its own address, `<app>.insulinapps.com`, and has an independent CI/CD pipeline.
+Every app in this repository runs at its own address, `<app>.insulinapps.com`, with its own checks; releases deploy it.
 People create an account and an organization, invite their teammates with a role in every app or in specific apps,
 connect AI agents, and use the apps for real work. Data is kept; nothing is reset. How accounts, roles and access work
 is in [DESIGN.md](DESIGN.md).
@@ -16,19 +16,28 @@ every five minutes, on a second cron trigger, it calls the scheduled path of eac
 §8.5). The deploy sets both triggers and the gateway's rate limits (`RL_AUTH`, `RL_APP`, `RL_PUBLIC`); none needs
 setting up by hand.
 
-Each `.github/workflows/<app>.yml` file supplies its app name to the shared `.github/workflows/app.yml` pipeline. On a
-pull request that touches that app, the pipeline installs it, checks its Insulin shape, typechecks, tests, verifies
-migration drift, builds for Cloudflare, and checks the build output. Cap Table also runs the local workerd smoke test.
-It does not receive deployment settings or deploy from a pull request.
+Each `.github/workflows/<app>.yml` file, named after its app, supplies its app name to the shared
+`.github/workflows/app.yml` pipeline. On a pull request or a push to `main` that touches that app, the pipeline
+installs it, checks its Insulin shape, typechecks, tests, verifies migration drift, builds for Cloudflare, and checks
+the build output. Cap Table also runs the local workerd smoke test. It never receives deployment settings and never
+deploys.
 
-On a push to `main` that touches an app, the same checks build it once in a job without secrets. The pipeline uploads
-that output, then a separate `production` job treats the downloaded build as untrusted before applying that app's
-migrations and deploying only its private Worker. The archive is listed before extraction, may contain only regular
-files and directories under `<app>/.output`, and is extracted without its stored ownership or permissions. The deploy
-then walks the output without following links, rejects special files and hard links outside the output, and requires
-the Worker entry file and asset directory. A failure in one app's workflow does not block another app. After every
-successful app deployment, the pipeline calls the gateway workflow so new hostnames and service bindings become live
-automatically. Gateway deploys share the `gateway-deploy` concurrency queue and never cancel one another.
+Only releases are deployed. Once every workflow a push to `main` started has passed, `release.yml` tags it (below) and
+calls `.github/workflows/deploy.yml` with the version. `.github/scripts/check-deploy.mjs` first checks that the version
+is a release on `main` and that the apps exist in it. Each app that changed since the previous release, and whose
+latest check passed, is then built from the release's commit in a job without secrets, and a separate `production` job
+treats the downloaded build as untrusted before applying that app's migrations and deploying only its private Worker.
+The archive is listed before extraction, may contain only regular files and directories under `<app>/.output`, and is
+extracted without its stored ownership or permissions. The deploy then walks the output without following links,
+rejects special files and hard links outside the output, and requires the Worker entry file and asset directory. A
+failed app deploy doesn't stop the others. Once every app has deployed, the gateway follows, so new hostnames and
+service bindings become live with them. Every Worker version is tagged with the release (`wrangler deploy --tag`).
+Deploys of one app, and of the gateway, share a concurrency queue and never cancel one another.
+
+To retry a failed deploy, re-run its failed jobs, or run **Actions → Deploy → Run workflow** on `main` with the version,
+the apps (`all` or their names) and whether to deploy the gateway. The same goes back to an earlier release; it's
+refused when anything it would deploy has a migration since, because going back past a migration needs the database
+restored first.
 
 The app deploy builds a fresh Wrangler configuration instead of trusting generated deployment metadata. It accepts
 only a valid `compatibility_date`, `nodejs_compat` as the only possible compatibility flag, validated module `rules`,
@@ -36,18 +45,19 @@ boolean `no_bundle`, and the primitive `assets` settings `binding`, `html_handli
 `run_worker_first`. It logs and ignores every other generated key. The deploy itself always supplies the Worker name,
 absolute entry and asset paths, D1 binding, console access mode, and disabled `workers.dev` and preview settings.
 
-The gateway has its own path-filtered workflow. Pull requests that change the gateway, its deployment and discovery
-scripts, or the public docs (`.github/hosting/docs/` and every app's `docs/public/`) run gateway typechecks and tests,
-which fail while the generated docs module is stale. A matching push to `main`, or a manual dispatch on `main`, also
-migrates and deploys the gateway with all discovered app bindings. Custom domains are managed by the Worker deployment;
-there is no manual DNS provisioning. After deploying the gateway, the workflow lists its remote secrets and fails if
-`SITE_ENV` is present, because a retained secret is not removed merely by omitting it from a new configuration.
+The gateway has its own path-filtered workflow. Pull requests and pushes to `main` that change the gateway, its
+deployment and discovery scripts, or the public docs (`.github/hosting/docs/` and every app's `docs/public/`) run
+gateway typechecks and tests, which fail while the generated docs module is stale. A release deploy migrates and
+deploys the gateway with all discovered app bindings. Custom domains are managed by the Worker deployment; there is no
+manual DNS provisioning. After deploying the gateway, the deploy lists its remote secrets and fails if `SITE_ENV` is
+present, because a retained secret is not removed merely by omitting it from a new configuration.
 
 The gateway deploy also uploads the docs' images: `.github/hosting/docs/assets/` is the Worker's static-assets
 directory (binding `DOCS_ASSETS`, `run_worker_first: true`), uploaded by `wrangler deploy` with the Worker, so the
 same Workers Scripts permission covers it. Every request still reaches the gateway first; it serves the directory only
 at `https://insulinapps.com/docs/assets/*`. The pages themselves are compiled into the Worker
-(`src/assets/docs-content.ts`), so docs reach `https://insulinapps.com/docs/` with the next gateway deploy. Keep only
+(`src/assets/docs-content.ts`), so docs reach `https://insulinapps.com/docs/` with the next release that deploys the
+gateway. Keep only
 images in that directory: everything in it is uploaded.
 
 After every app Worker deploy, the pipeline also uses the Cloudflare API to remove any custom domain or zone route
@@ -59,10 +69,10 @@ Path-filtered workflows do not report a check on pull requests that do not touch
 therefore require an always-running check such as the repository-wide `Public content` job, not an app or gateway job
 that may be absent.
 
-Once every run a push to `main` started has passed, deploys included, `.github/workflows/release.yml` tags that commit
-with the next version and publishes a GitHub Release (the root README's "Releases"); a push with a failed or cancelled
-run gets no version. It tags with a deploy key that only its `release` environment holds, and the "Release tags"
-ruleset lets nobody else, org admins aside, create, move or delete a `v*` tag.
+Once every run a push to `main` started has passed, `.github/workflows/release.yml` tags that commit with the next
+version, publishes a GitHub Release (the root README's "Releases") and deploys it as above; a push with a failed or
+cancelled run gets no version. It tags with a deploy key that only its `release` environment holds, and the "Release
+tags" ruleset lets nobody else, org admins aside, create, move or delete a `v*` tag.
 
 ## Owner setup
 
@@ -147,18 +157,18 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    deploy key. It prints what it set when it's done. Until it has run, `release.yml` plans releases but can't tag
    them. It targets `sugerio/insulin-apps`; set `GH_REPO` for a fork.
 
-Manually run the `Gateway` workflow on `main` once setup is complete, then manually run each app workflow on `main`.
-Step summaries link the affected public addresses.
+Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and the
+gateway (the next green merge to `main` releases and deploys too). Step summaries link the affected public addresses.
 
 ## Operations
 
 ### Rotate secrets
 
-Replace the relevant secret in the GitHub `production` environment. For a gateway setting, manually dispatch the
-`Gateway` workflow on `main`; its secrets are uploaded with `wrangler deploy` (`--secrets-file`), so the new version
-starts with the new values. After rotating the Cloudflare token, manually dispatch the affected app workflows on
-`main` as well as `Gateway` to verify each independently. Never put a value in a workflow file, command argument,
-issue, or log.
+Replace the relevant secret in the GitHub `production` environment, then run **Actions → Deploy → Run workflow** on
+`main` with the latest release: for a gateway setting, with no apps; for an app's setting, with that app. Secrets are
+uploaded with `wrangler deploy` (`--secrets-file`), so the new version starts with the new values. After rotating the
+Cloudflare token, deploy the latest release with `all` apps and the gateway to verify each. Never put a value in a
+workflow file, command argument, issue, or log.
 
 To replace the release deploy key, run `.github/scripts/configure-release-tags.sh --rotate` as an org admin: it adds a
 new key, stores it as `RELEASE_DEPLOY_KEY` and deletes the old one.
@@ -196,27 +206,28 @@ Table does. Set `displayName` and `description` in `package.json`, include D1 mi
 `src/app/db/migrations`, and make sure the normal checks pass. An app that needs public paths, mail, runtime secrets or
 scheduled work declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to the `production`
 environment before its first deploy. A new `insulin.scheduled` path is ticked once the gateway has been deployed with
-it (the app's workflow refreshes the gateway after every app deploy). Copy `.github/workflows/captable.yml` to
-`.github/workflows/<app>.yml`, then change the workflow name, the app path entries, and `with.app`, and add the
-workflow name to the `workflows` list in `.github/workflows/release.yml`. Repository-wide CI enforces that every
-discovered app has this workflow, that no app workflow names a missing app, and that `release.yml` starts after every
-workflow that runs on a push.
+it (a release deploys the gateway after its apps). Copy `.github/workflows/captable.yml` to
+`.github/workflows/<app>.yml`, then change the workflow name to the app's directory name, the app path entries, and
+`with.app`, and add the workflow name to the `workflows` list in `.github/workflows/release.yml`. Repository-wide CI
+enforces that every discovered app has this workflow, named after it, that no app workflow names a missing app, that
+only CI, Gateway and the apps' own workflows run on a push, and that `release.yml` starts after every one of them.
 
-On the first matching push to `main`, the app workflow creates its D1 database, deploys its private Worker, and queues a
-gateway refresh for its hostname and service binding. If one pull request adds several new apps, an early app pipeline
-can show one failed gateway refresh because another new app Worker does not exist yet. The app deployments are still
-independent; after the last new app deploys, its later queued gateway refresh can bind all of them successfully.
+The release that first includes the app creates its D1 database, deploys its private Worker, and then deploys the
+gateway with its hostname and service binding. When one release adds several new apps, the gateway deploys once, after
+all of them.
 
 ### Roll back
 
-Cloudflare keeps Worker versions. With the same account credentials used by the workflow, use the gateway package's
+To go back to an earlier release, run **Actions → Deploy → Run workflow** on `main` with its version and the apps to
+deploy; it refuses when anything it would deploy has a migration since. Otherwise, Cloudflare keeps Worker versions,
+each tagged with its release. With the same account credentials used by the workflow, use the gateway package's
 pinned CLI to inspect deployments and run `wrangler rollback --name insulin-apps-<app>` for only the affected app. Roll
 back `insulin-apps-gateway` separately only when the gateway itself changed. When both need rollback, roll back the app
 Worker before the gateway. D1 migrations are forward-only and are not rolled back; confirm that the older Worker
 remains compatible with the migrated schema.
 
-After a rollback, investigate the failed version before manually dispatching that app's workflow again. A later
-matching push to `main` will otherwise deploy the current repository state.
+After a rollback, investigate the failed version before deploying it again. The next release that changes the app
+will otherwise deploy it.
 
 ## Troubleshooting
 

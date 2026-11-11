@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Plans the releases that release.yml's `publish` job tags and publishes: each green
 # push to main since the latest release gets the next version, v0.1.1, v0.1.2, and so on.
+# Then what its `deploy` job deploys of them.
 #
 # A push is green when every workflow run it started on main completed and passed
 # (skipped jobs, or a wholly skipped run, are fine): CI, the workflow of each app it
-# touched and Gateway when it touched the gateway, deploys included. Pushes are
+# touched and Gateway when it touched the gateway. Pushes are
 # numbered oldest first: a green one gets the next version, one with a failed or
 # cancelled run gets none, and one with a run still going stops the plan, so a later
 # run numbers it and what follows. So each green push is numbered once and in order,
@@ -19,7 +20,11 @@
 # given by hand), RUNNER_TEMP, GITHUB_OUTPUT and GITHUB_STEP_SUMMARY. Its `releases`
 # output has a line per release, oldest first: the version, its commit, the version
 # before it (- for none), then the workflows that passed on its push (- for none).
-# plan-release.test.mjs runs it against a fake gh.
+# When those releases need a deploy, `deploy-version` is the newest of them,
+# `deploy-apps` the apps to deploy (an app's workflow is named after it;
+# check-app-workflows.mjs checks that), separated by spaces, and `deploy-gateway`
+# whether the gateway goes too (see deploy_plan). plan-release.test.mjs runs it against
+# a fake gh.
 set -euo pipefail
 
 if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
@@ -59,12 +64,52 @@ has_release() {
 : >"$RUNNER_TEMP/plan"
 plan() {
   echo "$1 $2 ${3:--} ${4:--}" >>"$RUNNER_TEMP/plan"
+  # A numbered push's runs count for the deploy; a version released again by hand has none.
+  if [ -n "${4:-}" ]; then
+    record
+    planned=$(($(wc -l <"$RUNNER_TEMP/history")))
+  fi
   echo "Releasing $1 at $2" | tee -a "$GITHUB_STEP_SUMMARY"
+}
+# The runs of each push looked at since the latest release, oldest first, "conclusion
+# workflow" per run, and how many of them precede the newest release planned.
+: >"$RUNNER_TEMP/history"
+planned=0
+record() {
+  awk '{ $1 = ""; sub(/^ +/, ""); print }' "$RUNNER_TEMP/push-runs" >>"$RUNNER_TEMP/history"
+}
+# What the planned releases deploy: the newest version, with whatever changed since the
+# latest release whose newest check passed. That is each app whose workflow's latest run
+# up to that version passed, pushes that got no version included, since their changes
+# are in it too; an app whose latest run failed keeps the version it runs. The gateway
+# goes when its own latest run passed, or when apps go and it didn't run, as its bindings
+# and app catalog follow the apps. Nothing when only CI ran, or the plan only releases a
+# version again by hand.
+deploy_plan() {
+  local version apps gateway=false
+  [ "$planned" -gt 0 ] || return 0
+  version=$(awk 'END { print $1 }' "$RUNNER_TEMP/plan")
+  # Each workflow's latest result: "conclusion workflow".
+  head -n "$planned" "$RUNNER_TEMP/history" \
+    | awk '{ result = $1; $1 = ""; sub(/^ +/, ""); last[$0] = result } END { for (name in last) print last[name], name }' \
+    | LC_ALL=C sort -k 2 >"$RUNNER_TEMP/deploy"
+  apps=$(awk '$1 ~ /^(success|skipped)$/ && $2 != "CI" && $2 != "Gateway" { print $2 }' "$RUNNER_TEMP/deploy" | paste -sd ' ' -)
+  if grep -qE '^(success|skipped) Gateway$' "$RUNNER_TEMP/deploy"; then
+    gateway=true
+  elif [ -n "$apps" ] && ! grep -q ' Gateway$' "$RUNNER_TEMP/deploy"; then
+    gateway=true
+  fi
+  if [ -n "$apps" ] || [ "$gateway" = true ]; then
+    echo "deploy-version=$version"
+    echo "deploy-apps=$apps"
+    echo "deploy-gateway=$gateway"
+    echo "Deploying $version: ${apps:-no apps}; the gateway: $gateway" >>"$GITHUB_STEP_SUMMARY"
+  fi
 }
 finish() {
   local status=$?
   if [ "$status" = 0 ]; then
-    { echo "releases<<END_OF_RELEASES"; cat "$RUNNER_TEMP/plan"; echo "END_OF_RELEASES"; } >>"$GITHUB_OUTPUT"
+    { echo "releases<<END_OF_RELEASES"; cat "$RUNNER_TEMP/plan"; echo "END_OF_RELEASES"; deploy_plan; } >>"$GITHUB_OUTPUT"
   fi
 }
 trap finish EXIT
@@ -203,6 +248,7 @@ while read -r sha <&3; do
       ;;
     failed)
       echo "Not every workflow passed for $sha ($(workflows 'completed (success|skipped)')): no version."
+      record
       continue
       ;;
   esac

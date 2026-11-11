@@ -131,16 +131,18 @@ never reads another's data.
 - Its roles mapped to the app's functions (what Admin, Editor and Viewer may do there), a permission catalog in
   `package.json` if it should support custom roles, and `GET /api/catalog` for AI agents.
 - A row in the app table of the root `README.md`.
-- A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name, paths and `app` input changed, and
-  that name added to the `workflows` list in `.github/workflows/release.yml`. The shared pipeline runs its typecheck,
-  tests, migration check and Cloudflare build.
+- A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name (the app's directory name), paths and
+  `app` input changed, and that name added to the `workflows` list in `.github/workflows/release.yml`. The shared
+  pipeline runs its typecheck, tests, migration check and Cloudflare build; releases deploy it (`deploy.yml`).
 
 ## Releases
 
-`.github/workflows/release.yml` makes every green push to `main` a release: it tags the commit `v0.1.1`, `v0.1.2`, …
-and publishes its GitHub Release (the root README's "Releases"). Never create, move or delete a `v*` tag, or publish
-or edit one of those releases, by hand or from another workflow. A workflow that runs on a push to `main` must be in
-release.yml's `workflow_run` list; `node .github/scripts/check-app-workflows.mjs` checks it.
+`.github/workflows/release.yml` makes every green push to `main` a release: it tags the commit `v0.1.1`, `v0.1.2`, …,
+publishes its GitHub Release (the root README's "Releases") and deploys it with `deploy.yml`. Only releases are
+deployed: an app's or the gateway's workflow only checks a push, and no other workflow deploys. Never create, move or
+delete a `v*` tag, or publish or edit one of those releases, by hand or from another workflow. Only CI, Gateway and
+each app's own workflow, named after the app, run on a push to `main`, and each is in release.yml's `workflow_run`
+list; `node .github/scripts/check-app-workflows.mjs` checks both.
 
 ## Before you finish
 

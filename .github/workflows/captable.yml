@@ -28,6 +28,4 @@ jobs:
     uses: ./.github/workflows/app.yml
     with:
       app: captable
-      deploy: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
       workerd-smoke: true
-    secrets: inherit

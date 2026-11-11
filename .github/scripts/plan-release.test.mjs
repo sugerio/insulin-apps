@@ -73,7 +73,7 @@ after(async () => Promise.all(temporary.map((directory) => rm(directory, { recur
 const sha = (hex) => hex.repeat(40)
 const passed = (name) => [name, 'completed', 'success']
 const push = (hex, ...runs) => ({ sha: sha(hex), runs })
-// A push that touched Cap Table: CI and captable ran, and captable deployed.
+// A push that touched Cap Table: CI and captable ran.
 const green = (hex) => push(hex, passed('CI'), passed('captable'))
 
 async function plan({ tags = [], releases = {}, pushes = [], permission = {} }, env = {}) {
@@ -103,10 +103,12 @@ async function plan({ tags = [], releases = {}, pushes = [], permission = {} }, 
   })
   const output = await readFile(files.GITHUB_OUTPUT, 'utf8')
   const planned = output.match(/^releases<<END_OF_RELEASES\n([^]*?)END_OF_RELEASES\n/m)
+  const deploy = Object.fromEntries([...output.matchAll(/^deploy-(version|apps|gateway)=(.*)$/gm)].map(([, key, value]) => [key, value]))
   return {
     status: result.status,
     log: result.stdout + result.stderr,
     releases: planned ? planned[1].split('\n').filter(Boolean) : undefined,
+    deploy: Object.keys(deploy).length ? deploy : undefined,
   }
 }
 
@@ -252,4 +254,71 @@ test('refuses to number anything after a v* tag that names no commit', { skip },
   assert.equal(result.status, 1)
   assert.match(result.log, /v0\.1\.1 isn't a tag on a commit/)
   assert.equal(result.releases, undefined)
+})
+
+test('deploys the newest release planned, with every app whose workflow ran on its pushes and the gateway', { skip }, async () => {
+  const result = await plan({
+    tags: [['v0.1.1', sha('a')]],
+    releases: { 'v0.1.1': BOT },
+    pushes: [
+      green('a'),
+      push('b', passed('CI'), passed('Gateway')),
+      push('c', passed('CI'), passed('esign'), passed('captable')),
+      push('d', passed('CI'), ['captable', 'completed', 'failure']),
+    ],
+  })
+  assert.equal(result.status, 0, result.log)
+  assert.deepEqual(result.releases, [`v0.1.2 ${sha('b')} v0.1.1 CI, Gateway`, `v0.1.3 ${sha('c')} v0.1.2 CI, captable, esign`])
+  assert.deepEqual(result.deploy, { version: 'v0.1.3', apps: 'captable esign', gateway: 'true' })
+
+  // The gateway alone, when only it changed.
+  const gateway = await plan({ tags: [['v0.1.1', sha('a')]], releases: { 'v0.1.1': BOT }, pushes: [green('a'), push('b', passed('CI'), passed('Gateway'))] })
+  assert.deepEqual(gateway.deploy, { version: 'v0.1.2', apps: '', gateway: 'true' })
+})
+
+test("deploys what changed since the latest release whose newest check passed, pushes without a version included", { skip }, async () => {
+  const failed = (name) => [name, 'completed', 'failure']
+  const result = await plan({
+    tags: [['v0.1.1', sha('a')]],
+    releases: { 'v0.1.1': BOT },
+    pushes: [
+      green('a'),
+      // No version: esign failed. Its Cap Table change passed and is in what follows, so it deploys.
+      push('b', passed('CI'), passed('captable'), failed('esign')),
+      push('c', passed('CI'), passed('Gateway')),
+      // After the newest release planned: not part of it.
+      push('d', passed('CI'), passed('esign'), failed('Gateway')),
+    ],
+  })
+  assert.equal(result.status, 0, result.log)
+  assert.deepEqual(result.releases, [`v0.1.2 ${sha('c')} v0.1.1 CI, Gateway`])
+  // E-sign's latest run up to v0.1.2 failed, so it keeps the version it runs.
+  assert.deepEqual(result.deploy, { version: 'v0.1.2', apps: 'captable', gateway: 'true' })
+
+  // A failure fixed by a later push deploys; a gateway whose latest run failed stays, even when apps go.
+  const later = await plan({
+    tags: [['v0.1.1', sha('a')]],
+    releases: { 'v0.1.1': BOT },
+    pushes: [green('a'), push('b', passed('CI'), failed('captable'), failed('Gateway')), push('c', passed('CI'), passed('captable'))],
+  })
+  assert.deepEqual(later.releases, [`v0.1.2 ${sha('c')} v0.1.1 CI, captable`])
+  assert.deepEqual(later.deploy, { version: 'v0.1.2', apps: 'captable', gateway: 'false' })
+})
+
+test('deploys nothing for a release where only CI ran, or for a version released again by hand', { skip }, async () => {
+  const ciOnly = await plan({ tags: [['v0.1.1', sha('a')]], releases: { 'v0.1.1': BOT }, pushes: [green('a'), push('b', passed('CI'))] })
+  assert.equal(ciOnly.status, 0, ciOnly.log)
+  assert.deepEqual(ciOnly.releases, [`v0.1.2 ${sha('b')} v0.1.1 CI`])
+  assert.equal(ciOnly.deploy, undefined)
+
+  const nothing = await plan({ tags: [['v0.1.1', sha('a')]], releases: { 'v0.1.1': BOT }, pushes: [green('a')] })
+  assert.deepEqual([nothing.releases, nothing.deploy], [[], undefined])
+
+  const byHand = await plan(
+    { tags: [['v0.1.1', sha('a')]], releases: { 'v0.1.1': BOT }, pushes: [green('a')], permission: { 'release-admin': 'admin' } },
+    { GITHUB_EVENT_NAME: 'workflow_dispatch', VERSION: 'v0.2.0' },
+  )
+  assert.equal(byHand.status, 0, byHand.log)
+  assert.deepEqual(byHand.releases, [`v0.2.0 ${sha('a')} v0.1.1 -`])
+  assert.equal(byHand.deploy, undefined)
 })

@@ -258,6 +258,18 @@ describe("the shell", () => {
     expect(screen.queryByRole("navigation", { name: "Section" })).toBeNull();
   });
 
+  it("shows the preview strip once, at the top of the page's column beside the navigation, and above setup", async () => {
+    renderPage("dashboard", dashboardHandlers(), { preview: true });
+    const strip = await screen.findByText("Preview mode.");
+    expect(screen.getAllByText("Preview mode.")).toHaveLength(1);
+    expect(strip.closest(".content")?.firstElementChild?.contains(strip)).toBe(true);
+    cleanup();
+    renderAt("/setup", me("owner", { company: null, preview: true }));
+    const above = await screen.findByText("Preview mode.");
+    expect(screen.getAllByText("Preview mode.")).toHaveLength(1);
+    expect(above.closest("[data-insulin-shell]")).toBeNull();
+  });
+
   it("shows the page's breadcrumb in the header above it", async () => {
     renderPage("reports", []);
     const crumbs = await screen.findByRole("navigation", { name: "Breadcrumb" });

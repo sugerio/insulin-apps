@@ -124,10 +124,11 @@
 @media (max-width: 767px) {
   .shell { display: block; padding-top: var(--bar); }
   .nav-panels {
-    position: fixed; top: 0; right: 0; left: 0; flex-direction: column; height: auto; max-height: 100vh; overflow-y: auto;
+    position: fixed; top: 0; right: 0; left: 0; flex-direction: column; height: auto;
     background: var(--surface); border-bottom: 1px solid var(--border);
   }
-  .shell[data-menu="open"] .nav-panels { bottom: 0; box-shadow: var(--shadow-lg); }
+  /* Open, the menu scrolls; closed, the bar lets the switcher's menu hang below it. */
+  .shell[data-menu="open"] .nav-panels { bottom: 0; overflow-y: auto; box-shadow: var(--shadow-lg); }
   .nav-l1, .nav-l2 { width: auto; border-right: 0; }
   .nav-l2 { border-top: 1px solid var(--border); }
   .l1-top { border-bottom: 0; }

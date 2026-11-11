@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, createBrowserRouter, useLocation, type RouteObject } from "react-router";
-import { RequireAuth, RequireOrgAccess, RequirePortal } from "./auth/guards.tsx";
+import { RequireAuth, RequireOrgAccess, RequirePortal, type ShellHandle } from "./auth/guards.tsx";
 import { AppLayout } from "./components/AppLayout.tsx";
 import { OrgWorkspace } from "./components/OrgWorkspace.tsx";
 import { PortalWorkspace, PreviewWorkspace } from "./components/PortalWorkspace.tsx";
@@ -134,6 +134,7 @@ export const routes: RouteObject[] = [
       ...sectionRoutes,
       {
         element: <AppLayout />,
+        handle: { shell: true } satisfies ShellHandle,
         errorElement: <RouteErrorPage />,
         children: [
           {

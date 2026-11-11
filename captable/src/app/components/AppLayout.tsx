@@ -4,6 +4,7 @@ import { Link, Outlet, useLocation } from "react-router";
 import type { api } from "#shared";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { hasAdminAccess, personName, roleLabel } from "../auth/access.ts";
+import { PreviewStrip } from "../auth/guards.tsx";
 import {
   NAVIGATION, appRootPath, groupNavigation, matchNavigation, navigationFor, navigationRole, readNavCollapse, resolveNavPath,
   writeNavCollapse, type NavCollapse, type NavLink,
@@ -179,6 +180,7 @@ export function AppLayout() {
         </div>
       </div>
       <div className="content">
+        {me.preview ? <PreviewStrip /> : null}
         <header className="shell-header">
           <div className="shell-crumbs" ref={setCrumbSlot} />
         </header>

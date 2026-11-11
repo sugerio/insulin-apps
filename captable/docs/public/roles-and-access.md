@@ -18,9 +18,20 @@ People, roles and invitations are managed on Insulin Apps, not in Cap Table:
   custom roles.
 
 The organization's people and roles are at `https://insulinapps.com/settings/users` and `/settings/roles`. Cap Table's
-own people page is at `https://insulinapps.com/apps/captable/settings/users`, and
-`https://captable.insulinapps.com/settings/users` leads there. See
+own people page is at `https://insulinapps.com/apps/captable/settings/users`: **Settings › People** in Cap Table's
+navigation opens it, and `https://captable.insulinapps.com/settings/users` leads there too. See
 [Organizations and roles](/docs/platform/organizations-and-roles).
+
+## What each role sees in the navigation
+
+| Who | Sections |
+|---|---|
+| Admins, Editors, and custom roles that view or manage the cap table | Under **Essentials**: Dashboard, Cap Table, Compliance & Tax, Hire and Retain, Stakeholders, Company and Certificates (with their pages in the second column), and **+ New** for those who record changes |
+| Viewers who hold equity (the holder view) | Under **My equity**: Portfolio, How to exercise and Documents |
+| Everyone, before setup too | **Docs** and **Settings** (People, Integrations, API access and Connect AI on Insulin Apps), the organization switcher, and their name and role |
+
+The navigation follows what each person can use; it isn't what protects the data. Cap Table checks every request on
+the server, whatever a page shows.
 
 ## What each role can do in Cap Table
 

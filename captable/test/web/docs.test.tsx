@@ -303,7 +303,7 @@ describe("the standalone docs", () => {
   it("work for an owner without a company, with the docs as the sidebar's only section and the way back to setup", async () => {
     const { router, callsTo } = renderAt("/docs", me("owner", { company: null }));
     expect(await title("Getting started")).toBeTruthy();
-    expect(screen.queryByText("Essentials")).toBeNull();
+    expect(within(screen.getByRole("navigation", { name: "Primary" })).queryByText("Essentials")).toBeNull();
     expect(primaryLinks()).toEqual(["Docs"]);
     const entry = within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Docs" });
     expect(entry.getAttribute("href")).toBe("/docs");

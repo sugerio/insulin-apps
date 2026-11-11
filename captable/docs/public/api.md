@@ -15,14 +15,14 @@ The base URL is `https://captable.insulinapps.com`, and every endpoint is under 
 the browser:
 
 - **AI agents over MCP.** Connect an MCP client to `https://captable.insulinapps.com/mcp`. Cap Table's **Connect AI**
-  page (`https://insulinapps.com/apps/captable/settings/connect-ai`, or **Connect AI** in the account bar) has the
+  page (`https://insulinapps.com/apps/captable/settings/connect-ai`, or **Settings › Connect AI** in Cap Table) has the
   command for Claude Code, Codex, Gemini CLI and opencode, and the steps for Claude.ai and ChatGPT. The agent signs in as
   you and acts with your role. Its `endpoints` tool shows this app's catalog, `read` sends a GET, and `change` sends a
   POST, PUT, PATCH or DELETE with a JSON body. See [AI agents](/docs/platform/ai-agents).
 - **OAuth clients.** An owner or admin of the organization creates an OAuth client, with a role, on Cap Table's **API
-  access** tab (`https://insulinapps.com/apps/captable/settings/api`), which also shows the token URL and a curl
-  example. Your program gets a token with the client-credentials grant and sends it as a Bearer token. **Rotate
-  secret** keeps the previous secret working for 24 hours, so the program can switch over. See
+  access** page (`https://insulinapps.com/apps/captable/settings/api`, or **Settings › API access** in Cap Table), which
+  also shows the token URL and a curl example. Your program gets a token with the client-credentials grant and sends it
+  as a Bearer token. **Rotate secret** keeps the previous secret working for 24 hours, so the program can switch over. See
   [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ```bash

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Checks what deploy.yml was asked to deploy, before anything is built: the version is a release (a v* tag, which only
-// release.yml creates) on a commit of main; the apps exist in that release; and going back to an earlier release keeps
-// the latest release's migrations for everything it deploys, since a deploy can't undo a migration. deploy.yml then
-// builds and deploys that commit, from GITHUB_OUTPUT: `commit`, `apps` (a JSON array) and `gateway` (true or false).
+// Checks what deploy-release.yml was asked to deploy, before anything is built: the version is a release (a v* tag,
+// which only release.yml creates) on a commit of main; the apps exist in that release; and going back to an earlier
+// release keeps the latest release's migrations for everything it deploys, since a deploy can't undo a migration.
+// deploy-release.yml then builds and deploys that commit, from GITHUB_OUTPUT: `commit`, `apps` (a JSON array) and
+// `gateway` (true or false).
 //
 // usage: node .github/scripts/check-deploy.mjs <version> <apps> <gateway>
 //   apps: names separated by spaces or commas, `all`, or empty for none; gateway: true or false.

@@ -22,9 +22,8 @@
 # before it (- for none), then the workflows that passed on its push (- for none).
 # When those releases need a deploy, `deploy-version` is the newest of them,
 # `deploy-apps` the apps to deploy (an app's workflow is named after it;
-# check-app-workflows.mjs checks that), separated by spaces, and `deploy-gateway`
-# whether the gateway goes too (see deploy_plan). plan-release.test.mjs runs it against
-# a fake gh.
+# check-app-workflows.mjs checks that), separated by spaces, and `deploy-gateway` true
+# (see deploy_plan). plan-release.test.mjs runs it against a fake gh.
 set -euo pipefail
 
 if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
@@ -75,6 +74,7 @@ plan() {
 # workflow" per run, and how many of them precede the newest release planned.
 : >"$RUNNER_TEMP/history"
 planned=0
+untracked=""
 record() {
   awk '{ $1 = ""; sub(/^ +/, ""); print }' "$RUNNER_TEMP/push-runs" >>"$RUNNER_TEMP/history"
 }
@@ -82,28 +82,28 @@ record() {
 # latest release whose newest check passed. That is each app whose workflow's latest run
 # up to that version passed, pushes that got no version included, since their changes
 # are in it too; an app whose latest run failed keeps the version it runs. The gateway
-# goes when its own latest run passed, or when apps go and it didn't run, as its bindings
-# and app catalog follow the apps. Nothing when only CI ran, or the plan only releases a
-# version again by hand.
+# goes with any change of its own or of an app, since its bindings and app catalog
+# follow the apps, and while its own latest run fails nothing goes, so no app waits for
+# a gateway that can't follow it. Nothing either when only CI ran, when the plan only
+# releases a version again by hand, or when what changed isn't known.
 deploy_plan() {
-  local version apps gateway=false
-  [ "$planned" -gt 0 ] || return 0
+  local version apps
+  [ "$planned" -gt 0 ] && [ -z "$untracked" ] || return 0
   version=$(awk 'END { print $1 }' "$RUNNER_TEMP/plan")
   # Each workflow's latest result: "conclusion workflow".
   head -n "$planned" "$RUNNER_TEMP/history" \
     | awk '{ result = $1; $1 = ""; sub(/^ +/, ""); last[$0] = result } END { for (name in last) print last[name], name }' \
     | LC_ALL=C sort -k 2 >"$RUNNER_TEMP/deploy"
-  apps=$(awk '$1 ~ /^(success|skipped)$/ && $2 != "CI" && $2 != "Gateway" { print $2 }' "$RUNNER_TEMP/deploy" | paste -sd ' ' -)
-  if grep -qE '^(success|skipped) Gateway$' "$RUNNER_TEMP/deploy"; then
-    gateway=true
-  elif [ -n "$apps" ] && ! grep -q ' Gateway$' "$RUNNER_TEMP/deploy"; then
-    gateway=true
+  if grep -q ' Gateway$' "$RUNNER_TEMP/deploy" && ! grep -qE '^(success|skipped) Gateway$' "$RUNNER_TEMP/deploy"; then
+    echo "The gateway's latest check up to $version failed, so nothing deploys until it passes." | tee -a "$GITHUB_STEP_SUMMARY" >&2
+    return 0
   fi
-  if [ -n "$apps" ] || [ "$gateway" = true ]; then
+  apps=$(awk '$1 ~ /^(success|skipped)$/ && $2 != "CI" && $2 != "Gateway" { print $2 }' "$RUNNER_TEMP/deploy" | paste -sd ' ' -)
+  if [ -n "$apps" ] || grep -q ' Gateway$' "$RUNNER_TEMP/deploy"; then
     echo "deploy-version=$version"
     echo "deploy-apps=$apps"
-    echo "deploy-gateway=$gateway"
-    echo "Deploying $version: ${apps:-no apps}; the gateway: $gateway" >>"$GITHUB_STEP_SUMMARY"
+    echo "deploy-gateway=true"
+    echo "Deploying $version: ${apps:+$apps and }the gateway" >>"$GITHUB_STEP_SUMMARY"
   fi
 }
 finish() {
@@ -213,6 +213,9 @@ if [ -n "$released" ] && [ -z "$found" ]; then
   newest_green
   [ -n "$newest" ] || { echo "::error::No push to main GitHub lists is green."; exit 1; }
   echo "::warning::Pushes since $latest that GitHub no longer lists get no version."
+  # Their checks are unknown too, so nothing deploys on its own.
+  untracked=yes
+  echo "::warning::What changed since $latest, and whether its checks passed, isn't known, so $VERSION doesn't deploy: deploy it by hand once you know it may."
   plan "$VERSION" "$newest" "$latest" "$(workflows)"
   exit 0
 fi

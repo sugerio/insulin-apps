@@ -7,9 +7,8 @@ name: Release
 #
 # A push is green when every workflow run it started passed: CI, the workflow of each
 # app it touched and Gateway. Those workflows only check a push; nothing deploys until
-# it is a release. Then the `deploy` job deploys it (deploy.yml): the apps whose
-# workflows ran on its push, then the gateway, built from its tag, so production
-# always runs a release. .github/scripts/plan-release.sh
+# it is a release. Then the `deploy` job deploys it (deploy-release.yml): what changed,
+# then the gateway, built from its tag, so production always runs a release. .github/scripts/plan-release.sh
 # numbers every push to main since the latest release, oldest first: a green push
 # gets the next version, one with a failed or cancelled run gets none, and one with a
 # run still going stops the plan, so a later run numbers it and what follows. So no
@@ -17,7 +16,8 @@ name: Release
 # this workflow (it keeps one at a time) or the runs finish out of order. An hourly
 # run picks up after one that failed. When one run numbers several pushes, it deploys
 # the newest with everything their pushes changed. A deploy that fails leaves its
-# release in place: re-run the failed jobs, or run Deploy by hand with the version.
+# release in place: re-run the failed jobs, or run Deploy by hand with the version
+# (deploy.yml, which shares this workflow's concurrency group).
 #
 # This workflow starts whenever one of the workflows a push to main runs completes,
 # so `workflows` below must name every workflow with a push trigger;
@@ -154,7 +154,7 @@ jobs:
     if: needs.plan.outputs.deploy-version != ''
     permissions:
       contents: read
-    uses: ./.github/workflows/deploy.yml
+    uses: ./.github/workflows/deploy-release.yml
     with:
       version: ${{ needs.plan.outputs.deploy-version }}
       apps: ${{ needs.plan.outputs.deploy-apps }}

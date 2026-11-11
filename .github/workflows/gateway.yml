@@ -1,7 +1,7 @@
 name: Gateway
 
 # The gateway's checks: typecheck and tests (which fail while the generated docs are stale). Nothing deploys here: once
-# every workflow a push started has passed, release.yml tags it as a release and deploy.yml deploys it.
+# every workflow a push started has passed, release.yml tags it as a release and deploy-release.yml deploys it.
 on:
   push:
     branches: [main]

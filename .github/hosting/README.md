@@ -22,17 +22,19 @@ installs it, checks its Insulin shape, typechecks, tests, verifies migration dri
 the build output. Cap Table also runs the local workerd smoke test. It never receives deployment settings and never
 deploys.
 
-Only releases are deployed. Once every workflow a push to `main` started has passed, `release.yml` tags it (below) and
-calls `.github/workflows/deploy.yml` with the version. `.github/scripts/check-deploy.mjs` first checks that the version
-is a release on `main` and that the apps exist in it. Each app that changed since the previous release, and whose
-latest check passed, is then built from the release's commit in a job without secrets, and a separate `production` job
+Only releases are deployed. Once every workflow a push to `main` started has passed, `release.yml` tags it (below)
+and calls `.github/workflows/deploy-release.yml` with the version. `.github/scripts/check-deploy.mjs` first checks
+that the version is a release on `main` and that the apps exist in it. Each app that changed since the previous
+release, and whose latest check passed, is then built from the release's commit in a job without secrets (while the
+gateway's latest check fails, nothing deploys), and a separate `production` job
 treats the downloaded build as untrusted before applying that app's migrations and deploying only its private Worker.
 The archive is listed before extraction, may contain only regular files and directories under `<app>/.output`, and is
 extracted without its stored ownership or permissions. The deploy then walks the output without following links,
 rejects special files and hard links outside the output, and requires the Worker entry file and asset directory. A
 failed app deploy doesn't stop the others. Once every app has deployed, the gateway follows, so new hostnames and
 service bindings become live with them. Every Worker version is tagged with the release (`wrangler deploy --tag`).
-Deploys of one app, and of the gateway, share a concurrency queue and never cancel one another.
+Deploys never overlap: a Release run, which deploys its release, and a deploy by hand (`deploy.yml`) both hold the
+`release` concurrency group.
 
 To retry a failed deploy, re-run its failed jobs, or run **Actions → Deploy → Run workflow** on `main` with the version,
 the apps (`all` or their names) and whether to deploy the gateway. The same goes back to an earlier release; it's
@@ -157,8 +159,9 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    deploy key. It prints what it set when it's done. Until it has run, `release.yml` plans releases but can't tag
    them. It targets `sugerio/insulin-apps`; set `GH_REPO` for a fork.
 
-Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and the
-gateway (the next green merge to `main` releases and deploys too). Step summaries link the affected public addresses.
+Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and
+the gateway (the next green merge to `main` releases and deploys too). Step summaries link the affected public
+addresses.
 
 ## Operations
 

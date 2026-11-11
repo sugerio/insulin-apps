@@ -8,8 +8,8 @@ import type { Context } from '../context.ts'
 import { constantTimeEqual, newId } from '../crypto.ts'
 import {
   deleteGrant, deleteToken, findClient, findGrant, findServiceAccountByClientId, findTokenOwner, insertClient,
-  insertGrantWithCode, insertRequest, issueTokens, redeemCode, redeemRefresh, takeRequest, usedCodeGrant, usedRefreshGrant,
-  type ServiceAccountRow,
+  insertGrantWithCode, insertRequest, issueServiceToken, issueTokens, redeemCode, redeemRefresh, takeRequest, usedCodeGrant,
+  usedRefreshGrant, type ServiceAccountRow,
 } from '../db/oauth.ts'
 import { listMemberships } from '../db/orgs.ts'
 import { field } from '../http/request.ts'
@@ -293,30 +293,41 @@ function clientSecretOf(ctx: Context, params: Record<string, string>): { id: str
   return params.client_id && params.client_secret ? { id: params.client_id, secret: params.client_secret } : null
 }
 
-/** The service account these credentials belong to, or null. */
-export async function serviceAccountFor(ctx: Context, credentials: { id: string; secret: string } | null): Promise<ServiceAccountRow | null> {
+/**
+ * The service account these credentials belong to, with the hash of the secret that matched: its current secret, or
+ * the previous one while that is still valid (the 24 hours after a rotation, DESIGN.md §5.3). Null otherwise.
+ */
+export async function serviceAccountFor(ctx: Context, credentials: { id: string; secret: string } | null): Promise<{ account: ServiceAccountRow; secretHash: string; previous: boolean } | null> {
   if (!credentials || !credentials.id.startsWith(PREFIX.serviceAccount) || !isSecret(credentials.secret, PREFIX.secret)) return null
   const account = await findServiceAccountByClientId(ctx.config.db, credentials.id)
   if (!account) return null
-  return constantTimeEqual(account.secret_hash, await hashSecret(credentials.secret)) ? account : null
+  const hash = await hashSecret(credentials.secret)
+  const current = constantTimeEqual(account.secret_hash, hash)
+  const previous = account.previous_secret_hash !== null && constantTimeEqual(account.previous_secret_hash, hash)
+    && (account.previous_secret_expires_at ?? 0) > ctx.now
+  return current || previous ? { account, secretHash: hash, previous: !current } : null
 }
 
 async function clientCredentials(ctx: Context, params: Record<string, string>): Promise<Response> {
   const credentials = clientSecretOf(ctx, params)
   const limited = await tokenLimit(ctx)
   if (limited) return limited
-  const account = await serviceAccountFor(ctx, credentials)
-  if (!account) return failed(ctx, credentials?.id ?? '', oauthError('invalid_client', 'The client id or secret is wrong.', 401, { 'WWW-Authenticate': 'Basic realm="insulin-apps"' }))
+  const wrong = () => failed(ctx, credentials?.id ?? '', oauthError('invalid_client', 'The client id or secret is wrong.', 401, { 'WWW-Authenticate': 'Basic realm="insulin-apps"' }))
+  const found = await serviceAccountFor(ctx, credentials)
+  if (!found) return wrong()
+  const { account } = found
   const app = ctx.config.apps.find((candidate) => candidate.name === account.app)
   if (!app) return oauthError('invalid_client', 'The app of this service account is no longer available.', 401)
   if (params.resource && params.resource.replace(/\/$/, '') !== apiResource(ctx, app)) {
     return oauthError('invalid_target', `This service account's tokens are for ${apiResource(ctx, app)}.`)
   }
   const access = newSecret(PREFIX.access)
-  await issueTokens(ctx.config.db, [
-    { hash: await hashSecret(access), kind: 'access', grantId: null, serviceAccountId: account.id, expiresAt: ctx.now + ACCESS_TTL_MS },
-  ], ctx.now)
-  log('oauth_service_token', { account: account.id, app: app.name })
+  // The insert checks the secret again, so one rotated or revoked meanwhile issues nothing.
+  const issued = await issueServiceToken(ctx.config.db, {
+    hash: await hashSecret(access), serviceAccountId: account.id, secretHash: found.secretHash, now: ctx.now, expiresAt: ctx.now + ACCESS_TTL_MS,
+  })
+  if (!issued) return wrong()
+  log('oauth_service_token', { account: account.id, app: app.name, secret: found.previous ? 'previous' : 'current' })
   return corsJson({ access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL_MS / 1000 })
 }
 
@@ -341,7 +352,7 @@ export async function revoke(ctx: Context): Promise<Response> {
     if (owner.kind === 'refresh') await deleteGrant(ctx.config.db, owner.grant_id)
     else await deleteToken(ctx.config.db, hash)
     log('oauth_revoked', { grant: owner.grant_id, kind: owner.kind })
-  } else if (owner.service_account_client_id && (await serviceAccountFor(ctx, credentials))?.client_id === owner.service_account_client_id) {
+  } else if (owner.service_account_client_id && (await serviceAccountFor(ctx, credentials))?.account.client_id === owner.service_account_client_id) {
     await deleteToken(ctx.config.db, hash)
     log('oauth_revoked', { kind: 'service' })
   }

@@ -57,6 +57,15 @@ export function canManageMembers(role: Role): boolean {
   return role === 'OWNER' || role === 'ADMIN'
 }
 
+/**
+ * OWNER and ADMIN manage an app's OAuth clients for API access (create, rename, change the role of, rotate, delete), and
+ * see and disconnect everyone's AI agents on its Connect AI page. An app admin by grant does neither (DESIGN.md §5.2,
+ * §5.3): a client's secret outlives the person who made it, so it is the organization's to manage.
+ */
+export function canManageAppClients(role: Role): boolean {
+  return role === 'OWNER' || role === 'ADMIN'
+}
+
 /** Only OWNERs create, change and delete custom roles (anyone who manages members may give them). */
 export function canManageCustomRoles(role: Role): boolean {
   return role === 'OWNER'

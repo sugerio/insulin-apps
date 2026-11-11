@@ -1,5 +1,6 @@
-// An app's integrations (DESIGN.md §5.3, §6): service accounts and their API access, stored credentials, and the
-// integration proxy that adds a credential to an app's outside calls.
+// An app's integrations (DESIGN.md §5.3, §6): service accounts (the OAuth clients of API access) and their tokens,
+// stored credentials, and the integration proxy that adds a credential to an app's outside calls. Who manages OAuth
+// clients, and rotation, are in api-access.test.mjs.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { APPS, SECRET_KEY, startGateway } from './helpers/harness.mjs'
@@ -17,8 +18,9 @@ before(async () => {
 })
 after(async () => { await h?.close() })
 
-// The app's integrations page lives on the apex, under /apps/<app>.
+// The app's integrations and API access pages live on the apex, under /apps/<app>.
 const page = (person) => person.client.get(h.url('apex', '/apps/captable/settings/integrations'))
+const apiPage = (person) => person.client.get(h.url('apex', '/apps/captable/settings/api'))
 const post = (person, path, fields) => person.client.post(h.url('apex', `/apps/captable${path}`), fields)
 
 async function team(name) {
@@ -29,9 +31,9 @@ async function team(name) {
   return { owner, orgId, viewer }
 }
 
-/** Creates a service account as `person`; returns its client id and the secret shown once. */
+/** Creates a service account (an OAuth client on API access) as `person`; returns its client id and the secret shown once. */
 async function serviceAccount(person, orgId, name, role = 'EDITOR') {
-  const created = await post(person, '/settings/integrations/service-accounts', { org_id: orgId, name, role })
+  const created = await post(person, '/settings/api/clients', { org_id: orgId, name, role })
   assert.equal(created.status, 200, created.text.slice(0, 400))
   const clientId = /(ia_sa_[A-Za-z0-9_-]{22})/.exec(created.text)?.[1]
   const secret = /(ia_sk_[A-Za-z0-9_-]{43})/.exec(created.text)?.[1]
@@ -54,17 +56,19 @@ test('the integrations page: everyone with access sees it, only app admins chang
   const { owner, viewer, orgId } = await team('Integrations Org')
   const asViewer = await page(viewer)
   assert.equal(asViewer.status, 200)
-  assert.match(asViewer.text, /<h2>Service accounts<\/h2>/)
-  assert.match(asViewer.text, /Only Cap Table&#x27;s admins add, change and delete integrations/)
-  assert.doesNotMatch(asViewer.text, /New service account/)
-  assert.equal((await post(viewer, '/settings/integrations/service-accounts', { org_id: orgId, name: 'Sneaky', role: 'ADMIN' })).status, 403)
+  assert.match(asViewer.text, /<h2>Stored credentials<\/h2>/)
+  assert.match(asViewer.text, /Only Cap Table&#x27;s admins add, change and delete stored credentials/)
+  assert.doesNotMatch(asViewer.text, /New stored credential/)
+  assert.ok(asViewer.text.includes('href="/apps/captable/settings/api"'), 'the integrations page links to API access')
+  assert.doesNotMatch(asViewer.text, /New OAuth client|New service account/, 'API clients moved to their own tab')
+  assert.equal((await post(viewer, '/settings/api/clients', { org_id: orgId, name: 'Sneaky', role: 'ADMIN' })).status, 403)
   assert.equal((await post(viewer, '/settings/integrations/credentials', { org_id: orgId, key: 'x', name: 'x', base_url: 'https://api.example.test', auth_scheme: 'bearer', secret: 's' })).status, 403)
   const asOwner = await page(owner)
-  assert.match(asOwner.text, /New service account/)
   assert.match(asOwner.text, /New stored credential/)
+  assert.match((await apiPage(owner)).text, /New OAuth client/)
   const stranger = await h.user()
   await h.org(stranger.client, 'Stranger Org')
-  assert.equal((await post(stranger, '/settings/integrations/service-accounts', { org_id: orgId, name: 'x', role: 'ADMIN' })).status, 404)
+  assert.equal((await post(stranger, '/settings/api/clients', { org_id: orgId, name: 'x', role: 'ADMIN' })).status, 404)
 })
 
 test('a service account gets tokens with its credentials and calls the API with its role; its secret shows once', async () => {
@@ -73,7 +77,7 @@ test('a service account gets tokens with its credentials and calls the API with 
   assert.match(account.page, /copy the secret now/)
   const [stored] = await h.sql('SELECT secret_hash FROM service_accounts WHERE id = ?1', account.id)
   assert.match(stored.secret_hash, /^[0-9a-f]{64}$/)
-  const again = await page(owner)
+  const again = await apiPage(owner)
   assert.ok(again.text.includes(account.clientId), 'the client id stays visible')
   assert.ok(!again.text.includes(account.secret), 'the secret never shows again')
 
@@ -139,20 +143,22 @@ test('custom roles, edits, new secrets and deletion apply to the next request', 
   const inUse = await owner.client.post(h.url('apex', `/orgs/${orgId}/roles/${role.id}/delete`), {})
   assert.equal(inUse.status, 409, 'a custom role a service account uses stays')
 
-  assert.equal((await post(owner, `/settings/integrations/service-accounts/${account.id}`, { org_id: orgId, name: 'Board feed v2', role: 'VIEWER' })).status, 303)
+  assert.equal((await post(owner, `/settings/api/clients/${account.id}`, { org_id: orgId, name: 'Board feed v2', role: 'VIEWER' })).status, 303)
   headers = JSON.parse((await api(token)).text).headers
   assert.equal(headers['x-suger-app-role'], 'VIEWER', 'the new role, with the same token')
   assert.equal(headers['x-suger-user-name'], encodeURIComponent('Board feed v2'))
 
-  const rotated = await post(owner, `/settings/integrations/service-accounts/${account.id}/rotate`, { org_id: orgId })
+  const rotated = await post(owner, `/settings/api/clients/${account.id}/rotate`, { org_id: orgId })
   const newSecret = /(ia_sk_[A-Za-z0-9_-]{43})/.exec(rotated.text)?.[1]
   assert.ok(newSecret && newSecret !== account.secret)
-  assert.equal((await api(token)).status, 401, 'the old tokens stopped')
-  assert.equal((await serviceToken(account)).status, 401, 'and the old secret')
+  assert.equal((await api(token)).status, 200, 'a rotation leaves the tokens already issued working (api-access.test.mjs has the rest)')
+  assert.equal((await post(owner, `/settings/api/clients/${account.id}/revoke-previous`, { org_id: orgId })).status, 303)
+  assert.equal((await api(token)).status, 401, 'revoking the previous secret stopped its tokens')
+  assert.equal((await serviceToken(account)).status, 401, 'and the previous secret')
   token = (await serviceToken({ ...account, secret: newSecret })).json.access_token
   assert.equal((await api(token)).status, 200)
 
-  assert.equal((await post(owner, `/settings/integrations/service-accounts/${account.id}/delete`, { org_id: orgId })).status, 303)
+  assert.equal((await post(owner, `/settings/api/clients/${account.id}/delete`, { org_id: orgId })).status, 303)
   assert.equal((await api(token)).status, 401)
   assert.equal((await owner.client.post(h.url('apex', `/orgs/${orgId}/roles/${role.id}/delete`), {})).status, 303, 'now the role can go')
 })
@@ -276,7 +282,7 @@ test('without GATEWAY_SECRET_KEY, stored credentials and the proxy say they are 
     const orgId = await bare.org(owner.client, 'Keyless Org')
     const text = (await owner.client.get(bare.url('apex', '/apps/captable/settings/integrations'))).text
     assert.match(text, /aren&#x27;t set up on this site yet/)
-    assert.match(text, /New service account/, 'service accounts need no key')
+    assert.match((await owner.client.get(bare.url('apex', '/apps/captable/settings/api'))).text, /New OAuth client/, 'OAuth clients need no key')
     const refused = await owner.client.post(bare.url('apex', '/apps/captable/settings/integrations/credentials'), { org_id: orgId, key: 'k', name: 'n', base_url: 'https://api.example.test', auth_scheme: 'bearer', secret: 's' })
     assert.equal(refused.status, 503)
     const proxy = await bare.client().get(bare.url('apex', '/__insulin/integrations/k/proxy/_/x'), { headers: { Authorization: 'Bearer x', 'x-suger-organization-id': orgId } })

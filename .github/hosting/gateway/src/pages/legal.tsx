@@ -107,7 +107,8 @@ export function privacyPage(ctx: Context): Html {
         <li>
           <strong>AI agents and API access:</strong> the AI agents (MCP clients) you connect: the name and return address each
           gave itself, and each permission you allowed (you, the organization, the app, when it was allowed and last used).
-          Service accounts that an app&apos;s admins create: their name, role, who created them and when they were last used.
+          Service accounts (an app&apos;s OAuth clients) that an organization&apos;s owners and admins create: their name, role, who
+          created them, when their secret was rotated and when they were last used.
           Tokens and client secrets are stored as hashes only. Credentials for outside services that admins store for an app
           are encrypted and never shown again.
         </li>
@@ -140,7 +141,7 @@ export function privacyPage(ctx: Context): Html {
         </li>
         <li>To let organizations work together: membership, roles, custom roles, invitations and single sign-on.</li>
         <li>To limit how many organizations each email domain can have, and to answer requests for more.</li>
-        <li>To let the AI agents you connect, and the service accounts admins create, use the apps with the access given.</li>
+        <li>To let the AI agents you connect, and the service accounts owners and admins create, use the apps with the access given.</li>
         <li>To run the apps you use for your organization.</li>
         <li>To limit abuse of the service: rate limits, the bot check and email limits.</li>
       </ul>

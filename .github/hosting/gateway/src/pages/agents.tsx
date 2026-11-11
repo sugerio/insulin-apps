@@ -1,11 +1,14 @@
-// Account → AI agents: the MCP clients the person connected, each to one app in one organization.
+// Account → AI agents: the MCP clients the person connected, each to one app in one organization, and each app's
+// Connect AI page, where the setup for every client is.
 import { ArrowLeft } from "lucide-react"
+import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Notice, PostButton } from "@/components/forms"
 import { Container, PageHeader } from "@/components/layout"
+import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { appUrl } from "../context.ts"
+import { appSettingsPath, appUrl } from "../context.ts"
 import type { UserGrantRow } from "../db/oauth.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import type { Session } from "../auth/session.ts"
@@ -16,8 +19,7 @@ function day(ms: number | null): string {
   return ms === null ? "Not yet" : new Date(ms).toISOString().slice(0, 10)
 }
 
-export function agentsPage(ctx: Context, session: Session, grants: UserGrantRow[], notice: string | null, orgs?: readonly MembershipRow[]): Html {
-  const example = ctx.config.apps[0]
+export function agentsPage(ctx: Context, session: Session, grants: UserGrantRow[], notice: string | null, connect: { apps: HostedApp[]; orgName: string | null }, orgs?: readonly MembershipRow[]): Html {
   return page(ctx, { title: "AI agents", user: accountOf(session, orgs) }, (
     <Container width="prose" className="flex flex-col gap-6 py-10 sm:py-12">
       <a
@@ -78,25 +80,38 @@ export function agentsPage(ctx: Context, session: Session, grants: UserGrantRow[
           </CardContent>
         ) : null}
       </Card>
-      {example ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <h2>Connect an agent</h2>
-            </CardTitle>
-            <CardDescription>
-              Each app has its own MCP server. Add it to your agent; the agent opens this site to sign you in and asks you to allow it.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm">
-            <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">{`claude mcp add --transport http ${example.name} ${appUrl(ctx, example, "/mcp")}
-codex mcp add ${example.name} --url ${appUrl(ctx, example, "/mcp")}`}</pre>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Connect an agent</h2>
+          </CardTitle>
+          <CardDescription>
+            Each app has its own MCP server. Its Connect AI page has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT;
+            the agent then opens this site to sign you in and asks you to allow it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          {connect.apps.length ? (
+            <ul className="flex flex-col gap-3">
+              {connect.apps.map((app) => (
+                <li key={app.name} className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium">{app.title}</div>
+                    <code className="font-mono text-xs break-all text-muted-foreground select-all">{appUrl(ctx, app, "/mcp")}</code>
+                  </div>
+                  <a className={buttonVariants({ variant: "outline", size: "sm" })} href={appSettingsPath(app, "connect-ai")}>
+                    Connect AI<span className="sr-only"> to {app.title}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
             <p className="text-muted-foreground">
-              Other apps work the same way, at <code className="font-mono">/mcp</code> on their own address.
+              {connect.orgName ? `You don't have access to an app in ${connect.orgName} yet.` : "Join or create an organization to use its apps."}
             </p>
-          </CardContent>
-        </Card>
-      ) : null}
+          )}
+        </CardContent>
+      </Card>
     </Container>
   ))
 }

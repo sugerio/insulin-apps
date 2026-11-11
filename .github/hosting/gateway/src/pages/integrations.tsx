@@ -1,9 +1,8 @@
-// <app>.<domain>/settings/integrations (DESIGN.md §6): service accounts (API clients of the app) and stored credentials
-// (secrets for outside services, used through the integration proxy). A secret appears once, right after it is made.
-import { ChevronDown, KeyRound } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+// /apps/<app>/settings/integrations on the apex (DESIGN.md §6): stored credentials (secrets for outside services, used
+// through the integration proxy), which the app's admins manage. The app's OAuth clients for API access have their own
+// tab (api-access.tsx). A secret is never shown again.
+import { ArrowRight, ChevronDown } from "lucide-react"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,12 +10,9 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Notice, PostButton, SelectField, type Choice } from "@/components/forms"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
-import { appSettingsPath, originOf } from "../context.ts"
-import type { CustomRoleRow } from "../db/grants.ts"
+import { appSettingsPath } from "../context.ts"
 import type { AuthScheme, IntegrationRow } from "../db/integrations.ts"
-import type { ServiceAccountRow } from "../db/oauth.ts"
 import type { MembershipRow } from "../db/orgs.ts"
-import { grantChoices, grantLabel, grantValue } from "../orgs/access-forms.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
 import { AppSettingsFrame, type AppFrame } from "./app-settings.tsx"
@@ -25,21 +21,10 @@ import { accountOf, page } from "./document.tsx"
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
 const disclosure = "inline-flex cursor-pointer items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
 
-export interface NewSecret {
-  kind: "created" | "rotated"
-  name: string
-  clientId: string
-  secret: string
-}
-
 export interface IntegrationsData extends AppFrame {
-  accounts: ServiceAccountRow[]
   credentials: IntegrationRow[]
-  /** This app's custom roles. */
-  customRoles: CustomRoleRow[]
   /** GATEWAY_SECRET_KEY is set, so credentials can be stored. */
   sealing: boolean
-  secret: NewSecret | null
 }
 
 const SCHEMES: Record<AuthScheme, string> = { bearer: "Bearer token", header: "Named header", basic: "Basic authentication" }
@@ -72,117 +57,25 @@ function Field({ id, label, name, value, type = "text", required = true, hint, m
   )
 }
 
-/** The secret, once: how to use it, and that it won't be shown again. */
-function SecretCard({ ctx, app, secret }: { ctx: Context; app: HostedApp; secret: NewSecret }) {
-  const tokenUrl = `${originOf(ctx, ctx.config.domain)}/oauth/token`
-  const api = `${originOf(ctx, app.host)}/api/`
-  return (
-    <Alert role="status">
-      <KeyRound />
-      <AlertTitle>{secret.kind === "created" ? `${secret.name} is ready` : `${secret.name} has a new secret`}: copy the secret now</AlertTitle>
-      <AlertDescription className="flex flex-col gap-3 text-card-foreground">
-        <p>It isn&apos;t shown again. {secret.kind === "rotated" ? "The old secret and the tokens made with it stopped working." : ""}</p>
-        <dl className="grid gap-2">
-          <div>
-            <dt className="text-muted-foreground">Client id</dt>
-            <dd><code className="font-mono break-all select-all">{secret.clientId}</code></dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Client secret</dt>
-            <dd><code className="font-mono break-all select-all">{secret.secret}</code></dd>
-          </div>
-        </dl>
-        <p>Get a token (it lasts an hour), then call {app.title}&apos;s API with it:</p>
-        <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">{`curl -u '${secret.clientId}:<secret>' -d grant_type=client_credentials ${tokenUrl}
-curl -H 'Authorization: Bearer <access_token>' ${api}...`}</pre>
-      </AlertDescription>
-    </Alert>
-  )
-}
-
-function AccountsCard({ data, app }: { data: IntegrationsData; app: HostedApp }) {
-  const admin = data.access.admin
-  const roles = grantChoices(app, data.customRoles, false)
+/** Where the app's API clients went: their own tab, managed by the organization's owners and admins. */
+function ApiClientsCard({ app }: { app: HostedApp }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>Service accounts</h2>
+          <h2>API clients</h2>
         </CardTitle>
         <CardDescription>
-          Programs that call {app.title}&apos;s API in {data.orgName}, each with a role here like a person&apos;s. They get tokens with their client id and
-          secret; tokens reach only the app&apos;s API, never people, roles or integrations.
+          Programs that call {app.title}&apos;s API use OAuth clients (client credentials). They are under API access, where the organization&apos;s
+          owners and admins manage them.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {data.accounts.length ? (
-          <Table>
-            <TableCaption className="sr-only">Service accounts of {app.title}</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead scope="col">Name</TableHead>
-                <TableHead scope="col">Role</TableHead>
-                <TableHead scope="col" className="max-md:hidden">Last used</TableHead>
-                {admin ? <TableHead scope="col"><span className="sr-only">Actions</span></TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.accounts.map((account) => (
-                <TableRow key={account.id}>
-                  <TableCell className="align-top whitespace-normal">
-                    <div className="font-medium">{account.name}</div>
-                    <code className="font-mono text-xs break-all text-muted-foreground">{account.client_id}</code>
-                    <div className="text-xs text-muted-foreground">Created {day(account.created_at)}</div>
-                    {admin ? (
-                      <details className="group mt-2">
-                        <summary className={disclosure}>
-                          Edit<span className="sr-only"> {account.name}</span>
-                          <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
-                        </summary>
-                        <form method="post" action={appSettingsPath(app, "integrations", `/service-accounts/${account.id}`)} className="mt-3 flex flex-col gap-4">
-                          <input type="hidden" name="org_id" defaultValue={data.orgId} />
-                          <Field id={`account-${account.id}-name`} label="Name" name="name" value={account.name} maxLength={80} />
-                          <SelectField id={`account-${account.id}-role`} label="Role" name="role" choices={roles} selected={grantValue(account)} />
-                          <div>
-                            <Button type="submit" variant="outline" size="sm">Save</Button>
-                          </div>
-                        </form>
-                      </details>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="align-top"><Badge variant="outline">{grantLabel(account)}</Badge></TableCell>
-                  <TableCell className="align-top text-muted-foreground max-md:hidden">{day(account.last_used_at)}</TableCell>
-                  {admin ? (
-                    <TableCell className="align-top">
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <PostButton action={appSettingsPath(app, "integrations", `/service-accounts/${account.id}/rotate`)} fields={{ org_id: data.orgId }} variant="outline" size="sm">
-                          New secret<span className="sr-only"> for {account.name}</span>
-                        </PostButton>
-                        <PostButton action={appSettingsPath(app, "integrations", `/service-accounts/${account.id}/delete`)} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
-                          Delete<span className="sr-only"> {account.name}</span>
-                        </PostButton>
-                      </div>
-                    </TableCell>
-                  ) : null}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <p className="text-sm text-muted-foreground">No service accounts yet.</p>
-        )}
+        <a className={buttonVariants({ variant: "outline" })} href={appSettingsPath(app, "api")}>
+          API access
+          <ArrowRight />
+        </a>
       </CardContent>
-      {admin ? (
-        <CardFooter className="flex-col items-stretch gap-4 border-t">
-          <h3 className="text-sm font-semibold">New service account</h3>
-          <form method="post" action={appSettingsPath(app, "integrations", "/service-accounts")} className="grid gap-4 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
-            <input type="hidden" name="org_id" defaultValue={data.orgId} />
-            <Field id="new-account-name" label="Name" name="name" maxLength={80} />
-            <SelectField id="new-account-role" label="Role" name="role" choices={roles} selected="VIEWER" />
-            <Button type="submit">Create</Button>
-          </form>
-        </CardFooter>
-      ) : null}
     </Card>
   )
 }
@@ -307,13 +200,11 @@ function CredentialsCard({ data, app }: { data: IntegrationsData; app: HostedApp
 export function integrationsPage(ctx: Context, session: Session, app: HostedApp, data: IntegrationsData, orgs?: readonly MembershipRow[]): Html {
   return page(ctx, { title: `Integrations · ${app.title}`, user: accountOf(session, orgs) }, (
     <AppSettingsFrame ctx={ctx} app={app} data={data} tab="integrations">
-      {data.secret ? <SecretCard ctx={ctx} app={app} secret={data.secret} /> : null}
       {data.access.admin ? null : (
-        <Notice>Only {app.title}&apos;s admins add, change and delete integrations. You can see what is connected.</Notice>
+        <Notice>Only {app.title}&apos;s admins add, change and delete stored credentials. You can see what is connected.</Notice>
       )}
-      <AccountsCard data={data} app={app} />
       <CredentialsCard data={data} app={app} />
+      <ApiClientsCard app={app} />
     </AppSettingsFrame>
   ))
 }
-

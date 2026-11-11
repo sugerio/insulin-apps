@@ -144,6 +144,14 @@ const PUBLIC_PATH_LIMIT = 10
 const RESERVED_PREFIXES = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
 
 /**
+ * Paths on an app host that belong to the gateway: the app's settings addresses (People, Integrations, API access and
+ * Connect AI), which redirect to the same page on the apex (router.ts).
+ */
+export function isGatewayAppPath(path: string): boolean {
+  return /^\/settings\/(?:users|integrations|api|connect-ai)(?:\/|$)/.test(path)
+}
+
+/**
  * Why an entry of `insulin.publicPaths` is refused, or null. The same rule as .github/scripts/list-apps.mjs: a path
  * starting with `/`, without `..`, a query or a fragment, that neither is nor covers the API as a whole or a reserved
  * path (compared without regard to case).

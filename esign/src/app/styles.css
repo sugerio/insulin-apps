@@ -1,7 +1,9 @@
 /*
  * Esign's stylesheet: Tailwind CSS v4 with shadcn/ui's theme (MIT), the new-york style with the neutral base colour,
  * as on insulinapps.com. Dark mode follows prefers-color-scheme (Tailwind's default `dark:` variant). --ring is the
- * primary colour, so focus rings keep a 3:1 contrast. Tailwind scans this folder (src/app) for classes.
+ * primary colour, so focus rings keep a 3:1 contrast. Tailwind scans this folder (src/app) for classes. The --sidebar-*
+ * tokens are shadcn/ui's sidebar colours, for the members' navigation (member/Shell.ts); --sidebar-ring is --ring, for
+ * the same contrast.
  *
  * The pages' own hooks (the editor's workspace, the signing steps) are in ui/esign-theme.css, in the components layer
  * so that a utility class still wins over them.
@@ -30,6 +32,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -58,6 +68,14 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.205 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.205 0 0);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -80,6 +98,14 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.922 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.922 0 0);
   }
 }
 

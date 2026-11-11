@@ -6,14 +6,14 @@ import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent } from '../components/ui/card.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
-import { apiJson, canManage, dateTime, describeError, STATUS_LABELS, type EnvelopeSummary, type Me } from './api.ts'
+import { apiJson, canManage, dateTime, describeError, envelopesPath, STATUS_LABELS, type EnvelopeSummary, type Me } from './api.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
-import { Link } from './router.ts'
+import { Link, navigate } from './router.ts'
 
 const h = React.createElement
 
-export function EnvelopesPage({ me }: { me: Me }) {
-  const [status, setStatus] = useState('')
+/** `status` comes from the address (`/envelopes?status=completed`), so the navigation's status items and the filter agree. */
+export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) {
   const [envelopes, setEnvelopes] = useState<EnvelopeSummary[] | null>(null)
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
@@ -25,7 +25,7 @@ export function EnvelopesPage({ me }: { me: Me }) {
       setEnvelopes(data.envelopes)
     } catch (error) { setMessage({ text: describeError(error), error: true }) }
   }
-  useEffect(() => { void load(status) }, [status])
+  useEffect(() => { setEnvelopes(null); void load(status) }, [status])
 
   async function processDue() {
     setBusy(true)
@@ -57,7 +57,7 @@ export function EnvelopesPage({ me }: { me: Me }) {
     h(Notice, { message: message.text, error: message.error }),
     h('div', { className: 'flex max-w-xs flex-col gap-2' },
       h('label', { htmlFor: 'envelope-status', className: 'text-sm font-medium' }, 'Status'),
-      h(NativeSelect, { id: 'envelope-status', value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value) },
+      h(NativeSelect, { id: 'envelope-status', value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => navigate(envelopesPath(e.target.value)) },
         h(NativeSelectOption, { value: '' }, 'All'),
         ...Object.entries(STATUS_LABELS).map(([value, label]) => h(NativeSelectOption, { key: value, value }, label)))),
     h(Card, { className: 'py-0' }, h(CardContent, { className: 'px-0' },

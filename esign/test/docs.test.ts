@@ -1,12 +1,13 @@
 // The in-app Docs: a Docs entry in the members' navigation for every role (custom roles, someone not signed in, and an
-// organization with no template yet included), one Docs component with its topic list and "On this page" links, a
-// "not found" for a topic that doesn't exist, and static content that links only within the app.
+// organization with no template yet included), its topics as the navigation's level 2, one Docs component with the
+// topic and its "On this page" links, a "not found" for a topic that doesn't exist, and static content that links only
+// within the app.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {Docs} from '../src/app/components/Docs.ts';
+import {Docs,docsNavigation} from '../src/app/components/Docs.ts';
 import {TOPIC_SLUGS,anchorId} from '../src/app/pages/docs/parts.ts';
 import {DOC_TOPICS,docTopic} from '../src/app/pages/docs/topics.ts';
 import {json,me,renderMember,visibleText} from './helpers/member.ts';
@@ -14,6 +15,17 @@ import {statusLabel,taskLabel} from '../src/app/member/api.ts';
 
 const render=(topic:string|undefined)=>renderToStaticMarkup(React.createElement(Docs,{topic}));
 const textOf=(html:string)=>html.replace(/<[^>]+>/g,' ').replace(/&#x27;/g,"'").replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/\s+/g,' ');
+// The elements that hold the first <tag> in rendered markup, outermost first.
+const ancestorsOf=(html:string,tag:string)=>{
+ const stack:string[]=[];
+ for(const [,close,name,self] of html.matchAll(/<(\/?)([a-z0-9]+)\b[^>]*?(\/?)>/g)){
+  if(self||['br','img','input','path','circle','rect','line','polyline'].includes(name))continue;
+  if(close){stack.pop();continue;}
+  if(name===tag)return stack;
+  stack.push(name);
+ }
+ assert.fail(`no <${tag}>`);
+};
 
 // Every role as Esign sees it, and the visitor the platform hasn't signed in.
 const SESSIONS:[string,unknown,number][]=[
@@ -35,17 +47,22 @@ for(const [who,session,status] of SESSIONS){
   });
   try{
    const nav=app.byLabel('Primary');assert.ok(nav,'the primary navigation');
-   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/'],['Templates','/templates'],['Docs','/docs']]);
+   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/envelopes'],['Templates','/templates'],['Docs','/docs']]);
+   assert.ok(nav.findAll((n:any)=>n.type==='button'&&visibleText(n.children).trim()==='Settings').length===1,'and Settings');
    if(status===401)assert.match(app.text(),/Sign in to use Esign\./);
    else assert.match(app.text(),/No envelopes yet\./,'an organization that has sent nothing yet');
    const entry=nav.findAll((n:any)=>n.type==='a'&&n.props.href==='/docs')[0];
    assert.equal(entry.props['aria-current'],undefined);
    await app.click(entry,'Docs');
    assert.equal(app.location.pathname,'/docs');
-   assert.equal(nav.findAll((n:any)=>n.type==='a'&&n.props.href==='/docs')[0].props['aria-current'],'page');
+   // Docs is the open section; its first topic, in level 2, is the page.
+   assert.equal(nav.findAll((n:any)=>n.type==='a'&&n.props.href==='/docs')[0].props['aria-current'],'true');
    const title=app.renderer.root.findAll((n:any)=>n.type==='h1')[0];
    assert.equal(visibleText(title.children),'Getting started');
-   assert.ok(app.byLabel('Docs topics'));
+   const topics=app.byLabel('Section');assert.ok(topics,'the topics are the section column');
+   assert.deepEqual(topics.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),DOC_TOPICS.map(t=>[t.title,`/docs/${t.slug}`]));
+   assert.deepEqual(topics.findAll((n:any)=>n.type==='a'&&n.props['aria-current']==='page').map((a:any)=>a.props.href),['/docs/getting-started']);
+   assert.match(visibleText(app.byLabel('Breadcrumb').children),/Docs\s+Getting started/);
    // A topic link moves to that topic in place.
    await app.click(app.link('Roles and permissions'),'Roles and permissions');
    assert.equal(app.location.pathname,'/docs/roles');
@@ -72,10 +89,38 @@ test('the topics are listed in reading order, in two groups, and /docs opens the
  assert.deepEqual([...new Set(DOC_TOPICS.map(t=>t.group))],['app','background']);
  assert.equal(docTopic(undefined)?.slug,'getting-started');
  assert.equal(docTopic('no-such-topic'),undefined);
- const html=render(undefined);
- assert.match(html,/<h1[^>]*>Getting started<\/h1>/);
- for(const topic of DOC_TOPICS)assert.ok(html.includes(`href="/docs/${topic.slug}"`),`the list links ${topic.slug}`);
- assert.ok(html.includes('aria-current="page"'));
+ assert.match(render(undefined),/<h1[^>]*>Getting started<\/h1>/);
+ // The navigation's level 2: every topic in reading order, under its group's heading, each with its own icon.
+ const items=docsNavigation();
+ assert.deepEqual(items.map(i=>i.key),[...TOPIC_SLUGS]);
+ assert.deepEqual(items.map(i=>i.path),TOPIC_SLUGS.map(slug=>`/docs/${slug}`));
+ assert.deepEqual([...new Set(items.map(i=>i.group))],['Using Esign','Electronic signatures']);
+ assert.equal(new Set(items.map(i=>i.icon)).size,items.length,'a different icon for each, for the collapsed column');
+});
+
+// Esign's Docs at https://esign.insulinapps.com/docs showed everything in one narrow column: a misplaced parenthesis
+// rendered the article inside the topic list's <nav>, so the two-column grid had one child, in its 13rem column.
+test('a topic is the page itself: its article is the outermost element, never inside a navigation',()=>{
+ for(const topic of [undefined,...DOC_TOPICS.map(t=>t.slug)]){
+  const html=render(topic);
+  assert.deepEqual(ancestorsOf(html,'article'),[],`${topic ?? '/docs'} starts with its article`);
+  assert.ok(html.startsWith('<article'),`${topic ?? '/docs'} has nothing around its article`);
+ }
+});
+
+test('in the members\' app, the topic list is the section column and the topic is the main content beside it',async()=>{
+ const app=await renderMember('/docs/statuses',c=>{if(c.path==='/api/me')return json(me('VIEWER',['esign.view']));});
+ try{
+  const article=app.renderer.root.find((n:any)=>n.type==='article');
+  const parents:string[]=[];for(let n=article.parent;n;n=n.parent)if(typeof n.type==='string')parents.push(n.props['aria-label']?`${n.type}[${n.props['aria-label']}]`:n.type);
+  assert.deepEqual(parents.filter(p=>p.startsWith('nav')),[],'no navigation holds the article');
+  assert.equal(parents[0],'main','the article is the page');
+  const section=app.byLabel('Section');
+  assert.equal(section.findAll((n:any)=>n.type==='article').length,0);
+  assert.ok(section.findAll((n:any)=>n.type==='a'&&n.props.href==='/docs/statuses'&&n.props['aria-current']==='page').length===1);
+  const main=app.renderer.root.find((n:any)=>n.type==='main');
+  assert.equal(main.findAll((n:any)=>n.type==='nav'&&n.props['aria-label']==='Section').length,0,'the topics are beside the page, not in it');
+ }finally{await app.unmount();}
 });
 
 for(const topic of DOC_TOPICS){
@@ -93,7 +138,7 @@ for(const topic of DOC_TOPICS){
   assert.equal(html.includes('General information, not legal advice'),!!topic.generalInformation);
   for(const [,href] of html.matchAll(/href="([^"]*)"/g)){
    if(href.startsWith('#'))continue;
-   assert.match(href,/^\/(docs\/[a-z0-9-]+(#[a-z0-9-]+)?|templates)?$/,`${href} stays in the app`);
+   assert.match(href,/^\/(docs\/[a-z0-9-]+(#[a-z0-9-]+)?|templates|envelopes)?$/,`${href} stays in the app`);
    const [, slug, section]=href.match(/^\/docs\/([a-z0-9-]+)(?:#([a-z0-9-]+))?$/)??[];
    if(!slug)continue;
    const target=docTopic(slug);assert.ok(target,`${href} names a topic`);
@@ -109,6 +154,13 @@ test('only the background on electronic signatures is general information, and i
  assert.match(text,/ESIGN Act/);assert.match(text,/eIDAS/);
  assert.match(text,/In Esign: the signer adopts their typed name/);
  assert.match(text,/doesn't make advanced or qualified signatures/);
+});
+
+test('the Docs describe the navigation: both columns, Settings on Insulin Apps, the breadcrumb, collapsing and narrow screens',()=>{
+ const text=textOf(render('getting-started'));
+ for(const words of [/switch to one, or create a new one/,/Envelopes and Templates, then Docs and Settings/,/All envelopes, New envelope \(for roles that send\)/,/People, Integrations, API access and Connect AI/,/Envelopes › Completed/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
+  assert.match(text,words);
+ assert.match(textOf(render('roles')),/New envelope, for example, is only in the navigation of roles that send/);
 });
 
 test('the Docs cover the main tasks, what each role sees, signers, statuses, evidence, and due work every five minutes',()=>{
@@ -165,22 +217,6 @@ test('the glossary defines each term once, A to Z, each with its own anchor',()=
  assert.equal(new Set(names).size,names.length,'each once');
  for(const term of ['envelope','template','audit trail','seal','verification code','void','service account','ai agent'])assert.ok(names.includes(term),term);
  assert.deepEqual(topic.sections.map(s=>s.title),[...new Set(names.map(n=>n[0].toUpperCase()))]);
-});
-
-// Esign's Docs at https://esign.insulinapps.com/docs showed everything in one narrow column: a misplaced parenthesis
-// rendered the article inside the topic list's <nav>, so the two-column grid had one child, in its 13rem column.
-test('the topic list and the topic are the grid\'s two columns: the article is never inside the navigation',()=>{
- for(const topic of [undefined,...DOC_TOPICS.map(t=>t.slug)]){
-  const html=render(topic);
-  const stack:string[]=[];let parents:string[]|undefined;
-  for(const [,close,name,self] of html.matchAll(/<(\/?)([a-z0-9]+)\b[^>]*?(\/?)>/g)){
-   if(self||['br','img','input','path','circle','rect','line','polyline'].includes(name))continue;
-   if(close){stack.pop();continue;}
-   if(name==='article'){parents=[...stack];break;}
-   stack.push(name);
-  }
-  assert.deepEqual(parents,['div'],`${topic ?? '/docs'}: the article is a column of the grid, beside the topic list`);
- }
 });
 
 test('a topic that does not exist says so and points to the start',()=>{

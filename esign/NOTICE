@@ -20,7 +20,8 @@ shadcn/ui (components and theme)
 
 Where:     src/app/components/ui/ (button, card, input, label, textarea, badge,
            alert, table, separator, native-select, the new-york style, rewritten
-           with React.createElement) and the theme tokens in src/app/styles.css
+           with React.createElement; sidebar, its class names only) and the
+           theme tokens in src/app/styles.css, the sidebar colours included
 Copyright: shadcn
 License:   MIT; https://github.com/shadcn-ui/ui/blob/main/LICENSE.md
 

@@ -8,6 +8,10 @@ function currentPath(): string {
   return typeof window === 'undefined' || !window.location ? '/' : window.location.pathname || '/'
 }
 
+function currentSearch(): string {
+  return typeof window === 'undefined' || !window.location ? '' : window.location.search || ''
+}
+
 function subscribe(listener: () => void): () => void {
   if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return () => {}
   window.addEventListener('popstate', listener)
@@ -21,6 +25,11 @@ function subscribe(listener: () => void): () => void {
 /** The current path; the component re-renders when it changes. */
 export function usePath(): string {
   return React.useSyncExternalStore(subscribe, currentPath, () => '/')
+}
+
+/** The current query (`?status=completed`, or ''); the component re-renders when it changes. */
+export function useSearch(): string {
+  return React.useSyncExternalStore(subscribe, currentSearch, () => '')
 }
 
 export function navigate(path: string): void {

@@ -29,7 +29,8 @@ export const roles: DocTopic = {
             ['Viewer', 'View', 'Sees templates and envelopes, read-only.'],
           ],
         }),
-        p('Every role can read these Docs. The header shows your role. What your role can\'t do isn\'t shown, and Esign refuses it on the server too, however it is asked.'),
+        p('Every role can read these Docs. The bottom of the navigation shows your name and role. What your role can\'t do isn\'t shown (New envelope, for example, is only in the navigation of roles that send), and Esign refuses it on the server too, however it is asked.'),
+        p('People, Integrations, API access and Connect AI, under Settings, are Insulin Apps pages: who can do what there is decided by Insulin Apps, not by Esign.'),
       ],
     },
     {

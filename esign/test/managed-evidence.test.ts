@@ -81,6 +81,8 @@ test('a finished envelope is sealed once, completed, and verified on every read'
     const row = await e.db.prepare("SELECT object_key,key_id,timestamp_time FROM seals WHERE envelope_id=? AND mode='KEY_TSA'").bind(e.id).first();
     assert.deepEqual(row, { object_key: managedEvidenceKey(e.id), key_id: config.sealer.keyId, timestamp_time: sealed.timestampTime });
     const verified = await verifyManagedEvidence(e.db, e.bucket, 'tenant', e.id, config.trust);
+    assert.deepEqual(verified.identities.map(({ email, role }) => ({ email, role })), [{ email: 'ana@partner.test', role: 'partner' }, { email: 'marcus@seller.test', role: 'isv' }], 'the sealed signers');
+    assert.ok(verified.identities.every(identity => /^[0-9a-f]{64}$/.test(identity.disclosure?.sha256 ?? '')), 'with the consent text they agreed to');
     assert.equal(verified.signatures.length, 2);
     assert.equal(verified.seal.timestampTime, sealed.timestampTime);
     // Finalizing again changes nothing and makes no new signature or timestamp.

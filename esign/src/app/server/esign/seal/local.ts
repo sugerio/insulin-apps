@@ -1,4 +1,4 @@
-import { buildEvidenceManifest, commitSeal, type SignatureRow } from './evidence.ts';
+import { buildEvidenceManifest, commitSeal, type SealedIdentity, type SignatureRow } from './evidence.ts';
 import type { BlobStore } from '../blob-store.ts';
 /** Fake HMAC adapters for local tests only; neither the managed seal key nor an external TSA. */
 const text = new TextEncoder();
@@ -23,8 +23,8 @@ export async function verifyLocalTestSeal(seal:LocalTestSeal,key:Uint8Array):Pro
   return await crypto.subtle.verify('HMAC',imported,bytes(seal.testKmsMac),text.encode(`local-test-kms-v1\n${seal.manifest}`)) &&
     await crypto.subtle.verify('HMAC',imported,bytes(seal.testTsaMac),text.encode(`local-test-tsa-v1\n${seal.syntheticTimestampMs}\n${seal.testKmsMac}`));
 }
-export async function finalizeLocalTestEvidence(db:D1Database,bucket:BlobStore,tenantId:string,envelopeId:string,key:Uint8Array,verifyOnly=false):Promise<{source:{id:string;object_key:string;sha256:string};signatures:SignatureRow[];finalArtifactId:string;finalSha256:string}|void> {
-  const {source,signatures,finalArtifactId,finalSha256,manifest}=await buildEvidenceManifest(db,bucket,tenantId,envelopeId);
+export async function finalizeLocalTestEvidence(db:D1Database,bucket:BlobStore,tenantId:string,envelopeId:string,key:Uint8Array,verifyOnly=false):Promise<{source:{id:string;object_key:string;sha256:string};signatures:SignatureRow[];identities:SealedIdentity[];finalArtifactId:string;finalSha256:string}|void> {
+  const {source,signatures,identities,finalArtifactId,finalSha256,manifest}=await buildEvidenceManifest(db,bucket,tenantId,envelopeId);
   const seal=await makeLocalTestSeal(manifest,key,signatures[signatures.length-1].consented_at);
   if(!await verifyLocalTestSeal(seal,key)) throw new Error('Test seal verification failed');
   const bytes=text.encode(JSON.stringify(seal)), hash=await digest(bytes.buffer), objectKey=`envelopes/${envelopeId}/local-test-evidence.json`;
@@ -32,7 +32,7 @@ export async function finalizeLocalTestEvidence(db:D1Database,bucket:BlobStore,t
     const evidence=await db.prepare("SELECT object_key,sha256 FROM seals WHERE envelope_id=? AND mode='LOCAL_TEST'").bind(envelopeId).first<{object_key:string;sha256:string}>();
     const object=evidence && await bucket.get(evidence.object_key);
     if (!evidence || evidence.object_key!==objectKey || evidence.sha256!==hash || !object || await digest(await object.arrayBuffer())!==hash) throw new Error('Evidence integrity failure');
-    return {source,signatures,finalArtifactId,finalSha256};
+    return {source,signatures,identities,finalArtifactId,finalSha256};
   }
   const stored=await bucket.put(objectKey,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/json'}});
   if(!stored) {const previousObject=await bucket.get(objectKey);if(!previousObject || await digest(await previousObject.arrayBuffer())!==hash) throw new Error('Evidence conflict');}

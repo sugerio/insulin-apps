@@ -39,7 +39,7 @@ export const evidence: DocTopic = {
           [b('Signed PDF with certificate: '), 'the signed document followed by its certificate of completion, the same file each signer gets.'],
           [b('Certificate of completion: '), 'the seal checked against the stored files, shown on the page, with its key, its timestamp and the fingerprints it binds, the signers and the audit trail. It can be downloaded as JSON.'],
         ),
-        p('What the certificate doesn\'t establish, it says. The envelope\'s current details, such as signers\' email addresses and statuses, are read from the database and aren\'t bound by the seal. Who a signer is, beyond control of their email address at the time, isn\'t established. The time-stamping authority\'s certificates aren\'t checked for revocation.'),
+        p('What the certificate doesn\'t establish, it says. Each signer\'s name, email address, role and the consent text they agreed to are sealed with their signing record; the envelope\'s other current details, such as each signer\'s status, are read from the database and aren\'t bound by the seal. For a signing link issued, the IP address and browser are those of whoever issued the link, not the signer\'s. Who a signer is, beyond control of their email address at the time, isn\'t established. The time-stamping authority\'s certificates aren\'t checked for revocation.'),
       ],
     },
     {

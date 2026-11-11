@@ -113,8 +113,11 @@ delivery PDF itself.
 
 What the certificate doesn't establish, it says:
 
-- the envelope's current details, such as signers' email addresses, roles and statuses, are read from the database and
+- each signer's name, email address, role and the consent text they agreed to are sealed with their signing record, and
+  shown as such; the envelope's other current details, such as each signer's status, are read from the database and
   aren't bound by the seal;
+- for a signing link issued, the IP address and browser are those of whoever issued the link (a member or the host
+  product's server), not the signer's;
 - who a signer is, beyond control of their email address at the time (and any sign-in the host reported), isn't
   established;
 - the time-stamping authority's certificates aren't checked for revocation.

@@ -180,7 +180,7 @@ export async function verifyManagedEvidence(db: D1Database, bucket: BlobStore, t
   const stored = row && await readStoredSeal(bucket, row.object_key);
   if (!row || !stored || row.object_key !== managedEvidenceKey(envelopeId) || stored.sha256 !== row.sha256) throw new Error('Evidence integrity failure');
   const { seal, sealed, afterSeal } = await verifyStoredSeal(db, envelopeId, stored.seal, built.manifest, trust);
-  return { source: built.source, signatures: built.signatures, finalArtifactId: built.finalArtifactId, finalSha256: built.finalSha256, seal, audit: { sealed, afterSeal } };
+  return { source: built.source, signatures: built.signatures, identities: built.identities, finalArtifactId: built.finalArtifactId, finalSha256: built.finalSha256, seal, audit: { sealed, afterSeal } };
 }
 
 /** Whether an envelope was completed with the managed seal (and not the local test seal). */

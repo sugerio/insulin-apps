@@ -82,8 +82,8 @@ test('specific-apps access: the app sees the role given for it; another app is c
   assert.equal(page.status, 403)
   assert.match(page.text, /You don&#x27;t have access to Cap Table/)
   const home = await ledgerOnly.client.get(h.url('apex', '/'))
-  assert.match(home.text, /<h3>Ledger<\/h3>/)
-  assert.doesNotMatch(home.text, /<h3>Cap Table<\/h3>/, 'the home page lists only their apps')
+  assert.match(home.text, /<h2>Ledger<\/h2>/)
+  assert.doesNotMatch(home.text, /<h2>Cap Table<\/h2>/, 'the home page lists only their apps')
 
   const people = await ledgerOnly.client.get(h.url('auth', `/settings/users?org=${orgId}`))
   assert.match(people.text, /<h2>Your apps<\/h2>/)

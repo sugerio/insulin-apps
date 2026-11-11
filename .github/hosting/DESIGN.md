@@ -110,9 +110,37 @@ Apps refuse mutations of their own people, roles, billing or integrations unless
   Inviting someone who already has specific-apps access adds the app at once; inviting a member with an organization
   role is refused (they already have access).
 - `insulinapps.com/apps/<app>/settings/integrations` (where `<app>.insulinapps.com/settings/integrations` leads): §6.
+- `insulinapps.com/settings/organization` has the name, leaving and deleting and, for owners, **who can be invited**.
+  Once the organization has a verified domain (§7), an owner can invite only people with an address in its verified
+  domains; it is off by default. While it is on, every new invitation, from the people page or an app's, must be for an
+  address in one of the domains verified now (compared in lower case and punycode), and accepting checks again, so an
+  invitation sent before it was turned on, or before its domain was removed, brings nobody new in. Both checks are part
+  of the insert and the acceptance statement, so neither races the setting or a domain's removal. People who are
+  members already keep their access, and an app admin can still give an existing specific-apps member another app.
+  With no verified domain left, nobody can be invited until an owner verifies one or turns the setting off. SCIM keeps
+  its own rule (§7).
 
 Every change re-checks the actor's role inside the same SQL statement as the change, so a member who was demoted or
 removed meanwhile changes nothing (the gateway's existing rule, extended to app grants and custom roles).
+
+### 3.1 Organization limits
+
+- **Owner domain.** Each organization records the domain of its creator's address, lower case and in punycode. For an
+  address at a public mail provider (the providers no organization may claim in §7: gmail.com, outlook.com and the
+  like) it is the address itself, without a +tag, so each person there counts on their own and the provider as a whole
+  isn't limited.
+- **Two per owner domain.** An owner domain may have at most two organizations at a time. The count is part of the
+  insert, so concurrent creations can't go past it; deleting an organization frees its place. Migration `0007` gave
+  existing organizations their creator's owner domain; one whose creator's account was gone counts for nobody. The old
+  per-account count (`users.orgs_created`) is kept as a record and limits nothing.
+- **Allowances.** Operators let a domain (or an address at a provider) have more, or fewer down to none, in
+  `org_domain_allowances`, with `.github/hosting/scripts/allow-orgs.mjs` ([runbook](README.md)).
+- **Asking for more.** At the limit, `/orgs/new` shows "Request more organizations" instead of the create form: the
+  name wanted and why. It e-mails Insulin Apps support at `ORG_REQUEST_EMAIL` with the requester's name and address,
+  their owner domain and how many organizations it has, from `EMAIL_FROM` with Reply-To set to the requester; at most
+  three a day per person, and `RL_AUTH`. Without `ORG_REQUEST_EMAIL` the page shows the limit and the contact
+  (`SUPPORT_EMAIL`, or the repository's issues). Support replies by e-mail; once an allowance is set, the person creates
+  the organization themselves.
 
 ## 4. What tokens may reach
 
@@ -223,7 +251,7 @@ An organization's owners set this up under `insulinapps.com/settings/sso`.
 
 - **Domains.** An owner claims an e-mail domain and proves it with a DNS TXT record (`_insulin-apps.<domain>`, value
   `insulin-apps-verification=<token>`), checked over DNS-over-HTTPS. One organization at a time can hold a verified
-  domain.
+  domain. Verified domains are also what an owner can limit invitations to (§3).
 - **Connection.** One per organization, SAML 2.0 or OpenID Connect, with a default role for people it adds (Editor or
   Viewer) and an option to require SSO for the verified domains (password and Google sign-in are then refused for
   those addresses).
@@ -374,6 +402,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | `0004_oauth` | `oauth_clients`, `oauth_requests`, `oauth_grants`, `oauth_codes`, `oauth_tokens`, `service_accounts`, `integrations`; a trigger that deletes a person's grants in an organization they leave |
 | `0005_mfa` | TOTP columns on `users`, `mfa_recovery_codes`, `mfa_challenges` |
 | `0006_sso` | `sso_domains`, `sso_connections`, `sso_requests`, `scim_tokens`, `scim_users` |
+| `0007_org_limits` | `orgs.invite_verified_domains_only` (§3) and `orgs.owner_domain`, filled from each creator's address; `org_domain_allowances`; `mail_log.user_id` for the per-person cap on requests (§3.1) |
 
 ## 10. Configuration added
 
@@ -382,6 +411,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | `GATEWAY_SECRET_KEY` | secret | 32 random bytes, base64. Encrypts TOTP secrets, stored credentials and OIDC client secrets; derives the apps' `SUGER_APP_TOKEN`. Without it MFA, stored credentials and OIDC can't be set up (the rest works) |
 | `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled` | var | From each app's `package.json` (§2.3, §8.1, §8.5) |
 | `RL_PUBLIC` | ratelimit | Requests to public paths that aren't GET or HEAD, per app and IP; 60 a minute suggested (§8.1) |
+| `ORG_REQUEST_EMAIL` | var | Optional: Insulin Apps support's address for requests for more organizations (§3.1). A GitHub variable, never written in the repository |
 | Cron triggers | trigger | `*/5 * * * *` (the apps' tick, §8.5) and `17 3 * * *` (the daily cleanup) |
 | App secrets | GitHub environment | Each app's `insulin.secrets`, by name (§8.3) |
 | `nodejs_compat` | flag | For SAML's XML signature library |

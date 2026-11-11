@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import {
   appToken,
   assertNoSiteEnvSecret,
+  buildGatewayConfig,
   deployApps,
   emailAddress,
   parseArguments,
@@ -145,6 +146,17 @@ test('preflight skips without a token and lists every missing setting otherwise'
     () => readSettings({ CLOUDFLARE_API_TOKEN: 'set' }, { gateway: false }),
     /CLOUDFLARE_ACCOUNT_ID/,
   )
+})
+
+test('the optional contact and organization-request addresses go to the gateway as vars, trimmed', () => {
+  const read = readSettings(settings({ SUPPORT_EMAIL: ' help@example.com ', ORG_REQUEST_EMAIL: ' requests@example.com ' }))
+  assert.equal(read.supportEmail, 'help@example.com')
+  assert.equal(read.orgRequestEmail, 'requests@example.com')
+  const config = buildGatewayConfig({ root: '/repository', apps: [], settings: read, databaseId: null })
+  assert.equal(config.vars.SUPPORT_EMAIL, 'help@example.com')
+  assert.equal(config.vars.ORG_REQUEST_EMAIL, 'requests@example.com')
+  assert.equal(readSettings(settings()).orgRequestEmail, '', 'unset: the page at the limit points to the contact instead')
+  assert.equal('orgRequestEmail' in readSettings(settings(), { gateway: false }), false, 'app deploys never get it')
 })
 
 test('extracts and validates the sender address', () => {
@@ -345,6 +357,8 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   ])
   assert.equal(gateway.vars.SITE_APPS[0].source, 'https://github.com/sugerio/insulin-apps/tree/main/alpha-app')
   assert.ok(!('SITE_ENV' in gateway.vars))
+  assert.equal(gateway.vars.SUPPORT_EMAIL, '', 'optional settings left unset stay empty')
+  assert.equal(gateway.vars.ORG_REQUEST_EMAIL, '')
 
   const planText = await readFile(join(out, 'plan.json'), 'utf8')
   for (const secret of [environment.CLOUDFLARE_API_TOKEN, environment.GOOGLE_CLIENT_SECRET, environment.TURNSTILE_SECRET_KEY]) {

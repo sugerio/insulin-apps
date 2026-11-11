@@ -44,6 +44,7 @@
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA",
     "EMAIL_FROM": "Insulin Apps (local) <no-reply@insulinapps.localhost>",
-    "SUPPORT_EMAIL": ""
+    "SUPPORT_EMAIL": "",
+    "ORG_REQUEST_EMAIL": ""
   }
 }

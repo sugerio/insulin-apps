@@ -230,6 +230,11 @@ pages (landing, sign-in, the docs), invitations, the consent page and the messag
   It takes `l1`, `l2` (at least one; a level left out keeps its state) and `return`, a path on the same host (`/` when
   left out); an unknown, repeated or invalid parameter, or a `return` that is an absolute URL, another host, `//…` or
   holds a backslash, is a 400 that remembers nothing.
+- **The public docs** (`/docs/`, `gateway/scripts/docs/layout.mjs`) keep the top bar and have the same two levels
+  below it, drawn at build time: level 1 is Overview, Platform, each app and the files for AI agents; level 2 is the
+  open section's pages, so each app's docs are a place of their own at `/docs/<app>/`. There is no organization
+  switcher or person (the docs are public) and no collapsing (the pages are static); below 1024px a `<details>` menu
+  above the article holds both levels.
 
 **The navigation manifest.** An app declares its level 1 in `package.json`, under `insulin.navigation`, which the app
 and the gateway both render from:

@@ -50,13 +50,13 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, disconnecting them, and links to each app's Connect AI |
 | `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
 | `src/reserved.ts` | `/__insulin/me` (who is signed in, their organizations, the apex's origin and, in an app, its settings pages), `switch-org`, `logout`, `nav` (the navigation's collapse toggles), and the local captured-mail page |
-| `src/navigation.ts` | the two-level navigation of the signed-in pages as data (DESIGN.md §3.2): level 1 and 2 for the organization's pages, the account pages and an app's settings pages (its manifest, by the person's role), the breadcrumb, the `insulin_nav` cookie and `/__insulin/nav`; `src/nav-icons.ts` the icon names an app's manifest may use (list-apps.mjs's) |
+| `src/navigation.ts` | the two-level navigation of the signed-in pages as data (DESIGN.md §3.2): level 1 and 2 for the organization's pages, the account pages and an app's settings pages (its manifest, by the person's role), the breadcrumb, the `insulin_nav` cookie and `/__insulin/nav`; `src/nav-icons.ts` the icon names an app's manifest may use (list-apps.mjs's) and each app's own icon (also the docs') |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode), the messages, and the apps' mail relay (`relay.ts`) |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
 | `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (the top bar or, signed in, the navigation; footer, favicon links); `settings.tsx` the organization's settings; `app-settings.tsx` an app's settings frame and People page, with `integrations.tsx`, `api-access.tsx` and `connect-ai.tsx` its other pages |
 | `src/pages/html.ts` | the `html` tag, which escapes the HTML of the e-mails (React escapes the pages) |
 | `src/docs.ts`, `src/pages/docs.tsx` | `/docs/` on the apex: the pages from `src/assets/docs-content.ts` in the shared document, `llms.txt`, `llms-full.txt`, each page's `.md`, and `/docs/assets/*` from the `DOCS_ASSETS` binding |
-| `scripts/build-docs.mjs`, `scripts/docs/` | `npm run build:docs`: the Markdown of `.github/hosting/docs/` and every app's `docs/public/` rendered with React (`markdown.mjs`, `layout.mjs`) into `src/assets/docs-content.ts`, with the diagram blocks drawn as SVG (`diagram.mjs`) |
+| `scripts/build-docs.mjs`, `scripts/docs/` | `npm run build:docs`: the Markdown of `.github/hosting/docs/` and every app's `docs/public/` rendered with React (`markdown.mjs`; `layout.mjs`, with the two-level navigation) into `src/assets/docs-content.ts`, with the diagram blocks drawn as SVG (`diagram.mjs`) |
 | `src/components/ui/` | shadcn/ui components (new-york style), as the shadcn CLI writes them; see "shadcn/ui" below |
 | `src/components/` | the gateway's own pieces: top bar, the navigation (`shell.tsx`, with the manifest's icons in `nav-icon.tsx`), footer, `<details>` menus, form fields, brand marks |
 | `src/lib/utils.ts` | `cn()`, shadcn's class-name helper (`clsx` and `tailwind-merge`) |
@@ -134,10 +134,18 @@ too, and linked with their content hash, so they are cached for good), and ` ```
 arrows in a small language described at the top of `scripts/docs/diagram.mjs`, drawn as inline SVG coloured only by
 the stylesheet's `--diagram-*` tokens. Raw HTML fails the build.
 
-`npm run build:docs` renders each page with React in the gateway's shadcn style (the navigation, the article, its table
-of contents, previous and next) and refuses any script, style attribute or event handler in the result. The gateway
-puts a page into the shared document per request (`src/pages/docs.tsx`), so the top bar shows the visitor's sign-in
-links or account; the pages are public, indexable and under the usual CSP. `/docs/llms.txt` lists every page for AI
+`npm run build:docs` renders each page with React in the gateway's shadcn style (`scripts/docs/layout.mjs`: the
+navigation, the article, its table of contents, previous and next) and refuses any script, style attribute or event
+handler in the result. The navigation has the two levels of DESIGN.md §3.2, in shadcn's sidebar colours, drawn at build
+time: level 1 is Overview, Platform, then each app under "Apps" (with the icon the gateway gives it, `appIconName` in
+`src/nav-icons.ts`), and "For AI agents" (llms.txt, llms-full.txt) at the bottom; level 2, headed by the section's
+title, lists only the open section's pages, the current one with `aria-current="page"` (the open level-1 item has
+`aria-current="true"`). `/docs/` has no level 2: its cards list every section. So each app's docs read as a place of
+their own at `/docs/<app>/`. The levels don't collapse (the pages are static, with no per-request state), and there is
+no organization switcher or person, since the docs are public. Below 1024px a `<details>` menu above the article holds
+level 1, the open section's pages and the agents' files. The gateway puts a page into the shared document per request
+(`src/pages/docs.tsx`), so the top bar, spanning the window over the navigation, shows the visitor's sign-in links or
+account; the pages are public, indexable and under the usual CSP. `/docs/llms.txt` lists every page for AI
 agents, `/docs/llms-full.txt` holds all of them, and each page's Markdown is at its address with `.md`. Commit the
 regenerated module with the change; `npm test` fails while it is stale, and the gateway workflow runs when a docs page
 changes.

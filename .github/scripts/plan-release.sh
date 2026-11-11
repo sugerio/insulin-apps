@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Plans the releases that release.yml's `publish` job tags and publishes: each green
 # push to main since the latest release gets the next version, v0.1.1, v0.1.2, and so on.
-# Then what its `deploy` job deploys of them.
+# Its `deploy` job then deploys the newest of them (deploy-release.yml).
 #
 # A push is green when every workflow run it started on main completed and passed
 # (skipped jobs, or a wholly skipped run, are fine): CI, the workflow of each app it
@@ -19,12 +19,10 @@
 # GitHub CLI and reads GH_REPO, GITHUB_EVENT_NAME, GITHUB_ACTOR, VERSION (empty unless
 # given by hand), RUNNER_TEMP, GITHUB_OUTPUT and GITHUB_STEP_SUMMARY. Its `releases`
 # output has a line per release, oldest first: the version, its commit, the version
-# before it (- for none), then the workflows that passed on its push (- for none).
-# When those releases need a deploy, `deploy-version` is the newest of them,
-# `deploy-apps` the apps to deploy (an app's workflow is named after it;
-# check-app-workflows.mjs checks that), separated by spaces, and `deploy-gateway`
-# whether the gateway goes too (see deploy_plan). plan-release.test.mjs runs it against
-# a fake gh.
+# before it (- for none), then the workflows that passed on its push (- for none). Its
+# `deploy-version` output is the newest of them, empty when there are none; what that
+# release deploys, check-deploy.mjs decides from each part's latest check. plan-release.test.mjs
+# runs it against a fake gh.
 set -euo pipefail
 
 if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
@@ -64,52 +62,15 @@ has_release() {
 : >"$RUNNER_TEMP/plan"
 plan() {
   echo "$1 $2 ${3:--} ${4:--}" >>"$RUNNER_TEMP/plan"
-  # A numbered push's runs count for the deploy; a version released again by hand has none.
-  if [ -n "${4:-}" ]; then
-    record
-    planned=$(($(wc -l <"$RUNNER_TEMP/history")))
-  fi
   echo "Releasing $1 at $2" | tee -a "$GITHUB_STEP_SUMMARY"
-}
-# The runs of each push looked at since the latest release, oldest first, "conclusion
-# workflow" per run, and how many of them precede the newest release planned.
-: >"$RUNNER_TEMP/history"
-planned=0
-record() {
-  awk '{ $1 = ""; sub(/^ +/, ""); print }' "$RUNNER_TEMP/push-runs" >>"$RUNNER_TEMP/history"
-}
-# What the planned releases deploy: the newest version, with whatever changed since the
-# latest release whose newest check passed. That is each app whose workflow's latest run
-# up to that version passed, pushes that got no version included, since their changes
-# are in it too; an app whose latest run failed keeps the version it runs. The gateway
-# goes when its own latest run passed, or when apps go and it didn't run, as its bindings
-# and app catalog follow the apps. Nothing when only CI ran, or the plan only releases a
-# version again by hand.
-deploy_plan() {
-  local version apps gateway=false
-  [ "$planned" -gt 0 ] || return 0
-  version=$(awk 'END { print $1 }' "$RUNNER_TEMP/plan")
-  # Each workflow's latest result: "conclusion workflow".
-  head -n "$planned" "$RUNNER_TEMP/history" \
-    | awk '{ result = $1; $1 = ""; sub(/^ +/, ""); last[$0] = result } END { for (name in last) print last[name], name }' \
-    | LC_ALL=C sort -k 2 >"$RUNNER_TEMP/deploy"
-  apps=$(awk '$1 ~ /^(success|skipped)$/ && $2 != "CI" && $2 != "Gateway" { print $2 }' "$RUNNER_TEMP/deploy" | paste -sd ' ' -)
-  if grep -qE '^(success|skipped) Gateway$' "$RUNNER_TEMP/deploy"; then
-    gateway=true
-  elif [ -n "$apps" ] && ! grep -q ' Gateway$' "$RUNNER_TEMP/deploy"; then
-    gateway=true
-  fi
-  if [ -n "$apps" ] || [ "$gateway" = true ]; then
-    echo "deploy-version=$version"
-    echo "deploy-apps=$apps"
-    echo "deploy-gateway=$gateway"
-    echo "Deploying $version: ${apps:-no apps}; the gateway: $gateway" >>"$GITHUB_STEP_SUMMARY"
-  fi
 }
 finish() {
   local status=$?
   if [ "$status" = 0 ]; then
-    { echo "releases<<END_OF_RELEASES"; cat "$RUNNER_TEMP/plan"; echo "END_OF_RELEASES"; deploy_plan; } >>"$GITHUB_OUTPUT"
+    {
+      echo "releases<<END_OF_RELEASES"; cat "$RUNNER_TEMP/plan"; echo "END_OF_RELEASES"
+      echo "deploy-version=$(awk 'END { print $1 }' "$RUNNER_TEMP/plan")"
+    } >>"$GITHUB_OUTPUT"
   fi
 }
 trap finish EXIT
@@ -121,11 +82,12 @@ push_runs() {
     --jq '.workflow_runs[] | "\(.status) \(.conclusion) \(.name)"' >"$RUNNER_TEMP/push-runs"
 }
 # Of those runs: waiting while any is unfinished (or none is listed yet), green when
-# every one succeeded or was skipped, failed otherwise.
+# every one succeeded or was skipped and CI, which every push to main starts, is among
+# them, failed otherwise.
 push_state() {
   if [ ! -s "$RUNNER_TEMP/push-runs" ] || grep -qv '^completed ' "$RUNNER_TEMP/push-runs"; then
     echo waiting
-  elif grep -qvE '^completed (success|skipped) ' "$RUNNER_TEMP/push-runs"; then
+  elif grep -qvE '^completed (success|skipped) ' "$RUNNER_TEMP/push-runs" || ! grep -qE '^completed (success|skipped) CI$' "$RUNNER_TEMP/push-runs"; then
     echo failed
   else
     echo green
@@ -176,10 +138,15 @@ if [ -n "$latest" ] && ! [[ "$released" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 # A run that tagged the latest version but failed before publishing its release
-# finishes it, as it does a release someone else published for it.
+# finishes it, as it does a release someone else published for it, once its push is
+# green, so a tag an admin put on another commit never releases or deploys it.
 if [ -n "$latest" ] && ! has_release "$latest"; then
   push_runs "$released"
-  plan "$latest" "$released" "$previous" "$(workflows)"
+  if [ "$(push_state)" = green ]; then
+    plan "$latest" "$released" "$previous" "$(workflows)"
+  else
+    echo "::warning::$latest is tagged on $released, whose workflows haven't all passed ($(workflows 'completed (success|skipped)')): no release for it."
+  fi
 fi
 
 # Every run that pushes to main started, newest first, back to the latest release's
@@ -248,7 +215,6 @@ while read -r sha <&3; do
       ;;
     failed)
       echo "Not every workflow passed for $sha ($(workflows 'completed (success|skipped)')): no version."
-      record
       continue
       ;;
   esac

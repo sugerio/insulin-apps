@@ -516,7 +516,7 @@ class CommandRunner {
 }
 
 /**
- * The release a deploy installs, which deploy.yml passes as RELEASE_VERSION and RELEASE_COMMIT: `wrangler deploy` tags
+ * The release a deploy installs, which deploy-release.yml passes as RELEASE_VERSION and RELEASE_COMMIT: `wrangler deploy` tags
  * each Worker version with it, so Cloudflare shows which release runs. Nothing outside a release deploy.
  */
 export function releaseArguments(environment = process.env) {

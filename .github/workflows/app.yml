@@ -1,7 +1,7 @@
 name: App pipeline
 
 # An app's checks, which its own workflow (<app>.yml) runs on pull requests and pushes to main. Nothing deploys here:
-# once every workflow a push started has passed, release.yml tags it as a release and deploy.yml deploys it.
+# once every workflow a push started has passed, release.yml tags it as a release and deploy-release.yml deploys it.
 on:
   workflow_call:
     inputs:

@@ -135,12 +135,12 @@ never reads another's data.
 - A row in the app table of the root `README.md`.
 - A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name (the app's directory name), paths and
   `app` input changed, and that name added to the `workflows` list in `.github/workflows/release.yml`. The shared
-  pipeline runs its typecheck, tests, migration check and Cloudflare build; releases deploy it (`deploy.yml`).
+  pipeline runs its typecheck, tests, migration check and Cloudflare build; releases deploy it (`deploy-release.yml`).
 
 ## Releases
 
 `.github/workflows/release.yml` makes every green push to `main` a release: it tags the commit `v0.1.1`, `v0.1.2`, …,
-publishes its GitHub Release (the root README's "Releases") and deploys it with `deploy.yml`. Only releases are
+publishes its GitHub Release (the root README's "Releases") and deploys it with `deploy-release.yml`. Only releases are
 deployed: an app's or the gateway's workflow only checks a push, and no other workflow deploys. Never create, move or
 delete a `v*` tag, or publish or edit one of those releases, by hand or from another workflow. Only CI, Gateway and
 each app's own workflow, named after the app, run on a push to `main`, and each is in release.yml's `workflow_run`
@@ -150,3 +150,7 @@ list; `node .github/scripts/check-app-workflows.mjs` checks both.
 
 From the app's directory: `npm run typecheck`, `npm test` and `npm run build`. From the repository root:
 `node .github/scripts/check-insulin-app.mjs <app>` and `node .github/scripts/check-public-content.mjs`.
+
+A pull request is ready to merge only once `/review-pr` (`.claude/commands/review-pr.md`) and then `/e2e-test`
+(`.claude/commands/e2e-test.md`) have run on it, and each has recorded its section (`## Review`, `## E2E test`) in
+the PR's description. A merge to `main` becomes a release, which deploys to production.

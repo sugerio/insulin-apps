@@ -80,18 +80,22 @@ started passed: CI, the workflow of each app it touched, and Gateway when it tou
 check it. [`release.yml`](.github/workflows/release.yml) then tags the merge's commit with the next version, `v0.1.1`,
 then `v0.1.2` and so on, one version for the whole repository, publishes a GitHub Release that lists the workflows that
 passed and the pull requests merged since the previous version, and deploys that release with
-[`deploy.yml`](.github/workflows/deploy.yml): each app that changed, built from the tag, then the gateway. Each Worker
-version carries the release as its tag, so Cloudflare shows which release runs.
+[`deploy-release.yml`](.github/workflows/deploy-release.yml): every app whose latest check passed, built from the
+tag, then the gateway. Each Worker version carries the release as its tag, so Cloudflare shows which release runs.
 
 - Merges are numbered in the order they reached `main`, each once. One whose workflows are still running holds back
   those after it until it finishes.
 - A merge with a failed or cancelled run (as when a newer merge replaces a run still waiting in its queue) gets no
   version; the next green one takes it, and its release lists the pull requests of both.
-- A release deploys what changed since the previous one, merges without a version included, but only where the
-  latest check passed: an app or the gateway whose latest run failed keeps the version it runs.
-- A deploy that fails leaves its release in place: re-run the failed jobs, or run **Actions → Deploy → Run workflow**
-  on `main` with the version. The same goes back to an earlier release, unless something it deploys has a migration
-  since, which needs the database restored first.
+- A part's latest check is the newest run of its workflow on `main` at or before the release, if nothing the
+  workflow watches changed since (a push with `[skip ci]` starts no run). A release deploys every app that passed
+  it, so anything an earlier release couldn't deploy goes out with the next; an app whose latest check didn't pass
+  keeps the version it runs, and while the gateway's doesn't, nothing deploys. A merge is green only if CI ran on it.
+- A deploy that fails leaves its release in place: run **Actions → Deploy → Run workflow** on `main` with the latest
+  release, which checks it again (re-running the failed jobs is refused, since it would reuse an earlier check). To go
+  back to an earlier release, set `rollback` too, and untick **Deploy the gateway too** unless the gateway should go
+  back as well; it's refused when something it deploys has a migration since, which needs the database restored
+  first. Deploys never overlap: Release runs and deploys by hand wait in one queue.
 - To start a new minor or major version, an org admin runs **Actions → Release → Run workflow** with it, such as
   `v0.2.0`: `main`'s latest release is released again as that version, and the next merges count on from it.
 - Only `release.yml` creates `v*` tags. The "Release tags" ruleset lets nobody else create, move or delete one (org

@@ -1,5 +1,5 @@
 import "./setup.ts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { api } from "#shared";
@@ -44,9 +44,10 @@ describe("holder access", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(PORTFOLIO));
     expect(await screen.findByText(/You can exercise 60,000 vested options/)).toBeTruthy();
     expect(screen.getByText(consoleRole === "USER" ? "User" : "Viewer")).toBeTruthy();
-    const nav = screen.getByRole("navigation", { name: "Portfolio" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Portfolio", "How to exercise", "Documents"]);
-    expect(screen.queryByRole("link", { name: "Admin workspace" })).toBeNull();
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Portfolio", "How to exercise", "Documents", "Docs"]);
+    expect(within(nav).getByRole("link", { name: "Portfolio" }).getAttribute("aria-current")).toBe("page");
+    expect(within(nav).queryByRole("link", { name: "Dashboard" })).toBeNull();
     expect(screen.queryByRole("button", { name: /New/ })).toBeNull();
   });
 
@@ -72,10 +73,19 @@ describe("admins and editors who hold equity", () => {
     const adminHolder = holderMe([DANIEL], { email: "daniel@acmerobotics.example", access: "admin_ro" });
     const { router } = renderAt("/", adminHolder, handlers([DANIEL]));
     await waitFor(() => expect(router.state.location.pathname).toBe(DASHBOARD));
-    expect((await screen.findAllByRole("link", { name: "My portfolio" })).map((link) => link.getAttribute("href"))).toContain(PORTFOLIO);
+    // Both in one navigation: the workspace's sections, then their own equity.
+    const nav = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(nav).getByText("Essentials")).toBeTruthy();
+    expect(within(nav).getByText("My equity")).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Portfolio" }).getAttribute("href")).toBe(PORTFOLIO);
+    cleanup();
     const portfolio = renderAt(PORTFOLIO, adminHolder, handlers([DANIEL]));
     expect(await screen.findAllByRole("heading", { name: "Acme Robotics", level: 1 })).toBeTruthy();
-    expect(screen.getAllByRole("link", { name: "Admin workspace" }).length).toBeGreaterThan(0);
+    const there = screen.getByRole("navigation", { name: "Primary" });
+    expect(within(there).getByRole("link", { name: "Portfolio" }).getAttribute("aria-current")).toBe("page");
+    expect(within(there).getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe(DASHBOARD);
+    // In the portfolio the docs are the holder's.
+    expect(within(there).getByRole("link", { name: "Docs" }).getAttribute("href")).toBe(`${PORTFOLIO}/docs`);
     expect(portfolio.router.state.location.pathname).toBe(PORTFOLIO);
   });
 

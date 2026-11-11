@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate, createBrowserRouter, type RouteObject } from "react-router";
+import { Navigate, createBrowserRouter, useLocation, type RouteObject } from "react-router";
 import { RequireAuth, RequireOrgAccess, RequirePortal } from "./auth/guards.tsx";
 import { AppLayout } from "./components/AppLayout.tsx";
 import { OrgWorkspace } from "./components/OrgWorkspace.tsx";
@@ -33,10 +33,11 @@ import { StakeholderFormPage } from "./pages/StakeholderFormPage.tsx";
 import { TerminatePage } from "./pages/TerminatePage.tsx";
 import { HowToExercisePage } from "./pages/portal/HowToExercisePage.tsx";
 import { PortalDocumentsPage } from "./pages/portal/PortalDocumentsPage.tsx";
-import { PortalNotFoundPage, PortfolioHome, PortfolioOverviewPage } from "./pages/portal/PortfolioPage.tsx";
+import { PortalNotFoundPage, PortfolioOverviewPage } from "./pages/portal/PortfolioPage.tsx";
 import { PortalSecurityPage } from "./pages/portal/PortalSecurityPage.tsx";
 import { useMe } from "./auth/AuthProvider.tsx";
 import { hasAdminAccess } from "./auth/access.ts";
+import { isPortfolioPath, navigationPaths, resolveNavPath } from "./lib/navigation.ts";
 import { SetupPage } from "./pages/SetupPage.tsx";
 
 function Home() {
@@ -48,6 +49,25 @@ function Home() {
   if (me.portal.matches.length > 0) return <Navigate to="/portfolio" replace />;
   return <Navigate to="/no-access" replace />;
 }
+
+/**
+ * An app-root path of the navigation manifest (`/vesting`, `/portfolio`, `/portfolio/documents`): the same page in this
+ * organization's company, for someone who has it there. Insulin Apps links to these from Cap Table's settings pages.
+ * Anyone else goes home, which sends them where their access leads.
+ */
+function SectionRedirect() {
+  const me = useMe();
+  const { pathname, search, hash } = useLocation();
+  const company = me.company;
+  const portfolio = isPortfolioPath(pathname);
+  const allowed = company !== null && (portfolio ? me.portal.matches.some((match) => match.orgId === company.id) : hasAdminAccess(me));
+  return <Navigate to={allowed ? `${resolveNavPath(pathname, company.id)}${search}${hash}` : "/"} replace />;
+}
+// The app's own top-level paths, which a manifest path never replaces.
+const APP_PATHS = new Set(["/", "/setup", "/no-access", "/docs"]);
+const sectionRoutes: RouteObject[] = navigationPaths()
+  .filter((path) => !APP_PATHS.has(path))
+  .map((path) => ({ path, element: <SectionRedirect /> }));
 // The admin workspace: a company's pages, under /companies/:orgId/. An address that matches none of them is the
 // shell's "Page not found".
 const companyPages: [path: string, element: ReactNode][] = [
@@ -110,6 +130,8 @@ export const routes: RouteObject[] = [
       { index: true, element: <Home /> },
       { path: "/setup", element: <SetupPage /> },
       { path: "/no-access", element: <NoAccessPage /> },
+      // The navigation's app-root paths (`/dashboard`, `/portfolio`, …), each to the page in this company.
+      ...sectionRoutes,
       {
         element: <AppLayout />,
         errorElement: <RouteErrorPage />,
@@ -123,7 +145,6 @@ export const routes: RouteObject[] = [
           {
             element: <RequirePortal />,
             children: [
-              { path: "/portfolio", element: <PortfolioHome /> },
               // The docs are the holder's own, not part of the portal view an admin previews.
               { path: "/portfolio/:orgId", element: <PortalWorkspace />, children: [...portalPages, { path: "docs/:topic?", element: <PortalDocsPage /> }] },
             ],

@@ -43,6 +43,11 @@ function topicList(): HTMLElement {
   return screen.getByRole("navigation", { name: "Docs topics" });
 }
 
+/** The links of level 1, in order (Settings, the last item, is a button that opens its pages beside it). */
+function primaryLinks(): (string | null)[] {
+  return within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((link) => link.textContent);
+}
+
 async function title(name: string): Promise<HTMLElement> {
   return screen.findByRole("heading", { level: 1, name });
 }
@@ -64,15 +69,14 @@ const BEFORE_SETUP: readonly (readonly [who: string, session: Me, home: string])
 ];
 
 describe("the Docs entry, for every role", () => {
-  it.each(WORKSPACE_ROLES)("is the last item of %s's sidebar, in a section of its own, and opens the docs in the workspace", async (_who, role, label) => {
+  it.each(WORKSPACE_ROLES)("follows every section of %s's navigation, beside Settings, and opens the docs in the workspace", async (_who, role, label) => {
     const { router } = renderPage("dashboard", [mock(api.routes.getDashboard, dashboard()), mock(api.routes.listValuations, { items: VALUATIONS })], { role });
     const primary = await screen.findByRole("navigation", { name: "Primary" });
-    expect(within(screen.getByRole("banner")).getByText(label)).toBeTruthy();
-    const help = screen.getByRole("navigation", { name: "Help" });
-    expect(within(primary).queryByRole("link", { name: "Docs" })).toBeNull();
-    // After every cap-table item, not among them.
-    expect(primary.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const entry = within(help).getByRole("link", { name: "Docs" });
+    expect(screen.getByRole("button", { name: new RegExp(label) })).toBeTruthy();
+    // After every cap-table section, among the platform's items: Docs, then Settings.
+    expect(primaryLinks()).toEqual(["Dashboard", "Cap Table", "Compliance & Tax", "Hire and Retain", "Stakeholders", "Company", "Certificates", "Docs"]);
+    expect(within(primary).getByRole("button", { name: "Settings" })).toBeTruthy();
+    const entry = within(primary).getByRole("link", { name: "Docs" });
     expect(entry.getAttribute("href")).toBe(DOCS);
     expect(entry.querySelector("svg")).toBeTruthy();
     expect(entry.getAttribute("aria-current")).toBeNull();
@@ -81,19 +85,19 @@ describe("the Docs entry, for every role", () => {
     // Arriving by a link in the app: the focus goes to the topic's title.
     const heading = await title("Getting started");
     await waitFor(() => expect(document.activeElement).toBe(heading));
-    expect(within(screen.getByRole("navigation", { name: "Help" })).getByRole("link", { name: "Docs" }).getAttribute("aria-current")).toBe("page");
+    expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Docs" }).getAttribute("aria-current")).toBe("page");
+    expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Dashboard" }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toBe("Acme RoboticsDocsGetting started");
     expect(document.title).toBe("Getting started — Docs · Cap Table");
   });
 
   it.each(HOLDER_ROLES)("follows the portfolio navigation of %s holder and opens the docs in the portfolio, on the holders' topic", async (_who, consoleRole, label) => {
     const { router, callsTo } = renderAt(PORTFOLIO, holderMe([NADIA], { consoleRole }), portalHandlers());
-    const portfolio = await screen.findByRole("navigation", { name: "Portfolio" });
-    expect(within(screen.getByRole("banner")).getByText(label)).toBeTruthy();
-    expect(within(portfolio).getAllByRole("link").map((link) => link.textContent)).toEqual(["Portfolio", "How to exercise", "Documents"]);
-    const help = screen.getByRole("navigation", { name: "Help" });
-    expect(portfolio.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const entry = within(help).getByRole("link", { name: "Docs" });
+    const primary = await screen.findByRole("navigation", { name: "Primary" });
+    expect(screen.getByRole("button", { name: new RegExp(label) })).toBeTruthy();
+    expect(await screen.findByText("My equity")).toBeTruthy();
+    expect(primaryLinks()).toEqual(["Portfolio", "How to exercise", "Documents", "Docs"]);
+    const entry = within(primary).getByRole("link", { name: "Docs" });
     expect(entry.getAttribute("href")).toBe(`${PORTFOLIO}/docs`);
     fireEvent.click(entry);
     await waitFor(() => expect(router.state.location.pathname).toBe(`${PORTFOLIO}/docs`));
@@ -113,9 +117,9 @@ describe("the Docs entry, for every role", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/docs"));
     const heading = await title("Getting started");
     await waitFor(() => expect(document.activeElement).toBe(heading));
-    // The standalone pages: the docs are the sidebar's only section, and the way back is the setup page or home.
-    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
-    const entry = within(screen.getByRole("navigation", { name: "Help" })).getByRole("link", { name: "Docs" });
+    // The standalone pages: the docs (and Settings) are the sidebar's only items, and the way back is the setup page or home.
+    expect(primaryLinks()).toEqual(["Docs"]);
+    const entry = within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Docs" });
     expect(entry.getAttribute("href")).toBe("/docs");
     expect(entry.getAttribute("aria-current")).toBe("page");
     expect(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("link", { name: home }).getAttribute("href")).toBe(home === "Home" ? "/" : "/setup");
@@ -299,9 +303,9 @@ describe("the standalone docs", () => {
   it("work for an owner without a company, with the docs as the sidebar's only section and the way back to setup", async () => {
     const { router, callsTo } = renderAt("/docs", me("owner", { company: null }));
     expect(await title("Getting started")).toBeTruthy();
-    expect(screen.queryByText("ESSENTIALS")).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
-    const entry = within(screen.getByRole("navigation", { name: "Help" })).getByRole("link", { name: "Docs" });
+    expect(screen.queryByText("Essentials")).toBeNull();
+    expect(primaryLinks()).toEqual(["Docs"]);
+    const entry = within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Docs" });
     expect(entry.getAttribute("href")).toBe("/docs");
     expect(entry.getAttribute("aria-current")).toBe("page");
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });

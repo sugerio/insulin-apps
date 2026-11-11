@@ -1,0 +1,147 @@
+/* The shell: the two-level navigation every Insulin app shares (DESIGN.md §3.2), on Cap Table's tokens (app.css).
+   Level 1 (240px; 56px collapsed) has the organization switcher, the sections, Docs and Settings, and the person;
+   level 2 (224px; 56px collapsed) the open section's items. Below 768px a top bar holds the switcher and the menu
+   button, and the menu opens both levels stacked. */
+.shell { --l1: 240px; --l2: 224px; --rail: 56px; --bar: 56px; display: flex; align-items: flex-start; min-height: 100vh; }
+.nav-panels { position: sticky; top: 0; z-index: 30; display: flex; flex: none; height: 100vh; }
+.nav-l1, .nav-l2 { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+.nav-l1 { width: var(--l1); background: var(--surface); }
+.nav-l2 { width: var(--l2); background: var(--surface-2); }
+.nav-l2[hidden] { display: none; }
+.l1-top { display: flex; align-items: center; gap: 4px; min-height: var(--bar); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.l1-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 0; }
+.l1-foot { display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-top: 1px solid var(--border); }
+
+/* The organization switcher and the person */
+.org-switcher, .nav-person { position: relative; flex: 1; min-width: 0; }
+.org-button, .person-button {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 5px 8px; border: 0;
+  border-radius: var(--radius); background: none; color: var(--text); text-align: left; cursor: pointer;
+}
+.org-button:hover, .person-button:hover { background: var(--surface-2); }
+.org-button.static { cursor: default; }
+.org-button.static:hover { background: none; }
+.org-text, .person-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.25; }
+.org-text b, .person-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.org-text small, .person-text small { color: var(--muted); font-size: 11px; font-weight: 600; }
+.org-button > .icon, .person-button > .icon { color: var(--muted); }
+.org-initial, .avatar {
+  display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 7px;
+  background: var(--primary-button); color: var(--on-primary); font-size: 13px; font-weight: 700;
+}
+.avatar { border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-size: 11.5px; }
+
+/* Their menus */
+.nav-menu {
+  position: absolute; z-index: 60; left: 0; width: max(100%, 232px); padding: 6px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-lg);
+}
+.nav-menu[hidden] { display: none; }
+.org-menu { top: calc(100% + 6px); }
+.person-menu { bottom: calc(100% + 6px); }
+.nav-menu ul { margin: 0; padding: 0; list-style: none; }
+.menu-heading { padding: 6px 8px 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.menu-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 8px; border: 0;
+  border-radius: 6px; background: none; color: var(--text); font-size: 13px; text-align: left; cursor: pointer;
+}
+.menu-row:hover { background: var(--surface-2); text-decoration: none; }
+.menu-row:disabled { cursor: default; }
+.menu-row:disabled:hover { background: none; }
+.menu-row .icon { color: var(--muted); }
+.menu-row[aria-current] .icon { color: var(--primary); }
+.menu-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.3; }
+.menu-row-text small { color: var(--muted); font-size: 11.5px; }
+.menu-email { margin: 0; padding: 6px 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.menu-status { margin: 0; padding: 4px 8px; font-size: 12px; }
+.menu-status:empty { display: none; }
+
+/* + New, headings and items */
+.new-button {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: calc(100% - 24px); height: 38px;
+  margin: 0 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  box-shadow: var(--shadow); color: var(--text); font-weight: 600; cursor: pointer;
+}
+.new-button .icon { color: var(--primary); }
+.new-button .nav-label { flex: none; }
+.nav-heading { margin: 16px 0 6px; padding: 0 22px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.nav-block:first-child .nav-heading { margin-top: 0; }
+.nav-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0 10px; list-style: none; }
+.nav-block + .nav-block { margin-top: 4px; }
+.nav-platform { margin: 14px 10px 0; padding: 14px 0 0; border-top: 1px solid var(--border); }
+.nav-link {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 34px; padding: 7px 12px; border: 0;
+  border-radius: 6px; background: none; color: var(--text-2); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.nav-link:hover { background: var(--surface-2); text-decoration: none; }
+.nav-l2 .nav-link:hover { background: var(--sunken); }
+.nav-link .icon { color: var(--muted); }
+.nav-link.active, .nav-link[aria-expanded="true"] { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+.nav-link.active .icon, .nav-link[aria-expanded="true"] .icon { color: inherit; }
+.nav-link.disabled, .nav-link.disabled:hover { background: none; color: var(--muted); cursor: default; }
+.nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-note { margin: 12px 22px 0; font-size: 12px; }
+
+/* Level 2's header, and the toggles */
+.l2-head { display: flex; align-items: center; gap: 6px; min-height: var(--bar); padding: 0 10px 0 22px; border-bottom: 1px solid var(--border); }
+.l2-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 14px; font-weight: 700; }
+.nav-section { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 0; }
+.nav-toggle, .menu-button {
+  display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; border: 0; border-radius: 6px;
+  background: none; color: var(--muted); cursor: pointer;
+}
+.nav-toggle:hover, .menu-button:hover { background: var(--surface-2); color: var(--text); }
+.menu-button { display: none; }
+
+/* The page beside them, with the breadcrumb in its header (hidden on a page without one) */
+.content { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 100vh; }
+.shell-header {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; min-height: var(--topbar); padding: 0 30px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.shell-header:not(:has(.crumbs)) { display: none; }
+.shell-header .crumbs { margin: 0; }
+
+/* Collapsed: icons only, each label a tooltip; the switcher shows the organization's initial. */
+@media (min-width: 768px) {
+  .shell[data-l1="collapsed"] .nav-l1 { width: var(--rail); }
+  .shell[data-l1="collapsed"] .nav-l1 :is(.nav-label, .org-text, .person-text, .nav-heading, .org-button > .icon, .person-button > .icon) { display: none; }
+  .shell[data-l1="collapsed"] :is(.l1-top, .l1-foot) { flex-direction: column; padding-left: 6px; padding-right: 6px; }
+  .shell[data-l1="collapsed"] .nav-l1 .nav-list { padding: 0 8px; }
+  .shell[data-l1="collapsed"] .nav-platform { margin: 14px 8px 0; padding: 14px 0 0; }
+  .shell[data-l1="collapsed"] .nav-l1 .nav-block + .nav-block { margin: 10px 8px 0; padding-top: 10px; border-top: 1px solid var(--border); }
+  .shell[data-l1="collapsed"] .nav-l1 .nav-block + .nav-block .nav-list { padding: 0; }
+  .shell[data-l1="collapsed"] :is(.nav-l1 .nav-link, .org-button, .person-button) { justify-content: center; padding-left: 0; padding-right: 0; }
+  .shell[data-l1="collapsed"] .new-button { width: 38px; margin: 0 auto 14px; }
+  .shell[data-l2="collapsed"] .nav-l2 { width: var(--rail); }
+  .shell[data-l2="collapsed"] .nav-l2 :is(.nav-label, .l2-title, .nav-heading, .nav-note) { display: none; }
+  .shell[data-l2="collapsed"] .l2-head { justify-content: center; padding: 0; }
+  .shell[data-l2="collapsed"] .nav-l2 .nav-list { padding: 0 8px; }
+  .shell[data-l2="collapsed"] .nav-l2 .nav-link { justify-content: center; padding-left: 0; padding-right: 0; }
+}
+
+/* Narrow screens: a top bar with the switcher and the menu button; the menu opens both levels stacked. */
+@media (max-width: 767px) {
+  .shell { display: block; padding-top: var(--bar); }
+  .nav-panels {
+    position: fixed; top: 0; right: 0; left: 0; flex-direction: column; height: auto; max-height: 100vh; overflow-y: auto;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .shell[data-menu="open"] .nav-panels { bottom: 0; box-shadow: var(--shadow-lg); }
+  .nav-l1, .nav-l2 { width: auto; border-right: 0; }
+  .nav-l2 { border-top: 1px solid var(--border); }
+  .l1-top { border-bottom: 0; }
+  .shell[data-menu="open"] .l1-top { border-bottom: 1px solid var(--border); }
+  .shell[data-menu="closed"] :is(.l1-scroll, .l1-foot, .nav-l2) { display: none; }
+  .l1-scroll, .nav-section { flex: none; overflow: visible; }
+  .menu-button { display: inline-grid; }
+  .nav-toggle { display: none; }
+  .content { min-height: calc(100vh - var(--bar)); }
+  .shell-header { top: var(--bar); padding: 0 16px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nav-l1, .nav-l2 { transition: width .15s ease; }
+}
+@media (forced-colors: active) {
+  .nav-link.active, .nav-link[aria-expanded="true"] { outline: 1px solid CanvasText; }
+}

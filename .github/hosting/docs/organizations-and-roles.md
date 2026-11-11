@@ -20,7 +20,23 @@ Never both at once. Giving someone an organization role removes their app-by-app
 access needs the member to be on **Specific apps**.
 
 ```diagram
-todo: roles-model
+title: From a member's access to their role in an app
+description: Every member has one kind of access. An organization role applies in every app: owners and admins are Admin in every app, editors are Editor and viewers are Viewer. Access to specific apps gives a role in each chosen app: Admin, Editor, Viewer or one of that app's custom roles, which owners build from the app's permission catalog. The gateway sends the app the role and the permissions in the x-suger-app-role and x-suger-app-permissions headers.
+size: 740 x 500
+box member 260 20 220 60 "Member" "of an organization," "with one kind of access"
+box orgrole 40 130 300 80 accent "Organization role" "Owner or Admin: Admin in every app" "Editor: Editor; Viewer: Viewer"
+box specific 400 130 300 80 accent "Specific apps" "only the apps chosen, with a role" "in each, possibly a custom role"
+group inapp 20 250 700 130 "Role in an app"
+box admin 40 290 150 70 "Admin" "everything, people" "and integrations too"
+box editor 210 290 150 70 "Editor" "every function but" "people and roles"
+box viewer 380 290 150 70 "Viewer" "read only, as the" "app defines it"
+box custom 550 290 150 70 dashed "Custom role" "built by owners from" "the app's catalog"
+box headers 140 420 460 62 muted "Sent to the app with every request" "x-suger-app-role and x-suger-app-permissions"
+arrow member.b:0.25 -> orgrole.t:0.6 "or" mid=105
+arrow member.b:0.75 -> specific.t:0.4 mid=105
+arrow orgrole.b -> inapp.t:0.271 "same role in every app"
+arrow specific.b -> inapp.t:0.786 "a role per app"
+arrow inapp.b:0.529 -> headers.t:0.543
 ```
 
 Insulin Apps works out your role in an app and passes it to the app with every request. The app then decides what that

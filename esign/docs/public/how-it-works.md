@@ -12,7 +12,27 @@ and wording still need review before real documents are signed.
 ## The signing lifecycle
 
 ```diagram
-todo: esign-signing-flow
+title: From template to sealed PDF
+description: A template is a PDF with its signer roles and either placed fields or an added signature page. Sending it makes an envelope with one recipient per role, signed in order. For each signer in turn, a one-time link opens the signing page, a six-digit code emailed to the signer confirms who they are, and they agree to sign electronically and sign; the signature is drawn into the PDF and hash-chained to the previous one. After the last signer, E-sign checks the chain, seals it with an AWS KMS signature and an RFC 3161 timestamp, and the envelope is completed with the signed PDF, a certificate of completion and a copy link emailed to each signer.
+size: 740 x 550
+box template 20 20 260 70 "Template" "a PDF and its signer roles, with" "fields or an added signature page"
+box envelope 380 20 340 70 "Envelope" "one recipient per role, signed in order;" "document name, sender, sign-by date"
+group each 20 130 700 200 "For each signer, in order"
+box link 40 170 200 66 accent "Signing page" "opened with a one-time" "link; review the PDF"
+box code 270 170 200 66 accent "Emailed code" "six digits, confirms" "who is signing"
+box sign 500 170 200 66 accent "Agree and sign" "consent to sign" "electronically, then sign"
+box render 270 256 430 58 "Drawn and chained" "drawn into the PDF, hash-chained to the one before"
+box seal 40 372 320 80 accent "Seal" "the chain checked, then an AWS KMS" "signature and an RFC 3161 timestamp"
+box done 400 372 320 80 "Completed" "the signed PDF, a certificate of" "completion, copy links emailed"
+box status 20 482 700 52 muted "Envelope status" "Out for signature, then Finishing, then Completed; or Voided, Declined or Expired"
+arrow template.r -> envelope.l "send"
+arrow envelope.b:0.3 -> link.t:0.95 mid=112
+arrow link.r -> code.l
+arrow code.r -> sign.l
+arrow sign.b -> render.t:0.767
+arrow render.l -> link.b "next signer"
+arrow render.b:0.1 -> seal.t:0.85 "after the last signer"
+arrow seal.r -> done.l
 ```
 
 1. **Template.** Someone uploads a PDF with its roles, signed on an added signature page or in placed fields.

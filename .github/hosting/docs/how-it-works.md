@@ -16,7 +16,32 @@ private service binding, with the caller's identity in request headers. Each app
 D1 database, and has no public address of its own: the gateway is the only way in.
 
 ```diagram
-todo: platform-overview
+title: How a request reaches an app
+description: People, AI agents, service accounts and signers all reach Insulin Apps through one gateway Worker. On insulinapps.com it signs people in and keeps accounts, organizations and roles in its own D1 database; on each app's host it checks the session or token, works out the caller's role and forwards the request with the x-suger-* identity headers over a private service binding to the app's Worker, which has its own D1 database. Signers on an app's public paths reach it with no identity.
+size: 740 x 545
+box people 20 20 160 60 "People" "web browser"
+box agents 200 20 160 60 "AI agents" "MCP clients"
+box services 380 20 160 60 "Service accounts" "API clients"
+box signers 560 20 160 60 dashed "Signers" "no account"
+group gateway 20 130 700 230 "Gateway Worker"
+box apex 40 170 320 76 accent "insulinapps.com" "sign-in, organizations, roles, docs" "OAuth server, SCIM, mail relay"
+box apphosts 380 170 320 76 accent "<app>.insulinapps.com" "checks the session or token, works out" "the role and adds the identity headers"
+box gwdb 40 268 150 76 db "Gateway D1" "accounts, roles," "grants, tokens"
+box cron 210 268 150 76 muted "Crons" "five-minute tick" "daily cleanup"
+group apps 20 400 700 125 "App Workers, private"
+box captable 40 442 170 58 "Cap Table" "insulin-apps-captable"
+box capdb 222 447 52 48 db "D1"
+box esign 300 442 170 58 "E-sign" "insulin-apps-esign"
+box esdb 482 447 52 48 db "D1"
+box more 560 442 140 58 dashed "More apps" "the same shape"
+arrow people.b -> apex.t:0.1875 "session cookie" label=0.3
+arrow agents.b -> apphosts.t:0.12 "token for /mcp" mid=118 label=0.12
+arrow services.b -> apphosts.t:0.42 "token for /api/*" mid=118 label=0.12
+arrow signers.b -> apphosts.t:0.8 "public paths" mid=118 label=0.12
+arrow apphosts.b -> apps.t:0.743 "service binding, identity headers"
+arrow cron.b -> apps.t:0.379 dashed "tick" label=0.75
+arrow captable.r -> capdb.l
+arrow esign.r -> esdb.l
 ```
 
 - **One sign-in for every app.** Sessions, passwords, Google, two-step sign-in, single sign-on, SCIM and OAuth all live
@@ -93,7 +118,31 @@ AI agents and service accounts also send a `User-Agent` that names them: `Insuli
 There are three kinds of caller, and all of them end up with the same identity headers.
 
 ```diagram
-todo: sign-in-and-oauth
+title: Three kinds of caller, one set of headers
+description: A person signs in on insulinapps.com with a password, Google or single sign-on (and a two-step code if it is on) and gets a session cookie for every app host. An AI agent registers with the OAuth server, sends the person through sign-in and consent, and gets an hour-long token for one app's /mcp, where it acts as that person. A service account, created by an app admin, trades its client id and secret for a token and calls the app's /api/*. The app receives the same identity headers in every case, with x-suger-access-via set to browser, mcp or api.
+size: 740 x 490
+box person 20 20 220 56 "Person" "web browser"
+box agent 260 20 220 56 "AI agent" "MCP client"
+box account 500 20 220 56 "Service account" "a program"
+group auth 10 100 720 118 "insulinapps.com"
+box signin 20 134 220 72 accent "Sign-in" "password, Google or SSO," "then a two-step code if on"
+box consent 260 134 220 72 accent "Authorize and allow" "register, sign in, choose" "the organization, Allow"
+box token 500 134 220 72 accent "Token endpoint" "client id and secret," "client credentials"
+group host 10 242 720 104 "App host"
+box pages 20 276 220 60 "Any app page" "session cookie"
+box mcp 260 276 220 60 "/mcp" "whoami, endpoints," "read, change"
+box api 500 276 220 60 "/api/*" "Bearer token"
+box app 20 386 700 72 "The app" "the same identity headers for every caller, with" "x-suger-access-via set to browser, mcp or api"
+arrow person.b -> signin.t
+arrow agent.b -> consent.t "PKCE" label=0.35
+arrow account.b -> token.t "id, secret" label=0.35
+arrow signin.b -> pages.t "cookie" label=0.4
+arrow consent.b -> mcp.t "token, 1 h" label=0.4
+arrow token.b -> api.t "token, 1 h" label=0.4
+arrow pages.b -> app.t:0.157 "browser"
+arrow mcp.b -> app.t:0.5 "mcp"
+arrow api.b -> app.t:0.843 "api"
+text 370 478 small muted "Every request checks the person's or the account's current role in that app again."
 ```
 
 - **People** sign in at `insulinapps.com` with a password, Google or their company's SSO, plus two-step sign-in if they

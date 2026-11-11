@@ -18,9 +18,9 @@
 //   # a comment
 import { createElement as h } from 'react'
 
-const TITLE_SIZE = 13
-const LINE_SIZE = 11.5
-const LABEL_SIZE = 11
+const TITLE_SIZE = 14
+const LINE_SIZE = 12.5
+const LABEL_SIZE = 11.5
 const RADIUS = 10
 const HEAD = 7
 
@@ -288,7 +288,7 @@ export function renderDiagram(source, id) {
   // Groups first (behind), then boxes, then arrows and their labels on top, then free text.
   const boxes = [...diagram.boxes.values()].filter((shape) => shape.kind === 'box')
   return h('figure', { className: 'mt-8 first:mt-0' },
-    h('div', { className: 'overflow-x-auto rounded-xl border bg-diagram-canvas p-3 sm:p-5' },
+    h('div', { className: 'overflow-x-auto rounded-xl border bg-diagram-canvas p-3 sm:p-4' },
       h('svg', {
         viewBox: `0 0 ${diagram.width} ${diagram.height}`, width: diagram.width, height: diagram.height, role: 'img', 'aria-labelledby': `${titleId} ${descId}`,
         className: 'mx-auto block h-auto w-full min-w-[40rem] max-w-full font-sans', xmlns: 'http://www.w3.org/2000/svg',

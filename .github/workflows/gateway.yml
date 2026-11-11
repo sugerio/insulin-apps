@@ -5,12 +5,18 @@ on:
     branches: [main]
     paths:
       - .github/hosting/gateway/**
+      # The public docs: the platform's pages and images, and each app's pages (npm run check:docs).
+      - .github/hosting/docs/**
+      - '*/docs/public/**'
       - .github/workflows/gateway.yml
       - .github/scripts/deploy-apps.mjs
       - .github/scripts/list-apps.mjs
   pull_request:
     paths:
       - .github/hosting/gateway/**
+      # The public docs: the platform's pages and images, and each app's pages (npm run check:docs).
+      - .github/hosting/docs/**
+      - '*/docs/public/**'
       - .github/workflows/gateway.yml
       - .github/scripts/deploy-apps.mjs
       - .github/scripts/list-apps.mjs

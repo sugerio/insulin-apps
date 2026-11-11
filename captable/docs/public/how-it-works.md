@@ -37,7 +37,35 @@ To show the cap table, Cap Table **replays** the ledger: it takes the entries in
 them one by one, checking the rules as it goes.
 
 ```diagram
-todo: captable-ledger
+title: The ledger and the replay
+description: Every change, whether made in the app's forms, by an AI agent or service account through the API, or by an import, is first checked by replaying the whole ledger with the new entry, and refused if a rule breaks. Accepted changes are appended to the ledger, where each entry records what happened, its effective date, who recorded it, and a SHA-256 hash chained to the entry before; a mistake is undone by a reversal entry, never by an edit. Replaying the ledger in date order up to any date produces the cap table, each holder's holdings and vesting, and the reports and deadlines.
+size: 740 x 545
+box people 20 20 220 56 "People" "forms in the app"
+box agents 260 20 220 56 "AI agents, API clients" "ledger commands"
+box import 500 20 220 56 "Import" "Pulley or spreadsheet"
+box check 170 118 400 70 accent "Check first" "replay the whole ledger with the new entry," "and refuse it if any rule breaks"
+group ledger 20 230 700 160 "Ledger, append-only"
+box e1 40 272 150 60 "#1 Opening" "balances, imported"
+box e2 210 272 150 60 "#2 Grant" "48,000 options"
+box e3 380 272 150 60 "#3 Exercise" "12,000 shares"
+box e4 550 272 150 60 dashed "#4 Reversal" "undoes #3"
+text 370 352 small muted "Each entry: what happened, its effective date and who recorded it,"
+text 370 370 small muted "with a SHA-256 hash chained to the entry before it."
+box replay 40 425 260 80 accent "Replay as of a date" "entries in date order," "every rule checked again"
+box out1 380 420 340 30 pill "The cap table on any date"
+box out2 380 457 340 30 pill "Holdings, vesting and positions"
+box out3 380 494 340 30 pill "Reports and deadlines"
+arrow people.b -> check.t:0.15 mid=97
+arrow agents.b -> check.t:0.5
+arrow import.b -> check.t:0.85 mid=97
+arrow check.b -> ledger.t:0.5 "append"
+arrow e1.r -> e2.l
+arrow e2.r -> e3.l
+arrow e3.r -> e4.l
+arrow ledger.b:0.214 -> replay.t:0.5 "read"
+arrow replay.r:0.25 -> out1.l mid=340
+arrow replay.r:0.59 -> out2.l
+arrow replay.r:0.8 -> out3.l mid=340
 ```
 
 - **As of a date.** Pick any date under **As of**, and the replay stops at entries effective on that day. That is how

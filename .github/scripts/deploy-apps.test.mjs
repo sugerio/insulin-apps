@@ -345,6 +345,11 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   ])
   assert.equal(gateway.vars.SITE_APPS[0].source, 'https://github.com/sugerio/insulin-apps/tree/main/alpha-app')
   assert.ok(!('SITE_ENV' in gateway.vars))
+  assert.deepEqual(gateway.assets, {
+    directory: resolve(root, '.github', 'hosting', 'docs', 'assets'),
+    binding: 'DOCS_ASSETS',
+    run_worker_first: true,
+  }, "the docs' images, behind the gateway: every request reaches the Worker first")
 
   const planText = await readFile(join(out, 'plan.json'), 'utf8')
   for (const secret of [environment.CLOUDFLARE_API_TOKEN, environment.GOOGLE_CLIENT_SECRET, environment.TURNSTILE_SECRET_KEY]) {

@@ -151,8 +151,9 @@ function ConnectionCard({ data }: { data: SsoPageData }) {
         </CardTitle>
         <CardDescription>
           Connect your organization&apos;s identity provider with SAML 2.0 or OpenID Connect. People with an address in a verified domain then
-          sign in there; someone who isn&apos;t a member yet joins with the role you choose. The identity provider is responsible for their
-          second factor.
+          sign in there; someone who isn&apos;t a member yet joins with the role you choose. The identity provider asks for whatever it
+          requires, its own second factor included. Afterwards, anyone who has turned on two-step sign-in for their Insulin Apps account
+          also enters a code from their authenticator app, or a recovery code, before they are signed in.
         </CardDescription>
       </CardHeader>
       <CardContent>

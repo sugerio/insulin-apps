@@ -421,6 +421,10 @@ test('review: single sign-on asks for the code too when two-step sign-in is on, 
   assert.equal(answered.status, 303, answered.text.slice(0, 300))
   const echo = JSON.parse((await client.get(h.url('captable', '/api/echo'))).text)
   assert.equal(echo.headers['x-suger-organization-id'], orgId, "the code step keeps single sign-on's organization")
+  // The owner's settings page says so, rather than leaving the second factor to the identity provider alone.
+  const settings = (await owner.client.get(h.url('apex', `/settings/sso?org=${orgId}`))).text.replace(/\s+/g, ' ')
+  assert.match(settings, /anyone who has turned on two-step sign-in for their Insulin Apps account also enters a code from their authenticator app, or a recovery code, before they are signed in/)
+  assert.doesNotMatch(settings, /responsible for their second factor/)
 
   // An account with its own password learns, once, that the organization's identity provider can now sign it in.
   const mails = (await h.mails(person.email)).filter((mail) => /single sign-on/.test(mail.subject))

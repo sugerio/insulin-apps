@@ -118,7 +118,7 @@ Tokens last an hour. Ask for a new one when it expires.
 ```bash
 curl -s https://esign.insulinapps.com/api/templates \
   -H "Authorization: Bearer $TOKEN" \
-  -F file=@partnership-agreement.pdf \
+  -F file=@./partnership-agreement.pdf \
   -F 'roles=["partner","seller"]'
 ```
 

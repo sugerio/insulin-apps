@@ -264,6 +264,10 @@ test('the docs\' MCP server needs no sign-in: initialize, the three read-only to
 test('search, its JSON and the MCP server are limited per IP, and every tool call in a batch counts', async () => {
   const limited = await startGateway({ appLimit: 3 })
   try {
+    // Miniflare's limiter counts in windows aligned to the wall clock (a new one each minute): start early in one, so
+    // the few seconds this test takes don't straddle a reset.
+    const into = Date.now() % 60_000
+    if (into > 45_000) await new Promise((resolve) => setTimeout(resolve, 60_000 - into + 100))
     const client = limited.client()
     for (let i = 0; i < 3; i++) assert.equal((await client.get(limited.url('apex', '/docs/search.json?q=roles'))).status, 200, `request ${i + 1}`)
     const json429 = await client.get(limited.url('apex', '/docs/search.json?q=roles'))

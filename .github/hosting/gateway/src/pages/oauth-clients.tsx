@@ -63,12 +63,16 @@ function rows(ctx: Context, data: OAuthClientsData): Row[] {
   return [...clients, ...agents].sort((a, b) => b.createdAt - a.createdAt || a.key.localeCompare(b.key))
 }
 
+function TypeBadge({ row }: { row: Row }) {
+  return <Badge variant="outline">{row.kind === "api" ? "API access" : "AI agent (MCP)"}</Badge>
+}
+
 function Status({ row }: { row: Row }) {
   if (row.revoked) {
     return (
       <div className="flex flex-col items-start gap-1">
         <Badge variant="destructive">Revoked</Badge>
-        <span className="text-xs text-muted-foreground">{day(row.revoked.at)} by {row.revoked.by}</span>
+        <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{day(row.revoked.at)} by {row.revoked.by}</span>
       </div>
     )
   }
@@ -85,16 +89,19 @@ function ClientsTable({ ctx, data }: { ctx: Context; data: OAuthClientsData }) {
   if (!all.length) {
     return <p className="text-sm text-muted-foreground">No OAuth clients yet. They appear here when someone creates one on an app&apos;s API access page or connects an AI agent.</p>
   }
+  // Six columns fit beside the navigation from xl (1280px) only. Below it the table keeps the client cell and the
+  // actions, and the client cell says what the hidden columns say, so the status and the buttons stay in view; long
+  // names and addresses wrap anywhere so they can't widen the table.
   return (
     <Table>
       <TableCaption className="sr-only">OAuth clients of {data.orgName}</TableCaption>
       <TableHeader>
         <TableRow>
           <TableHead scope="col">Client</TableHead>
-          <TableHead scope="col">Type</TableHead>
-          <TableHead scope="col" className="max-md:hidden">Created by</TableHead>
-          <TableHead scope="col" className="max-md:hidden">Last used</TableHead>
-          <TableHead scope="col">Status</TableHead>
+          <TableHead scope="col" className="max-xl:hidden">Type</TableHead>
+          <TableHead scope="col" className="max-xl:hidden">Created by</TableHead>
+          <TableHead scope="col" className="max-xl:hidden">Last used</TableHead>
+          <TableHead scope="col" className="max-xl:hidden">Status</TableHead>
           <TableHead scope="col"><span className="sr-only">Actions</span></TableHead>
         </TableRow>
       </TableHeader>
@@ -104,21 +111,23 @@ function ClientsTable({ ctx, data }: { ctx: Context; data: OAuthClientsData }) {
           return (
             <TableRow key={row.key}>
               <TableCell className="align-top whitespace-normal">
-                <div className="font-medium break-words">{row.name}</div>
+                <div className="font-medium [overflow-wrap:anywhere]">{row.name}</div>
                 {row.kind === "api"
                   ? <code className="font-mono text-xs break-all text-muted-foreground">{row.detail}</code>
                   : <div className="text-xs text-muted-foreground">{row.detail}</div>}
                 <div className="text-xs text-muted-foreground">{row.app} · created {day(row.createdAt)}</div>
-                <div className="text-xs text-muted-foreground md:hidden">By {row.createdBy} · last used {day(row.lastUsedAt)}</div>
+                <div className="text-xs text-muted-foreground [overflow-wrap:anywhere] xl:hidden">By {row.createdBy} · last used {day(row.lastUsedAt)}</div>
+                <div className="mt-2 flex flex-wrap items-start gap-2 xl:hidden">
+                  <TypeBadge row={row} />
+                  <Status row={row} />
+                </div>
               </TableCell>
+              <TableCell className="align-top max-xl:hidden"><TypeBadge row={row} /></TableCell>
+              <TableCell className="align-top whitespace-normal text-muted-foreground [overflow-wrap:anywhere] max-xl:hidden">{row.createdBy}</TableCell>
+              <TableCell className="align-top text-muted-foreground max-xl:hidden">{day(row.lastUsedAt)}</TableCell>
+              <TableCell className="align-top whitespace-normal max-xl:hidden"><Status row={row} /></TableCell>
               <TableCell className="align-top">
-                <Badge variant="outline">{row.kind === "api" ? "API access" : "AI agent (MCP)"}</Badge>
-              </TableCell>
-              <TableCell className="align-top whitespace-normal break-words text-muted-foreground max-md:hidden">{row.createdBy}</TableCell>
-              <TableCell className="align-top text-muted-foreground max-md:hidden">{day(row.lastUsedAt)}</TableCell>
-              <TableCell className="align-top whitespace-normal"><Status row={row} /></TableCell>
-              <TableCell className="align-top">
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex flex-col items-end gap-2 xl:flex-row xl:flex-wrap xl:items-center xl:justify-end">
                   {row.revoked ? null : (
                     <PostButton action={`${base}/revoke`} variant="outline" size="sm">
                       Revoke<span className="sr-only"> {row.name}</span>

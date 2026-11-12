@@ -278,6 +278,37 @@ test('OAuth clients: a revoked agent stays listed when its person disconnects it
   assert.match(rowOf((await page(owner, orgId)).text, 'Weekly Digest Agent'), /Revoked \d{4}-\d{2}-\d{2} by Rhea Owner/)
 })
 
+test('OAuth clients: below 1280px each row keeps its status and actions in view: only the client cell and the actions show, and the client cell carries the rest', async () => {
+  const owner = await h.user({ name: 'Nina Owner' })
+  const orgId = await h.org(owner.client, 'Narrow Screens Org')
+  const editor = await member(orgId, 'Ned Editor', 'EDITOR')
+  await createClient(owner, orgId, 'Narrowscreenclientwithaverylongnamewithoutanyspaces')
+  await connect(h, editor, orgId, { name: 'Narrow Agent' })
+  const html = (await page(owner, orgId)).text
+  const classes = (tag) => /class="([^"]*)"/.exec(tag)?.[1].split(/\s+/) ?? []
+  // The columns: Client and the actions always; Type, Created by, Last used and Status from xl (1280px) only.
+  const heads = [...html.matchAll(/<th [^>]*>[\s\S]*?<\/th>/g)].map((match) => ({ text: match[0].replace(/<[^>]+>/g, '').trim(), hidden: classes(match[0]).includes('max-xl:hidden') }))
+  assert.deepEqual(heads, [
+    { text: 'Client', hidden: false }, { text: 'Type', hidden: true }, { text: 'Created by', hidden: true },
+    { text: 'Last used', hidden: true }, { text: 'Status', hidden: true }, { text: 'Actions', hidden: false },
+  ])
+  const rows = html.split('<tbody')[1].split('<tr').slice(1)
+  assert.equal(rows.length, 2)
+  for (const row of rows) {
+    const cells = [...row.matchAll(/<td [^>]*>/g)].map((match) => classes(match[0]).includes('max-xl:hidden'))
+    assert.deepEqual(cells, [false, true, true, true, true, false], 'the same columns hide in every row')
+    const first = /<td [^>]*>([\s\S]*?)<\/td>/.exec(row)[1]
+    // Below xl the first cell says what the hidden columns say.
+    const narrow = /<div class="[^"]*\bxl:hidden\b[^"]*">([\s\S]*?)<\/div><\/div>/.exec(first)?.[1] ?? ''
+    const text = first.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+    assert.match(text, /By (Nina Owner|Ned Editor) \([^)]+\) · last used (Never|\d{4}-\d{2}-\d{2})/, 'creator and last use')
+    assert.match(narrow, /API access|AI agent \(MCP\)/, 'the type')
+    assert.match(narrow, />Active</, 'the status')
+    // A long name or address can't widen the table: it wraps anywhere.
+    assert.match(first, /<div class="[^"]*\[overflow-wrap:anywhere\][^"]*">Narrow/, 'the name wraps anywhere')
+  }
+})
+
 test('OAuth clients: only owners and admins revoke or delete, only in their own organization, and each write re-checks the role', async () => {
   const owner = await h.user({ name: 'Petra Owner' })
   const orgId = await h.org(owner.client, 'Guarded Clients Org')

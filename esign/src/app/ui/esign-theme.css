@@ -66,7 +66,7 @@
 .esign-steps li.esign-step-current { font-weight: 600; }
 .esign-steps li.esign-step-current .esign-step-number, .esign-steps li.esign-step-done .esign-step-number { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
 /* The step's body: Review and Sign have a side panel; Confirm it's you is one centred column. */
-.esign-signing-workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 20px; }
+.esign-signing-workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) 280px; gap: 16px; }
 .esign-signing-workspace.esign-at-step-2 { grid-template-columns: minmax(0,1fr); overflow-y: auto; }
 .esign-at-step-2 .esign-document, .esign-at-step-3 .esign-document { display: none; }
 .esign-document { min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--card); }
@@ -75,7 +75,7 @@
 .esign-page-of { font-variant-numeric: tabular-nums; margin-left: auto; }
 .esign-document-toolbar a { color: var(--foreground); font-weight: 500; text-underline-offset: 4px; }
 .esign-document-toolbar a:hover { text-decoration: underline; }
-.esign-recipient .esign-document-surface { flex: 1; min-height: 0; border: 0; border-radius: 0; padding: 16px; }
+.esign-recipient .esign-document-surface { flex: 1; min-height: 0; border: 0; border-radius: 0; padding: 8px; }
 .esign-side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .esign-side-section { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .esign-side-section > h2 { font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground); }

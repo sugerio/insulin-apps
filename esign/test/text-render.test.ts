@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {PDFDocument} from 'pdf-lib';
 import {TEXT_ATLAS_BASE64} from '../src/app/server/esign/fonts/text-atlas.ts';
 import {TEXT_ATLAS_V3_BASE64} from '../src/app/server/esign/fonts/text-atlas-v3.ts';
-import {fieldRenderer,renderText,renderTextV2,storedFieldRenderer,TEXT_RENDERER,TEXT_ATLAS_HASH,TEXT_RENDERER_V2,TEXT_ATLAS_V2_HASH} from '../src/app/server/esign/field-render.ts';
+import {fieldRenderer,renderText,renderTextV2,storedFieldRenderer,TEXT_RENDERER,TEXT_ATLAS_HASH,TEXT_RENDERER_V2,TEXT_ATLAS_V2_HASH,TEXT_RENDERER_V3} from '../src/app/server/esign/field-render.ts';
 
 const sha=(bytes:Uint8Array|Buffer)=>createHash('sha256').update(bytes).digest('hex');
 /** The coverage index of each pixel of renderText's indexed PNG, row by row (filter bytes dropped). */
@@ -20,7 +20,7 @@ function pixels(png:Uint8Array){
 }
 
 test('text artwork is anti-aliased, 96 pixels high, deterministic and bounded, with distinct visible printable glyphs',async()=>{
- assert.match(TEXT_RENDERER,/v3/);assert.equal(sha(Buffer.from(TEXT_ATLAS_V3_BASE64,'base64')),TEXT_ATLAS_HASH);
+ assert.match(TEXT_RENDERER,/aa-v4/);assert.equal(sha(Buffer.from(TEXT_ATLAS_V3_BASE64,'base64')),TEXT_ATLAS_HASH);
  for(const text of ['Chief Executive, A/B & Co.','2023-11-14T22:13:20.123Z','x'.repeat(128)]){
   const bytes=await renderText(text);assert.deepEqual(await renderText(text),bytes);const image=pixels(bytes);
   assert.ok(image.width<text.length*72);assert.equal(image.height,96);assert.ok(image.bytes.some(v=>v!==0));
@@ -42,7 +42,7 @@ test('pdf-lib embeds the indexed PNG with its transparency',async()=>{
  page.drawImage(png,{x:10,y:10,width:png.width*27/96,height:27});assert.ok((await pdf.save()).length>0);
 });
 
-test('signatures recorded with the v2 renderer still verify and draw with it, unchanged',async()=>{
+test('signatures recorded with the v2 or v3 renderer still verify and draw with it, unchanged',async()=>{
  assert.equal(sha(Buffer.from(TEXT_ATLAS_BASE64,'base64')),TEXT_ATLAS_V2_HASH);
  // Bytes v2 made before v3 existed: a stored image must still match what its renderer makes of its value.
  assert.equal(sha(await renderTextV2('Director')),'99e45b30afda2c58ad45504828cb9189a223299b3615ce1d8fab71da73859db1');
@@ -51,6 +51,11 @@ test('signatures recorded with the v2 renderer still verify and draw with it, un
  for(const type of ['Title','Date signed']){
   assert.equal(storedFieldRenderer(type,{name:TEXT_RENDERER_V2,sha256:TEXT_ATLAS_V2_HASH}).name,TEXT_RENDERER_V2);
   assert.equal(storedFieldRenderer(type,{name:TEXT_RENDERER,sha256:TEXT_ATLAS_HASH}),fieldRenderer(type));
+  // v3: the same atlas and image, drawn 27 points high from the box's top, as recorded.
+  const v3=storedFieldRenderer(type,{name:TEXT_RENDERER_V3,sha256:TEXT_ATLAS_HASH}),page=(await PDFDocument.create()).addPage([600,800]),image=await renderText('2026-11-12');
+  assert.equal(v3.name,TEXT_RENDERER_V3);assert.deepEqual(await v3.render('2026-11-12'),image);
+  const box={rect:{x:.1,y:.2,width:.5,height:.1}},g3=v3.geometry(page,box,image),g4=fieldRenderer(type).geometry(page,box,image);
+  assert.deepEqual([g3.y,g3.height],[160,27]);assert.deepEqual([g4.y,g4.height],[160+9*78/96,18]);
   assert.equal(fieldRenderer(type).name,TEXT_RENDERER,'new signatures use v3');
   for(const named of [{name:TEXT_RENDERER_V2,sha256:TEXT_ATLAS_HASH},{name:'other',sha256:TEXT_ATLAS_HASH},null])assert.throws(()=>storedFieldRenderer(type,named),/Renderer changed/);
  }

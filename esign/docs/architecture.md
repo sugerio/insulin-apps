@@ -160,17 +160,20 @@ Two ways to sign:
 | Field | What is drawn |
 | --- | --- |
 | Signature | The typed text (Latin letters and single spaces, 1–64 characters) rendered on the server from a bundled Caveat bitmap atlas (`caveat-bitmap-v2`), 30 points high. It may extend to the right of its box but not off the page or over another field. Typed text is not the authenticated recipient name |
-| Title | The title the signer gave on Review (printable ASCII, at most 128 characters), 27-point text that must fit its box |
-| Date signed | The server's UTC date when the signature is accepted, 27-point text that must fit its box |
+| Title | The title the signer gave on Review (printable ASCII, at most 128 characters), 18-point text that must fit its box |
+| Date signed | The server's UTC date when the signature is accepted, 18-point text that must fit its box |
 
-Title and Date signed text is drawn from a bundled, anti-aliased Liberation Sans atlas 96 pixels high
-(`liberation-sans-aa-v3`), each character at the font's own advance. Signatures recorded with the
-earlier 1-bit, 32-pixel renderer (`liberation-sans-bitmap-v2`) name it in `render_json` and are still
-verified and drawn with it; new signatures always use v3.
+Title and Date signed text is drawn from a bundled, anti-aliased Liberation Sans atlas 96 pixels high,
+each character at the font's own advance, 18 points high (its capitals 9 points, about half a
+signature's), on the baseline earlier versions used: 7.3 points below the box's top
+(`liberation-sans-aa-v4`); the preview says so in `X-Text-Top`. Signatures recorded with an earlier
+renderer name it in `render_json` and are still verified and drawn with it: the same atlas 27 points
+high from the box's top (`liberation-sans-aa-v3`), or a 1-bit, 32-pixel one 27 points high
+(`liberation-sans-bitmap-v2`). New signatures always use v4.
 
 Every field is previewed through `POST /api/public/signing/preview` with `{fieldId, text}` (no `text` for
 Date signed). It returns the PNG that will be drawn, with its size relative to the box
-(`X-Signature-Width`/`-Height` or `X-Text-Width`/`-Height`) and, for Signature and Title, a receipt
+(`X-Signature-Width`/`-Height`, or `X-Text-Width`/`-Height`/`-Top`) and, for Signature and Title, a receipt
 (`X-Signature-Preview`, `X-Text-Preview`) that binds the input, the template, the field, the text,
 the image and its geometry. The sign request sends back the receipts and the dates the page showed
 (`datePreviews`); a date that changed in between (after midnight UTC) is refused with

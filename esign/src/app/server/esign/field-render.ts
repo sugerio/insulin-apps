@@ -16,9 +16,14 @@ import { TEXT_ATLAS_V3_BASE64 } from './fonts/text-atlas-v3.ts';
 
 export const TYPED_SIGNATURE_FONT='caveat-bitmap-v2';
 export const TYPED_SIGNATURE_FONT_HASH='8939915eee4471c416b9d5e718c9e78db58511aa38f67c803bfafeda0d549d61';
-/** Title and Date signed text: anti-aliased Liberation Sans, 96 pixels high (renderText). */
-export const TEXT_RENDERER='liberation-sans-aa-v3';
+/**
+ * Title and Date signed text: anti-aliased Liberation Sans, 96 pixels high (renderText), drawn 18
+ * points high on the baseline v2 and v3 used (textGeometry).
+ */
+export const TEXT_RENDERER='liberation-sans-aa-v4';
 export const TEXT_ATLAS_HASH='d0d622738ff8355a534c49d0a8bd8d16fcfac46fede2e4786dc5ce63f8f39def';
+/** The same atlas drawn 27 points high (v3), as signatures recorded with it are drawn; nothing new uses it. */
+export const TEXT_RENDERER_V3='liberation-sans-aa-v3';
 /**
  * The renderer Title and Date signed fields were drawn with before v3: 1-bit, 32 pixels high
  * (renderTextV2). Signatures that name it are still verified and drawn with it; nothing new uses it.
@@ -131,29 +136,40 @@ export class TextDoesNotFitError extends Error {
  constructor(){super('Text field too small');}
 }
 
-// The reference H in the 128px Caveat atlas has 72 ink rows at 30pt;
-// H and date digits in the 32px Liberation atlas have 16 ink rows (48 in the
-// 96px one). Their visible height is intentionally 80% of the signature
-// reference height.
-export const TEXT_HEIGHT=27;
+// The reference H in the 128px Caveat atlas has 72 ink rows at 30pt (16.9pt of ink);
+// H in the 32px Liberation atlas has 16 ink rows, 48 in the 96px one. v2 and v3 drew
+// text 27pt high (13.5pt of ink, 80% of the signature's); v4 draws it 18pt high (9pt
+// of ink, about half the signature's: text of a document, beside a signature).
+export const TEXT_HEIGHT=18;
+/** v2 and v3's height. */
+const TEXT_HEIGHT_V3=27;
+/**
+ * v4 keeps v3's baseline, so a box placed for v2 or v3 text shows v4 text on the same line: the
+ * baseline is 18 of the 96 rows above the image's bottom (generate-text-atlas-v3.swift).
+ */
+const TEXT_BASELINE_DROP=(TEXT_HEIGHT_V3-TEXT_HEIGHT)*(AA_HEIGHT-18)/AA_HEIGHT;
 
-/** Fixed PDF-point placement, top-left origin, independent of field size, for an image `rows` high. */
-function textBox(rows:number){
+/**
+ * Fixed PDF-point placement, top-left origin, independent of field size: an image `rows` high
+ * drawn `points` high, `drop` points below the box's top.
+ */
+function textBox(rows:number,points:number,drop=0){
  return (page:PDFPage,field:Pick<TemplateField,'rect'>,image:Uint8Array):Box=>{
   const view=new DataView(image.buffer,image.byteOffset,image.byteLength),width=view.getUint32(16),height=view.getUint32(20);
   if(!width||height!==rows)throw new Error('Invalid text image');
-  return {x:field.rect.x*page.getWidth(),y:field.rect.y*page.getHeight(),width:width*TEXT_HEIGHT/height,height:TEXT_HEIGHT};
+  return {x:field.rect.x*page.getWidth(),y:field.rect.y*page.getHeight()+drop,width:width*points/height,height:points};
  };
 }
 /** Where renderText's image goes. */
-export const textGeometry=textBox(AA_HEIGHT);
-const textGeometryV2=textBox(32);
+export const textGeometry=textBox(AA_HEIGHT,TEXT_HEIGHT,TEXT_BASELINE_DROP);
+const textGeometryV3=textBox(AA_HEIGHT,TEXT_HEIGHT_V3);
+const textGeometryV2=textBox(32,TEXT_HEIGHT_V3);
 
 /** Unlike signatures, text must fit inside its static field. */
 export function assertTextFits(page:PDFPage,field:Pick<TemplateField,'rect'>,image:Uint8Array):void {
  const g=textGeometry(page,field,image);
  const epsilon=1e-9; // Normalized coordinates can lose fractions of a PDF point to floating-point rounding.
- if(g.width>field.rect.width*page.getWidth()+epsilon||g.height>field.rect.height*page.getHeight()+epsilon||g.x+g.width>page.getWidth()+epsilon||g.y+g.height>page.getHeight()+epsilon)throw new TextDoesNotFitError();
+ if(g.width>field.rect.width*page.getWidth()+epsilon||g.y+g.height>(field.rect.y+field.rect.height)*page.getHeight()+epsilon||g.x+g.width>page.getWidth()+epsilon||g.y+g.height>page.getHeight()+epsilon)throw new TextDoesNotFitError();
 }
 
 // --- Preview receipts --------------------------------------------------------------------------
@@ -185,6 +201,10 @@ const text: Omit<FieldRenderer, 'check'> = {
   name: TEXT_RENDERER, sha256: TEXT_ATLAS_HASH,
   render: renderText, geometry: textGeometry,
 };
+const textV3: Omit<FieldRenderer, 'check'> = {
+  name: TEXT_RENDERER_V3, sha256: TEXT_ATLAS_HASH,
+  render: renderText, geometry: textGeometryV3,
+};
 const textV2: Omit<FieldRenderer, 'check'> = {
   name: TEXT_RENDERER_V2, sha256: TEXT_ATLAS_V2_HASH,
   render: renderTextV2, geometry: textGeometryV2,
@@ -213,8 +233,8 @@ const earlier = (renderer: Omit<FieldRenderer, 'check'>): FieldRenderer => ({ ..
 
 /** Renderers a field type was drawn with before its current one, so signatures recorded with them stay valid. */
 const EARLIER_RENDERERS: Readonly<Record<string, readonly FieldRenderer[]>> = {
-  'Title': [earlier(textV2)],
-  'Date signed': [earlier(textV2)],
+  'Title': [earlier(textV3), earlier(textV2)],
+  'Date signed': [earlier(textV3), earlier(textV2)],
 };
 
 /**

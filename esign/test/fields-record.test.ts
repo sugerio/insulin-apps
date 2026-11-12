@@ -147,7 +147,8 @@ test('a fields signature captures only the verified current role, time and image
   const finalBytes=await (await bucket.get(`envelopes/${envelope.id}/${secondRow.output_artifact_id}.pdf`))!.arrayBuffer();
   const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');const doc=await pdfjs.getDocument({data:new Uint8Array(finalBytes)}).promise;const ops=await (await doc.getPage(1)).getOperatorList();assert.equal(ops.fnArray.filter((fn:number)=>fn===pdfjs.OPS.paintImageXObject).length,4);
   const transforms=ops.argsArray.filter((_:unknown,i:number)=>ops.fnArray[i]===pdfjs.OPS.transform),placed=[updated[0],updated[2],updated[3],updated[1]];assert.equal(transforms.length,16);
-  for(let i=0;i<4;i++){const translate=transforms[i*4],scale=transforms[i*4+2],r=placed[i].rect;assert.equal(translate[4],r.x*600);assert.ok(Math.abs(translate[5]+scale[3]-(1-r.y)*800)<1e-5);assert.ok(scale[0]<=r.width*600&&scale[3]<=r.height*800);}
+  for(let i=0;i<4;i++){const translate=transforms[i*4],scale=transforms[i*4+2],r=placed[i].rect;assert.equal(translate[4],r.x*600);// Title and Date signed text sits 9 × 78/96 points below the box's top, on v3's baseline.
+    const drop=placed[i].type==='Signature'?0:9*78/96;assert.ok(Math.abs(translate[5]+scale[3]-((1-r.y)*800-drop))<1e-5);assert.ok(scale[0]<=r.width*600&&drop+scale[3]<=r.height*800);}
   await doc.destroy();
   // A second signature claiming other placed fields than the first fails closed, even with a matching hash.
   const altered=JSON.parse(secondRow.render_json);altered.template.find((f:any)=>f.id==='title-a').rect.x=.1;

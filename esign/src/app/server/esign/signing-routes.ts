@@ -270,11 +270,11 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const headers:Record<string,string>={'Content-Type':'image/png','X-Content-Type-Options':'nosniff','X-Preview-Text':text};
     const image=Uint8Array.from(await renderText(text));
     const source=await c.env.ARTIFACTS.get(artifact.object_key);if(!source)throw new Error('Missing input');const bytes=await source.arrayBuffer();if(await sha256(bytes)!==artifact.sha256)throw new Error('Input mismatch');const pdf=await PDFDocument.load(bytes,{updateMetadata:false,throwOnInvalidObject:true});if(field.page<1||field.page>pdf.getPageCount())throw new Error('Invalid page');validateFieldsPdf(pdf);validateFieldPlacement(pdf,all);const page=pdf.getPage(field.page-1);assertTextFits(page,field,image);const geometry=textGeometry(page,field,image);
-    headers['X-Text-Width']=String(geometry.width/(field.rect.width*page.getWidth()));headers['X-Text-Height']=String(geometry.height/(field.rect.height*page.getHeight()));
+    headers['X-Text-Width']=String(geometry.width/(field.rect.width*page.getWidth()));headers['X-Text-Height']=String(geometry.height/(field.rect.height*page.getHeight()));headers['X-Text-Top']=String((geometry.y-field.rect.y*page.getHeight())/(field.rect.height*page.getHeight()));
     // Title: a receipt binding the image and its place, checked when signing. Date signed: the
     // date shown, which the sign request repeats; another date by then is refused (date_changed).
     if(field.type==='Title')headers['X-Text-Preview']=await signaturePreviewHash(artifact.sha256,rolesJson,fieldsJson,field.id,text,await sha256(image.buffer),geometry);
-    headers['Access-Control-Expose-Headers']=field.type==='Title'?'X-Text-Preview, X-Preview-Text, X-Text-Width, X-Text-Height':'X-Preview-Text, X-Text-Width, X-Text-Height';
+    headers['Access-Control-Expose-Headers']=field.type==='Title'?'X-Text-Preview, X-Preview-Text, X-Text-Width, X-Text-Height, X-Text-Top':'X-Preview-Text, X-Text-Width, X-Text-Height, X-Text-Top';
     return c.body(image.buffer,200,headers);
   }catch(error){return c.json({error:type==='Signature'?'signature_does_not_fit':error instanceof TextDoesNotFitError?'title_does_not_fit':'invalid_preview'},422);}});
   app.get('/api/public/signing/pdf', async c => {try {const a=await current(c,{verified:false}), file=await c.env.ARTIFACTS.get(a.object_key);if (!file) throw new Error('Missing');const bytes=await file.arrayBuffer();if (await sha256(bytes)!==a.sha256) throw new Error('Mismatch');

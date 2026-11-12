@@ -156,7 +156,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
     certificate && completed ? h(CompletionCertificate, { certificate }) : null,
     // The signing page in a dialog, as a host shows it.
     frame ? h('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4' },
-      h('div', { role: 'dialog', 'aria-modal': true, 'aria-label': 'Signing page', className: 'flex h-[88vh] w-full max-w-6xl flex-col gap-3 rounded-xl border bg-background p-5 shadow-lg' },
+      h('div', { role: 'dialog', 'aria-modal': true, 'aria-label': 'Signing page', className: 'flex h-[88vh] w-full max-w-[1440px] flex-col gap-3 rounded-xl border bg-background p-5 shadow-lg' },
         h('div', { className: 'flex items-start gap-3' },
           h('div', { className: 'flex-1' }, h('h2', { className: 'text-lg font-semibold' }, `${frame.task.recipientName}'s signing page`),
             h('p', { className: 'text-sm text-muted-foreground' }, 'What the signer sees. Their code goes to their own email address.')),

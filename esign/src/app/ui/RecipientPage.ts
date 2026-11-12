@@ -66,8 +66,9 @@ export function afterSigningLines(artifact:Pick<Artifact,'sender'|'signers'|'aft
   else if(signers)lines.push('Your signature completes the agreement.');
   return [...lines,...(artifact.afterSigning??[])];
 }
-type RenderDocument = (blob:Blob, container:HTMLElement, signal:AbortSignal)=>Promise<void>;
-const defaultRender:RenderDocument=async (blob,container,signal)=>{const {renderPdf}=await import('./pdf');signal.throwIfAborted();return renderPdf(blob,container,signal);};
+/** Renders the document into `container`, its pages across the width of `shownIn`, the element it will be shown in, and sharp there. */
+type RenderDocument = (blob:Blob, container:HTMLElement, signal:AbortSignal, shownIn?:HTMLElement)=>Promise<void>;
+const defaultRender:RenderDocument=async (blob,container,signal,shownIn)=>{const {renderPdf}=await import('./pdf');signal.throwIfAborted();return renderPdf(blob,container,signal,shownIn,true);};
 /** A code lasts as long as the Worker keeps it (OTP_TTL_MS). */
 const CODE_TTL_MS=10*60*1000, CODE_LENGTH=6;
 /** Sends are a minute apart (the Worker's OTP_RESEND_MS). */
@@ -136,7 +137,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const [rendered,setRendered]=useState(false),[pageHosts,setPageHosts]=useState<HTMLElement[]>([]),[imageUrls,setImageUrls]=useState<Record<string,string>>({});
   const [textReceipts,setTextReceipts]=useState<Record<string,string>>({});
   const [signatureReceipts,setSignatureReceipts]=useState<Record<string,string>>({});
-  const [signatureSizes,setSignatureSizes]=useState<Record<string,{width:number;height:number}>>({});
+  const [signatureSizes,setSignatureSizes]=useState<Record<string,{width:number;height:number;top?:number}>>({});
   const [signatures,setSignatures]=useState<Record<string,string>>({}),[previews,setPreviews]=useState<Record<string,string>>({}),[datePreviewVersion,setDatePreviewVersion]=useState(0);
   // Why a field's preview failed (a name or title that does not fit), by field id.
   const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
@@ -198,7 +199,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     if (!pdf || !container.current) return;
     let active=true;const target=container.current;const detached=target.ownerDocument.createElement('div');
     const controller=new AbortController();renderController.current=controller;target.replaceChildren();
-    renderDocument(pdf,detached,controller.signal).then(()=>{
+    renderDocument(pdf,detached,controller.signal,target).then(()=>{
       if(active && !controller.signal.aborted) {
         const pages=typeof detached.querySelectorAll==='function'?Array.from(detached.querySelectorAll('canvas')):[];
         setPageCount(pages.length);setPageEls(pages);setCurrentPage(1);
@@ -363,8 +364,8 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       preview:async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,text})});const receipt=response.headers.get('X-Signature-Preview')??'',width=Number(response.headers.get('X-Signature-Width')),height=Number(response.headers.get('X-Signature-Height'));if(!/^[a-f0-9]{64}$/.test(receipt))throw new Error('Invalid preview receipt');if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),width,height,receipt};},
       onSize:(size:{width:number;height:number;receipt:string})=>{setSignatureSizes(old=>({...old,[field.id]:size}));setSignatureReceipts(old=>({...old,[field.id]:size.receipt}));}})
     :h(TextPreview,{...previewProps(field),value:field.type==='Title'?signatures[field.id]??'':'',version:datePreviewVersion,
-      onSize:(size:{width:number;height:number})=>setSignatureSizes(old=>({...old,[field.id]:size})),
-      preview:async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,...(field.type==='Title'?{text}:{})})});const width=Number(response.headers.get('X-Text-Width')),height=Number(response.headers.get('X-Text-Height'));if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),previewId:response.headers.get(field.type==='Title'?'X-Text-Preview':'X-Preview-Text'),width,height};}}));
+      onSize:(size:{width:number;height:number;top:number})=>setSignatureSizes(old=>({...old,[field.id]:size})),
+      preview:async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,...(field.type==='Title'?{text}:{})})});const width=Number(response.headers.get('X-Text-Width')),height=Number(response.headers.get('X-Text-Height')),top=Number(response.headers.get('X-Text-Top')??0);if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isFinite(top)||width<=0||height<=0||top<0||top+height>1+1e-9)throw new Error('Invalid preview geometry');return {blob:await response.blob(),previewId:response.headers.get(field.type==='Title'?'X-Text-Preview':'X-Preview-Text'),width,height,top};}}));
 
   const ready=!!artifact&&rendered;
   const actions=h('div',{className:'esign-actions'},
@@ -446,7 +447,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       h('h2',null,'About signing'),
       h(SigningHelp,{sender:sender||'The sender',documentName:artifact?.documentName}),
       h('div',{className:'esign-modal-actions'},button('Close',()=>setShowHelp(false),{primary:true}))),
-    rendered&&fields.map((field,index)=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${artifact?.role ? `${artifact.role} ${field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature'}${fields.length>1?` ${index+1}`:""}` : `${field.type||'Signature'} field ${index+1}`} on page ${field.page}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:'2px dashed #135c9b',outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},imageUrls[field.id]&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,maxWidth:'none',objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)));
+    rendered&&fields.map((field,index)=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${artifact?.role ? `${artifact.role} ${field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature'}${fields.length>1?` ${index+1}`:""}` : `${field.type||'Signature'} field ${index+1}`} on page ${field.page}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:'2px dashed #135c9b',outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},imageUrls[field.id]&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,top:`${(signatureSizes[field.id]?.top??0)*100}%`,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,maxWidth:'none',objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)));
 }
 
 type PreviewProps = {field:SignatureField;value:string;token:string;onReady:(value:string,url:string,receipt?:string)=>void;onError:(error:string)=>void};
@@ -461,10 +462,10 @@ function SignaturePreview({field,value,token,preview,onReady,onSize,onError}:Pre
 }
 
 /** Asks the server for a Title field's image of the signer's title, or a Date signed field's date; renders nothing itself. */
-function TextPreview({field,value,token,version,preview,onReady,onSize,onError}:PreviewProps&{version:number;preview:(text:string)=>Promise<{blob:Blob;previewId:string|null;width:number;height:number}>;onSize:(size:{width:number;height:number})=>void}) {
+function TextPreview({field,value,token,version,preview,onReady,onSize,onError}:PreviewProps&{version:number;preview:(text:string)=>Promise<{blob:Blob;previewId:string|null;width:number;height:number;top:number}>;onSize:(size:{width:number;height:number;top:number})=>void}) {
  const date=field.type==='Date signed';
  useEffect(()=>{let active=true,objectUrl='';onError('');
-  if(date||(value.length>0&&value.length<=128&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value)))preview(value).then(async({blob,previewId,width,height})=>{if(!active||!previewId||(date?!/^\d{4}-\d{2}-\d{2}$/.test(previewId):!/^[a-f0-9]{64}$/.test(previewId)))return;objectUrl=URL.createObjectURL(blob);const image=new Image();image.src=objectUrl;await image.decode();if(!active)return;onSize({width,height});onReady(date?previewId!:value,objectUrl,previewId!);}).catch(error=>{if(active)onError(error instanceof RequestFailed&&error.code==='title_does_not_fit'?'Your title does not fit the title field. Shorten it.':error instanceof RequestFailed&&error.code==='title_field_too_small'?'The title field is too small. Ask the sender to resize it.':date?'The date could not be shown. Go back and try again.':'Your title could not be shown. Change it or try again.');});
+  if(date||(value.length>0&&value.length<=128&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value)))preview(value).then(async({blob,previewId,width,height,top})=>{if(!active||!previewId||(date?!/^\d{4}-\d{2}-\d{2}$/.test(previewId):!/^[a-f0-9]{64}$/.test(previewId)))return;objectUrl=URL.createObjectURL(blob);const image=new Image();image.src=objectUrl;await image.decode();if(!active)return;onSize({width,height,top});onReady(date?previewId!:value,objectUrl,previewId!);}).catch(error=>{if(active)onError(error instanceof RequestFailed&&error.code==='title_does_not_fit'?'Your title does not fit the title field. Shorten it.':error instanceof RequestFailed&&error.code==='title_field_too_small'?'The title field is too small. Ask the sender to resize it.':date?'The date could not be shown. Go back and try again.':'Your title could not be shown. Change it or try again.');});
   else if(!date&&value)onError('Use English letters, digits and common punctuation in your title.');
   return ()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[value,token,field.id,version]);

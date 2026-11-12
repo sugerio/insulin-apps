@@ -1,10 +1,10 @@
 // Generates the anti-aliased Liberation Sans atlas for Title and Date signed fields
-// (fonts/text-atlas-v3.ts, renderer liberation-sans-aa-v3 in field-render.ts):
+// (fonts/text-atlas-v3.ts, renderers liberation-sans-aa-v3 and v4 in field-render.ts):
 //   swift scripts/generate-text-atlas-v3.swift node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
 // Output, base64: 95 bytes of advance widths in pixels (one per printable ASCII character, 32–126),
 // then each character's 72 × 96 cell as 4-bit coverage (0–15), two pixels a byte, high nibble first,
 // rows top to bottom. Each glyph is drawn 69 pixels high with its origin at x = 3, baseline 18 rows
-// above the bottom: three times the v2 atlas (generate-text-atlas.swift), so the text keeps its size.
+// above the bottom: three times the v2 atlas (generate-text-atlas.swift), in the same proportions.
 import Foundation
 import CoreGraphics
 import CoreText

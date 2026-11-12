@@ -3,7 +3,8 @@
 // title), the article, its table of contents, previous and next, and the /docs/ index. The navigation is static: the
 // docs are public, so it has no organization switcher, no person and no per-request state, and its levels don't
 // collapse. On narrow screens a <details> menu above the article holds both levels. A search box (a plain GET form to
-// /docs/search) heads level 1, and on narrow screens sits above the menu. Pages carry schema.org microdata (TechArticle,
+// /docs/search) heads level 1, and on narrow screens sits above the menu, so one shows at a time (/docs/search has its
+// own instead). Pages carry schema.org microdata (TechArticle,
 // BreadcrumbList) as attributes: JSON-LD would need a <script>, which the docs never have. The gateway puts the result
 // inside its shared document (top bar and footer), per request (src/pages/docs.tsx). Classes are Tailwind's, in shadcn's
 // neutral theme, the navigation in its sidebar colours and spacing as components/shell.tsx draws them;
@@ -83,9 +84,9 @@ function Groups({ groups, idPrefix }) {
   })
 }
 
-/** A search box: a GET form to /docs/search. It has no id, so a page can show it more than once. */
+/** A search box: a GET form to /docs/search, a named search landmark. It has no id, so a page can hold two (one per width). */
 export function SearchForm({ className = '' }) {
-  return h('form', { action: '/docs/search', method: 'get', role: 'search', className: `flex items-center gap-2 ${className}`.trim() },
+  return h('form', { action: '/docs/search', method: 'get', role: 'search', 'aria-label': 'Search the docs', className: `flex items-center gap-2 ${className}`.trim() },
     h('input', { type: 'search', name: 'q', required: true, maxLength: 200, placeholder: 'Search the docs', 'aria-label': 'Search the docs', className: SEARCH_INPUT }),
     h('button', { type: 'submit', className: SEARCH_BUTTON }, h(Search, { 'aria-hidden': 'true' }), h('span', { className: 'sr-only' }, 'Search')))
 }
@@ -97,13 +98,16 @@ function Pages({ section, current, labelledBy }) {
       h('a', { href: page.path, className: PAGE_ITEM, ...(page.path === current ? { 'aria-current': 'page', 'data-active': 'true' } : {}) }, page.title))))
 }
 
-/** The columns on wide screens: level 1, then level 2 when a section is open (on every page but /docs/). */
-function Navigation({ site, current }) {
+/**
+ * The columns on wide screens: level 1, headed by the search box (not on /docs/search, `search` false, which has its
+ * own), then level 2 when a section is open (on every page but /docs/).
+ */
+function Navigation({ site, current, search = true }) {
   const { open, groups, agents } = primaryOf(site, current)
   return [
     h('nav', { key: 'primary', 'aria-label': 'Documentation', 'data-slot': 'docs-nav-primary', className: `${COLUMN} z-20 w-60` },
       h('div', { className: 'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-2' },
-        h(SearchForm),
+        search ? h(SearchForm) : null,
         h(Groups, { groups, idPrefix: 'docs-nav' }),
         h('div', { className: 'mt-auto flex flex-col' }, h(Groups, { groups: [agents], idPrefix: 'docs-nav' })))),
     open ? h('nav', { key: 'section', 'aria-label': 'Section', 'data-slot': 'docs-nav-section', className: `${COLUMN} z-10 w-56` },
@@ -212,8 +216,7 @@ export function DocsIndex({ site, next }) {
           h('p', { className: 'flex items-center gap-2 text-sm font-medium text-muted-foreground' }, h(BookOpen, { className: 'size-4', 'aria-hidden': 'true' }), 'Documentation'),
           h('div', { className: 'text-3xl font-semibold tracking-tight text-balance sm:text-4xl' }, h('h1', null, 'Insulin Apps documentation')),
           h('p', { className: 'max-w-2xl text-lg text-muted-foreground text-balance' },
-            'How to set up your organization on insulinapps.com, sign in, give people the right access, connect AI agents and call the API, and how to use each app.'),
-          h(SearchForm, { className: 'mt-2 max-w-xl' })),
+            'How to set up your organization on insulinapps.com, sign in, give people the right access, connect AI agents and call the API, and how to use each app.')),
         h('section', { 'aria-labelledby': 'start-here', className: 'mb-12' },
           h('div', { className: 'mb-4 text-xl font-semibold tracking-tight' }, h('h2', { id: 'start-here' }, 'Start here')),
           h('div', { className: 'grid gap-4 sm:grid-cols-3' },
@@ -249,7 +252,7 @@ export function DocsIndex({ site, next }) {
 /** /docs/search: the navigation, and the slot the gateway fills per request with the search box and the results. */
 export function DocsSearch({ site }) {
   return h('div', { className: FRAME },
-    h(Navigation, { site, current: '/docs/search' }),
+    h(Navigation, { site, current: '/docs/search', search: false }),
     h('div', { className: `${CONTENT} py-8 lg:py-10` },
       h(MobileNav, { site, current: '/docs/search', search: false }),
       h('div', { className: 'max-w-3xl' }, h('div', { 'data-docs-search-slot': '' }))))

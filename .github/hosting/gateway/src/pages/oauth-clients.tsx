@@ -147,7 +147,7 @@ export function oauthClientsPage(ctx: Context, session: Session, data: OAuthClie
           </CardTitle>
           <CardDescription>
             Every app&apos;s clients for API access and everyone&apos;s AI agents in {data.orgName}. Revoke ends a client&apos;s access at once and keeps it
-            listed, marked revoked; Delete takes it off the list. A revoked AI agent stays listed until it would have expired.
+            listed, marked revoked; Delete takes it off the list. A revoked AI agent stays listed until it would have expired, or its person leaves.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

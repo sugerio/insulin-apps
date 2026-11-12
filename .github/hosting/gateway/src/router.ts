@@ -227,15 +227,15 @@ type MachineHandler = (ctx: Context) => Promise<Response> | Response
 /**
  * Endpoints machines call, with JSON or form bodies and no cookies: they skip the form POST checks and answer CORS
  * preflights (oauth/http.ts). On the apex, the authorization server and the docs' search JSON and MCP server; on every
- * app host, its MCP server and metadata.
+ * app host, its MCP server and metadata. `readOnly` marks a POST that changes nothing, which runs no housekeeping.
  */
-const APEX_MACHINE: Record<string, { methods: string; handlers: Partial<Record<string, MachineHandler>> }> = {
+const APEX_MACHINE: Record<string, { methods: string; handlers: Partial<Record<string, MachineHandler>>; readOnly?: true }> = {
   '/.well-known/oauth-authorization-server': { methods: 'GET, OPTIONS', handlers: { GET: authorizationServerMetadata } },
   '/oauth/register': { methods: 'POST, OPTIONS', handlers: { POST: register } },
   '/oauth/token': { methods: 'POST, OPTIONS', handlers: { POST: token } },
   '/oauth/revoke': { methods: 'POST, OPTIONS', handlers: { POST: revoke } },
   '/docs/search.json': { methods: 'GET, OPTIONS', handlers: { GET: docsSearchJson } },
-  '/docs/mcp': { methods: 'POST, OPTIONS', handlers: { POST: docsMcpEndpoint } },
+  '/docs/mcp': { methods: 'POST, OPTIONS', handlers: { POST: docsMcpEndpoint }, readOnly: true },
 }
 
 function appMachine(ctx: Context, path: string): Promise<Response> | Response | null {
@@ -280,7 +280,7 @@ export async function handleRequest(request: Request, env: Env, exec: ExecutionC
   const ctx = createContext(request, env, exec, loaded.config)
   if (url.protocol === 'http:' && !ctx.relaxed) return toHttps(ctx)
   const response = await dispatch(ctx)
-  if (request.method === 'POST') {
+  if (request.method === 'POST' && !(ctx.site === 'apex' && APEX_MACHINE[url.pathname]?.readOnly)) {
     // Retention cleanup, a bounded batch after each state-changing request (housekeeping.ts).
     exec.waitUntil(housekeeping(ctx.config.db, ctx.now).catch((error) => logError('housekeeping_failed', error)))
   }

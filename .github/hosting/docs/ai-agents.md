@@ -226,7 +226,7 @@ of one app only (through access to specific apps) sees just their own.
 The organization's owners and admins also see every app's agents, with every OAuth client for API access, on
 **Settings › OAuth clients** (`https://insulinapps.com/settings/oauth-clients`), with who connected each, when, and when
 it was last used. **Revoke** there ends an agent's access at once and keeps it listed, marked **Revoked** with the day and
-who revoked it, until its 30 days would have ended; **Delete** takes it off the list. A revoked agent no longer appears in
+who revoked it, until its 30 days would have ended or its person leaves the organization; **Delete** takes it off the list. A revoked agent no longer appears in
 its person's lists, and the person can connect it again, which makes a new grant.
 
 A grant also ends when:

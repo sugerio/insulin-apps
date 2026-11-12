@@ -3,9 +3,12 @@
 // used, never with a secret; Revoke ends access at once and keeps the client listed, marked revoked; Delete removes it.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { startGateway } from './helpers/harness.mjs'
 import { connect, form, rpc } from './helpers/oauth.mjs'
-import { listOrgGrantsAsAdmin, listOrgServiceAccountsAsAdmin, revokeOrgGrant, revokeOrgServiceAccount } from '../src/db/oauth.ts'
+import {
+  findGrant, issueServiceToken, listOrgGrantsAsAdmin, listOrgServiceAccountsAsAdmin, redeemCode, redeemRefresh, revokeOrgGrant, revokeOrgServiceAccount,
+} from '../src/db/oauth.ts'
 
 let h
 before(async () => { h = await startGateway() })
@@ -43,6 +46,9 @@ function token({ clientId }, secret) {
 }
 
 const api = (accessToken) => h.client().request(h.url('captable', '/api/echo'), { headers: { Authorization: `Bearer ${accessToken}` } })
+
+const sha256 = (value) => createHash('sha256').update(value).digest('hex')
+const day = (ms) => new Date(ms).toISOString().slice(0, 10)
 
 /** The table row naming `text` (a client's or an agent's name), as one line of the page's text. */
 function rowOf(html, text) {
@@ -175,6 +181,101 @@ test('OAuth clients: revoking an AI agent ends its grant\'s tokens and refresh a
   assert.equal(deleted.status, 303)
   assert.equal((await h.sql('SELECT COUNT(*) AS n FROM oauth_grants WHERE id = ?1', grant.id))[0].n, 0)
   assert.equal((await rpc(h, reconnected.access_token, 'tools/list')).status, 200, 'deleting the revoked one leaves the new one alone')
+})
+
+test('OAuth clients: each check refuses a revoked agent or client by itself, so rows left by a request racing the revoke do nothing', async () => {
+  const owner = await h.user({ name: 'Iris Owner' })
+  const orgId = await h.org(owner.client, 'Each Check Org')
+  const admin = await member(orgId, 'Ines Admin', 'ADMIN')
+  const editor = await member(orgId, 'Ike Editor', 'EDITOR')
+  await connect(h, editor, orgId, { name: 'Leftover Agent' })
+  const [grant] = await h.sql('SELECT id, client_id FROM oauth_grants WHERE user_id = ?1 AND org_id = ?2', editor.id, orgId)
+  const client = await createClient(owner, orgId, 'Leftover client')
+  assert.equal((await post(owner, orgId, `/agents/${grant.id}/revoke`)).status, 303)
+  assert.equal((await post(owner, orgId, `/api/${client.id}/revoke`)).status, 303)
+
+  // What a code exchange, a refresh or a token request that passed its check just before the revoke would insert.
+  const now = Date.now()
+  const later = now + 60 * 60 * 1000
+  const [agentAccess, refresh, clientAccess] = ['ia_at_', 'ia_rt_', 'ia_at_'].map((prefix, index) => `${prefix}${String(index).repeat(43)}`)
+  const code = `ia_ac_${'c'.repeat(43)}`
+  await h.sql("INSERT INTO oauth_tokens (token_hash, kind, grant_id, created_at, expires_at) VALUES (?1, 'access', ?2, ?3, ?4)", sha256(agentAccess), grant.id, now, later)
+  await h.sql("INSERT INTO oauth_tokens (token_hash, kind, grant_id, created_at, expires_at) VALUES (?1, 'refresh', ?2, ?3, ?4)", sha256(refresh), grant.id, now, later)
+  await h.sql("INSERT INTO oauth_tokens (token_hash, kind, service_account_id, client_secret_hash, created_at, expires_at) VALUES (?1, 'access', ?2, ?3, ?4, ?5)", sha256(clientAccess), client.id, sha256(client.secret), now, later)
+  await h.sql("INSERT INTO oauth_codes (code_hash, grant_id, redirect_uri, code_challenge, created_at, expires_at) VALUES (?1, ?2, 'http://127.0.0.1:8976/callback', 'x', ?3, ?4)", sha256(code), grant.id, now, later)
+
+  assert.equal((await rpc(h, agentAccess, 'tools/list')).status, 401, 'the agent\'s token check')
+  assert.equal((await api(clientAccess)).status, 401, 'the client\'s token check')
+  assert.equal(await redeemRefresh(h.db, sha256(refresh), grant.client_id, Date.now()), null, 'the refresh')
+  assert.equal(await redeemCode(h.db, sha256(code), grant.client_id, Date.now()), null, 'the code exchange')
+  assert.equal(await findGrant(h.db, grant.id, Date.now()), null, 'the grant lookup')
+  assert.equal(await issueServiceToken(h.db, { hash: sha256('ia_at_another'), serviceAccountId: client.id, secretHash: sha256(client.secret), now: Date.now(), expiresAt: later }), false, 'the token insert')
+
+  // Nor does anything list, revoke again or rename what was revoked.
+  assert.doesNotMatch((await editor.client.get(h.url('apex', `/apps/captable/settings/connect-ai?org=${orgId}`))).text, /Leftover Agent/, 'the person\'s own Connect AI')
+  assert.equal((await post(admin, orgId, `/agents/${grant.id}/revoke`)).status, 409, 'a second revoke')
+  assert.equal((await h.sql('SELECT revoked_by FROM oauth_grants WHERE id = ?1', grant.id))[0].revoked_by, owner.id, 'keeps who revoked it first')
+  const renamed = await owner.client.post(h.url('apex', `/apps/captable/settings/api/clients/${client.id}`), { org_id: orgId, name: 'Renamed client', role: 'VIEWER' })
+  assert.notEqual(renamed.status, 303, 'a rename')
+  assert.deepEqual(await h.sql('SELECT name, role FROM service_accounts WHERE id = ?1', client.id), [{ name: 'Leftover client', role: 'EDITOR' }])
+})
+
+test('OAuth clients: the list says when each was created and last used, names a creator whose account is gone, and holds only this organization\'s', async () => {
+  const owner = await h.user({ name: 'Uma Owner' })
+  const orgId = await h.org(owner.client, 'Usage Org')
+  const admin = await member(orgId, 'Udo Admin', 'ADMIN')
+  const editor = await member(orgId, 'Ula Editor', 'EDITOR')
+  const client = await createClient(admin, orgId, 'Usage client')
+  const agent = await connect(h, editor, orgId, { name: 'Usage Agent' })
+  const other = await h.user({ name: 'Otto Elsewhere' })
+  const otherOrg = await h.org(other.client, 'Elsewhere Org')
+  await createClient(other, otherOrg, 'Elsewhere client')
+  await connect(h, other, otherOrg, { name: 'Elsewhere Agent' })
+  // Made ten days earlier, so a page that showed one date for both "created" and "last used" can't pass.
+  const earlier = Date.now() - 10 * 24 * 60 * 60 * 1000
+  await h.sql('UPDATE service_accounts SET created_at = ?2 WHERE id = ?1', client.id, earlier)
+  await h.sql('UPDATE oauth_grants SET created_at = ?3 WHERE user_id = ?1 AND org_id = ?2', editor.id, orgId, earlier)
+
+  let html = (await page(owner, orgId)).text
+  assert.match(rowOf(html, 'Usage client'), /last used Never/, 'not used yet')
+  assert.doesNotMatch(html, /Elsewhere/, 'another organization\'s clients and agents aren\'t listed')
+
+  const issued = await token(client, client.secret)
+  assert.equal((await api(issued.json.access_token)).status, 200)
+  assert.equal((await rpc(h, agent.access_token, 'tools/list')).status, 200)
+  // Each use is stamped in the background, just after the response.
+  const stamped = async () => (await h.sql('SELECT (SELECT last_used_at FROM service_accounts WHERE id = ?1) AS client, (SELECT last_used_at FROM oauth_grants WHERE user_id = ?2 AND org_id = ?3) AS agent', client.id, editor.id, orgId))[0]
+  for (let attempt = 0; attempt < 100 && !((await stamped()).client && (await stamped()).agent); attempt += 1) await new Promise((accept) => setTimeout(accept, 30))
+  const used = await stamped()
+  const [created] = await h.sql('SELECT (SELECT created_at FROM service_accounts WHERE id = ?1) AS client, (SELECT created_at FROM oauth_grants WHERE user_id = ?2 AND org_id = ?3) AS agent', client.id, editor.id, orgId)
+  assert.notEqual(day(created.client), day(used.client))
+  assert.notEqual(day(created.agent), day(used.agent))
+  html = (await page(owner, orgId)).text
+  assert.match(rowOf(html, 'Usage client'), new RegExp(`created ${day(created.client)} By Udo Admin \\([^)]+\\) · last used ${day(used.client)} `))
+  assert.match(rowOf(html, 'Usage Agent'), new RegExp(`created ${day(created.agent)} By Ula Editor \\([^)]+\\) · last used ${day(used.agent)} `))
+
+  await h.sql('DELETE FROM users WHERE id = ?1', admin.id)
+  assert.match(rowOf((await page(owner, orgId)).text, 'Usage client'), /By A deleted account/, 'its creator\'s account is gone')
+})
+
+test('OAuth clients: a revoked agent stays listed when its person disconnects it from an older page or changes their password', async () => {
+  const owner = await h.user({ name: 'Rhea Owner' })
+  const orgId = await h.org(owner.client, 'Kept Record Org')
+  const editor = await member(orgId, 'Ravi Editor', 'EDITOR')
+  await connect(h, editor, orgId, { name: 'Weekly Digest Agent' })
+  const [grant] = await h.sql('SELECT id FROM oauth_grants WHERE user_id = ?1 AND org_id = ?2', editor.id, orgId)
+  await connect(h, editor, orgId, { name: 'Live Agent' })
+  assert.equal((await post(owner, orgId, `/agents/${grant.id}/revoke`)).status, 303)
+
+  // Disconnect buttons on Account › AI agents and Connect AI, from pages opened before the revoke, reach nothing now.
+  assert.equal((await editor.client.post(h.url('apex', `/account/agents/${grant.id}/disconnect`), {})).status, 404)
+  assert.equal((await editor.client.post(h.url('apex', `/apps/captable/settings/connect-ai/agents/${grant.id}/disconnect`), { org_id: orgId })).status, 404)
+  // A credential change ends the person's live agents, and leaves the revoked one's record.
+  await h.sql('UPDATE users SET credential_version = credential_version + 1 WHERE id = ?1', editor.id)
+  const left = await h.sql('SELECT id, revoked_at FROM oauth_grants WHERE user_id = ?1 AND org_id = ?2', editor.id, orgId)
+  assert.deepEqual(left.map((row) => row.id), [grant.id], 'only the revoked record is left')
+  assert.ok(left[0].revoked_at > 0)
+  assert.match(rowOf((await page(owner, orgId)).text, 'Weekly Digest Agent'), /Revoked \d{4}-\d{2}-\d{2} by Rhea Owner/)
 })
 
 test('OAuth clients: only owners and admins revoke or delete, only in their own organization, and each write re-checks the role', async () => {

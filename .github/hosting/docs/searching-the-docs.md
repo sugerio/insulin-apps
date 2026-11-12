@@ -19,8 +19,8 @@ with its section, the heading where the words are, and a passage with the words 
 heading.
 
 - Words match in any case, and a word also finds its other forms: **rotate** finds "rotating" and "rotation".
-- A page that has every word comes before one that has only some. Common words such as "how" or "the" are ignored when
-  there are others.
+- When some pages have every word, only those are listed; otherwise, the pages with the most of them. Common words such
+  as "how" or "the" are ignored when there are others.
 - Search pages aren't indexed by search engines; the pages they find are.
 
 ## Search as JSON

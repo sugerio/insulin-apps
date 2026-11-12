@@ -69,13 +69,14 @@ test('llms.txt and llms-full.txt are at the root too, and llms.txt says how to s
 
 test('every docs page has the search box, link previews and schema.org microdata', async () => {
   const docsIndex = await h.client().get(h.url('apex', '/docs/'))
-  assert.equal(docsIndex.text.match(/<form [^>]*action="\/docs\/search"/g)?.length, 3, '/docs/: in level 1, above the menu and under the title')
+  assert.equal(docsIndex.text.match(/<form [^>]*action="\/docs\/search"/g)?.length, 2, '/docs/: in level 1, and above the menu on narrow screens')
   assert.ok(docsIndex.text.includes('<meta property="og:type" content="website"/>'), '/docs/: a website')
   for (const page of docs.pages) {
     const html = (await h.client().get(h.url('apex', page.path))).text
     const forms = [...html.matchAll(/<form [^>]*>[\s\S]*?<\/form>/g)].map((match) => match[0]).filter((form) => form.includes('action="/docs/search"'))
     assert.equal(forms.length, 2, `${page.path}: in level 1, and above the menu on narrow screens`)
     for (const form of forms) {
+      assert.match(form, /^<form role="search" aria-label="Search the docs" /, `${page.path}: a named search landmark`)
       assert.match(form, /\smethod="get"/, page.path)
       assert.match(form, /<input type="search" [^>]*aria-label="Search the docs"[^>]*name="q"\/>/, `${page.path}: a named search box`)
       assert.match(form, /<button type="submit"[^>]*>[\s\S]*<span class="sr-only">Search<\/span><\/button>/, `${page.path}: and its button`)
@@ -121,6 +122,8 @@ test('/docs/search lists the best passages with the words marked, escapes the qu
   assert.ok(found.text.includes('<title>rotate secret · Search the docs · Insulin Apps</title>'))
   assert.match(found.text, /<input type="search" [^>]*value="rotate secret"/, 'the box keeps the query')
   assert.match(found.text, /<nav aria-label="Documentation"/, 'inside the docs\' navigation')
+  assert.equal(found.text.match(/role="search"/g)?.length, 1, 'one search box: the page\'s own, not the navigation\'s too')
+  assert.match(found.text, /<form [^>]*role="search" aria-label="Search the docs"/)
   assert.equal(found.text.match(/aria-current="(?:page|true)"/g), null, 'no page or section is open')
   const results = [...found.text.matchAll(/<li class="flex flex-col gap-1 rounded-xl[^"]*"><a href="([^"]+)"/g)].map((match) => decodeEntities(match[1]))
   assert.equal(results[0], ROTATE, 'the section about rotating comes first, linked at its heading')
@@ -172,6 +175,25 @@ test('/docs/search.json answers any origin with each result\'s page, heading, pa
   assert.equal(preflight.status, 204)
   assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, OPTIONS')
   assert.equal((await h.client().request(h.url('apex', '/docs/search.json?q=x'), { method: 'POST' })).status, 405)
+})
+
+test('a page is found by its passage with the most of the words, even when another of its passages scores higher', async () => {
+  // Cap Table's "How it works" has four of these words in "The import", and a higher-scoring passage with three.
+  const body = JSON.parse((await searchJson('?q=cap%20table%20import%20pulley%20carta&limit=25')).text)
+  assert.ok(body.results.some((result) => result.url === h.url('apex', '/docs/captable/how-it-works#the-import')), JSON.stringify(body.results.map((result) => result.url)))
+})
+
+test('requests to the docs\' MCP server change nothing, so they don\'t run the cleanup that follows a change', async () => {
+  const old = Date.now() - 3 * 24 * 60 * 60 * 1000
+  await h.sql("INSERT INTO mail_log (recipient_hash, kind, org_id, created_at) VALUES ('docs-mcp-cleanup', 'verify_email', NULL, ?1)", old)
+  const left = async () => (await h.sql("SELECT COUNT(*) AS n FROM mail_log WHERE recipient_hash = 'docs-mcp-cleanup'"))[0].n
+  for (let id = 0; id < 3; id += 1) assert.equal((await mcp({ jsonrpc: '2.0', id, method: 'ping' })).status, 200)
+  await new Promise((accept) => setTimeout(accept, 500))
+  assert.equal(await left(), 1, 'no cleanup after a docs MCP request')
+  // Any other POST still runs it, so the check above would see one.
+  await h.signIn(h.client(), { email: 'nobody-docs-mcp@example.test', password: 'not a real account' })
+  for (let attempt = 0; attempt < 100 && (await left()); attempt += 1) await new Promise((accept) => setTimeout(accept, 30))
+  assert.equal(await left(), 0)
 })
 
 test('the docs\' MCP server needs no sign-in: initialize, the three read-only tools, and the protocol\'s edges', async () => {

@@ -36,7 +36,7 @@ function SearchResults({ query, results }: { query: string; results: DocsResult[
         <div className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
           <h1>Search the docs</h1>
         </div>
-        <form action="/docs/search" method="get" role="search" className="flex items-center gap-2">
+        <form action="/docs/search" method="get" role="search" aria-label="Search the docs" className="flex items-center gap-2">
           <Input type="search" name="q" defaultValue={query} required maxLength={QUERY_LIMIT} placeholder="Search the docs" aria-label="Search the docs" />
           <Button type="submit">Search</Button>
         </form>

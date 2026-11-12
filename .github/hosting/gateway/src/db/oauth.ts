@@ -178,9 +178,12 @@ export async function deleteGrant(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM oauth_grants WHERE id = ?1').bind(id).run()
 }
 
-/** A person ends one of their own grants. False when it isn't theirs. */
+/**
+ * A person ends one of their own live grants. False when it isn't theirs, or was revoked: that record is the
+ * organization's (DESIGN.md §5.4), and only its owners and admins delete it.
+ */
 export async function deleteUserGrant(db: D1Database, id: string, userId: string): Promise<boolean> {
-  const result = await db.prepare('DELETE FROM oauth_grants WHERE id = ?1 AND user_id = ?2').bind(id, userId).run()
+  const result = await db.prepare('DELETE FROM oauth_grants WHERE id = ?1 AND user_id = ?2 AND revoked_at IS NULL').bind(id, userId).run()
   return result.meta.changes > 0
 }
 
@@ -217,11 +220,11 @@ export async function listAppGrantsAsAdmin(db: D1Database, grant: { orgId: strin
 }
 
 /**
- * Ends a grant from an app's Connect AI page: the actor's own, or anyone's in that app and organization while the actor
- * is still an OWNER or ADMIN there (checked in the statement). Its codes and tokens go with it. False otherwise.
+ * Ends a grant from an app's Connect AI page: the actor's own live one, or anyone's in that app and organization while
+ * the actor is still an OWNER or ADMIN there (checked in the statement). Its codes and tokens go with it. False otherwise.
  */
 export async function deleteAppGrant(db: D1Database, grant: { id: string; orgId: string; app: string; actorId: string }): Promise<boolean> {
-  const result = await db.prepare(`DELETE FROM oauth_grants WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND (user_id = ?4 OR ${orgAdmin('?2', '?4')})`)
+  const result = await db.prepare(`DELETE FROM oauth_grants WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ((user_id = ?4 AND revoked_at IS NULL) OR ${orgAdmin('?2', '?4')})`)
     .bind(grant.id, grant.orgId, grant.app, grant.actorId).run()
   return result.meta.changes > 0
 }

@@ -3,8 +3,9 @@
 // (scripts/docs/search-index.mjs) and held in memory, so a search reads nothing and stores nothing.
 //
 // A query is a few words. A word matches the words that start with its stem ("rotate", "rotating" and "rotation" share
-// "rotat"), in any case and without accents. Each page is scored by its best passage: the words in the passage's heading
-// count most, then in the page's title, its description, and the passage's text; a passage with every word, and one
+// "rotat"), in any case and without accents. Each page stands for its passage with the most of the words (the highest
+// score among those): the words in the passage's heading count most, then in the page's title, its description, and the
+// passage's text; a passage with every word, and one
 // with the words side by side, comes first. Only the pages with the most of the words are listed, so a page with some
 // of them shows only when none has them all. Common words are dropped when the query has others.
 import { DOCS_PAGES, DOCS_SEARCH_INDEX, type DocsSearchPage } from './assets/docs-content.ts'
@@ -135,7 +136,8 @@ export function searchDocs(query: string, limit: number): DocsResult[] {
     let best: { passage: Passage; value: number; matched: number } | null = null
     for (const passage of entry.passages) {
       const scored = score(entry, passage, terms)
-      if (scored.value > (best?.value ?? 0)) best = { passage, ...scored }
+      if (!scored.value) continue
+      if (!best || scored.matched > best.matched || (scored.matched === best.matched && scored.value > best.value)) best = { passage, ...scored }
     }
     if (!best) return
     found.push({

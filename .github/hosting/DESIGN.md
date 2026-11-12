@@ -323,8 +323,8 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
   (`x-suger-access-via: mcp`), and the app sees `User-Agent: Insulin Apps MCP: <client name>`, which its audit trail can
   record. Leaving or being removed from an organization deletes the person's grants there, so a later invitation
   doesn't bring old agents back, and a credential change (a password set, changed or reset, two-step sign-in turned
-  on or off) deletes all of them, so an agent connected by someone who took over the account doesn't outlive its
-  recovery.
+  on or off) deletes all their live ones, so an agent connected by someone who took over the account doesn't outlive
+  its recovery (a revoked one, which holds no token, stays on the organization's list, §5.4).
 - **Limits.** The token endpoint is limited per IP before anything is checked, and per client only on failed
   attempts, so junk requests naming a public client id can't lock that client out. A JSON-RPC batch holds at most 10
   messages, and every tool call in one counts against the person's app rate.
@@ -413,7 +413,9 @@ one table, for its owners and admins only: each app's clients for API access (§
   Revoking something already revoked or gone changes nothing and answers 409, as does an id from another organization,
   so ids reveal nothing.
 - **Delete** removes the client or the grant and, with it, its tokens. A revoked agent is deleted anyway when its grant
-  would have expired (the daily cleanup).
+  would have expired (the daily cleanup), or when its person leaves the organization. Only the organization's owners
+  and admins delete it before then: the person's own Disconnect (Account › AI agents, Connect AI) reaches only live
+  agents, and a credential change leaves it.
 
 ## 6. Integrations
 

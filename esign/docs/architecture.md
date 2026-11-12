@@ -163,6 +163,11 @@ Two ways to sign:
 | Title | The title the signer gave on Review (printable ASCII, at most 128 characters), 27-point text that must fit its box |
 | Date signed | The server's UTC date when the signature is accepted, 27-point text that must fit its box |
 
+Title and Date signed text is drawn from a bundled, anti-aliased Liberation Sans atlas 96 pixels high
+(`liberation-sans-aa-v3`), each character at the font's own advance. Signatures recorded with the
+earlier 1-bit, 32-pixel renderer (`liberation-sans-bitmap-v2`) name it in `render_json` and are still
+verified and drawn with it; new signatures always use v3.
+
 Every field is previewed through `POST /api/public/signing/preview` with `{fieldId, text}` (no `text` for
 Date signed). It returns the PNG that will be drawn, with its size relative to the box
 (`X-Signature-Width`/`-Height` or `X-Text-Width`/`-Height`) and, for Signature and Title, a receipt

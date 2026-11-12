@@ -1,5 +1,5 @@
 import { canonicalJson } from './canonical-json.ts';
-import { fieldRenderer, type Box } from './field-render.ts';
+import { storedFieldRenderer, type Box } from './field-render.ts';
 import { validateFields, type TemplateField } from './fields.ts';
 
 /**
@@ -150,8 +150,8 @@ export function parseRender(value: unknown, facts: SignatureFacts): SignatureRen
     if (!isObject(field) || !isString(field.id) || seen.has(field.id) || !isString(field.value) || !HEX64.test(String(field.imageSha256)) || !isBox(field.geometry) || !isBox(field.rect)) throw new Error('Invalid rendered field');
     const placed = owned.find(f => f.id === field.id);
     if (!placed || placed.type !== field.type || placed.role !== field.role || placed.page !== field.page || !sameBox(placed.rect, field.rect)) throw new Error('Rendered field is not the placed field');
-    const renderer = fieldRenderer(field.type);
-    if (!isObject(field.renderer) || field.renderer.name !== renderer.name || field.renderer.sha256 !== renderer.sha256) throw new Error('Renderer changed');
+    if (!isObject(field.renderer)) throw new Error('Renderer changed');
+    storedFieldRenderer(field.type, field.renderer);
     if (field.type === 'Date signed' && field.value !== date) throw new Error('Invalid signing date');
     seen.add(field.id);
   }

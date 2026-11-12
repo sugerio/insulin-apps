@@ -21,11 +21,13 @@ import {renderTypedSignature} from '../src/app/server/esign/field-render.ts';
 import {processEnvelopeStep} from '../src/app/server/esign/envelope-completion.ts';
 const chrome=process.env.ESIGN_TEST_CHROME??['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+// A preview PNG as RGB and alpha: RGBA (signatures) or indexed with a transparency table (Title and Date signed).
 function pngRgba(base64:string){
- const data=Buffer.from(base64,'base64'),width=data.readUInt32BE(16),height=data.readUInt32BE(20),chunks:Buffer[]=[];
- for(let at=8;at<data.length;){const length=data.readUInt32BE(at),type=data.toString('ascii',at+4,at+8);if(type==='IDAT')chunks.push(data.subarray(at+8,at+8+length));at+=12+length;}
- const rows=inflateSync(Buffer.concat(chunks)),rgb=Buffer.alloc(width*height*3),alpha=Buffer.alloc(width*height);
- for(let y=0;y<height;y++){assert.equal(rows[y*(width*4+1)],0,'expected unfiltered synthetic PNG');for(let x=0;x<width;x++){const src=y*(width*4+1)+1+x*4,dst=y*width+x;rows.copy(rgb,dst*3,src,src+3);alpha[dst]=rows[src+3];}}
+ const data=Buffer.from(base64,'base64'),width=data.readUInt32BE(16),height=data.readUInt32BE(20),indexed=data[25]===3,chunks:Buffer[]=[];let palette=Buffer.alloc(0),transparency=Buffer.alloc(0);
+ for(let at=8;at<data.length;){const length=data.readUInt32BE(at),type=data.toString('ascii',at+4,at+8),body=data.subarray(at+8,at+8+length);if(type==='IDAT')chunks.push(body);if(type==='PLTE')palette=body;if(type==='tRNS')transparency=body;at+=12+length;}
+ const bytes=indexed?1:4,rows=inflateSync(Buffer.concat(chunks)),rgb=Buffer.alloc(width*height*3),alpha=Buffer.alloc(width*height);
+ for(let y=0;y<height;y++){assert.equal(rows[y*(width*bytes+1)],0,'expected unfiltered synthetic PNG');for(let x=0;x<width;x++){const src=y*(width*bytes+1)+1+x*bytes,dst=y*width+x;
+  if(indexed){const i=rows[src];palette.copy(rgb,dst*3,i*3,i*3+3);alpha[dst]=i<transparency.length?transparency[i]:255;}else{rows.copy(rgb,dst*3,src,src+3);alpha[dst]=rows[src+3];}}}
  return {width,height,rgb,alpha};
 }
 const digestBytes=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');

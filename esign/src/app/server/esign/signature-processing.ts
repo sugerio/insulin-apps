@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { assertRenderableRecipientNames, fieldImageKey, fieldRenderer, SIGNATURE_NAME_FONT_SIZE, SIGNATURE_PAGE_MARGIN, SIGNATURE_PAGE_SIZE, signatureNameLine, type Box } from './field-render.ts';
+import { assertRenderableRecipientNames, fieldImageKey, SIGNATURE_NAME_FONT_SIZE, storedFieldRenderer, SIGNATURE_PAGE_MARGIN, SIGNATURE_PAGE_SIZE, signatureNameLine, type Box } from './field-render.ts';
 import { validateFieldsPdf } from './fields.ts';
 import { canonicalJson } from './canonical-json.ts';
 import { artifactObjectKey, digestHex, outputArtifactId, verifySignatureRecord, type AppendedPageRender, type FieldsRender, type SignatureRender, type SignatureRow } from './signatures.ts';
@@ -108,7 +108,7 @@ const sameBox = (a: Box, b: Box) => a.x === b.x && a.y === b.y && a.width === b.
 async function drawFields(pdf: PDFDocument, bucket: BlobStore, row: SignatureRow, render: FieldsRender): Promise<void> {
   validateFieldsPdf(pdf);
   for (const field of render.fields) {
-    const renderer = fieldRenderer(field.type);
+    const renderer = storedFieldRenderer(field.type, field.renderer);
     if (await digestHex(await renderer.render(field.value)) !== field.imageSha256) throw new Error('Image does not match its value');
     const object = await bucket.get(fieldImageKey(row.envelope_id, row.id, field.id));
     if (!object) throw new Error('Missing image');

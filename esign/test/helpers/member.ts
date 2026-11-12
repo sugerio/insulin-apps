@@ -1,5 +1,6 @@
 // The members' app rendered at an address, with a window that keeps the address as the app moves (pushState and the
-// navigation event) and a fetch that answers from `routes`. Every request is recorded.
+// navigation event) and a fetch that answers from `routes`. Every request is recorded, and so is every location.assign
+// (the platform's switch and sign-out). `stored` seeds localStorage (the navigation's `insulin-nav`).
 import assert from 'node:assert/strict';
 import React from 'react';
 
@@ -19,13 +20,15 @@ export function visibleText(node:any):string {
  return visibleText(node.children);
 }
 
-export async function renderMember(path:string,routes:(call:Call)=>Response|undefined){
+export async function renderMember(path:string,routes:(call:Call)=>Response|undefined,stored:Record<string,string>={}){
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  const start=new URL(path,ORIGIN);
- const location={origin:ORIGIN,pathname:start.pathname,search:start.search,hash:start.hash};
+ const assigned:string[]=[];
+ const location={origin:ORIGIN,pathname:start.pathname,search:start.search,hash:start.hash,assign:(to:string)=>void assigned.push(to)};
  const listeners=new Map<string,Set<(e:any)=>void>>();
  const session=memoryStorage(),local=memoryStorage();
+ for(const [k,v] of Object.entries(stored))local.setItem(k,v);
  (globalThis as any).window={location,sessionStorage:session,localStorage:local,scrollTo(){},
   history:{pushState(_state:unknown,_title:string,to:string){const u=new URL(to,ORIGIN);location.pathname=u.pathname;location.search=u.search;location.hash=u.hash;}},
   addEventListener:(type:string,f:(e:any)=>void)=>{if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type)!.add(f);},
@@ -54,6 +57,7 @@ export async function renderMember(path:string,routes:(call:Call)=>Response|unde
  const click=async(node:any,label='')=>{assert.ok(node,`${label} is shown: ${text()}`);await act(async()=>{node.props.onClick({defaultPrevented:false,button:0,preventDefault(){},stopPropagation(){}});});await settle();};
  const type=async(node:any,value:string)=>{assert.ok(node,`field is shown: ${text()}`);await act(async()=>{node.props.onChange({target:{value,files:[]}});});};
  const dispatch=async(event:{origin:string;source:unknown;data:unknown})=>{await act(async()=>{for(const f of [...(listeners.get('message')??[])])f(event);});await settle();};
- return {renderer,act,calls,location,session,local,posted,frameWindow,text,button,link,byId,byLabel,click,type,dispatch,settle,
+ const keyDown=async(node:any,key:string)=>{await act(async()=>{node.props.onKeyDown({key,stopPropagation(){},preventDefault(){}});});await settle();};
+ return {renderer,act,calls,location,assigned,session,local,posted,keyDown,frameWindow,text,button,link,byId,byLabel,click,type,dispatch,settle,
   unmount:async()=>{await act(async()=>renderer.unmount());delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}};
 }

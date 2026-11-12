@@ -167,10 +167,11 @@ function AccountControls({ ctx, account }: { ctx: Context; account: HeaderAccoun
   )
 }
 
-export function SiteHeader({ ctx, account }: { ctx: Context; account: HeaderAccount | null | undefined }) {
+/** `wide`: the bar's contents span the window, so the mark lines up with a navigation at the left edge (the docs). */
+export function SiteHeader({ ctx, account, wide = false }: { ctx: Context; account: HeaderAccount | null | undefined; wide?: boolean }) {
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
+      <div className={wide ? "flex h-14 w-full items-center gap-2 px-4" : "mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6"}>
         <a
           href={apexUrl(ctx)}
           className="flex shrink-0 items-center gap-2.5 rounded-md font-semibold tracking-tight outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"

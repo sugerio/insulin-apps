@@ -6,18 +6,18 @@ order: 9
 
 The terms used across the Insulin Apps platform docs, in alphabetical order, each with a one- or two-sentence
 definition. For words specific to an app, see that app's own glossary: [Cap Table](/docs/captable/overview),
-[E-sign](/docs/esign/overview).
+[Esign](/docs/esign/overview).
 
 **Access token**: a short-lived secret, valid for one hour, that an AI agent or an OAuth client sends as
 `Authorization: Bearer …` to call an app. Insulin Apps stores only its hash.
 
 **Account**: you, as one person signed in with one e-mail address. One account can belong to several organizations.
 
-**Account bar**: the small bar Insulin Apps adds to an app's pages, with your organization, the app's people,
-integrations and Connect AI pages, your account and sign out.
+**Account bar**: the small bar Insulin Apps adds to the pages of an app that has no navigation of its own, with your
+organization, the app's people, integrations and Connect AI pages, your account and sign out.
 
-**Active organization**: the organization apps open in right now. You switch it from the organization menu in the top
-bar or from the account bar.
+**Active organization**: the organization apps open in right now. You switch it from the organization menu, at the top
+of the navigation, or from the account bar.
 
 **Admin**: an organization role that manages people (except owners), every app's integrations and its OAuth clients,
 and is Admin in every app. Also an app role: everything in that app, including its people and integrations.
@@ -25,12 +25,12 @@ and is Admin in every app. Also an app role: everything in that app, including i
 **AI agent**: a program such as Claude Code, Codex, Gemini CLI or opencode that uses an app for you through its MCP
 server, with your role. See [AI agents](/docs/platform/ai-agents).
 
-**API access**: an app's settings tab, at `insulinapps.com/apps/<app>/settings/api`, with its OAuth clients and how a
+**API access**: an app's settings page, at `insulinapps.com/apps/<app>/settings/api`, with its OAuth clients and how a
 program gets a token.
 
 **API catalog**: the list of an app's API endpoints at `GET /api/catalog`, showing only what the caller may use.
 
-**App**: one of the business applications on Insulin Apps, such as Cap Table or E-sign, at its own address
+**App**: one of the business applications on Insulin Apps, such as Cap Table or Esign, at its own address
 `<app>.insulinapps.com`.
 
 **App admin**: someone who manages an app's people and stored credentials: an organization owner or admin, or someone
@@ -46,7 +46,7 @@ involved.
 
 **Client id and client secret**: an OAuth client's user name and password for getting tokens. The secret is shown once.
 
-**Connect AI**: an app's settings tab, at `insulinapps.com/apps/<app>/settings/connect-ai`, with its MCP server, the
+**Connect AI**: an app's settings page, at `insulinapps.com/apps/<app>/settings/connect-ai`, with its MCP server, the
 setup for each AI client and the agents connected to it.
 
 **Consent page**: the page where you choose **Allow** or **Deny** when an AI agent asks to use an app as you.
@@ -82,7 +82,7 @@ the app never holds the secret.
 **OAuth**: the standard Insulin Apps uses to give AI agents and OAuth clients tokens without sharing passwords.
 
 **OAuth client**: a program's identity in one app and organization, with a role, a client id and a client secret, used
-to call the app's API. Owners and admins manage them on the app's API access tab. Also called a service account.
+to call the app's API. Owners and admins manage them on the app's API access page. Also called a service account.
 
 **OpenID Connect (OIDC)**: a sign-in protocol built on OAuth, one of the two ways to connect an identity provider for
 single sign-on.
@@ -90,8 +90,8 @@ single sign-on.
 **Organization**: a shared workspace for a team or company. Members, roles and app data belong to it, and organizations
 never see each other's data.
 
-**Organization menu**: the button in the top bar of `insulinapps.com` with your active organization's name. It lists your
-organizations to switch between, and has People and roles and Create an organization.
+**Organization menu**: the button at the top of the navigation with your active organization's name. It lists your
+organizations to switch between, and has All apps and Create an organization.
 
 **Organization role**: Owner, Admin, Editor or Viewer, a role that applies in every app.
 
@@ -108,7 +108,7 @@ roles.
 
 **PKCE**: a check in the OAuth sign-in that ties the returned code to the program that asked for it.
 
-**Public path**: a page of an app that people without an account may open, such as E-sign's signing page. It carries no
+**Public path**: a page of an app that people without an account may open, such as Esign's signing page. It carries no
 identity; the app checks its own short-lived codes.
 
 **Recovery code**: one of ten single-use codes that sign you in when you can't use your authenticator app.

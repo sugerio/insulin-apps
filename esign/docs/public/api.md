@@ -1,11 +1,11 @@
 ---
-title: E-sign API
-description: E-sign's management API for host products, OAuth clients and AI agents, its public signer endpoints, and how to embed the signing page.
+title: Esign API
+description: Esign's management API for host products, OAuth clients and AI agents, its public signer endpoints, and how to embed the signing page.
 order: 7
 ---
 
-E-sign's API is what its own pages use, and what host products, OAuth clients and AI agents call. This page lists the
-endpoints from E-sign's catalog (`GET /api/catalog`), with the permission each needs, explains the public endpoints the
+Esign's API is what its own pages use, and what host products, OAuth clients and AI agents call. This page lists the
+endpoints from Esign's catalog (`GET /api/catalog`), with the permission each needs, explains the public endpoints the
 signing page and the editor use, and shows examples. It is for developers and AI agents.
 
 ## Base URL and authentication
@@ -14,9 +14,9 @@ The base URL is `https://esign.insulinapps.com`. Every endpoint is under `/api/`
 
 | Caller | How it authenticates | Notes |
 | --- | --- | --- |
-| A person in the browser | Their insulinapps.com session | What E-sign's own pages do. |
-| An OAuth client (a service account) | `Authorization: Bearer` with a token from `https://insulinapps.com/oauth/token` | Created by an owner or admin of the organization on E-sign's **API access** tab (`https://insulinapps.com/apps/esign/settings/api`), with a role of its own; the tab shows the token URL and a curl example. **Rotate secret** keeps the previous secret working for 24 hours. See [API access with OAuth clients](/docs/platform/api-and-service-accounts). |
-| An AI agent | Through the MCP server at `https://esign.insulinapps.com/mcp` | Acts with the person's role. E-sign's **Connect AI** page (`https://insulinapps.com/apps/esign/settings/connect-ai`, or **Connect AI** in the account bar) has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
+| A person in the browser | Their insulinapps.com session | What Esign's own pages do. |
+| An OAuth client (a service account) | `Authorization: Bearer` with a token from `https://insulinapps.com/oauth/token` | Created by an owner or admin of the organization on Esign's **API access** tab (`https://insulinapps.com/apps/esign/settings/api`), with a role of its own; the tab shows the token URL and a curl example. **Rotate secret** keeps the previous secret working for 24 hours. See [API access with OAuth clients](/docs/platform/api-and-service-accounts). |
+| An AI agent | Through the MCP server at `https://esign.insulinapps.com/mcp` | Acts with the person's role. Esign's **Connect AI** page (`https://insulinapps.com/apps/esign/settings/connect-ai`, or **Connect AI** in the account bar) has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
 | A signer's page | A one-time code exchanged for a page session (`x-esign-session` header) | Only the public `/api/public/` endpoints. |
 
 Every management call sees only the caller's organization. An id from another organization answers `404 not_found`, as
@@ -27,7 +27,7 @@ if it didn't exist.
 - **JSON** in and out, except uploads (multipart or PDF bytes) and PDF downloads.
 - **Permissions.** Reading (`GET`) needs **View envelopes** (`esign.view`); anything else needs **Send and manage
   envelopes** (`esign.manage`). `GET /api/me` and `GET /api/catalog` work for every role.
-- **Errors** are `{"error": "<code>"}` with an HTTP status: `400` and `422` for a request E-sign doesn't accept, `401
+- **Errors** are `{"error": "<code>"}` with an HTTP status: `400` and `422` for a request Esign doesn't accept, `401
   unauthorized` without an identity, `403 forbidden` when the role doesn't allow it, `404 not_found`, `409` when the state
   changed meanwhile (for example `envelope_not_voidable` or `idempotency_conflict`).
 - **Signing must be set up.** Until it is, the endpoints marked † answer `404 signing_disabled`. `GET /api/me` says
@@ -214,10 +214,10 @@ A host product shows the signing page inside its own pages:
 Rules:
 
 - The code works once, within two minutes, only for that signer and while their task is active.
-- The host's origin must be one of the origins the deployment allows to embed E-sign's pages. The page refuses to start
+- The host's origin must be one of the origins the deployment allows to embed Esign's pages. The page refuses to start
   in a frame from any other origin, or in one that hides its origin.
 - `hostAuthentication` (`{method, provider?, domain?, signedInAt?}`, `method` an upper-case word such as `SSO`) tells
-  E-sign how the host signed the signer in. E-sign can't check it; it shows it to the signer and records it as the
+  Esign how the host signed the signer in. Esign can't check it; it shows it to the signer and records it as the
   host's statement.
 - The code that confirms the signer always goes to their own email address.
 

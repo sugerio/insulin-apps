@@ -1,12 +1,12 @@
 import { DocLink, h, InApp, p, ul, type DocTopic } from './parts.ts'
 
 // Docs › Electronic signatures in general: the background a business user needs, labelled general information, not
-// legal advice. Each section ends with how the idea shows up in E-sign, and says only what E-sign does.
+// legal advice. Each section ends with how the idea shows up in Esign, and says only what Esign does.
 
 export const eSignatures: DocTopic = {
   slug: 'e-signatures',
   title: 'Electronic signatures in general',
-  summary: 'What an electronic signature is, what usually makes one hold up, and where E-sign stands.',
+  summary: 'What an electronic signature is, what usually makes one hold up, and where Esign stands.',
   group: 'background',
   generalInformation: true,
   sections: [
@@ -15,7 +15,7 @@ export const eSignatures: DocTopic = {
       title: 'What an electronic signature is',
       body: [
         p('Laws in many places define an electronic signature broadly: an electronic sound, symbol or process attached to a record and adopted by someone with the intent to sign it. In the United States, the ESIGN Act and the Uniform Electronic Transactions Act (UETA), adopted by most states, say a signature or contract can\'t be denied effect just because it is electronic. In the European Union, the eIDAS Regulation does the same, and distinguishes simple, advanced and qualified electronic signatures.'),
-        h(InApp, null, 'the signer adopts their typed name as their signature after confirming a code sent to their email. In eIDAS terms, that is generally a simple electronic signature. E-sign doesn\'t make advanced or qualified signatures, which rely on certificates issued to the signer.'),
+        h(InApp, null, 'the signer adopts their typed name as their signature after confirming a code sent to their email. In eIDAS terms, that is generally a simple electronic signature. Esign doesn\'t make advanced or qualified signatures, which rely on certificates issued to the signer.'),
       ],
     },
     {
@@ -46,7 +46,7 @@ export const eSignatures: DocTopic = {
       title: 'Knowing who signed',
       body: [
         p('A code sent to an email address shows that the signer could read that mailbox at the time, not who they are. Where more is needed, the usual ways are for the signer to sign in with an account their organization manages, or to check an identity document.'),
-        h(InApp, null, 'the code shows control of the signer\'s email address. A host product that has signed the signer in can tell E-sign how, and E-sign records it in the audit trail. E-sign doesn\'t check identity documents.'),
+        h(InApp, null, 'the code shows control of the signer\'s email address. A host product that has signed the signer in can tell Esign how, and Esign records it in the audit trail. Esign doesn\'t check identity documents.'),
       ],
     },
     {

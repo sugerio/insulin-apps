@@ -372,9 +372,22 @@ A new company is set up by importing Pulley's standard reports or the app's own 
   an import replaces the company the address names), and an admin's "Preview as stakeholder" at
   `/companies/:orgId/stakeholders/:stakeholderId/preview`, which renders the portal's pages. `/api/me` decides where a
   user lands; a 401 from any call shows the full-page "Open this app from the Insulin console".
+- The shell (`components/AppLayout.tsx`, `shell.css`) is the two-level navigation of the repository's
+  `.github/hosting/DESIGN.md` §3.2. Level 1 comes from the navigation manifest, `insulin.navigation` in package.json,
+  which the gateway renders too (on Cap Table's settings pages): `lib/navigation.ts` validates it, keeps the items the
+  person's role and access reach (the company's sections need the workspace, the `/portfolio` items holdings), finds
+  the section a page belongs to, and resolves the manifest's app-root paths to `/companies/:orgId/...` or
+  `/portfolio/:orgId/...`. The router answers those app-root paths (`/vesting`, `/portfolio/documents`) by sending the
+  person to the page in their company. Then Docs and Settings, whose level 2 links to People, Integrations, API access
+  and Connect AI on the apex; the organization switcher and the person's Account and Sign out come from the gateway's
+  `/__insulin/me`, `/__insulin/switch-org` and `/__insulin/logout` (`lib/platform.ts`), and are left out when the page
+  isn't served by the gateway or runs in a frame. Each level's collapse is a disposable preference in `localStorage`
+  (`insulin-nav`). The root carries `data-insulin-shell`, so the gateway's account bar stays out of the way, and a
+  page's breadcrumb renders in the shell's header through a portal (`CrumbSlotContext` in `components/Page.tsx`).
 - The Docs render inside the reader's frame: `/companies/:orgId/docs/:topic?` in the workspace and
-  `/portfolio/:orgId/docs/:topic?` in the holder's portfolio (not in the admin's preview), with the Docs entry last in each
-  navigation, and `/docs/:topic?` for someone with neither, such as an owner before setup (anyone else is sent to theirs).
+  `/portfolio/:orgId/docs/:topic?` in the holder's portfolio (not in the admin's preview), with the Docs entry after the
+  sections in each navigation, and `/docs/:topic?` for someone with neither, such as an owner before setup (anyone else
+  is sent to theirs).
   One component (`components/Docs.tsx`) shows the topic list and the topic; the topics are static TSX in `pages/docs/`,
   with no markdown parser and nothing from the server, and an unknown topic is the frame's own "not found".
 - The import wizard (`components/ImportWizard.tsx`, `ImportPreview.tsx`, `lib/imports.ts`, `lib/useImportFiles.ts`)
@@ -384,7 +397,8 @@ A new company is set up by importing Pulley's standard reports or the app's own 
   runs.
 - The console shows the app in a sandboxed iframe, so the UI never uses `window.open`, `target="_blank"`, `alert`,
   `confirm`, `prompt`, `print` or top-level navigation. Downloads use a blob URL and `<a download>`. Fonts and images ship
-  with the app (no CDNs), and `localStorage` holds only disposable table preferences.
+  with the app (no CDNs), and `localStorage` holds only disposable preferences (tables, the navigation's collapse).
+  Switching organization and signing out navigate the page, so they exist only outside a frame, on insulinapps.com.
 - Writes follow the review pattern: a dry run shows exactly what will change, the user confirms, and the real request
   carries the reviewed sequence number and diff hash, under one idempotency key per intent so that a lost answer can be
   retried safely. While an outcome is unknown, an in-app guard holds navigation (no `beforeunload` prompt).

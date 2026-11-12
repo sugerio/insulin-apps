@@ -41,7 +41,9 @@ export function EditorPage(){
   const [session,setSession]=React.useState<Session|null>(null),[failed,setFailed]=React.useState(false);
   React.useEffect(()=>{
     const pageId=window.location.pathname.split('/').pop()??'';
-    const code=consumeEditorFragment(window.location,window.history);
+    // A link without its code (or with a malformed one) can't open a session: say so, as a failed exchange does.
+    let code:string;
+    try{code=consumeEditorFragment(window.location,window.history);}catch{setFailed(true);return;}
     let live=true;
     openSession(pageId,code).then(value=>{if(live)setSession(value);}).catch(()=>{if(live)setFailed(true);});
     return()=>{live=false;};

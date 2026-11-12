@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { NavIconName } from "../lib/navigation.ts";
 
 // Line icons (24×24, stroke = currentColor). Decorative: the text next to them carries
 // the meaning, so every icon is aria-hidden.
@@ -40,9 +41,42 @@ const ICONS = {
   help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8M12 16.8v.2" /></>,
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   book: <><path d="M3 5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H3z" /><path d="M21 5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H21z" /></>,
+  // The navigation's: the manifest names Lucide icons (NAV_ICON below), drawn here in Cap Table's own line style.
+  dashboard: <><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>,
+  layers: <><path d="m12 3 9 5-9 5-9-5z" /><path d="m3 12.5 9 5 9-5" /><path d="m3 16.5 9 5 9-5" /></>,
+  fileText: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>,
+  inbox: <><path d="M3 13h5l1.5 3h5l1.5-3h5" /><path d="M5.5 5h13L21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" /></>,
+  files: <><path d="M15 3H9a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8z" /><path d="M15 3v5h5" /><path d="M4 8v11a2 2 0 0 0 2 2h9" /></>,
+  filePen: <><path d="M11 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v2.5" /><path d="M14 3v5h5" /><path d="M14 21v-2.5l5.5-5.5 2.5 2.5-5.5 5.5z" /></>,
+  signature: <><path d="M3 16c3-1 4-9 6.5-9S9 17 12 17s3-4 4.5-4 1 3 2.5 3H21" /><path d="M3 21h18" /></>,
+  send: <><path d="M21 3 10 14" /><path d="m21 3-7 18-4-7-7-4z" /></>,
+  archive: <><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4" /></>,
+  settings: <><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></>,
+  plug: <><path d="M9 3v5M15 3v5" /><path d="M6 8h12v4a6 6 0 0 1-12 0z" /><path d="M12 18v3" /></>,
+  key: <><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.7 12.3 9.8-9.8M17 6l3 3M14.5 8.5l2 2" /></>,
+  bot: <><rect x="4" y="8" width="16" height="12" rx="2" /><path d="M12 8V4H9M2 14h2M20 14h2M9 13v2M15 13v2" /></>,
+  list: <path d="M9 6h11M9 12h11M9 18h11M4.5 6h0M4.5 12h0M4.5 18h0" />,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>,
+  bell: <><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z" /><path d="M10 21h4" /></>,
+  // The shell's own: the collapse toggles, the menus' chevrons, the person's menu.
+  panel: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></>,
+  chevrons: <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />,
+  grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /></>,
+  user: <><circle cx="12" cy="8" r="4.5" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5M21 12H9" /></>,
+  contrast: <><circle cx="12" cy="12" r="9" /><path d="M12 3v18a9 9 0 0 0 0-18z" /></>,
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICONS;
+
+/** The icon for each name the navigation manifest may use (Lucide's names). */
+export const NAV_ICON: Record<NavIconName, IconName> = {
+  "layout-dashboard": "dashboard", home: "home", table: "table", layers: "layers", "chart-pie": "pie", shield: "shield",
+  heart: "heart", users: "users", building: "building", "file-text": "fileText", award: "award", inbox: "inbox",
+  files: "files", "file-pen": "filePen", signature: "signature", send: "send", clock: "clock", "check-circle": "checkCircle",
+  archive: "archive", settings: "settings", "book-open": "book", plug: "plug", key: "key", bot: "bot", folder: "folder",
+  list: "list", calendar: "calendar", bell: "bell", search: "search",
+};
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
   return (

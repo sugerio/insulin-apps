@@ -45,9 +45,9 @@ export async function checkAppWorkflows(root = repositoryRoot) {
     if (!hasPathFilter(text, `${name}/**`)) {
       errors.push(`App workflow .github/workflows/${file} must include the path filter ${name}/**`)
     }
-    // release.yml deploys the apps whose workflows passed on the released pushes, by the workflows' names.
+    // A release's notes list the workflows that passed by name, as does the Actions list: each names the app it checks.
     if (workflowName(text) !== name) {
-      errors.push(`App workflow .github/workflows/${file} must be named ${name}, which is how release.yml knows to deploy the app`)
+      errors.push(`App workflow .github/workflows/${file} must be named ${name}, so a release's notes and the Actions list name the app it checks`)
     }
   }
 
@@ -71,8 +71,8 @@ export async function checkAppWorkflows(root = repositoryRoot) {
 
 // release.yml numbers a push to main once every run the push started has passed, and it starts when one of those runs
 // completes. So its workflow_run trigger must name every workflow that runs on a push (each app's, CI and Gateway),
-// or a push whose last run is an unlisted workflow waits for the hourly run. It then deploys every app whose workflow
-// ran, taking each name other than CI and Gateway for an app's, so no other workflow may run on a push.
+// or a push whose last run is an unlisted workflow waits for the hourly run. A release then deploys what CI, Gateway
+// and the apps' own workflows checked (check-deploy.mjs), so no other workflow may run on a push.
 function checkReleaseTriggers(workflows, appNames) {
   const release = workflows.get(RELEASE)
   if (release === undefined) return [`Missing .github/workflows/${RELEASE}, which numbers each green push to main`]
@@ -90,7 +90,7 @@ function checkReleaseTriggers(workflows, appNames) {
     }
     if (!PUSH_WORKFLOWS.includes(name) && !appNames.has(name)) {
       errors.push(
-        `Workflow .github/workflows/${file} runs on a push, but only CI, Gateway and each app's own workflow may: ${RELEASE} would take ${JSON.stringify(name)} for an app to deploy`,
+        `Workflow .github/workflows/${file} runs on a push, but only CI, Gateway and each app's own workflow may: a release waits for every workflow a push runs, so ${JSON.stringify(name)} would hold back every release it fails`,
       )
     }
     if (!listed.includes(name)) {

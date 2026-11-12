@@ -1,11 +1,11 @@
 ---
 title: API access with OAuth clients
-description: Create an OAuth client on an app's API access tab, get a client-credentials token, rotate its secret without downtime, and call the app's API, starting with GET /api/catalog.
+description: Create an OAuth client on an app's API access page, get a client-credentials token, rotate its secret without downtime, and call the app's API, starting with GET /api/catalog.
 order: 5
 ---
 
 This page explains how your own software calls an Insulin app's API: create an OAuth client on the app's **API access**
-tab, get a token, and call the app's `/api/*` endpoints. It is for developers connecting another system (a script, a
+page, get a token, and call the app's `/api/*` endpoints. It is for developers connecting another system (a script, a
 back office, a product that embeds an app) and for the organization's owners and admins who create the clients. To let
 an AI agent act as you instead, see [AI agents](/docs/platform/ai-agents).
 
@@ -20,11 +20,11 @@ the same role.
 An OAuth client reaches only the app's own API, under `/api/`. It can never reach people, roles, integrations, single
 sign-on or anything else on `insulinapps.com`.
 
-## The API access tab
+## The API access page
 
-Each app's OAuth clients are on its **API access** tab: `https://insulinapps.com/apps/<app>/settings/api`, for example
+Each app's OAuth clients are on its **API access** page: `https://insulinapps.com/apps/<app>/settings/api`, for example
 `https://insulinapps.com/apps/captable/settings/api`. The app's own `https://<app>.insulinapps.com/settings/api` leads
-there, and the tab sits next to **People**, **Integrations** and **Connect AI** in the app's settings.
+there, and in the app's navigation it is under **Settings**, next to **People**, **Integrations** and **Connect AI**.
 
 | Who | What they can do |
 |---|---|
@@ -36,14 +36,14 @@ Only the organization's owners and admins manage OAuth clients, because a client
 it: it belongs to the organization. Everyone else sees the list with the note "Only the owners and admins of …
 create, change, rotate and delete OAuth clients."
 
-The tab also shows how a program gets a token: the **Token URL** (`https://insulinapps.com/oauth/token`), the grant type,
-the app's **Resource**, and a curl example with placeholders for the client id and secret.
+The page also shows how a program gets a token: the **Token URL** (`https://insulinapps.com/oauth/token`), the grant
+type, the app's **Resource**, and a curl example with placeholders for the client id and secret.
 
-![The API access tab of Cap Table with an OAuth client listed, one whose secret was just rotated, the form for a new client and the token URL with a curl example](/docs/assets/screenshots/platform-api-access.png "An app's API access tab")
+![The API access page of Cap Table with an OAuth client listed, one whose secret was just rotated, the form for a new client and the token URL with a curl example](/docs/assets/screenshots/platform-api-access.png "An app's API access page")
 
 ## Create an OAuth client
 
-1. Open the app's **API access** tab.
+1. Open the app's **API access** page.
 2. Under **New OAuth client**, enter a **Name**, such as "Payroll sync". The app sees this name in its audit trail.
 3. Choose its **Role** in the app. Give the least it needs; **Viewer** is the default.
 4. Choose **Create**.
@@ -172,7 +172,7 @@ role may use. One entry of Cap Table's catalog, for example:
 | `query`, `body` | A JSON Schema of the query parameters or of the body, or `null` |
 | `idempotencyKey` | Whether the request needs an `Idempotency-Key` header |
 
-Each app's docs describe its API in words: [Cap Table](/docs/captable/overview), [E-sign](/docs/esign/overview).
+Each app's docs describe its API in words: [Cap Table](/docs/captable/overview), [Esign](/docs/esign/overview).
 
 ### Errors from the gateway
 

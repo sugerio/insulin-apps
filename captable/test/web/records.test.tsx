@@ -151,11 +151,13 @@ describe("company profile and settings", () => {
     expect(screen.queryByRole("button", { name: /Propose a change|confirm|Reject|Withdraw/i })).toBeNull();
   });
 
-  it("is reachable from the sidebar's Company group", async () => {
+  it("is reachable from the Company section, whose items it opens beside it", async () => {
     renderPage("company", handlers, { role: "admin_ro" });
     await screen.findByRole("heading", { name: "Company Profile" });
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(within(nav).getByRole("link", { name: "Company" }).getAttribute("href")).toBe(`${base}/company`);
-    expect(within(nav).getByRole("link", { name: "Recent Activity" }).getAttribute("href")).toBe(`${base}/activity`);
+    const section = screen.getByRole("navigation", { name: "Section" });
+    expect(within(section).getByRole("link", { name: "Profile & Settings" }).getAttribute("aria-current")).toBe("page");
+    expect(within(section).getByRole("link", { name: "Recent Activity" }).getAttribute("href")).toBe(`${base}/activity`);
   });
 });

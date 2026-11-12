@@ -142,7 +142,7 @@ test('the three steps show what the prototype shows', async () => {
     await p.settle();
     // Sign: the adopted name, its preview line, the one consent sentence, and what happens next.
     out = p.text();
-    for (const expected of ['Adopt your signature', 'Ana Partner · Partner Manager, Northbeam Consulting · Signed electronically through E-sign', 'Mutual NDA (v3)', 'Pigment countersigns next.', 'Your onboarding moves on to: Complete your profile.', 'Read the electronic records disclosure']) assert.ok(out.includes(expected), expected);
+    for (const expected of ['Adopt your signature', 'Ana Partner · Partner Manager, Northbeam Consulting · Signed electronically through Esign', 'Mutual NDA (v3)', 'Pigment countersigns next.', 'Your onboarding moves on to: Complete your profile.', 'Read the electronic records disclosure']) assert.ok(out.includes(expected), expected);
     assert.equal(p.labelled('Full name').props.value, 'Ana Partner');
     await p.act(async () => { p.renderer.unmount(); });
   } finally { globalThis.fetch = oldFetch; restore(); }

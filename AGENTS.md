@@ -30,6 +30,10 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
    is in the gateway's README under "The public docs".
 3. **UI.** New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default theme (the hosting gateway in
    `.github/hosting/gateway/` follows it). Apps that already have their own design keep it until they are restyled.
+   **Navigation:** every app has the two-level, collapsible navigation of
+   [DESIGN.md §3.2](.github/hosting/DESIGN.md): the organization switcher, its sections from `insulin.navigation` in
+   `package.json`, then Docs and Settings (People, Integrations, API access, Connect AI, which link to the gateway's
+   pages), and the person at the bottom; each level collapses to icons. Repeat this rule in the app's own `AGENTS.md`.
 4. **Public repository.** Synthetic data only (example.com or `.test` addresses, fictional people and companies), in
    code, tests, fixtures and docs. No secrets, account ids or internal hostnames.
 5. **Accounts, roles and access belong to the platform.** The rules below follow from the design in
@@ -106,7 +110,7 @@ keep such secrets in the app's database or source.
 **Beyond D1** (`.github/hosting/DESIGN.md` §8). An app gets one D1 database and static assets, nothing else. It asks
 the platform for the rest in `package.json` under `insulin`:
 
-- **Public paths** (`insulin.publicPaths`) are only for people who have no account, such as an e-sign recipient. The
+- **Public paths** (`insulin.publicPaths`) are only for people who have no account, such as an Esign recipient. The
   gateway forwards them with no identity (`x-suger-access-via: public`), so the app authenticates them with its own
   short-lived codes and lets them reach only what those codes are for. Never use one to skip sign-in for members.
 - **Mail** goes through the gateway's relay: `POST` to `SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the request's
@@ -144,7 +148,12 @@ publishes its GitHub Release (the root README's "Releases") and deploys it with 
 deployed: an app's or the gateway's workflow only checks a push, and no other workflow deploys. Never create, move or
 delete a `v*` tag, or publish or edit one of those releases, by hand or from another workflow. Only CI, Gateway and
 each app's own workflow, named after the app, run on a push to `main`, and each is in release.yml's `workflow_run`
-list; `node .github/scripts/check-app-workflows.mjs` checks both.
+list; `node .github/scripts/check-app-workflows.mjs` checks both. Pull requests are squash merged, and the squash
+commit carries every commit message, so none of them, nor the title or body, may hold a line telling GitHub to skip
+workflows: the merge would start no push workflow and be neither checked on `main` nor released. The
+"Commit messages" workflow refuses one; it runs on `pull_request_target`, which such a line in a pull request's last
+commit doesn't stop, and never runs the pull request's code (the repository needs an Actions event policy allowing
+that event for this workflow alone: `.github/hosting/README.md`, "Owner setup").
 
 ## Before you finish
 

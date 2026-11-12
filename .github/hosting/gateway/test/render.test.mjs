@@ -26,9 +26,17 @@ function header(page) {
   return match[0]
 }
 
+/** The navigation's level 1 (desktop), where the organization switcher and the person are. */
+function primary(page) {
+  const match = /<nav aria-label="Primary" id="insulin-nav-primary"[\s\S]*?<\/nav>/.exec(page.text)
+  assert.ok(match, 'the navigation')
+  return match[0]
+}
+
 /**
  * The shared document. `state` is the top bar's account part: 'in' (organization switcher and account menu), 'out'
- * (Sign in and Create account), or 'none' (pages that must not depend on the session).
+ * (Sign in and Create account), or 'none' (pages that must not depend on the session); or 'shell' for a signed-in page
+ * inside the two-level navigation (DESIGN.md §3.2), which has no top bar.
  */
 function assertPage(page, { status = 200, title, site = 'auth', state, name = 'Rendering Owner' }) {
   const where = `${title} (${state})`
@@ -48,13 +56,22 @@ function assertPage(page, { status = 200, title, site = 'auth', state, name = 'R
   assert.ok(page.text.includes('<a class="skip" href="#main">Skip to content</a>'), where)
   assert.ok(page.text.includes('<main id="main"'), where)
 
-  const top = header(page)
-  assert.match(top, /aria-hidden="true" data-slot="insulin-mark"/, `${where}: the mark`)
-  assert.match(top, /Built with <\/span>Insulin<\/span>/, `${where}: the Insulin link`)
-  assert.ok(top.includes(INSULIN), `${where}: links to Insulin`)
-  const signedIn = top.includes(`Account menu for ${name}`)
-  const signedOut = top.includes('>Sign in</a>') && top.includes('>Create account</a>')
-  assert.deepEqual({ signedIn, signedOut }, { signedIn: state === 'in', signedOut: state === 'out' }, `${where}: top bar`)
+  assert.equal(page.text.includes('<div data-insulin-shell=""'), state === 'shell', `${where}: the navigation`)
+  if (state === 'shell') {
+    const nav = primary(page)
+    assert.match(nav, /aria-hidden="true" data-slot="insulin-mark"/, `${where}: the mark`)
+    assert.ok(nav.includes(`Account menu for ${name}`), `${where}: the person`)
+    assert.match(page.text, /<header class="[^"]*"><nav aria-label="Breadcrumb"/, `${where}: the breadcrumb`)
+    assert.ok(!page.text.includes('>Sign in</a>'), `${where}: no sign-in links`)
+  } else {
+    const top = header(page)
+    assert.match(top, /aria-hidden="true" data-slot="insulin-mark"/, `${where}: the mark`)
+    assert.match(top, /Built with <\/span>Insulin<\/span>/, `${where}: the Insulin link`)
+    assert.ok(top.includes(INSULIN), `${where}: links to Insulin`)
+    const signedIn = top.includes(`Account menu for ${name}`)
+    const signedOut = top.includes('>Sign in</a>') && top.includes('>Create account</a>')
+    assert.deepEqual({ signedIn, signedOut }, { signedIn: state === 'in', signedOut: state === 'out' }, `${where}: top bar`)
+  }
 
   const footer = /<footer\b[\s\S]*?<\/footer>/.exec(page.text)?.[0] ?? ''
   assert.match(footer, /<a href="[^"]+\/privacy">Privacy notice<\/a>/, `${where}: footer`)
@@ -66,12 +83,13 @@ test('the apex pages, signed out and signed in', async () => {
   const anonymous = h.client()
   assertPage(await anonymous.get(h.url('apex', '/')), { site: 'apex', title: 'Open-source apps, hosted', state: 'out' })
   const home = await owner.client.get(h.url('apex', '/'))
-  assertPage(home, { site: 'apex', title: 'Your apps', state: 'in' })
-  assert.match(header(home), /Rendering Org[\s\S]*?>Owner<\/span>/, 'the switcher shows the active organization and role')
+  assertPage(home, { site: 'apex', title: 'Your apps', state: 'shell' })
+  assert.match(primary(home), /Rendering Org<\/span><span class="[^"]*">Owner<\/span>/, 'the switcher shows the active organization and role')
   assert.match(home.text, /<h1>Apps in Rendering Org<\/h1>/)
   const orgless = await h.user({ name: 'Rendering Orgless' })
   const empty = await orgless.client.get(h.url('apex', '/'))
-  assertPage(empty, { site: 'apex', title: 'Your apps', state: 'in', name: 'Rendering Orgless' })
+  assertPage(empty, { site: 'apex', title: 'Your apps', state: 'shell', name: 'Rendering Orgless' })
+  assert.match(primary(empty), /No organization/)
   assert.match(empty.text, /<h1>Your apps<\/h1>/)
   assert.match(empty.text, /You&#x27;re not in an organization yet/)
   for (const [path, title] of [['/privacy', 'Privacy notice'], ['/terms', 'Terms of use']]) {
@@ -101,22 +119,25 @@ test('the auth forms render signed out; signed in, sign-in and sign-up send the 
   }
 })
 
-test('the signed-in pages render with the account controls, and send the signed-out to sign in', async () => {
+test('the signed-in pages render in the navigation, and send the signed-out to sign in', async () => {
   const pages = [
-    ['/account', 'Account'], ['/orgs/new', 'Create an organization'], [`/settings/users?org=${orgId}`, 'People · Rendering Org'],
-    [`/settings/roles?org=${orgId}`, 'Roles · Rendering Org'], [`/settings/organization?org=${orgId}`, 'Organization · Rendering Org'],
+    ['/account', 'Account'], ['/account/security', 'Security'], ['/account/agents', 'AI agents'], ['/orgs/new', 'Create an organization'],
+    [`/settings/users?org=${orgId}`, 'People · Rendering Org'], [`/settings/roles?org=${orgId}`, 'Roles · Rendering Org'],
+    [`/settings/organization?org=${orgId}`, 'Organization · Rendering Org'], [`/settings/sso?org=${orgId}`, 'Single sign-on · Rendering Org'],
+    ['/apps/captable/settings/users', 'People · Cap Table'], ['/apps/captable/settings/integrations', 'Integrations · Cap Table'],
+    ['/apps/captable/settings/api', 'API access · Cap Table'], ['/apps/captable/settings/connect-ai', 'Connect AI · Cap Table'],
   ]
   for (const [path, title] of pages) {
     const page = await owner.client.get(h.url('auth', path))
-    assertPage(page, { title, state: 'in' })
+    assertPage(page, { title, state: 'shell' })
     assert.match(page.text, /<form action="\/logout" method="post">/, `${path}: sign-out posts to the apex's own route`)
     const away = await h.client().get(h.url('auth', path))
     assert.equal(away.status, 302, path)
     assert.equal(away.location, h.url('auth', `/login?return_to=${encodeURIComponent(h.url('auth', path))}`))
   }
   const home = await owner.client.get(h.url('auth', '/'))
-  assert.match(header(home), new RegExp(`<a class="[^"]*" href="http://insulinapps\\.localhost/settings/users\\?org=${orgId}">`), 'People and roles')
-  assert.equal(header(home).match(/<details data-slot="menu" class="[^"]*" name="top-bar">/g)?.length, 2, 'two exclusive <details> menus')
+  assert.match(primary(home), new RegExp(`<a href="http://insulinapps\\.localhost/settings/users\\?org=${orgId}"[^>]*>`), 'People')
+  assert.equal(primary(home).match(/<details data-slot="[a-z-]+" class="[^"]*" name="insulin-shell">/g)?.length, 2, 'two exclusive <details> menus')
 })
 
 test('the invitation page in each state', async () => {

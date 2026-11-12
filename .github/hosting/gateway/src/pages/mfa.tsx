@@ -1,7 +1,7 @@
 // Two-step sign-in pages: the code prompt after the first factor, and Account → Security, where it is turned on (with a
 // QR code for the authenticator app) and off, and recovery codes are made.
 import qrcode from "qrcode-generator"
-import { ArrowLeft, ShieldCheck } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -9,11 +9,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ErrorSummary, Notice, PostButton, TextField } from "@/components/forms"
 import { AuthCard, Container, PageHeader, proseLinks } from "@/components/layout"
 import type { Context } from "../context.ts"
-import type { MembershipRow } from "../db/orgs.ts"
+import { accountShell, type ShellData } from "../navigation.ts"
 import type { Session } from "../auth/session.ts"
 import { groupedSecret } from "../auth/totp.ts"
 import type { Html } from "./html.ts"
-import { accountOf, page } from "./document.tsx"
+import { page } from "./document.tsx"
 
 /** A QR code as SVG paths (one per dark module, four modules of quiet zone), dark on light in either theme. */
 export function QrCode({ text, label }: { text: string; label: string }) {
@@ -135,18 +135,11 @@ function RecoveryCodes({ codes }: { codes: string[] }) {
   )
 }
 
-export function securityPage(ctx: Context, session: Session, state: SecurityState, orgs?: readonly MembershipRow[]): Html {
+export function securityPage(ctx: Context, session: Session, state: SecurityState, shell: ShellData): Html {
   const errors = state.errors ?? {}
   const enabled = state.enabledAt !== null
-  return page(ctx, { title: "Security", user: accountOf(session, orgs) }, (
+  return page(ctx, { title: "Security", shell: accountShell(ctx, session, shell, "security") }, (
     <Container width="prose" className="flex flex-col gap-6 py-10 sm:py-12">
-      <a
-        href="/account"
-        className="-mb-2 inline-flex w-fit items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
-        <ArrowLeft className="size-4" />
-        Account
-      </a>
       <PageHeader
         title="Security"
         description={

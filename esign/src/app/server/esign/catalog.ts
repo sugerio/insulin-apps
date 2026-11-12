@@ -1,7 +1,7 @@
 import { can, type Caller, type Permission } from './identity.ts';
 
 /**
- * `GET /api/catalog`: E-sign's management API as data, for AI agents and API clients (the hosting
+ * `GET /api/catalog`: Esign's management API as data, for AI agents and API clients (the hosting
  * platform's MCP `endpoints` tool shows it), limited to what the caller may call. The signer pages'
  * API (`/api/public/*`) is left out: it answers only the codes and sessions a recipient holds.
  */

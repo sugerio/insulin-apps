@@ -22,6 +22,7 @@ export const forStakeholders: DocTopic = {
             of your Insulin console account as your own address.
           </p>
           <ul>
+            <li><b>Where things are.</b> The navigation lists <b>Portfolio</b>, <b>How to exercise</b> and <b>Documents</b> under <b>My equity</b>, then <b>Docs</b> and <b>Settings</b>; your name and role are at the bottom.</li>
             <li><b>Portfolio</b> is your home page: a summary of your shares, options, warrants and SAFEs, your vesting status and upcoming vesting dates, a table of your grants and shares with each one's status, and the company resources. A SAFE shows its terms, and once it has converted, the shares it became.</li>
             <li><b>More than one record?</b> If you hold equity under more than one record (for example personally and through a trust), Portfolio lets you switch between them.</li>
             <li><b>If you have left the company,</b> a banner says how many vested options you can still exercise and until when, and when exercises start being taxed as NSOs if an ISO deadline applies.</li>

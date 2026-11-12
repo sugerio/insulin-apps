@@ -22,7 +22,7 @@ export interface DocTopic {
   title: string
   /** One sentence under the title. */
   summary: string
-  /** Where the topic list shows it: using E-sign, or electronic signatures in general. */
+  /** Where the topic list shows it: using Esign, or electronic signatures in general. */
   group: 'app' | 'background'
   /** Legal matters: the topic opens with the note that it is general information, not legal advice. */
   generalInformation?: true
@@ -61,9 +61,9 @@ export const ol = (...items: React.ReactNode[]) => h('ol', null, ...items.map((i
 export const b = (text: string) => h('strong', null, text)
 export const code = (text: string) => h('code', null, text)
 
-/** How a general idea shows up in E-sign, at the end of a background section. */
+/** How a general idea shows up in Esign, at the end of a background section. */
 export function InApp({ children }: { children?: React.ReactNode }) {
-  return h('p', { className: 'rounded-md border-l-2 border-primary bg-muted/50 px-3 py-2' }, h('strong', null, 'In E-sign: '), children)
+  return h('p', { className: 'rounded-md border-l-2 border-primary bg-muted/50 px-3 py-2' }, h('strong', null, 'In Esign: '), children)
 }
 
 /** A small table: the first cell of each row heads it. */

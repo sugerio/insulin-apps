@@ -211,6 +211,32 @@ test('/__insulin/me tells the account bar who is signed in and where things are'
   assert.equal(me.links.account, h.url('auth', '/account'))
 })
 
+test("/__insulin/me gives an app the apex's origin and its four settings pages, for its navigation's Settings", async () => {
+  const person = await member(h, { name: 'Settings User', org: 'Settings Org' })
+  const me = JSON.parse((await person.client.get(h.url('captable', '/__insulin/me'))).text)
+  assert.equal(me.apex, 'http://insulinapps.localhost', 'the origin, without a path')
+  assert.deepEqual(me.settings, {
+    users: 'http://insulinapps.localhost/apps/captable/settings/users',
+    integrations: 'http://insulinapps.localhost/apps/captable/settings/integrations',
+    api: 'http://insulinapps.localhost/apps/captable/settings/api',
+    connectAi: 'http://insulinapps.localhost/apps/captable/settings/connect-ai',
+  }, 'on the apex, never on the app host')
+  const apex = JSON.parse((await person.client.get(h.url('apex', '/__insulin/me'))).text)
+  assert.equal(apex.apex, 'http://insulinapps.localhost')
+  assert.equal(apex.settings, null, 'on the apex there is no app')
+  // Someone in the organization without this app gets the origin but no settings of an app they can't use.
+  const outsider = await h.user({ name: 'Settings Outsider' })
+  const now = Date.now()
+  await h.sql("INSERT INTO memberships (org_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, 'APPS', ?3, ?3)", person.orgId, outsider.id, now)
+  const none = JSON.parse((await outsider.client.get(h.url('captable', '/__insulin/me'))).text)
+  assert.equal(none.apex, 'http://insulinapps.localhost')
+  assert.equal(none.settings, null)
+  // Locally the origin keeps the port, as every other link does.
+  const local = await person.client.get(`http://captable.insulinapps.localhost:8787/__insulin/me`, { headers: { Cookie: person.client.jar.header(new URL(h.url('captable', '/'))) } })
+  assert.equal(JSON.parse(local.text).apex, 'http://insulinapps.localhost:8787')
+  assert.equal(JSON.parse(local.text).settings.api, 'http://insulinapps.localhost:8787/apps/captable/settings/api')
+})
+
 test('/__insulin/switch-org takes JSON or a form from the same host only', async () => {
   const person = await member()
   const other = await h.org(person.client, 'Switch Target')

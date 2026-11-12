@@ -745,7 +745,7 @@ describe("the dashboard of an empty company", () => {
 
   it("never offers it to editors", async () => {
     renderPage("dashboard", handlers(), { role: "admin_ro", orgOverrides: [{ ledgerSeq: 0, ledgerHeadHash: null }] });
-    await screen.findByText("ESSENTIALS");
+    await screen.findByText("Essentials");
     await screen.findByRole("heading", { name: "Acme Robotics, Inc." });
     expect(screen.queryByRole("link", { name: "Import the cap table" })).toBeNull();
   });

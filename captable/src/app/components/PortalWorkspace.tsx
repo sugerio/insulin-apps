@@ -9,7 +9,7 @@ import { useResource, type Resource } from "../lib/useResource.ts";
 import { DisplayContext, type Display } from "./Display.tsx";
 import { Loading, ResourceView } from "./Feedback.tsx";
 import { Icon } from "./Icon.tsx";
-import { Page } from "./Page.tsx";
+import { CrumbSlotContext, Page } from "./Page.tsx";
 import { OutsideWorkspace, useWorkspace } from "./OrgWorkspace.tsx";
 
 // The holder portal's frame. Every portal page reads the caller's own holdings from the
@@ -124,7 +124,8 @@ export function PreviewWorkspace() {
                   <Link to={base}>Portfolio</Link> · <Link to={`${base}/how-to-exercise`}>How to exercise</Link> · <Link to={`${base}/documents`}>Documents</Link>
                 </div>
               </div>
-              <div className="preview-frame">
+              {/* The holder's page as it shows below the holder's header: the shell's header has the admin's breadcrumb. */}
+              <div className="preview-frame"><CrumbSlotContext value="hidden">
                 <PortalFrame
                   scope={{
                     orgId,
@@ -139,7 +140,7 @@ export function PreviewWorkspace() {
                 >
                   <Outlet />
                 </PortalFrame>
-              </div>
+              </CrumbSlotContext></div>
             </>
           );
         }}

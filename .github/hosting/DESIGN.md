@@ -172,6 +172,97 @@ removed meanwhile changes nothing (the gateway's existing rule, extended to app 
   repository's issues). Support replies by e-mail; once an allowance is set, the person creates the organization
   themselves.
 
+### 3.2 Navigation: two levels, each collapsible
+
+Every app, and the gateway's signed-in pages, share one navigation, so moving between an app, its settings and the
+organization's pages feels like one product (the model is a two-column sidebar: a primary column, and a column for the
+section open in it).
+
+- **Level 1, the primary column** (left, 240px; 56px collapsed):
+  - at the top, the organization switcher: the mark, the organization's name and a chevron, listing the person's
+    organizations and the link to create one. In an app it reads `/__insulin/me` and switches through
+    `/__insulin/switch-org`, as the account bar does; on the gateway the page renders it;
+  - the app's sections, from its navigation manifest (below), each an icon and a label, under optional group headings;
+  - then the platform's items, in every app: **Docs** (the app's in-app Docs) and **Settings**, whose level 2 is
+    People, Integrations, API access and Connect AI. Those four stay the gateway's pages on the apex
+    (`insulinapps.com/apps/<app>/settings/...`, §3), so an app's code can never read or submit them; the app links to
+    them (`/__insulin/me` gives their addresses as `settings: { users, integrations, api, connectAi }`, null where the
+    person can't use the app, and the apex's origin as `apex`), and they render with that app's own level 1, so they
+    read as part of the app;
+  - at the bottom, the person: their initials and name, with Account and Sign out.
+- **Level 2, the section column** (224px; 56px collapsed): shown when the open level-1 item has sub-items, which it
+  lists under optional group headings, with a header naming the section. The page's own header carries the breadcrumb
+  (section › item).
+- **Collapsing.** Each level has its own toggle and collapses to its icons; a collapsed item shows its label as a
+  tooltip (`title` and `aria-label`), and the organization switcher shows the organization's initial. The choice is
+  remembered per browser: apps keep it in `localStorage` (`insulin-nav`: `{"l1":"collapsed"|"expanded","l2":…}`); the
+  gateway, which sends no script of its own, keeps it in the `insulin_nav` cookie, set by the toggle's link
+  (`/__insulin/nav?l1=collapsed&return=<path>`, same host only, then a 303 back).
+- **Narrow screens** (below 768px): a top bar with the organization switcher and a menu button; the menu opens both
+  levels stacked in a drawer (a `<details>` element on the gateway).
+- **Accessibility.** `<nav aria-label="Primary">` and `<nav aria-label="Section">`, `aria-current="page"` on the
+  active item, toggles with `aria-expanded` and `aria-controls`, and a visible focus ring; everything works from the
+  keyboard.
+- **Look.** The gateway and shadcn apps use shadcn's sidebar colours and spacing; an app with its own design keeps it
+  but has the same structure and behaviour.
+- **The account bar** (`/__insulin/bar.js`) floats on app pages that have no navigation of their own. An app that
+  renders this navigation marks its root with `data-insulin-shell`, and the bar stays out of the way (it also leaves
+  when a single-page app renders the mark after the bar's script ran).
+
+**On the gateway** (`gateway/src/navigation.ts`, `components/shell.tsx`). The navigation surrounds the home page, the
+account pages, creating an organization, the organization's settings and each app's settings pages; the signed-out
+pages (landing, sign-in, the docs), invitations, the consent page and the message pages keep the top bar.
+
+- **The organization's pages**: level 1 is Home; **Apps**, the deployed apps the person can use in that organization,
+  each opening on its own host; **Settings**: People and Organization for everyone, Roles for an organization role,
+  Single sign-on for owners; and the platform's Docs at the bottom. No level 2; the breadcrumb is Settings › the page.
+- **The account pages**: the organization's level 1, and **Account** in level 2: Profile, Security, AI agents.
+- **An app's settings pages**: the app's level 1 with the items the person's role in that app reaches (a custom role
+  counts as the built-in role it is sent as, §2.4), consecutive items of one `group` under one heading, and no
+  children (they are the app's own level 2); then Docs (`https://<app>.insulinapps.com/docs`) and Settings. The
+  breadcrumb starts with the app: Cap Table › Settings › People.
+- The open level-1 item whose level 2 holds the page has `aria-current="true"`; the page's own item `"page"`.
+- The organization switcher also links **All apps** (the home page). Switching from a page opened with `?org=` comes
+  back without it, so the page shows the organization just chosen.
+- **The cookie** is `insulin_nav=<l1>.<l2>`, each `expanded` or `collapsed` (anything else reads as both expanded):
+  host-only on the apex, `HttpOnly`, `SameSite=Lax`, `Secure` (but on local http), for 400 days, and one of the
+  gateway's cookies, so it is never forwarded to an app nor set by one. `GET /__insulin/nav` answers on the apex only.
+  It takes `l1`, `l2` (at least one; a level left out keeps its state) and `return`, a path on the same host (`/` when
+  left out); an unknown, repeated or invalid parameter, or a `return` that is an absolute URL, another host, `//…` or
+  holds a backslash, is a 400 that remembers nothing.
+- **The public docs** (`/docs/`, `gateway/scripts/docs/layout.mjs`) keep the top bar and have the same two levels
+  below it, drawn at build time: level 1 is Overview, Platform, each app and the files for AI agents; level 2 is the
+  open section's pages, so each app's docs are a place of their own at `/docs/<app>/`. There is no organization
+  switcher or person (the docs are public) and no collapsing (the pages are static); below 1024px a `<details>` menu
+  above the article holds both levels.
+
+**The navigation manifest.** An app declares its level 1 in `package.json`, under `insulin.navigation`, which the app
+and the gateway both render from:
+
+```json
+"navigation": [
+  { "key": "envelopes", "label": "Envelopes", "icon": "inbox", "path": "/envelopes",
+    "children": [{ "key": "drafts", "label": "Drafts", "icon": "file-pen", "path": "/envelopes?status=draft" }] },
+  { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "role": "EDITOR" }
+]
+```
+
+`key` matches `[a-z0-9-]+` and is unique; `label` is 1 to 40 characters; `icon` is one of the Lucide icons the gateway
+bundles (`list-apps.mjs` lists them); `path` starts with `/` on the app's host and isn't one of the gateway's paths
+(`/__insulin/*`, `/settings/*`, `/mcp`, `/.well-known/*`); `group` (optional) is a heading shown above the item, which
+consecutive items with the same group share (an item without one has none); `role` (optional) is the least app role
+that sees it (VIEWER by default), and `maxRole` (optional) the most (ADMIN by default; an item for viewers only, such
+as a holder's own pages, says VIEWER); `children` holds level 2, the same fields without `children`. At most 12 items,
+and 12 children each. `list-apps.mjs` refuses a malformed manifest, and the deploy passes its level 1 to the gateway
+in `SITE_APPS`, without children: the gateway never draws an app's level 2, and a Worker variable holds at most 5 KB
+(`deploy-apps.test.mjs` keeps every gateway variable for this repository's apps under it). Docs and Settings are added
+by the platform and aren't in the manifest.
+In detail: a key has at most 40 characters and is unique across items and children; a `group` is 1 to 40 characters;
+any other field is refused; a `path` may carry a query but no fragment, before its query holds no `%`, empty or dot
+segment, and stays off `/api/__suger/*` too; `home` and `check-circle`, Lucide's older names for `house` and
+`circle-check`, are accepted as well. `check-insulin-app.mjs` checks it as the deploy does; the gateway checks it again
+(a malformed one fails it closed, like the other fields), and a `SITE_APPS` from before the manifest loads with none.
+
 ## 4. What tokens may reach
 
 Browser sessions reach everything their role allows. Bearer tokens (MCP and OAuth clients) reach only the app's own
@@ -246,9 +337,10 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
 - People see and disconnect their own agents under Account → AI agents, for every app and organization, and on each
   app's Connect AI page.
 
-**Connect AI.** Every app has a Connect AI page, `insulinapps.com/apps/<app>/settings/connect-ai` (a tab of the app's
-settings, and a link in the account bar on the app's host; `<app>.insulinapps.com/settings/connect-ai` leads there),
-which everyone who can use the app opens: Viewers and specific-apps members included.
+**Connect AI.** Every app has a Connect AI page, `insulinapps.com/apps/<app>/settings/connect-ai` (in the level 2 of
+the app's Settings, §3.2, and a link in the account bar on an app host without the navigation;
+`<app>.insulinapps.com/settings/connect-ai` leads there), which everyone who can use the app opens: Viewers and
+specific-apps members included.
 
 - **The server.** The app's MCP server URL, and in plain words what connecting does: the agent signs in at the apex,
   the person chooses the organization and allows it, and it then acts as them, with their current role in this app
@@ -376,7 +468,7 @@ The deploy reads these with `list-apps.mjs` and refuses a malformed list; the ga
 
 ### 8.1 Public paths
 
-Some apps serve people who have no account and never will, such as an e-sign recipient who signs on a page that a
+Some apps serve people who have no account and never will, such as an Esign recipient who signs on a page that a
 host product frames. Such paths are listed in `insulin.publicPaths`, at most ten. A request path matches an entry if
 it equals the entry, starts with it when the entry ends in `/`, or starts with `entry/` when it doesn't. A path whose
 segments hide a dot segment or a slash in their encoding never matches. An entry may not be `/`, `/api` or `/api/`,
@@ -387,7 +479,7 @@ On a public path the gateway looks at no session and no token, and the app gets 
 `x-suger-access-via: public` only: no person, organization, role or permissions, even when a signed-in person or a
 token sent the request. Incoming `x-suger-*` headers, the gateway's cookies and `Authorization` are removed as always.
 HTML gets no account bar, the app's own headers (its CSP and `frame-ancestors`) are kept, and requests are limited per
-IP address (`RL_APP`). A request that isn't GET or HEAD (an e-sign code exchange, a code sent or checked) also counts
+IP address (`RL_APP`). A request that isn't GET or HEAD (an Esign code exchange, a code sent or checked) also counts
 against a stricter limit per app and IP address, `RL_PUBLIC` (60 a minute suggested), and gets 429
 `{ "error": "rate_limited" }` with `Retry-After: 60` past it, while reading goes on. That is defence in depth: the app
 still limits what its codes allow. The gateway's own paths always win over a public path.
@@ -462,7 +554,7 @@ mail to retry) declares one path in `insulin.scheduled`, and the gateway calls i
   is present, and treats a request marked `schedule` as nobody everywhere else.
 - **What the app does.** Its due work for every organization, since the tick belongs to none. It must be safe to
   repeat and to overlap with requests (the next tick picks up what one leaves), and should finish well within the
-  timeout, doing a bounded amount per tick. An app can keep a route of its own (E-sign's `POST /api/process-due`) for
+  timeout, doing a bounded amount per tick. An app can keep a route of its own (Esign's `POST /api/process-due`) for
   someone to finish their organization's due work at once.
 - **The daily cleanup** keeps its own cron, `17 3 * * *`: the gateway's retention cleanup runs on it and the tick
   doesn't.

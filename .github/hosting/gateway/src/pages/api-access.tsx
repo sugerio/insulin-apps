@@ -17,8 +17,8 @@ import type { MembershipRow } from "../db/orgs.ts"
 import { grantChoices, grantLabel, grantValue } from "../orgs/access-forms.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { AppSettingsFrame, type AppFrame } from "./app-settings.tsx"
-import { accountOf, page } from "./document.tsx"
+import { AppSettingsFrame, appSettingsShell, type AppFrame } from "./app-settings.tsx"
+import { page } from "./document.tsx"
 
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
 const disclosure = "inline-flex cursor-pointer items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -81,7 +81,7 @@ function SecretCard({ ctx, app, secret }: { ctx: Context; app: HostedApp; secret
     <Alert role="status">
       <KeyRound />
       <AlertTitle>{secret.kind === "created" ? `${secret.name} is ready` : `${secret.name} has a new secret`}: copy the secret now</AlertTitle>
-      <AlertDescription className="flex flex-col gap-3 text-card-foreground">
+      <AlertDescription className="flex min-w-0 flex-col gap-3 text-card-foreground">
         <p>It isn&apos;t shown again.</p>
         {secret.kind === "rotated" && secret.previousExpiresAt !== null ? (
           <p>
@@ -121,11 +121,12 @@ function UsageCard({ ctx, app }: { ctx: Context; app: HostedApp }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
-        <dl className="grid gap-3 sm:grid-cols-[10rem_1fr]">
+        {/* Two columns only from xl: beside both navigation levels the content is 256px wide at 768px. */}
+        <dl className="grid grid-cols-1 gap-3 xl:grid-cols-[10rem_1fr]">
           <dt className="text-muted-foreground">Token URL</dt>
           <dd><code className="font-mono break-all select-all">{tokenUrl}</code></dd>
           <dt className="text-muted-foreground">Grant type</dt>
-          <dd><code className="font-mono">grant_type=client_credentials</code>, with the client id and secret as HTTP Basic authentication</dd>
+          <dd><code className="font-mono break-words">grant_type=client_credentials</code>, with the client id and secret as HTTP Basic authentication</dd>
           <dt className="text-muted-foreground">Resource</dt>
           <dd><code className="font-mono break-all select-all">resource={resource}</code></dd>
         </dl>
@@ -235,7 +236,8 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
       {data.manage ? (
         <CardFooter className="flex-col items-stretch gap-4 border-t">
           <h3 className="text-sm font-semibold">New OAuth client</h3>
-          <form method="post" action={appSettingsPath(app, "api", "/clients")} className="grid gap-4 sm:grid-cols-[1fr_13rem_auto] sm:items-end">
+          {/* Three columns only from xl, for the same reason as the token details. */}
+          <form method="post" action={appSettingsPath(app, "api", "/clients")} className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_13rem_auto] xl:items-end">
             <input type="hidden" name="org_id" defaultValue={data.orgId} />
             <TextField id="new-client-name" label="Name" name="name" maxLength={80} autoComplete="off" />
             <SelectField id="new-client-role" label="Role" name="role" choices={roles} selected="VIEWER" />
@@ -247,9 +249,9 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
   )
 }
 
-export function apiAccessPage(ctx: Context, session: Session, app: HostedApp, data: ApiAccessData, orgs?: readonly MembershipRow[]): Html {
-  return page(ctx, { title: `API access · ${app.title}`, user: accountOf(session, orgs) }, (
-    <AppSettingsFrame ctx={ctx} app={app} data={data} tab="api">
+export function apiAccessPage(ctx: Context, session: Session, app: HostedApp, data: ApiAccessData, orgs: readonly MembershipRow[]): Html {
+  return page(ctx, { title: `API access · ${app.title}`, shell: appSettingsShell(ctx, session, app, data, orgs, "api") }, (
+    <AppSettingsFrame ctx={ctx} app={app} data={data}>
       {data.secret ? <SecretCard ctx={ctx} app={app} secret={data.secret} /> : null}
       {data.manage ? null : (
         <Notice>Only the owners and admins of {data.orgName} create, change, rotate and delete OAuth clients. You can see which exist.</Notice>

@@ -20,11 +20,12 @@ import type { Context } from "../context.ts"
 import { apexUrl, appSettingsPath, withReturnTo } from "../context.ts"
 import type { CustomRoleRow, GrantRow } from "../db/grants.ts"
 import type { InvitationGrantRow, InvitationRow } from "../db/invitations.ts"
-import type { MemberRow, MembershipRow } from "../db/orgs.ts"
+import type { MemberRow } from "../db/orgs.ts"
+import { orgShell, type ShellData } from "../navigation.ts"
 import { accessPhrase, accessSummary, grantChoices, grantField, grantLabel, grantValue } from "../orgs/access-forms.ts"
 import {
   APP_ROLES, APP_ROLE_LABELS, APP_ROLE_SUMMARIES, ROLES, ROLE_LABELS, ROLE_SUMMARIES, canChangeRole, canDeleteOrg,
-  canHandleInvitation, canManageCustomRoles, canManageMembers, canManageSso, canRemoveMember, canRenameOrg, canSeeMembers,
+  canHandleInvitation, canManageCustomRoles, canManageMembers, canRemoveMember, canRenameOrg,
   canSetInvitePolicy, grantableRoles, roleHas, type Role,
 } from "../roles.ts"
 import type { Session } from "../auth/session.ts"
@@ -58,35 +59,11 @@ export interface OrgFrame {
   error?: string | null
 }
 
-/** The tabs of the organization's settings; each keeps the organization in `?org=`. */
-function SettingsNav({ ctx, data, tab }: { ctx: Context; data: OrgFrame; tab: SettingsTab }) {
-  const tabs: { tab: SettingsTab; label: string; path: string; show: boolean }[] = [
-    { tab: "users", label: "People", path: "/settings/users", show: true },
-    { tab: "roles", label: "Roles", path: "/settings/roles", show: canSeeMembers(data.role) },
-    { tab: "organization", label: "Organization", path: "/settings/organization", show: true },
-    { tab: "sso", label: "Single sign-on", path: "/settings/sso", show: canManageSso(data.role) },
-  ]
-  return (
-    <nav aria-label="Organization settings" className="flex gap-1 border-b">
-      {tabs.filter((item) => item.show).map((item) => (
-        <a
-          key={item.tab}
-          href={apexUrl(ctx, `${item.path}?org=${data.orgId}`)}
-          aria-current={item.tab === tab ? "page" : undefined}
-          className={cn(
-            "-mb-px rounded-t-md border-b-2 px-3 py-2 text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-            item.tab === tab ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {item.label}
-        </a>
-      ))}
-    </nav>
-  )
-}
-
-/** The organization's name, the member's role, whether it is active, the tabs, and the page's notice or problem. */
-export function SettingsFrame({ ctx, data, tab, children }: { ctx: Context; data: OrgFrame; tab: SettingsTab; children: ReactNode }) {
+/**
+ * The organization's name, the member's role, whether it is active, and the page's notice or problem. The pages
+ * themselves (People, Roles, Organization, Single sign-on) are in the navigation's level 1 (navigation.ts).
+ */
+export function SettingsFrame({ ctx, data, children }: { ctx: Context; data: OrgFrame; children: ReactNode }) {
   return (
     <Container className="flex flex-col gap-6 py-10 sm:py-12">
       <PageHeader
@@ -107,7 +84,6 @@ export function SettingsFrame({ ctx, data, tab, children }: { ctx: Context; data
           )
         }
       />
-      <SettingsNav ctx={ctx} data={data} tab={tab} />
       {data.notice ? <Notice kind="ok">{data.notice}</Notice> : null}
       <ErrorSummary errors={[data.error]} />
       {children}
@@ -184,8 +160,8 @@ function RequestMoreCard({ ctx, limit, state }: { ctx: Context; limit: OrgLimitV
   )
 }
 
-export function newOrgPage(ctx: Context, session: Session, invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, state: NewOrgState = {}): Html {
-  return page(ctx, { title: "Create an organization", user: accountOf(session) }, (
+export function newOrgPage(ctx: Context, session: Session, invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, shell: ShellData, state: NewOrgState = {}): Html {
+  return page(ctx, { title: "Create an organization", shell: orgShell(ctx, session, shell, null, { title: "Create an organization", path: "/orgs/new" }) }, (
     <Container width="prose" className="flex flex-col gap-8 py-10 sm:py-12">
       <PageHeader
         title="Create an organization"
@@ -466,9 +442,9 @@ function MyAppsCard({ ctx, grants }: { ctx: Context; grants: GrantRow[] }) {
   )
 }
 
-export function usersPage(ctx: Context, session: Session, data: UsersPageData, orgs?: readonly MembershipRow[]): Html {
-  return page(ctx, { title: `People · ${data.orgName}`, user: accountOf(session, orgs) }, (
-    <SettingsFrame ctx={ctx} data={data} tab="users">
+export function usersPage(ctx: Context, session: Session, data: UsersPageData, shell: ShellData): Html {
+  return page(ctx, { title: `People · ${data.orgName}`, shell: orgShell(ctx, session, shell, "users") }, (
+    <SettingsFrame ctx={ctx} data={data}>
       {data.role === "APPS" ? <MyAppsCard ctx={ctx} grants={data.myGrants} /> : <MembersCard ctx={ctx} data={data} session={session} />}
       {data.invitations ? <InvitationsCards ctx={ctx} data={data} invitations={data.invitations} /> : null}
     </SettingsFrame>
@@ -641,10 +617,10 @@ function AppRolesCard({ data, app }: { data: RolesPageData; app: HostedApp }) {
   )
 }
 
-export function rolesPage(ctx: Context, session: Session, data: RolesPageData, orgs?: readonly MembershipRow[]): Html {
+export function rolesPage(ctx: Context, session: Session, data: RolesPageData, shell: ShellData): Html {
   const catalogued = ctx.config.apps.filter((app) => app.permissions.length)
-  return page(ctx, { title: `Roles · ${data.orgName}`, user: accountOf(session, orgs) }, (
-    <SettingsFrame ctx={ctx} data={data} tab="roles">
+  return page(ctx, { title: `Roles · ${data.orgName}`, shell: orgShell(ctx, session, shell, "roles") }, (
+    <SettingsFrame ctx={ctx} data={data}>
       <Card>
         <CardHeader>
           <CardTitle>
@@ -743,10 +719,10 @@ function InvitePolicyCard({ ctx, data }: { ctx: Context; data: OrgSettingsData }
   )
 }
 
-export function orgSettingsPage(ctx: Context, session: Session, data: OrgSettingsData, orgs?: readonly MembershipRow[]): Html {
+export function orgSettingsPage(ctx: Context, session: Session, data: OrgSettingsData, shell: ShellData): Html {
   const lastOwner = data.role === "OWNER" && data.ownerCount <= 1
-  return page(ctx, { title: `Organization · ${data.orgName}`, user: accountOf(session, orgs) }, (
-    <SettingsFrame ctx={ctx} data={data} tab="organization">
+  return page(ctx, { title: `Organization · ${data.orgName}`, shell: orgShell(ctx, session, shell, "organization") }, (
+    <SettingsFrame ctx={ctx} data={data}>
       {canRenameOrg(data.role) ? (
         <Card>
           <CardHeader>

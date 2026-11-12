@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Captures the docs' screenshots (assets/screenshots/*.png) from a real local run: the gateway with Cap Table and
-// E-sign, as `npm run dev -- --app captable --app esign` starts them, driven in Chrome through synthetic data only.
+// Esign, as `npm run dev -- --app captable --app esign` starts them, driven in Chrome through synthetic data only.
 //
 //   (cd captable && npm ci && NITRO_PRESET=cloudflare_module npm run build)
 //   (cd esign && npm ci && NITRO_PRESET=cloudflare_module npm run build)
@@ -14,17 +14,17 @@
 // What the run does: signs up (confirming through the captured-mail page), creates an organization, adds a custom role,
 // invites people with an organization role and with specific apps, accepts an invitation, stores a credential, creates
 // two OAuth clients and rotates one's secret, connects an MCP client, imports Cap Table's own spreadsheet template
-// filled with a fictional company, opens its dashboard, cap table and holder view, uploads an E-sign template, places
+// filled with a fictional company, opens its dashboard, cap table and holder view, uploads an Esign template, places
 // its fields, sends an envelope and signs it, then creates a second organization under the same email domain, which
 // reaches the limit of two, so the next one is a request to support. Light mode, a 1280 x 800 viewport.
 //
 // The run is local and offline except for Cloudflare's Turnstile widget, which the sign-up and sign-in forms load (the
 // local config uses Cloudflare's always-passing test keys). It serves the stack over https, with wrangler's
-// self-signed certificate: E-sign accepts its own origin for the embedded field editor only over https. E-sign sends
+// self-signed certificate: Esign accepts its own origin for the embedded field editor only over https. Esign sends
 // signing codes through the gateway's mail relay, which it reaches through a small proxy on 127.0.0.1: the app accepts
 // a relay URL over https or plain http on a loopback host, and wrangler's certificate isn't one the Worker trusts.
 //
-// One screenshot can't be taken here: E-sign seals a finished envelope with an AWS KMS signature and an RFC 3161
+// One screenshot can't be taken here: Esign seals a finished envelope with an AWS KMS signature and an RFC 3161
 // timestamp, both outside services, so an envelope never reaches Completed locally. esign-completed.png is a labelled
 // placeholder, drawn by this script, until it is captured from a deployment with a KMS key.
 //
@@ -71,7 +71,7 @@ const ORG = 'Northwind Robotics'
 const SECOND_ORG = 'Northwind Labs'
 const COMPANY = 'Northwind Robotics, Inc.'
 
-// Local-only settings: a gateway key made of synthetic bytes, E-sign's code pepper, and a KMS key name in AWS's
+// Local-only settings: a gateway key made of synthetic bytes, Esign's code pepper, and a KMS key name in AWS's
 // documentation account. None of them is a secret; nothing here ever reaches a deployment.
 const GATEWAY_SECRET_KEY = Buffer.alloc(32, 0x42).toString('base64')
 const ESIGN_OTP_KEY = 'local-screenshots-code-pepper-0123456789abcdef'
@@ -189,7 +189,7 @@ async function signUp(page, person, { shotName } = {}) {
   await page.waitForURL((url) => url.pathname === '/' || url.pathname.startsWith('/invitations/') || url.pathname.startsWith('/orgs/'), { timeout: TIMEOUT })
 }
 
-// A small PDF, built by hand: one Letter page of fictional text in Helvetica, which E-sign accepts as a template.
+// A small PDF, built by hand: one Letter page of fictional text in Helvetica, which Esign accepts as a template.
 function agreementPdf(title, lines) {
   const text = (value) => value.replace(/[\\()]/g, (character) => `\\${character}`)
   const stream = [
@@ -225,7 +225,7 @@ const AGREEMENT = agreementPdf('Supply Agreement', [
   '3. Delivery. Parts are delivered to the Buyer\'s address within 30 days.',
   '4. Term. This agreement lasts one year and renews unless either party ends it.',
   '',
-  'This document is synthetic. It exists only to show how E-sign works.',
+  'This document is synthetic. It exists only to show how Esign works.',
 ])
 
 // The Cap Table spreadsheet: a fictional company, its holders and holdings, as of a fixed date.
@@ -298,7 +298,7 @@ async function main() {
   await mkdir(OUT, { recursive: true })
   const relay = await startRelayProxy()
   const state = await mkdtemp(join(tmpdir(), 'insulin-docs-screenshots-'))
-  log(`Starting the gateway, Cap Table and E-sign at ${APEX} (state in ${state})`)
+  log(`Starting the gateway, Cap Table and Esign at ${APEX} (state in ${state})`)
   const child = await startDev({
     apps: ['captable', 'esign'],
     port: PORT,
@@ -485,7 +485,7 @@ async function main() {
     await holderPage.waitForLoadState('networkidle')
     await shot(holderPage, 'captable-holder-view')
 
-    // E-sign: a template with an added signature page, one with placed fields, an envelope, and its signing page.
+    // Esign: a template with an added signature page, one with placed fields, an envelope, and its signing page.
     const esign = host('esign')
     await page.goto(`${esign}/templates`)
     await page.setInputFiles('#template-pdf', { name: 'supply-agreement.pdf', mimeType: 'application/pdf', buffer: AGREEMENT })
@@ -569,7 +569,7 @@ async function main() {
     await page.getByRole('heading').first().waitFor()
     await shot(page, 'esign-envelope', { fullPage: true })
     await placeholder(owner, 'esign-completed', 'A completed envelope', [
-      'This image is a placeholder. A completed envelope can\'t be captured on a local run: E-sign seals a finished envelope with an AWS KMS signature and an RFC 3161 timestamp from outside services, so locally it stays Finishing.',
+      'This image is a placeholder. A completed envelope can\'t be captured on a local run: Esign seals a finished envelope with an AWS KMS signature and an RFC 3161 timestamp from outside services, so locally it stays Finishing.',
       'When an envelope is completed, its page shows the status Completed and two downloads: Signed PDF with certificate, and Certificate of completion.',
     ])
 
@@ -580,12 +580,13 @@ async function main() {
     await page.click('button:has-text("Create organization")')
     await page.waitForURL((url) => url.searchParams.has('org') && url.searchParams.get('org') !== orgId)
     await page.goto(`${APEX}/`)
-    const orgMenu = page.locator('header summary', { hasText: 'Organization:' })
+    // The organization switcher at the top of the navigation's level 1 (DESIGN.md §3.2).
+    const orgMenu = page.locator('[data-slot="nav-primary"] summary', { hasText: 'Organization:' })
     await orgMenu.click()
-    await page.locator('header form button', { hasText: ORG }).click()
+    await page.locator('[data-slot="nav-primary"] form button', { hasText: ORG }).click()
     await page.getByRole('heading', { name: `Apps in ${ORG}` }).waitFor()
     await orgMenu.click()
-    await page.locator('header a', { hasText: 'Create an organization' }).waitFor()
+    await page.locator('[data-slot="nav-primary"] a', { hasText: 'Create an organization' }).waitFor()
     await shot(page, 'platform-org-menu')
     await page.goto(`${APEX}/orgs/new`)
     await page.getByRole('heading', { name: 'Request more organizations' }).waitFor()

@@ -1,8 +1,9 @@
 import "./docs.css";
-import { useEffect, useRef } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { Link, NavigationType, useLocation, useNavigationType } from "react-router";
 import { DocsBaseContext, type DocTopic } from "../pages/docs/parts.tsx";
 import { DOC_TOPICS } from "../pages/docs/topics.ts";
+import { PlatformAccountContext, publicDocsLink } from "../lib/platform.ts";
 import { Banner } from "./Feedback.tsx";
 
 // The in-app Docs, the same in every frame (the admin workspace, the holder's portfolio and the standalone pages): the
@@ -52,6 +53,7 @@ export function Docs({ base, topic }: { base: string; topic: DocTopic }) {
   const before = DOC_TOPICS[index - 1];
   const after = DOC_TOPICS[index + 1];
   const href = (slug: string, section?: string) => `${base}/${slug}${section ? `#${section}` : ""}`;
+  const publicDocs = publicDocsLink(useContext(PlatformAccountContext));
   return (
     <DocsBaseContext value={base}>
       <div className="docs-layout" ref={layout}>
@@ -71,6 +73,12 @@ export function Docs({ base, topic }: { base: string; topic: DocTopic }) {
               </ul>
             </div>
           ))}
+          {publicDocs ? (
+            <div className="docs-topic-group">
+              <p className="docs-topic-label" id="docs-group-public">On the web</p>
+              <ul aria-labelledby="docs-group-public"><li><a href={publicDocs}>Public docs</a></li></ul>
+            </div>
+          ) : null}
         </nav>
         <article className="card docs-article" ref={article} aria-labelledby="docs-title">
           <header className="docs-head">

@@ -13,7 +13,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { listApps } from '../../../scripts/list-apps.mjs'
+import { gatewayNavigation, listApps } from '../../../scripts/list-apps.mjs'
 
 export const gatewayDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repositoryDir = resolve(gatewayDir, '..', '..', '..')
@@ -76,7 +76,7 @@ export async function gatewayConfig(apps = ['stub'], vars = {}) {
   config.services = apps.map((app) => ({ binding: bindingName(app), service: workerName(app) }))
   config.vars.SITE_APPS = apps.map((app) => {
     const { secrets: _secrets, ...entry } = known.find(({ name }) => name === app)
-    return { ...entry, binding: bindingName(app) }
+    return { ...entry, navigation: gatewayNavigation(entry.navigation), binding: bindingName(app) }
   })
   return config
 }

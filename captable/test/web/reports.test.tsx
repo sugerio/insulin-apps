@@ -32,8 +32,10 @@ describe("reports", () => {
     ]);
     expect(within(rows[5]!).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["CSV"]);
     expect(within(rows[1]!).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["CSV", "Excel", "JSON"]);
-    const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(within(nav).getByRole("link", { name: "Reports" }).getAttribute("href")).toBe(`${base}/reports`);
+    expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Company" }).getAttribute("aria-current")).toBe("true");
+    const section = screen.getByRole("navigation", { name: "Section" });
+    expect(within(section).getByRole("link", { name: "Reports" }).getAttribute("href")).toBe(`${base}/reports`);
+    expect(within(section).getByRole("link", { name: "Reports" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("downloads a report as of the chosen date, with personal data for those who may see it", async () => {

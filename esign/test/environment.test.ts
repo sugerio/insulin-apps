@@ -53,7 +53,7 @@ test('the relay is used only at an https address with its token, and refusals ar
   assert.deepEqual(relay.sent.at(-1)!.body, { to: 'ana@partner.example', subject: 'Hello', text: 'Body' });
   assert.equal(relay.sent.at(-1)!.headers.get('x-suger-organization-id'), 'org-a');
   await mailerFor(relay.env, 'org-a')!.send('ana@partner.example', 'Hello', 'Body');
-  assert.match(relay.sent.at(-1)!.body.text, /^Body\n\nSent by an E-sign test deployment\./, 'the preview marks what it sends');
+  assert.match(relay.sent.at(-1)!.body.text, /^Body\n\nSent by an Esign test deployment\./, 'the preview marks what it sends');
   await assert.rejects(mailerFor(relay.env, 'org-a')!.send('not an address', 'Hello', 'Body'), /Invalid recipient/);
   for (const status of [502, 503, 429, 200, 400]) {
     const refusing = mailRelay(() => status);

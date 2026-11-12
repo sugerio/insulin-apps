@@ -13,8 +13,8 @@ import type { AppGrantRow, GrantRow } from "../db/oauth.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { AppSettingsFrame, type AppFrame } from "./app-settings.tsx"
-import { accountOf, page } from "./document.tsx"
+import { AppSettingsFrame, appSettingsShell, type AppFrame } from "./app-settings.tsx"
+import { page } from "./document.tsx"
 
 const codeBlock = "overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs select-all"
 
@@ -63,7 +63,7 @@ function ClientSetup({ app, url, domain }: { app: HostedApp; url: string; domain
   return (
     <section aria-labelledby="clients-heading" className="flex flex-col gap-4">
       <h2 id="clients-heading" className="text-lg font-semibold">Set up your AI client</h2>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ClientCard title="Claude Code">
           <Code>{`claude mcp add --transport http ${name} ${url}`}</Code>
           <p className={muted}>
@@ -120,7 +120,7 @@ function ServerCard({ app, data, url, domain }: { app: HostedApp; data: ConnectA
         <p>
           The first time the agent connects, it opens {domain} in your browser: you sign in, choose the organization, and allow it. It then acts
           as you in {app.title}, with your current role in that organization, for 30 days or until you disconnect it. In {data.orgName} your role is{" "}
-          <Badge variant="outline">{data.access.label}</Badge>, so that is what the agent may do there.
+          <Badge variant="outline" className="max-w-full whitespace-normal break-words">{data.access.label}</Badge>, so that is what the agent may do there.
         </p>
         <p className="text-muted-foreground">
           If your role changes, the agent&apos;s changes with it, and if you lose access, so does the agent. It uses {app.title}&apos;s own API only: it
@@ -236,10 +236,10 @@ function EveryonesAgents({ app, data, everyone, session }: { app: HostedApp; dat
   )
 }
 
-export function connectAiPage(ctx: Context, session: Session, app: HostedApp, data: ConnectAiData, orgs?: readonly MembershipRow[]): Html {
+export function connectAiPage(ctx: Context, session: Session, app: HostedApp, data: ConnectAiData, orgs: readonly MembershipRow[]): Html {
   const url = appUrl(ctx, app, "/mcp")
-  return page(ctx, { title: `Connect AI · ${app.title}`, user: accountOf(session, orgs) }, (
-    <AppSettingsFrame ctx={ctx} app={app} data={data} tab="connect-ai">
+  return page(ctx, { title: `Connect AI · ${app.title}`, shell: appSettingsShell(ctx, session, app, data, orgs, "connect-ai") }, (
+    <AppSettingsFrame ctx={ctx} app={app} data={data}>
       <ServerCard app={app} data={data} url={url} domain={ctx.config.domain} />
       <ClientSetup app={app} url={url} domain={ctx.config.domain} />
       <OwnAgents app={app} data={data} />

@@ -4,14 +4,25 @@
 // stylesheet, and talks to /__insulin/* with same-origin fetch. It navigates with location.assign rather than submitting
 // forms, because form-action would block the cross-origin redirects of switching and signing out.
 //
+// A page with the platform's navigation (an element with data-insulin-shell, DESIGN.md §3.2) gets no bar: its own
+// organization switcher and person menu do the same job.
+//
 // The icons are drawn with createElementNS: the Insulin Apps mark (icon.ts) and a few Lucide icons (ISC licence).
 import { MARK_OFFSET, MARK_ORANGE, MARK_PATH, MARK_RADIUS, MARK_SIZE, MARK_TILE } from './icon.ts'
 
 const MARK = JSON.stringify({ size: MARK_SIZE, radius: MARK_RADIUS, tile: MARK_TILE, orange: MARK_ORANGE, offset: MARK_OFFSET, path: MARK_PATH })
 
+/**
+ * The mark of a page that has the platform's navigation (DESIGN.md §3.2): its root carries this attribute, its own
+ * organization switcher and person menu take the bar's place, and the bar isn't drawn.
+ */
+export const SHELL_SELECTOR = '[data-insulin-shell]'
+
 export const BAR_JS = String.raw`(() => {
   'use strict'
   if (window.top !== window.self || document.querySelector('insulin-account-bar')) return
+  const shelled = () => document.querySelector('${SHELL_SELECTOR}') !== null
+  if (shelled()) return
 
   const make = (tag, attributes = {}, children = []) => {
     const node = document.createElement(tag)
@@ -91,7 +102,20 @@ export const BAR_JS = String.raw`(() => {
   const root = host.attachShadow({ mode: 'closed' })
   let styled = false
   let rendered = false
-  const reveal = () => { if (styled && rendered) host.hidden = false }
+  // A single-page app may render its navigation after this script has run: the bar then leaves for good.
+  let watcher = null
+  const leave = () => {
+    if (watcher) watcher.disconnect()
+    host.remove()
+  }
+  const reveal = () => {
+    if (shelled()) leave()
+    else if (styled && rendered) host.hidden = false
+  }
+  if (typeof MutationObserver === 'function') {
+    watcher = new MutationObserver(() => { if (shelled()) leave() })
+    watcher.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-insulin-shell'] })
+  }
   const sheet = make('link', { rel: 'stylesheet', href: '/__insulin/bar.css' })
   sheet.addEventListener('load', () => { styled = true; reveal() })
   root.append(sheet)
@@ -197,7 +221,7 @@ export const BAR_JS = String.raw`(() => {
 
   fetch('/__insulin/me', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
     .then((response) => (response.ok ? response.json() : null))
-    .then((me) => { if (me && me.user) render(me) })
+    .then((me) => { if (shelled()) leave(); else if (me && me.user) render(me) })
     .catch(() => {})
 })()
 `

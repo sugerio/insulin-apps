@@ -1,4 +1,4 @@
-// How E-sign reaches the platform's gateway (the mail relay). The deploy binds the gateway Worker to the app as
+// How Esign reaches the platform's gateway (the mail relay). The deploy binds the gateway Worker to the app as
 // SUGER_GATEWAY: a Worker can't fetch another Worker of the same zone through its public URL, so a plain fetch of
 // https://insulinapps.com/__insulin/mail from esign.insulinapps.com never reaches the gateway. Nitro on Workers puts the
 // invocation's env on the request it passes on (request.runtime.cloudflare.env), as it does waitUntil (wait-until.ts),

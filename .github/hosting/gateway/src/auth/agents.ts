@@ -7,6 +7,7 @@ import { deleteUserGrant, listUserGrants } from '../db/oauth.ts'
 import { listMemberships } from '../db/orgs.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
 import { log } from '../log.ts'
+import { loadShell } from '../navigation.ts'
 import { agentsPage } from '../pages/agents.tsx'
 import { notFoundPage } from '../pages/status.tsx'
 import { requireSession } from './guard.ts'
@@ -31,7 +32,8 @@ export async function agentsView(ctx: Context): Promise<Response> {
       if (app.service && (await appAccess(ctx.config.db, app, active.id, session.user.id, active.role))) apps.push(app)
     }
   }
-  return htmlResponse(agentsPage(ctx, session, grants, NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null, { apps, orgName: active?.name ?? null }, memberships))
+  const shell = await loadShell(ctx, session, { orgs: memberships, org: active, apps })
+  return htmlResponse(agentsPage(ctx, session, grants, NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null, { apps, orgName: active?.name ?? null }, shell))
 }
 
 export async function disconnectAgent(ctx: Context, [grantId]: string[]): Promise<Response> {

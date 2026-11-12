@@ -38,14 +38,14 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
  const editor=await renderMember('/',routes(EDITOR));
  try{
   assert.ok(editor.button('Process due work'));assert.ok(editor.link('New envelope'));
-  assert.match(editor.text(),/Mutual NDA/);assert.match(editor.text(),/Out for signature/);assert.match(editor.text(),/Sam Example · +Editor/);
+  assert.match(editor.text(),/Mutual NDA/);assert.match(editor.text(),/Out for signature/);assert.match(editor.text(),/Sam Example\s+Editor/);
   const me=editor.calls.find(c=>c.path==='/api/me')!;
   assert.equal(me.headers.authorization,undefined,'no key: the session is the platform\'s');
   assert.equal(editor.session.map.size+editor.local.map.size,0,'nothing is stored in the browser');
   await editor.click(editor.link('Templates'),'Templates');
   assert.ok(editor.byLabel('New template'));assert.ok(editor.button('Place fields'));assert.ok(editor.link('Send'));
   await editor.click(editor.link('Envelopes'),'Envelopes');
-  assert.equal(editor.location.pathname,'/');
+  assert.equal(editor.location.pathname,'/envelopes');
  }finally{await editor.unmount();}
  const viewer=await renderMember('/',routes(VIEWER));
  try{
@@ -66,8 +66,8 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
  }finally{await viewerSending.unmount();}
  const visitor=await renderMember('/',c=>{if(c.path==='/api/me')return json({error:'unauthorized'},401);});
  try{
-  assert.match(visitor.text(),/Sign in to use E-sign\./);
-  assert.equal(visitor.calls.length,1,'nothing else is asked for');
+  assert.match(visitor.text(),/Sign in to use Esign\./);
+  assert.deepEqual(visitor.calls.map(c=>c.path).sort(),['/__insulin/me','/api/me'],'nothing else is asked for: who the app and the platform say is signed in');
  }finally{await visitor.unmount();}
 });
 

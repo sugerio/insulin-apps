@@ -30,7 +30,7 @@ export async function startDev({ apps = ['stub'], port = '8787', state = DEV_STA
     if (app !== 'stub') await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', configs.apps[index]], { stdio, state })
   }
   const args = ['dev', '--config', configs.gateway, ...configs.apps.flatMap((config) => ['--config', config]), '--local', '--persist-to', state, '--ip', '127.0.0.1', '--port', port]
-  // https (wrangler's self-signed certificate): what E-sign needs to accept its own origin for the embedded editor.
+  // https (wrangler's self-signed certificate): what Esign needs to accept its own origin for the embedded editor.
   if (https) args.push('--local-protocol', 'https')
   return spawn(wrangler, args, { cwd: gatewayDir, stdio, env })
 }

@@ -1,6 +1,6 @@
 ---
 title: Signing
-description: What a signer sees and does on E-sign's signing page, from the one-time link and the emailed code to signing, declining and their copy.
+description: What a signer sees and does on Esign's signing page, from the one-time link and the emailed code to signing, declining and their copy.
 order: 5
 ---
 
@@ -12,10 +12,10 @@ need an account.
 
 When it is a signer's turn, they open the signing page in one of two ways:
 
-- **In a host product.** The system your organization uses E-sign from shows the signing page inside its own pages, to
+- **In a host product.** The system your organization uses Esign from shows the signing page inside its own pages, to
   the signer it has signed in.
 - **From the envelope's page.** Someone who manages envelopes chooses **Open** *name*'s **signing page** next to the
-  active signer, for example when the signer signs in person, or to try E-sign out. The page opens in a dialog that shows
+  active signer, for example when the signer signs in person, or to try Esign out. The page opens in a dialog that shows
   what the signer sees.
 
 Either way, the page is opened with a one-time link that works once, within two minutes, and only for that signer. The
@@ -34,7 +34,7 @@ The signer reads the document. The page shows every page of the PDF and, beside 
 - their **Title**, which they can correct, when the sender gave one, the document has a Title field, or they sign for a
   company;
 - when they sign for a company, a box to confirm "I'm authorized to sign for" that company;
-- **Viewed** *n* **of** *n* **pages**: E-sign records each page the signer has looked at (at least half on screen for a
+- **Viewed** *n* **of** *n* **pages**: Esign records each page the signer has looked at (at least half on screen for a
   second).
 
 **Download PDF** saves a copy of the document. The signer chooses **Continue** when ready, or **Decline to sign** (see
@@ -42,7 +42,7 @@ below).
 
 ## Step 2: Confirm it's you
 
-E-sign emails a 6-digit code to the signer's address. The page says "Enter the 6-digit code we sent to" that address, with
+Esign emails a 6-digit code to the signer's address. The page says "Enter the 6-digit code we sent to" that address, with
 a countdown.
 
 - The code works for 10 minutes and only once.
@@ -52,7 +52,7 @@ a countdown.
 
 The signer types the code and chooses **Verify code**. The page then says "Your email address is confirmed."
 
-When a host product told E-sign how it signed the signer in (for example through single sign-on), the page also shows
+When a host product told Esign how it signed the signer in (for example through single sign-on), the page also shows
 that sign-in, and the audit trail records it as the host's statement. **Why we ask** explains that the code and the
 sign-in are recorded in the audit trail, with the time, the IP address and the browser.
 
@@ -84,10 +84,10 @@ The electronic records disclosure says that the signer signs electronically, wit
 signature, and consents to receive the document and the records of the signing electronically. It explains that they may
 ask the sender for a paper copy, or withdraw consent, by contacting the sender before they sign (withdrawing ends the
 electronic signing, at no charge), that they receive the signed document and its certificate after everyone has signed
-(E-sign emails a link to download it), and that they need a current web browser, a PDF reader and access to their email.
+(Esign emails a link to download it), and that they need a current web browser, a PDF reader and access to their email.
 
 Signing records which version of the disclosure the signer agreed to. Its wording is a draft that still needs review by
-counsel; E-sign is experimental.
+counsel; Esign is experimental.
 
 ### Placed fields
 
@@ -96,10 +96,10 @@ When the template has placed fields, the preview shows each of the signer's fiel
 - **Signature**: their typed name, drawn in a handwriting style. If it doesn't fit without overlapping another field, the
   page says so; shorten the name or ask the sender to move the field.
 - **Title**: their typed title, which must fit its box.
-- **Date signed**: today's date in UTC, filled in by E-sign. If the date changes between the preview and signing (after
+- **Date signed**: today's date in UTC, filled in by Esign. If the date changes between the preview and signing (after
   midnight UTC), the page asks the signer to review and sign again.
 
-Without placed fields, the signer signs on the page E-sign adds after the document, with their name and the signing time.
+Without placed fields, the signer signs on the page Esign adds after the document, with their name and the signing time.
 
 ## Declining
 
@@ -115,7 +115,7 @@ receives a message saying the signer declined).
 
 ## After everyone has signed
 
-E-sign seals the signed PDF and emails every signer a link to their copy. The link opens the **Your signed document**
+Esign seals the signed PDF and emails every signer a link to their copy. The link opens the **Your signed document**
 page, where **Download my copy** prepares the signed document followed by its certificate of completion, and **Save the
 PDF** saves it.
 

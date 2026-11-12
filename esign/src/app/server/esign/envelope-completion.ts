@@ -95,7 +95,7 @@ async function sendCopies(env: CompletionEnv, tenantId: string, envelopeId: stri
   const managed = await managedEvidenceFromEnv(env);
   try {
     if (env.APP_ORIGIN && (managed || testSealKey(env))) await sendSignedCopies(env.DB,tenantId,envelopeId,mailer,env.APP_ORIGIN);
-  } catch { console.error(`E-sign: sending the signed-copy notices of envelope ${envelopeId} failed; process-due retries it`); }
+  } catch { console.error(`Esign: sending the signed-copy notices of envelope ${envelopeId} failed; process-due retries it`); }
 }
 
 /** The envelope a recipient page session signs, by the session's bearer token. */

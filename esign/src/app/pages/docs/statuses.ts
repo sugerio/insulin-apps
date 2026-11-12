@@ -17,7 +17,7 @@ export const statuses: DocTopic = {
         columns: ['Status', 'What it means'],
         rows: [
           ['Out for signature', 'Signers are signing in turn. It is the only status in which anyone can sign, decline or void.'],
-          ['Finishing', 'Everyone has signed, and E-sign is sealing the signed PDF. This usually takes seconds.'],
+          ['Finishing', 'Everyone has signed, and Esign is sealing the signed PDF. This usually takes seconds.'],
           ['Completed', 'Sealed. The signed PDF and the certificate of completion can be downloaded, and each signer has been sent a link to their copy.'],
           ['Voided', 'Someone who manages envelopes withdrew it before everyone had signed.'],
           ['Declined', 'The signer whose turn it was declined to sign, with a reason.'],
@@ -56,13 +56,13 @@ export const statuses: DocTopic = {
     {
       id: 'deadlines',
       title: 'Sign-by deadlines',
-      body: p('An envelope with a sign-by day expires when a signer who hasn\'t signed passes it. A signer who has already signed is past their deadline\'s reach. E-sign applies an expiry when someone next opens the envelope, and when due work runs.'),
+      body: p('An envelope with a sign-by day expires when a signer who hasn\'t signed passes it. A signer who has already signed is past their deadline\'s reach. Esign applies an expiry when someone next opens the envelope, and when due work runs.'),
     },
     {
       id: 'due-work',
       title: 'Due work',
       body: [
-        p('E-sign usually finishes an envelope right after its last signature, without making the signer wait. If that can\'t happen, for example after a time limit or an outage, the envelope stays Finishing until due work runs.'),
+        p('Esign usually finishes an envelope right after its last signature, without making the signer wait. If that can\'t happen, for example after a time limit or an outage, the envelope stays Finishing until due work runs.'),
         p('Due work expires envelopes past their deadline, finishes those left Finishing, and retries the signed-copy emails that didn\'t go out. The platform runs it for every organization every five minutes, so an envelope left Finishing usually completes within a few minutes. To run it at once for your organization, someone who manages can choose ', b('Process due work'), ' on Envelopes (it says what it did), and a host can call ', code('POST /api/process-due'), '.'),
       ],
     },

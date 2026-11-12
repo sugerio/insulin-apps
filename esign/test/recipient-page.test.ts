@@ -411,7 +411,7 @@ test('Review names the document with its fingerprint and offers the PDF; Sign sa
   await p.act(async()=>{p.labelled('Authorized to sign').props.onChange({target:{checked:true}});});
   await p.toSign();
   const out=JSON.stringify(p.renderer.toJSON());
-  assert.match(out,/Ana Partner · Head of Partnerships, Northbeam Consulting · Signed electronically through E-sign/);
+  assert.match(out,/Ana Partner · Head of Partnerships, Northbeam Consulting · Signed electronically through Esign/);
   assert.match(out,/After you sign/);
   // Back returns to Review with what was entered.
   await p.act(async()=>{p.button('Back').props.onClick();});
@@ -421,9 +421,9 @@ test('Review names the document with its fingerprint and offers the PDF; Sign sa
 });
 
 test('signatureCaption leaves out what is not known', ()=>{
- assert.equal(page.signatureCaption('Ana Partner','Partner Manager','Northbeam Consulting'),'Ana Partner · Partner Manager, Northbeam Consulting · Signed electronically through E-sign');
- assert.equal(page.signatureCaption('Ana Partner','',undefined),'Ana Partner · Signed electronically through E-sign');
- assert.equal(page.signatureCaption('','',undefined),'Signed electronically through E-sign');
+ assert.equal(page.signatureCaption('Ana Partner','Partner Manager','Northbeam Consulting'),'Ana Partner · Partner Manager, Northbeam Consulting · Signed electronically through Esign');
+ assert.equal(page.signatureCaption('Ana Partner','',undefined),'Ana Partner · Signed electronically through Esign');
+ assert.equal(page.signatureCaption('','',undefined),'Signed electronically through Esign');
 });
 
 test('the code boxes take one digit each, move on, go back and take a paste', ()=>{

@@ -13,10 +13,10 @@ import { AuthCard, proseLinks } from "@/components/layout"
 import type { Session } from "../auth/session.ts"
 import type { Context } from "../context.ts"
 import { withReturnTo } from "../context.ts"
-import type { MembershipRow } from "../db/orgs.ts"
+import { orgShell, type ShellData } from "../navigation.ts"
 import type { ScimTokenRow, SsoConnectionRow, SsoDomainRow } from "../db/sso.ts"
 import type { Html } from "./html.ts"
-import { accountOf, page } from "./document.tsx"
+import { page } from "./document.tsx"
 import { SettingsFrame, type OrgFrame } from "./settings.tsx"
 
 const destructiveGhost = "text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -331,9 +331,9 @@ function ScimCard({ ctx, data }: { ctx: Context; data: SsoPageData }) {
   )
 }
 
-export function ssoSettingsPage(ctx: Context, session: Session, data: SsoPageData, orgs?: readonly MembershipRow[]): Html {
-  return page(ctx, { title: `Single sign-on · ${data.orgName}`, user: accountOf(session, orgs) }, (
-    <SettingsFrame ctx={ctx} data={data} tab="sso">
+export function ssoSettingsPage(ctx: Context, session: Session, data: SsoPageData, shell: ShellData): Html {
+  return page(ctx, { title: `Single sign-on · ${data.orgName}`, shell: orgShell(ctx, session, shell, "sso") }, (
+    <SettingsFrame ctx={ctx} data={data}>
       <DomainsCard data={data} />
       <ConnectionCard data={data} />
       <DetailsCard data={data} />

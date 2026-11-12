@@ -116,7 +116,7 @@ export function TemplatesPage({ me }: { me: Me }) {
     h(Notice, { message: message.text, error: message.error }),
     manage && !editor ? h(Card, { 'aria-label': 'New template' },
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'New template')),
-        h(CardDescription, null, 'A PDF of up to 5 MB and 100 pages, and the roles that sign it, in signing order. Use synthetic documents until your organization has reviewed E-sign for real ones.')),
+        h(CardDescription, null, 'A PDF of up to 5 MB and 100 pages, and the roles that sign it, in signing order. Use synthetic documents until your organization has reviewed Esign for real ones.')),
       h(CardContent, { className: 'flex flex-col gap-4' },
         h(Field, { label: 'PDF', htmlFor: 'template-pdf' },
           h(Input, { id: 'template-pdf', type: 'file', accept: 'application/pdf', disabled: busy, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null) })),

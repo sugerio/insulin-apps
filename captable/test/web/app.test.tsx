@@ -52,7 +52,7 @@ describe("opened outside the Insulin console", () => {
     const { callsTo } = renderRoute(`${DASHBOARD}?asOf=2026-10-22`, unauthenticated);
     expect(await screen.findByRole("heading", { name: "Open this app from the Insulin console" })).toBeTruthy();
     expect(document.querySelectorAll("a")).toHaveLength(0);
-    expect(screen.queryByText("ESSENTIALS")).toBeNull();
+    expect(document.querySelector("[data-insulin-shell]")).toBeNull();
     expect(callsTo(api.routes.getDashboard)).toHaveLength(0);
     // "Try again" asks /api/me once more, in place: the console may have renewed its session meanwhile.
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -63,7 +63,7 @@ describe("opened outside the Insulin console", () => {
     let reads = 0;
     const { router } = renderRoute(DASHBOARD, () => (++reads === 1 ? unauthenticated() : me("owner")));
     fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("ESSENTIALS")).toBeTruthy();
+    expect(await screen.findByText("Essentials")).toBeTruthy();
     expect(router.state.location.pathname).toBe(DASHBOARD);
   });
 
@@ -71,7 +71,7 @@ describe("opened outside the Insulin console", () => {
     const extra = [...workspaceHandlers().filter((handler) => handler.route !== api.routes.getDashboard), mock(api.routes.getDashboard, unauthenticated)];
     renderRoute(DASHBOARD, me("owner"), extra);
     expect(await screen.findByRole("heading", { name: "Open this app from the Insulin console" })).toBeTruthy();
-    expect(screen.queryByText("ESSENTIALS")).toBeNull();
+    expect(screen.queryByText("Essentials")).toBeNull();
   });
 
   it("never navigates the window or opens another one", async () => {
@@ -84,16 +84,20 @@ describe("opened outside the Insulin console", () => {
 });
 
 describe("the shell", () => {
-  it("shows the product and the company's name, the person's console role, and no sign-in or sign-out", async () => {
-    renderRoute(DASHBOARD, me("owner"));
-    const banner = await screen.findByRole("banner");
-    expect(within(banner).getByText("Cap Table")).toBeTruthy();
-    expect(within(banner).getByText("Acme Robotics")).toBeTruthy();
-    expect(within(banner).getByText("Rachel Ostrowski")).toBeTruthy();
-    expect(within(banner).getByText("Owner")).toBeTruthy();
-    expect(screen.getByText("ESSENTIALS")).toBeTruthy();
+  it("shows the company and the product, the person's console role, and in the console nothing to sign in to or out of", async () => {
+    const { calls } = renderRoute(DASHBOARD, me("owner"));
+    const primary = await screen.findByRole("navigation", { name: "Primary" });
+    expect(within(primary).getByText("Essentials")).toBeTruthy();
+    // Served without Insulin Apps around it (the console's frame): the switcher names the company, with nothing to switch.
+    expect(document.querySelector(".org-switcher")?.textContent).toBe("Acme RoboticsCap Table");
+    const person = screen.getByRole("button", { name: /Rachel Ostrowski/ });
+    expect(person.textContent).toContain("Owner");
     expect(await screen.findByRole("button", { name: /New/ })).toBeTruthy();
+    await waitFor(() => expect(calls.some((call) => call.url.pathname === "/__insulin/me")).toBe(true));
+    fireEvent.click(person);
+    expect(screen.getByRole("button", { name: "Switch theme" })).toBeTruthy();
     expect(screen.queryByText(/sign (in|out)/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Account" })).toBeNull();
   });
 
   it("offers write entry points to an editor", async () => {
@@ -105,7 +109,7 @@ describe("the shell", () => {
   it("offers no write entry points to a custom role that only views the cap table", async () => {
     renderRoute(DASHBOARD, me("admin_ro"));
     expect(await screen.findByText("Custom role")).toBeTruthy();
-    await screen.findByText("ESSENTIALS");
+    await screen.findByText("Essentials");
     await screen.findByRole("heading", { name: "Acme Robotics, Inc." });
     expect(screen.queryByRole("button", { name: /New/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Process due items" })).toBeNull();
@@ -119,7 +123,7 @@ describe("the shell", () => {
 
   it("shows no preview strip for a real console user", async () => {
     renderRoute(DASHBOARD, me("owner"));
-    await screen.findByText("ESSENTIALS");
+    await screen.findByText("Essentials");
     expect(screen.queryByText(/Preview mode/)).toBeNull();
   });
 });

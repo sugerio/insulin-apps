@@ -28,7 +28,7 @@ and publish it. It brings its own database and needs no other service.
   log.
 - **A permanent history.** Every change is recorded with who made it and when. A mistake is corrected by reversing the
   change, never by rewriting history.
-- **Built-in Docs.** **Docs**, at the bottom of everyone's sidebar, explains how to use Cap Table and what holders see,
+- **Built-in Docs.** **Docs**, in everyone's navigation, explains how to use Cap Table and what holders see,
   and covers the basics of equity in plain words (share counts, common and preferred stock, stock options and vesting,
   ISOs and NSOs, 409A valuations, SAFEs, dilution), with a glossary.
 

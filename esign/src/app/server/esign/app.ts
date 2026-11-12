@@ -253,7 +253,7 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   let body: unknown;
   try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
-  // Every field must be one E-sign knows: a misspelled one is refused rather than lost.
+  // Every field must be one Esign knows: a misspelled one is refused rather than lost.
   const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
   if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
   const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown };

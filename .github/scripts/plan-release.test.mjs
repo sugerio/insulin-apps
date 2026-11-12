@@ -308,5 +308,5 @@ test("gives no version to a push CI didn't run on, even when its other runs pass
   })
   assert.equal(result.status, 0, result.log)
   assert.deepEqual(result.releases, [`v0.1.2 ${sha('c')} v0.1.1 CI, captable`])
-  assert.match(result.log, new RegExp(`Not every workflow passed for ${sha('b')}`))
+  assert.match(result.log, new RegExp(`Not every workflow passed for ${sha('b')} \\(CI didn't run on it\\): no version`))
 })

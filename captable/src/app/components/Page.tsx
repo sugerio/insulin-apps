@@ -1,11 +1,13 @@
 import "./workspace.css";
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { useDocumentTitle } from "../lib/useDocumentTitle.ts";
 import { useOptionalWorkspace, useWorkspace } from "./OrgWorkspace.tsx";
 
 // The page frame every admin screen shares: breadcrumb, then white cards; the card header has the
-// H1 on the left and actions on the right, with a "Read-only" badge next to the H1 for read-only admins.
+// H1 on the left and actions on the right, with a "Read-only" badge next to the H1 for read-only admins. Inside the
+// app's shell the breadcrumb shows in the header above the page (section › item).
 
 export type Crumb = readonly [label: string, to?: string];
 
@@ -20,8 +22,16 @@ export function Page({ title, crumbs, children }: { title: string; crumbs?: read
   );
 }
 
+/**
+ * Where a page's breadcrumb goes: the shell's page header; null keeps it in the page (no shell around it), and "hidden"
+ * leaves it out (the holder's page in an admin's preview, which shows the page without the holder's shell).
+ */
+export const CrumbSlotContext = createContext<HTMLElement | "hidden" | null>(null);
+
 export function Breadcrumbs({ items }: { items: readonly Crumb[] }) {
-  return (
+  const slot = useContext(CrumbSlotContext);
+  if (slot === "hidden") return null;
+  const crumbs = (
     <nav className="crumbs" aria-label="Breadcrumb">
       <ol>
         {items.map(([label, to], index) => (
@@ -32,6 +42,7 @@ export function Breadcrumbs({ items }: { items: readonly Crumb[] }) {
       </ol>
     </nav>
   );
+  return slot ? createPortal(crumbs, slot) : crumbs;
 }
 
 interface PageHeadProps {

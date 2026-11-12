@@ -1,44 +1,116 @@
-// The docs' layout, rendered with React at build time: the navigation (Platform, then one section per app), the
-// article, its table of contents, previous and next, and the /docs/ index. The gateway puts the result inside its
-// shared document (top bar and footer), per request (src/pages/docs.tsx). Classes are Tailwind's, in shadcn's neutral
-// theme; src/styles/gateway.css scans this directory for them.
+// The docs' layout, rendered with React at build time: the two-level navigation of DESIGN.md §3.2 (level 1: Overview,
+// Platform, one item per app, and the files for AI agents at the bottom; level 2: the open section's pages under its
+// title), the article, its table of contents, previous and next, and the /docs/ index. The navigation is static: the
+// docs are public, so it has no organization switcher, no person and no per-request state, and its levels don't
+// collapse. On narrow screens a <details> menu above the article holds both levels. The gateway puts the result inside
+// its shared document (top bar and footer), per request (src/pages/docs.tsx). Classes are Tailwind's, in shadcn's
+// neutral theme, the navigation in its sidebar colours and spacing as components/shell.tsx draws them;
+// src/styles/gateway.css scans this directory for them.
 import { createElement as h } from 'react'
+import * as lucide from 'lucide-react'
 import { ArrowRight, Bot, BookOpen, ChevronLeft, ChevronRight, KeyRound, Menu, Rocket } from 'lucide-react'
 
-const LINK = 'block rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground'
-const CURRENT = 'block rounded-md bg-accent px-2 py-1.5 text-sm font-medium text-accent-foreground'
 const CARD = 'flex flex-col gap-1.5 rounded-xl border bg-card p-4 text-card-foreground shadow-xs transition-colors hover:bg-accent/60'
 
-/** The sections' links; `current` is the path of the page being rendered. */
-function NavLinks({ site, current }) {
-  return h('div', { className: 'flex flex-col gap-6' },
-    h('div', { className: 'flex flex-col gap-0.5' },
-      h('a', { href: '/docs/', className: current === '/docs/' ? CURRENT : LINK, ...(current === '/docs/' ? { 'aria-current': 'page' } : {}) }, 'Overview')),
-    site.sections.map((section) => h('div', { key: section.slug, className: 'flex flex-col gap-0.5' },
-      h('p', { className: 'px-2 pb-1 text-xs font-medium text-muted-foreground' }, section.title),
-      h('ul', { className: 'flex flex-col gap-0.5' },
-        section.pages.map((page) => h('li', { key: page.path },
-          h('a', { href: page.path, className: page.path === current ? CURRENT : LINK, ...(page.path === current ? { 'aria-current': 'page' } : {}) }, page.title)))))),
-    h('div', { className: 'flex flex-col gap-0.5' },
-      h('p', { className: 'px-2 pb-1 text-xs font-medium text-muted-foreground' }, 'For AI agents'),
-      h('a', { href: '/docs/llms.txt', className: LINK }, 'llms.txt'),
-      h('a', { href: '/docs/llms-full.txt', className: LINK }, 'llms-full.txt')))
+const FOCUS = 'outline-hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring'
+/** shadcn's SidebarMenuButton, as components/shell.tsx draws it: an icon and a label, the open item highlighted. */
+const ITEM = `flex h-8 w-full items-center gap-2 overflow-hidden rounded-md px-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground [&>span]:truncate [&>svg]:size-4 [&>svg]:shrink-0 ${FOCUS}`
+/** A page in level 2: the same without an icon, and a long title wraps rather than being cut. */
+const PAGE_ITEM = `flex min-h-8 w-full items-center rounded-md px-2 py-1.5 text-left text-sm leading-snug text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground ${FOCUS}`
+/** shadcn's SidebarGroupLabel, in small capitals. */
+const GROUP_LABEL = 'flex h-8 shrink-0 items-center px-2 text-xs font-medium tracking-wider text-sidebar-foreground/70 uppercase'
+/** A column of the navigation on wide screens, below the top bar (3.5rem), scrolling on its own. */
+const COLUMN = 'sticky top-14 hidden h-[calc(100svh-3.5rem)] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex'
+
+/** Lucide's older names for two icons, mapped as components/nav-icon.tsx maps them. */
+const ICON_ALIASES = { home: 'house', 'check-circle': 'circle-check' }
+
+/** The Lucide component for one of the navigation's icon names (src/nav-icons.ts), or null. */
+export function navIcon(name) {
+  const pascal = (ICON_ALIASES[name] ?? name).replace(/(?:^|-)([a-z0-9])/g, (_, letter) => letter.toUpperCase())
+  return lucide[pascal] ?? null
 }
 
-/** The sidebar on wide screens, and the same links in a <details> menu above the article on narrow ones. */
-function Sidebar({ site, current }) {
-  return h('aside', { className: 'hidden border-r lg:block' },
-    h('nav', { 'aria-label': 'Documentation', className: 'sticky top-14 max-h-[calc(100svh-3.5rem)] overflow-y-auto py-8 pr-4' },
-      h(NavLinks, { site, current })))
+function Icon({ name }) {
+  const component = navIcon(name)
+  if (!component) throw new Error(`the docs' navigation has no icon named "${name}"`)
+  return h(component, { 'aria-hidden': 'true' })
 }
 
+/**
+ * Level 1 for the page at `current`: Overview and Platform, the apps under their heading, and apart, the files for AI
+ * agents. The section holding the page is open (`aria-current` "true"); on /docs/, Overview is the page ("page").
+ */
+function primaryOf(site, current) {
+  const open = site.sections.find((section) => section.pages.some((page) => page.path === current)) ?? null
+  const item = (key, label, icon, href, state) => ({ key, label, icon, href, current: state })
+  const sectionItem = (section) => item(section.slug, section.title, section.icon, section.pages[0].path, section === open ? 'true' : null)
+  const [platform, ...apps] = site.sections
+  return {
+    open,
+    groups: [
+      { key: 'docs', heading: null, items: [item('overview', 'Overview', 'book-open', '/docs/', current === '/docs/' ? 'page' : null), sectionItem(platform)] },
+      ...(apps.length ? [{ key: 'apps', heading: 'Apps', items: apps.map(sectionItem) }] : []),
+    ],
+    agents: {
+      key: 'agents',
+      heading: 'For AI agents',
+      items: [item('llms', 'llms.txt', 'file-text', '/docs/llms.txt', null), item('llms-full', 'llms-full.txt', 'files', '/docs/llms-full.txt', null)],
+    },
+  }
+}
+
+/** Groups of level-1 items, each under its heading; `idPrefix` keeps the headings' ids unique in the page. */
+function Groups({ groups, idPrefix }) {
+  return groups.map((group) => {
+    const headingId = group.heading ? `${idPrefix}-${group.key}` : undefined
+    return h('div', { key: group.key, className: 'flex flex-col' },
+      group.heading ? h('div', { id: headingId, className: GROUP_LABEL }, group.heading) : null,
+      h('ul', { 'aria-labelledby': headingId, className: 'flex flex-col gap-1' },
+        group.items.map((item) => h('li', { key: item.key },
+          h('a', { href: item.href, className: ITEM, ...(item.current ? { 'aria-current': item.current, 'data-active': 'true' } : {}) },
+            h(Icon, { name: item.icon }),
+            h('span', null, item.label))))))
+  })
+}
+
+/** Level 2: the open section's pages, the current one marked. */
+function Pages({ section, current, labelledBy }) {
+  return h('ul', { 'aria-labelledby': labelledBy, className: 'flex flex-col gap-1' },
+    section.pages.map((page) => h('li', { key: page.path },
+      h('a', { href: page.path, className: PAGE_ITEM, ...(page.path === current ? { 'aria-current': 'page', 'data-active': 'true' } : {}) }, page.title))))
+}
+
+/** The columns on wide screens: level 1, then level 2 when a section is open (on every page but /docs/). */
+function Navigation({ site, current }) {
+  const { open, groups, agents } = primaryOf(site, current)
+  return [
+    h('nav', { key: 'primary', 'aria-label': 'Documentation', 'data-slot': 'docs-nav-primary', className: `${COLUMN} z-20 w-60` },
+      h('div', { className: 'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-2' },
+        h(Groups, { groups, idPrefix: 'docs-nav' }),
+        h('div', { className: 'mt-auto flex flex-col' }, h(Groups, { groups: [agents], idPrefix: 'docs-nav' })))),
+    open ? h('nav', { key: 'section', 'aria-label': 'Section', 'data-slot': 'docs-nav-section', className: `${COLUMN} z-10 w-56` },
+      h('div', { className: 'flex h-14 shrink-0 items-center border-b border-sidebar-border px-4' },
+        h('div', { id: 'docs-nav-section-title', className: 'min-w-0 flex-1 truncate text-sm font-semibold' }, open.title)),
+      h('div', { className: 'flex min-h-0 flex-1 flex-col overflow-y-auto p-2' },
+        h(Pages, { section: open, current, labelledBy: 'docs-nav-section-title' }))) : null,
+  ]
+}
+
+/** Below 1024px, a <details> menu above the article with both levels: level 1, the open section's pages, the agents' files. */
 function MobileNav({ site, current }) {
+  const { open, groups, agents } = primaryOf(site, current)
   return h('details', { className: 'group mb-8 rounded-lg border lg:hidden' },
     h('summary', { className: 'flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden' },
       h(Menu, { className: 'size-4', 'aria-hidden': 'true' }),
       'Documentation menu',
       h(ChevronRight, { className: 'ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-90', 'aria-hidden': 'true' })),
-    h('nav', { 'aria-label': 'Documentation menu', className: 'border-t px-2 py-4' }, h(NavLinks, { site, current })))
+    h('nav', { 'aria-label': 'Documentation menu', className: 'flex flex-col gap-4 rounded-b-lg border-t bg-sidebar p-2 text-sidebar-foreground' },
+      h('div', { 'data-slot': 'docs-menu-primary', className: 'flex flex-col gap-4' }, h(Groups, { groups, idPrefix: 'docs-menu' })),
+      open ? h('div', { 'data-slot': 'docs-menu-section', className: 'flex flex-col gap-2 border-t border-sidebar-border pt-4' },
+        h('div', { id: 'docs-menu-section-title', className: 'px-2 text-sm font-semibold' }, open.title),
+        h(Pages, { section: open, current, labelledBy: 'docs-menu-section-title' })) : null,
+      h('div', { className: 'flex flex-col border-t border-sidebar-border pt-2' }, h(Groups, { groups: [agents], idPrefix: 'docs-menu' }))))
 }
 
 function Breadcrumb({ section }) {
@@ -76,22 +148,25 @@ function PreviousNext({ previous, next }) {
     next ? card(next, 'next') : null)
 }
 
-const GRID = 'mx-auto grid w-full max-w-7xl px-4 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10'
+/** The navigation's columns at the left edge, then the page, centred in the room left. */
+const FRAME = 'flex w-full'
+const CONTENT = 'mx-auto w-full min-w-0 max-w-7xl px-4 sm:px-6'
 
-/** One docs page: sidebar, article (title, description, body), previous and next, table of contents. */
+/** One docs page: the navigation, the article (title, description, body), previous and next, the table of contents. */
 export function DocsPage({ site, page, body }) {
-  return h('div', { className: `${GRID} xl:grid-cols-[15rem_minmax(0,1fr)_13rem]` },
-    h(Sidebar, { site, current: page.path }),
-    h('div', { className: 'min-w-0 py-8 lg:py-10' },
-      h(MobileNav, { site, current: page.path }),
-      h(Breadcrumb, { section: page.section }),
-      h('article', { className: 'max-w-3xl text-[0.9375rem] text-pretty' },
-        h('header', { className: 'mb-10 flex flex-col gap-3' },
-          h('div', { className: 'text-3xl font-semibold tracking-tight text-balance sm:text-4xl' }, h('h1', null, page.title)),
-          h('p', { className: 'text-lg text-muted-foreground text-balance' }, page.description)),
-        body),
-      h('div', { className: 'max-w-3xl' }, h(PreviousNext, { previous: page.previous, next: page.next }))),
-    h(TableOfContents, { headings: page.headings }))
+  return h('div', { className: FRAME },
+    h(Navigation, { site, current: page.path }),
+    h('div', { className: `${CONTENT} grid xl:grid-cols-[minmax(0,1fr)_13rem] xl:gap-10` },
+      h('div', { className: 'min-w-0 py-8 lg:py-10' },
+        h(MobileNav, { site, current: page.path }),
+        h(Breadcrumb, { section: page.section }),
+        h('article', { className: 'max-w-3xl text-[0.9375rem] text-pretty' },
+          h('header', { className: 'mb-10 flex flex-col gap-3' },
+            h('div', { className: 'text-3xl font-semibold tracking-tight text-balance sm:text-4xl' }, h('h1', null, page.title)),
+            h('p', { className: 'text-lg text-muted-foreground text-balance' }, page.description)),
+          body),
+        h('div', { className: 'max-w-3xl' }, h(PreviousNext, { previous: page.previous, next: page.next }))),
+      h(TableOfContents, { headings: page.headings })))
 }
 
 const START = [
@@ -102,9 +177,9 @@ const START = [
 
 /** /docs/: what the docs cover, where to start, and every page of every section with its description. */
 export function DocsIndex({ site, next }) {
-  return h('div', { className: GRID },
-    h(Sidebar, { site, current: '/docs/' }),
-    h('div', { className: 'min-w-0 py-8 lg:py-10' },
+  return h('div', { className: FRAME },
+    h(Navigation, { site, current: '/docs/' }),
+    h('div', { className: `${CONTENT} py-8 lg:py-10` },
       h(MobileNav, { site, current: '/docs/' }),
       h('div', { className: 'max-w-4xl' },
         h('header', { className: 'mb-10 flex flex-col gap-3' },

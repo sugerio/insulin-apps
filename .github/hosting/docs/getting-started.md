@@ -10,7 +10,7 @@ or an operations, finance or IT lead. Each step takes a minute or two.
 
 Insulin Apps is one place to sign in for every app on `insulinapps.com`. You sign in once at `https://insulinapps.com`,
 and the same account, organization and teammates work in every app, such as [Cap Table](/docs/captable/overview) and
-[E-sign](/docs/esign/overview). Each app runs at its own address, like `https://captable.insulinapps.com`.
+[Esign](/docs/esign/overview). Each app runs at its own address, like `https://captable.insulinapps.com`.
 
 ![The Insulin Apps landing page, with Create an account and Sign in buttons above the list of apps](/docs/assets/screenshots/platform-landing.png "The landing page at insulinapps.com")
 
@@ -65,8 +65,9 @@ an owner sets this up.
 If someone has already invited you, skip to [Step 4](#step-4-accept-an-invitation): you join their organization instead.
 
 1. When you are signed in, choose **Create an organization**. Before you belong to any organization, your home page
-   offers it. Once you do, it is in the top bar's organization menu (see [Your home page and the organization
-   menu](#your-home-page-and-the-organization-menu)). You can also go to `https://insulinapps.com/orgs/new`.
+   offers it. It is also in the organization menu at the top of the navigation (see [Your home page and the
+   organization menu](#your-home-page-and-the-organization-menu)). You can also go to
+   `https://insulinapps.com/orgs/new`.
 2. Enter the **Organization name**, for example "Northwind Robotics". You can rename it later.
 3. Choose **Create organization**.
 
@@ -98,7 +99,7 @@ who to contact instead.
 
 Owners and admins invite people from the organization's **People** page, at `https://insulinapps.com/settings/users`.
 
-1. Open **People**. From any page, use the organization menu in the top bar and choose **People and roles**.
+1. Open **People**, under **Settings** in the navigation on the left of `insulinapps.com`.
 2. Under **Invite people**, enter the person's **Email address**.
 3. Choose their **Access**:
    - an organization role, **Owner**, **Admin**, **Editor** or **Viewer**, which applies in every app; or
@@ -119,7 +120,7 @@ Which access should you choose? A quick guide:
 | Someone who manages people and integrations | **Admin** |
 | Someone who does the day-to-day work in every app | **Editor** |
 | Someone who only needs to look, such as a board member | **Viewer** |
-| An outside lawyer who only needs E-sign, or an employee who only needs to see their own equity | **Specific apps** |
+| An outside lawyer who only needs Esign, or an employee who only needs to see their own equity | **Specific apps** |
 
 Admins can invite anyone except owners. The details are in
 [Organizations and roles](/docs/platform/organizations-and-roles).
@@ -151,15 +152,16 @@ Your home page at `https://insulinapps.com`, **Apps in** your active organizatio
 Choose the app's **Open** button on its card (for example **Open Cap Table**), or go straight to its address, such as
 `https://captable.insulinapps.com`.
 
-![The signed-in home page, Apps in Northwind Robotics, with a card for Cap Table and one for E-sign](/docs/assets/screenshots/platform-home.png "Your home page")
+![The signed-in home page, Apps in Northwind Robotics, with a card for Cap Table and one for Esign](/docs/assets/screenshots/platform-home.png "Your home page")
 
-Inside an app, a small account bar from Insulin Apps shows who you are and which organization you are in. From it you
-can switch organization, open the app's **People**, **Integrations** and **Connect AI** settings, go back to **All
-apps**, open your **Account** or **Sign out**.
+Inside an app, the same navigation runs down the left: the organization menu at the top (with **All apps**, to come
+back here), the app's own pages, then **Docs** and **Settings**, whose pages are the app's **People**,
+**Integrations**, **API access** and **Connect AI**, and you at the bottom, with **Account** and **Sign out**. An app
+without this navigation shows a small account bar from Insulin Apps instead, with the same links.
 
 The first time you open an app, it may ask you to set it up for your organization. For example, Cap Table asks how to
 start your company's records. The app's own docs explain this: [Cap Table](/docs/captable/overview),
-[E-sign](/docs/esign/overview).
+[Esign](/docs/esign/overview).
 
 If you see **You don't have access to** an app, your access in that organization is to specific apps only, and that app
 isn't one of them. Ask one of the organization's owners or admins.
@@ -173,24 +175,32 @@ Once you are signed in, `https://insulinapps.com` is your home page. It shows:
 - **Invitations** waiting for your address, if any, with **Accept** and **Decline**.
 - If you don't belong to any organization yet, **You're not in an organization yet**, with **Create an organization**.
 
-Your organizations are in the **organization menu**, the button with your active organization's name and your role in
-the top bar of `insulinapps.com`. Open it to:
+The navigation on the left of every page, once you are signed in, holds:
 
-- see your organizations, with your role in each and a check mark next to the active one;
-- choose another organization to switch to it;
-- open **People and roles**, the active organization's settings;
-- **Create an organization**.
+- at the top, the **organization menu**: your active organization's name and your role. Open it to see your
+  organizations, with your role in each and a check mark next to the active one; choose another organization to switch
+  to it; go to **All apps** (this home page); or **Create an organization**;
+- **Home**, this page;
+- **Apps**: the apps you can use in the active organization, each opening on its own address;
+- **Settings**: the organization's **People**, **Roles** (for everyone with an organization role), **Organization**
+  and, for owners, **Single sign-on**;
+- **Docs**, these pages;
+- at the bottom, you: your initials and name, opening **Account** and **Sign out**. **Account** has its own pages,
+  **Profile**, **Security** and **AI agents**, in a second column.
 
-![The home page with the organization menu open, listing two organizations, People and roles, and Create an organization](/docs/assets/screenshots/platform-org-menu.png "The organization menu")
+**Collapse**, above your name, narrows the navigation to its icons (point at one to see its name), and the button at
+the top of the second column does the same for that column. Your browser remembers the choice. On a phone, the menu
+button at the top opens the whole navigation.
 
-The avatar with your initials next to it is the account menu: **Your apps**, **Account**, **Security** and **Sign out**.
+![The home page with the organization menu open at the top of the navigation, listing two organizations, All apps and Create an organization](/docs/assets/screenshots/platform-org-menu.png "The organization menu")
 
 ## Switching organizations
 
 Every app opens in your **active organization**. If you belong to more than one:
 
-- in the top bar of `insulinapps.com`, open the organization menu and choose another organization; or
-- inside an app, use the account bar's **Organization** list and choose **Switch**.
+- open the organization menu at the top of the navigation, on `insulinapps.com` or inside an app, and choose another
+  organization; or
+- inside an app with the account bar instead, use its **Organization** list and choose **Switch**.
 
 The app then shows that organization's data. Apps keep each organization's data apart.
 
@@ -201,4 +211,4 @@ The app then shows that organization's data. Apps keep each organization's data 
 - Let an AI agent such as Claude Code or Codex work in an app for you: open the app's **Connect AI** page, and see
   [AI agents](/docs/platform/ai-agents).
 - Connect your own software to an app: [API access with OAuth clients](/docs/platform/api-and-service-accounts).
-- Learn an app: [Cap Table](/docs/captable/overview), [E-sign](/docs/esign/overview).
+- Learn an app: [Cap Table](/docs/captable/overview), [Esign](/docs/esign/overview).

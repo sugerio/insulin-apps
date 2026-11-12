@@ -4,14 +4,15 @@ import { appAccess } from './access.ts'
 import { integrationProxy } from './integrations/proxy.ts'
 import { appMailRelay } from './mail/relay.ts'
 import type { Context } from './context.ts'
-import { apexUrl, appSettingsPath } from './context.ts'
+import { apexUrl, appSettingsPath, originOf } from './context.ts'
 import { listCapturedMail } from './db/mail.ts'
 import { findMembership, listMemberships } from './db/orgs.ts'
 import { BodyTooLarge, isFormBody, isJsonBody, isSameOrigin, readText, wantsJson } from './http/request.ts'
 import { htmlResponse, jsonResponse, redirect } from './http/response.ts'
 import { log } from './log.ts'
+import { navToggle } from './navigation.ts'
 import { devMailPage, mailLinks } from './pages/dev-mail.tsx'
-import { afterPost, methodNotAllowed, notFoundPage } from './pages/status.tsx'
+import { afterPost, badRequestPage, methodNotAllowed, notFoundPage } from './pages/status.tsx'
 import { ROLE_LABELS } from './roles.ts'
 import { activeOrg, endSession, loadSession, switchActiveOrg } from './auth/session.ts'
 
@@ -31,6 +32,8 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
       return method === 'POST' ? switchOrg(ctx) : methodNotAllowed(ctx, ['POST'])
     case '/__insulin/logout':
       return method === 'POST' ? logout(ctx) : methodNotAllowed(ctx, ['POST'])
+    case '/__insulin/nav':
+      return nav(ctx)
     case '/__insulin/dev/mail':
       return devMail(ctx)
     default:
@@ -39,8 +42,10 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
 }
 
 /**
- * What the account bar shows: who is signed in, the active organization with their role (in an app: their role in that
- * app), the other organizations, links (in an app: its own people, integrations and Connect AI pages).
+ * What the account bar and an app's navigation show: who is signed in, the active organization with their role (in an
+ * app: their role in that app), the other organizations, the apex's origin, links (in an app: its own people,
+ * integrations and Connect AI pages) and, in an app the person can use, its four settings pages (DESIGN.md §3.2: the
+ * app's Settings links to them on the apex).
  */
 async function me(ctx: Context): Promise<Response> {
   const session = await loadSession(ctx)
@@ -48,7 +53,15 @@ async function me(ctx: Context): Promise<Response> {
   const active = await activeOrg(ctx, session)
   const memberships = await listMemberships(ctx.config.db, session.user.id)
   const access = ctx.app && active ? await appAccess(ctx.config.db, ctx.app, active.id, session.user.id, active.role) : null
+  const app = access ? ctx.app : null
   return jsonResponse({
+    apex: originOf(ctx, ctx.config.domain),
+    settings: app ? {
+      users: apexUrl(ctx, appSettingsPath(app, 'users')),
+      integrations: apexUrl(ctx, appSettingsPath(app, 'integrations')),
+      api: apexUrl(ctx, appSettingsPath(app, 'api')),
+      connectAi: apexUrl(ctx, appSettingsPath(app, 'connect-ai')),
+    } : null,
     user: { name: session.user.name, email: session.user.email },
     organization: active ? { id: active.id, name: active.name, role: active.role, roleLabel: access?.label ?? ROLE_LABELS[active.role] } : null,
     organizations: memberships.map((membership) => ({
@@ -115,6 +128,20 @@ async function logout(ctx: Context): Promise<Response> {
   await endSession(ctx)
   if (wantsJson(ctx.request)) return jsonResponse({ ok: true, next: apexUrl(ctx) })
   return afterPost(ctx, apexUrl(ctx))
+}
+
+/**
+ * The collapse toggles of the gateway's navigation (DESIGN.md §3.2, navigation.ts): GET only, on the apex only, where
+ * the signed-in pages are (apps keep the choice in their own localStorage).
+ */
+function nav(ctx: Context): Response {
+  if (ctx.site !== 'apex') return notFoundPage(ctx)
+  const method = ctx.request.method
+  if (method !== 'GET' && method !== 'HEAD') return methodNotAllowed(ctx, ['GET', 'HEAD'])
+  const result = navToggle(ctx)
+  if (result instanceof Response) return result
+  log('nav_refused', { reason: result.code })
+  return badRequestPage(ctx, 400, result.problem)
 }
 
 /** Local development only: SITE_ENV=test and a *.localhost host; a 404 everywhere else. */

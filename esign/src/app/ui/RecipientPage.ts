@@ -34,8 +34,8 @@ type Artifact = {id:string;sha256:string;verified?:boolean;fields?:SignatureFiel
 /** A file name for the downloaded copy: the document's name, else "document". */
 const pdfFileName=(name?:string)=>`${(name??'').replace(/[^A-Za-z0-9 ._-]+/g,'').trim().slice(0,100)||'document'}.pdf`;
 /** The name a signature is credited to on the page; the product named under every preview. */
-const SIGNED_THROUGH='E-sign';
-/** "Ana Ribeiro · Partner Manager, Northbeam Consulting · Signed electronically through E-sign". */
+const SIGNED_THROUGH='Esign';
+/** "Ana Ribeiro · Partner Manager, Northbeam Consulting · Signed electronically through Esign". */
 export function signatureCaption(name:string,title:string,company?:string):string{
   const role=[title.trim(),company?.trim()].filter(Boolean).join(', ');
   return [name.trim(),role,`Signed electronically through ${SIGNED_THROUGH}`].filter(Boolean).join(' · ');

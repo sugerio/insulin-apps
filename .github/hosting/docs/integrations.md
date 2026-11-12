@@ -12,10 +12,11 @@ secrets). The first part is for app admins; the last part is for people who buil
 
 Each app has an **Integrations** page on the apex: `https://insulinapps.com/apps/<app>/settings/integrations`, for
 example `https://insulinapps.com/apps/esign/settings/integrations`. The app's own
-`https://<app>.insulinapps.com/settings/integrations` leads there, and so does **Integrations** in the app's account bar.
+`https://<app>.insulinapps.com/settings/integrations` leads there, and so does **Settings** → **Integrations** in the
+app's navigation.
 
 It holds the app's **stored credentials**: secrets for outside services that the app calls, such as another company's
-API. Programs that call the app's own API don't belong here: they use OAuth clients, on the app's **API access** tab,
+API. Programs that call the app's own API don't belong here: they use OAuth clients, on the app's **API access** page,
 which the page links to under **API clients**. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ![The Integrations page with the Stored credentials card and the API clients card that links to API access](/docs/assets/screenshots/platform-integrations.png "An app's Integrations page")
@@ -108,7 +109,7 @@ app reads them with `getCurrentUser(request)` from `@fours/app/server`. An app t
 
 ### Public pages for people without an account
 
-Some people never get an account, such as someone who receives a document to sign in E-sign. An app lists the paths
+Some people never get an account, such as someone who receives a document to sign in Esign. An app lists the paths
 they may open in `publicPaths` (at most ten). On those paths Insulin Apps forwards the request with no identity at all
 (`x-suger-access-via: public`), and the app authenticates the visitor with its own short-lived codes, such as a code
 e-mailed to them. These requests are rate limited per IP address, and requests that change something more strictly.
@@ -125,7 +126,7 @@ ten messages an hour per recipient across all apps, 500 a day per organization a
 
 Apps have no cron jobs. An app with work that falls due (deadlines, retries) declares one `scheduled` path under `/api/`,
 and the platform calls it every five minutes, with no identity (`x-suger-access-via: schedule`), an empty body and a
-25-second timeout. The app does every organization's due work there, safely repeatable. For example, E-sign expires
+25-second timeout. The app does every organization's due work there, safely repeatable. For example, Esign expires
 envelopes past their deadline this way.
 
 ### Secrets

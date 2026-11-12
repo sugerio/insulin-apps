@@ -1,21 +1,21 @@
 ---
-title: E-sign overview
-description: What E-sign does, who it is for, its pages, and how it runs on Insulin Apps. Experimental, for synthetic documents only.
+title: Esign overview
+description: What Esign does, who it is for, its pages, and how it runs on Insulin Apps. Experimental, for synthetic documents only.
 order: 1
 ---
 
-E-sign sends PDFs for electronic signature. This page is for anyone deciding whether to use it, and for AI agents that need
+Esign sends PDFs for electronic signature. This page is for anyone deciding whether to use it, and for AI agents that need
 a map of the app before they act on it.
 
 > [!WARNING]
-> **E-sign is experimental.** Use synthetic documents and test email addresses only. The consent wording, the
+> **Esign is experimental.** Use synthetic documents and test email addresses only. The consent wording, the
 > certificate of completion and the timestamp service still need legal and operational review before real documents
 > are signed.
 
-## What E-sign does
+## What Esign does
 
 Someone in your organization uploads a PDF as a **template** and names the roles that sign it, in order. They send the
-template as an **envelope**, naming one signer for each role. Each signer, in turn, opens the signing page. E-sign:
+template as an **envelope**, naming one signer for each role. Each signer, in turn, opens the signing page. Esign:
 
 1. emails the signer a 6-digit code to confirm it is them;
 2. shows them the document, with its fingerprint (a SHA-256 hash that identifies exactly this file);
@@ -40,45 +40,69 @@ to them give access to their own turn, and nothing else.
 
 ## The pages
 
-Members open E-sign at `https://esign.insulinapps.com`. Its navigation has three entries:
+Members open Esign at `https://esign.insulinapps.com`. Its navigation has four entries:
 
 | Page | What it shows |
 | --- | --- |
 | **Envelopes** | Every envelope in your organization, newest first, with its status. Open one to see its signers, its audit trail and, once completed, the signed PDF and the certificate. Those who manage also find **New envelope** and **Process due work** here. |
 | **Templates** | The PDFs your organization sends, with their signer roles and placed fields. Those who manage upload new ones here. |
 | **Docs** | The built-in help: getting started, the main tasks, what signers see, statuses, evidence, roles, background on electronic signatures and a glossary. Every role can open it. |
+| **Settings** | Esign's **People**, **Integrations**, **API access** and **Connect AI** pages, which are the platform's pages on `https://insulinapps.com/apps/esign/settings/` (see [Roles and access](/docs/esign/roles-and-access#people-and-integrations-live-on-the-platform)). |
 
-Signers see only the public pages: the signing page (`/sign`), the page that downloads their signed copy (`/copy`) and,
-for host products, the embedded field editor (`/editor/page/...`).
+Signers see only the public pages, which have no navigation: the signing page (`/sign`), the page that downloads their
+signed copy (`/copy`) and, for host products, the embedded field editor (`/editor/page/...`).
+
+## The navigation
+
+The navigation on the left has two columns, as in every Insulin app. The first column has the organization switcher at
+the top (your organization's name; choose it to switch to another of your organizations, go to **All apps** or create one), then
+**Envelopes** and **Templates** under the heading Esign, then **Docs** and **Settings**, and at the bottom your name and
+role, with your Insulin Apps **Account** and **Sign out**. The second column lists what the open section holds:
+
+| Section | Second column |
+| --- | --- |
+| **Envelopes** | **All envelopes**, **New envelope** (only for roles that send), and under Status one view per status: **Out for signature**, **Finishing**, **Completed**, **Declined**, **Expired**, **Voided**. A view is an address such as `/envelopes?status=completed`, the same as choosing that status in the list's filter. |
+| **Docs** | The topics, under Using Esign and Electronic signatures, then **Public docs**, a link to these pages. |
+| **Settings** | **People**, **Integrations**, **API access** and **Connect AI**, links to the platform's pages (in the console's preview, listed without links). |
+| **Templates** | None. |
+
+The bar above the page shows where you are, such as Envelopes › Completed; the section's name goes back to it.
+
+Each column has its own button that collapses it to icons, whose names show when you point at them. The choice is kept
+in this browser (`localStorage`, key `insulin-nav`). Below 768 pixels wide, a top bar holds the organization switcher and
+a menu button that opens both columns.
+
+Esign declares its sections in its `package.json` under `insulin.navigation`. The platform reads the same list, so
+Esign's Settings pages on insulinapps.com show the same first column.
 
 ## How it runs on Insulin Apps
 
-E-sign is an open-source Insulin app. On insulinapps.com it runs at `https://esign.insulinapps.com`, behind the platform:
+Esign is an open-source Insulin app. On insulinapps.com it runs at `https://esign.insulinapps.com`, behind the platform:
 
 - **Sign-in is the platform's.** You sign in at `https://insulinapps.com` with email and password, Google or your
-  company's single sign-on. E-sign has no sign-in screens of its own. See
+  company's single sign-on. Esign has no sign-in screens of its own. See
   [Sign-in and security](/docs/platform/sign-in-and-security).
 - **Your role comes from your organization.** Owners, admins and editors send and manage envelopes; viewers see them.
   See [Roles and access](/docs/esign/roles-and-access).
-- **One organization at a time.** Everything you see in E-sign belongs to your active organization. Switch organization
+- **One organization at a time.** Everything you see in Esign belongs to your active organization. Switch organization
   in the top bar to see another one's templates and envelopes.
-- **Due work runs every five minutes.** The platform calls E-sign every five minutes so it can expire envelopes past
+- **Due work runs every five minutes.** The platform calls Esign every five minutes so it can expire envelopes past
   their deadline, finish envelopes a request left unfinished and retry signed-copy emails, for every organization.
-- **Mail goes through the platform.** E-sign has no mail service of its own. It sends a signer two kinds of email only:
+- **Mail goes through the platform.** Esign has no mail service of its own. It sends a signer two kinds of email only:
   their verification code and, at the end, the link to their signed copy. It doesn't email signers an invitation to
   sign.
-- **Signing must be set up.** A published E-sign signs nothing until its code pepper, the mail relay and its seal key
+- **Signing must be set up.** A published Esign signs nothing until its code pepper, the mail relay and its seal key
   are configured. Until then, the **Envelopes** page says that signing isn't set up on the deployment.
 
-![An envelope's page in E-sign, with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "One envelope: its signers in order, where each stands, and the audit trail")
+![An envelope's page in Esign, with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "One envelope: its signers in order, where each stands, and the audit trail")
 
-## What E-sign doesn't do
+## What Esign doesn't do
 
 - It doesn't email signers an invitation to sign. The signer opens the signing page in your host product, or someone who
   manages opens it for them from the envelope's page.
 - It doesn't check what kind of document is sent. Whoever sends decides whether an electronic signature fits it.
 - It doesn't verify identity documents. The emailed code shows control of the signer's mailbox at the time, and a host
-  product can tell E-sign how it signed the signer in, which E-sign records as the host's statement.
+  product can tell Esign how it signed the signer in, which Esign records as the host's statement.
 - It doesn't make advanced or qualified electronic signatures (in the EU's eIDAS terms), and the signed PDF carries no
   embedded PDF signature.
 

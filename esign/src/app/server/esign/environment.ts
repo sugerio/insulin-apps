@@ -1,5 +1,5 @@
 /**
- * dev or prod. Published, E-sign is `prod`; the local preview (`import.meta.env.DEV`, see
+ * dev or prod. Published, Esign is `prod`; the local preview (`import.meta.env.DEV`, see
  * src/app/server/router.ts) is `dev`. The router derives ESIGN_ENV from that; nothing configures it.
  *
  * |                          | dev (local preview)                               | prod (published)              |

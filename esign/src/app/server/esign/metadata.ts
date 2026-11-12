@@ -1,6 +1,6 @@
 /**
  * What a host says about its own templates and envelopes: a template's name, and metadata, a small
- * set of string keys and values (its own ids, for instance) that E-sign keeps and returns as given
+ * set of string keys and values (its own ids, for instance) that Esign keeps and returns as given
  * and never reads. They label a record; they are never evidence: not sealed, and not shown to signers.
  */
 

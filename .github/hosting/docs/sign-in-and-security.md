@@ -41,7 +41,8 @@ profile and e-mail address.
 
 - Signing in starts a session that lasts 30 days and renews while you use it. It works on `insulinapps.com` and in every
   app.
-- **Sign out** is in the account menu of the top bar, and in the account bar inside each app.
+- **Sign out** is under your name at the bottom of the navigation, on `insulinapps.com` and inside each app (or in the
+  account bar, in an app without the navigation).
 - **A change of credentials signs you out everywhere else.** Setting, changing or resetting your password, and turning
   two-step sign-in on or off, end all your other sessions. They also disconnect all your AI agents, so an agent connected
   by someone who got into your account doesn't outlive your recovery. Reconnect the agents you still want.
@@ -114,7 +115,7 @@ One organization at a time can hold a verified domain. **Remove** takes a domain
 organization the members (other than owners) that SCIM added with addresses in that domain.
 
 A verified domain also lets an owner limit invitations to it: **Invite only my verified domains**, on the
-**Organization** tab, off by default. See
+**Organization** page, off by default. See
 [Organizations and roles](/docs/platform/organizations-and-roles#who-can-be-invited).
 
 ### Step 2: Connect your identity provider

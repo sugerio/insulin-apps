@@ -12,7 +12,7 @@ import { waitUntilOf } from './wait-until.ts'
 const PREVIEW_OTP_KEY = 'local-preview-otp-pepper-not-for-real-documents'
 const PREVIEW_SEAL_KEY = 'local-preview-hmac-seal-key-not-for-real-documents'
 
-/** What E-sign runs with, from the platform: the D1 binding, the ESIGN_* secrets, the seal key and the mail relay. */
+/** What Esign runs with, from the platform: the D1 binding, the ESIGN_* secrets, the seal key and the mail relay. */
 async function bindings(request: Request): Promise<Bindings> {
   const db = (await openAppD1()) as unknown as D1Database
   const dev = import.meta.env.DEV && readAppEnv('SUGER_ACCESS_MODE') !== 'console'
@@ -42,7 +42,7 @@ async function bindings(request: Request): Promise<Bindings> {
   }
 }
 
-/** Every `/api/**` request of the app (src/api.ts): E-sign's Hono app, with the platform's bindings. */
+/** Every `/api/**` request of the app (src/api.ts): Esign's Hono app, with the platform's bindings. */
 export async function handleAppRequest(request: Request): Promise<Response> {
   return app.fetch(request, await bindings(request))
 }

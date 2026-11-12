@@ -135,7 +135,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
           manage ? h(TableCell, { className: 'text-right' }, task.status === 'ACTIVE' && envelope.status === 'IN_PROGRESS'
             ? h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => openSigning(task) }, h(PenLine, { 'aria-hidden': true }), `Open ${task.recipientName}'s signing page`) : null) : null)))))),
     envelope.metadata && Object.keys(envelope.metadata).length ? h(Card, null,
-      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Metadata')), h(CardDescription, null, 'Labels the sender\'s system gave this envelope. E-sign keeps them as given; they are not part of the signed evidence.')),
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Metadata')), h(CardDescription, null, 'Labels the sender\'s system gave this envelope. Esign keeps them as given; they are not part of the signed evidence.')),
       h(CardContent, null, h('dl', { 'aria-label': 'Metadata', className: 'grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]' },
         ...Object.entries(envelope.metadata).flatMap(([key, value]) => [
           h('dt', { key: `k-${key}`, className: 'font-mono text-xs text-muted-foreground' }, key),

@@ -92,7 +92,7 @@ test('with a relay, the preview emails the code to the signer for the organizati
   assert.equal(mail.body.to,'ana.partner@partner.example');
   assert.equal(mail.body.subject,'Your verification code');
   assert.match(mail.body.text,/10 minutes/);
-  assert.match(mail.body.text,/Sent by an E-sign test deployment/);
+  assert.match(mail.body.text,/Sent by an Esign test deployment/);
   const otp=/Verification code: (\d{6})/.exec(mail.body.text)?.[1];
   assert.ok(otp);
   const kept=await (await w.req(`/api/test-mail/${body.messageId}`,{headers:w.auth})).json() as {otp:string};

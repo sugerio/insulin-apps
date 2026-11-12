@@ -31,7 +31,7 @@ box cron 210 268 150 76 muted "Crons" "five-minute tick" "daily cleanup"
 group apps 20 400 700 125 "App Workers, private"
 box captable 40 442 170 58 "Cap Table" "insulin-apps-captable"
 box capdb 222 447 52 48 db "D1"
-box esign 300 442 170 58 "E-sign" "insulin-apps-esign"
+box esign 300 442 170 58 "Esign" "insulin-apps-esign"
 box esdb 482 447 52 48 db "D1"
 box more 560 442 140 58 dashed "More apps" "the same shape"
 arrow people.b -> apex.t:0.1875 "session cookie" label=0.3
@@ -88,7 +88,8 @@ When your browser opens a page of an app:
    no access to the app you see **You don't have access to** the app.
 6. It forwards the request to the app Worker over its service binding, with the identity headers.
 7. On an HTML page, it adds the small account bar (organization switch, the app's people, integrations and Connect AI
-   pages, your account, sign out). The bar runs under the app's own content security policy.
+   pages, your account, sign out). The bar runs under the app's own content security policy, and draws nothing on a
+   page that has the navigation of its own (marked `data-insulin-shell`).
 
 ## The identity headers
 
@@ -153,7 +154,7 @@ text 370 478 small muted "Every request checks the person's or the account's cur
   [AI agents](/docs/platform/ai-agents).
 - **OAuth clients** (once called service accounts) get a token with their client id and secret (`client_credentials`)
   and call one app's `/api/*`. They act with the role the organization's owners or admins gave them on the app's **API
-  access** tab. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
+  access** page. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ### Tokens for agents and programs
 
@@ -168,7 +169,7 @@ text 370 478 small muted "Every request checks the person's or the account's cur
 
 ## Public paths
 
-Some apps serve people who have no account, such as a recipient signing a document in E-sign. An app declares those
+Some apps serve people who have no account, such as a recipient signing a document in Esign. An app declares those
 paths (`insulin.publicPaths` in its `package.json`, at most ten). On a public path the gateway:
 
 - looks at no session and no token, and forwards only `x-suger-app-id` and `x-suger-access-via: public`, even when a

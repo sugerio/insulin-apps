@@ -1,7 +1,7 @@
 import {blobStore} from './helpers/platform.ts';
 // A host's labels: a template's name and metadata, and an envelope's metadata (metadata.ts). They are
 // validated, kept as given and returned, carried into the template an editing session saves, and part
-// of an envelope's idempotent request; a create request with a field E-sign doesn't know is refused.
+// of an envelope's idempotent request; a create request with a field Esign doesn't know is refused.
 // Synthetic data, in-process.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -71,7 +71,7 @@ test('a template keeps the name and metadata it was uploaded with, and lists the
     const listed = (templateId: string) => templates.find(t => t.id === templateId);
     assert.deepEqual([listed(id)?.name, listed(id)?.metadata], ['Mutual NDA (v3)', LABELS]);
     assert.deepEqual([listed(plain.id)?.name, listed(plain.id)?.metadata], [undefined, {}]);
-    // Malformed labels, and a form field E-sign doesn't know, are refused.
+    // Malformed labels, and a form field Esign doesn't know, are refused.
     for (const fields of [{ name: 'x'.repeat(201) }, { metadata: '{"a":1}' }, { metadata: 'not json' }]) assert.equal((await h.upload(fields)).status, 422, JSON.stringify(fields));
     const unknown = await h.upload({ title: 'NDA' });
     assert.equal(unknown.status, 422);
@@ -118,7 +118,7 @@ test('an editing session gives the saved template its name and metadata, or the 
   } finally { await h.mf.dispose(); }
 });
 
-test('an envelope keeps its metadata as part of the idempotent request, and refuses fields E-sign doesn\'t know', async () => {
+test('an envelope keeps its metadata as part of the idempotent request, and refuses fields Esign doesn\'t know', async () => {
   const h = await harness();
   try {
     const { id: templateId } = await (await h.upload({})).json() as { id: string };

@@ -96,7 +96,7 @@ export function parseSender(value: unknown): Sender | null | 'invalid' {
 export const parseNamedBy = (value: unknown) => text(value, MAX_NAMED_BY);
 
 /**
- * How the host signed the recipient in before asking for a signing link, as the host says. E-sign
+ * How the host signed the recipient in before asking for a signing link, as the host says. Esign
  * cannot check it: it is recorded, and shown, as the host's statement.
  */
 export type HostAuthentication = { method: string; provider?: string; domain?: string; signedInAt?: string };

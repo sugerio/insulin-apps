@@ -6,8 +6,9 @@
 //   <app>/docs/public/*.md        each app list-apps.mjs finds (section "<app>"), in its order
 //   .github/hosting/docs/assets/  images, served from the DOCS_ASSETS binding at /docs/assets/
 //
-// Each page is rendered with React on the server (scripts/docs/), in the gateway's shadcn style: the navigation, the
-// article, its table of contents, previous and next. The module also holds each page's Markdown, for llms.txt,
+// Each page is rendered with React on the server (scripts/docs/), in the gateway's shadcn style: the two-level
+// navigation (the sections, each with its icon, then the open section's pages), the article, its table of contents,
+// previous and next. The module also holds each page's Markdown, for llms.txt,
 // llms-full.txt and the .md address of every page. The result is committed, so the deploy needs no docs step.
 //
 // npm run check:docs (`--check`) writes nothing and fails while the committed module differs from a fresh build; the
@@ -21,6 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { listApps } from '../../../scripts/list-apps.mjs'
+import { appIconName } from '../src/nav-icons.ts'
 import { DocsIndex, DocsPage } from './docs/layout.mjs'
 import { DocsError, collectHeadings, lex, parseFrontMatter, renderTokens, textForAgents } from './docs/markdown.mjs'
 
@@ -35,6 +37,7 @@ export const ORIGIN_TOKEN = '@@ORIGIN@@'
 const PLATFORM = {
   slug: 'platform',
   title: 'Platform',
+  icon: 'layers',
   summary: 'What every app shares: accounts, organizations and roles, sign-in and security, AI agents over MCP, the API with service accounts, and integrations.',
 }
 
@@ -84,7 +87,7 @@ async function readSources() {
   const sources = [{ ...PLATFORM, dir: PLATFORM_DOCS }]
   for (const app of apps) {
     if (app.name === PLATFORM.slug) throw new DocsError(`an app named "${PLATFORM.slug}" would share the platform's docs section`)
-    sources.push({ slug: app.name, title: app.title, summary: app.summary, dir: join(repositoryDir, app.name, 'docs', 'public') })
+    sources.push({ slug: app.name, title: app.title, summary: app.summary, icon: appIconName(app.name), dir: join(repositoryDir, app.name, 'docs', 'public') })
   }
   const sections = []
   for (const source of sources) {
@@ -101,15 +104,18 @@ async function readSources() {
       pages.push({ ...meta, slug, file, body, tokens, path: `/docs/${source.slug}/${slug}`, headings: collectHeadings(tokens, file) })
     }
     pages.sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug))
-    const section = { slug: source.slug, title: source.title, summary: source.summary, pages }
+    const section = { slug: source.slug, title: source.title, summary: source.summary, icon: source.icon, pages }
     for (const page of pages) page.section = section
     sections.push(section)
   }
   return sections
 }
 
-/** The module's text: every page's HTML and Markdown, the sections' first pages, and llms.txt. */
-export async function buildDocs({ allowTodo = false, allowMissingImages = false } = {}) {
+/**
+ * The sections, every page in reading order (each with its previous and next), and the `site` the renderers take: what
+ * buildDocs renders, and what the tests check the rendered pages against.
+ */
+export async function loadDocs({ allowTodo = false, allowMissingImages = false } = {}) {
   const [sections, assets] = await Promise.all([readSources(), readAssets()])
   const pages = sections.flatMap((section) => section.pages)
   const byPath = new Map(pages.map((page) => [page.path, page]))
@@ -125,7 +131,12 @@ export async function buildDocs({ allowTodo = false, allowMissingImages = false 
     page.previous = index === 0 ? { path: '/docs/', title: 'Overview', sectionTitle: 'Documentation' } : link(pages[index - 1])
     page.next = link(pages[index + 1])
   })
+  return { sections, pages, site }
+}
 
+/** The module's text: every page's HTML and Markdown, the sections' first pages, and llms.txt. */
+export async function buildDocs({ allowTodo = false, allowMissingImages = false } = {}) {
+  const { sections, pages, site } = await loadDocs({ allowTodo, allowMissingImages })
   const out = {}
   out['/docs/'] = {
     title: 'Documentation',

@@ -164,6 +164,15 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    deploy key. It prints what it set when it's done. Until it has run, `release.yml` plans releases but can't tag
    them. It targets `sugerio/insulin-apps`; set `GH_REPO` for a fork.
 
+8. Allow `pull_request_target` for one workflow: in the repository's (or the organization's) **Settings → Actions →
+   Policies**, add an Actions event policy targeted at `.github/workflows/commit-messages.yml` alone that allows the
+   `pull_request_target` event. An event policy is an allowlist: one that covers every workflow and lists only this
+   event would stop the others (`push`, `pull_request`, `workflow_run`, `workflow_dispatch`, `schedule`), and with
+   them CI, releases and deploys. The "Commit messages" workflow runs on this event, so that a line telling GitHub to
+   skip workflows can't reach `main` in a squash merge, and GitHub blocks the event by default in public repositories
+   without such a policy from December 2, 2026. The workflow runs the default branch's code, reads the pull request's
+   commits as data, and has a read-only token.
+
 Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and
 the gateway (the next green merge to `main` releases and deploys too). Step summaries link the affected public
 addresses. On a new Cloudflare account, leave `GATEWAY_SECRET_KEY` out of the environment for that first deploy, then

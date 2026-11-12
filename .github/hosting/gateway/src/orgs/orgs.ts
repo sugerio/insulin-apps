@@ -8,13 +8,14 @@ import { listInvitationGrants, listInvitationsFor, listOrgInvitations } from '..
 import { ORG_REQUEST_DAILY_LIMIT, countOrgRequests } from '../db/mail.ts'
 import {
   changeRole, countOwners, createOrg as insertOrg, deleteOrg as removeOrg, findMembership, invitePolicy,
-  leaveOrg as leaveMembership, listMembers, listMemberships, orgAllowance, removeMember as removeMembership,
+  leaveOrg as leaveMembership, listMembers, orgAllowance, removeMember as removeMembership,
   renameOrg as updateOrgName, setAppAccess, setInviteVerifiedDomainsOnly, type MembershipRow,
 } from '../db/orgs.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
 import { safeReturnTo } from '../http/return-to.ts'
 import { log } from '../log.ts'
+import { loadShell, type ShellData } from '../navigation.ts'
 import { orgRequestMail } from '../mail/templates.ts'
 import { sendOrgRequest } from '../mail/transport.ts'
 import { MAIL_FAILED } from '../pages/auth.tsx'
@@ -109,9 +110,13 @@ function notice(ctx: Context, problem: Problem | null): string | null {
   return problem ? null : NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null
 }
 
-async function frame(ctx: Context, session: Session, membership: MembershipRow) {
-  const [active, memberships] = await Promise.all([activeOrg(ctx, session), listMemberships(ctx.config.db, session.user.id)])
-  return { active: active?.id === membership.org_id, memberships }
+/** Whether the page's organization is the active one, and the navigation's data, in that organization. */
+export async function frame(ctx: Context, session: Session, membership: MembershipRow): Promise<{ active: boolean; shell: ShellData }> {
+  const [active, shell] = await Promise.all([
+    activeOrg(ctx, session),
+    loadShell(ctx, session, { org: { id: membership.org_id, name: membership.org_name, role: membership.role } }),
+  ])
+  return { active: active?.id === membership.org_id, shell }
 }
 
 /** /settings/users: the people, as the member's role allows; also used to show a problem with a submitted form. */
@@ -144,7 +149,7 @@ export async function renderUsers(ctx: Context, session: Session, membership: Me
     myGrants,
     notice: notice(ctx, problem),
     error: problem?.error ?? null,
-  }, chrome.memberships), { status: problem?.status ?? 200 })
+  }, chrome.shell), { status: problem?.status ?? 200 })
 }
 
 /** /settings/roles: the built-in roles, each app's permissions and the custom roles. */
@@ -164,7 +169,7 @@ export async function renderRoles(ctx: Context, session: Session, membership: Me
     uses,
     notice: notice(ctx, problem),
     error: problem?.error ?? null,
-  }, chrome.memberships), { status: problem?.status ?? 200 })
+  }, chrome.shell), { status: problem?.status ?? 200 })
 }
 
 /** /settings/organization: its name, who can be invited (owners), leaving it, deleting it. */
@@ -182,7 +187,7 @@ export async function renderOrganization(ctx: Context, session: Session, members
     invitePolicy: policy,
     notice: notice(ctx, problem),
     error: problem?.error ?? null,
-  }, chrome.memberships), { status: problem?.status ?? 200 })
+  }, chrome.shell), { status: problem?.status ?? 200 })
 }
 
 export async function usersSettings(ctx: Context): Promise<Response> {
@@ -218,9 +223,11 @@ async function orgLimit(ctx: Context, session: Session): Promise<OrgLimitView | 
 /** /orgs/new: the form, or at the owner domain's limit the request for more; with the invitations waiting. */
 async function renderNewOrg(ctx: Context, session: Session, state: NewOrgState, status = 200): Promise<Response> {
   const db = ctx.config.db
-  const [invitations, limit] = await Promise.all([listInvitationsFor(db, session.user.email, ctx.now), state.limit === undefined ? orgLimit(ctx, session) : state.limit])
+  const [invitations, limit, shell] = await Promise.all([
+    listInvitationsFor(db, session.user.email, ctx.now), state.limit === undefined ? orgLimit(ctx, session) : state.limit, loadShell(ctx, session),
+  ])
   const grants = await listInvitationGrants(db, invitations.map((invitation) => invitation.id))
-  return htmlResponse(newOrgPage(ctx, session, invitations, grants, { ...state, limit }), { status })
+  return htmlResponse(newOrgPage(ctx, session, invitations, grants, shell, { ...state, limit }), { status })
 }
 
 export async function newOrgForm(ctx: Context): Promise<Response> {

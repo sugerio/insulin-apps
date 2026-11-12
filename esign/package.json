@@ -1,6 +1,6 @@
 {
   "name": "insulin-esign",
-  "displayName": "E-sign",
+  "displayName": "Esign",
   "version": "0.1.0",
   "description": "Electronic signatures: templates with placed fields, envelopes signed in order with emailed one-time codes, a sealed signed PDF and a certificate of completion",
   "license": "MIT",
@@ -17,6 +17,26 @@
     "test": "node --test test/*.test.ts"
   },
   "insulin": {
+    "navigation": [
+      {
+        "key": "envelopes",
+        "label": "Envelopes",
+        "icon": "inbox",
+        "path": "/envelopes",
+        "group": "Esign",
+        "children": [
+          { "key": "all-envelopes", "label": "All envelopes", "icon": "list", "path": "/envelopes" },
+          { "key": "new-envelope", "label": "New envelope", "icon": "file-pen", "path": "/envelopes/new", "role": "EDITOR" },
+          { "key": "out-for-signature", "label": "Out for signature", "icon": "send", "path": "/envelopes?status=in_progress", "group": "Status" },
+          { "key": "finishing", "label": "Finishing", "icon": "clock", "path": "/envelopes?status=finalizing", "group": "Status" },
+          { "key": "completed", "label": "Completed", "icon": "check-circle", "path": "/envelopes?status=completed", "group": "Status" },
+          { "key": "declined", "label": "Declined", "icon": "file-text", "path": "/envelopes?status=declined", "group": "Status" },
+          { "key": "expired", "label": "Expired", "icon": "calendar", "path": "/envelopes?status=expired", "group": "Status" },
+          { "key": "voided", "label": "Voided", "icon": "archive", "path": "/envelopes?status=voided", "group": "Status" }
+        ]
+      },
+      { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "group": "Esign" }
+    ],
     "permissions": [
       {
         "key": "esign.manage",

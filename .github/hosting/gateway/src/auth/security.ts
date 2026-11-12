@@ -10,7 +10,7 @@ import {
   clearCodeFailures, clearPendingSecret, consumeRecoveryCode, countRecoveryCodes, disableMfa, enableMfa, findMfa,
   replaceRecoveryCodes, setPendingSecret, type MfaRow,
 } from '../db/mfa.ts'
-import { listMemberships } from '../db/orgs.ts'
+import { loadShell } from '../navigation.ts'
 import { findUserById } from '../db/users.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
@@ -23,7 +23,7 @@ import { credentialsChangedPage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { requireSession } from './guard.ts'
 import { LOCKED_MESSAGE, TOTP_PURPOSE, checkAppCode } from './mfa.ts'
-import { activeOrg, startSession, type Session } from './session.ts'
+import { startSession, type Session } from './session.ts'
 import {
   RECOVERY_CODE_COUNT, codeDigits, matchTotp, newRecoveryCode, newTotpSecret, normalizeRecoveryCode, otpauthUri,
 } from './totp.ts'
@@ -54,11 +54,10 @@ async function proveOwner(ctx: Context, session: Session): Promise<string | null
 async function render(ctx: Context, session: Session, extra: Partial<SecurityState> = {}, status = 200): Promise<Response> {
   const db = ctx.config.db
   const key = ctx.config.secretKey
-  const [mfa, recoveryLeft, memberships] = await Promise.all([
+  const [mfa, recoveryLeft, shell] = await Promise.all([
     findMfa(db, session.user.id),
     countRecoveryCodes(db, session.user.id),
-    listMemberships(db, session.user.id),
-    activeOrg(ctx, session),
+    loadShell(ctx, session),
   ])
   const pending = mfa?.totp_pending && key && !mfa.totp_secret ? await unseal(key, TOTP_PURPOSE, mfa.totp_pending) : null
   return htmlResponse(securityPage(ctx, session, {
@@ -68,7 +67,7 @@ async function render(ctx: Context, session: Session, extra: Partial<SecuritySta
     setup: pending ? { secret: pending, uri: otpauthUri(pending, session.user.email) } : null,
     recoveryLeft,
     ...extra,
-  }, memberships), { status })
+  }, shell), { status })
 }
 
 function back(notice?: string): Response {

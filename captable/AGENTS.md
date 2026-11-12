@@ -35,6 +35,7 @@ README's "Database changes".
 |---|---|
 | `src/app/App.tsx`, `src/app/router.tsx` | React root and routes: the admin workspace (`/companies/:orgId/...`), the holder view (`/portfolio/:orgId/...`), first-run setup (`/setup`) |
 | `src/app/pages/`, `components/`, `lib/` | The React app; `components/flows/` holds the review-and-confirm dialogs |
+| `src/app/components/AppLayout.tsx`, `shell.css`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation from `insulin.navigation` in package.json, Docs and Settings, the organization switcher and the person (from the gateway's `/__insulin/*`) |
 | `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic, shown by one component in the workspace, the portfolio and before setup |
 | `src/app/api/`, `src/app/auth/` | The typed API client; the console identity (`/api/me`), access helpers and route guards |
 | `src/app/server/router.ts` | `handleAppRequest(request)`: every app `/api/**` request, handed to `createApp()` in `server/app.ts` |
@@ -211,6 +212,34 @@ web sources for these, and for links or assets from other sites.
   data.
 - `npm test` and `npm run typecheck` must pass before you finish. CI also checks the migrations against the schema and
   builds for Cloudflare.
+
+## Navigation
+
+Every app in this repository has the two-level, collapsible navigation of the repository's
+[DESIGN.md §3.2](../.github/hosting/DESIGN.md): the organization switcher, its sections from `insulin.navigation` in
+`package.json`, then Docs and Settings (People, Integrations, API access, Connect AI, which link to the gateway's
+pages), and the person at the bottom; each level collapses to icons. In Cap Table:
+
+- **The manifest is level 1.** `insulin.navigation` is what the shell (`components/AppLayout.tsx`) and the gateway both
+  render. A page that belongs in the navigation is an item or a child there: `key` (`[a-z0-9-]+`, unique), `label` (1 to
+  40 characters), `icon` (one of `NAV_ICONS` in `lib/navigation.ts`, the Lucide names the gateway bundles, each drawn
+  in `components/Icon.tsx`), `path` (an app-root path such as `/vesting`, never `/__insulin/*`, `/settings/*`, `/mcp` or
+  `/.well-known/*`), and optionally `group` (a heading, shared by consecutive items with the same group, so every item
+  names its own), `role` (the least app role that sees it: `EDITOR` for the company's pages, `VIEWER` for the holder's
+  `/portfolio` ones) and `maxRole` (the most: `VIEWER` for the holder's, since editors and admins never hold equity
+  here). At most 12 items, and 12 children each. `test/web/navigation.test.tsx` checks it, and that every path leads to a page.
+- **App-root paths lead to the company's page.** `/x` resolves to `/companies/:orgId/x` and `/portfolio/x` to
+  `/portfolio/:orgId/x`; the router answers every manifest path with that redirect, because the gateway links to them.
+- **Docs and Settings are the platform's**, added by the shell and never in the manifest. Settings only links to the
+  apex pages: never build people, integration, API client or AI agent pages in the app.
+- **What someone sees** follows their role and what they have here (the workspace, their own holdings). Hiding an item
+  is not access control: the server checks every request.
+- **The account parts come from the gateway** (`lib/platform.ts`: `/__insulin/me`, `/__insulin/switch-org`,
+  `/__insulin/logout`), only when the page is served by it and isn't framed; elsewhere the switcher names the company
+  and Settings lists its pages without links. Each level's collapse is a `localStorage` preference (`insulin-nav`), and
+  the shell's root keeps `data-insulin-shell`.
+- **A change to the navigation** updates the Docs topic "Getting started" (Finding your way around),
+  `docs/using-cap-table.md` and `docs/public/everyday-tasks.md` in the same change.
 
 ## Docs
 

@@ -1,17 +1,18 @@
-// The members' pages: a header with E-sign's navigation (Envelopes, Templates, Docs) and the page the address names.
-// Who the member is comes from /api/me, the platform's identity; the server checks every request again, so what a role
-// can't do is hidden here and refused there. The Docs need no identity: they open for every role, and before sign-in.
+// The members' pages: the two-level navigation (Shell.ts: Envelopes and Templates from package.json
+// `insulin.navigation`, Docs and Settings) beside the page the address names. Who the member is comes from /api/me, the
+// platform's identity; the server checks every request again, so what a role can't do is hidden here and refused there.
+// The Docs need no identity: they open for every role, and before sign-in.
 import React, { useEffect, useState } from 'react'
-import { BookOpen, Files, Inbox, Signature } from 'lucide-react'
-import { cn } from '../lib/utils.ts'
-import { apiJson, describeError, RequestError, type Me } from './api.ts'
+import { apiJson, describeError, RequestError, STATUS_LABELS, statusFilter, type Me } from './api.ts'
 import { EnvelopePage } from './EnvelopePage.ts'
 import { EnvelopesPage } from './EnvelopesPage.ts'
 import { NewEnvelopePage } from './NewEnvelopePage.ts'
 import { Notice } from './parts.ts'
-import { Link, usePath } from './router.ts'
+import { Link, usePath, useSearch } from './router.ts'
+import { Shell } from './Shell.ts'
 import { TemplatesPage } from './TemplatesPage.ts'
 import { Docs } from '../components/Docs.ts'
+import { docTopic } from '../pages/docs/topics.ts'
 
 const h = React.createElement
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -36,17 +37,23 @@ export function route(path: string): Route {
   return { section: null, page: 'missing' }
 }
 
-const NAV = [
-  { section: 'envelopes', to: '/', label: 'Envelopes', icon: Inbox },
-  { section: 'templates', to: '/templates', label: 'Templates', icon: Files },
-  { section: 'docs', to: '/docs', label: 'Docs', icon: BookOpen },
-] as const
+/** The page's name, the breadcrumb's last part. */
+export function pageTitle(current: Route, status: string): string {
+  if (current.page === 'list' && current.section === 'envelopes') return status ? STATUS_LABELS[status]! : 'All envelopes'
+  if (current.page === 'new') return 'New envelope'
+  if (current.page === 'envelope') return 'Envelope'
+  if (current.page === 'list') return 'Templates'
+  if (current.page === 'docs') return docTopic(current.topic)?.title ?? 'Topic not found'
+  return 'Page not found'
+}
 
 const ROLE_LABELS: Record<string, string> = { OWNER: 'Owner', ADMIN: 'Admin', EDITOR: 'Editor', USER: 'User', VIEWER: 'Viewer' }
 
 export function MemberApp() {
   const path = usePath()
+  const search = useSearch()
   const current = route(path)
+  const status = statusFilter(search)
   const [me, setMe] = useState<Me | null>(null)
   const [failure, setFailure] = useState<unknown>(null)
   useEffect(() => { apiJson<Me>('/api/me').then(setMe).catch(setFailure) }, [])
@@ -59,29 +66,19 @@ export function MemberApp() {
   else if (current.page === 'new') page = h(NewEnvelopePage, { me })
   else if (current.page === 'envelope') page = h(EnvelopePage, { key: current.id, me, id: current.id })
   else if (current.section === 'templates') page = h(TemplatesPage, { me })
-  else page = h(EnvelopesPage, { me })
+  else page = h(EnvelopesPage, { me, status })
 
-  const who = me ? me.user?.name || me.user?.email || '' : ''
-  return h('div', { className: 'min-h-svh bg-background text-foreground' },
-    h('header', { className: 'border-b' },
-      h('div', { className: 'mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6' },
-        h(Link, { to: '/', className: 'flex items-center gap-2 font-semibold' }, h(Signature, { className: 'size-5', 'aria-hidden': true }), 'E-sign'),
-        h('nav', { 'aria-label': 'Primary', className: 'flex flex-1 items-center gap-1' },
-          ...NAV.map((item) => {
-            const active = item.section === current.section
-            return h(Link, {
-              key: item.section, to: item.to, 'aria-current': active ? 'page' : undefined,
-              className: cn('inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground', active && 'bg-accent text-accent-foreground'),
-            }, h(item.icon, { className: 'size-4', 'aria-hidden': true }), item.label)
-          })),
-        me ? h('p', { className: 'text-sm text-muted-foreground' }, who ? `${who} · ` : '', ROLE_LABELS[me.role ?? ''] ?? me.role ?? '') : null)),
-    h('main', { className: 'mx-auto max-w-6xl px-4 py-8 sm:px-6' }, page))
+  return h(Shell, {
+    pathname: path, search, role: me?.role, permissions: me?.permissions, user: me?.user ?? null,
+    roleLabel: me ? ROLE_LABELS[me.role ?? ''] ?? me.role : undefined,
+    title: pageTitle(current, status),
+  }, page)
 }
 
 function SignIn() {
   return h('div', { className: 'flex flex-col gap-2' },
-    h('h1', { className: 'text-2xl font-semibold tracking-tight' }, 'Sign in to use E-sign.'),
-    h('p', { className: 'text-sm text-muted-foreground' }, 'E-sign is part of your organization\'s Insulin apps; open it from there. ', h(Link, { to: '/docs', className: 'font-medium text-foreground underline underline-offset-4' }, 'Read the Docs')))
+    h('h1', { className: 'text-2xl font-semibold tracking-tight' }, 'Sign in to use Esign.'),
+    h('p', { className: 'text-sm text-muted-foreground' }, 'Esign is part of your organization\'s Insulin apps; open it from there. ', h(Link, { to: '/docs', className: 'font-medium text-foreground underline underline-offset-4' }, 'Read the Docs')))
 }
 
 function NotFound() {

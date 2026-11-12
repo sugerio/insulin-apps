@@ -60,7 +60,7 @@ export default {
       case '/api/public/echo':
         return Response.json(received(request))
       case '/sign':
-        // A public page (an e-sign recipient's), framed by a host product: the app's own frame-ancestors must survive.
+        // A public page (an Esign recipient's), framed by a host product: the app's own frame-ancestors must survive.
         return new Response(`<!doctype html><html lang="en"><head><title>Sign</title></head><body><pre>${escapeHtml(JSON.stringify(received(request)))}</pre></body></html>`, {
           headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "frame-ancestors https://host.example.test" },
         })

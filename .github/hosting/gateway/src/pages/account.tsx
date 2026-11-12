@@ -10,11 +10,11 @@ import { ErrorSummary, Notice, TextField } from "@/components/forms"
 import { AuthCard, Container, PageHeader, proseLinks } from "@/components/layout"
 import type { Context } from "../context.ts"
 import { apexUrl } from "../context.ts"
-import type { MembershipRow } from "../db/orgs.ts"
+import { accountShell, type ShellData } from "../navigation.ts"
 import type { Session } from "../auth/session.ts"
 import { NAME_MAX, PASSWORD_MAX, PASSWORD_MIN } from "../validate.ts"
 import type { Html } from "./html.ts"
-import { accountOf, page } from "./document.tsx"
+import { page } from "./document.tsx"
 
 export interface AccountState {
   notice?: string | null
@@ -24,11 +24,11 @@ export interface AccountState {
   blockingOrgs?: { id: string; name: string }[]
 }
 
-export function accountPage(ctx: Context, session: Session, state: AccountState = {}, orgs?: readonly MembershipRow[]): Html {
+export function accountPage(ctx: Context, session: Session, state: AccountState, shell: ShellData): Html {
   const errors = state.errors ?? {}
   const user = session.user
   const blocking = state.blockingOrgs ?? []
-  return page(ctx, { title: "Account", user: accountOf(session, orgs) }, (
+  return page(ctx, { title: "Account", shell: accountShell(ctx, session, shell, "profile") }, (
     <Container width="prose" className="flex flex-col gap-6 py-10 sm:py-12">
       <PageHeader
         title="Account"

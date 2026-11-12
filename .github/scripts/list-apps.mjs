@@ -66,7 +66,8 @@ export async function listApps(root = repositoryRoot) {
     const publicPaths = readPublicPaths(entry.name, manifest.insulin?.publicPaths)
     const scheduled = readScheduled(entry.name, manifest.insulin?.scheduled, publicPaths)
     const secrets = readSecretNames(entry.name, manifest.insulin?.secrets)
-    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, secrets })
+    const navigation = readNavigation(entry.name, manifest.insulin?.navigation)
+    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, navigation, secrets })
   }
 
   checkSecretNamespaces(apps)
@@ -187,6 +188,109 @@ export function readScheduled(app, raw, publicPaths = []) {
   const problem = scheduledProblem(raw, publicPaths)
   if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.scheduled ${problem}`)
   return raw
+}
+
+/**
+ * The Lucide icons an app's navigation may name (DESIGN.md §3.2). The gateway bundles exactly these (its
+ * src/nav-icons.ts lists the same names, and a test keeps the two in step), so an app's level 1 looks the same on the
+ * gateway's settings pages as in the app. `home` and `check-circle` are Lucide's older names for `house` and
+ * `circle-check`; both spellings are accepted.
+ */
+export const NAVIGATION_ICONS = Object.freeze([
+  'activity', 'archive', 'award', 'banknote', 'bell', 'book-open', 'bot', 'briefcase', 'building', 'calendar',
+  'chart-bar', 'chart-pie', 'check-circle', 'circle-check', 'clipboard-list', 'clock', 'download', 'file-pen',
+  'file-text', 'files', 'folder', 'gauge', 'heart', 'history', 'home', 'house', 'inbox', 'key', 'landmark', 'layers',
+  'layout-dashboard', 'layout-grid', 'list', 'mail', 'percent', 'plug', 'receipt', 'scale', 'search', 'send',
+  'settings', 'shield', 'signature', 'table', 'trending-up', 'upload', 'user', 'users', 'wallet',
+])
+const NAVIGATION_ICON_SET = new Set(NAVIGATION_ICONS)
+/** At most this many items, and this many children per item. */
+export const NAVIGATION_LIMIT = 12
+const NAVIGATION_KEY = /^[a-z0-9-]{1,40}$/
+const NAVIGATION_TEXT_MAX = 40
+const NAVIGATION_ROLE_ORDER = ['VIEWER', 'EDITOR', 'ADMIN']
+const NAVIGATION_ROLES = new Set(NAVIGATION_ROLE_ORDER)
+const NAVIGATION_FIELDS = new Set(['key', 'label', 'icon', 'path', 'group', 'role', 'maxRole', 'children'])
+// The gateway's own paths on an app host (DESIGN.md §1, §3.2): an app's navigation never links to them.
+const NAVIGATION_RESERVED = ['/__insulin', '/settings', '/mcp', '/.well-known', '/api/__suger']
+
+/**
+ * Why a navigation item's `path` is refused, or null: a path on the app's own host, starting with a single `/`, at
+ * most 200 characters, without a backslash, whitespace, a control character or a fragment; before its query (which
+ * may hold anything else), no percent sign, empty or dot segment; and not one of the gateway's paths, compared without
+ * regard to case. The gateway applies the same rule (navigationPathProblem in its src/config.ts).
+ */
+export function navigationPathProblem(entry) {
+  if (typeof entry !== 'string' || !entry.startsWith('/') || entry.startsWith('//') || entry.length > 200) {
+    return "must be a path on the app's host, starting with a single / (at most 200 characters)"
+  }
+  if (/[\\\s#\u0000-\u001f\u007f]/.test(entry)) return 'must not hold a backslash, whitespace, a control character or a fragment'
+  const pathname = entry.split('?', 1)[0]
+  if (pathname.includes('%') || pathname.includes('//') || pathname.split('/').some((segment) => segment === '.' || segment === '..')) {
+    return 'must not hold a percent sign, an empty or a dot segment before its query'
+  }
+  const bare = pathname.toLowerCase().replace(/\/+$/, '')
+  for (const reserved of NAVIGATION_RESERVED) {
+    if (bare === reserved || bare.startsWith(`${reserved}/`)) return `must not be one of the gateway's paths (${reserved})`
+  }
+  return null
+}
+
+function navigationItem(app, entry, where, keys, level) {
+  const at = `App ${JSON.stringify(app)}: ${where}`
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${at} must be an object`)
+  if (level === 2 && 'children' in entry) throw new Error(`${at} must not have children: the navigation has two levels`)
+  for (const field of Object.keys(entry)) {
+    if (!NAVIGATION_FIELDS.has(field)) throw new Error(`${at}.${field} is not a navigation field (key, label, icon, path, group, role, maxRole, children)`)
+  }
+  const { key, label, icon, path, group, role = 'VIEWER', maxRole = 'ADMIN', children } = entry
+  if (typeof key !== 'string' || !NAVIGATION_KEY.test(key)) throw new Error(`${at}.key must match ${NAVIGATION_KEY.source}`)
+  if (keys.has(key)) throw new Error(`${at}.key ${JSON.stringify(key)} is listed twice`)
+  keys.add(key)
+  if (typeof label !== 'string' || !label.trim() || label.trim().length > NAVIGATION_TEXT_MAX) {
+    throw new Error(`${at}.label must be 1-${NAVIGATION_TEXT_MAX} characters`)
+  }
+  if (typeof icon !== 'string' || !NAVIGATION_ICON_SET.has(icon)) throw new Error(`${at}.icon must be one of list-apps.mjs's NAVIGATION_ICONS`)
+  const problem = navigationPathProblem(path)
+  if (problem) throw new Error(`${at}.path ${problem}`)
+  if (group !== undefined && (typeof group !== 'string' || !group.trim() || group.trim().length > NAVIGATION_TEXT_MAX)) {
+    throw new Error(`${at}.group must be 1-${NAVIGATION_TEXT_MAX} characters`)
+  }
+  if (!NAVIGATION_ROLES.has(role)) throw new Error(`${at}.role must be VIEWER, EDITOR or ADMIN`)
+  if (!NAVIGATION_ROLES.has(maxRole)) throw new Error(`${at}.maxRole must be VIEWER, EDITOR or ADMIN`)
+  if (NAVIGATION_ROLE_ORDER.indexOf(maxRole) < NAVIGATION_ROLE_ORDER.indexOf(role)) throw new Error(`${at}.maxRole must not be below its role`)
+  const item = { key, label: label.trim(), icon, path, group: group === undefined ? null : group.trim(), role, maxRole }
+  if (level === 2) return item
+  if (children !== undefined && (!Array.isArray(children) || children.length > NAVIGATION_LIMIT)) {
+    throw new Error(`${at}.children must be an array of at most ${NAVIGATION_LIMIT}`)
+  }
+  return { ...item, children: (children ?? []).map((child, index) => navigationItem(app, child, `${where}.children[${index}]`, keys, 2)) }
+}
+
+/**
+ * An app's level-1 navigation, `insulin.navigation` in its package.json (DESIGN.md §3.2): at most 12 items of { key,
+ * label, icon, path, group?, role?, maxRole?, children? }, each child the same without `children`, at most 12 per item.
+ * `role` is the least app role that sees the item (VIEWER by default), `maxRole` the most (ADMIN by default: an item
+ * for viewers only, such as a holder's own pages, says VIEWER), and `group` a heading shown above it; keys are unique
+ * across items and children. The result spells out every field: `group` null when there is none, `children` [] on an
+ * item without any. The gateway checks it again and refuses to start with a malformed one, so a mistake fails here,
+ * before a deploy.
+ */
+export function readNavigation(app, raw) {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > NAVIGATION_LIMIT) {
+    throw new Error(`App ${JSON.stringify(app)}: insulin.navigation must be an array of at most ${NAVIGATION_LIMIT}`)
+  }
+  const keys = new Set()
+  return raw.map((entry, index) => navigationItem(app, entry, `insulin.navigation[${index}]`, keys, 1))
+}
+
+/**
+ * An app's navigation as the gateway gets it in SITE_APPS: level 1 without children. The gateway draws only an app's
+ * level 1 (DESIGN.md §3.2), and a Worker variable is limited to 5 KB, which SITE_APPS passed with the children.
+ */
+export function gatewayNavigation(navigation) {
+  return navigation.map(({ children: _children, ...item }) => item)
 }
 
 /** The prefix an app's secret names must carry: its name upper-cased, with `-` as `_`. */

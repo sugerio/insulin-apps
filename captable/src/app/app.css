@@ -1,4 +1,5 @@
-/* Cap Table — the palette and the workspace shell (system fonts only: no web fonts are loaded). */
+/* Cap Table — the palette and the page basics (system fonts only: no web fonts are loaded). The navigation shell is
+   components/shell.css. */
 :root {
   color-scheme: light dark;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -6,7 +7,7 @@
   --border: #dde1e7; --text: #161a1f; --text-2: #333a44; --muted: #59636f;
   --primary: #0f766e; --primary-hover: #0b5f58; --primary-button: #0f766e; --primary-soft: #e3f3f1; --on-primary: #fff;
   --danger-soft: #fdeceb; --danger: #b42318; --focus: #0d9488;
-  --sidebar: 260px; --topbar: 60px; --radius: 8px;
+  --topbar: 52px; --radius: 8px;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .06);
 }
 @media (prefers-color-scheme: dark) {
@@ -44,38 +45,6 @@ h2 { font-size: 18px; }
 p { color: var(--muted); }
 .skip-link { position: fixed; left: 10px; top: -60px; z-index: 100; padding: 8px 12px; background: var(--surface); }
 .skip-link:focus { top: 10px; }
-.topbar {
-  position: sticky; top: 0; z-index: 20; height: var(--topbar); display: flex; align-items: center;
-  background: var(--surface); border-bottom: 1px solid var(--border);
-}
-.brand { display: flex; align-items: center; gap: 10px; height: 100%; padding: 0 20px; color: var(--text); font-size: 15px; }
-.brand:hover { text-decoration: none; }
-.divider { width: 1px; height: 32px; background: var(--border); }
-.org-name { padding: 0 16px; font-weight: 600; white-space: nowrap; }
-.menu-button { display: none; width: 42px; height: 42px; margin-left: 8px; border: 0; background: none; font-size: 20px; }
-.user-menu { position: relative; margin-left: auto; margin-right: 18px; text-align: right; }
-.user-menu summary { display: flex; cursor: pointer; list-style: none; }
-.user-menu summary::-webkit-details-marker { display: none; }
-.user-menu summary span { display: flex; flex-direction: column; }
-.user-menu small { color: var(--muted); font-size: 11px; font-weight: 600; }
-.user-menu-popover { position: absolute; right: 0; top: calc(100% + 10px); width: 170px; display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); text-align: left; }
-.link-button { border: 0; background: none; color: var(--primary); cursor: pointer; }
-.workspace { display: flex; min-height: calc(100vh - var(--topbar)); }
-.sidebar {
-  position: sticky; top: var(--topbar); align-self: start; width: var(--sidebar); height: calc(100vh - var(--topbar));
-  flex: none; overflow-y: auto; padding: 16px 0 24px; background: var(--surface); border-right: 1px solid var(--border);
-}
-.new-button {
-  width: calc(100% - 64px); height: 40px; margin: 0 32px 18px; border: 1px solid var(--border);
-  border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); font-weight: 600;
-}
-.new-button span { color: var(--primary); font-size: 18px; }
-.new-button:disabled { opacity: .72; cursor: not-allowed; }
-.nav-title { margin: 18px 0 8px; padding: 0 32px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .5px; }
-.nav-item { display: flex; min-height: 35px; align-items: center; padding: 9px 32px; color: var(--text-2); font-size: 13px; }
-.nav-item:hover { background: var(--surface-2); text-decoration: none; }
-.nav-item.active { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
-.sidebar-foot { display: flex; flex-direction: column; gap: 8px; margin: 24px 32px 0; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; }
 .main { flex: 1; min-width: 0; }
 .page { max-width: 1480px; padding: 24px 30px 56px; }
 .breadcrumbs { margin-bottom: 16px; color: var(--muted); font-size: 12px; }
@@ -96,17 +65,7 @@ p { color: var(--muted); }
 .btn-primary:hover { background: var(--primary-hover); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 1024px) {
-  .menu-button { display: block; }
-  .org-name, .divider { display: none; }
-  .sidebar { position: fixed; z-index: 40; top: var(--topbar); left: 0; width: min(300px, 86vw); transform: translateX(-105%); transition: transform .18s ease; box-shadow: var(--shadow); }
-  .sidebar-open { transform: translateX(0); }
-  .sidebar-scrim { position: fixed; z-index: 30; inset: var(--topbar) 0 0; border: 0; background: rgba(0, 0, 0, .45); }
   .page { padding: 20px; }
-}
-@media (max-width: 620px) {
-  .brand { padding-left: 8px; }
-  .brand strong { display: none; }
-  .user-menu b, .user-menu small { display: none; }
 }
 
 /* The mark, the full-page console and setup cards, and the preview-mode strip. */

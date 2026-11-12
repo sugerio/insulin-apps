@@ -100,7 +100,7 @@ test('API access: everyone who can use the app sees the OAuth clients without se
     for (const shown of ['Nightly export', 'Board sync', nightly.clientId, board.clientId, 'Not rotated']) assert.ok(page.text.includes(shown), `${person.name}: ${shown}`)
     assert.ok(!SECRET.test(page.text), `${person.name}: no secret on the list`)
     assert.ok(!page.text.includes(stored.secret_hash), `${person.name}: nor a secret's hash`)
-    assert.match(page.text, /aria-current="page"[^>]*>API access<\/a>/, `${person.name}: the API access tab`)
+    assert.match(page.text, /aria-current="page"[^>]*><svg[^>]*>(?:(?!<\/svg>)[\s\S])*<\/svg><span>API access<\/span><\/a>/, `${person.name}: API access, open in the navigation`)
     // How a program gets a token and calls the API, with placeholder credentials.
     assert.ok(page.text.includes('http://insulinapps.localhost/oauth/token'), person.name)
     assert.ok(page.text.includes('grant_type=client_credentials'), person.name)
@@ -140,6 +140,31 @@ test('API access: everyone who can use the app sees the OAuth clients without se
   assert.ok(!listed.text.includes(byAdmin.secret) && !listed.text.includes(byOwner.secret), 'never a secret')
   assert.equal((await post(owner, `/clients/${board.id}/delete`, { org_id: orgId })).status, 303)
   assert.equal(await row(board.id), null)
+})
+
+test("API access can't widen the page beside both navigation levels: the form and token details stack below xl, the secret's alert shrinks", async () => {
+  // At 768px the content is 256px wide beside both levels, and 768px only from xl (1280px).
+  const has = (classes, name) => classes.split(' ').includes(name)
+  const owner = await h.user({ name: 'Wren Owner' })
+  const orgId = await h.org(owner.client, 'Narrow Org')
+  const text = (await apiPage(owner)).text
+  const form = /<form class="([^"]*)" action="\/apps\/captable\/settings\/api\/clients"/.exec(text)?.[1]
+  assert.ok(form, 'the new-client form')
+  assert.ok(has(form, 'grid-cols-1') && has(form, 'xl:grid-cols-[1fr_13rem_auto]'), `the form's columns: ${form}`)
+  assert.doesNotMatch(form, /(?:sm|md|lg):grid-cols-/)
+  const details = /<dl class="([^"]*)"><dt class="text-muted-foreground">Token URL<\/dt>/.exec(text)?.[1]
+  assert.ok(details, 'the token details')
+  assert.ok(has(details, 'grid-cols-1') && has(details, 'xl:grid-cols-[10rem_1fr]'), `the details' columns: ${details}`)
+  assert.doesNotMatch(details, /(?:sm|md|lg):grid-cols-/)
+  // The one value without a break of its own: in a single 206px column it would overflow its card.
+  assert.match(text, /<code class="[^"]*\bbreak-words\b[^"]*">grant_type=client_credentials<\/code>/)
+  // The secret, once: the alert's 1fr column would otherwise grow to the curl example's longest line.
+  const client = await createClient(owner, orgId, 'Narrow Client')
+  for (const page of [client.page, (await rotate(owner, orgId, client)).page]) {
+    const description = /<div[^>]*data-slot="alert-description"[^>]*>/.exec(page)?.[0]
+    assert.ok(description, 'the secret alert')
+    assert.ok(has(/class="([^"]*)"/.exec(description)[1], 'min-w-0'), description)
+  }
 })
 
 test('rotation: both secrets work for 24 hours, then only the new one; revoking the previous ends it and its tokens; a second rotation replaces it', async () => {

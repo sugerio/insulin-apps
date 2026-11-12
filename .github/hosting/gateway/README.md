@@ -11,7 +11,7 @@ over a service binding with the console identity headers. The apps need no hosti
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
 | `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the integration proxy `/__insulin/integrations/*` and the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*` and the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
 app) is `.github/hosting/README.md`. This file is for developers.
@@ -49,15 +49,16 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/integrations/` | an app's integrations page (`settings.ts`, stored credentials), its API access page (`api-clients.ts`, OAuth clients: owners and admins manage them, rotation with a 24-hour overlap) and the integration proxy (`proxy.ts`) |
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, disconnecting them, and links to each app's Connect AI |
 | `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
-| `src/reserved.ts` | `/__insulin/me`, `switch-org`, `logout`, and the local captured-mail page |
+| `src/reserved.ts` | `/__insulin/me` (who is signed in, their organizations, the apex's origin and, in an app, its settings pages), `switch-org`, `logout`, `nav` (the navigation's collapse toggles), and the local captured-mail page |
+| `src/navigation.ts` | the two-level navigation of the signed-in pages as data (DESIGN.md §3.2): level 1 and 2 for the organization's pages, the account pages and an app's settings pages (its manifest, by the person's role), the breadcrumb, the `insulin_nav` cookie and `/__insulin/nav`; `src/nav-icons.ts` the icon names an app's manifest may use (list-apps.mjs's) and each app's own icon (also the docs') |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode), the messages, and the apps' mail relay (`relay.ts`) |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
-| `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (top bar, footer, favicon links); `settings.tsx` the organization's settings; `app-settings.tsx` an app's settings frame and People tab, with `integrations.tsx`, `api-access.tsx` and `connect-ai.tsx` its other tabs |
+| `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (the top bar or, signed in, the navigation; footer, favicon links); `settings.tsx` the organization's settings; `app-settings.tsx` an app's settings frame and People page, with `integrations.tsx`, `api-access.tsx` and `connect-ai.tsx` its other pages |
 | `src/pages/html.ts` | the `html` tag, which escapes the HTML of the e-mails (React escapes the pages) |
 | `src/docs.ts`, `src/pages/docs.tsx` | `/docs/` on the apex: the pages from `src/assets/docs-content.ts` in the shared document, `llms.txt`, `llms-full.txt`, each page's `.md`, and `/docs/assets/*` from the `DOCS_ASSETS` binding |
-| `scripts/build-docs.mjs`, `scripts/docs/` | `npm run build:docs`: the Markdown of `.github/hosting/docs/` and every app's `docs/public/` rendered with React (`markdown.mjs`, `layout.mjs`) into `src/assets/docs-content.ts`, with the diagram blocks drawn as SVG (`diagram.mjs`) |
+| `scripts/build-docs.mjs`, `scripts/docs/` | `npm run build:docs`: the Markdown of `.github/hosting/docs/` and every app's `docs/public/` rendered with React (`markdown.mjs`; `layout.mjs`, with the two-level navigation) into `src/assets/docs-content.ts`, with the diagram blocks drawn as SVG (`diagram.mjs`) |
 | `src/components/ui/` | shadcn/ui components (new-york style), as the shadcn CLI writes them; see "shadcn/ui" below |
-| `src/components/` | the gateway's own pieces: top bar, footer, `<details>` menus, form fields, brand marks |
+| `src/components/` | the gateway's own pieces: top bar, the navigation (`shell.tsx`, with the manifest's icons in `nav-icon.tsx`), footer, `<details>` menus, form fields, brand marks |
 | `src/lib/utils.ts` | `cn()`, shadcn's class-name helper (`clsx` and `tailwind-merge`) |
 | `src/styles/gateway.css` | the Tailwind CSS source: shadcn's neutral theme tokens, light and dark |
 | `src/assets/` | what the Worker serves itself: the compiled stylesheet (`gateway-css.ts`, generated), the docs (`docs-content.ts`, generated), the mark (`icon.ts`) and its PNG renderings (`icons.ts`, generated), and the account bar (script and stylesheet) |
@@ -81,7 +82,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | crons | trigger | `*/5 * * * *` (the apps' tick, `src/scheduled.ts`) and `17 3 * * *` (the daily cleanup) |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
-| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`) and `scheduled` the path its tick goes to, or null (`insulin.scheduled`); a malformed list fails closed |
+| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled", "navigation" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`), `scheduled` the path its tick goes to, or null (`insulin.scheduled`), and `navigation` its level 1, which the app's settings pages show (`insulin.navigation`, DESIGN.md §3.2; missing in an older list, it is empty); a malformed list fails closed |
 | `GOOGLE_CLIENT_ID` | var | optional; empty hides Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | secret | required when `GOOGLE_CLIENT_ID` is set |
 | `TURNSTILE_SITE_KEY` | var | required |
@@ -133,10 +134,18 @@ too, and linked with their content hash, so they are cached for good), and ` ```
 arrows in a small language described at the top of `scripts/docs/diagram.mjs`, drawn as inline SVG coloured only by
 the stylesheet's `--diagram-*` tokens. Raw HTML fails the build.
 
-`npm run build:docs` renders each page with React in the gateway's shadcn style (the navigation, the article, its table
-of contents, previous and next) and refuses any script, style attribute or event handler in the result. The gateway
-puts a page into the shared document per request (`src/pages/docs.tsx`), so the top bar shows the visitor's sign-in
-links or account; the pages are public, indexable and under the usual CSP. `/docs/llms.txt` lists every page for AI
+`npm run build:docs` renders each page with React in the gateway's shadcn style (`scripts/docs/layout.mjs`: the
+navigation, the article, its table of contents, previous and next) and refuses any script, style attribute or event
+handler in the result. The navigation has the two levels of DESIGN.md §3.2, in shadcn's sidebar colours, drawn at build
+time: level 1 is Overview, Platform, then each app under "Apps" (with the icon the gateway gives it, `appIconName` in
+`src/nav-icons.ts`), and "For AI agents" (llms.txt, llms-full.txt) at the bottom; level 2, headed by the section's
+title, lists only the open section's pages, the current one with `aria-current="page"` (the open level-1 item has
+`aria-current="true"`). `/docs/` has no level 2: its cards list every section. So each app's docs read as a place of
+their own at `/docs/<app>/`. The levels don't collapse (the pages are static, with no per-request state), and there is
+no organization switcher or person, since the docs are public. Below 1024px a `<details>` menu above the article holds
+level 1, the open section's pages and the agents' files. The gateway puts a page into the shared document per request
+(`src/pages/docs.tsx`), so the top bar, spanning the window over the navigation, shows the visitor's sign-in links or
+account; the pages are public, indexable and under the usual CSP. `/docs/llms.txt` lists every page for AI
 agents, `/docs/llms-full.txt` holds all of them, and each page's Markdown is at its address with `.md`. Commit the
 regenerated module with the change; `npm test` fails while it is stale, and the gateway workflow runs when a docs page
 changes.
@@ -151,13 +160,13 @@ Playwright through synthetic data (`.github/hosting/docs/screenshots.mjs`, a sma
 npm run build:docs
 ```
 
-It starts the gateway with both apps over https (`wrangler dev --local-protocol https`, which E-sign's embedded editor
+It starts the gateway with both apps over https (`wrangler dev --local-protocol https`, which Esign's embedded editor
 needs) in a fresh local state, signs up through the captured-mail page, creates an organization, a custom role and
 invitations, stores a credential, creates two OAuth clients and rotates one's secret, connects an MCP client, imports
-Cap Table's own spreadsheet template filled with a fictional company, places E-sign fields, sends an envelope and signs
+Cap Table's own spreadsheet template filled with a fictional company, places Esign fields, sends an envelope and signs
 it, then creates a second organization under the same email domain so that the next one is a request to support
 (`ORG_REQUEST_EMAIL` is set to a synthetic address; mail is captured), with Cloudflare's always-passing Turnstile test
-widget as the only outside call. A completed E-sign envelope can't be captured locally (its seal needs a seal key
+widget as the only outside call. A completed Esign envelope can't be captured locally (its seal needs a seal key
 binding `wrangler dev` can't provide, and a timestamp service), so `esign-completed.png` is a labelled placeholder. Nor
 can a domain be verified (`wrangler dev` can't stub the DNS-over-HTTPS lookup), so `platform-organization.png` shows
 the invitation setting before one is.
@@ -185,7 +194,7 @@ npm run dev -- --app captable
 ```
 
 Several built apps run together, each on its own host, with `--app captable --app esign`: the gateway's config then
-gets a service binding and a `SITE_APPS` entry for each, read from its `package.json` as the deploy reads it. E-sign
+gets a service binding and a `SITE_APPS` entry for each, read from its `package.json` as the deploy reads it. Esign
 runs as it does when published, so it signs nothing until its settings are configured (the docs' screenshot script
 passes local ones). By hand, which is what the script does:
 
@@ -219,7 +228,8 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **The account bar** runs under the apps' CSP (`script-src 'self'; style-src 'self'; connect-src 'self';
   form-action 'self'`): a same-origin script builds a closed shadow root with DOM calls only and links
   `/__insulin/bar.css`; it switches organization and signs out with same-origin `fetch`, then navigates with
-  `location.assign`.
+  `location.assign`. It draws nothing on a page with an element marked `data-insulin-shell` (an app that renders
+  the navigation of DESIGN.md §3.2), and a `MutationObserver` sends it away when a single-page app adds one later.
 - Session ids and email tokens are 32 random bytes; D1 stores only their SHA-256. Passwords are PBKDF2-SHA256
   (100,000 iterations, the workerd maximum).
 - **OAuth for agents and service accounts.** Each app's `/mcp` is its own protected resource, so a client registers and
@@ -321,9 +331,16 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **Pages without scripts.** React renders each page once, on the server; the page itself runs no JavaScript (the
   Turnstile widget on the forms that need it is the only script, from Cloudflare). The CSP is unchanged: no inline
   script, no inline style or `style` attribute, and no outside fonts (the system font stack). React escapes every
-  value; `dangerouslySetInnerHTML` is never used, and a test checks it. The top bar's organization switcher and
-  account menu are `<details>`/`<summary>` menus styled like shadcn's DropdownMenu: keyboard-operable, exclusive
-  (`<details name>`), and closed by a click anywhere outside (the open trigger's `::before` covers the window).
+  value; `dangerouslySetInnerHTML` is never used, and a test checks it. The organization switcher and account menu
+  (of the top bar, and of the navigation) are `<details>`/`<summary>` menus styled like shadcn's DropdownMenu:
+  keyboard-operable, exclusive (`<details name>`), and closed by a click anywhere outside (the open trigger's
+  `::before` covers the window).
+- **The navigation without a script** (DESIGN.md §3.2). The signed-in pages render both levels on the server, from
+  `navigation.ts`; the narrow-screen drawer is another `<details>`, which repeats the navigation (hidden from 768px,
+  as the columns are below it, so assistive technology meets one copy), with ids kept unique. A collapse toggle is a
+  link to `/__insulin/nav`, which stores both levels in the host-only `insulin_nav` cookie and answers with a 303 to
+  the page it names, a path on the same host only (anything else is a 400); the next page renders collapsed or
+  expanded from the cookie. Forms shown again after a POST point the toggles at the page's own address instead.
 - **The docs are rendered at build time.** A docs page is the one place the gateway puts HTML into a page that React
   didn't render during the request: `src/pages/docs.tsx` renders the shared document around a placeholder element and
   swaps in the page from `src/assets/docs-content.ts`, which React rendered from the repository's Markdown at build

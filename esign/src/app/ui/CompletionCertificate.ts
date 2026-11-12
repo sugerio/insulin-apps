@@ -26,13 +26,13 @@ export function CompletionCertificate({certificate:c}:{certificate:Certificate})
   return h('section',{'aria-label':'Certificate of completion',className:'flex flex-col gap-4 rounded-xl border bg-card p-6 text-card-foreground shadow-sm break-words [&_dl]:grid [&_dl]:gap-3 sm:[&_dl]:grid-cols-2 [&_h3]:pt-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h4]:text-sm [&_h4]:font-medium [&>p]:text-sm [&>p]:text-muted-foreground'},
     h('h2',{className:'text-lg font-semibold'},'Certificate of completion'),
     ...(c.mode==='KEY_TSA'&&c.seal?[
-      h('h3',null,'Sealed: E-sign seal key signature + RFC 3161 timestamp'),
-      h('p',null,'The evidence below (source, signing events and signed PDF hashes) is signed with E-sign\'s seal key (ECDSA P-256), and that signature is timestamped by an RFC 3161 time-stamping authority. Revocation of the time-stamping authority certificates is not checked. This certificate is a separate view, not the signed PDF.'),
+      h('h3',null,'Sealed: Esign seal key signature + RFC 3161 timestamp'),
+      h('p',null,'The evidence below (source, signing events and signed PDF hashes) is signed with Esign\'s seal key (ECDSA P-256), and that signature is timestamped by an RFC 3161 time-stamping authority. Revocation of the time-stamping authority certificates is not checked. This certificate is a separate view, not the signed PDF.'),
       h('p',null,'The source, signature records, event links and output hashes are checked against the sealed manifest and stored files. Each signer\'s name, email address, role and consent text are part of their sealed signing record. Envelope metadata (including template and creation time) and each task\'s current routing order and status are database values and are not bound by the seal.'),
       h('h3',null,'Seal'),h('dl',null,field('Seal key fingerprint (SHA-256 of the public key)',c.seal.keyId),field('Timestamp (RFC 3161, UTC)',utc(c.seal.timestampTime)),field('Time-stamping authority',c.seal.tsaUrl)),
     ]:[
       h('h3',null,'LOCAL TEST ONLY'),
-      h('p',null,'Local simulation only, not a legal guarantee. The local HMAC uses a test key, not E-sign\'s seal key or a real TSA. Times are server-recorded, not independently timestamped. This certificate is a separate view, not the signed PDF.'),
+      h('p',null,'Local simulation only, not a legal guarantee. The local HMAC uses a test key, not Esign\'s seal key or a real TSA. Times are server-recorded, not independently timestamped. This certificate is a separate view, not the signed PDF.'),
       h('p',null,'The source, signature records, event links and output hashes are checked against the local HMAC manifest and stored files. Envelope metadata (including template and creation time) and recipient task details (including email, role and status) are current database values and are not sealed by the manifest. Each signer\'s name, email address, role and consent text are bound with their signing record.')
     ]),
     h('h3',null,'Envelope and document'),h('dl',null,

@@ -1,6 +1,6 @@
-# How E-sign works
+# How Esign works
 
-E-sign is an Insulin app: one npm package (Vite, React and Nitro, with Drizzle on D1) served behind
+Esign is an Insulin app: one npm package (Vite, React and Nitro, with Drizzle on D1) served behind
 the hosting gateway at `esign.<domain>`. Members of an organization send PDFs for signature from the
 app or through its API; recipients sign on a public page that a host product can embed; the app
 verifies each signer by an emailed one-time code, records the signature, renders the signed PDF,
@@ -87,10 +87,25 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
 
 ## The members' app and the Docs
 
-- **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` (envelopes),
-  `/envelopes/new`, `/envelopes/:id`, `/templates` and `/docs/:topic?`. It moves with
+- **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` and `/envelopes`
+  (envelopes, `?status=` filtering by status), `/envelopes/new`, `/envelopes/:id`, `/templates` and
+  `/docs/:topic?`. It moves with
   `history.pushState` (`router.ts`), the only navigation the console's sandboxed iframe allows. Every
   call is a same-origin request as the signed-in member; there is no key in the browser.
+- **Navigation.** `src/app/member/Shell.ts` draws DESIGN.md §3.2's two levels around every member
+  page: level 1 is the organization switcher (from the gateway's `/__insulin/me`, switching through
+  `/__insulin/switch-org`, with All apps), the sections of `package.json` `insulin.navigation` that
+  the member's role reaches, lowered by their permissions (`navigationRole`: without `esign.manage`
+  a Viewer's, with neither permission none; `navigation.ts` reads and checks the manifest), Docs,
+  Settings and the person (Account, Sign out through `/__insulin/logout`); level 2 is the open
+  section's items (the Envelopes views, the Docs topics and a link to the public docs on the apex,
+  or Settings' People, Integrations, API access and Connect AI, at the addresses `/__insulin/me`
+  gives or else on the apex), and the page header carries the breadcrumb. Each level collapses to
+  icons, remembered in localStorage `insulin-nav`; below 768px a menu button opens both levels in a
+  drawer. The root carries `data-insulin-shell` so the gateway's account bar stays out of the way.
+  Where `/__insulin/me` isn't answered (the local preview, the console), level 1 shows the app's
+  name and the person from `/api/me`, and Settings lists its pages without links: Esign has no
+  `/settings/*` of its own.
 - **Roles.** What a role can't do is hidden (`canManage(me)`), and the server refuses it anyway.
   `/api/me` answering 401 shows a sign-in message; the Docs open without it.
 - **Hosting the public pages.** The envelope page opens the active signer's `/sign` in a dialog
@@ -100,7 +115,8 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
 - **Sending.** A send carries an `Idempotency-Key` that a retry of the same form reuses. An
   optional sign-by day becomes every signer's `expiresAt` (the end of that day, the member's time).
 - **Docs.** Static topics in `src/app/pages/docs/` (one file each; `topics.ts` sets the reading
-  order) rendered by `src/app/components/Docs.ts`, with no request to the server. The background
+  order) rendered by `src/app/components/Docs.ts`, with no request to the server; the topic list is
+  the Docs' level 2 in the navigation (`docsNavigation()`). The background
   topic carries the general-information note. The signing page's "About signing" panel
   (`src/app/ui/SigningHelp.ts`) says the same as the signers topic in brief.
 - **UI.** shadcn/ui components in `src/app/components/ui/`, `cn()` in `src/app/lib/utils.ts`,
@@ -196,7 +212,7 @@ rendering and every later re-verification fail closed if the running renderer di
   `EXPIRED` audit event.
 - A recipient-view request may carry `hostAuthentication` (`{method, provider?, domain?,
   signedInAt?}`, `method` an upper-case word such as `SSO`): how the host signed the recipient in.
-  E-sign cannot check it; it is recorded and printed as the host's statement.
+  Esign cannot check it; it is recorded and printed as the host's statement.
 - The delivery PDF's certificate pages are stored once and rebuilt on every read, which must come
   out byte for byte the same, so they show only what is fixed by completion: the sealed events (for
   the local seal, those up to the last signature) and facts set at creation. A layout change

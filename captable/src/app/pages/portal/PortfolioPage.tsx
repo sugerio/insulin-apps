@@ -1,6 +1,5 @@
-import { Navigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import type { api } from "#shared";
-import { useMe } from "../../auth/AuthProvider.tsx";
 import { ProgressBar } from "../../components/Charts.tsx";
 import { useDisplay } from "../../components/Display.tsx";
 import { Badge, Banner, NotFoundState, Pending } from "../../components/Feedback.tsx";
@@ -15,14 +14,8 @@ import { exitWindows, isPositive, securityPath, summarize, typeLabel, upcomingVe
 import { useResource } from "../../lib/useResource.ts";
 
 // Portfolio: the exit-window banner for former employees, tiles,
-// vesting status, the next vest events, the holder's grants and shares, and company resources. Read-only.
-
-/** `/portfolio`: straight to the Insulin organization's company portfolio. */
-export function PortfolioHome() {
-  const me = useMe();
-  const match = me.portal.matches[0];
-  return match ? <Navigate to={`/portfolio/${match.orgId}`} replace /> : <Navigate to="/no-access" replace />;
-}
+// vesting status, the next vest events, the holder's grants and shares, and company resources. Read-only. (`/portfolio`
+// itself leads here through the router's navigation paths.)
 
 /** `/portfolio/:orgId` (and the admin preview's index). */
 export function PortfolioOverviewPage() {

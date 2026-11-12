@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Makes a new E-sign seal key and puts its private half on the Worker as the ESIGN_SEAL_KEY binding: a Cloudflare
+// Makes a new Esign seal key and puts its private half on the Worker as the ESIGN_SEAL_KEY binding: a Cloudflare
 // secret_key, imported as a non-extractable ECDSA P-256 key that can only sign. The private key exists only in this
 // process's memory; it is never printed or written to disk, and Cloudflare can't give it back. What is printed is the
 // entry to add to src/app/server/esign/seal/keys.ts, the public half the seals are verified against.

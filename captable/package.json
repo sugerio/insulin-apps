@@ -11,6 +11,41 @@
       { "key": "captable.manage", "label": "Record changes", "description": "Record and reverse equity changes, run imports and manage documents. Includes viewing the whole cap table.", "role": "EDITOR" },
       { "key": "captable.view", "label": "View the cap table", "description": "See the whole cap table, stakeholders, reports and documents, read only.", "role": "EDITOR" },
       { "key": "portfolio.view", "label": "See own holdings", "description": "See their own holdings in the holder view, matched by their e-mail address.", "role": "VIEWER" }
+    ],
+    "navigation": [
+      { "key": "dashboard", "label": "Dashboard", "icon": "layout-dashboard", "path": "/dashboard", "group": "Essentials", "role": "EDITOR" },
+      { "key": "cap-table", "label": "Cap Table", "icon": "table", "path": "/captable", "group": "Essentials", "role": "EDITOR",
+        "children": [
+          { "key": "cap-table-view", "label": "Cap Table", "icon": "table", "path": "/captable" },
+          { "key": "share-classes", "label": "Share Classes", "icon": "layers", "path": "/share-classes" },
+          { "key": "equity-plans", "label": "Equity Plans", "icon": "chart-pie", "path": "/equity-plans" },
+          { "key": "securities-status", "label": "Securities Status", "icon": "list", "path": "/securities-status" },
+          { "key": "vesting", "label": "Vesting", "icon": "calendar", "path": "/vesting" }
+        ] },
+      { "key": "compliance", "label": "Compliance & Tax", "icon": "shield", "path": "/compliance/409a", "group": "Essentials", "role": "EDITOR" },
+      { "key": "hire-and-retain", "label": "Hire and Retain", "icon": "heart", "path": "/exercise-requests", "group": "Essentials", "role": "EDITOR",
+        "children": [
+          { "key": "exercise-requests", "label": "Exercise Requests", "icon": "inbox", "path": "/exercise-requests" },
+          { "key": "hire-equity-plans", "label": "Equity Plans", "icon": "chart-pie", "path": "/equity-plans" },
+          { "key": "stakeholder-portal", "label": "Stakeholder Portal", "icon": "home", "path": "/stakeholder-portal" }
+        ] },
+      { "key": "stakeholders", "label": "Stakeholders", "icon": "users", "path": "/stakeholders", "group": "Essentials", "role": "EDITOR" },
+      { "key": "company", "label": "Company", "icon": "building", "path": "/company", "group": "Essentials", "role": "EDITOR",
+        "children": [
+          { "key": "profile", "label": "Profile & Settings", "icon": "building", "path": "/company" },
+          { "key": "documents", "label": "Documents", "icon": "folder", "path": "/documents" },
+          { "key": "reports", "label": "Reports", "icon": "file-text", "path": "/reports" },
+          { "key": "activity", "label": "Recent Activity", "icon": "clock", "path": "/activity" }
+        ] },
+      { "key": "certificates", "label": "Certificates", "icon": "award", "path": "/certificates", "group": "Essentials", "role": "EDITOR",
+        "children": [
+          { "key": "certificate-list", "label": "Certificates", "icon": "award", "path": "/certificates" },
+          { "key": "legends", "label": "Legends", "icon": "file-pen", "path": "/certificates/legends" },
+          { "key": "certificate-terms", "label": "Terms", "icon": "files", "path": "/certificates/terms" }
+        ] },
+      { "key": "portfolio", "label": "Portfolio", "icon": "chart-pie", "path": "/portfolio", "group": "My equity", "role": "VIEWER", "maxRole": "VIEWER" },
+      { "key": "how-to-exercise", "label": "How to exercise", "icon": "check-circle", "path": "/portfolio/how-to-exercise", "group": "My equity", "role": "VIEWER", "maxRole": "VIEWER" },
+      { "key": "my-documents", "label": "Documents", "icon": "folder", "path": "/portfolio/documents", "group": "My equity", "role": "VIEWER", "maxRole": "VIEWER" }
     ]
   },
   "imports": {

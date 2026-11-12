@@ -33,8 +33,8 @@ each holding came about and how it vests, and it lets every holder see their own
   log.
 - **A permanent history.** Every change is recorded with who made it and when. A mistake is corrected by reversing the
   change, never by rewriting history.
-- **Built-in Docs.** **Docs**, at the bottom of everyone's sidebar, explains how to use Cap Table and covers the basics
-  of equity, with a glossary.
+- **Built-in Docs.** **Docs**, in everyone's navigation, explains how to use Cap Table and covers the basics of equity,
+  with a glossary. Its topic list ends with **Public docs**, a link to these pages.
 
 ![The Cap Table dashboard of a fictional company, with company totals, plan usage and a Needs attention card](/docs/assets/screenshots/captable-dashboard.png "The dashboard of a company imported from the spreadsheet template")
 

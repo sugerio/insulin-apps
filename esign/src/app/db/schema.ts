@@ -1,5 +1,5 @@
 /**
- * E-sign's tables. Edit this file, then run `npm run db:generate`; the generated migrations in
+ * Esign's tables. Edit this file, then run `npm run db:generate`; the generated migrations in
  * ./migrations are the source of what D1 holds. The triggers that keep signatures and the audit
  * trail append-only are a custom migration (0001_triggers.sql), since Drizzle can't declare them.
  *

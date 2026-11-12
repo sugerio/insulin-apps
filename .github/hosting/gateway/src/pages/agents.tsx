@@ -1,6 +1,5 @@
 // Account → AI agents: the MCP clients the person connected, each to one app in one organization, and each app's
 // Connect AI page, where the setup for every client is.
-import { ArrowLeft } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -10,25 +9,18 @@ import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
 import { appSettingsPath, appUrl } from "../context.ts"
 import type { UserGrantRow } from "../db/oauth.ts"
-import type { MembershipRow } from "../db/orgs.ts"
+import { accountShell, type ShellData } from "../navigation.ts"
 import type { Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { accountOf, page } from "./document.tsx"
+import { page } from "./document.tsx"
 
 function day(ms: number | null): string {
   return ms === null ? "Not yet" : new Date(ms).toISOString().slice(0, 10)
 }
 
-export function agentsPage(ctx: Context, session: Session, grants: UserGrantRow[], notice: string | null, connect: { apps: HostedApp[]; orgName: string | null }, orgs?: readonly MembershipRow[]): Html {
-  return page(ctx, { title: "AI agents", user: accountOf(session, orgs) }, (
+export function agentsPage(ctx: Context, session: Session, grants: UserGrantRow[], notice: string | null, connect: { apps: HostedApp[]; orgName: string | null }, shell: ShellData): Html {
+  return page(ctx, { title: "AI agents", shell: accountShell(ctx, session, shell, "agents") }, (
     <Container width="prose" className="flex flex-col gap-6 py-10 sm:py-12">
-      <a
-        href="/account"
-        className="-mb-2 inline-flex w-fit items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
-        <ArrowLeft className="size-4" />
-        Account
-      </a>
       <PageHeader
         title="AI agents"
         description="Claude, Codex, Gemini, opencode and other MCP clients you connected. Each one uses one app in one organization as you, with your role there, for 30 days."

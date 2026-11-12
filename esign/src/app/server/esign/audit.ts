@@ -49,7 +49,7 @@ export async function recordAudit(db: D1Database, event: { envelopeId: string; t
 /** Records an event without failing the request it belongs to; a failure is logged. */
 export async function recordAuditQuietly(db: D1Database, event: Parameters<typeof recordAudit>[1]): Promise<void> {
   try { await recordAudit(db, event); }
-  catch { console.error(`E-sign: could not record audit event ${event.type} for envelope ${event.envelopeId}`); }
+  catch { console.error(`Esign: could not record audit event ${event.type} for envelope ${event.envelopeId}`); }
 }
 
 type Row = { id: number; envelope_id: string; task_id: string | null; type: string; occurred_at: number; ip: string | null; user_agent: string | null; detail_json: string | null };

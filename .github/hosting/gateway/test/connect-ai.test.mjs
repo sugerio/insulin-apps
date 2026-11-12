@@ -42,7 +42,7 @@ test('Connect AI opens for an organization Viewer and a specific-apps Viewer, wi
     const response = await page(person)
     assert.equal(response.status, 200, person.name)
     const text = response.text
-    assert.match(text, /aria-current="page"[^>]*>Connect AI<\/a>/, `${person.name}: the Connect AI tab`)
+    assert.match(text, /aria-current="page"[^>]*><svg[^>]*>(?:(?!<\/svg>)[\s\S])*<\/svg><span>Connect AI<\/span><\/a>/, `${person.name}: Connect AI, open in the navigation`)
     assert.ok(text.includes(`<code>${MCP}</code>`), `${person.name}: the server's address`)
     assert.match(text, new RegExp(`In Connect Org your role is <span[^>]*>${role}</span>`), `${person.name}: the role the agent gets`)
     assert.match(text, /choose the organization, and allow it/)
@@ -60,6 +60,9 @@ test('Connect AI opens for an organization Viewer and a specific-apps Viewer, wi
     assert.match(text, /Add custom connector/)
     assert.match(text, /Add custom MCP server/)
     assert.match(text, /<pre class="[^"]*select-all[^"]*"/, 'the blocks are selectable')
+    // Below lg the cards sit in one column that can shrink (minmax(0, 1fr)), so a long command scrolls inside its block
+    // instead of widening the page on a phone.
+    assert.match(text, /<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">/, `${person.name}: the setup cards' grid`)
     assert.match(text, /You haven&#x27;t connected an agent to Cap Table in Connect Org yet/)
     assert.equal(/Everyone&#x27;s agents/.test(text), person === owner, `${person.name}: everyone's agents only for owners and admins`)
     assert.equal(text.match(/<h1[\s>]/g)?.length, 1)
@@ -70,6 +73,25 @@ test('Connect AI opens for an organization Viewer and a specific-apps Viewer, wi
   assert.equal(signedOut.status, 302)
   assert.match(signedOut.location, /\/login\?/)
   assert.equal((await h.client().get(h.url('apex', '/apps/no-such-app/settings/connect-ai'))).status, 404)
+})
+
+test('a custom role\'s long name wraps in the server card instead of widening the page', async () => {
+  const owner = await h.user({ name: 'Rhea Owner' })
+  const orgId = await h.org(owner.client, 'Long Role Org')
+  const name = 'Quarterly board reporting reviewer for finance and audit'
+  const roleId = crypto.randomUUID()
+  await h.sql("INSERT INTO custom_roles (id, org_id, app, name, permissions, created_at, updated_at) VALUES (?1, ?2, 'captable', ?3, '[\"captable.view\"]', 1, 1)", roleId, orgId, name)
+  const reviewer = await member(orgId, 'Rex Reviewer', 'APPS')
+  await h.sql("INSERT INTO app_grants (org_id, user_id, app, role, custom_role_id, created_at, updated_at) VALUES (?1, ?2, 'captable', 'CUSTOM', ?3, 1, 1)", orgId, reviewer.id, roleId)
+
+  const response = await page(reviewer)
+  assert.equal(response.status, 200)
+  // A badge doesn't wrap, and next to two navigation columns the content is 256px wide at 768px.
+  const badge = response.text.match(new RegExp(`In Long Role Org your role is <span[^>]*\\sclass="([^"]*)"[^>]*>${name}</span>`))
+  assert.ok(badge, 'the role, by its name')
+  assert.match(badge[1], /(?:^| )whitespace-normal(?: |$)/)
+  assert.doesNotMatch(badge[1], /whitespace-nowrap/)
+  assert.match(badge[1], /(?:^| )max-w-full(?: |$)/)
 })
 
 test('own agents are listed and disconnectable; owners and admins see and disconnect everyone\'s; an Editor sees only their own', async () => {

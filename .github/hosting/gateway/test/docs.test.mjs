@@ -1,15 +1,22 @@
 // The public docs at /docs/ on the apex: every page generated from the repository's Markdown renders for anyone, with
-// one <h1>, the gateway's CSP and no inline script or style; the navigation lists every app; unknown pages are 404;
-// images come only from the DOCS_ASSETS binding, at /docs/assets/*; llms.txt lists every page; and check:docs fails
-// while the generated module is stale.
+// one <h1>, the gateway's CSP and no inline script or style; the two-level navigation lists every section in level 1
+// and the open section's pages in level 2, in a menu on narrow screens too, and is all the layout adds around the
+// breadcrumb, article, previous and next and table of contents; unknown pages are 404; images come only from the
+// DOCS_ASSETS binding, at /docs/assets/*; llms.txt lists every page; and check:docs fails while the generated module
+// is stale.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createElement, Fragment } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { listApps } from '../../../scripts/list-apps.mjs'
-import { DOCS_MODULE, PLATFORM_DOCS, docsAreCurrent, repositoryDir } from '../scripts/build-docs.mjs'
+import { DOCS_MODULE, PLATFORM_DOCS, docsAreCurrent, loadDocs, repositoryDir } from '../scripts/build-docs.mjs'
+import { navIcon } from '../scripts/docs/layout.mjs'
+import { decodeEntities, renderTokens } from '../scripts/docs/markdown.mjs'
+import { NAV_ICON_NAMES, appIconName } from '../src/nav-icons.ts'
 import { gatewayDir } from './helpers/bundle.mjs'
 import { DOCS_ASSETS_DIR, startGateway } from './helpers/harness.mjs'
 
@@ -18,9 +25,12 @@ let bare
 /** Every docs page, from the Markdown on disk: { path, title, section }. */
 let pages
 let apps
+/** The sections and pages in reading order, as the build reads them (scripts/build-docs.mjs). */
+let docs
 before(async () => {
   ;[h, bare] = await Promise.all([startGateway(), startGateway({ omit: ['DOCS_ASSETS'] })])
   apps = await listApps(repositoryDir)
+  docs = await loadDocs()
   const sections = [{ slug: 'platform', title: 'Platform', dir: PLATFORM_DOCS }, ...apps.map((app) => ({ slug: app.name, title: app.title, dir: join(repositoryDir, app.name, 'docs', 'public') }))]
   pages = []
   for (const section of sections) {
@@ -73,14 +83,158 @@ test('/docs/ and every page render publicly, with one h1, the CSP and no inline 
   }
 })
 
-test('the navigation lists Platform and every app with all its pages, and the top bar shows the visitor', async () => {
-  const index = await h.client().get(h.url('apex', '/docs/'))
-  const nav = /<nav aria-label="Documentation"[\s\S]*?<\/nav>/.exec(index.text)?.[0]
-  assert.ok(nav, 'a navigation')
-  for (const title of ['Platform', ...apps.map((app) => app.title)]) assert.ok(nav.includes(`>${title}</p>`), `the ${title} section`)
-  for (const { path } of pages) assert.ok(nav.includes(`href="${path}"`), `${path} in the navigation`)
-  assert.ok(nav.indexOf('>Platform</p>') < nav.indexOf(`>${apps[0].title}</p>`), 'Platform comes first')
+/** A page's HTML, fetched once per test file run. */
+const fetched = new Map()
+async function pageHtml(path) {
+  if (!fetched.has(path)) {
+    const page = await h.client().get(h.url('apex', path))
+    assert.equal(page.status, 200, path)
+    fetched.set(path, page.text)
+  }
+  return fetched.get(path)
+}
 
+/** The only match of `pattern` in `html`, or null; more than one fails. */
+function only(html, pattern, what) {
+  const all = html.match(new RegExp(pattern.source, 'g')) ?? []
+  assert.ok(all.length <= 1, `one ${what} at most`)
+  return all[0] ?? null
+}
+
+/** The docs' navigation in a page: level 1, level 2 and the narrow screens' menu (null where there is none). */
+function navigationOf(html) {
+  return {
+    primary: only(html, /<nav aria-label="Documentation"[\s\S]*?<\/nav>/, 'level 1'),
+    section: only(html, /<nav aria-label="Section"[\s\S]*?<\/nav>/, 'level 2'),
+    menu: only(html, /<details class="group mb-8 rounded-lg border lg:hidden">[\s\S]*?<\/details>/, 'menu'),
+  }
+}
+
+/** The links in some HTML, in order: { href, text, current } (`current`: the aria-current value, or null). */
+function linksOf(html) {
+  return [...html.matchAll(/<a href="([^"]*)"([^>]*)>([\s\S]*?)<\/a>/g)].map(([, href, attributes, inner]) => ({
+    href: decodeEntities(href),
+    text: decodeEntities(inner.replace(/<[^>]+>/g, '')).trim(),
+    current: /\saria-current="([^"]+)"/.exec(attributes)?.[1] ?? null,
+  }))
+}
+
+/** Level 1 as it should read with `open` the open section (null on /docs/, where Overview is the page). */
+function levelOne(open) {
+  return [
+    { href: '/docs/', text: 'Overview', current: open ? null : 'page' },
+    ...docs.sections.map((section) => ({ href: section.pages[0].path, text: section.title, current: section === open ? 'true' : null })),
+    { href: '/docs/llms.txt', text: 'llms.txt', current: null },
+    { href: '/docs/llms-full.txt', text: 'llms-full.txt', current: null },
+  ]
+}
+
+/** Level 2 for `page`: its section's pages in reading order, `page` marked. */
+function levelTwo(page) {
+  return page.section.pages.map((other) => ({ href: other.path, text: other.title, current: other === page ? 'page' : null }))
+}
+
+test('level 1 lists Overview, Platform, every app with its icon and the files for AI agents; /docs/ has no level 2', async () => {
+  assert.deepEqual(docs.sections.map((section) => section.slug), ['platform', ...apps.map((app) => app.name)], 'Platform, then every app')
+  const html = await pageHtml('/docs/')
+  const { primary, section, menu } = navigationOf(html)
+  assert.ok(primary, 'level 1')
+  assert.deepEqual(linksOf(primary), levelOne(null), 'Overview (the page), Platform, each app, llms.txt and llms-full.txt')
+  assert.equal(section, null, 'no level 2 on /docs/: Overview has no pages of its own')
+  assert.ok(menu, 'the menu for narrow screens')
+  assert.deepEqual(linksOf(menu), levelOne(null), 'the menu: level 1 only')
+  assert.ok(!menu.includes('data-slot="docs-menu-section"'), 'no level 2 in the menu either')
+
+  const icons = [['Overview', 'book-open'], ['Platform', 'layers'], ...apps.map((app) => [app.title, appIconName(app.name)]), ['llms.txt', 'file-text'], ['llms-full.txt', 'files']]
+  for (const [label, icon] of icons) {
+    assert.match(primary, new RegExp(`<svg [^>]*class="lucide lucide-${icon}[ "][^>]*aria-hidden="true"[^>]*>(?:(?!</svg>)[\\s\\S])*</svg><span>${label.replace('.', '\\.')}</span></a>`), `${label}: the ${icon} icon`)
+  }
+  for (const name of NAV_ICON_NAMES) assert.ok(navIcon(name), `the docs can draw the ${name} icon an app may have`)
+  // The apps under their heading, and the files for agents apart, pinned to the bottom of the column.
+  const appsAt = primary.indexOf('>Apps</div>')
+  assert.ok(appsAt > primary.indexOf('<span>Platform</span>') && appsAt < primary.indexOf(`<span>${apps[0].title}</span>`), 'the apps under "Apps"')
+  assert.match(primary, /<div class="mt-auto flex flex-col"><div class="flex flex-col"><div id="docs-nav-agents"[^>]*>For AI agents<\/div>/, 'For AI agents at the bottom')
+  // Each column shows on wide screens only, the menu on narrow ones.
+  assert.match(primary, /^<nav aria-label="Documentation" [^>]*class="[^"]*\bhidden\b[^"]*\blg:flex\b[^"]*\bw-60\b/, 'level 1: 240px, from 1024px')
+})
+
+test('level 2 lists only the open section\'s pages, marks the page, and level 1 the section', async () => {
+  for (const page of docs.pages) {
+    const html = await pageHtml(page.path)
+    const { primary, section } = navigationOf(html)
+    assert.deepEqual(linksOf(primary), levelOne(page.section), `${page.path}: level 1, its section open (aria-current="true")`)
+    assert.ok(section, `${page.path}: level 2`)
+    assert.match(section, /^<nav aria-label="Section" [^>]*class="[^"]*\bhidden\b[^"]*\blg:flex\b[^"]*\bw-56\b/, `${page.path}: level 2, 224px, from 1024px`)
+    assert.ok(section.includes(`<div id="docs-nav-section-title" class="min-w-0 flex-1 truncate text-sm font-semibold">${page.section.title}</div>`), `${page.path}: headed by its section`)
+    assert.ok(section.includes('<ul aria-labelledby="docs-nav-section-title"'), `${page.path}: the list is named by the header`)
+    assert.deepEqual(linksOf(section), levelTwo(page), `${page.path}: its section's pages, and no other section's`)
+    assert.equal(html.match(/aria-current="page"/g).length, 2, `${page.path}: the page is marked in level 2 and in the menu, nowhere else`)
+    const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1])
+    assert.equal(new Set(ids).size, ids.length, `${page.path}: every id once`)
+  }
+})
+
+test('on narrow screens the <details> menu holds both levels: level 1, the open section\'s pages, the files for agents', async () => {
+  for (const page of docs.pages) {
+    const { menu } = navigationOf(await pageHtml(page.path))
+    assert.ok(menu, `${page.path}: a menu`)
+    assert.match(menu, /^<details class="group mb-8 rounded-lg border lg:hidden"><summary [^>]*>[\s\S]*?Documentation menu[\s\S]*?<\/summary><nav aria-label="Documentation menu"/, `${page.path}: closed, below 1024px only`)
+    const one = levelOne(page.section)
+    assert.deepEqual(linksOf(menu), [...one.slice(0, -2), ...levelTwo(page), ...one.slice(-2)], `${page.path}: both levels, in order`)
+    const level2 = /<div data-slot="docs-menu-section"[\s\S]*?<\/ul><\/div>/.exec(menu)?.[0]
+    assert.ok(level2?.includes(`<div id="docs-menu-section-title" class="px-2 text-sm font-semibold">${page.section.title}</div>`), `${page.path}: level 2 headed by its section`)
+    assert.deepEqual(linksOf(level2), levelTwo(page), `${page.path}: level 2 in the menu`)
+  }
+})
+
+const TOP_BAR_WIDE = '<div class="flex h-14 w-full items-center gap-2 px-4">'
+const TOP_BAR = '<div class="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">'
+
+test('apart from the navigation, a page is its breadcrumb, article, previous and next and table of contents, as before', async () => {
+  for (const page of docs.pages) {
+    const html = await pageHtml(page.path)
+    let rest = /<main id="main"[^>]*>([\s\S]*)<\/main>/.exec(html)[1]
+    const take = (pattern, what) => {
+      const found = only(rest, pattern, what)
+      assert.ok(found, `${page.path}: ${what}`)
+      rest = rest.replace(found, '')
+      return found
+    }
+    for (const part of Object.values(navigationOf(rest))) rest = rest.replace(part, '')
+
+    const breadcrumb = take(/<nav aria-label="Breadcrumb"[\s\S]*?<\/nav>/, 'a breadcrumb')
+    assert.deepEqual(linksOf(breadcrumb), [{ href: '/docs/', text: 'Docs', current: null }, { href: page.section.pages[0].path, text: page.section.title, current: null }], `${page.path}: Docs › section`)
+
+    const article = take(/<article\b[\s\S]*?<\/article>/, 'an article')
+    const body = renderToStaticMarkup(createElement(Fragment, null, renderTokens(page.tokens, { file: page.file, path: page.path, headings: page.headings, site: docs.site })))
+    assert.ok(article.endsWith(`</header>${body}</article>`), `${page.path}: the article's body is the Markdown's, untouched`)
+    const title = renderToStaticMarkup(createElement('h1', null, page.title))
+    const description = renderToStaticMarkup(createElement(Fragment, null, page.description))
+    assert.match(article, new RegExp(`^<article [^>]*><header [^>]*><div [^>]*>${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</div><p [^>]*>`), `${page.path}: the title`)
+    assert.ok(article.includes(`>${description}</p></header>`), `${page.path}: the description`)
+
+    const toc = take(/<aside class="hidden xl:block">(?:<nav aria-label="On this page"[\s\S]*?<\/nav>)?<\/aside>/, 'a table of contents')
+    const entries = page.headings.filter((heading) => heading.depth <= 3)
+    assert.deepEqual(linksOf(toc).map((link) => [link.href, link.text]), entries.map((heading) => [`#${heading.id}`, heading.text]), `${page.path}: On this page`)
+    for (const heading of entries) assert.ok(article.includes(` id="${heading.id}"`), `${page.path}: #${heading.id} is in the article`)
+
+    const neighbours = take(/<nav aria-label="Previous and next"[\s\S]*?<\/nav>/, 'previous and next')
+    assert.deepEqual(linksOf(neighbours).map((link) => link.href), [page.previous, page.next].filter(Boolean).map((other) => other.path), `${page.path}: previous and next`)
+
+    assert.equal(rest.replace(/<[^>]+>/g, '').trim(), '', `${page.path}: nothing else to read`)
+    assert.deepEqual([...rest.matchAll(/<([a-z0-9]+)[\s>]/g)].map((match) => match[1]).filter((tag) => tag !== 'div'), [], `${page.path}: only the layout's boxes are left`)
+    assert.ok(html.includes(TOP_BAR_WIDE) && !html.includes(TOP_BAR), `${page.path}: the top bar spans the window, over the navigation`)
+  }
+  const index = await pageHtml('/docs/')
+  assert.ok(index.includes(TOP_BAR_WIDE), '/docs/: the wide top bar')
+  for (const section of docs.sections) {
+    for (const page of section.pages) assert.ok(index.includes(`<a href="${page.path}" class="flex flex-col gap-1.5 rounded-xl border`), `/docs/: the card for ${page.path}`)
+  }
+  assert.ok((await h.client().get(h.url('apex', '/privacy'))).text.includes(TOP_BAR), 'other pages keep their top bar')
+})
+
+test('the top bar shows the visitor', async () => {
+  const index = await h.client().get(h.url('apex', '/docs/'))
   const top = /<header\b[\s\S]*?<\/header>/.exec(index.text)[0]
   assert.ok(top.includes('>Sign in</a>') && top.includes('>Create account</a>'), 'signed out: sign-in links')
   assert.ok(top.includes(`href="${h.url('apex', '/docs/')}">Docs</a>`), 'the top bar links the docs')

@@ -13,7 +13,10 @@ import {
   verifyPassword,
 } from '../src/crypto.ts'
 import { cookieValues, serializeCookie, setCookieName, withoutCookies } from '../src/http/cookies.ts'
-import { bindingName, isAppName, isGatewayAppPath, issuesUrlFrom, parsePermissions, parseSecretKey, parseSender, readConfig, isPublicPath, parsePublicPaths, publicPathProblem, scheduledProblem } from '../src/config.ts'
+import { bindingName, isAppName, isGatewayAppPath, issuesUrlFrom, navigationPathProblem, parseNavigation, parsePermissions, parseSecretKey, parseSender, readConfig, isPublicPath, parsePublicPaths, publicPathProblem, scheduledProblem } from '../src/config.ts'
+import { NAV_ICON_NAMES, isNavIconName } from '../src/nav-icons.ts'
+import { NAVIGATION_ICONS, gatewayNavigation, listApps, navigationPathProblem as listAppsNavigationPathProblem, readNavigation } from '../../../scripts/list-apps.mjs'
+import { gatewayConfig } from '../scripts/app-config.mjs'
 import { safeReturnTo } from '../src/http/return-to.ts'
 import { createContext } from '../src/context.ts'
 import { escapeHtml, html } from '../src/pages/html.ts'
@@ -491,6 +494,68 @@ test("an app's scheduled path: one path under /api/, never reserved, never publi
     const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/api/public/'], scheduled }] })
     assert.equal(refused.ok, false, `${scheduled} fails closed`)
     assert.ok(refused.problems.includes('SITE_APPS[0].scheduled'), String(scheduled))
+  }
+})
+
+test("an app's navigation: the gateway bundles exactly list-apps.mjs's icons, and checks a manifest as it does", () => {
+  assert.deepEqual([...NAV_ICON_NAMES], [...NAVIGATION_ICONS], 'src/nav-icons.ts and list-apps.mjs list the same icons')
+  assert.equal(isNavIconName('inbox'), true)
+  for (const name of ['Inbox', 'rocket', '', null, 7]) assert.equal(isNavIconName(name), false, String(name))
+  for (const path of ['/', '/envelopes', '/envelopes?status=draft', '/search?q=a%20b', '/settingsx', '//evil.example', '/settings', '/Settings/users',
+    '/__insulin/me', '/mcp', '/.well-known/x', '/api/__suger/x', '/a#b', '/a b', '/a\\b', '/a/../b', '/a%2fb', '/a//b', 'a', 42]) {
+    assert.equal(navigationPathProblem(path), listAppsNavigationPathProblem(path), `the same verdict on ${JSON.stringify(path)}`)
+  }
+
+  const manifest = [
+    { key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes', group: 'Signing', children: [{ key: 'drafts', label: 'Drafts', icon: 'file-pen', path: '/envelopes?status=draft' }] },
+    { key: 'templates', label: 'Templates', icon: 'files', path: '/templates', role: 'EDITOR' },
+  ]
+  const problems = []
+  assert.deepEqual(parseNavigation(readNavigation('esign', manifest), 'nav', problems), readNavigation('esign', manifest), "list-apps.mjs's output passes unchanged")
+  assert.deepEqual(parseNavigation(manifest, 'nav', problems), readNavigation('esign', manifest), 'defaults filled in the same way')
+  assert.deepEqual(problems, [])
+  assert.deepEqual(parseNavigation(undefined, 'nav', problems), [])
+  for (const [raw, problem] of [
+    [{}, 'nav (expected an array of at most 12)'],
+    [Array.from({ length: 13 }, (_, i) => ({ key: `k${i}`, label: 'A', icon: 'list', path: '/a' })), 'nav (expected an array of at most 12)'],
+    [[{ key: 'a', label: 'A', icon: 'rocket', path: '/a' }], 'nav[0]'],
+    [[{ key: 'a', label: 'A', icon: 'list', path: '/settings/users' }], 'nav[0]'],
+    [[{ key: 'a', label: 'A', icon: 'list', path: '/a', role: 'OWNER' }], 'nav[0]'],
+    [[{ key: 'a', label: '', icon: 'list', path: '/a' }], 'nav[0]'],
+    [[{ key: 'a', label: 'A', icon: 'list', path: '/a', group: '' }], 'nav[0]'],
+    [[{ key: 'a', label: 'A', icon: 'list', path: '/a' }, { key: 'a', label: 'B', icon: 'list', path: '/b' }], 'nav[1]'],
+    [[{ key: 'a', label: 'A', icon: 'list', path: '/a', children: 'x' }], 'nav[0].children (expected an array of at most 12)'],
+    [[{ key: 'a', label: 'A', icon: 'list', path: '/a', children: [{ key: 'b', label: 'B', icon: 'list', path: '/b', children: [] }] }], 'nav[0].children[0]'],
+    [[{ key: 'a', label: 'A', icon: 'list', path: '/a', children: [{ key: 'b', label: 'B', icon: 'list', path: '/mcp' }] }], 'nav[0].children[0]'],
+  ]) {
+    const found = []
+    parseNavigation(raw, 'nav', found)
+    assert.ok(found.includes(problem), `${JSON.stringify(raw).slice(0, 90)}: ${found.join(', ')}`)
+  }
+
+  const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
+  const env = {
+    DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding, SITE_DOMAIN: 'example.test',
+    TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
+  }
+  const old = readConfig({ ...env, SITE_APPS: JSON.stringify([{ name: 'captable', title: 'Cap Table', binding: 'APP_CAPTABLE', permissions: [], publicPaths: [], scheduled: null }]) })
+  assert.equal(old.ok, true, 'a SITE_APPS from before the navigation manifest still loads')
+  assert.deepEqual(old.config.apps[0].navigation, [])
+  const declared = readConfig({ ...env, SITE_APPS: [{ name: 'captable', navigation: manifest }] })
+  assert.deepEqual(declared.config.apps[0].navigation, readNavigation('captable', manifest))
+  const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', navigation: [{ key: 'a', label: 'A', icon: 'list', path: '/__insulin/me' }] }] })
+  assert.equal(refused.ok, false, 'a malformed manifest fails closed, like the other fields')
+  assert.ok(refused.problems.includes('SITE_APPS[0].navigation[0]'))
+})
+
+test("a local run's gateway config carries each app's level 1, as the deploy's does", async () => {
+  const apps = await listApps()
+  const local = await gatewayConfig(apps.map(({ name }) => name))
+  for (const app of apps) {
+    const entry = local.vars.SITE_APPS.find(({ name }) => name === app.name)
+    assert.deepEqual(entry.navigation, gatewayNavigation(app.navigation), `${app.name}: level 1`)
+    assert.ok(entry.navigation.every((item) => !('children' in item)), `${app.name}: never level 2`)
+    assert.equal('secrets' in entry, false, `${app.name}: never the names of its secrets`)
   }
 })
 

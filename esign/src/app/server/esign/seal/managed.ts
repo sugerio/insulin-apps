@@ -191,6 +191,8 @@ export async function hasManagedEvidence(db: D1Database, envelopeId: string): Pr
 /** The delivery PDF's evidence and certificate notes for a managed seal. */
 export const managedDelivery = (db: D1Database, bucket: BlobStore, tenantId: string, envelopeId: string, trust: SealTrust): DeliveryEvidence => ({
   verify: () => verifyManagedEvidence(db, bucket, tenantId, envelopeId, trust),
+  // The mark and notes are in every delivered PDF, which is rebuilt on each read and must match the
+  // stored one byte for byte: they keep the name E-sign had, rather than renaming the file (delivery-v2).
   mark: 'Sealed by E-sign',
   notes: [
     'The signed PDF and its evidence (the original, each signing record and the events above) are signed with E-sign\'s seal key (ECDSA P-256) and timestamped by an RFC 3161 time-stamping authority. The seal covers the signed PDF, not these certificate pages.',

@@ -145,7 +145,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       // The task's send budget (60 seconds apart, 3 per 15 minutes): say when the next send is allowed.
       if (error instanceof OtpSendRefused) {const retryAfterSeconds=Math.ceil(error.retryAfterMs/1000);return c.json({error:'otp_rate_limited',retryAfterSeconds},429,{'Retry-After':String(retryAfterSeconds)});}
       // Why the code wasn't sent, without the address or the code: the relay's status, or the error's kind.
-      console.warn('E-sign: a verification code was not sent', error instanceof MailRelayError ? {relayStatus:error.status} : {error:error instanceof Error ? error.name : typeof error});
+      console.warn('Esign: a verification code was not sent', error instanceof MailRelayError ? {relayStatus:error.status} : {error:error instanceof Error ? error.name : typeof error});
       return c.json({error:'otp_unavailable'},429);
     }
   });
@@ -305,7 +305,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     await next();
     if (c.res.status !== 202 || c.env.COMPLETE_AFTER_SIGN !== 'true') return;
     const work = completeEnvelopeOfSession(c.env,pageToken(c))
-      .catch(() => console.error('E-sign: finishing the envelope after a signature failed; process-due retries it'));
+      .catch(() => console.error('Esign: finishing the envelope after a signature failed; process-due retries it'));
     if (c.env.WAIT_UNTIL) c.env.WAIT_UNTIL(work);
     else await work;
   });
@@ -387,7 +387,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       const recipients=async()=>(await c.env.DB.prepare('SELECT id,role,recipient_name,recipient_email,routing_order,status FROM tasks WHERE envelope_id=? ORDER BY routing_order').bind(id).all()).results;
       if (await hasManagedEvidence(c.env.DB,id)) {
         const verified=await verifyManagedEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,sealTrustFromEnv(c.env));
-        return c.json({mode:'KEY_TSA',notice:'Sealed with a signature by E-sign\'s seal key (ECDSA P-256) over the evidence and an RFC 3161 timestamp over that signature. Revocation of the time-stamping authority certificates is not checked. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the sealed manifest and stored files. Each signer\'s name, email address, role and consent text are sealed with their signing record. Envelope metadata and the tasks\' current routing order and status are database values, not bound by the seal.',envelope,recipients:await recipients(),...verified});
+        return c.json({mode:'KEY_TSA',notice:'Sealed with a signature by Esign\'s seal key (ECDSA P-256) over the evidence and an RFC 3161 timestamp over that signature. Revocation of the time-stamping authority certificates is not checked. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the sealed manifest and stored files. Each signer\'s name, email address, role and consent text are sealed with their signing record. Envelope metadata and the tasks\' current routing order and status are database values, not bound by the seal.',envelope,recipients:await recipients(),...verified});
       }
       const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
       const verified=await finalizeLocalTestEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey,true);

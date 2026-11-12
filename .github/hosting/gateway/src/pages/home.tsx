@@ -1,6 +1,6 @@
 // The apex's `/`: the landing page for visitors, the home page (the active organization's apps, invitations) once
-// signed in. Organizations are switched and created from the top bar.
-import { ArrowRight, Building2, ChartPie, LayoutGrid, Plus, ShieldCheck, type LucideIcon } from "lucide-react"
+// signed in, inside the navigation (DESIGN.md §3.2). Organizations are switched and created from its organization menu.
+import { ArrowRight, Building2, Plus, ShieldCheck, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -9,20 +9,17 @@ import { GitHubMark } from "@/components/brand"
 import { ContactLink } from "@/components/contact"
 import { Notice, PostButton } from "@/components/forms"
 import { Container, PageHeader, SectionTitle, proseLinks } from "@/components/layout"
+import { NavIcon } from "@/components/nav-icon"
 import type { HostedApp } from "../config.ts"
 import type { Context } from "../context.ts"
 import { apexUrl, appUrl, withReturnTo } from "../context.ts"
 import type { InvitationGrantRow, InvitationRow } from "../db/invitations.ts"
 import type { MembershipRow } from "../db/orgs.ts"
+import { appIcon, orgShell } from "../navigation.ts"
 import { accessPhrase } from "../orgs/access-forms.ts"
 import type { ActiveOrg, Session } from "../auth/session.ts"
 import type { Html } from "./html.ts"
-import { accountOf, page } from "./document.tsx"
-
-/** Each app's icon on its card, by directory name; apps without one get a generic icon. */
-const APP_ICONS: Record<string, LucideIcon> = {
-  captable: ChartPie,
-}
+import { page } from "./document.tsx"
 
 /** The apps as cards; each card's title is an h3 under a section's h2, or an h2 right under the page's h1. */
 function AppCards({ ctx, apps, level = 3 }: { ctx: Context; apps: HostedApp[]; level?: 2 | 3 }) {
@@ -30,12 +27,11 @@ function AppCards({ ctx, apps, level = 3 }: { ctx: Context; apps: HostedApp[]; l
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {apps.map((app) => {
-        const Icon = APP_ICONS[app.name] ?? LayoutGrid
         return (
           <Card key={app.name} className="gap-5">
             <CardHeader className="gap-3">
               <div className="flex size-10 items-center justify-center rounded-lg border bg-muted text-foreground">
-                <Icon className="size-5" />
+                <NavIcon name={appIcon(app)} className="size-5" />
               </div>
               <CardTitle className="text-base">{level === 2 ? <h2>{app.title}</h2> : <h3>{app.title}</h3>}</CardTitle>
               {app.summary ? <CardDescription>{app.summary}</CardDescription> : null}
@@ -190,15 +186,17 @@ function NoOrgCard({ session, invitations }: { session: Session; invitations: In
 
 /**
  * `apps`: the apps the user can use in the active organization (all of them with an organization role); the others
- * aren't listed. The organizations themselves are in the top bar's switcher, with "Create an organization".
+ * aren't listed. The organizations themselves are in the navigation's organization menu, with "Create an
+ * organization".
  */
 export function homePage(ctx: Context, session: Session, memberships: MembershipRow[], invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, active: ActiveOrg | null, apps: HostedApp[]): Html {
   const message = HOME_NOTICES[ctx.url.searchParams.get("notice") ?? ""]
-  return page(ctx, { title: "Your apps", user: { ...accountOf(session, memberships), org: active } }, (
+  const shell = orgShell(ctx, session, { orgs: memberships, org: active, apps: apps.filter((app) => app.service) }, "home")
+  return page(ctx, { title: "Your apps", shell }, (
     <Container className="flex flex-col gap-8 py-10 sm:py-12">
       <PageHeader
         title={active ? `Apps in ${active.name}` : "Your apps"}
-        description={active ? "Each app opens in this organization. Switch organizations from the top bar." : undefined}
+        description={active ? "Each app opens in this organization. Switch organizations from the organization menu." : undefined}
       />
       {message ? <Notice kind="ok">{message}</Notice> : null}
       {active ? (

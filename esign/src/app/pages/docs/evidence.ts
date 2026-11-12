@@ -1,12 +1,12 @@
 import { b, DocLink, h, p, ul, type DocTopic } from './parts.ts'
 
-// Docs › Certificates, seals and the audit trail: what E-sign records, how a completed envelope is sealed, what the
+// Docs › Certificates, seals and the audit trail: what Esign records, how a completed envelope is sealed, what the
 // certificate shows and what it doesn't, and the local test seal.
 
 export const evidence: DocTopic = {
   slug: 'evidence',
   title: 'Certificates, seals and the audit trail',
-  summary: 'What E-sign records about a signing, how it seals the result, and what the certificate of completion shows.',
+  summary: 'What Esign records about a signing, how it seals the result, and what the certificate of completion shows.',
   group: 'app',
   sections: [
     {
@@ -26,7 +26,7 @@ export const evidence: DocTopic = {
       id: 'the-seal',
       title: 'The seal',
       body: [
-        p('When everyone has signed, E-sign seals the envelope: it signs a summary of the evidence (the source PDF, each signature, the audit events and the signed PDF) with E-sign\'s seal key, and has that signature timestamped by an independent time-stamping authority (RFC 3161). The seal shows that the evidence hasn\'t changed since, and when it existed.'),
+        p('When everyone has signed, Esign seals the envelope: it signs a summary of the evidence (the source PDF, each signature, the audit events and the signed PDF) with Esign\'s seal key, and has that signature timestamped by an independent time-stamping authority (RFC 3161). The seal shows that the evidence hasn\'t changed since, and when it existed.'),
         p('Events after sealing, such as the signed copies being sent, are still recorded, and marked as recorded after sealing.'),
       ],
     },
@@ -45,7 +45,7 @@ export const evidence: DocTopic = {
     {
       id: 'the-local-test-seal',
       title: 'The local test seal',
-      body: p('A local preview has no seal key, so E-sign seals with a test key instead, and the certificate says ', b('LOCAL TEST ONLY'), '. Such a certificate is a simulation, with server-recorded times and no independent timestamp. Don\'t rely on it. In a local preview, codes go to a test mailbox instead of being emailed, and the signing page says where to find them.'),
+      body: p('A local preview has no seal key, so Esign seals with a test key instead, and the certificate says ', b('LOCAL TEST ONLY'), '. Such a certificate is a simulation, with server-recorded times and no independent timestamp. Don\'t rely on it. In a local preview, codes go to a test mailbox instead of being emailed, and the signing page says where to find them.'),
     },
     {
       id: 'keeping-records',

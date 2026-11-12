@@ -1,5 +1,5 @@
 /**
- * The seal keys E-sign trusts: the public half of every key that has sealed envelopes, with the
+ * The seal keys Esign trusts: the public half of every key that has sealed envelopes, with the
  * time it was in use. This list, not the deployment's configuration, is what a seal is verified
  * against, so trusting a key takes a reviewed change to this file, and whoever can change the
  * deployment's secrets can't make a seal of their own key verify.

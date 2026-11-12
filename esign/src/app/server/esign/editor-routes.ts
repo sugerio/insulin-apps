@@ -10,6 +10,7 @@ import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFiel
 import type {Hono} from 'hono';
 import type { BlobStore } from './blob-store.ts';
 import {parseMetadata,parseTemplateName,unknownKeys} from './metadata.ts';
+import {storedDefaultSigners} from './default-signers.ts';
 
 const limit=5*1024*1024;
 const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),n=>n.toString(16).padStart(2,'0')).join('');
@@ -82,8 +83,11 @@ export function mountEditorRoutes(app:Hono<Env>){
   try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./fields.ts').TemplateField[]);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
   try{assertEditorSigningFields(fields as import('./fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
   // The session's name and metadata, else those of the template it edits.
-  let labels={name:session.templateName as string|null,metadata:session.templateMetadataJson};
-  if((labels.name===null||labels.metadata===null)&&session.sourceTemplateId){const source=await c.env.DB.prepare('SELECT name,metadata_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{name:string|null;metadata_json:string}>();if(source)labels={name:labels.name??source.name,metadata:labels.metadata??source.metadata_json};}
+  // The source template's default signers too, for the roles the saved template keeps (a new PDF's are set after
+  // the save: POST /api/templates/:id/default-signers).
+  let labels={name:session.templateName as string|null,metadata:session.templateMetadataJson,signers:null as string|null};
+  if(session.sourceTemplateId){const source=await c.env.DB.prepare('SELECT name,metadata_json,default_signers_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{name:string|null;metadata_json:string;default_signers_json:string}>();if(source)labels={name:labels.name??source.name,metadata:labels.metadata??source.metadata_json,signers:source.default_signers_json};}
+  const signers=storedDefaultSigners(labels.signers,roles);
   const id=crypto.randomUUID(),key=`templates/${id}/source.pdf`;const stored=await c.env.ARTIFACTS.put(key,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/pdf'}});if(!stored)return c.json({error:'storage_conflict'},503);
   // The template row first: nothing references it and its id is returned only after the commit
   // point, a compare-and-set that records it as this page's result while the page is still unsaved
@@ -91,7 +95,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   // harmless orphan.
   let saved:D1Result;
   try{[,saved]=await c.env.DB.batch([
-   c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at,name,metadata_json) VALUES (?,?,?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now(),labels.name,labels.metadata??'{}'),
+   c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at,name,metadata_json,default_signers_json) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now(),labels.name,labels.metadata??'{}',JSON.stringify(signers)),
    c.env.DB.prepare(`UPDATE editor_sessions AS x SET result_template_id=? WHERE x.id=? AND x.tenant_id=? AND x.result_template_id IS NULL AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND EXISTS (SELECT 1 FROM access_sessions s WHERE s.scope='editor' AND s.token_hash=? AND s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin AND s.expires_at>?)`).bind(id,session.pageId,session.tenantId,session.tokenHash,Date.now()),
   ]);}catch{saved={meta:{changes:0}} as D1Result;}
   if(saved.meta.changes!==1){const result=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=?').bind(session.pageId).first<{result_template_id:string|null}>();if(result?.result_template_id)return c.json({error:'already_saved'},409);return c.json({error:'save_failed'},503);}

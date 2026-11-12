@@ -43,6 +43,13 @@
       "when": 1794487370914,
       "tag": "0005_contacts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794489885264,
+      "tag": "0006_default_signers",
+      "breakpoints": true
     }
   ]
 }

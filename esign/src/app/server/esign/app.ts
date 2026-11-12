@@ -20,6 +20,7 @@ import type { MailEnv } from './mail.ts';
 import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
 import { contactUpserts, mountContactRoutes } from './contacts.ts';
+import { defaultSignerNames, parseDefaultSigners, storedDefaultSigners, type DefaultSigners } from './default-signers.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -122,8 +123,8 @@ function page(query: (name: string) => string | undefined): { limit: number; bef
 app.get('/api/templates', async (context) => {
   const paging = page((name) => context.req.query(name));
   if (!paging) return context.json({ error: 'invalid_query' }, 400);
-  const { results } = await context.env.DB.prepare('SELECT id, roles_json, fields_json, created_at, name, metadata_json FROM templates WHERE tenant_id = ? AND created_at < ? ORDER BY created_at DESC, id LIMIT ?')
-    .bind(context.get('tenantId'), paging.before, paging.limit).all<{ id: string; roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string }>();
+  const { results } = await context.env.DB.prepare('SELECT id, roles_json, fields_json, created_at, name, metadata_json, default_signers_json FROM templates WHERE tenant_id = ? AND created_at < ? ORDER BY created_at DESC, id LIMIT ?')
+    .bind(context.get('tenantId'), paging.before, paging.limit).all<{ id: string; roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string }>();
   return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at })) });
 });
 
@@ -165,7 +166,7 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   const rawRoles = form.get('roles');
   if (!(file instanceof File) || typeof rawRoles !== 'string' || file.size === 0) return context.json({ error: 'invalid_template' }, 400);
   // The host's name and metadata for the template (metadata.ts), as form fields; metadata is a JSON object.
-  const unknown = unknownKeys(Object.fromEntries(Array.from(form.keys(), (key) => [key, true])), ['file', 'roles', 'name', 'metadata']);
+  const unknown = unknownKeys(Object.fromEntries(Array.from(form.keys(), (key) => [key, true])), ['file', 'roles', 'name', 'metadata', 'defaultSigners']);
   if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
   const name = parseTemplateName(form.get('name') ?? undefined);
   let metadata: ReturnType<typeof parseMetadata> = null;
@@ -178,6 +179,15 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   let roles: unknown;
   try { roles = JSON.parse(rawRoles); } catch { return context.json({ error: 'invalid_roles' }, 422); }
   if (!Array.isArray(roles) || roles.length === 0 || roles.length > 20 || roles.some((r) => typeof r !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(r)) || new Set(roles).size !== roles.length) return context.json({ error: 'invalid_roles' }, 422);
+  // Who usually signs as some of the roles (default-signers.ts), a JSON object.
+  let defaultSigners: ReturnType<typeof parseDefaultSigners> = null;
+  const rawSigners = form.get('defaultSigners');
+  if (rawSigners !== null) {
+    try { defaultSigners = typeof rawSigners === 'string' ? parseDefaultSigners(JSON.parse(rawSigners), roles as string[]) : 'invalid'; } catch { defaultSigners = 'invalid'; }
+  }
+  if (defaultSigners === 'invalid') return context.json({ error: 'invalid_template' }, 422);
+  try { await assertRenderableRecipientNames(defaultSignerNames(defaultSigners)); }
+  catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
   const bytes = new Uint8Array(await file.arrayBuffer());
   try {
     const pdf = await PDFDocument.load(bytes, { throwOnInvalidObject: true });
@@ -189,14 +199,14 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   if (!stored) return context.json({ error: 'storage_conflict' }, 503);
   // An ambiguous D1 failure may have committed. Keep the object for later reconciliation;
   // deleting it here could leave a committed template without its source.
-  await context.env.DB.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .bind(id, context.get('tenantId'), key, JSON.stringify(roles), Date.now(), name, JSON.stringify(metadata ?? {})).run();
-  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles }, 201);
+  await context.env.DB.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, context.get('tenantId'), key, JSON.stringify(roles), Date.now(), name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {})).run();
+  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles, defaultSigners: defaultSigners ?? {} }, 201);
 });
 
 app.get('/api/templates/:id', async (context) => {
   const row = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?')
-    .bind(context.req.param('id'), context.get('tenantId')).first<{ id: string; roles_json: string; fields_json?: string; name: string | null; metadata_json: string }>();
+    .bind(context.req.param('id'), context.get('tenantId')).first<{ id: string; roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string }>();
   if (!row) return context.json({ error: 'not_found' }, 404);
   // The response names keep the word "positioned": hosts read them.
   let hasFields = false;
@@ -213,9 +223,30 @@ app.get('/api/templates/:id', async (context) => {
   return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json) });
 });
 
-/** A template's name, when it has one, and its metadata, as the API returns them. */
-function templateLabels(row: { name: string | null; metadata_json: string }): { name?: string; metadata: Metadata } {
-  return { ...(row.name ? { name: row.name } : {}), metadata: storedMetadata(row.metadata_json) };
+// Replaces a template's default signers (default-signers.ts): who usually signs as some of its roles. They
+// aren't part of what is signed, so unlike the rest of a template they can change; envelopes already sent
+// keep the signers they were sent to. `{defaultSigners: {}}` clears them.
+app.post('/api/templates/:id/default-signers', bodyLimit({ maxSize: 16384 }), async (context) => {
+  let body: unknown;
+  try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_default_signers' }, 422);
+  const unknown = unknownKeys(body, ['defaultSigners']);
+  if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
+  const id = context.req.param('id'), tenantId = context.get('tenantId');
+  const template = await context.env.DB.prepare('SELECT roles_json FROM templates WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ roles_json: string }>();
+  if (!template) return context.json({ error: 'not_found' }, 404);
+  const value = (body as { defaultSigners?: unknown }).defaultSigners;
+  const signers = value === undefined ? 'invalid' : parseDefaultSigners(value, JSON.parse(template.roles_json));
+  if (signers === 'invalid') return context.json({ error: 'invalid_default_signers' }, 422);
+  try { await assertRenderableRecipientNames(defaultSignerNames(signers)); }
+  catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
+  await context.env.DB.prepare('UPDATE templates SET default_signers_json = ? WHERE id = ? AND tenant_id = ?').bind(JSON.stringify(signers ?? {}), id, tenantId).run();
+  return context.json({ id, defaultSigners: signers ?? {} });
+});
+
+/** A template's name, when it has one, its metadata and its default signers, as the API returns them. */
+function templateLabels(row: { name: string | null; metadata_json: string; roles_json: string; default_signers_json: string }): { name?: string; metadata: Metadata; defaultSigners: DefaultSigners } {
+  return { ...(row.name ? { name: row.name } : {}), metadata: storedMetadata(row.metadata_json), defaultSigners: storedDefaultSigners(row.default_signers_json, JSON.parse(row.roles_json)) };
 }
 
 /**
@@ -242,6 +273,8 @@ function placedFields(raw: string | undefined): { type: string; role: string; pa
 
 /** The fields a create-envelope request and each of its recipients may have; any other is refused. */
 const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata', 'message'];
+const validRecipientName = (name: unknown): name is string => typeof name === 'string' && !!name.trim() && name.length <= 200;
+const validRecipientEmail = (email: unknown): email is string => typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBehalfOf', 'namedBy', 'afterSigning', 'delivery', 'message'];
 
 /** A created envelope starts IN_PROGRESS: its first signer's task is active. */
@@ -279,7 +312,8 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const sender = parseSender(input.sender);
   if (sender === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
   if (typeof input.templateId !== 'string' || !Array.isArray(input.recipients) || input.recipients.length < 1 || input.recipients.length > 20) return context.json({ error: 'invalid_envelope' }, 422);
-  const recipients: ({ role: string; name: string; email: string; expiresAt?: string } & SignerFacts)[] = [];
+  // As requested: a name or an email left out comes from the template's default signer, below.
+  const recipients: ({ role: string; name?: string; email?: string; expiresAt?: string } & SignerFacts)[] = [];
   const deadlines: (number | null)[] = [];
   const signerFacts: SignerFacts[] = [];
   const namedBy: (string | null)[] = [];
@@ -293,7 +327,8 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
       if (message && typeof message === 'object' && !Array.isArray(message)) unknownRecipientFields.push(...unknownKeys(message, ['subject', 'body']).map((field) => `message.${field}`));
       if (unknownRecipientFields.length) return context.json({ error: 'unknown_field', fields: unknownRecipientFields.map((field) => `recipients[].${field}`) }, 422);
     }
-    if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || typeof recipient.name !== 'string' || typeof recipient.email !== 'string' || !recipient.name.trim() || recipient.name.length > 200 || recipient.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email)) return context.json({ error: 'invalid_recipient' }, 422);
+    // A name and an email each, unless the template's default signer for the role gives them (checked below).
+    if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || (recipient.name !== undefined && !validRecipientName(recipient.name)) || (recipient.email !== undefined && !validRecipientEmail(recipient.email))) return context.json({ error: 'invalid_recipient' }, 422);
     // A sign-by deadline for this recipient (ISO 8601, future, within 400 days).
     const deadline = parseDeadline((recipient as { expiresAt?: unknown }).expiresAt);
     if (deadline === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
@@ -317,7 +352,7 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     if (delivery === 'invalid' || own === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
     deliveries.push(delivery);
     messages.push(own);
-    recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email, ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}), ...(delivery === 'email' ? { delivery } : {}), ...(own ? { message: own } : {}) });
+    recipients.push({ role: recipient.role, ...(recipient.name === undefined ? {} : { name: recipient.name as string }), ...(recipient.email === undefined ? {} : { email: recipient.email as string }), ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}), ...(delivery === 'email' ? { delivery } : {}), ...(own ? { message: own } : {}) });
   }
   const tenantId = context.get('tenantId');
   const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) });
@@ -331,9 +366,7 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const replay = (existing: { request_sha256: string }) => existing.request_sha256 === hash ? context.json(createdResponse(id), 201) : context.json({ error: 'idempotency_conflict' }, 409);
   const existing = await lookup();
   if (existing) return replay(existing);
-  try { await assertRenderableRecipientNames(recipients.map((recipient) => recipient.name)); }
-  catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
-  const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string }>();
+  const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string }>();
   if (!template) return context.json({ error: 'not_found' }, 404);
   const roles = JSON.parse(template.roles_json) as string[];
   if (template.fields_json !== undefined) {
@@ -348,6 +381,15 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     } catch { return context.json({ error: 'positioned_fields_not_supported' }, 422); }
   }
   if (roles.length !== recipients.length || new Set(recipients.map((r) => r.role)).size !== roles.length || recipients.some((r) => !roles.includes(r.role))) return context.json({ error: 'invalid_roles' }, 422);
+  // A name or an email a recipient left out is their role's default signer's (default-signers.ts), as the
+  // template has them now. The request's hash is of the request as sent: a retry gets this envelope even if
+  // the default signers have changed since.
+  const defaults = storedDefaultSigners(template.default_signers_json, roles);
+  const filled = recipients.map((r) => ({ ...r, name: r.name ?? defaults[r.role]?.name, email: r.email ?? defaults[r.role]?.email }));
+  if (filled.some((r) => !validRecipientName(r.name) || !validRecipientEmail(r.email))) return context.json({ error: 'invalid_recipient' }, 422);
+  const people = filled as ((typeof recipients)[number] & { name: string; email: string })[];
+  try { await assertRenderableRecipientNames(people.map((recipient) => recipient.name)); }
+  catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
   // The envelope is prepared here, in the same request: its initial document (D0) is the template's
   // source, and the first signer's task is active. The id comes from the tenant and the
   // Idempotency-Key, so a retry after a failure reuses the D0 object stored by the failed attempt.
@@ -365,10 +407,10 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const statements = [
     // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
     context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
-    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
+    ...people.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
     // The organization's contacts (contacts.ts): each signer added or refreshed, with the envelope only.
-    ...contactUpserts(context.env.DB, tenantId, recipients, Date.now()),
+    ...contactUpserts(context.env.DB, tenantId, people, Date.now()),
   ];
   try { await context.env.DB.batch(statements); }
   catch (error) {

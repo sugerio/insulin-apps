@@ -141,9 +141,16 @@ test('templates: upload with a signature page, with roles checked first',async()
   await app.type(app.byLabel('Role 1'),'partner');
   await app.click(app.button('Add a role'),'Add a role');
   await app.type(app.byLabel('Role 2'),'seller');
+  // Who usually signs as a role: optional, and an email must be one.
+  await app.type(app.byId('role-1-email'),'sam@');
+  await app.click(app.button('Upload with a signature page'),'Upload');
+  assert.match(app.text(),/Enter a valid email address for seller, or leave it empty\./);
+  await app.type(app.byId('role-1-name'),'Sam Seller');await app.type(app.byId('role-1-email'),'sam@seller.example');
   await app.click(app.button('Upload with a signature page'),'Upload');
   const upload=app.calls.find(c=>c.path==='/api/templates'&&c.method==='POST')!;
   assert.ok(upload.body instanceof FormData);assert.equal((upload.body as FormData).get('roles'),'["partner","seller"]');
+  assert.deepEqual(JSON.parse(String((upload.body as FormData).get('defaultSigners'))),{seller:{name:'Sam Seller',email:'sam@seller.example'}});
+  assert.equal(app.byId('role-1-name').props.value,'','the form is cleared');
   assert.equal(upload.headers.authorization,undefined,'the member\'s session, not a key');
   assert.match(app.text(),/Template uploaded/);
  }finally{await app.unmount();}
@@ -161,10 +168,13 @@ test('placing fields opens the editor on this origin, ignores other frames, and 
   if(c.path==='/api/template-editing-sessions'&&c.method==='POST')return json({sessionId:SESSION,url:`${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}`},201);
   if(c.path===`/api/template-editing-sessions/${SESSION}/source`)return json({},201);
   if(c.path===`/api/template-editing-sessions/${SESSION}`)return json({templateId:SAVED});
+  if(c.path===`/api/templates/${SAVED}`)return json({id:SAVED,roles:['partner'],fields:[],createdAt:0});
+  if(c.path===`/api/templates/${SAVED}/default-signers`)return json({id:SAVED,defaultSigners:{partner:{email:'pat@partner.example'}}});
  });
  try{
   await app.act(async()=>{app.byId('template-pdf').props.onChange({target:{files:[pdf()]}});});
   await app.type(app.byLabel('Role 1'),'partner');
+  await app.type(app.byId('role-0-email'),'pat@partner.example');
   await app.click(app.button('Upload and place fields'),'Place fields');
   const session=app.calls.find(c=>c.path==='/api/template-editing-sessions')!;
   assert.deepEqual(JSON.parse(String(session.body)),{allowedParentOrigin:ORIGIN,roles:['partner']});
@@ -183,6 +193,8 @@ test('placing fields opens the editor on this origin, ignores other frames, and 
   await app.dispatch({origin:ORIGIN,source:app.frameWindow,data:{type:'esign.editor.saved',requestId:request.requestId,templateId:SAVED}});
   assert.match(app.text(),/Fields saved as a new template/);
   assert.match(app.text(),/1 placed field/);
+  // The default signers are set on the saved template, for the roles it kept.
+  assert.deepEqual(JSON.parse(String(app.calls.find(c=>c.path===`/api/templates/${SAVED}/default-signers`)!.body)),{defaultSigners:{partner:{email:'pat@partner.example'}}});
   assert.equal(app.renderer.root.findAll((n:any)=>n.type==='iframe').length,0,'the editor closes');
  }finally{await app.unmount();}
 });
@@ -393,5 +405,23 @@ test('sending: a signer chosen from the contacts, or suggested as typed, is fill
   // Nothing is suggested once the field holds a contact's email exactly.
   await app.type(app.byId('signer-0-email'),'ana@partner.example');await app.settle();
   assert.equal(app.byLabel('Contacts matching email'),undefined);
+ }finally{await app.unmount();}
+});
+
+test('sending: a template\'s default signers are filled in, can be changed, and give way to another template\'s',async()=>{
+ const WITH={...TEMPLATE,id:'tpl-2',defaultSigners:{seller:{name:'Sam Seller',email:'sam@seller.example'}}};
+ const OTHER_DEFAULTS={...TEMPLATE,id:'tpl-3',defaultSigners:{seller:{name:'Nia New',email:'nia@seller.example'}}};
+ const app=await renderMember('/envelopes/new?template=tpl-2',c=>{
+  if(c.path==='/api/me')return json(EDITOR);
+  if(c.path==='/api/templates')return json({templates:[TEMPLATE,WITH,OTHER_DEFAULTS]});
+  if(c.path.startsWith('/api/contacts?'))return json({contacts:[]});
+ });
+ try{
+  assert.deepEqual([app.byId('signer-0-name').props.value,app.byId('signer-1-name').props.value,app.byId('signer-1-email').props.value],['','Sam Seller','sam@seller.example']);
+  await app.act(async()=>{app.byId('envelope-template').props.onChange({target:{value:'tpl-3'}});});await app.settle();
+  assert.equal(app.byId('signer-1-name').props.value,'Nia New','a default not changed gives way to the next template\'s');
+  await app.type(app.byId('signer-1-name'),'Typed Seller');
+  await app.act(async()=>{app.byId('envelope-template').props.onChange({target:{value:'tpl-2'}});});await app.settle();
+  assert.equal(app.byId('signer-1-name').props.value,'Typed Seller','what was typed is kept');
  }finally{await app.unmount();}
 });

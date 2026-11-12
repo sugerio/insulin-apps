@@ -5,7 +5,9 @@ export type Permission = 'esign.manage' | 'esign.view'
 export type Me = { organizationId: string; user?: { id: string; email: string | null; name: string | null }; role?: string; permissions: Permission[]; signingEnabled?: boolean }
 /** The host's own labels for a template or envelope (server/esign/metadata.ts): kept, returned, never used. */
 export type Metadata = Record<string, string>
-export type TemplateSummary = { id: string; name?: string; metadata?: Metadata; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
+/** Who usually signs as a template's role (server/esign/default-signers.ts): the send form fills them in. */
+export type DefaultSigner = { name?: string; email?: string }
+export type TemplateSummary = { id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
 export type EnvelopeSummary = { id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
 export type Envelope = { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
@@ -62,14 +64,29 @@ export function contactsPath(q: string, limit: number, cursor = ''): string {
   return `/api/contacts?${query}`
 }
 
+/**
+ * The default signers a template form gives, keyed by role: the name and email typed for each role, trimmed, leaving
+ * out empty ones; null when there are none. An email that isn't one is the problem returned instead.
+ */
+export function defaultSignersOf(roles: string[], people: { name: string; email: string }[]): Record<string, DefaultSigner> | null | string {
+  const entries: [string, DefaultSigner][] = []
+  for (const [i, role] of roles.entries()) {
+    const name = people[i]?.name.trim() ?? '', email = people[i]?.email.trim() ?? ''
+    if (email && !EMAIL.test(email)) return `Enter a valid email address for ${role.trim() || `role ${i + 1}`}, or leave it empty.`
+    if (name || email) entries.push([role.trim(), { ...(name ? { name } : {}), ...(email ? { email } : {}) }])
+  }
+  return entries.length ? Object.fromEntries(entries) : null
+}
+
 export const canManage = (me: Me | null) => !!me?.permissions.includes('esign.manage')
 
 /** A signer as the send form collects them: the facts a host may give about a signer, each optional but name and email. */
 /**
  * `delivery` 'email': Esign emails them an invitation; otherwise ('host', the default) the page is opened for them.
  * `subject` and `body`: a message to this signer alone, instead of the envelope's.
+ * `fromTemplate`: the name and email are still the template's default signer's, untouched.
  */
-export type Signer = { name: string; email: string; title: string; company: string; after: string; delivery?: 'host' | 'email'; subject?: string; body?: string }
+export type Signer = { name: string; email: string; title: string; company: string; after: string; delivery?: 'host' | 'email'; subject?: string; body?: string; fromTemplate?: boolean }
 /** The sender's message to the signers: an invitation's subject, and a body shown in it and on the signing page. */
 export type EnvelopeMessage = { subject: string; body: string }
 /** What the sender says about the document and who sent it. */

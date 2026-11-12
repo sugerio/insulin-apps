@@ -32,6 +32,14 @@ export const templates: DocTopic = {
       ],
     },
     {
+      id: 'default-signers',
+      title: 'Default signers',
+      body: [
+        p('Next to a role you can give who usually signs as it: a ', b('Signer name'), ', a ', b('Signer email'), ', or both, such as the person who always countersigns for your company. Both are optional, and your contacts are suggested as you type.'),
+        p('When you send from the template, they are filled in for that role, and you can still change them. A copy made with Place fields keeps them, for the roles it keeps. They aren\'t part of what is signed: an envelope records whom it was sent to.'),
+      ],
+    },
+    {
       id: 'placing-fields',
       title: 'Placing fields',
       body: [
@@ -56,7 +64,7 @@ export const templates: DocTopic = {
       id: 'templates-dont-change',
       title: 'Templates don\'t change',
       body: [
-        p('A saved template is never changed. ', b('Place fields'), ' on an existing template opens the editor on a copy, and saving makes a new template; the old one stays as it was. An envelope always keeps the exact PDF and fields it was sent with, so what a signer signs is what was sent.'),
+        p('A saved template is never changed, except its default signers. ', b('Place fields'), ' on an existing template opens the editor on a copy, and saving makes a new template; the old one stays as it was. An envelope always keeps the exact PDF and fields it was sent with, so what a signer signs is what was sent.'),
       ],
     },
     {

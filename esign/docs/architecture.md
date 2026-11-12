@@ -238,7 +238,7 @@ tables:
 
 | Table | Holds |
 | --- | --- |
-| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none), the host's `name` and `metadata_json` |
+| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none), the host's `name` and `metadata_json`, and `default_signers_json` (who usually signs as some roles, `default-signers.ts`; the one part of a template that can change, and never evidence) |
 | `envelopes` | Tenant, template, status, creation time, `request_sha256`, `details_json` |
 | `tasks` | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
 | `artifacts` | Each envelope's initial document (D0): object key and SHA-256 |
@@ -485,7 +485,8 @@ is enabled.
 | `GET /api/catalog` | The management routes the caller may use |
 | `GET /api/templates`, `GET /api/envelopes` | The organization's templates and envelopes, newest first (`limit`, `before`; envelopes also `status`) |
 | `POST /api/process-due` † | Expires envelopes past a deadline, finishes envelopes the signing request did not, and retries completion notices, for the caller's organization, at once (the platform's tick does it for every organization every five minutes) |
-| `POST /api/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`); returns `{id, roles}` |
+| `POST /api/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`), optionally `name`, `metadata` and `defaultSigners`; returns `{id, roles, defaultSigners, ...}` |
+| `POST /api/templates/:id/default-signers` | Replaces the template's default signers; a recipient of a new envelope that leaves out its name or email gets its role's |
 | `GET /api/templates/:id` | Roles, the placed fields (type, role, page, normalized box) and whether they can be signed (`positionedFieldsSupported`) |
 | `POST /api/envelopes` | Creates and prepares an envelope (lifecycle step 2); `Idempotency-Key` required |
 | `GET /api/envelopes/:id` | Status and tasks (role, name, email, order, status, `expiresAt`, `openedAt`) |

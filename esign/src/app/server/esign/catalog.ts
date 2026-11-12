@@ -27,12 +27,12 @@ const message = (description: string) => ({
 
 const recipient = {
   type: 'object',
-  required: ['role', 'name', 'email'],
+  required: ['role'],
   additionalProperties: false,
   properties: {
     role: text('One of the template\'s roles; each role signs once, in the template\'s order', 64),
-    name: text('The signer\'s name, as it appears on the signature', 200),
-    email: { type: 'string', format: 'email', maxLength: 254, description: 'Where the signer\'s one-time code is sent' },
+    name: text('The signer\'s name, as it appears on the signature. Required unless the template has a default signer with a name for the role', 200),
+    email: { type: 'string', format: 'email', maxLength: 254, description: 'Where the signer\'s one-time code is sent. Required unless the template has a default signer with an email for the role' },
     expiresAt: { type: 'string', format: 'date-time', description: 'Sign-by deadline, in the future and within 400 days; the envelope expires after it' },
     title: text('The signer\'s title', 128),
     onBehalfOf: text('The company the signer signs for; they must then give a title and confirm their authority', 200),
@@ -51,6 +51,12 @@ const metadata = {
 }
 /** A contact's name, title and company (contacts.ts). */
 const CONTACT_FIELDS = { name: text('Their name', 200), title: { type: ['string', 'null'], maxLength: 128, description: 'Their title' }, company: { type: ['string', 'null'], maxLength: 200, description: 'The company they sign for' } }
+/** Who usually signs as some of a template's roles (default-signers.ts). */
+const defaultSigners = {
+  type: 'object', maxProperties: 20,
+  additionalProperties: { type: 'object', additionalProperties: false, properties: { name: text('Their name, as it appears on the signature', 200), email: { type: 'string', format: 'email', maxLength: 254 } } },
+  description: 'Keyed by role: who usually signs as it, a name, an email or both. A recipient of a new envelope that leaves out its name or email gets its role\'s default',
+}
 const templateName = text('A name for the template, shown in Esign\'s Templates page', 200)
 
 const ENTRIES: Entry[] = [
@@ -64,12 +70,13 @@ const ENTRIES: Entry[] = [
   {
     method: 'POST', path: '/api/templates', summary: 'Upload a PDF (at most 5 MiB and 100 pages) with the roles that sign it, in signing order',
     query: null,
-    body: { type: 'object', description: 'Sent as multipart/form-data fields', required: ['file', 'roles'], additionalProperties: false, properties: { file: { type: 'string', contentMediaType: 'application/pdf' }, roles: { type: 'string', description: 'A JSON array of 1 to 20 distinct role names ([A-Za-z0-9_-], up to 64 characters)' }, name: templateName, metadata: { type: 'string', description: 'A JSON object: your own keys and values (at most 20 keys of [A-Za-z0-9_.-], up to 40 characters; string values up to 500), returned as given' } } },
+    body: { type: 'object', description: 'Sent as multipart/form-data fields', required: ['file', 'roles'], additionalProperties: false, properties: { file: { type: 'string', contentMediaType: 'application/pdf' }, roles: { type: 'string', description: 'A JSON array of 1 to 20 distinct role names ([A-Za-z0-9_-], up to 64 characters)' }, name: templateName, metadata: { type: 'string', description: 'A JSON object: your own keys and values (at most 20 keys of [A-Za-z0-9_.-], up to 40 characters; string values up to 500), returned as given' }, defaultSigners: { type: 'string', description: `A JSON object. ${defaultSigners.description}` } } },
     idempotencyKey: false, permission: 'esign.manage',
   },
-  { method: 'GET', path: '/api/templates/{id}', summary: 'A template: its roles and placed fields, and whether they can be signed', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
+  { method: 'GET', path: '/api/templates/{id}', summary: 'A template: its roles and placed fields, whether they can be signed, and its default signers', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
+  { method: 'POST', path: '/api/templates/{id}/default-signers', summary: 'Replace a template\'s default signers ({} clears them). Envelopes already sent keep their signers', query: null, body: { type: 'object', required: ['defaultSigners'], additionalProperties: false, properties: { defaultSigners } }, idempotencyKey: false, permission: 'esign.manage' },
   {
-    method: 'POST', path: '/api/template-editing-sessions', summary: 'Open the field editor for a host page to embed: a new template, or a copy of an existing one',
+    method: 'POST', path: '/api/template-editing-sessions', summary: 'Open the field editor for a host page to embed: a new template, or a copy of an existing one (which keeps its default signers, for the roles it keeps; a new one\'s are set with POST /api/templates/{id}/default-signers once saved)',
     query: null,
     body: { type: 'object', required: ['allowedParentOrigin'], additionalProperties: false, properties: { allowedParentOrigin: { type: 'string', description: 'The host origin that will frame the editor; one of the deployment\'s allowed origins' }, sourceTemplateId: { type: 'string' }, roles: { type: 'array', maxItems: 20, items: text('A role', 64) }, name: { ...templateName, description: 'The saved template\'s name; the source template\'s when left out' }, metadata: { ...metadata, description: 'The saved template\'s metadata; the source template\'s when left out' } } },
     idempotencyKey: false, permission: 'esign.manage',

@@ -22,6 +22,8 @@ export const templates = sqliteTable('templates', {
   fields_json: text('fields_json').notNull().default('[]'),
   name: text('name'),
   metadata_json: text('metadata_json').notNull().default('{}'),
+  /** Who usually signs as some of its roles, `{role: {name?, email?}}` (default-signers.ts). */
+  default_signers_json: text('default_signers_json').notNull().default('{}'),
 }, (table) => [index('templates_by_tenant').on(table.tenant_id, table.created_at)])
 
 export const envelopes = sqliteTable('envelopes', {

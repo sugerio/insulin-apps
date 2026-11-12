@@ -49,9 +49,10 @@ if it didn't exist.
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/templates` | View | The organization's templates, newest first: `{templates: [{id, name?, metadata, roles, fields, createdAt}]}`. |
-| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name` and `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)). Answers `201 {id, name?, metadata, roles}`. Signed on an added signature page. |
-| `GET /api/templates/{id}` | View | A template's name and metadata, its roles and placed fields (type, role, page, box), and whether they can be signed. |
+| `GET /api/templates` | View | The organization's templates, newest first: `{templates: [{id, name?, metadata, defaultSigners, roles, fields, createdAt}]}`. |
+| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name`, `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)) and `defaultSigners` (a JSON object; see [Default signers](#default-signers)). Answers `201 {id, name?, metadata, roles, defaultSigners}`. Signed on an added signature page. |
+| `GET /api/templates/{id}` | View | A template's name, metadata and default signers, its roles and placed fields (type, role, page, box), and whether they can be signed. |
+| `POST /api/templates/{id}/default-signers` | Manage | Replace the template's default signers: `{defaultSigners}` (`{}` clears them). Answers `{id, defaultSigners}`. Envelopes already sent keep their signers. |
 | `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?, name?, metadata?}`. The template it saves gets that name and metadata, or the source template's. Answers `{sessionId, url}`. |
 | `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. |
 | `GET /api/template-editing-sessions/{id}` | View | `{templateId}` once the editor has saved, else `{templateId: null}`. |
@@ -96,7 +97,7 @@ Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLI
 | Field | Required | What it is |
 | --- | --- | --- |
 | `templateId` | Yes | The template to send. |
-| `recipients` | Yes | One per role of the template (1 to 20), each `{role, name, email}` and optionally `expiresAt` (ISO 8601, in the future, within 400 days), `title` (up to 128 characters), `onBehalfOf` (the company, up to 200), `namedBy` (who named this signer, up to 300), `afterSigning` (up to 3 lines shown after signing), `delivery` and `message`; see [How signers reach the page](#how-signers-reach-the-page). |
+| `recipients` | Yes | One per role of the template (1 to 20), each `{role, name, email}` (a `name` or `email` left out is the role's [default signer](#default-signers)'s, if the template has one) and optionally `expiresAt` (ISO 8601, in the future, within 400 days), `title` (up to 128 characters), `onBehalfOf` (the company, up to 200), `namedBy` (who named this signer, up to 300), `afterSigning` (up to 3 lines shown after signing), `delivery` and `message`; see [How signers reach the page](#how-signers-reach-the-page). |
 | `documentName` | No | Shown to signers and named in the statement they agree to (up to 200 characters). |
 | `documentVersion` | No | `{label, publishedAt?}`, such as `{"label": "v3"}` (a label of up to 16 characters). |
 | `sender` | No | `{name, email?, organization?}`. |
@@ -143,6 +144,22 @@ A template can have a **name**, up to 200 characters, shown on the Templates pag
 an object of at most 20 keys (letters, digits, `_`, `.` and `-`, up to 40 characters) whose values are strings of up to
 500 characters. Esign keeps it as given and returns it on every read; it never reads it, and it is not part of the
 sealed evidence or shown to signers. A malformed name or metadata is refused with `422`.
+
+## Default signers
+
+A template's `defaultSigners` say who usually signs as some of its roles: an object keyed by role, each
+`{name?, email?}` with at least one of them, such as
+`{"seller": {"name": "Sam Seller", "email": "sam@seller.example"}}`. A name follows the rules of a recipient's name (it
+must be drawable by the signature font), an email those of a recipient's email; a role the template hasn't is refused
+with `422`.
+
+When you send, a recipient that leaves out its `name` or `email` gets its role's default; what you give wins. Without a
+default to fall back on, a missing name or email is refused with `422 invalid_recipient`. The envelope records the
+signers it was sent to, so changing a template's default signers later changes no envelope. An envelope's idempotency is
+by the request as sent: a retry gets the envelope the first request made, even if the defaults changed since.
+
+A copy made in the field editor (`sourceTemplateId`) keeps its source's default signers for the roles it keeps; a new
+PDF placed in the editor gets them with `POST /api/templates/{id}/default-signers` once saved.
 
 ## How contacts are kept
 

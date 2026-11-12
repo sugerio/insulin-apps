@@ -37,19 +37,24 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     apiJson<{ templates: TemplateSummary[] }>('/api/templates').then((data) => setTemplates(data.templates)).catch((error) => setMessage({ text: describeError(error), error: true }))
   }, [])
   const template = templates?.find((t) => t.id === templateId) ?? null
-  // One signer per role of the chosen template, keeping what was typed.
+  // One signer per role of the chosen template, keeping what was typed; a role nobody was typed for gets the
+  // template's default signer, if it has one.
   useEffect(() => {
     if (!template) return
-    setSigners((old) => template.roles.map((_, i) => old[i] ?? { ...EMPTY_SIGNER }))
+    setSigners((old) => template.roles.map((role, i) => {
+      if (old[i] && !old[i]!.fromTemplate && (old[i]!.name.trim() || old[i]!.email.trim())) return old[i]!
+      const d = template.defaultSigners?.[role]
+      return { ...(old[i] ?? EMPTY_SIGNER), name: d?.name ?? '', email: d?.email ?? '', fromTemplate: !!d }
+    }))
   }, [template?.id])
 
   if (!canManage(me)) {
     return h('div', { className: 'flex flex-col gap-4' }, h(PageHeader, { title: 'New envelope' }), h(Notice, { message: 'Your role can see envelopes but not send them. Ask an admin of your organization for the Editor role, or a custom role that sends and manages envelopes.' }))
   }
 
-  const setSigner = (i: number, key: keyof Signer, value: string) => setSigners((old) => old.map((s, j) => j === i ? { ...s, [key]: value } : s))
+  const setSigner = (i: number, key: keyof Signer, value: string) => setSigners((old) => old.map((s, j) => j === i ? { ...s, [key]: value, ...(key === 'name' || key === 'email' ? { fromTemplate: false } : {}) } : s))
   // A contact fills in the signer's name, email, title and company.
-  const chooseContact = (i: number, c: Contact) => setSigners((old) => old.map((s, j) => j === i ? { ...s, name: c.name, email: c.email, title: c.title ?? '', company: c.company ?? '' } : s))
+  const chooseContact = (i: number, c: Contact) => setSigners((old) => old.map((s, j) => j === i ? { ...s, name: c.name, email: c.email, title: c.title ?? '', company: c.company ?? '', fromTemplate: false } : s))
   function send() {
     if (!template) { setMessage({ text: 'Choose a template.', error: true }); return }
     if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) { setMessage({ text: 'Enter a name and an email address for each signer.', error: true }); return }

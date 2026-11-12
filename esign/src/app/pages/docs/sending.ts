@@ -37,7 +37,7 @@ export const sending: DocTopic = {
           label: 'What you give for each signer',
           columns: ['Field', 'What it does'],
           rows: [
-            ['Name', 'The signer\'s name, shown on their signing page and on the certificate.'],
+            ['Name', 'The signer\'s name, shown on their signing page and on the certificate. A role\'s default signer, if the template has one, is filled in.'],
             ['Email', 'Where their verification code and, at the end, the link to their signed copy are sent. Only someone who can read this mailbox can sign.'],
             ['Title', 'Optional. Shown on the signing page and recorded with the signature.'],
             ['Signs for company', 'Optional. When given, the signer must give their title and confirm they are authorized to sign for that company.'],

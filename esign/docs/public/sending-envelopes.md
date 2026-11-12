@@ -21,7 +21,8 @@ work and contacts. It is for people who send and for AI agents acting for them.
 1. On **Envelopes**, choose **New envelope**. Or, on **Templates**, choose **Send** next to a template.
 2. Under **Template**, choose the template.
 3. Under **Signers**, fill in one block for each role, numbered in signing order (for example **1. partner**,
-   **2. seller**). **Name** and **Email** are required. As you type two or more characters in either, matching
+   **2. seller**). **Name** and **Email** are required; a role with a
+   [default signer](/docs/esign/templates#default-signers) has them filled in. As you type two or more characters in either, matching
    [contacts](#contacts) are suggested; choose one (or use the arrow keys and Enter) to fill in the signer. Or choose
    **Choose** *the role* **from contacts**, search, and choose the person.
 4. Under **Document**, add what signers should see about the document, and a sign-by day if there is one. All optional.

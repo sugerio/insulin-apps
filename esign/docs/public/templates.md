@@ -39,7 +39,8 @@ You need a role that sends and manages envelopes.
 1. Open **Templates**.
 2. Under **New template**, choose the **PDF**.
 3. Under **Signer roles, in signing order**, name each role. Choose **Add a role** for more (up to 20), or the bin icon to
-   remove one.
+   remove one. Next to a role you can give its [default signer](#default-signers): a **Signer name**, a **Signer email**,
+   or both. Both are optional; matching contacts are suggested as you type.
 4. Choose one of:
    - **Upload with a signature page**: the template is saved at once. The page says "Template uploaded. Signers sign it
      on a page added after its last page."
@@ -80,9 +81,22 @@ Rules the editor and the server check:
 - the PDF's pages are not rotated or cropped, and the PDF has no form fields or annotations. A PDF that breaks these rules
   can still be uploaded with a signature page, but an envelope sent from it with placed fields is refused.
 
+## Default signers
+
+A role can have a default signer: who usually signs as it, such as the person who always countersigns for your company.
+Give a name, an email or both next to the role when you upload the template.
+
+- **New envelope** fills them in for that role. You can still change them before you send.
+- An envelope sent through the API with a recipient that leaves out its `name` or `email` gets its role's default.
+- **Place fields** on an existing template keeps its default signers in the copy, for the roles the copy keeps.
+- They aren't part of what is signed: an envelope records whom it was sent to, and changing a default later changes no
+  envelope already sent. The API can change them (`POST /api/templates/{id}/default-signers`).
+
+A default signer's name must be one the signature can draw, as for any signer.
+
 ## Templates don't change
 
-A saved template is never changed. **Place fields** next to an existing template opens the editor on a copy, and saving
+A saved template is never changed, except its default signers. **Place fields** next to an existing template opens the editor on a copy, and saving
 makes a new template; the old one stays as it was. An envelope keeps the exact PDF and fields it was sent with, so what a
 signer signs is what was sent.
 

@@ -66,7 +66,7 @@ test('a template keeps the name and metadata it was uploaded with, and lists the
     const created = await h.upload({ name: 'Mutual NDA (v3)', metadata: JSON.stringify(LABELS) });
     assert.equal(created.status, 201, await created.clone().text());
     const { id, ...rest } = await created.json() as { id: string; name: string; metadata: Record<string, string> };
-    assert.deepEqual(rest, { name: 'Mutual NDA (v3)', metadata: LABELS, roles: ['partner'] });
+    assert.deepEqual(rest, { name: 'Mutual NDA (v3)', metadata: LABELS, roles: ['partner'], defaultSigners: {} });
     const one = await (await h.req(`/api/templates/${id}`, { headers: h.auth })).json() as { name: string; metadata: Record<string, string> };
     assert.equal(one.name, 'Mutual NDA (v3)');
     assert.deepEqual(one.metadata, LABELS);

@@ -9,13 +9,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '../components/ui/input.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
-import { api, apiJson, canManage, dateTime, describeError, MAX_PDF_BYTES, type Me, type TemplateSummary } from './api.ts'
+import { api, apiJson, canManage, dateTime, defaultSignersOf, describeError, MAX_PDF_BYTES, type Me, type TemplateSummary } from './api.ts'
+import { ContactField } from './ContactPicker.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 
 const h = React.createElement
 const ROLE = /^[A-Za-z0-9_-]{1,64}$/
-type Editor = { sessionId: string; url: string; ready: boolean; requestId: string }
+/** `defaultSigners`: who usually signs as each role of a new PDF, set on the template once the editor has saved it. */
+type Editor = { sessionId: string; url: string; ready: boolean; requestId: string; defaultSigners?: Record<string, { name?: string; email?: string }> | null }
 
 /** The roles a template form names, or the problem with them (the server's rule: letters, digits, - and _, unique). */
 export function checkRoles(roles: string[]): string {
@@ -31,6 +33,8 @@ export function TemplatesPage({ me }: { me: Me }) {
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [roles, setRoles] = useState<string[]>(['signer-1'])
+  // Who usually signs as each role, optional: the send form fills them in.
+  const [people, setPeople] = useState<{ name: string; email: string }[]>([{ name: '', email: '' }])
   const [editor, setEditor] = useState<Editor | null>(null)
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
@@ -49,8 +53,12 @@ export function TemplatesPage({ me }: { me: Me }) {
   function problem(): string {
     if (!file) return 'Choose a PDF.'
     if (file.size > MAX_PDF_BYTES) return 'The PDF must be 5 MB or smaller.'
-    return checkRoles(roles)
+    const signers = defaultSignersOf(roles, people)
+    return checkRoles(roles) || (typeof signers === 'string' ? signers : '')
   }
+  const defaultSigners = () => defaultSignersOf(roles, people) as Exclude<ReturnType<typeof defaultSignersOf>, string>
+  const removeRole = (i: number) => { setRoles((old) => old.filter((_, j) => j !== i)); setPeople((old) => old.filter((_, j) => j !== i)) }
+  const setPerson = (i: number, value: Partial<{ name: string; email: string }>) => setPeople((old) => roles.map((_, j) => j === i ? { ...(old[j] ?? { name: '', email: '' }), ...value } : old[j] ?? { name: '', email: '' }))
 
   function upload() {
     const invalid = problem()
@@ -59,27 +67,30 @@ export function TemplatesPage({ me }: { me: Me }) {
       const form = new FormData()
       form.set('file', file!)
       form.set('roles', JSON.stringify(roles.map((r) => r.trim())))
+      const signers = defaultSigners()
+      if (signers) form.set('defaultSigners', JSON.stringify(signers))
       await api('/api/templates', { method: 'POST', body: form })
       setFile(null)
+      setPeople((old) => old.map(() => ({ name: '', email: '' })))
       await load()
       setMessage({ text: 'Template uploaded. Signers sign it on a page added after its last page.', error: false })
     })
   }
   /** A session on this origin for the editor: a new PDF (staged as its source) or an existing template's fields. */
-  function openEditor(source: { file: File; roles: string[] } | { templateId: string }) {
+  function openEditor(source: { file: File; roles: string[]; defaultSigners: ReturnType<typeof defaultSigners> } | { templateId: string }) {
     void run(async () => {
       const body = 'templateId' in source ? { allowedParentOrigin: window.location.origin, sourceTemplateId: source.templateId } : { allowedParentOrigin: window.location.origin, roles: source.roles }
       const session = await apiJson<{ sessionId: string; url: string }>('/api/template-editing-sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       const url = new URL(session.url)
       if (url.origin !== window.location.origin || url.pathname !== `/editor/page/${session.sessionId}`) throw new Error('Unexpected editor address.')
       if ('file' in source) await api(`/api/template-editing-sessions/${session.sessionId}/source`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: source.file })
-      setEditor({ sessionId: session.sessionId, url: url.href, ready: false, requestId: '' })
+      setEditor({ sessionId: session.sessionId, url: url.href, ready: false, requestId: '', defaultSigners: 'defaultSigners' in source ? source.defaultSigners : null })
     })
   }
   function placeFields() {
     const invalid = problem()
     if (invalid) { setMessage({ text: invalid, error: true }); return }
-    openEditor({ file: file!, roles: roles.map((r) => r.trim()) })
+    openEditor({ file: file!, roles: roles.map((r) => r.trim()), defaultSigners: defaultSigners() })
   }
   function saveFields() {
     if (!editor || !editor.ready || editor.requestId || !editorFrame.current?.contentWindow) return
@@ -101,8 +112,13 @@ export function TemplatesPage({ me }: { me: Me }) {
       void run(async () => {
         const saved = await apiJson<{ templateId: string | null }>(`/api/template-editing-sessions/${editor.sessionId}`)
         if (saved.templateId !== result.templateId) throw new Error('The editor and the server disagree on the saved template; open the editor again.')
+        // A new PDF's default signers, for the roles the editor kept.
+        const savedRoles = editor.defaultSigners ? (await apiJson<TemplateSummary>(`/api/templates/${saved.templateId}`)).roles : []
+        const kept = Object.fromEntries(Object.entries(editor.defaultSigners ?? {}).filter(([role]) => savedRoles.includes(role)))
+        if (Object.keys(kept).length) await apiJson(`/api/templates/${saved.templateId}/default-signers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ defaultSigners: kept }) })
         setEditor(null)
         setFile(null)
+        setPeople((old) => old.map(() => ({ name: '', email: '' })))
         await load()
         setMessage({ text: 'Fields saved as a new template. Send an envelope from it.', error: false })
       })
@@ -122,10 +138,14 @@ export function TemplatesPage({ me }: { me: Me }) {
           h(Input, { id: 'template-pdf', type: 'file', accept: 'application/pdf', disabled: busy, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null) })),
         h('fieldset', { className: 'flex flex-col gap-2' },
           h('legend', { className: 'mb-1 text-sm font-medium' }, 'Signer roles, in signing order'),
-          ...roles.map((role, i) => h('div', { key: i, className: 'flex items-center gap-2' },
-            h(Input, { 'aria-label': `Role ${i + 1}`, value: role, maxLength: 64, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setRoles((old) => old.map((r, j) => j === i ? e.target.value : r)) }),
-            roles.length > 1 ? h(Button, { variant: 'ghost', size: 'icon', 'aria-label': `Remove role ${i + 1}`, onClick: () => setRoles((old) => old.filter((_, j) => j !== i)) }, h(Trash2, { 'aria-hidden': true })) : null)),
-          roles.length < 20 ? h(Button, { variant: 'outline', size: 'sm', className: 'w-fit', onClick: () => setRoles((old) => [...old, `signer-${old.length + 1}`]) }, h(Plus, { 'aria-hidden': true }), 'Add a role') : null)),
+          h('p', { className: 'text-xs text-muted-foreground' }, 'A role is required. Its signer\'s name and email are optional: when given, they are filled in each time you send, and can still be changed then.'),
+          ...roles.map((role, i) => h('div', { key: i, className: 'grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]' },
+            h(Field, { label: `Role ${i + 1}`, htmlFor: `role-${i}` },
+              h(Input, { id: `role-${i}`, 'aria-label': `Role ${i + 1}`, value: role, maxLength: 64, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setRoles((old) => old.map((r, j) => j === i ? e.target.value : r)) })),
+            h(ContactField, { id: `role-${i}-name`, label: 'Signer name (optional)', required: false, value: people[i]?.name ?? '', onChange: (v) => setPerson(i, { name: v }), onChoose: (c) => setPerson(i, { name: c.name, email: c.email }) }),
+            h(ContactField, { id: `role-${i}-email`, label: 'Signer email (optional)', type: 'email', required: false, value: people[i]?.email ?? '', onChange: (v) => setPerson(i, { email: v }), onChoose: (c) => setPerson(i, { name: c.name, email: c.email }) }),
+            roles.length > 1 ? h(Button, { variant: 'ghost', size: 'icon', 'aria-label': `Remove role ${i + 1}`, onClick: () => removeRole(i) }, h(Trash2, { 'aria-hidden': true })) : h('span'))),
+          roles.length < 20 ? h(Button, { variant: 'outline', size: 'sm', className: 'w-fit', onClick: () => { setRoles((old) => [...old, `signer-${old.length + 1}`]); setPeople((old) => [...old, { name: '', email: '' }]) } }, h(Plus, { 'aria-hidden': true }), 'Add a role') : null)),
       h(CardFooter, { className: 'flex-wrap gap-2' },
         h(Button, { disabled: busy, onClick: upload }, h(Upload, { 'aria-hidden': true }), 'Upload with a signature page'),
         h(Button, { variant: 'outline', disabled: busy, onClick: placeFields }, h(SquarePen, { 'aria-hidden': true }), 'Upload and place fields'))) : null,
@@ -143,7 +163,7 @@ export function TemplatesPage({ me }: { me: Me }) {
             h(TableHeader, null, h(TableRow, null, h(TableHead, { className: 'pl-6' }, 'Template'), h(TableHead, null, 'Roles'), h(TableHead, null, 'Signed on'), h(TableHead, null, 'Uploaded'), manage ? h(TableHead, { className: 'pr-6' }, h('span', { className: 'sr-only' }, 'Actions')) : null)),
             h(TableBody, null, ...templates.map((t) => h(TableRow, { key: t.id },
               h(TableCell, { className: 'pl-6 whitespace-normal' }, t.name ? h('div', { className: 'font-medium' }, t.name) : null, h('div', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id)),
-              h(TableCell, { className: 'whitespace-normal' }, t.roles.join(', ')),
+              h(TableCell, { className: 'whitespace-normal' }, t.roles.map((role) => { const d = t.defaultSigners?.[role]; return d ? `${role} (${d.name ?? d.email})` : role }).join(', ')),
               h(TableCell, null, t.fields.length ? `${t.fields.length} placed ${t.fields.length === 1 ? 'field' : 'fields'}` : 'A signature page'),
               h(TableCell, { className: 'text-muted-foreground' }, dateTime(t.createdAt)),
               manage ? h(TableCell, { className: 'pr-6 text-right' }, h('div', { className: 'flex justify-end gap-2' },

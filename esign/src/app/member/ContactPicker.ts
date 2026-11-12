@@ -57,7 +57,7 @@ export function ContactPicker({ id, label, onChoose }: { id: string; label: stri
  * containing it, most recently used first). Arrow keys move through the suggestions, Enter or a click chooses one,
  * Escape or leaving the field closes them; typing on is never held up.
  */
-export function ContactField({ id, label, type = 'text', value, onChange, onChoose }: { id: string; label: string; type?: string; value: string; onChange: (value: string) => void; onChoose: (contact: Contact) => void }) {
+export function ContactField({ id, label, type = 'text', value, required = true, onChange, onChoose }: { id: string; label: string; type?: string; value: string; required?: boolean; onChange: (value: string) => void; onChoose: (contact: Contact) => void }) {
   const [found, setFound] = useState<Contact[]>([])
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
@@ -101,7 +101,7 @@ export function ContactField({ id, label, type = 'text', value, onChange, onChoo
   return h(Field, { label, htmlFor: id },
     h('div', { className: 'relative' },
       h(Input, {
-        id, type, value, required: true, autoComplete: 'off',
+        id, type, value, required, autoComplete: 'off',
         role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': open, 'aria-controls': listId,
         ...(open && active >= 0 ? { 'aria-activedescendant': `${listId}-${active}` } : {}),
         onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value),

@@ -21,7 +21,8 @@ work and contacts. It is for people who send and for AI agents acting for them.
 1. On **Envelopes**, choose **New envelope**. Or, on **Templates**, choose **Send** next to a template.
 2. Under **Template**, choose the template.
 3. Under **Signers**, fill in one block for each role, numbered in signing order (for example **1. partner**,
-   **2. seller**). **Name** and **Email** are required. To fill one in from your [contacts](#contacts), choose
+   **2. seller**). **Name** and **Email** are required. As you type two or more characters in either, matching
+   [contacts](#contacts) are suggested; choose one (or use the arrow keys and Enter) to fill in the signer. Or choose
    **Choose** *the role* **from contacts**, search, and choose the person.
 4. Under **Document**, add what signers should see about the document, and a sign-by day if there is one. All optional.
 5. Choose **Send for signature**.
@@ -158,7 +159,8 @@ Search it by name or email.
   contact.
 - To change or delete a contact, open them. Their page also lists the envelopes that name them. Deleting asks you to
   confirm; the next envelope you send them adds them again.
-- When you send, **Choose** *the role* **from contacts** fills in the signer's name, email, title and company.
+- When you send, a contact suggested under **Name** or **Email** as you type, or chosen with **Choose** *the role*
+  **from contacts**, fills in the signer's name, email, title and company.
 
 A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact
 changes no envelope. Everyone in your organization who can see envelopes sees the contacts; those who send can change them.

@@ -8,8 +8,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { checkClass, Input } from '../components/ui/input.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
 import { Textarea } from '../components/ui/textarea.ts'
-import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, signByTime, type DocumentFacts, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
-import { ContactPicker } from './ContactPicker.ts'
+import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, signByTime, type Contact, type DocumentFacts, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
+import { ContactField, ContactPicker } from './ContactPicker.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 
@@ -48,6 +48,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   }
 
   const setSigner = (i: number, key: keyof Signer, value: string) => setSigners((old) => old.map((s, j) => j === i ? { ...s, [key]: value } : s))
+  // A contact fills in the signer's name, email, title and company.
+  const chooseContact = (i: number, c: Contact) => setSigners((old) => old.map((s, j) => j === i ? { ...s, name: c.name, email: c.email, title: c.title ?? '', company: c.company ?? '' } : s))
   function send() {
     if (!template) { setMessage({ text: 'Choose a template.', error: true }); return }
     if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) { setMessage({ text: 'Enter a name and an email address for each signer.', error: true }); return }
@@ -85,12 +87,12 @@ export function NewEnvelopePage({ me }: { me: Me }) {
                 h(NativeSelectOption, { value: '' }, 'Choose a template'),
                 ...templates.map((t) => h(NativeSelectOption, { key: t.id, value: t.id }, `${t.name ? `${t.name} · ` : ''}${t.roles.join(', ')} · ${t.fields.length ? `${t.fields.length} fields` : 'signature page'} · ${dateTime(t.createdAt)}`)))))),
     template ? h(Card, null,
-      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Signers')), h(CardDescription, null, 'One for each role: type them in, or choose them from your contacts. A title and a company are shown on the signing page and recorded with the signature.')),
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Signers')), h(CardDescription, null, 'One for each role: type them in (your contacts are suggested as you type), or choose them from your contacts. A title and a company are shown on the signing page and recorded with the signature.')),
       h(CardContent, { className: 'flex flex-col gap-6' }, ...template.roles.map((role, i) => h('fieldset', { key: role, className: 'grid gap-4 rounded-lg border p-4 sm:grid-cols-2' },
         h('legend', { className: 'px-1 text-sm font-medium' }, `${i + 1}. ${role}`),
-        h('div', { className: 'sm:col-span-2' }, h(ContactPicker, { id: `signer-${i}-contact-search`, label: role, onChoose: (c) => setSigners((old) => old.map((s, j) => j === i ? { ...s, name: c.name, email: c.email, title: c.title ?? '', company: c.company ?? '' } : s)) })),
-        text(`signer-${i}-name`, 'Name', signers[i]?.name ?? '', (v) => setSigner(i, 'name', v), { required: true }),
-        text(`signer-${i}-email`, 'Email', signers[i]?.email ?? '', (v) => setSigner(i, 'email', v), { type: 'email', required: true }),
+        h('div', { className: 'sm:col-span-2' }, h(ContactPicker, { id: `signer-${i}-contact-search`, label: role, onChoose: (c) => chooseContact(i, c) })),
+        h(ContactField, { id: `signer-${i}-name`, label: 'Name', value: signers[i]?.name ?? '', onChange: (v) => setSigner(i, 'name', v), onChoose: (c) => chooseContact(i, c) }),
+        h(ContactField, { id: `signer-${i}-email`, label: 'Email', type: 'email', value: signers[i]?.email ?? '', onChange: (v) => setSigner(i, 'email', v), onChoose: (c) => chooseContact(i, c) }),
         text(`signer-${i}-title`, 'Title (optional)', signers[i]?.title ?? '', (v) => setSigner(i, 'title', v)),
         text(`signer-${i}-company`, 'Signs for company (optional)', signers[i]?.company ?? '', (v) => setSigner(i, 'company', v), { hint: 'They confirm they are authorized to sign for it.' }),
         h('div', { className: 'sm:col-span-2' }, h(Field, { label: 'How they get the signing page', htmlFor: `signer-${i}-delivery` },

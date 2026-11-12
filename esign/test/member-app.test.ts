@@ -356,7 +356,7 @@ test('contacts: the address book lists, searches and adds; a contact\'s page cha
  }finally{await viewer.unmount();}
 });
 
-test('sending: a signer chosen from the contacts is filled in, title and company included',async()=>{
+test('sending: a signer chosen from the contacts, or suggested as typed, is filled in, title and company included',async()=>{
  const app=await renderMember('/envelopes/new?template=tpl-1',c=>{
   if(c.path==='/api/me')return json(EDITOR);
   if(c.path==='/api/templates')return json({templates:[TEMPLATE]});
@@ -371,5 +371,27 @@ test('sending: a signer chosen from the contacts is filled in, title and company
   assert.deepEqual(['signer-0-name','signer-0-email','signer-0-title','signer-0-company'].map(id=>app.byId(id).props.value),['Ana Example','ana@partner.example','Partner Manager','Partner Company Ltd']);
   assert.equal(app.byId('signer-0-contact-search'),undefined,'the picker closes');
   assert.equal(app.byId('signer-1-name').props.value,'','the other signer is untouched');
+  // Suggested as they are typed: from two characters on; arrow keys and Enter choose one.
+  await app.type(app.byId('signer-1-name'),'a');await app.settle();
+  assert.equal(app.byLabel('Contacts matching name'),undefined,'not after one character');
+  await app.type(app.byId('signer-1-name'),'an');await app.settle();
+  assert.ok(app.calls.some(c=>c.path==='/api/contacts?limit=6&q=an'));
+  assert.ok(app.byLabel('Contacts matching name'));
+  assert.equal(app.byId('signer-1-name').props['aria-expanded'],true);
+  await app.keyDown(app.byId('signer-1-name'),'ArrowDown');
+  assert.equal(app.byId('signer-1-name').props['aria-activedescendant'],'signer-1-name-suggestions-0');
+  await app.keyDown(app.byId('signer-1-name'),'Enter');
+  assert.deepEqual(['signer-1-name','signer-1-email','signer-1-title','signer-1-company'].map(id=>app.byId(id).props.value),['Ana Example','ana@partner.example','Partner Manager','Partner Company Ltd']);
+  assert.equal(app.byLabel('Contacts matching name'),undefined,'the suggestions close');
+  // Or clicked, under the Email field; Escape closes them without choosing.
+  await app.type(app.byId('signer-0-email'),'ana@');await app.settle();
+  await app.keyDown(app.byId('signer-0-email'),'Escape');
+  assert.equal(app.byLabel('Contacts matching email'),undefined);
+  await app.type(app.byId('signer-0-email'),'ana@p');await app.settle();
+  await app.click(app.byLabel('Choose Ana Example (ana@partner.example)'),'the suggestion');
+  assert.equal(app.byId('signer-0-email').props.value,'ana@partner.example');
+  // Nothing is suggested once the field holds a contact's email exactly.
+  await app.type(app.byId('signer-0-email'),'ana@partner.example');await app.settle();
+  assert.equal(app.byLabel('Contacts matching email'),undefined);
  }finally{await app.unmount();}
 });

@@ -75,7 +75,7 @@ export const sending: DocTopic = {
       title: 'Contacts',
       body: [
         p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; open a contact to change or delete them, or to see the envelopes that name them.'),
-        p('When you send, ', b('Choose {role} from contacts'), ' fills in that signer\'s name, email, title and company.'),
+        p('When you send, matching contacts are suggested under a signer\'s Name and Email as you type (from two characters on); choosing one, or a contact found with ', b('Choose {role} from contacts'), ', fills in that signer\'s name, email, title and company.'),
         p('A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact changes no envelope, and the next envelope that names them adds them again.'),
       ],
     },

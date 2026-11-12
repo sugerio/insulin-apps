@@ -66,8 +66,8 @@ if it didn't exist.
 | `GET /api/envelopes/{id}/audit` | View | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
 | `POST /api/envelopes/{id}/void` | Manage | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. |
 | `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Manage | A one-time code for the active signer's signing page: `{code}`. Body: `{origin?, hostAuthentication?}`. |
-| `GET /api/envelopes/{id}/delivery-pdf` † | View | A completed envelope's signed PDF followed by its certificate of completion. |
-| `GET /api/envelopes/{id}/certificate` † | View | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
+| `GET /api/envelopes/{id}/delivery-pdf` | View | A completed envelope's signed PDF followed by its certificate of completion. |
+| `GET /api/envelopes/{id}/certificate` | View | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
 | `POST /api/process-due` † | Manage | Due work for the caller's organization, at once: answers `{expired, completed, waiting, failed}`. The platform runs it for every organization every five minutes anyway. |
 
 `POST /api/envelopes/{id}/prepare` still exists for older callers and does nothing; don't use it.
@@ -95,7 +95,7 @@ envelope. The envelope's id is derived from your organization and the key, so:
 - the same key with a different request answers `409 idempotency_conflict`.
 
 Other refusals: `400 idempotency_key_required`, `422 unknown_field` with the `fields` Esign doesn't know (a request,
-or a recipient, may name only the fields above), `422 invalid_envelope` or `invalid_recipient` (a field out of bounds),
+a recipient, the document version and the sender may name only the fields above), `422 invalid_envelope` or `invalid_recipient` (a field out of bounds),
 `422 invalid_roles` (the recipients don't match the template's roles one to one), `422 unsupported_recipient_name` (a
 name the signature page can't draw), `422 positioned_fields_not_supported` (the template's placed fields can't be signed),
 `404 not_found` (no such template).

@@ -9,10 +9,12 @@
 // The token needs Workers Scripts: Edit on the account. Putting the binding deploys a new version of the Worker with
 // the same code; `wrangler deploy` keeps it from then on (it keeps a Worker's secret_key bindings).
 //
-// Rotating: run this, then add the printed entry to keys.ts, set the old entry's `until` to the printed `from`, and
-// deploy. Between the two, the Worker holds the new key while keys.ts still names the old one, so sealing refuses to
-// sign (the signature doesn't match the named key) and finished envelopes wait, FINALIZING, for the next five-minute
-// tick after the deploy; nothing is sealed with a key keys.ts doesn't name.
+// Rotating: run this, then add the printed entry to keys.ts, give the old entry an `until` at least an hour after this
+// script finished, such as the time of that deploy (not the printed `from`: requests the old version is still running
+// seal with the old key for a while after the new one is put, and a seal timestamped after its key's `until` stops
+// verifying), and deploy. Between the two, the Worker holds the new key while keys.ts still names the old one, so
+// sealing refuses to sign (the signature doesn't match the named key) and finished envelopes wait, FINALIZING, for the
+// next five-minute tick after the deploy; nothing is sealed with a key keys.ts doesn't name.
 import { webcrypto as crypto } from 'node:crypto'
 import { parseArgs } from 'node:util'
 

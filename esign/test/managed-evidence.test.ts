@@ -106,6 +106,22 @@ test('a retry after a stored seal but before completion reuses the seal', async 
   } finally { await e.mf.dispose(); await tsa.dispose(); }
 });
 
+test('a seal that would not verify is never stored: the envelope stays FINALIZING, and is sealed once its key is trusted', async () => {
+  const { tsa, config } = await sealing();
+  const e = await finishedEnvelope();
+  try {
+    const entry = config.trust.keys[0]!;
+    // Stored seals are never replaced, so a key keys.ts doesn't list, or lists as not yet in use, must not seal anything.
+    for (const keys of [[], [{ ...entry, from: new Date(Date.now() + 86_400_000).toISOString() }]]) {
+      await assert.rejects(finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, { ...config, trust: { ...config.trust, keys } }));
+      assert.equal(await e.bucket.get(managedEvidenceKey(e.id)), null, 'nothing stored');
+      assert.equal(await e.status(), 'FINALIZING');
+    }
+    await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
+    assert.equal(await e.status(), 'COMPLETED');
+  } finally { await e.mf.dispose(); await tsa.dispose(); }
+});
+
 test('verification fails when the signed PDF or the stored seal changes, and the delivery PDF says how it was sealed', async () => {
   const { tsa, config } = await sealing();
   const e = await finishedEnvelope();

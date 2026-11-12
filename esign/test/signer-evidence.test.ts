@@ -65,7 +65,7 @@ async function harness() {
     for (let n = 1; n <= doc.numPages; n++) text += ((await (await doc.getPage(n)).getTextContent()).items as { str?: string }[]).map(i => i.str ?? '').join(' ') + '\n';
     return { text, bytes };
   };
-  return { mf, db, auth, req, json, create, signAll, certificateText };
+  return { mf, db, env, auth, req, json, create, signAll, certificateText };
 }
 
 test('the sender, who named the signer and the host sign-in are validated and part of the idempotent request', async () => {
@@ -149,6 +149,25 @@ test('page views are recorded once per page before the code, and the certificate
     assert.deepEqual(events.find(e => e.type === 'PAGES_VIEWED')?.detail, { pages: [1], total: 1 });
     const { text } = await h.certificateText(id);
     assert.ok(text.replace(/\s+/g, '').includes('Viewed1of1pagesAnaRibeiro'));
+  } finally { await h.mf.dispose(); }
+});
+
+test('a completed envelope stays readable while signing is off: its certificate, delivery PDF and copy', async () => {
+  const h = await harness();
+  try {
+    const { id } = await (await h.create('read-while-off')).json() as { id: string };
+    await h.signAll(id);
+    // Without its test mailbox the local deployment signs nothing more; verifying what it completed needs only the seal's trust.
+    const off = { ...h.env, TEST_MAIL: undefined };
+    const req = (path: string, init: RequestInit = {}) => app.fetch(new Request('http://localhost' + path, init), off);
+    assert.equal((await (await req('/api/public/signing-page')).json() as { signingEnabled: boolean }).signingEnabled, false);
+    for (const path of [`/api/envelopes/${id}/certificate`, `/api/envelopes/${id}/delivery-pdf`]) {
+      const read = await req(path, { headers: h.auth });
+      assert.equal(read.status, 200, path);
+      assert.equal(read.headers.get('cache-control'), 'no-store', path);
+    }
+    const copy = await req('/api/public/copies/open', h.json({ token: 'f'.repeat(64) }, { origin: 'http://localhost' }));
+    assert.deepEqual([copy.status, await copy.json()], [410, { error: 'link_unavailable' }], 'an unknown link, not signing_disabled');
   } finally { await h.mf.dispose(); }
 });
 

@@ -30,12 +30,11 @@ export function parseMetadata(value: unknown): Metadata | null | 'invalid' {
   if (typeof value !== 'object' || Array.isArray(value)) return 'invalid';
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.length > MAX_METADATA_KEYS) return 'invalid';
-  const out: Metadata = {};
-  for (const [key, item] of entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+  for (const [key, item] of entries) {
     if (!METADATA_KEY.test(key) || typeof item !== 'string' || item.length > MAX_METADATA_VALUE || /[\u0000-\u001f\u007f]/.test(item)) return 'invalid';
-    out[key] = item;
   }
-  return entries.length ? out : null;
+  // fromEntries defines each key, so `__proto__` is kept like any other rather than setting the prototype.
+  return entries.length ? Object.fromEntries(entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) as Metadata : null;
 }
 
 /** Stored metadata as returned: the string values of a JSON object; anything else is dropped. */

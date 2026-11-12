@@ -255,6 +255,10 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
   // Every field must be one Esign knows: a misspelled one is refused rather than lost.
   const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
+  for (const [name, allowed] of [['documentVersion', ['label', 'publishedAt']], ['sender', ['name', 'email', 'organization']]] as const) {
+    const value = (body as Record<string, unknown>)[name];
+    if (value && typeof value === 'object' && !Array.isArray(value)) unknownFields.push(...unknownKeys(value, allowed).map((field) => `${name}.${field}`));
+  }
   if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
   const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown };
   // The host's own labels for the envelope (metadata.ts): kept and returned, never evidence.

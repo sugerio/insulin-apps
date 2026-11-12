@@ -121,7 +121,9 @@ CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=... node esign/scripts/put-seal-k
 ```
 
 The script generates the key in memory, puts the private half on the Worker, and prints the entry for `keys.ts`.
-Add it (when rotating, give the previous entry an `until` of the new entry's `from`; never remove one), then deploy.
+Add it (when rotating, give the previous entry an `until` at least an hour after the script finished, such as the
+time of that deploy, not the new entry's `from`: requests already running seal with the old key for a while after;
+never remove one), then deploy.
 
 ### UI
 

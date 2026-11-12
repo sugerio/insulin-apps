@@ -54,6 +54,10 @@ test('names and metadata parse strictly: bounded, plain text, and string values 
   }
   assert.deepEqual(storedMetadata('{"a":"1","b":2}'), { a: '1' });
   assert.deepEqual(storedMetadata('not json'), {});
+  // A key named __proto__ fits the pattern and is kept like any other, not swallowed by the prototype setter.
+  const proto = parseMetadata(JSON.parse('{"__proto__":"host-1","a":"b"}'));
+  assert.equal(JSON.stringify(proto), '{"__proto__":"host-1","a":"b"}');
+  assert.deepEqual(Object.entries(storedMetadata(JSON.stringify(proto))), [['__proto__', 'host-1'], ['a', 'b']]);
 });
 
 test('a template keeps the name and metadata it was uploaded with, and lists them', async () => {
@@ -115,6 +119,10 @@ test('an editing session gives the saved template its name and metadata, or the 
     const unknown = await h.req('/api/template-editing-sessions', h.json({ allowedParentOrigin: HOST, label: 'x' }));
     assert.equal(unknown.status, 422);
     assert.deepEqual(await unknown.json(), { error: 'unknown_field', fields: ['label'] });
+    // The largest labels the catalog allows (a 200-character name, 20 keys of 40 characters with 500-character values) fit the request.
+    const largest = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`key${i}`.padEnd(40, '-'), 'v'.repeat(500)]));
+    const big = await h.req('/api/template-editing-sessions', h.json({ allowedParentOrigin: HOST, roles: ['partner'], name: 'n'.repeat(200), metadata: largest }));
+    assert.equal(big.status, 201, await big.clone().text());
   } finally { await h.mf.dispose(); }
 });
 
@@ -145,9 +153,15 @@ test('an envelope keeps its metadata as part of the idempotent request, and refu
     const unknownRecipient = await send('k5', body({}, { phone: '+1 555 0100' }));
     assert.equal(unknownRecipient.status, 422);
     assert.deepEqual(await unknownRecipient.json(), { error: 'unknown_field', fields: ['recipients[].phone'] });
+    // Inside the document version and the sender too: a misspelled field is refused, not dropped.
+    const unknownNested = await send('k8', body({ documentVersion: { label: 'v1', externalId: 'a' }, sender: { name: 'Dana Seller', organisation: 'Harness' } }));
+    assert.equal(unknownNested.status, 422);
+    assert.deepEqual(await unknownNested.json(), { error: 'unknown_field', fields: ['documentVersion.externalId', 'sender.organisation'] });
     // The API catalog states the version label's real limit, 16 characters.
     const catalog = await (await h.req('/api/catalog', { headers: h.auth })).json() as { endpoints: { method: string; path: string; body: { properties: { documentVersion: { properties: { label: { maxLength: number } } } } } }[] };
-    assert.equal(catalog.endpoints.find(e => e.method === 'POST' && e.path === '/api/envelopes')?.body.properties.documentVersion.properties.label.maxLength, 16);
+    const envelopeBody = catalog.endpoints.find(e => e.method === 'POST' && e.path === '/api/envelopes')?.body.properties as unknown as Record<string, { additionalProperties?: boolean; properties: Record<string, { maxLength?: number }> }>;
+    assert.equal(envelopeBody.documentVersion.properties.label.maxLength, 16);
+    assert.deepEqual([envelopeBody.documentVersion.additionalProperties, envelopeBody.sender.additionalProperties], [false, false]);
     assert.equal((await send('k6', body({ documentVersion: { label: 'x'.repeat(16) } }))).status, 201);
     assert.equal((await send('k7', body({ documentVersion: { label: 'x'.repeat(17) } }))).status, 422);
   } finally { await h.mf.dispose(); }

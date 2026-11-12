@@ -62,7 +62,8 @@ published app is `prod` (`environment.ts`).
 
 prod signs nothing until it has `ESIGN_OTP_KEY` (at least 32 characters), the mail relay, the
 `ESIGN_SEAL_KEY` binding and a current key in `seal/keys.ts` (`prodProblems`); until then the signing
-routes answer 404 `signing_disabled`.
+routes answer 404 `signing_disabled`. Reading a completed envelope (its certificate, delivery PDF and
+signers' copies) doesn't wait for that: it needs only the trust in the code.
 
 ## Configuration
 
@@ -479,8 +480,8 @@ is enabled.
 | `POST /api/envelopes/:id/void` | Optional `{reason}` (at most 500 characters); a repeat is a no-op; any status other than `IN_PROGRESS` answers `409 envelope_not_voidable` |
 | `GET /api/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
 | `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{origin?, hostAuthentication?}`; returns `{code}` for the active task |
-| `GET /api/envelopes/:id/delivery-pdf` † | The signed PDF with its certificate, for a `COMPLETED` envelope |
-| `GET /api/envelopes/:id/certificate` † | The completion certificate as JSON (shown on the envelope page), verified on every read |
+| `GET /api/envelopes/:id/delivery-pdf` | The signed PDF with its certificate, for a `COMPLETED` envelope |
+| `GET /api/envelopes/:id/certificate` | The completion certificate as JSON (shown on the envelope page), verified on every read |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 

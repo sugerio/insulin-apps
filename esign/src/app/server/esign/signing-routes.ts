@@ -60,6 +60,12 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     if (!signingEnabled(c.env)) return c.json({error:'signing_disabled'}, 404);
     await next();
   };
+  // Reading what was completed (the certificate, the delivery PDF, a signer's copy) verifies it with the trust in the
+  // code alone, so it works whether or not this deployment can sign now.
+  const noStore = async (c: import('hono').Context<Env>, next: import('hono').Next) => {
+    c.header('Cache-Control','no-store');
+    await next();
+  };
   app.use('/api/public/page-sessions/*', whenSigningEnabled);
   app.use('/api/public/signing/*', whenSigningEnabled);
   // A passed sign-by deadline expires the envelope before the signer's request runs.
@@ -343,7 +349,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       return c.json({id},202);
     } catch (error) {const raced=await replay();return raced ? c.json(raced,202) : c.json({error:error instanceof DateChanged?'date_changed':'signature_rejected'},409);}
   });
-  app.get('/api/envelopes/:id/delivery-pdf', whenSigningEnabled, async c => {
+  app.get('/api/envelopes/:id/delivery-pdf', noStore, async c => {
     const envelope=await c.env.DB.prepare("SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if(!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';
@@ -361,7 +367,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   });
   // A signer's copy, from the link in their completion notice (signed-copies.ts): the /copy page
   // posts the token from its fragment, once. The delivery PDF is built from the stored records.
-  app.post('/api/public/copies/open', whenSigningEnabled, bodyLimit({maxSize:1024}), async c => {
+  app.post('/api/public/copies/open', noStore, bodyLimit({maxSize:1024}), async c => {
     if (c.req.header('origin') !== new URL(c.req.url).origin) return c.json({error:'forbidden'},403);
     let body: {token?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     const link=typeof body?.token==='string'?await useCopyLink(c.env.DB,body.token):null;
@@ -379,7 +385,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       return c.json({error:'unavailable'},503);
     }
   });
-  app.get('/api/envelopes/:id/certificate', whenSigningEnabled, async c => {
+  app.get('/api/envelopes/:id/certificate', noStore, async c => {
     const envelope=await c.env.DB.prepare("SELECT id,template_id,created_at,status FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if (!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';

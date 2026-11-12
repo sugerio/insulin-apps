@@ -29,7 +29,7 @@ export function mountEditorRoutes(app:Hono<Env>){
  // whose Templates page hosts the editor, and the hosts in ESIGN_FRAME_ANCESTORS.
  const syncOrigins=async(c:import('hono').Context<Env>,next:import('hono').Next)=>{await syncEditorOrigins(c.env.DB,editorOrigins(new URL(c.req.url).origin,c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)));await next();};
  app.use('/api/template-editing-sessions',syncOrigins);app.use('/api/template-editing-sessions/*',syncOrigins);app.use('/api/public/editor/*',syncOrigins);
- app.post('/api/template-editing-sessions',bodyLimit({maxSize:8192}),async c=>{
+ app.post('/api/template-editing-sessions',bodyLimit({maxSize:32768}),async c=>{
   let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
   if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
   // The name and metadata the saved template gets (metadata.ts); without them, an edited template keeps its source's.

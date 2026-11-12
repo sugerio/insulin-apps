@@ -8,10 +8,13 @@
  * `secret_key` the Worker sees as a non-extractable ECDSA P-256 signing key (config.ts). It is
  * put there by `scripts/put-seal-key.mjs`, which prints the entry to add here.
  *
- * Rotating: add the new key's entry (no `until`) and deploy, put the new private key with the
- * script, then give the old entry its `until`. Never remove an entry: the seals it made would
- * stop verifying. A seal verifies only if its timestamp falls within its key's `from`..`until`,
- * so a retired key that leaks can't seal anything new that verifies.
+ * Rotating: run the script, which puts the new private key on the Worker and prints its entry;
+ * add that entry (no `until`), give the old entry an `until` at least an hour after the script
+ * finished, such as the time of that deploy, and deploy. Never the new entry's `from` as that
+ * `until`: `from` is taken before the new key is put, and requests the old version is still
+ * running (a TSA call, a tick) seal with the old key for a while after. Never remove an entry:
+ * the seals it made would stop verifying. A seal verifies only if its timestamp falls within its
+ * key's `from`..`until`, so a retired key that leaks can't seal anything new that verifies.
  */
 export type SealKey = {
   /** SHA-256 of the SubjectPublicKeyInfo, hex: the key's fingerprint, shown on certificates. */

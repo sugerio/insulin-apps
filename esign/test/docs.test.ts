@@ -47,7 +47,7 @@ for(const [who,session,status] of SESSIONS){
   });
   try{
    const nav=app.byLabel('Primary');assert.ok(nav,'the primary navigation');
-   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/envelopes'],['Templates','/templates'],['Docs','/docs']]);
+   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/envelopes'],['Templates','/templates'],['Contacts','/contacts'],['Docs','/docs']]);
    assert.ok(nav.findAll((n:any)=>n.type==='button'&&visibleText(n.children).trim()==='Settings').length===1,'and Settings');
    if(status===401)assert.match(app.text(),/Sign in to use Esign\./);
    else assert.match(app.text(),/No envelopes yet\./,'an organization that has sent nothing yet');
@@ -138,7 +138,7 @@ for(const topic of DOC_TOPICS){
   assert.equal(html.includes('General information, not legal advice'),!!topic.generalInformation);
   for(const [,href] of html.matchAll(/href="([^"]*)"/g)){
    if(href.startsWith('#'))continue;
-   assert.match(href,/^\/(docs\/[a-z0-9-]+(#[a-z0-9-]+)?|templates|envelopes)?$/,`${href} stays in the app`);
+   assert.match(href,/^\/(docs\/[a-z0-9-]+(#[a-z0-9-]+)?|templates|envelopes|contacts)?$/,`${href} stays in the app`);
    const [, slug, section]=href.match(/^\/docs\/([a-z0-9-]+)(?:#([a-z0-9-]+))?$/)??[];
    if(!slug)continue;
    const target=docTopic(slug);assert.ok(target,`${href} names a topic`);

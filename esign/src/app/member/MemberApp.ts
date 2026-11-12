@@ -1,9 +1,11 @@
-// The members' pages: the two-level navigation (Shell.ts: Envelopes and Templates from package.json
+// The members' pages: the two-level navigation (Shell.ts: Envelopes, Templates and Contacts from package.json
 // `insulin.navigation`, Docs and Settings) beside the page the address names. Who the member is comes from /api/me, the
 // platform's identity; the server checks every request again, so what a role can't do is hidden here and refused there.
 // The Docs need no identity: they open for every role, and before sign-in.
 import React, { useEffect, useState } from 'react'
 import { apiJson, describeError, RequestError, STATUS_LABELS, statusFilter, type Me } from './api.ts'
+import { ContactPage } from './ContactPage.ts'
+import { ContactsPage } from './ContactsPage.ts'
 import { EnvelopePage } from './EnvelopePage.ts'
 import { EnvelopesPage } from './EnvelopesPage.ts'
 import { NewEnvelopePage } from './NewEnvelopePage.ts'
@@ -21,6 +23,8 @@ type Route =
   | { section: 'envelopes'; page: 'list' | 'new' }
   | { section: 'envelopes'; page: 'envelope'; id: string }
   | { section: 'templates'; page: 'list' }
+  | { section: 'contacts'; page: 'list' }
+  | { section: 'contacts'; page: 'contact'; id: string }
   | { section: 'docs'; page: 'docs'; topic: string | undefined }
   | { section: null; page: 'missing' }
 
@@ -33,6 +37,8 @@ export function route(path: string): Route {
     if (UUID.test(parts[1])) return { section: 'envelopes', page: 'envelope', id: parts[1] }
   }
   if (parts.length === 1 && parts[0] === 'templates') return { section: 'templates', page: 'list' }
+  if (parts.length === 1 && parts[0] === 'contacts') return { section: 'contacts', page: 'list' }
+  if (parts[0] === 'contacts' && parts.length === 2 && UUID.test(parts[1])) return { section: 'contacts', page: 'contact', id: parts[1] }
   if (parts[0] === 'docs' && parts.length <= 2) return { section: 'docs', page: 'docs', topic: parts[1] }
   return { section: null, page: 'missing' }
 }
@@ -42,7 +48,8 @@ export function pageTitle(current: Route, status: string): string {
   if (current.page === 'list' && current.section === 'envelopes') return status ? STATUS_LABELS[status]! : 'All envelopes'
   if (current.page === 'new') return 'New envelope'
   if (current.page === 'envelope') return 'Envelope'
-  if (current.page === 'list') return 'Templates'
+  if (current.page === 'contact') return 'Contact'
+  if (current.page === 'list') return current.section === 'contacts' ? 'Contacts' : 'Templates'
   if (current.page === 'docs') return docTopic(current.topic)?.title ?? 'Topic not found'
   return 'Page not found'
 }
@@ -65,6 +72,8 @@ export function MemberApp() {
   else if (!me) page = h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading…')
   else if (current.page === 'new') page = h(NewEnvelopePage, { me })
   else if (current.page === 'envelope') page = h(EnvelopePage, { key: current.id, me, id: current.id })
+  else if (current.page === 'contact') page = h(ContactPage, { key: current.id, me, id: current.id })
+  else if (current.section === 'contacts') page = h(ContactsPage, { me })
   else if (current.section === 'templates') page = h(TemplatesPage, { me })
   else page = h(EnvelopesPage, { me, status })
 

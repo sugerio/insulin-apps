@@ -35,7 +35,8 @@
           { "key": "voided", "label": "Voided", "icon": "archive", "path": "/envelopes?status=voided", "group": "Status" }
         ]
       },
-      { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "group": "Esign" }
+      { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "group": "Esign" },
+      { "key": "contacts", "label": "Contacts", "icon": "users", "path": "/contacts", "group": "Esign" }
     ],
     "permissions": [
       {

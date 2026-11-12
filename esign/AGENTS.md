@@ -29,7 +29,7 @@ Run from `esign/` unless noted.
 | Path | What |
 |---|---|
 | `src/app/App.tsx` | The pages: `/sign` (signing), `/editor/page/:id` (embedded editor), `/copy` (a signer's copy), and every other path the members' app |
-| `src/app/member/` | The members' app: `MemberApp.ts` (routes), `Shell.ts` (the two-level navigation), `navigation.ts` (the manifest, role filtering, Settings links, the remembered collapse), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `api.ts`, `router.ts` (pushState, no router library) |
+| `src/app/member/` | The members' app: `MemberApp.ts` (routes), `Shell.ts` (the two-level navigation), `navigation.ts` (the manifest, role filtering, Settings links, the remembered collapse), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `ContactsPage.ts`, `ContactPage.ts`, `ContactPicker.ts` (a signer from the contacts), `api.ts`, `router.ts` (pushState, no router library) |
 | `src/app/pages/docs/`, `src/app/components/Docs.ts` | The in-app Docs: one file per topic, `topics.ts` (reading order), `parts.ts`, and the Docs component |
 | `src/app/ui/` | The public pages and their parts: `RecipientPage.ts`, `SigningHelp.ts` ("About signing"), `FieldEditor.ts`, `EditorPage.ts`, `CopyPage.ts`, `CompletionCertificate.ts`, `pdf.ts`, `esign-theme.css` (layout hooks) |
 | `src/app/components/ui/`, `src/app/lib/utils.ts`, `src/app/styles.css` | shadcn/ui components (copied, as `.ts`; `sidebar.ts` is the sidebar's class names), `cn()`, and Tailwind with the shadcn neutral theme and sidebar colours, light and dark |

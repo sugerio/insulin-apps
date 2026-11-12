@@ -302,3 +302,74 @@ test('the completion certificate lists the audit trail, marking events recorded 
  assert.match(html,/Sealed and completed/);assert.match(html,/records the seal/);
  assert.match(html,/Signing link issued \(by the sender\)/);assert.match(html,/those of whoever issued it/);
 });
+
+const CONTACT_ID='22222222-2222-4222-8222-222222222222';
+const ANA={id:CONTACT_ID,email:'ana@partner.example',name:'Ana Example',title:'Partner Manager',company:'Partner Company Ltd',envelopeCount:2,lastUsedAt:Date.parse('2026-11-10T00:00:00Z'),createdAt:0,updatedAt:0};
+
+test('contacts: the address book lists, searches and adds; a contact\'s page changes or deletes them and lists their envelopes',async()=>{
+ assert.deepEqual(route('/contacts'),{section:'contacts',page:'list'});
+ assert.deepEqual(route(`/contacts/${CONTACT_ID}`),{section:'contacts',page:'contact',id:CONTACT_ID});
+ assert.equal(route('/contacts/not-an-id').page,'missing');
+ let current={...ANA};let deleted=false;
+ const routes=(who:unknown)=>(c:{path:string;method:string;body:unknown})=>{
+  if(c.path==='/api/me')return json(who);
+  if(c.path.startsWith('/api/contacts?')){const q=new URL(c.path,ORIGIN).searchParams.get('q')??'';return json({contacts:deleted||(q&&!'ana example ana@partner.example'.includes(q.toLowerCase()))?[]:[current]});}
+  if(c.path==='/api/contacts'&&c.method==='POST'){const b=JSON.parse(String(c.body));return json({...ANA,id:CONTACT_ID,...b,envelopeCount:0,lastUsedAt:undefined},201);}
+  if(c.path===`/api/contacts/${CONTACT_ID}`&&c.method==='GET')return json({...current,envelopes:[{id:ENV_ID,status:'COMPLETED',createdAt:0,documentName:'Mutual NDA',role:'partner',taskStatus:'SIGNED'}]});
+  if(c.path===`/api/contacts/${CONTACT_ID}`&&c.method==='POST'){const b=JSON.parse(String(c.body));current={...current,name:b.name,title:b.title||undefined,company:b.company||undefined};return json(current);}
+  if(c.path===`/api/contacts/${CONTACT_ID}/delete`){deleted=true;return json({id:CONTACT_ID,deleted:true});}
+ };
+ const app=await renderMember('/contacts',routes(EDITOR));
+ try{
+  assert.match(app.text(),/Ana Example/);assert.match(app.text(),/ana@partner\.example/);assert.match(app.text(),/Partner Company Ltd/);
+  await app.type(app.byId('contact-search'),'nobody');await app.settle();
+  assert.match(app.text(),/No contact matches\./);
+  assert.ok(app.calls.some(c=>c.path==='/api/contacts?limit=50&q=nobody'));
+  await app.type(app.byId('contact-search'),'');await app.settle();
+  await app.click(app.button('Add contact'),'Add contact');
+  await app.click(app.button('Save contact'),'Save');
+  assert.match(app.text(),/Enter a name and an email address\./);
+  await app.type(app.byId('contact-name'),'Lee Buyer');await app.type(app.byId('contact-email'),'lee@buyer.example');
+  await app.click(app.button('Save contact'),'Save');
+  assert.deepEqual(JSON.parse(String(app.calls.find(c=>c.path==='/api/contacts'&&c.method==='POST')!.body)),{name:'Lee Buyer',email:'lee@buyer.example'});
+  assert.equal(app.location.pathname,`/contacts/${CONTACT_ID}`,'the new contact opens');
+  // Their page: the envelopes that name them, a change, and a delete asked twice.
+  assert.match(app.text(),/Mutual NDA/);assert.match(app.text(),/Signed/);
+  await app.type(app.byId('contact-name'),'Ana E.');await app.type(app.byId('contact-company'),'');
+  await app.click(app.button('Save contact'),'Save');
+  assert.deepEqual(JSON.parse(String(app.calls.filter(c=>c.path===`/api/contacts/${CONTACT_ID}`&&c.method==='POST').at(-1)!.body)),{name:'Ana E.',title:'Partner Manager',company:''});
+  assert.match(app.text(),/Contact saved\./);
+  await app.click(app.button('Delete contact'),'Delete');
+  assert.ok(!app.calls.some(c=>c.path.endsWith('/delete')),'not until confirmed');
+  await app.click(app.button('Delete for good'),'Confirm');
+  assert.equal(app.location.pathname,'/contacts');
+  assert.match(app.text(),/No contacts yet\./);
+ }finally{await app.unmount();}
+ deleted=false;current={...ANA};
+ const viewer=await renderMember(`/contacts/${CONTACT_ID}`,routes(VIEWER));
+ try{
+  assert.match(viewer.text(),/Mutual NDA/);
+  assert.equal(viewer.button('Save contact'),undefined);assert.equal(viewer.button('Delete contact'),undefined);
+  assert.equal(viewer.byId('contact-name').props.disabled,true);
+  await viewer.click(viewer.link('Contacts'),'back');
+  assert.equal(viewer.button('Add contact'),undefined);
+ }finally{await viewer.unmount();}
+});
+
+test('sending: a signer chosen from the contacts is filled in, title and company included',async()=>{
+ const app=await renderMember('/envelopes/new?template=tpl-1',c=>{
+  if(c.path==='/api/me')return json(EDITOR);
+  if(c.path==='/api/templates')return json({templates:[TEMPLATE]});
+  if(c.path.startsWith('/api/contacts?'))return json({contacts:[ANA]});
+ });
+ try{
+  await app.type(app.byId('signer-0-title'),'Typed title');
+  await app.click(app.button('Choose partner from contacts'),'the picker');
+  await app.type(app.byId('signer-0-contact-search'),'ana');await app.settle();
+  assert.ok(app.calls.some(c=>c.path==='/api/contacts?limit=8&q=ana'));
+  await app.click(app.byLabel('Choose Ana Example (ana@partner.example)'),'Ana');
+  assert.deepEqual(['signer-0-name','signer-0-email','signer-0-title','signer-0-company'].map(id=>app.byId(id).props.value),['Ana Example','ana@partner.example','Partner Manager','Partner Company Ltd']);
+  assert.equal(app.byId('signer-0-contact-search'),undefined,'the picker closes');
+  assert.equal(app.byId('signer-1-name').props.value,'','the other signer is untouched');
+ }finally{await app.unmount();}
+});

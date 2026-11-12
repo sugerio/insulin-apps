@@ -19,6 +19,7 @@ import { can, isScheduleTick, PERMISSIONS, readCaller, type Caller } from './ide
 import type { MailEnv } from './mail.ts';
 import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
+import { contactUpserts, mountContactRoutes } from './contacts.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -278,7 +279,7 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const sender = parseSender(input.sender);
   if (sender === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
   if (typeof input.templateId !== 'string' || !Array.isArray(input.recipients) || input.recipients.length < 1 || input.recipients.length > 20) return context.json({ error: 'invalid_envelope' }, 422);
-  const recipients: { role: string; name: string; email: string; expiresAt?: string }[] = [];
+  const recipients: ({ role: string; name: string; email: string; expiresAt?: string } & SignerFacts)[] = [];
   const deadlines: (number | null)[] = [];
   const signerFacts: SignerFacts[] = [];
   const namedBy: (string | null)[] = [];
@@ -366,6 +367,8 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
     ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
+    // The organization's contacts (contacts.ts): each signer added or refreshed, with the envelope only.
+    ...contactUpserts(context.env.DB, tenantId, recipients, Date.now()),
   ];
   try { await context.env.DB.batch(statements); }
   catch (error) {
@@ -467,6 +470,7 @@ app.post('/api/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context
   return context.json({ id, status: 'VOIDED' });
 });
 
+mountContactRoutes(app);
 mountSigningRoutes(app);
 return app;
 }

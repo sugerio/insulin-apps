@@ -5,8 +5,8 @@ order: 4
 ---
 
 An envelope is a template sent to named signers, one for each role, who sign in order. This page covers sending one step
-by step, what each field does, the statuses an envelope and its signers go through, voiding, declines, deadlines and due
-work. It is for people who send and for AI agents acting for them.
+by step, what each field does, the statuses an envelope and its signers go through, voiding, declines, deadlines, due
+work and contacts. It is for people who send and for AI agents acting for them.
 
 ## Before you send
 
@@ -21,7 +21,8 @@ work. It is for people who send and for AI agents acting for them.
 1. On **Envelopes**, choose **New envelope**. Or, on **Templates**, choose **Send** next to a template.
 2. Under **Template**, choose the template.
 3. Under **Signers**, fill in one block for each role, numbered in signing order (for example **1. partner**,
-   **2. seller**). **Name** and **Email** are required.
+   **2. seller**). **Name** and **Email** are required. To fill one in from your [contacts](#contacts), choose
+   **Choose** *the role* **from contacts**, search, and choose the person.
 4. Under **Document**, add what signers should see about the document, and a sign-by day if there is one. All optional.
 5. Choose **Send for signature**.
 
@@ -146,6 +147,21 @@ for your organization:
 - call `POST /api/process-due` with an OAuth client or an AI agent whose role can send and manage envelopes.
 
 One run looks at up to 25 envelopes to finish and 25 owing signed copies, so a backlog takes several runs.
+
+## Contacts
+
+**Contacts** is your organization's address book. Everyone an envelope names as a signer is added, or refreshed with the
+name, title and company you gave this time, and listed most recently used first, with how many envelopes named them.
+Search it by name or email.
+
+- To add someone before you send to them, choose **Add contact**. Adding an email that is already there changes that
+  contact.
+- To change or delete a contact, open them. Their page also lists the envelopes that name them. Deleting asks you to
+  confirm; the next envelope you send them adds them again.
+- When you send, **Choose** *the role* **from contacts** fills in the signer's name, email, title and company.
+
+A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact
+changes no envelope. Everyone in your organization who can see envelopes sees the contacts; those who send can change them.
 
 ## Send from another system
 

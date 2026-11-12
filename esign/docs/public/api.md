@@ -73,6 +73,19 @@ if it didn't exist.
 
 `POST /api/envelopes/{id}/prepare` still exists for older callers and does nothing; don't use it.
 
+### Contacts
+
+The organization's address book: everyone its envelopes named as a signer, and anyone added by hand. See
+[How contacts are kept](#how-contacts-are-kept).
+
+| Method and path | Permission | What it does |
+| --- | --- | --- |
+| `GET /api/contacts` | View | The contacts, most recently used (or added) first: `{contacts: [{id, email, name, title?, company?, envelopeCount, lastUsedAt?, createdAt, updatedAt}], next?}`. `q` keeps those whose name or email contains it (up to 100 characters, case-insensitive); `limit` is 1 to 100 (50 by default); pass `next` as `cursor` for the following page. |
+| `GET /api/contacts/{id}` | View | A contact, with `envelopes`: the envelopes that name them as a signer, newest first (at most 50), each `{id, status, createdAt, documentName?, role, taskStatus}`. |
+| `POST /api/contacts` | Manage | Add a contact, `{email, name, title?, company?}`, or change the one with this email (compared case-insensitively). Answers `201` when added, `200` when changed, with the contact. A `title` or `company` left out is kept; `null` or `""` clears it. |
+| `POST /api/contacts/{id}` | Manage | Change a contact's `name`, `title` or `company`, as above. The email can't change: another email is another contact. |
+| `POST /api/contacts/{id}/delete` | Manage | Delete a contact. Answers `{id, deleted: true}`. |
+
 Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLINED` and `EXPIRED`; a signer's task is
 `PENDING`, `ACTIVE` or `SIGNED`. See [Sending envelopes](/docs/esign/sending-envelopes#statuses).
 
@@ -130,6 +143,17 @@ A template can have a **name**, up to 200 characters, shown on the Templates pag
 an object of at most 20 keys (letters, digits, `_`, `.` and `-`, up to 40 characters) whose values are strings of up to
 500 characters. Esign keeps it as given and returns it on every read; it never reads it, and it is not part of the
 sealed evidence or shown to signers. A malformed name or metadata is refused with `422`.
+
+## How contacts are kept
+
+Every envelope adds each of its signers to the organization's contacts, one per email address (compared
+case-insensitively), or refreshes the one there: the name is the envelope's, and its title and company (`onBehalfOf`)
+replace the contact's when the envelope gives them. A retried send counts once. Members also add, change and delete
+contacts, in Esign's **Contacts** page or through the API above.
+
+A contact only helps fill in a signer: it is never evidence. An envelope keeps the name and email it was sent with,
+whatever happens to the contact later, and deleting a contact deletes no envelope. The next envelope that names them adds
+them again.
 
 ## Examples
 

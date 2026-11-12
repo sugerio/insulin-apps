@@ -9,6 +9,9 @@ export type TemplateSummary = { id: string; name?: string; metadata?: Metadata; 
 export type EnvelopeSummary = { id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
 export type Envelope = { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
+/** A contact (server/esign/contacts.ts): someone the organization's envelopes named, or a member added. Never evidence. */
+export type Contact = { id: string; email: string; name: string; title?: string; company?: string; envelopeCount: number; lastUsedAt?: number; createdAt: number; updatedAt: number }
+export type ContactEnvelope = { id: string; status: string; createdAt: number; documentName?: string; role: string; taskStatus: string }
 export type AuditEvent = { type: string; at: string; recipient?: { role: string; name: string; email: string }; ip?: string; userAgent?: string; detail?: Record<string, unknown> }
 
 export class RequestError extends Error {
@@ -49,6 +52,14 @@ export function describeError(error: unknown): string {
     return `Request failed (${error.message}).`
   }
   return error instanceof Error ? error.message : 'Request failed.'
+}
+
+/** A page of contacts, most recently used first: those whose name or email contains `q`, after `cursor`. */
+export function contactsPath(q: string, limit: number, cursor = ''): string {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (q.trim()) query.set('q', q.trim())
+  if (cursor) query.set('cursor', cursor)
+  return `/api/contacts?${query}`
 }
 
 export const canManage = (me: Me | null) => !!me?.permissions.includes('esign.manage')

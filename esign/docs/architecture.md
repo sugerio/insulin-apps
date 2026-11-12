@@ -89,8 +89,8 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
 ## The members' app and the Docs
 
 - **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` and `/envelopes`
-  (envelopes, `?status=` filtering by status), `/envelopes/new`, `/envelopes/:id`, `/templates` and
-  `/docs/:topic?`. It moves with
+  (envelopes, `?status=` filtering by status), `/envelopes/new`, `/envelopes/:id`, `/templates`,
+  `/contacts`, `/contacts/:id` and `/docs/:topic?`. It moves with
   `history.pushState` (`router.ts`), the only navigation the console's sandboxed iframe allows. Every
   call is a same-origin request as the signed-in member; there is no key in the browser.
 - **Navigation.** `src/app/member/Shell.ts` draws DESIGN.md §3.2's two levels around every member
@@ -233,7 +233,7 @@ rendering and every later re-verification fail closed if the running renderer di
 
 `src/app/db/schema.ts` declares the tables; `src/app/db/migrations/` holds the generated
 `0000_init.sql` and the custom `0001_triggers.sql` (the triggers Drizzle can't declare). Every record
-of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 16
+of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 17
 tables:
 
 | Table | Holds |
@@ -252,6 +252,7 @@ tables:
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
+| `contacts` | The organization's address book (`contacts.ts`): one per email (`email_key`, trimmed and lower-cased), name, title, company, how many envelopes named them, `last_used_at`, and `recent_at` (last used or added, the list's order). Never evidence |
 | `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
 
@@ -312,7 +313,7 @@ only the current state.
 
 | Step | Written first | Commit point |
 | --- | --- | --- |
-| Envelope creation | D0 in the object store | One D1 batch: the envelope, its tasks and the D0 row, all or none |
+| Envelope creation | D0 in the object store | One D1 batch: the envelope, its tasks, the D0 row and its signers' contacts, all or none |
 | Code exchange (both pages) | The `access_sessions` row | Marking the code used (`used_at IS NULL`, scope and validity); the token is returned only then |
 | Editor session start | The `editor_sessions` row | Inserting its `editor` code, which requires the session and an allowed parent |
 | Editor save | The source object and the template row | Recording the template as the session's result, while unsaved and while this request's token is live |
@@ -493,6 +494,8 @@ is enabled.
 | `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{origin?, hostAuthentication?}`; returns `{code}` for the active task |
 | `GET /api/envelopes/:id/delivery-pdf` | The signed PDF with its certificate, for a `COMPLETED` envelope |
 | `GET /api/envelopes/:id/certificate` | The completion certificate as JSON (shown on the envelope page), verified on every read |
+| `GET /api/contacts`, `GET /api/contacts/:id` | The address book, most recently used first (`q`, `limit`, `cursor`), and one contact with the envelopes that name them |
+| `POST /api/contacts`, `POST /api/contacts/:id`, `POST /api/contacts/:id/delete` | Add a contact (or change the one with that email), change one, delete one |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 

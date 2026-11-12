@@ -23,7 +23,7 @@ export const sending: DocTopic = {
       body: ol(
         ['On ', h(PageLink, { to: '/' }, 'Envelopes'), ', choose ', b('New envelope'), '. Or, on Templates, choose ', b('Send'), ' next to a template.'],
         'Choose the template.',
-        'For each role, name the signer and give their email address. The signers sign in this order.',
+        ['For each role, name the signer and give their email address, or choose them from your contacts. The signers sign in this order.'],
         'Add what the signers should see about the document, and a sign-by day if there is one. Both are optional.',
         ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn.'],
       ),
@@ -71,10 +71,19 @@ export const sending: DocTopic = {
       ],
     },
     {
+      id: 'contacts',
+      title: 'Contacts',
+      body: [
+        p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; open a contact to change or delete them, or to see the envelopes that name them.'),
+        p('When you send, ', b('Choose {role} from contacts'), ' fills in that signer\'s name, email, title and company.'),
+        p('A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact changes no envelope, and the next envelope that names them adds them again.'),
+      ],
+    },
+    {
       id: 'from-another-system',
       title: 'Sending from another system',
       body: [
-        p('A host product, or an AI agent someone connects, sends with ', code('POST /api/envelopes'), ' and an ', code('Idempotency-Key'), ' header, a fresh random value for each new envelope. The API can also give each signer a deadline of their own and say who named them. ', code('GET /api/catalog'), ' lists the calls the caller may make, with their fields.'),
+        p('A host product, or an AI agent someone connects, sends with ', code('POST /api/envelopes'), ' and an ', code('Idempotency-Key'), ' header, a fresh random value for each new envelope. The API can also give each signer a deadline of their own and say who named them. ', code('GET /api/catalog'), ' lists the calls the caller may make, with their fields, including the contacts (', code('/api/contacts'), ').'),
       ],
     },
   ],

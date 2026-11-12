@@ -233,6 +233,30 @@ export const invitations = sqliteTable('invitations', {
   sent_at: integer('sent_at'),
 })
 
+/**
+ * The organization's contacts (contacts.ts): one per email address (`email_key`, trimmed and
+ * lower-cased), added by every envelope that names them and by members. A convenience for filling
+ * in signers, never evidence. `recent_at` is when an envelope last named them, or when they were
+ * added: the list's order.
+ */
+export const contacts = sqliteTable('contacts', {
+  id: text('id').primaryKey(),
+  tenant_id: text('tenant_id').notNull(),
+  email: text('email').notNull(),
+  email_key: text('email_key').notNull(),
+  name: text('name').notNull(),
+  title: text('title'),
+  company: text('company'),
+  envelope_count: integer('envelope_count').notNull().default(0),
+  last_used_at: integer('last_used_at'),
+  recent_at: integer('recent_at').notNull(),
+  created_at: integer('created_at').notNull(),
+  updated_at: integer('updated_at').notNull(),
+}, (table) => [
+  unique('contacts_tenant_email').on(table.tenant_id, table.email_key),
+  index('contacts_by_recent').on(table.tenant_id, table.recent_at, table.id),
+])
+
 /** Objects (blob-store.ts): a key in a bucket points to one upload's chunks. */
 export const blobs = sqliteTable('blobs', {
   bucket: text('bucket').notNull(),

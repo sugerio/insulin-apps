@@ -49,6 +49,8 @@ const metadata = {
   additionalProperties: { type: 'string', maxLength: 500 },
   description: 'Your own keys and values (your ids, for instance), returned as given',
 }
+/** A contact's name, title and company (contacts.ts). */
+const CONTACT_FIELDS = { name: text('Their name', 200), title: { type: ['string', 'null'], maxLength: 128, description: 'Their title' }, company: { type: ['string', 'null'], maxLength: 200, description: 'The company they sign for' } }
 const templateName = text('A name for the template, shown in Esign\'s Templates page', 200)
 
 const ENTRIES: Entry[] = [
@@ -108,6 +110,19 @@ const ENTRIES: Entry[] = [
   { method: 'POST', path: '/api/envelopes/{id}/tasks/{taskId}/invitation', summary: 'Email the active signer\'s invitation again, with a new link (the earlier one stops working); for a signer Esign invites by email', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },
   { method: 'GET', path: '/api/envelopes/{id}/delivery-pdf', summary: 'A completed envelope\'s signed PDF followed by its certificate of completion', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   { method: 'GET', path: '/api/envelopes/{id}/certificate', summary: 'A completed envelope\'s seal, checked: what it binds and how', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
+  {
+    method: 'GET', path: '/api/contacts', summary: 'The organization\'s contacts (everyone its envelopes named, and those added by hand), most recently used first',
+    query: { type: 'object', properties: { q: text('Only contacts whose name or email contains this', 100), limit: { type: 'integer', minimum: 1, maximum: 100 }, cursor: { type: 'string', description: 'The `next` of the previous page' } } },
+    body: null, idempotencyKey: false, permission: 'esign.view',
+  },
+  { method: 'GET', path: '/api/contacts/{id}', summary: 'A contact, with the envelopes that name them as a signer, newest first', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
+  {
+    method: 'POST', path: '/api/contacts', summary: 'Add a contact, or change the one with this email (201 added, 200 changed). A contact is never evidence: envelopes keep what they were sent with',
+    query: null, body: { type: 'object', required: ['email', 'name'], additionalProperties: false, properties: { ...CONTACT_FIELDS, email: { type: 'string', format: 'email', maxLength: 254 } } },
+    idempotencyKey: false, permission: 'esign.manage',
+  },
+  { method: 'POST', path: '/api/contacts/{id}', summary: 'Change a contact\'s name, title or company (null or \'\' clears a title or company); the email stays', query: null, body: { type: 'object', additionalProperties: false, properties: CONTACT_FIELDS }, idempotencyKey: false, permission: 'esign.manage' },
+  { method: 'POST', path: '/api/contacts/{id}/delete', summary: 'Delete a contact; their envelopes are untouched, and the next envelope that names them adds them again', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },
   { method: 'POST', path: '/api/process-due', summary: 'Expire envelopes past a deadline, finish those left unfinished, and send signed-copy notices still owed', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },
 ];
 

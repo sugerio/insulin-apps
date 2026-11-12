@@ -15,7 +15,9 @@ import { log, logError } from './log.ts'
 import { badRequestPage, forbiddenPage, methodNotAllowed, notConfiguredResponse, notFoundPage } from './pages/status.tsx'
 import { proxyToApp } from './proxy.ts'
 import { landing, privacy, terms } from './site.ts'
-import { docs } from './docs.ts'
+import { robotsTxt, sitemapXml } from './crawl.ts'
+import { docs, docsSearchJson, llmsFullTxt, llmsTxt } from './docs.ts'
+import { deleteOrgAgent, deleteOrgApiClient, oauthClientsSettings, revokeOrgAgent, revokeOrgApiClient } from './orgs/oauth-clients.ts'
 import { accountView, deleteAccount, updateName, updatePassword } from './auth/account.ts'
 import {
   forgot, forgotForm, login, loginForm, logout, resend, resendForm, reset, resetForm, signup, signupForm, verifyEmail,
@@ -30,6 +32,7 @@ import {
 } from './integrations/api-clients.ts'
 import { createCredential, deleteCredential, integrations, updateCredential } from './integrations/settings.ts'
 import { connectAi, disconnectAppAgent } from './mcp/connect-ai.ts'
+import { docsMcpEndpoint } from './mcp/docs.ts'
 import { mcpEndpoint, protectedResourceMetadata } from './mcp/server.ts'
 import { preflight } from './oauth/http.ts'
 import { authorizationServerMetadata, authorize, decide, register, revoke, token } from './oauth/server.ts'
@@ -91,7 +94,12 @@ const APEX_ROUTES: Route[] = [
   route('GET', '/', landing),
   route('GET', '/privacy', privacy),
   route('GET', '/terms', terms),
-  // The public documentation, its llms.txt and its images (docs.ts).
+  // For crawlers, search engines' and AI assistants' (crawl.ts), and the docs' llms.txt at the root too.
+  route('GET', '/robots\\.txt', robotsTxt),
+  route('GET', '/sitemap\\.xml', sitemapXml),
+  route('GET', '/llms\\.txt', llmsTxt),
+  route('GET', '/llms-full\\.txt', llmsFullTxt),
+  // The public documentation, its llms.txt, its search and its images (docs.ts).
   route('GET', '/docs(?:/.*)?', docs),
   route('GET', '/signup', signupForm),
   route('POST', '/signup', signup),
@@ -131,6 +139,11 @@ const APEX_ROUTES: Route[] = [
   route('GET', '/settings/roles', rolesSettings),
   route('GET', '/settings/organization', organizationSettings),
   route('GET', '/settings/sso', ssoSettings),
+  route('GET', '/settings/oauth-clients', oauthClientsSettings),
+  route('POST', `/orgs/(${ORG})/oauth-clients/api/(${ACCOUNT})/revoke`, revokeOrgApiClient),
+  route('POST', `/orgs/(${ORG})/oauth-clients/api/(${ACCOUNT})/delete`, deleteOrgApiClient),
+  route('POST', `/orgs/(${ORG})/oauth-clients/agents/(${GRANT})/revoke`, revokeOrgAgent),
+  route('POST', `/orgs/(${ORG})/oauth-clients/agents/(${GRANT})/delete`, deleteOrgAgent),
   route('POST', `/orgs/(${ORG})/sso/domains`, claimSsoDomain),
   route('POST', `/orgs/(${ORG})/sso/domains/verify`, verifySsoDomain),
   route('POST', `/orgs/(${ORG})/sso/domains/remove`, removeSsoDomain),
@@ -213,13 +226,16 @@ type MachineHandler = (ctx: Context) => Promise<Response> | Response
 
 /**
  * Endpoints machines call, with JSON or form bodies and no cookies: they skip the form POST checks and answer CORS
- * preflights (oauth/http.ts). On the apex, the authorization server; on every app host, its MCP server and metadata.
+ * preflights (oauth/http.ts). On the apex, the authorization server and the docs' search JSON and MCP server; on every
+ * app host, its MCP server and metadata.
  */
 const APEX_MACHINE: Record<string, { methods: string; handlers: Partial<Record<string, MachineHandler>> }> = {
   '/.well-known/oauth-authorization-server': { methods: 'GET, OPTIONS', handlers: { GET: authorizationServerMetadata } },
   '/oauth/register': { methods: 'POST, OPTIONS', handlers: { POST: register } },
   '/oauth/token': { methods: 'POST, OPTIONS', handlers: { POST: token } },
   '/oauth/revoke': { methods: 'POST, OPTIONS', handlers: { POST: revoke } },
+  '/docs/search.json': { methods: 'GET, OPTIONS', handlers: { GET: docsSearchJson } },
+  '/docs/mcp': { methods: 'POST, OPTIONS', handlers: { POST: docsMcpEndpoint } },
 }
 
 function appMachine(ctx: Context, path: string): Promise<Response> | Response | null {

@@ -88,6 +88,8 @@ export interface ServiceAccountRow {
   secret_rotated_at: number | null
   created_at: number
   last_used_at: number | null
+  /** When an owner or admin revoked it (/settings/oauth-clients): it then gets no token, and may only be deleted. */
+  revoked_at: number | null
 }
 
 export interface TokenToIssue {
@@ -152,7 +154,7 @@ export async function insertGrantWithCode(db: D1Database, grant: {
 export function redeemCode(db: D1Database, codeHash: string, clientId: string, now: number): Promise<{ grant_id: string; redirect_uri: string; code_challenge: string } | null> {
   return db.prepare(
     `UPDATE oauth_codes SET used_at = ?2 WHERE code_hash = ?1 AND used_at IS NULL AND expires_at > ?2
-       AND EXISTS (SELECT 1 FROM oauth_grants g WHERE g.id = oauth_codes.grant_id AND g.client_id = ?3)
+       AND EXISTS (SELECT 1 FROM oauth_grants g WHERE g.id = oauth_codes.grant_id AND g.client_id = ?3 AND g.revoked_at IS NULL)
      RETURNING grant_id, redirect_uri, code_challenge`,
   ).bind(codeHash, now, clientId).first()
 }
@@ -168,7 +170,7 @@ const GRANT_SELECT = `SELECT g.id, g.client_id, c.name AS client_name, g.user_id
   FROM oauth_grants g JOIN oauth_clients c ON c.id = g.client_id`
 
 export function findGrant(db: D1Database, id: string, now: number): Promise<GrantRow | null> {
-  return db.prepare(`${GRANT_SELECT} WHERE g.id = ?1 AND g.expires_at > ?2`).bind(id, now).first<GrantRow>()
+  return db.prepare(`${GRANT_SELECT} WHERE g.id = ?1 AND g.expires_at > ?2 AND g.revoked_at IS NULL`).bind(id, now).first<GrantRow>()
 }
 
 /** Ends a grant: its codes and tokens go with it. */
@@ -187,14 +189,14 @@ export async function listUserGrants(db: D1Database, userId: string, now: number
     `SELECT g.id, g.client_id, c.name AS client_name, g.user_id, g.org_id, o.name AS org_name, g.app, g.created_at,
        g.expires_at, g.last_used_at
      FROM oauth_grants g JOIN oauth_clients c ON c.id = g.client_id JOIN orgs o ON o.id = g.org_id
-     WHERE g.user_id = ?1 AND g.expires_at > ?2 ORDER BY g.created_at DESC`,
+     WHERE g.user_id = ?1 AND g.expires_at > ?2 AND g.revoked_at IS NULL ORDER BY g.created_at DESC`,
   ).bind(userId, now).all<UserGrantRow>()
   return results
 }
 
 /** The person's own live grants for one app in one organization (the app's Connect AI page). */
 export async function listOwnAppGrants(db: D1Database, grant: { userId: string; orgId: string; app: string; now: number }): Promise<GrantRow[]> {
-  const { results } = await db.prepare(`${GRANT_SELECT} WHERE g.user_id = ?1 AND g.org_id = ?2 AND g.app = ?3 AND g.expires_at > ?4 ORDER BY g.created_at DESC`)
+  const { results } = await db.prepare(`${GRANT_SELECT} WHERE g.user_id = ?1 AND g.org_id = ?2 AND g.app = ?3 AND g.expires_at > ?4 AND g.revoked_at IS NULL ORDER BY g.created_at DESC`)
     .bind(grant.userId, grant.orgId, grant.app, grant.now).all<GrantRow>()
   return results
 }
@@ -208,7 +210,7 @@ export async function listAppGrantsAsAdmin(db: D1Database, grant: { orgId: strin
     `SELECT g.id, g.client_id, c.name AS client_name, g.user_id, u.name AS user_name, u.email AS user_email, g.org_id, g.app,
        g.created_at, g.expires_at, g.last_used_at
      FROM oauth_grants g JOIN oauth_clients c ON c.id = g.client_id JOIN users u ON u.id = g.user_id
-     WHERE g.org_id = ?1 AND g.app = ?2 AND g.expires_at > ?3 AND ${orgAdmin('?1', '?4')}
+     WHERE g.org_id = ?1 AND g.app = ?2 AND g.expires_at > ?3 AND g.revoked_at IS NULL AND ${orgAdmin('?1', '?4')}
      ORDER BY u.name COLLATE NOCASE, g.created_at DESC`,
   ).bind(grant.orgId, grant.app, grant.now, grant.actorId).all<AppGrantRow>()
   return results
@@ -252,7 +254,8 @@ export function findAccessToken(db: D1Database, hash: string, now: number): Prom
      LEFT JOIN users u ON u.id = g.user_id
      LEFT JOIN service_accounts s ON s.id = t.service_account_id
      LEFT JOIN custom_roles cr ON cr.id = s.custom_role_id
-     WHERE t.token_hash = ?1 AND t.kind = 'access' AND t.expires_at > ?2`,
+     WHERE t.token_hash = ?1 AND t.kind = 'access' AND t.expires_at > ?2
+       AND (t.grant_id IS NULL OR g.revoked_at IS NULL) AND (t.service_account_id IS NULL OR s.revoked_at IS NULL)`,
   ).bind(hash, now).first<AccessTokenRow>()
 }
 
@@ -263,7 +266,7 @@ export function findAccessToken(db: D1Database, hash: string, now: number): Prom
 export async function redeemRefresh(db: D1Database, hash: string, clientId: string, now: number): Promise<string | null> {
   const row = await db.prepare(
     `UPDATE oauth_tokens SET used_at = ?2 WHERE token_hash = ?1 AND kind = 'refresh' AND used_at IS NULL AND expires_at > ?2
-       AND EXISTS (SELECT 1 FROM oauth_grants g WHERE g.id = oauth_tokens.grant_id AND g.client_id = ?3)
+       AND EXISTS (SELECT 1 FROM oauth_grants g WHERE g.id = oauth_tokens.grant_id AND g.client_id = ?3 AND g.revoked_at IS NULL)
      RETURNING grant_id`,
   ).bind(hash, now, clientId).first<{ grant_id: string | null }>()
   return row?.grant_id ?? null
@@ -290,7 +293,8 @@ export async function deleteToken(db: D1Database, hash: string): Promise<void> {
 }
 
 const SERVICE_ACCOUNT_SELECT = `SELECT s.id, s.org_id, s.app, s.name, s.role, s.custom_role_id, c.name AS custom_role_name,
-    s.client_id, s.secret_hash, s.previous_secret_hash, s.previous_secret_expires_at, s.secret_rotated_at, s.created_at, s.last_used_at
+    s.client_id, s.secret_hash, s.previous_secret_hash, s.previous_secret_expires_at, s.secret_rotated_at, s.created_at, s.last_used_at,
+    s.revoked_at
   FROM service_accounts s LEFT JOIN custom_roles c ON c.id = s.custom_role_id`
 
 export async function listServiceAccounts(db: D1Database, orgId: string, app: string): Promise<ServiceAccountRow[]> {
@@ -316,7 +320,7 @@ export async function issueServiceToken(db: D1Database, token: { hash: string; s
   const result = await db.prepare(
     `INSERT INTO oauth_tokens (token_hash, kind, grant_id, service_account_id, client_secret_hash, created_at, expires_at)
      SELECT ?1, 'access', NULL, ?2, ?3, ?4, ?5
-     WHERE EXISTS (SELECT 1 FROM service_accounts s WHERE s.id = ?2
+     WHERE EXISTS (SELECT 1 FROM service_accounts s WHERE s.id = ?2 AND s.revoked_at IS NULL
        AND (s.secret_hash = ?3 OR (s.previous_secret_hash = ?3 AND s.previous_secret_expires_at > ?4)))`,
   ).bind(token.hash, token.serviceAccountId, token.secretHash, token.now, token.expiresAt).run()
   return result.meta.changes > 0
@@ -340,7 +344,7 @@ export async function updateServiceAccount(db: D1Database, account: {
 }): Promise<boolean> {
   const result = await db.prepare(
     `UPDATE service_accounts SET name = ?4, role = ?5, custom_role_id = ?6, updated_at = ?7
-     WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${orgAdmin('?2', '?8')}`,
+     WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND revoked_at IS NULL AND ${orgAdmin('?2', '?8')}`,
   ).bind(account.id, account.orgId, account.app, account.name, account.grant.role, account.grant.customRoleId, account.now, account.actorId).run()
   return result.meta.changes > 0
 }
@@ -372,7 +376,7 @@ export async function rotateServiceAccount(db: D1Database, account: {
     db.prepare(
       `UPDATE service_accounts SET previous_secret_hash = secret_hash, previous_secret_expires_at = ?5, secret_hash = ?4,
          secret_rotated_at = ?6, updated_at = ?6
-       WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${orgAdmin('?2', '?7')}`,
+       WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND revoked_at IS NULL AND ${orgAdmin('?2', '?7')}`,
     ).bind(account.id, account.orgId, account.app, account.secretHash, account.previousExpiresAt, account.now, account.actorId),
   ])
   return (rotated?.meta.changes ?? 0) > 0
@@ -387,7 +391,7 @@ export async function revokePreviousSecret(db: D1Database, account: { id: string
     endPreviousSecretTokens(db, account),
     db.prepare(
       `UPDATE service_accounts SET previous_secret_hash = NULL, previous_secret_expires_at = NULL, updated_at = ?4
-       WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND previous_secret_hash IS NOT NULL AND ${orgAdmin('?2', '?5')}`,
+       WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND previous_secret_hash IS NOT NULL AND revoked_at IS NULL AND ${orgAdmin('?2', '?5')}`,
     ).bind(account.id, account.orgId, account.app, account.now, account.actorId),
   ])
   return (revoked?.meta.changes ?? 0) > 0
@@ -397,6 +401,113 @@ export async function revokePreviousSecret(db: D1Database, account: { id: string
 export async function deleteServiceAccount(db: D1Database, account: { id: string; orgId: string; app: string; actorId: string }): Promise<boolean> {
   const result = await db.prepare(`DELETE FROM service_accounts WHERE id = ?1 AND org_id = ?2 AND app = ?3 AND ${orgAdmin('?2', '?4')}`)
     .bind(account.id, account.orgId, account.app, account.actorId).run()
+  return result.meta.changes > 0
+}
+
+// --- The organization's OAuth clients (/settings/oauth-clients, DESIGN.md §5.4) -----------------------------------------
+// Every app's clients for API access and every person's AI agents in one organization, for its owners and admins: each
+// list and each write re-checks OWNER or ADMIN inside its statement, so a demoted admin sees and changes nothing. No
+// secret is ever read here; secrets are made, shown once and rotated on each app's API access page.
+
+/** An app's OAuth client for API access, with who created it and, once revoked, who revoked it. */
+export interface OrgServiceAccountRow {
+  id: string
+  app: string
+  name: string
+  role: GrantRole
+  custom_role_id: string | null
+  custom_role_name: string | null
+  client_id: string
+  created_at: number
+  last_used_at: number | null
+  /** Null when the person who created it has since deleted their account. */
+  created_by_name: string | null
+  created_by_email: string | null
+  revoked_at: number | null
+  revoked_by_name: string | null
+  revoked_by_email: string | null
+}
+
+export async function listOrgServiceAccountsAsAdmin(db: D1Database, list: { orgId: string; actorId: string }): Promise<OrgServiceAccountRow[]> {
+  const { results } = await db.prepare(
+    `SELECT s.id, s.app, s.name, s.role, s.custom_role_id, c.name AS custom_role_name, s.client_id, s.created_at, s.last_used_at,
+       cu.name AS created_by_name, cu.email AS created_by_email, s.revoked_at, ru.name AS revoked_by_name, ru.email AS revoked_by_email
+     FROM service_accounts s LEFT JOIN custom_roles c ON c.id = s.custom_role_id
+       LEFT JOIN users cu ON cu.id = s.created_by LEFT JOIN users ru ON ru.id = s.revoked_by
+     WHERE s.org_id = ?1 AND ${orgAdmin('?1', '?2')}
+     ORDER BY s.created_at DESC, s.id`,
+  ).bind(list.orgId, list.actorId).all<OrgServiceAccountRow>()
+  return results
+}
+
+/** A person's AI agent (an MCP client's grant) in one app, live or revoked, with who allowed it and who revoked it. */
+export interface OrgGrantRow extends AppGrantRow {
+  revoked_at: number | null
+  revoked_by_name: string | null
+  revoked_by_email: string | null
+}
+
+/** Every grant in the organization that hasn't expired, revoked ones included (they stay listed until they would expire). */
+export async function listOrgGrantsAsAdmin(db: D1Database, list: { orgId: string; actorId: string; now: number }): Promise<OrgGrantRow[]> {
+  const { results } = await db.prepare(
+    `SELECT g.id, g.client_id, c.name AS client_name, g.user_id, u.name AS user_name, u.email AS user_email, g.org_id, g.app,
+       g.created_at, g.expires_at, g.last_used_at, g.revoked_at, ru.name AS revoked_by_name, ru.email AS revoked_by_email
+     FROM oauth_grants g JOIN oauth_clients c ON c.id = g.client_id JOIN users u ON u.id = g.user_id
+       LEFT JOIN users ru ON ru.id = g.revoked_by
+     WHERE g.org_id = ?1 AND g.expires_at > ?3 AND ${orgAdmin('?1', '?2')}
+     ORDER BY g.created_at DESC, g.id`,
+  ).bind(list.orgId, list.actorId, list.now).all<OrgGrantRow>()
+  return results
+}
+
+/**
+ * Revokes an app's OAuth client in one batch, while `actorId` is still an OWNER or ADMIN of the organization: it is marked
+ * revoked by them, its previous secret ends, and every token it holds is deleted. Its current secret is kept only as a
+ * hash that no longer issues anything (issueServiceToken). False when it was already revoked, or the actor may not.
+ */
+export async function revokeOrgServiceAccount(db: D1Database, account: { id: string; orgId: string; actorId: string; now: number }): Promise<boolean> {
+  const [revoked] = await db.batch([
+    db.prepare(
+      `UPDATE service_accounts SET revoked_at = ?3, revoked_by = ?4, previous_secret_hash = NULL, previous_secret_expires_at = NULL, updated_at = ?3
+       WHERE id = ?1 AND org_id = ?2 AND revoked_at IS NULL AND ${orgAdmin('?2', '?4')}`,
+    ).bind(account.id, account.orgId, account.now, account.actorId),
+    db.prepare(
+      `DELETE FROM oauth_tokens WHERE service_account_id = ?1
+         AND EXISTS (SELECT 1 FROM service_accounts s WHERE s.id = ?1 AND s.org_id = ?2 AND s.revoked_at IS NOT NULL)`,
+    ).bind(account.id, account.orgId),
+  ])
+  return (revoked?.meta.changes ?? 0) > 0
+}
+
+/** Deletes an app's OAuth client of the organization (revoked or not) and its tokens, while `actorId` is still an OWNER or ADMIN. */
+export async function deleteOrgServiceAccount(db: D1Database, account: { id: string; orgId: string; actorId: string }): Promise<boolean> {
+  const result = await db.prepare(`DELETE FROM service_accounts WHERE id = ?1 AND org_id = ?2 AND ${orgAdmin('?2', '?3')}`)
+    .bind(account.id, account.orgId, account.actorId).run()
+  return result.meta.changes > 0
+}
+
+/**
+ * Revokes a person's AI agent in one batch, while `actorId` is still an OWNER or ADMIN of the organization: the grant is
+ * marked revoked by them and its codes and tokens are deleted, so the agent must be allowed again. False when it was
+ * already revoked or has expired, or the actor may not.
+ */
+export async function revokeOrgGrant(db: D1Database, grant: { id: string; orgId: string; actorId: string; now: number }): Promise<boolean> {
+  const revokedHere = 'EXISTS (SELECT 1 FROM oauth_grants g WHERE g.id = ?1 AND g.org_id = ?2 AND g.revoked_at IS NOT NULL)'
+  const [revoked] = await db.batch([
+    db.prepare(
+      `UPDATE oauth_grants SET revoked_at = ?3, revoked_by = ?4
+       WHERE id = ?1 AND org_id = ?2 AND revoked_at IS NULL AND expires_at > ?3 AND ${orgAdmin('?2', '?4')}`,
+    ).bind(grant.id, grant.orgId, grant.now, grant.actorId),
+    db.prepare(`DELETE FROM oauth_tokens WHERE grant_id = ?1 AND ${revokedHere}`).bind(grant.id, grant.orgId),
+    db.prepare(`DELETE FROM oauth_codes WHERE grant_id = ?1 AND ${revokedHere}`).bind(grant.id, grant.orgId),
+  ])
+  return (revoked?.meta.changes ?? 0) > 0
+}
+
+/** Deletes a person's AI agent in the organization (revoked or not), with its codes and tokens, while `actorId` is still an OWNER or ADMIN. */
+export async function deleteOrgGrant(db: D1Database, grant: { id: string; orgId: string; actorId: string }): Promise<boolean> {
+  const result = await db.prepare(`DELETE FROM oauth_grants WHERE id = ?1 AND org_id = ?2 AND ${orgAdmin('?2', '?3')}`)
+    .bind(grant.id, grant.orgId, grant.actorId).run()
   return result.meta.changes > 0
 }
 

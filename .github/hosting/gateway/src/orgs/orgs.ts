@@ -80,6 +80,7 @@ const TAB_PATHS: Record<SettingsTab, string> = {
   users: '/settings/users',
   roles: '/settings/roles',
   organization: '/settings/organization',
+  'oauth-clients': '/settings/oauth-clients',
   sso: '/settings/sso',
 }
 

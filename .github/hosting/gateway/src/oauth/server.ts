@@ -300,7 +300,8 @@ function clientSecretOf(ctx: Context, params: Record<string, string>): { id: str
 export async function serviceAccountFor(ctx: Context, credentials: { id: string; secret: string } | null): Promise<{ account: ServiceAccountRow; secretHash: string; previous: boolean } | null> {
   if (!credentials || !credentials.id.startsWith(PREFIX.serviceAccount) || !isSecret(credentials.secret, PREFIX.secret)) return null
   const account = await findServiceAccountByClientId(ctx.config.db, credentials.id)
-  if (!account) return null
+  // A revoked client (DESIGN.md §5.4) gets no token, whichever secret it presents.
+  if (!account || account.revoked_at !== null) return null
   const hash = await hashSecret(credentials.secret)
   const current = constantTimeEqual(account.secret_hash, hash)
   const previous = account.previous_secret_hash !== null && constantTimeEqual(account.previous_secret_hash, hash)

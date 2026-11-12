@@ -8,7 +8,7 @@ import { listUserGrants } from './db/grants.ts'
 import { listMemberships, type MembershipRow } from './db/orgs.ts'
 import { cookieValues, serializeCookie } from './http/cookies.ts'
 import { appIconName, type NavIconName } from './nav-icons.ts'
-import { canManageSso, canSeeMembers, roleHas, type AppRole } from './roles.ts'
+import { canManageOAuthClients, canManageSso, canSeeMembers, roleHas, type AppRole } from './roles.ts'
 import { activeOrg, type ActiveOrg, type Session } from './auth/session.ts'
 
 export interface NavLink {
@@ -192,10 +192,10 @@ function base(ctx: Context, session: Session, data: ShellData, fallback: string)
 }
 
 /** The organization's own pages, in level 1: Home, its apps, and its settings as the role allows. */
-export type OrgPage = 'home' | 'users' | 'roles' | 'organization' | 'sso'
+export type OrgPage = 'home' | 'users' | 'roles' | 'organization' | 'oauth-clients' | 'sso'
 
 const ORG_PAGE_LABELS: Record<OrgPage, string> = {
-  home: 'Home', users: 'People', roles: 'Roles', organization: 'Organization', sso: 'Single sign-on',
+  home: 'Home', users: 'People', roles: 'Roles', organization: 'Organization', 'oauth-clients': 'OAuth clients', sso: 'Single sign-on',
 }
 
 function orgSettingsHref(ctx: Context, path: string, org: ActiveOrg): string {
@@ -220,6 +220,9 @@ function orgPrimary(ctx: Context, data: ShellData, current: OrgPage | null): Nav
     settings.push({ key: 'roles', label: ORG_PAGE_LABELS.roles, icon: 'shield', href: orgSettingsHref(ctx, '/settings/roles', org), current: current === 'roles' })
   }
   settings.push({ key: 'organization', label: ORG_PAGE_LABELS.organization, icon: 'building', href: orgSettingsHref(ctx, '/settings/organization', org), current: current === 'organization' })
+  if (canManageOAuthClients(org.role)) {
+    settings.push({ key: 'oauth-clients', label: ORG_PAGE_LABELS['oauth-clients'], icon: 'plug', href: orgSettingsHref(ctx, '/settings/oauth-clients', org), current: current === 'oauth-clients' })
+  }
   if (canManageSso(org.role)) {
     settings.push({ key: 'sso', label: ORG_PAGE_LABELS.sso, icon: 'key', href: orgSettingsHref(ctx, '/settings/sso', org), current: current === 'sso' })
   }

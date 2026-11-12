@@ -83,6 +83,10 @@ rotate and delete them, on the app's **API access** page, because a client's sec
 admin through specific apps sees the list but can't change it. See
 [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
+The organization's owners and admins also have **Settings › OAuth clients**: every app's OAuth clients and everyone's AI
+agents in one list, with who created each, when, and when it was last used, where they revoke or delete any of them.
+Nobody sees a secret there.
+
 ## Access to specific apps
 
 Use **Specific apps** for people who need one or two apps and nothing else, such as an outside counsel who only uses

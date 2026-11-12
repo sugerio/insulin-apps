@@ -80,7 +80,8 @@ const FEATURES: { icon: LucideIcon | typeof GitHubMark; title: string; text: str
 export function landingPage(ctx: Context): Html {
   const signup = apexUrl(ctx, withReturnTo("/signup", apexUrl(ctx)))
   const login = apexUrl(ctx, withReturnTo("/login", apexUrl(ctx)))
-  return page(ctx, { title: "Open-source apps, hosted", user: null }, (
+  const description = "Open-source business apps for your team, hosted: one account and organization for every app, a role in each, AI agents over MCP and an API."
+  return page(ctx, { title: "Open-source apps, hosted", user: null, description, canonical: apexUrl(ctx, "/") }, (
     <>
       <section className="border-b">
         <Container width="wide" className="flex flex-col items-center gap-6 py-16 text-center sm:py-24">

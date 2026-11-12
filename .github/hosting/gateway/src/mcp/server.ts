@@ -72,11 +72,11 @@ const TOOLS = [
   },
 ]
 
-function rpcResult(id: JsonRpcId, result: unknown) {
+export function rpcResult(id: JsonRpcId, result: unknown) {
   return { jsonrpc: '2.0', id, result }
 }
 
-function rpcError(id: JsonRpcId | null, error: JsonRpcError) {
+export function rpcError(id: JsonRpcId | null, error: JsonRpcError) {
   return { jsonrpc: '2.0', id, error }
 }
 
@@ -124,7 +124,7 @@ export async function mcpEndpoint(ctx: Context, app: HostedApp): Promise<Respons
   return answer === null ? new Response(null, { status: 202, headers: CORS }) : json(answer)
 }
 
-function isId(value: unknown): value is JsonRpcId {
+export function isId(value: unknown): value is JsonRpcId {
   return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
 }
 
@@ -162,7 +162,7 @@ async function handleMessage(ctx: Context, app: HostedApp, identity: Extract<Bea
   }
 }
 
-interface ToolResult {
+export interface ToolResult {
   content: { type: 'text'; text: string }[]
   structuredContent?: Record<string, unknown>
   isError?: boolean
@@ -172,7 +172,7 @@ function toolResult(data: Record<string, unknown>, isError = false): ToolResult 
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }], structuredContent: data, ...(isError ? { isError: true } : {}) }
 }
 
-function toolProblem(text: string): ToolResult {
+export function toolProblem(text: string): ToolResult {
   return { content: [{ type: 'text', text }], isError: true }
 }
 

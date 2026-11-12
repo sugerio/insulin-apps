@@ -69,8 +69,8 @@ function hrefOf(html, label) {
 
 test("level 1 of the organization's pages: Home, the apps the person can use, and the settings their role opens", async () => {
   const expected = {
-    owner: ['Home', '# Apps', 'Cap Table', '# Settings', 'People', 'Roles', 'Organization', 'Single sign-on', 'Docs'],
-    admin: ['Home', '# Apps', 'Cap Table', '# Settings', 'People', 'Roles', 'Organization', 'Docs'],
+    owner: ['Home', '# Apps', 'Cap Table', '# Settings', 'People', 'Roles', 'Organization', 'OAuth clients', 'Single sign-on', 'Docs'],
+    admin: ['Home', '# Apps', 'Cap Table', '# Settings', 'People', 'Roles', 'Organization', 'OAuth clients', 'Docs'],
     editor: ['Home', '# Apps', 'Cap Table', '# Settings', 'People', 'Roles', 'Organization', 'Docs'],
     viewer: ['Home', '# Apps', 'Cap Table', '# Settings', 'People', 'Roles', 'Organization', 'Docs'],
     appViewer: ['Home', '# Apps', 'Cap Table', '# Settings', 'People', 'Organization', 'Docs'],

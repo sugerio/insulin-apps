@@ -77,6 +77,8 @@ export const accessCodes = sqliteTable('access_codes', {
   origin: text('origin').notNull(),
   expires_at: integer('expires_at').notNull(),
   used_at: integer('used_at'),
+  /** How a recipient code was issued (the signer's entry, signer-facts.ts); copied to its session. */
+  entry_json: text('entry_json'),
 }, (table) => [
   index('access_codes_by_subject').on(table.scope, table.subject_id),
   check('access_codes_scope', sql`${table.scope} IN ('recipient', 'editor')`),
@@ -91,6 +93,8 @@ export const accessSessions = sqliteTable('access_sessions', {
   expires_at: integer('expires_at').notNull(),
   /** When the recipient entered the task's emailed code in this session; always NULL for the editor. */
   otp_verified_at: integer('otp_verified_at'),
+  /** How the recipient came to this session (its code's entry_json); recorded when they confirm their code. */
+  entry_json: text('entry_json'),
 }, (table) => [
   check('access_sessions_scope', sql`${table.scope} IN ('recipient', 'editor')`),
   check('access_sessions_otp_scope', sql`${table.otp_verified_at} IS NULL OR ${table.scope} = 'recipient'`),
@@ -214,6 +218,20 @@ export const signedCopyLinks = sqliteTable('signed_copy_links', {
   expires_at: integer('expires_at').notNull(),
   used_at: integer('used_at'),
 }, (table) => [index('signed_copy_links_by_task').on(table.envelope_id, table.task_id)])
+
+/**
+ * The invitation of a signer Esign emails (delivery 'email', invitations.ts): the SHA-256 of their
+ * link's token, one per task. It is reserved before sending and works once sent, while the task is
+ * the active one; sending it again replaces the token, so only the latest link opens the page.
+ */
+export const invitations = sqliteTable('invitations', {
+  task_id: text('task_id').primaryKey().notNull().references(() => tasks.id),
+  tenant_id: text('tenant_id').notNull(),
+  envelope_id: text('envelope_id').notNull().references(() => envelopes.id),
+  token_hash: text('token_hash').notNull().unique(),
+  reserved_at: integer('reserved_at').notNull(),
+  sent_at: integer('sent_at'),
+})
 
 /** Objects (blob-store.ts): a key in a bucket points to one upload's chunks. */
 export const blobs = sqliteTable('blobs', {

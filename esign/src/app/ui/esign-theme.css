@@ -140,3 +140,6 @@
   .esign-steps { font-size: .75rem; }
   .esign-actions { flex-wrap: wrap; }
 }
+/* The sender's message on Review: its line breaks kept, long text scrolled. */
+.esign-message-subject { font-weight: 600; margin: 0 0 4px; }
+.esign-message-body { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow-y: auto; margin: 0; font-size: .875rem; }

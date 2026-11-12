@@ -7,8 +7,8 @@ export type Me = { organizationId: string; user?: { id: string; email: string | 
 export type Metadata = Record<string, string>
 export type TemplateSummary = { id: string; name?: string; metadata?: Metadata; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
 export type EnvelopeSummary = { id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata }
-export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string }
-export type Envelope = { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; tasks: Task[] }
+export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
+export type Envelope = { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
 export type AuditEvent = { type: string; at: string; recipient?: { role: string; name: string; email: string }; ip?: string; userAgent?: string; detail?: Record<string, unknown> }
 
 export class RequestError extends Error {
@@ -54,7 +54,10 @@ export function describeError(error: unknown): string {
 export const canManage = (me: Me | null) => !!me?.permissions.includes('esign.manage')
 
 /** A signer as the send form collects them: the facts a host may give about a signer, each optional but name and email. */
-export type Signer = { name: string; email: string; title: string; company: string; after: string }
+/** `delivery` 'email': Esign emails them an invitation; otherwise ('host', the default) the page is opened for them. */
+export type Signer = { name: string; email: string; title: string; company: string; after: string; delivery?: 'host' | 'email' }
+/** The sender's message to the signers: an invitation's subject, and a body shown in it and on the signing page. */
+export type EnvelopeMessage = { subject: string; body: string }
 /** What the sender says about the document and who sent it. */
 export type DocumentFacts = { name: string; version: string; published: string; senderName: string; senderCompany: string }
 
@@ -66,7 +69,7 @@ export function signByTime(day: string): string {
 }
 
 /** The body of POST /api/envelopes: one recipient per role, in order, leaving out what is empty. A sign-by day applies to every signer. */
-export function envelopeRequest(templateId: string, roles: string[], people: Signer[], doc: DocumentFacts, signBy = '') {
+export function envelopeRequest(templateId: string, roles: string[], people: Signer[], doc: DocumentFacts, signBy = '', message: EnvelopeMessage = { subject: '', body: '' }) {
   const text = (v: string) => v.trim()
   const deadline = signByTime(signBy)
   const published = text(doc.published) && !Number.isNaN(Date.parse(text(doc.published))) ? new Date(text(doc.published)).toISOString() : ''
@@ -80,11 +83,13 @@ export function envelopeRequest(templateId: string, roles: string[], people: Sig
         ...(text(s.title) ? { title: text(s.title) } : {}),
         ...(text(s.company) ? { onBehalfOf: text(s.company) } : {}),
         ...(after.length ? { afterSigning: after } : {}),
+        ...(s.delivery === 'email' ? { delivery: 'email' } : {}),
       }
     }),
     ...(text(doc.name) ? { documentName: text(doc.name) } : {}),
     ...(text(doc.version) ? { documentVersion: { label: text(doc.version), ...(published ? { publishedAt: published } : {}) } } : {}),
     ...(text(doc.senderName) ? { sender: { name: text(doc.senderName), ...(text(doc.senderCompany) ? { organization: text(doc.senderCompany) } : {}) } } : {}),
+    ...(text(message.subject) || text(message.body) ? { message: { ...(text(message.subject) ? { subject: text(message.subject) } : {}), ...(text(message.body) ? { body: text(message.body) } : {}) } } : {}),
   }
 }
 

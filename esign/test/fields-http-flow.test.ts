@@ -28,7 +28,7 @@ test('isolated HTTP flow with Title and Date signed fields binds role input, ser
   const created=await req('/api/envelopes',post(body,headers));assert.equal(created.status,201,'the Worker accepts Date signed and Title');const envelope=await created.json();assert.equal((await req(`/api/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);
   const tasks=(await (await req(`/api/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;let previous='';
   for(let i=0;i<2;i++){
-   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({origin},mgmt))).json(),session=await (await req('/api/public/page-sessions/exchange',post({code:view.code},{origin}))).json(),h={origin,'x-esign-session':session.token};
+   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({signedInEmail:tasks[i].recipientEmail,origin},mgmt))).json(),session=await (await req('/api/public/page-sessions/exchange',post({code:view.code},{origin}))).json(),h={origin,'x-esign-session':session.token};
    const sent=await (await req('/api/public/signing/otp',post({},h))).json(),message=await (await mail.get(`test-mail/${sent.messageId}.json`))!.json() as {otp:string};assert.equal((await req('/api/public/signing/otp/verify',post({otp:message.otp},h))).status,204);
    const current=await (await req('/api/public/signing/current',{headers:h})).json();assert.deepEqual(current.fields,fields.filter(f=>f.role===(i?'marcus':'ana')));assert.equal(current.v3,true);if(i)assert.equal(current.sha256,previous);
    const fieldId=i?'date-b':'date';

@@ -19,6 +19,12 @@ export type CatalogEndpoint = {
 type Entry = CatalogEndpoint & { permission: Permission | null };
 
 const text = (description: string, maxLength: number) => ({ type: 'string', maxLength, description });
+/** The sender's message (invitations.ts): an invitation's subject, and a body in it and on the signing page. */
+const message = (description: string) => ({
+  type: 'object', additionalProperties: false, description,
+  properties: { subject: text('The invitation email\'s subject (one line)', 100), body: { type: 'string', maxLength: 10000, description: 'Plain text; line breaks are kept' } },
+})
+
 const recipient = {
   type: 'object',
   required: ['role', 'name', 'email'],
@@ -32,6 +38,8 @@ const recipient = {
     onBehalfOf: text('The company the signer signs for; they must then give a title and confirm their authority', 200),
     namedBy: text('Who named this signer, for the certificate', 300),
     afterSigning: { type: 'array', maxItems: 3, items: text('A line shown to this signer after they sign', 200) },
+    delivery: { type: 'string', enum: ['host', 'email'], default: 'host', description: 'host: your product opens their signing page (recipient-view, for the account signed in to it, which must have their email), and Esign emails them nothing. email: when it is their turn, Esign emails them an invitation to the signing page, and recipient-view refuses them' },
+    message: message('A message to this signer alone, instead of the envelope\'s'),
   },
 }
 
@@ -83,6 +91,7 @@ const ENTRIES: Entry[] = [
         documentVersion: { type: 'object', required: ['label'], additionalProperties: false, properties: { label: text('The version, such as v3', 16), publishedAt: { type: 'string', format: 'date-time' } } },
         sender: { type: 'object', required: ['name'], additionalProperties: false, properties: { name: text('Who sent it', 200), email: { type: 'string', format: 'email' }, organization: text('Their company', 200) } },
         metadata,
+        message: message('The sender\'s message to every signer'),
       },
     },
     idempotencyKey: true, permission: 'esign.manage',
@@ -93,9 +102,10 @@ const ENTRIES: Entry[] = [
   {
     method: 'POST', path: '/api/envelopes/{id}/tasks/{taskId}/recipient-view', summary: 'A one-time code for the active signer\'s signing page: embed <app origin>/sign#code=<code>',
     query: null,
-    body: { type: 'object', additionalProperties: false, properties: { origin: { type: 'string', description: 'The page origin the code is for; the app\'s own by default' }, hostAuthentication: { type: 'object', required: ['method'], properties: { method: { type: 'string', pattern: '^[A-Z][A-Z_]*$' }, provider: { type: 'string' }, domain: { type: 'string' }, signedInAt: { type: 'string', format: 'date-time' } } } } },
+    body: { type: 'object', additionalProperties: false, properties: { signedInEmail: { type: 'string', format: 'email', description: 'The email of the account signed in to your product, which must be the signer\'s (case-insensitive); required for your signers. A signer Esign invites by email is refused (409 recipient_signs_by_email)' }, origin: { type: 'string', description: 'The page origin the code is for; the app\'s own by default' }, hostAuthentication: { type: 'object', required: ['method'], properties: { method: { type: 'string', pattern: '^[A-Z][A-Z_]*$' }, provider: { type: 'string' }, domain: { type: 'string' }, signedInAt: { type: 'string', format: 'date-time' } } } } },
     idempotencyKey: false, permission: 'esign.manage',
   },
+  { method: 'POST', path: '/api/envelopes/{id}/tasks/{taskId}/invitation', summary: 'Email the active signer\'s invitation again, with a new link (the earlier one stops working); for a signer Esign invites by email', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },
   { method: 'GET', path: '/api/envelopes/{id}/delivery-pdf', summary: 'A completed envelope\'s signed PDF followed by its certificate of completion', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   { method: 'GET', path: '/api/envelopes/{id}/certificate', summary: 'A completed envelope\'s seal, checked: what it binds and how', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   { method: 'POST', path: '/api/process-due', summary: 'Expire envelopes past a deadline, finish those left unfinished, and send signed-copy notices still owed', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },

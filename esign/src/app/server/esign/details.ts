@@ -6,11 +6,16 @@
  */
 import type { DocumentVersion, Sender, SignerFacts } from './signer-facts.ts';
 import { storedMetadata, type Metadata } from './metadata.ts';
+import type { Message } from './invitations.ts';
 
 /** What the host said about the envelope, and its metadata (metadata.ts). */
-export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender; metadata?: Metadata };
-/** What the host said about a task's signer, and what it says happens once they sign. */
-export type TaskDetails = SignerFacts & { namedBy?: string; afterSigning?: string[] };
+export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender; metadata?: Metadata; message?: Message };
+/**
+ * What the host said about a task's signer, what it says happens once they sign, how they reach
+ * the signing page (`delivery`: absent is the host's, 'email' an invitation Esign emails), and the
+ * sender's message to them alone.
+ */
+export type TaskDetails = SignerFacts & { namedBy?: string; afterSigning?: string[]; delivery?: 'email'; message?: Message };
 
 const object = (raw: string | null | undefined): Record<string, unknown> => {
   try {
@@ -21,6 +26,11 @@ const object = (raw: string | null | undefined): Record<string, unknown> => {
 const text = (value: unknown): string | undefined => typeof value === 'string' && value !== '' ? value : undefined;
 const defined = <T extends Record<string, unknown>>(value: T): T =>
   Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+/** A stored message: its subject and body, when either is set. */
+const storedMessage = (raw: unknown): Message | undefined => {
+  const value = object(JSON.stringify(raw ?? {})), subject = text(value.subject), body = text(value.body);
+  return subject || body ? defined({ subject, body }) : undefined;
+};
 
 export function envelopeDetails(raw: string | null | undefined): EnvelopeDetails {
   const value = object(raw), sender = object(JSON.stringify(value.sender ?? {})), version = object(JSON.stringify(value.documentVersion ?? {}));
@@ -30,11 +40,13 @@ export function envelopeDetails(raw: string | null | undefined): EnvelopeDetails
     documentVersion: label ? defined({ label, publishedAt: text(version.publishedAt) }) : undefined,
     sender: name ? defined({ name, email: text(sender.email), organization: text(sender.organization) }) : undefined,
     metadata: Object.keys(storedMetadata(value.metadata)).length ? storedMetadata(value.metadata) : undefined,
+    message: storedMessage(value.message),
   });
 }
 
 export function taskDetails(raw: string | null | undefined): TaskDetails {
   const value = object(raw);
   const after = Array.isArray(value.afterSigning) ? value.afterSigning.filter((line): line is string => typeof line === 'string' && line !== '') : [];
-  return defined({ title: text(value.title), onBehalfOf: text(value.onBehalfOf), namedBy: text(value.namedBy), afterSigning: after.length ? after : undefined });
+  return defined({ title: text(value.title), onBehalfOf: text(value.onBehalfOf), namedBy: text(value.namedBy), afterSigning: after.length ? after : undefined,
+    delivery: value.delivery === 'email' ? 'email' as const : undefined, message: storedMessage(value.message) });
 }

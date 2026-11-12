@@ -138,9 +138,19 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
    source is copied to the envelope's initial document (D0, `envelopes/<id>/d0.pdf`), the first
    recipient's task becomes `ACTIVE`, and the envelope is created `IN_PROGRESS`. Recipients sign in
    routing order.
-3. **Recipient view.** For the active task the host calls
-   `POST /api/envelopes/:id/tasks/:taskId/recipient-view` and embeds
-   `<worker origin>/sign#code=<code>`. The page exchanges the code for a page session.
+3. **Recipient view.** A task's `delivery` (in `details_json`) says how its signer reaches the page.
+   The host's (the default): for the active task the host calls
+   `POST /api/envelopes/:id/tasks/:taskId/recipient-view` with `signedInEmail`, the email of the
+   account signed in to it, which must be the task's (a member in Esign's console, `accessVia`
+   browser, needn't give one), and embeds `<worker origin>/sign#code=<code>`. `email`: when the task
+   becomes active (at creation, after the previous signature in `completeEnvelope`, or by due work),
+   Esign emails an invitation (`invitations.ts`) with `<worker origin>/sign#invite=<token>`; the page
+   trades the token for a code (`POST /api/public/signing/invitation`) while the task is active, and
+   the host can't ask for one. Either way the page exchanges the code for a page session, which
+   keeps how the code was issued (`entry_json`: the host's statement and the checked account, or the
+   invitation); confirming the emailed code records it in `OTP_VERIFIED`, and the certificate's
+   "Identified by" reads it there. The sender's `message` (the envelope's, or the task's own) is in
+   the invitation and on Review.
 4. **Review, confirm, sign.** The page has three steps: **Review** (the document, its fingerprint,
    page count and download, and the signer's title and authority when the host named a company),
    **Confirm it's you** (a six-digit code emailed for the task) and **Sign** (the fields, the
@@ -232,8 +242,9 @@ tables:
 | `envelopes` | Tenant, template, status, creation time, `request_sha256`, `details_json` |
 | `tasks` | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
 | `artifacts` | Each envelope's initial document (D0): object key and SHA-256 |
-| `access_codes` | One-time page codes (hashed) with scope, tenant, subject, origin, expiry, `used_at` |
+| `access_codes` | One-time page codes (hashed) with scope, tenant, subject, origin, expiry, `used_at`, and how a recipient code was issued (`entry_json`) |
 | `access_sessions` | Page sessions (hashed tokens) with the same fields and `otp_verified_at` |
+| `invitations` | One per task Esign invites by email: the SHA-256 of its latest link's token, when it was reserved and sent |
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
 | `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |

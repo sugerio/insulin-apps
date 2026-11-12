@@ -33,8 +33,8 @@ async function harness() {
     const template = await (await req('/api/templates', { method: 'POST', headers: auth, body: form })).json() as { id: string };
     const { id } = await (await req('/api/envelopes', json({ templateId: template.id, recipients: [{ role: 'partner', name: 'Ana Partner', email: 'ana@partner.test' }] }, { ...auth, 'idempotency-key': idempotencyKey }))).json() as { id: string };
     await req(`/api/envelopes/${id}/prepare`, { method: 'POST', headers: auth });
-    const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[0];
-    const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN }, auth))).json() as { code: string };
+    const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string; recipientEmail: string }[] }).tasks[0];
+    const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({signedInEmail:task.recipientEmail, origin: ORIGIN }, auth))).json() as { code: string };
     const { token } = await (await req('/api/public/page-sessions/exchange', json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
     return { id, taskId: task.id, signer: { origin: ORIGIN, 'x-esign-session': token, ...SIGNER } };
   };
@@ -52,7 +52,7 @@ test('voiding an envelope in progress ends it for everyone and records who asked
     assert.equal(envelope.status, 'VOIDED');
     assert.deepEqual(envelope.tasks.map(t => t.status), ['ACTIVE'], 'the signer keeps their status; the envelope says it ended');
 
-    assert.notEqual((await h.req(`/api/envelopes/${id}/tasks/${taskId}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).status, 201, 'no new signing link');
+    assert.notEqual((await h.req(`/api/envelopes/${id}/tasks/${taskId}/recipient-view`, h.json({ origin: ORIGIN, signedInEmail: 'ana@partner.test' }, h.auth))).status, 201, 'no new signing link');
     assert.notEqual((await h.req('/api/public/signing/current', { headers: signer })).status, 200, 'an open signing page can no longer load the document to sign');
     assert.notEqual((await h.req('/api/public/signing/otp', h.json({}, signer))).status, 200, 'nor ask for a code');
 

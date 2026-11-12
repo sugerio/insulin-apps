@@ -62,10 +62,11 @@ if it didn't exist.
 | --- | --- | --- |
 | `GET /api/envelopes` | View | The organization's envelopes, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?, metadata}]}`. Filter with `status`. |
 | `POST /api/envelopes` | Manage | Send a template for signature, one recipient per role. Needs an `Idempotency-Key` header. Answers `201 {id, status: "IN_PROGRESS"}`; the first signer's turn starts at once. |
-| `GET /api/envelopes/{id}` | View | The status, `documentName` and `metadata`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `expiresAt`, `openedAt`. |
+| `GET /api/envelopes/{id}` | View | The status, `documentName`, `metadata` and `message`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `delivery`, `message`, `expiresAt`, `openedAt`, `invitedAt`. |
 | `GET /api/envelopes/{id}/audit` | View | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
 | `POST /api/envelopes/{id}/void` | Manage | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. |
-| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Manage | A one-time code for the active signer's signing page: `{code}`. Body: `{origin?, hostAuthentication?}`. |
+| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Manage | A one-time code for the active signer's signing page: `{code}`. Body: `{signedInEmail, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
+| `POST /api/envelopes/{id}/tasks/{taskId}/invitation` | Manage | Email the active signer's invitation again, with a new link; the earlier link stops working. Answers `204`; `409 not_invited` for a signer Esign doesn't invite. |
 | `GET /api/envelopes/{id}/delivery-pdf` | View | A completed envelope's signed PDF followed by its certificate of completion. |
 | `GET /api/envelopes/{id}/certificate` | View | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
 | `POST /api/process-due` † | Manage | Due work for the caller's organization, at once: answers `{expired, completed, waiting, failed}`. The platform runs it for every organization every five minutes anyway. |
@@ -82,11 +83,12 @@ Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLI
 | Field | Required | What it is |
 | --- | --- | --- |
 | `templateId` | Yes | The template to send. |
-| `recipients` | Yes | One per role of the template (1 to 20), each `{role, name, email}` and optionally `expiresAt` (ISO 8601, in the future, within 400 days), `title` (up to 128 characters), `onBehalfOf` (the company, up to 200), `namedBy` (who named this signer, up to 300) and `afterSigning` (up to 3 lines shown after signing). |
+| `recipients` | Yes | One per role of the template (1 to 20), each `{role, name, email}` and optionally `expiresAt` (ISO 8601, in the future, within 400 days), `title` (up to 128 characters), `onBehalfOf` (the company, up to 200), `namedBy` (who named this signer, up to 300), `afterSigning` (up to 3 lines shown after signing), `delivery` and `message`; see [How signers reach the page](#how-signers-reach-the-page). |
 | `documentName` | No | Shown to signers and named in the statement they agree to (up to 200 characters). |
 | `documentVersion` | No | `{label, publishedAt?}`, such as `{"label": "v3"}` (a label of up to 16 characters). |
 | `sender` | No | `{name, email?, organization?}`. |
 | `metadata` | No | Your own keys and values; see [Names and metadata](#names-and-metadata). Part of the request: the same key with other metadata is a conflict. |
+| `message` | No | `{subject?, body?}`: your message to every signer. See [How signers reach the page](#how-signers-reach-the-page). |
 
 The `Idempotency-Key` header is required: 1 to 128 letters, digits, `-` or `_`, a fresh random value for each new
 envelope. The envelope's id is derived from your organization and the key, so:
@@ -99,6 +101,27 @@ a recipient, the document version and the sender may name only the fields above)
 `422 invalid_roles` (the recipients don't match the template's roles one to one), `422 unsupported_recipient_name` (a
 name the signature page can't draw), `422 positioned_fields_not_supported` (the template's placed fields can't be signed),
 `404 not_found` (no such template).
+
+## How signers reach the page
+
+Each recipient's `delivery` says how they get to the signing page:
+
+- `host` (the default): your product. Esign emails them nothing; your backend asks for a one-time code with
+  `recipient-view` when it is their turn, for the account signed in to your product (see
+  [Embed the signing page](#embed-the-signing-page)).
+- `email`: Esign. When it is their turn, Esign emails them an invitation with a link to the signing page, from your
+  organization's mail relay. `recipient-view` refuses them (`409 recipient_signs_by_email`). If the email went astray,
+  send it again with `POST /api/envelopes/{id}/tasks/{taskId}/invitation`; the earlier link then stops working. A link
+  works while it is the signer's turn.
+
+Either way the signer then confirms a code emailed to them before they sign, and the certificate says how they came:
+"signed in to the sender's system as …" or "Email invitation link".
+
+`message` is your message to the signers, `{subject?, body?}`: a subject of one line, up to 100 characters, and a body
+of plain text, up to 10,000 characters, line breaks kept. The envelope's `message` is for every signer; a recipient's own
+`message` replaces it for them. The body is shown on the signing page, next to the document, and in an invitation;
+the subject is the invitation's (without one, "Please sign:" and the document's name). It is part of the request, like
+`metadata`, and not part of the signed evidence.
 
 ## Names and metadata
 
@@ -214,7 +237,8 @@ clients uploaded.
 A host product shows the signing page inside its own pages:
 
 1. When it is a signer's turn (their task is `ACTIVE`), the host's backend calls
-   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with `{}` and gets `{code}`.
+   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with `{"signedInEmail": "…"}`, the email of the account
+   signed in to the host, and gets `{code}`.
 2. The host frames `https://esign.insulinapps.com/sign#code=CODE&host=HOST_ORIGIN`, where `HOST_ORIGIN` is the host
    page's origin (for messages). Put the code in the fragment, never in a query string, and never log it.
 3. The page exchanges the code for a 15-minute session, takes the signer through review, the emailed code and signing,
@@ -224,6 +248,10 @@ A host product shows the signing page inside its own pages:
 Rules:
 
 - The code works once, within two minutes, only for that signer and while their task is active.
+- Only for your signers (`delivery` `host`), and only when `signedInEmail` is the signer's email, compared without
+  regard to case: otherwise `422 signed_in_email_required` or `403 signer_mismatch`. Esign records the account it
+  checked, and the certificate shows it. A member opening the page in Esign's own console, for signing in person,
+  doesn't give one.
 - The host's origin must be one of the origins the deployment allows to embed Esign's pages. The page refuses to start
   in a frame from any other origin, or in one that hides its origin.
 - `hostAuthentication` (`{method, provider?, domain?, signedInAt?}`, `method` an upper-case word such as `SSO`) tells
@@ -242,6 +270,7 @@ calls them directly.
 | Endpoint | Used by | What it does |
 | --- | --- | --- |
 | `POST /api/public/page-sessions/exchange` | Signing page | Exchanges the one-time code for a page session. |
+| `POST /api/public/signing/invitation` | Signing page | Exchanges an invitation link's token for a one-time code. |
 | `GET /api/public/signing/current` | Signing page | The document's details, fields, disclosure and intent statement, and whether the code is verified. |
 | `GET /api/public/signing/pdf` | Signing page | The PDF to sign. |
 | `POST /api/public/signing/page-views` | Signing page | Records the pages the signer viewed. |

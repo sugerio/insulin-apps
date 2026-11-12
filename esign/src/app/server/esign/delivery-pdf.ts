@@ -10,7 +10,12 @@ const hash = async (bytes: Uint8Array | ArrayBuffer) => Array.from(new Uint8Arra
 
 /** How a signer was identified, from their OTP_VERIFIED event: the host's sign-in, then the emailed code. */
 export function identification(detail: Record<string, unknown> | null | undefined): string {
+  // Opened with the invitation Esign emailed them.
+  if (detail?.entry === 'EMAIL_INVITATION') return 'Email invitation link; email one-time code';
   const auth = parseHostAuthentication(detail?.hostAuthentication);
+  // The account the host said was signed in, which Esign checked has the signer's email.
+  const signedIn = typeof detail?.signedInEmail === 'string' && detail.signedInEmail ? detail.signedInEmail : '';
+  if (signedIn) return `${auth && auth !== 'invalid' ? `${describeHostAuthentication(auth)}; ` : ''}signed in to the sender's system as ${signedIn}; email one-time code`;
   return auth && auth !== 'invalid' ? `${describeHostAuthentication(auth)}; email one-time code` : 'Email one-time code';
 }
 
@@ -86,6 +91,9 @@ function eventRows(events: readonly AuditEvent[], nameOf: (taskId: string | null
       // The link is issued by the sender (a member, or the host product's server): the IP is theirs.
       case AUDIT.viewIssued: if (first(event)) row(`Signing link issued to ${who}`, 'Sender'); break;
       case AUDIT.sessionOpened: if (first(event)) row('Opened the document'); break;
+      // Esign emailed the signer their invitation (again, when the sender resent it).
+      case AUDIT.invitationSent: row(event.detail?.resend === true ? `Invitation emailed again to ${who}` : `Invitation emailed to ${who}`, 'Esign'); break;
+      case AUDIT.invitationOpened: if (first(event)) row('Opened the invitation link'); break;
       case AUDIT.documentViewed: if (first(event)) row('Viewed the document'); break;
       case AUDIT.pagesViewed: if (event.taskId && lastViews.get(event.taskId) === event.id) {
         const total = Number(event.detail?.total);

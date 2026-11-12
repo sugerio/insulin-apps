@@ -279,7 +279,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
 
   for(const [i,role] of ['Partner','Seller'].entries()){
    // Sign on the Worker's own signing page, as a host embeds it: <Worker origin>/sign#code=<code>.
-   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${info.tasks[i].id}/recipient-view`,post({origin:'http://127.0.0.1:8787'},auth))).json();
+   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${info.tasks[i].id}/recipient-view`,post({signedInEmail:info.tasks[i].recipientEmail,origin:'http://127.0.0.1:8787'},auth))).json();
    // A new code differs only in the fragment, which would not reload the page: start from a blank page.
    await call('Page.navigate',{url:'about:blank'});await call('Page.navigate',{url:`http://127.0.0.1:8787/sign#code=${view.code}`});await wait(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Continue')"),'signing session');
    await wait(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Continue'&&!b.disabled)"),'document reviewed');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Continue').click()");

@@ -2,7 +2,7 @@
 // opening the active signer's page here (this page is then the host that embeds it). A completed envelope offers the
 // signed PDF with its certificate.
 import React, { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Ban, Download, FileCheck2, PenLine, X } from 'lucide-react'
+import { ArrowLeft, Ban, Download, FileCheck2, Mail, PenLine, X } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { Label } from '../components/ui/label.ts'
@@ -55,6 +55,14 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
   }, [envelope?.id, envelope?.status])
   useEffect(() => () => { if (pdf) URL.revokeObjectURL(pdf.url) }, [pdf])
 
+  // A new link to the invited signer (the old one stops working).
+  function resendInvitation(task: Task) {
+    void run(async () => {
+      await apiJson(`/api/envelopes/${id}/tasks/${task.id}/invitation`, { method: 'POST' })
+      await refresh()
+      setMessage({ text: `The invitation was emailed again to ${task.recipientEmail}. The earlier link no longer works.`, error: false })
+    })
+  }
   function openSigning(task: Task) {
     void run(async () => {
       const origin = window.location.origin
@@ -130,10 +138,13 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
           h(TableCell, { className: 'whitespace-normal' }, h('div', { className: 'font-medium' }, task.recipientName), h('div', { className: 'text-xs text-muted-foreground' }, task.recipientEmail)),
           h(TableCell, null, task.role),
           h(TableCell, { className: 'whitespace-normal' }, taskLabel(task.status),
+            task.delivery === 'email' ? h('div', { className: 'text-xs text-muted-foreground' }, task.invitedAt ? `Invited by email ${dateTime(task.invitedAt)}` : task.status === 'ACTIVE' ? 'Invitation not sent yet' : 'Invited by email when it is their turn') : null,
             task.openedAt ? h('div', { className: 'text-xs text-muted-foreground' }, `Opened ${dateTime(task.openedAt)}`) : null,
             task.expiresAt && task.status === 'ACTIVE' ? h('div', { className: 'text-xs text-muted-foreground' }, `Deadline ${dateTime(task.expiresAt)}`) : null),
           manage ? h(TableCell, { className: 'text-right' }, task.status === 'ACTIVE' && envelope.status === 'IN_PROGRESS'
-            ? h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => openSigning(task) }, h(PenLine, { 'aria-hidden': true }), `Open ${task.recipientName}'s signing page`) : null) : null)))))),
+            ? h('div', { className: 'flex flex-wrap justify-end gap-2' },
+              task.delivery === 'email' ? h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => resendInvitation(task) }, h(Mail, { 'aria-hidden': true }), 'Send the invitation again') : null,
+              h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => openSigning(task) }, h(PenLine, { 'aria-hidden': true }), `Open ${task.recipientName}'s signing page`)) : null) : null)))))),
     envelope.metadata && Object.keys(envelope.metadata).length ? h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Metadata')), h(CardDescription, null, 'Labels the sender\'s system gave this envelope. Esign keeps them as given; they are not part of the signed evidence.')),
       h(CardContent, null, h('dl', { 'aria-label': 'Metadata', className: 'grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]' },

@@ -105,7 +105,7 @@ test('sending from a template: one signer per role, the document, a sign-by day,
   assert.equal(sends[0].headers['idempotency-key'],sends[1].headers['idempotency-key'],'a retry is the same send');
   const deadline=signByTime(day);
   assert.deepEqual(JSON.parse(String(sends[1].body)),{templateId:'tpl-1',documentName:'Mutual NDA',documentVersion:{label:'v3',publishedAt:'2026-09-02T00:00:00.000Z'},sender:{name:'Sam Seller',organization:'Example Seller Inc.'},
-   recipients:[{role:'partner',name:'Ana',email:'ana@partner.example',expiresAt:deadline,title:'Partner Manager',onBehalfOf:'Partner Company Ltd',afterSigning:['Your onboarding moves on.','Training opens.']},{role:'seller',name:'Marcus',email:'marcus@seller.example',expiresAt:deadline}]});
+   recipients:[{role:'partner',name:'Ana',email:'ana@partner.example',expiresAt:deadline,title:'Partner Manager',onBehalfOf:'Partner Company Ltd',afterSigning:['Your onboarding moves on.','Training opens.'],delivery:'email'},{role:'seller',name:'Marcus',email:'marcus@seller.example',expiresAt:deadline,delivery:'email'}]});
   assert.ok(!app.calls.some(c=>c.path.endsWith('/prepare')),'creating the envelope prepares it');
   assert.equal(app.location.pathname,`/envelopes/${ENV_ID}`,'the new envelope opens');
   assert.match(app.text(),/Signers/);assert.ok(app.button("Open Ana's signing page"));

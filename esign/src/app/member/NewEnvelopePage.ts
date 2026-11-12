@@ -8,12 +8,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '../components/ui/input.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
 import { Textarea } from '../components/ui/textarea.ts'
-import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, signByTime, type DocumentFacts, type Me, type Signer, type TemplateSummary } from './api.ts'
+import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, signByTime, type DocumentFacts, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 
 const h = React.createElement
-const EMPTY_SIGNER: Signer = { name: '', email: '', title: '', company: '', after: '' }
+// Esign invites a signer by email unless the sender opens the page for them (in person, from the envelope's page).
+const EMPTY_SIGNER: Signer = { name: '', email: '', title: '', company: '', after: '', delivery: 'email' }
 const EMPTY_DOCUMENT: DocumentFacts = { name: '', version: '', published: '', senderName: '', senderCompany: '' }
 
 export function NewEnvelopePage({ me }: { me: Me }) {
@@ -24,6 +25,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   const [signers, setSigners] = useState<Signer[]>([])
   const [doc, setDoc] = useState<DocumentFacts>(EMPTY_DOCUMENT)
   const [signBy, setSignBy] = useState('')
+  const [note, setNote] = useState<EnvelopeMessage>({ subject: '', body: '' })
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
   const attempt = useRef<{ body: string; key: string } | null>(null)
@@ -46,6 +48,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   function send() {
     if (!template) { setMessage({ text: 'Choose a template.', error: true }); return }
     if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) { setMessage({ text: 'Enter a name and an email address for each signer.', error: true }); return }
+    if (note.subject.trim().length > 100) { setMessage({ text: 'Use at most 100 characters for the email subject.', error: true }); return }
     if (signers.some((s) => s.after.split('\n').filter((l) => l.trim()).length > 3)) { setMessage({ text: 'Use at most three lines for what a signer sees after signing.', error: true }); return }
     if (signBy.trim()) {
       const at = Date.parse(signByTime(signBy))
@@ -53,7 +56,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     }
     setBusy(true)
     setMessage({ text: '', error: false })
-    const body = JSON.stringify(envelopeRequest(template.id, template.roles, signers, doc, signBy))
+    const body = JSON.stringify(envelopeRequest(template.id, template.roles, signers, doc, signBy, note))
     if (!attempt.current || attempt.current.body !== body) attempt.current = { body, key: crypto.randomUUID() }
     apiJson<{ id: string }>('/api/envelopes', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': attempt.current.key }, body })
       .then(({ id }) => { attempt.current = null; navigate(`/envelopes/${id}`) })
@@ -85,6 +88,10 @@ export function NewEnvelopePage({ me }: { me: Me }) {
         text(`signer-${i}-email`, 'Email', signers[i]?.email ?? '', (v) => setSigner(i, 'email', v), { type: 'email', required: true }),
         text(`signer-${i}-title`, 'Title (optional)', signers[i]?.title ?? '', (v) => setSigner(i, 'title', v)),
         text(`signer-${i}-company`, 'Signs for company (optional)', signers[i]?.company ?? '', (v) => setSigner(i, 'company', v), { hint: 'They confirm they are authorized to sign for it.' }),
+        h('div', { className: 'sm:col-span-2' }, h(Field, { label: 'How they get the signing page', htmlFor: `signer-${i}-delivery` },
+          h(NativeSelect, { id: `signer-${i}-delivery`, value: signers[i]?.delivery ?? 'email', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSigner(i, 'delivery', e.target.value) },
+            h(NativeSelectOption, { value: 'email' }, 'Esign emails them an invitation when it is their turn'),
+            h(NativeSelectOption, { value: 'host' }, 'You open it for them, from the envelope\'s page')))),
         h('div', { className: 'sm:col-span-2' }, h(Field, { label: 'After signing, one line each (optional, at most 3)', htmlFor: `signer-${i}-after` },
           h(Textarea, { id: `signer-${i}-after`, rows: 2, value: signers[i]?.after ?? '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSigner(i, 'after', e.target.value) }))))))) : null,
     template ? h(Card, null,
@@ -96,5 +103,9 @@ export function NewEnvelopePage({ me }: { me: Me }) {
         text('doc-sender', 'Sender name', doc.senderName, (v) => setDoc((d) => ({ ...d, senderName: v }))),
         text('doc-sender-company', 'Sender company', doc.senderCompany, (v) => setDoc((d) => ({ ...d, senderCompany: v }))),
         text('sign-by', 'Sign by (optional)', signBy, setSignBy, { type: 'date', hint: 'If someone hasn\'t signed by the end of this day, the envelope expires and nobody can sign it.' })),
+      h(CardContent, { className: 'grid gap-4 border-t pt-6' },
+        text('message-subject', 'Email subject (optional)', note.subject, (v) => setNote((m) => ({ ...m, subject: v })), { hint: 'For the invitations Esign emails. Without one: "Please sign: <document name>".' }),
+        h(Field, { label: 'Message to the signers (optional)', htmlFor: 'message-body' },
+          h(Textarea, { id: 'message-body', rows: 4, maxLength: 10000, value: note.body, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setNote((m) => ({ ...m, body: e.target.value })) }))),
       h(CardFooter, null, h(Button, { disabled: busy, onClick: send }, h(Send, { 'aria-hidden': true }), busy ? 'Sending…' : 'Send for signature'))) : null)
 }

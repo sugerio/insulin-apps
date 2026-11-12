@@ -38,7 +38,7 @@ test('positioned signatures bind each role and preserve a sequential PDF chain',
   assert.equal((await req(`/api/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);
   const tasks=(await (await req(`/api/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;
   for(let i=0;i<2;i++) {
-   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({origin},mgmt))).json();const session=await (await req('/api/public/page-sessions/exchange',post({code:view.code},{origin}))).json();const headers={origin,'x-esign-session':session.token};
+   const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({signedInEmail:tasks[i].recipientEmail,origin},mgmt))).json();const session=await (await req('/api/public/page-sessions/exchange',post({code:view.code},{origin}))).json();const headers={origin,'x-esign-session':session.token};
    // Before the code the signer may read the document, but not sign it.
    const unverified=await (await req('/api/public/signing/current',{headers})).json();assert.equal(unverified.verified,false);assert.equal((await req('/api/public/signing/sign',post({artifactId:unverified.id,artifactHash:unverified.sha256,consent:true,signatures:{[fields[i].id]:'ANA'}},headers))).status,409);
    const sent=await (await req('/api/public/signing/otp',post({},headers))).json();const otp=await (await env.TEST_MAIL.get(`test-mail/${sent.messageId}.json`))!.json() as {otp:string};assert.equal((await req('/api/public/signing/otp/verify',post({otp:otp.otp},headers))).status,204);

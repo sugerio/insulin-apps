@@ -29,7 +29,7 @@ type Disclosure = {version:string;text:string};
 /** The host's statement of how it signed the recipient in (src/signer-facts.ts). */
 type HostAuthentication = {method:string;provider?:string;domain?:string;signedInAt?:string};
 type Artifact = {id:string;sha256:string;verified?:boolean;fields?:SignatureField[];recipientName?:string;role?:string;disclosure?:Disclosure;signer?:{title?:string;onBehalfOf?:string};intent?:string;signerName?:string;documentName?:string;recipientEmail?:string;
-  documentVersion?:{label:string;publishedAt?:string};sender?:{name:string;organization?:string};hostAuthentication?:HostAuthentication;
+  documentVersion?:{label:string;publishedAt?:string};sender?:{name:string;organization?:string};hostAuthentication?:HostAuthentication;message?:{subject?:string;body?:string};
   signers?:{before:number;after:number;next?:{name:string;organization?:string}};afterSigning?:string[]};
 /** A file name for the downloaded copy: the document's name, else "document". */
 const pdfFileName=(name?:string)=>`${(name??'').replace(/[^A-Za-z0-9 ._-]+/g,'').trim().slice(0,100)||'document'}.pdf`;
@@ -176,22 +176,32 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     setSignatures(old=>signatureFieldIds.every(id=>old[id]===fullName)?old:{...old,...Object.fromEntries(signatureFieldIds.map(id=>[id,fullName]))});
     setPreviews(old=>signatureFieldIds.every(id=>old[id]===fullName||!old[id])?old:{...old,...Object.fromEntries(signatureFieldIds.filter(id=>old[id]!==fullName).map(id=>[id,'']))});},[fullName,signatureFieldIds.join()]);
   useEffect(()=>{
-    const params=new URLSearchParams(window.location.hash.slice(1));const code=params.get('code');
+    // A host's link carries a one-time code (#code=); an invitation Esign emailed carries the
+    // invitation's token (#invite=), which this page exchanges for such a code first.
+    const params=new URLSearchParams(window.location.hash.slice(1));const given=params.get('code'),invite=params.get('invite');
     window.history.replaceState(null,'',window.location.pathname);
     // The API is this page's own origin (the app). The host told when the signer closes, signs or
     // declines must be one the app lets frame this page (GET /api/public/signing-page).
     api.current=window.location.origin;
-    if (!code) {setMessage('No recipient code provided.');return;}
+    if (!given && !invite) {setMessage('No recipient code provided.');return;}
+    let invitationRefused=false;
+    const codeFor=async():Promise<string>=>{
+      if (given) return given;
+      const response=await fetch(`${api.current}/api/public/signing/invitation`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:invite})});
+      if (!response.ok) {invitationRefused=true;throw new Error();}
+      return (await response.json() as {code:string}).code;
+    };
     const frame=embedding(window,window.document?.referrer??'');
     fetch(`${api.current}/api/public/signing-page`,{cache:'no-store'})
       .then(async response=>{
         const page=response.ok?await response.json() as {hosts?:unknown}:{};
         const hosts=Array.isArray(page.hosts)?page.hosts.filter((h):h is string=>typeof h==='string').join(' '):'';
         try {host.current=signingHost(params.get('host'),hosts,frame.embedded,frame.embedder||undefined);} catch {host.current='';}
+        const code=await codeFor();
         const exchange=await fetch(`${api.current}/api/public/page-sessions/exchange`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,...frame})});
         if(!exchange.ok) throw new Error();const value=await exchange.json() as {token:string};setToken(value.token);setMessage('Loading document…');
       })
-      .catch(()=>setMessage('Session unavailable or expired.'));
+      .catch(()=>setMessage(invitationRefused?'This invitation link no longer works: a newer email replaced it, your turn has passed, or the signing has ended. Use the latest email, or ask the sender to send it again.':'Session unavailable or expired.'));
   },[]);
   /** Tells the host (when there is one) that the signer closed the page, signed or declined. */
   const notifyHost=(msg:SigningHostMessage)=>{if(!host.current)return;try{window.parent.postMessage(msg,host.current);}catch{/* The host is gone: nothing to tell. */}};
@@ -403,6 +413,10 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
             pdfUrl&&h('a',{href:pdfUrl,download:pdfFileName(artifact.documentName)},'Download PDF')),
           h('div',{ref:container,'aria-label':'Document to sign',className:'esign-document-surface'})),
         ready && step===1 && h('aside',{className:'esign-side'},
+          // The sender's message to this signer, as they wrote it (text only).
+          artifact.message&&section(`Message from ${sender||'the sender'}`,
+            artifact.message.subject&&h('p',{className:'esign-message-subject'},artifact.message.subject),
+            artifact.message.body&&h('p',{className:'esign-message-body'},artifact.message.body)),
           section('Document',documentFacts(true)),
           section('Signing as',
             h('dl',{className:'esign-facts'},signingAs&&fact('Name',signingAs),artifact.recipientEmail&&fact('Email',artifact.recipientEmail)),

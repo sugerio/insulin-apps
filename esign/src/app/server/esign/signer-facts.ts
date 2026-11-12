@@ -175,6 +175,26 @@ export async function sha256Hex(value: string): Promise<string> {
 }
 
 /** The host's sign-in from the last signing link a task's recipient was given (null when it said none). */
+/**
+ * How the signer came to the page session they are confirming their code in, as its code was issued:
+ * a link from the host (with the host's statement of the sign-in, and the signed-in account Esign
+ * checked has the signer's email), or their invitation. Recorded with OTP_VERIFIED; the
+ * certificate's "Identified by" reads it there.
+ */
+export type SessionEntry = { entry?: 'EMAIL_INVITATION'; hostAuthentication?: HostAuthentication; signedInEmail?: string };
+
+/** The entry of the recipient page session a bearer token opens; empty when it has none. */
+export async function sessionEntry(db: D1Database, token: string): Promise<SessionEntry> {
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))), n => n.toString(16).padStart(2, '0')).join('');
+  const row = await db.prepare("SELECT entry_json FROM access_sessions WHERE token_hash = ? AND scope = 'recipient'").bind(hash).first<{ entry_json: string | null }>();
+  try {
+    const value = JSON.parse(row?.entry_json ?? '{}') as { entry?: unknown; hostAuthentication?: unknown; signedInEmail?: unknown };
+    if (value.entry === 'EMAIL_INVITATION') return { entry: 'EMAIL_INVITATION' };
+    const auth = parseHostAuthentication(value.hostAuthentication);
+    return { ...(auth && auth !== 'invalid' ? { hostAuthentication: auth } : {}), ...(typeof value.signedInEmail === 'string' && value.signedInEmail ? { signedInEmail: value.signedInEmail } : {}) };
+  } catch { return {}; }
+}
+
 export async function lastHostAuthentication(db: D1Database, envelopeId: string, taskId: string): Promise<HostAuthentication | null> {
   const row = await db.prepare("SELECT detail_json FROM audit_events WHERE envelope_id = ? AND task_id = ? AND type = 'RECIPIENT_VIEW_ISSUED' ORDER BY id DESC LIMIT 1")
     .bind(envelopeId, taskId).first<{ detail_json: string | null }>();

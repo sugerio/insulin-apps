@@ -30,8 +30,8 @@ test('a signing leaves an ordered audit trail with the signer\'s IP and browser,
     const template = await (await req('/api/templates', { method: 'POST', headers: auth, body: form })).json() as { id: string };
     const { id } = await (await req('/api/envelopes', json({ templateId: template.id, recipients: [{ role: 'partner', name: 'Ana Partner', email: 'ana@partner.test' }] }, { ...auth, 'idempotency-key': 'k1' }))).json() as { id: string };
     await req(`/api/envelopes/${id}/prepare`, { method: 'POST', headers: auth });
-    const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[0];
-    const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN }, auth))).json() as { code: string };
+    const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string; recipientEmail: string }[] }).tasks[0];
+    const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({signedInEmail:task.recipientEmail, origin: ORIGIN }, auth))).json() as { code: string };
     const { token } = await (await req('/api/public/page-sessions/exchange', json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
     const headers = { origin: ORIGIN, 'x-esign-session': token, ...SIGNER };
     const { messageId } = await (await req('/api/public/signing/otp', json({}, headers))).json() as { messageId: string };

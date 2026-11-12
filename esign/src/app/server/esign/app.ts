@@ -3,7 +3,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { AUDIT, requestFacts } from './audit.ts';
 import { expireDueEnvelopes, expireIfDue, parseDeadline } from './task-expiry.ts';
 import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedBy, parseSender, parseSignerFacts, type SignerFacts } from './signer-facts.ts';
-import { envelopeDetails, type EnvelopeDetails, type TaskDetails } from './details.ts';
+import { envelopeDetails, taskDetails, type EnvelopeDetails, type TaskDetails } from './details.ts';
 import { parseMetadata, parseTemplateName, storedMetadata, unknownKeys, type Metadata } from './metadata.ts';
 import { PDFDocument } from 'pdf-lib';
 import { assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf } from './fields.ts';
@@ -12,7 +12,8 @@ import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './
 import { mountSigningRoutes } from './signing-routes.ts';
 import { signingEnabled, type EnvironmentEnv } from './environment.ts';
 import { mountEditorRoutes } from './editor-routes.ts';
-import { sweepEnvelopes } from './envelope-completion.ts';
+import { sendDueInvitations, sweepEnvelopes } from './envelope-completion.ts';
+import { parseDelivery, parseMessage, type Delivery, type Message } from './invitations.ts';
 import type { BlobStore } from './blob-store.ts';
 import { can, isScheduleTick, PERMISSIONS, readCaller, type Caller } from './identity.ts';
 import type { MailEnv } from './mail.ts';
@@ -239,8 +240,8 @@ function placedFields(raw: string | undefined): { type: string; role: string; pa
 }
 
 /** The fields a create-envelope request and each of its recipients may have; any other is refused. */
-const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata'];
-const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBehalfOf', 'namedBy', 'afterSigning'];
+const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata', 'message'];
+const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBehalfOf', 'namedBy', 'afterSigning', 'delivery', 'message'];
 
 /** A created envelope starts IN_PROGRESS: its first signer's task is active. */
 const CREATED_STATUS = 'IN_PROGRESS';
@@ -255,12 +256,15 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
   // Every field must be one Esign knows: a misspelled one is refused rather than lost.
   const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
-  for (const [name, allowed] of [['documentVersion', ['label', 'publishedAt']], ['sender', ['name', 'email', 'organization']]] as const) {
+  for (const [name, allowed] of [['documentVersion', ['label', 'publishedAt']], ['sender', ['name', 'email', 'organization']], ['message', ['subject', 'body']]] as const) {
     const value = (body as Record<string, unknown>)[name];
     if (value && typeof value === 'object' && !Array.isArray(value)) unknownFields.push(...unknownKeys(value, allowed).map((field) => `${name}.${field}`));
   }
   if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
-  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown };
+  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown; message?: unknown };
+  // The sender's message to every signer (invitations.ts): in an invitation's email, and on the signing page.
+  const message = parseMessage(input.message);
+  if (message === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
   // The host's own labels for the envelope (metadata.ts): kept and returned, never evidence.
   const metadata = parseMetadata(input.metadata);
   if (metadata === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
@@ -279,9 +283,13 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const signerFacts: SignerFacts[] = [];
   const namedBy: (string | null)[] = [];
   const afterSigning: (string[] | null)[] = [];
+  const deliveries: Delivery[] = [];
+  const messages: (Message | null)[] = [];
   for (const recipient of input.recipients) {
     if (recipient && typeof recipient === 'object' && !Array.isArray(recipient)) {
       const unknownRecipientFields = unknownKeys(recipient, RECIPIENT_FIELDS);
+      const message = (recipient as { message?: unknown }).message;
+      if (message && typeof message === 'object' && !Array.isArray(message)) unknownRecipientFields.push(...unknownKeys(message, ['subject', 'body']).map((field) => `message.${field}`));
       if (unknownRecipientFields.length) return context.json({ error: 'unknown_field', fields: unknownRecipientFields.map((field) => `recipients[].${field}`) }, 422);
     }
     if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || typeof recipient.name !== 'string' || typeof recipient.email !== 'string' || !recipient.name.trim() || recipient.name.length > 200 || recipient.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email)) return context.json({ error: 'invalid_recipient' }, 422);
@@ -301,10 +309,17 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     const after = parseAfterSigning((recipient as { afterSigning?: unknown }).afterSigning);
     if (after === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
     afterSigning.push(after);
-    recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email, ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}) });
+    // How the signer reaches the page: the host's (default), or an invitation Esign emails; and the
+    // sender's message to this signer alone.
+    const delivery = parseDelivery((recipient as { delivery?: unknown }).delivery);
+    const own = parseMessage((recipient as { message?: unknown }).message);
+    if (delivery === 'invalid' || own === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    deliveries.push(delivery);
+    messages.push(own);
+    recipients.push({ role: recipient.role, name: recipient.name, email: recipient.email, ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}), ...(delivery === 'email' ? { delivery } : {}), ...(own ? { message: own } : {}) });
   }
   const tenantId = context.get('tenantId');
-  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}) });
+  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
   // Idempotency is by the envelope itself: its id comes from the tenant and the Idempotency-Key, and
   // it keeps the hash of the request that created it. A retry of that request gets the response a
@@ -348,8 +363,8 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   // or not at all.
   const statements = [
     // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
-    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}) } satisfies EnvelopeDetails)),
-    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}) } satisfies TaskDetails))),
+    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
+    ...recipients.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
   ];
   try { await context.env.DB.batch(statements); }
@@ -358,6 +373,12 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     const raced = await lookup();
     if (raced) return replay(raced);
     throw error;
+  }
+  // The first signer's invitation, when Esign invites them: after the response, where the platform allows.
+  if (deliveries[0] === 'email') {
+    const invite = sendDueInvitations(context.env, tenantId, id);
+    if (context.env.WAIT_UNTIL) context.env.WAIT_UNTIL(invite);
+    else await invite;
   }
   return context.json(createdResponse(id), 201);
 });
@@ -370,11 +391,13 @@ app.get('/api/envelopes/:id', async (context) => {
   const envelope = await context.env.DB.prepare('SELECT id, template_id, status, created_at, details_json FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ id: string; template_id: string; status: string; created_at: number; details_json: string }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
-  const tasks = await context.env.DB.prepare(`SELECT t.id, t.role, t.recipient_name, t.recipient_email, t.routing_order, t.status, t.expires_at,
-      (SELECT MIN(a.occurred_at) FROM audit_events a WHERE a.envelope_id = t.envelope_id AND a.task_id = t.id AND a.type = ?) AS opened_at
-    FROM tasks t WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; opened_at: number | null }>();
+  // invitedAt: when Esign last emailed the signer's invitation (delivery 'email').
+  const tasks = await context.env.DB.prepare(`SELECT t.id, t.role, t.recipient_name, t.recipient_email, t.routing_order, t.status, t.expires_at, t.details_json,
+      (SELECT MIN(a.occurred_at) FROM audit_events a WHERE a.envelope_id = t.envelope_id AND a.task_id = t.id AND a.type = ?) AS opened_at,
+      (SELECT i.sent_at FROM invitations i WHERE i.task_id = t.id) AS invited_at
+    FROM tasks t WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; details_json: string; opened_at: number | null; invited_at: number | null }>();
   const details = envelopeDetails(envelope.details_json);
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, tasks: tasks.results.map((task) => ({ id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }) })) });
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
 });
 
 /**

@@ -282,7 +282,12 @@ test('OAuth clients: below 1280px each row keeps its status and actions in view:
   const owner = await h.user({ name: 'Nina Owner' })
   const orgId = await h.org(owner.client, 'Narrow Screens Org')
   const editor = await member(orgId, 'Ned Editor', 'EDITOR')
-  await createClient(owner, orgId, 'Narrowscreenclientwithaverylongnamewithoutanyspaces')
+  const narrow = await createClient(owner, orgId, 'Narrowscreenclientwithaverylongnamewithoutanyspaces')
+  // Its role is a custom one whose name is 60 characters without a space, the longest a role's name may be.
+  const roleName = 'Quarterlyfinancereportingexportreadonlyroleforauditorsabcdef'
+  assert.equal(roleName.length, 60)
+  await h.sql("INSERT INTO custom_roles (id, org_id, app, name, permissions, created_at, updated_at) VALUES ('narrow-role', ?1, 'captable', ?2, '[\"captable.view\"]', 1, 1)", orgId, roleName)
+  await h.sql("UPDATE service_accounts SET role = 'CUSTOM', custom_role_id = 'narrow-role' WHERE id = ?1", narrow.id)
   await connect(h, editor, orgId, { name: 'Narrow Agent' })
   const html = (await page(owner, orgId)).text
   const classes = (tag) => /class="([^"]*)"/.exec(tag)?.[1].split(/\s+/) ?? []
@@ -294,6 +299,7 @@ test('OAuth clients: below 1280px each row keeps its status and actions in view:
   ])
   const rows = html.split('<tbody')[1].split('<tr').slice(1)
   assert.equal(rows.length, 2)
+  assert.ok(html.includes(`Cap Table · ${roleName} · created`), 'the client shows its custom role')
   for (const row of rows) {
     const cells = [...row.matchAll(/<td [^>]*>/g)].map((match) => classes(match[0]).includes('max-xl:hidden'))
     assert.deepEqual(cells, [false, true, true, true, true, false], 'the same columns hide in every row')
@@ -304,8 +310,9 @@ test('OAuth clients: below 1280px each row keeps its status and actions in view:
     assert.match(text, /By (Nina Owner|Ned Editor) \([^)]+\) · last used (Never|\d{4}-\d{2}-\d{2})/, 'creator and last use')
     assert.match(narrow, /API access|AI agent \(MCP\)/, 'the type')
     assert.match(narrow, />Active</, 'the status')
-    // A long name or address can't widen the table: it wraps anywhere.
+    // A long name, role or address can't widen the table: it wraps anywhere.
     assert.match(first, /<div class="[^"]*\[overflow-wrap:anywhere\][^"]*">Narrow/, 'the name wraps anywhere')
+    assert.match(first, /<div class="[^"]*\[overflow-wrap:anywhere\][^"]*">Cap Table[^<]* · created /, 'the app and role wrap anywhere')
   }
 })
 

@@ -115,7 +115,7 @@ function ClientsTable({ ctx, data }: { ctx: Context; data: OAuthClientsData }) {
                 {row.kind === "api"
                   ? <code className="font-mono text-xs break-all text-muted-foreground">{row.detail}</code>
                   : <div className="text-xs text-muted-foreground">{row.detail}</div>}
-                <div className="text-xs text-muted-foreground">{row.app} · created {day(row.createdAt)}</div>
+                <div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.app} · created {day(row.createdAt)}</div>
                 <div className="text-xs text-muted-foreground [overflow-wrap:anywhere] xl:hidden">By {row.createdBy} · last used {day(row.lastUsedAt)}</div>
                 <div className="mt-2 flex flex-wrap items-start gap-2 xl:hidden">
                   <TypeBadge row={row} />

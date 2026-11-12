@@ -10,7 +10,8 @@ import { MIGRATIONS_DIR, splitSql as unstable_splitSqlQuery } from './helpers/pl
 import app from './helpers/gateway.ts';
 import { finalizeManagedEvidence, verifyManagedEvidence, managedDelivery, managedEvidenceKey, type ManagedEvidenceConfig } from '../src/app/server/esign/seal/managed.ts';
 import { deliveryPdf } from '../src/app/server/esign/delivery-pdf.ts';
-import { evidenceMessage } from '../src/app/server/esign/seal/kms.ts';
+import { signEvidence } from '../src/app/server/esign/seal/signing.ts';
+import { makeSealKey } from './helpers/seal-key.ts';
 import { startOpensslTsa } from './helpers/openssl-tsa.ts';
 import { mailRelay, RELAY_URL } from './helpers/mail-relay.ts';
 import {processEnvelopeStep} from '../src/app/server/esign/envelope-completion.ts';
@@ -18,22 +19,20 @@ import {processEnvelopeStep} from '../src/app/server/esign/envelope-completion.t
 const ORIGIN = 'https://esign.example.test';
 const KEY = 'm'.repeat(64);
 const TSA_URL = 'http://tsa.example.test/';
-const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b), x => x.toString(16).padStart(2, '0')).join('');
 
 async function sealing() {
   const tsa = await startOpensslTsa();
-  const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
-  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
+  const key = await makeSealKey();
   const counts = { sign: 0, tsa: 0 };
-  const tsaTrust = { url: TSA_URL, roots: tsa.roots, policies: [tsa.policy], signerSpkiSha256: [tsa.signerSpkiSha256], missingAccuracyMs: 1000 };
+  const tsaTrust = { url: TSA_URL, roots: tsa.roots, policies: [tsa.policy], issuerSpkiSha256: [tsa.issuerSpkiSha256], missingAccuracyMs: 1000 };
   const config: ManagedEvidenceConfig = {
     sealer: {
-      keyArn: 'arn:aws:kms:us-west-2:123456789012:key/00000000-0000-4000-8000-000000000000', publicKeySpki: spki,
-      signEvidence: async input => { counts.sign++; return new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, Uint8Array.from(evidenceMessage(input)))); },
+      keyId: key.entry.id, publicKeySpki: key.spki,
+      signEvidence: input => { counts.sign++; return signEvidence(input, key.spki, key.privateKey); },
       tsa: tsaTrust,
       fetch: (async (request: Request) => { counts.tsa++; return new Response(await tsa.reply(new Uint8Array(await request.arrayBuffer())), { headers: { 'content-type': 'application/timestamp-reply' } }); }) as typeof fetch,
     },
-    trust: { publicKeySha256: [hex(await crypto.subtle.digest('SHA-256', spki))], tsa: tsaTrust },
+    trust: { keys: [key.entry], tsa: tsaTrust },
   };
   return { tsa, config, counts };
 }
@@ -78,10 +77,12 @@ test('a finished envelope is sealed once, completed, and verified on every read'
     const sealed = await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
     assert.equal(await e.status(), 'COMPLETED');
     assert.deepEqual(counts, { sign: 1, tsa: 1 });
-    assert.equal(sealed.keyArn, config.sealer.keyArn);
-    const row = await e.db.prepare("SELECT object_key,key_arn,timestamp_time FROM seals WHERE envelope_id=? AND mode='KMS_TSA'").bind(e.id).first();
-    assert.deepEqual(row, { object_key: managedEvidenceKey(e.id), key_arn: config.sealer.keyArn, timestamp_time: sealed.timestampTime });
+    assert.equal(sealed.keyId, config.sealer.keyId);
+    const row = await e.db.prepare("SELECT object_key,key_id,timestamp_time FROM seals WHERE envelope_id=? AND mode='KEY_TSA'").bind(e.id).first();
+    assert.deepEqual(row, { object_key: managedEvidenceKey(e.id), key_id: config.sealer.keyId, timestamp_time: sealed.timestampTime });
     const verified = await verifyManagedEvidence(e.db, e.bucket, 'tenant', e.id, config.trust);
+    assert.deepEqual(verified.identities.map(({ email, role }) => ({ email, role })), [{ email: 'ana@partner.test', role: 'partner' }, { email: 'marcus@seller.test', role: 'isv' }], 'the sealed signers');
+    assert.ok(verified.identities.every(identity => /^[0-9a-f]{64}$/.test(identity.disclosure?.sha256 ?? '')), 'with the consent text they agreed to');
     assert.equal(verified.signatures.length, 2);
     assert.equal(verified.seal.timestampTime, sealed.timestampTime);
     // Finalizing again changes nothing and makes no new signature or timestamp.
@@ -105,6 +106,22 @@ test('a retry after a stored seal but before completion reuses the seal', async 
   } finally { await e.mf.dispose(); await tsa.dispose(); }
 });
 
+test('a seal that would not verify is never stored: the envelope stays FINALIZING, and is sealed once its key is trusted', async () => {
+  const { tsa, config } = await sealing();
+  const e = await finishedEnvelope();
+  try {
+    const entry = config.trust.keys[0]!;
+    // Stored seals are never replaced, so a key keys.ts doesn't list, or lists as not yet in use, must not seal anything.
+    for (const keys of [[], [{ ...entry, from: new Date(Date.now() + 86_400_000).toISOString() }]]) {
+      await assert.rejects(finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, { ...config, trust: { ...config.trust, keys } }));
+      assert.equal(await e.bucket.get(managedEvidenceKey(e.id)), null, 'nothing stored');
+      assert.equal(await e.status(), 'FINALIZING');
+    }
+    await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
+    assert.equal(await e.status(), 'COMPLETED');
+  } finally { await e.mf.dispose(); await tsa.dispose(); }
+});
+
 test('verification fails when the signed PDF or the stored seal changes, and the delivery PDF says how it was sealed', async () => {
   const { tsa, config } = await sealing();
   const e = await finishedEnvelope();
@@ -112,16 +129,21 @@ test('verification fails when the signed PDF or the stored seal changes, and the
     await finalizeManagedEvidence(e.db, e.bucket, 'tenant', e.id, config);
     const verified = await verifyManagedEvidence(e.db, e.bucket, 'tenant', e.id, config.trust);
     const delivery = await deliveryPdf(e.db, e.bucket, 'tenant', e.id, managedDelivery(e.db, e.bucket, 'tenant', e.id, config.trust));
-    assert.equal(delivery.metadata.format, 'esign-delivery-v1');
+    assert.equal(delivery.metadata.format, 'esign-delivery-v2');
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const loaded = await pdfjs.getDocument({ data: new Uint8Array(delivery.bytes), useSystemFonts: true }).promise;
     const pageText = (await (await loaded.getPage(loaded.numPages)).getTextContent()).items.map((i: any) => i.str ?? '').join(' ');
-    assert.match(pageText, /AWS KMS/);
+    assert.match(pageText, /Sealed by E-sign/);
+    assert.match(pageText, /Certificate page 1 of 1/, 'two signers fit on one certificate page');
     assert.doesNotMatch(pageText, /LOCAL TEST ONLY/);
     const allText = (await Promise.all(Array.from({ length: loaded.numPages }, async (_, i) => (await (await loaded.getPage(i + 1)).getTextContent()).items.map((x: any) => x.str ?? '').join(' ')))).join(' ');
-    assert.match(allText, /Audit trail \(UTC\)/);
-    assert.match(allText, /otp verified/);
-    assert.match(allText, /signed · Ana Partner/);
+    assert.match(allText, /Events \(UTC\)/);
+    assert.match(allText, /Confirmed the emailed code +Ana Partner/);
+    assert.match(allText, /Signed +Marcus Seller/);
+    assert.match(allText, /Sealed and completed +E-sign/);
+    assert.ok(allText.includes(`Completed and sealed ${new Date(verified.seal.timestampTime).toISOString().slice(0, 19).replace('T', ' ')} UTC`));
+    assert.ok(allText.includes(verified.seal.keyId), 'the seal key fingerprint');
+    assert.match(allText, /Email +ana@partner\.test/, 'the sealed email');
     const finalKey = verified.signatures[verified.signatures.length - 1].object_key;
     const original = await (await e.bucket.get(finalKey))!.arrayBuffer();
     await e.bucket.put(finalKey, 'tampered');
@@ -191,7 +213,7 @@ test('once completed, each signer is emailed one link to their copy: the signed 
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const pdf = await pdfjs.getDocument({ data: Uint8Array.from(delivery.bytes), useSystemFonts: true }).promise;
     const lastPage = (await (await pdf.getPage(pdf.numPages)).getTextContent()).items.map((i: any) => i.str ?? '').join(' ');
-    assert.match(lastPage, /AWS KMS/, 'the copy carries the certificate pages');
+    assert.match(lastPage, /Sealed by E-sign/, 'the copy carries the certificate pages');
   } finally { await e.mf.dispose(); await tsa.dispose(); }
 });
 

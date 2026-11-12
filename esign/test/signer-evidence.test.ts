@@ -65,7 +65,7 @@ async function harness() {
     for (let n = 1; n <= doc.numPages; n++) text += ((await (await doc.getPage(n)).getTextContent()).items as { str?: string }[]).map(i => i.str ?? '').join(' ') + '\n';
     return { text, bytes };
   };
-  return { mf, db, auth, req, json, create, signAll, certificateText };
+  return { mf, db, env, auth, req, json, create, signAll, certificateText };
 }
 
 test('the sender, who named the signer and the host sign-in are validated and part of the idempotent request', async () => {
@@ -109,13 +109,16 @@ test('the certificate names the sender, who named the signer, how they were iden
       'Pedro Alves (applicant), accepted by Harness',
       'Google Workspace sign-in (northbeam.test) at 2026-11-08T09:30:00Z, stated by the sender',
       'email one-time code',
-      'IP 203.0.113.9',
-      'Events summary (UTC)',
-      'Sent by Dana Seller',
-      'Opened by Ana Ribeiro',
-      'Identity confirmed: Ana Ribeiro',
-      'Signed by Ana Ribeiro as Partner Manager, on behalf of Northbeam',
-      // Long values wrap mid-word on the page: compare without whitespace.
+      'ana@northbeam.test',
+      'as Partner Manager, on behalf of Northbeam (authority confirmed)',
+      'Agreed to the electronic records disclosure, version',
+      '203.0.113.9 - Mozilla/5.0 (Synthetic signer)',
+      'Sent for signature Dana Seller',
+      'Signing link issued to Ana Ribeiro Sender',
+      'Opened the document Ana Ribeiro 203.0.113.9',
+      'Confirmed the emailed code Ana Ribeiro 203.0.113.9',
+      'Signed Ana Ribeiro 203.0.113.9',
+      // Long values wrap between words on the page: compare without whitespace.
     ]) assert.ok(text.replace(/\s+/g, '').includes(expected.replace(/\s+/g, '')), `missing ${expected}`);
     // Rebuilt on every read: the same bytes again.
     assert.deepEqual((await h.certificateText(id)).bytes, bytes);
@@ -145,7 +148,26 @@ test('page views are recorded once per page before the code, and the certificate
     const { events } = await (await h.req(`/api/envelopes/${id}/audit`, { headers: h.auth })).json() as { events: { type: string; detail?: Record<string, unknown> }[] };
     assert.deepEqual(events.find(e => e.type === 'PAGES_VIEWED')?.detail, { pages: [1], total: 1 });
     const { text } = await h.certificateText(id);
-    assert.ok(text.replace(/\s+/g, '').includes('Viewed1of1pages:AnaRibeiro'));
+    assert.ok(text.replace(/\s+/g, '').includes('Viewed1of1pagesAnaRibeiro'));
+  } finally { await h.mf.dispose(); }
+});
+
+test('a completed envelope stays readable while signing is off: its certificate, delivery PDF and copy', async () => {
+  const h = await harness();
+  try {
+    const { id } = await (await h.create('read-while-off')).json() as { id: string };
+    await h.signAll(id);
+    // Without its test mailbox the local deployment signs nothing more; verifying what it completed needs only the seal's trust.
+    const off = { ...h.env, TEST_MAIL: undefined };
+    const req = (path: string, init: RequestInit = {}) => app.fetch(new Request('http://localhost' + path, init), off);
+    assert.equal((await (await req('/api/public/signing-page')).json() as { signingEnabled: boolean }).signingEnabled, false);
+    for (const path of [`/api/envelopes/${id}/certificate`, `/api/envelopes/${id}/delivery-pdf`]) {
+      const read = await req(path, { headers: h.auth });
+      assert.equal(read.status, 200, path);
+      assert.equal(read.headers.get('cache-control'), 'no-store', path);
+    }
+    const copy = await req('/api/public/copies/open', h.json({ token: 'f'.repeat(64) }, { origin: 'http://localhost' }));
+    assert.deepEqual([copy.status, await copy.json()], [410, { error: 'link_unavailable' }], 'an unknown link, not signing_disabled');
   } finally { await h.mf.dispose(); }
 });
 
@@ -154,19 +176,6 @@ test('page views need a live page session', async () => {
   try {
     const res = await h.req('/api/public/signing/page-views', h.json({ pages: [1], total: 1 }, { origin: ORIGIN, 'x-esign-session': 'a'.repeat(64) }));
     assert.equal(res.status, 401);
-  } finally { await h.mf.dispose(); }
-});
-
-test('an envelope made before keeps its original certificate layout', async () => {
-  const h = await harness();
-  try {
-    const { id } = await (await h.create('o1', { sender: { name: 'Dana Seller' } })).json() as { id: string };
-    // As an envelope created before certificate versions existed.
-    await h.db.prepare("UPDATE envelopes SET details_json = json_remove(details_json, '$.certificateVersion') WHERE id = ?").bind(id).run();
-    await h.signAll(id, AUTH);
-    const { text } = await h.certificateText(id);
-    assert.ok(!text.includes('Events summary'), 'no version-2 sections');
-    assert.ok(!text.includes('Dana Seller'));
   } finally { await h.mf.dispose(); }
 });
 

@@ -27,7 +27,7 @@ seals the finished envelope and emails each signer a link to their copy.
   with R2's create-only put (`onlyIf: { etagDoesNotMatch: '*' }`). The local preview's test mailbox
   is a second bucket, `test-mail`.
 - **Work in requests, and the platform's tick.** The app has no cron. Once a signature is accepted
-  it is rendered, and after the last one the envelope sealed (KMS and the timestamp authority),
+  it is rendered, and after the last one the envelope sealed (the seal key and the timestamp authority),
   through the request's `waitUntil` that Nitro puts on the request on Workers: the signer gets their
   response first and never waits for the seal. Without one (the tests) it runs in the request. Work
   cut short, by a CPU limit or an outage, leaves the signature `PENDING` or the envelope
@@ -55,13 +55,15 @@ published app is `prod` (`environment.ts`).
 | | dev (local preview) | prod (published) |
 | --- | --- | --- |
 | Codes | kept in the test mailbox, read back with `GET /api/test-mail/:id`; emailed only if a relay is configured; without one only synthetic addresses (`example.com`, `.test`) get a code | emailed to the recipient through the relay, kept nowhere |
-| Seal | KMS + TSA when configured, else the HMAC test seal | KMS + TSA only |
+| Seal | the seal key + TSA when bound, else the HMAC test seal | the seal key + TSA only |
 | Signing page hosts | the app, plus `SIGNING_PAGE_ORIGINS` | the app only |
 | Origins that may embed | https, or http on a loopback host | https only |
 | Identity | the platform's, or a preview Owner when there is none | the platform's |
 
-prod signs nothing until it has `ESIGN_OTP_KEY` (at least 32 characters), the mail relay and
-`ESIGN_KMS_KEY_ARN` (`prodProblems`); until then the signing routes answer 404 `signing_disabled`.
+prod signs nothing until it has `ESIGN_OTP_KEY` (at least 32 characters), the mail relay, the
+`ESIGN_SEAL_KEY` binding and a current key in `seal/keys.ts` (`prodProblems`); until then the signing
+routes answer 404 `signing_disabled`. Reading a completed envelope (its certificate, delivery PDF and
+signers' copies) doesn't wait for that: it needs only the trust in the code.
 
 ## Configuration
 
@@ -71,11 +73,18 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | --- | --- |
 | `ESIGN_OTP_KEY` | The pepper of the emailed codes (at least 32 characters) |
 | `ESIGN_FRAME_ANCESTORS` | Space-separated host origins that may embed the signing page and the editor (the app's own origin always may) |
-| `ESIGN_KMS_KEY_ARN`, `ESIGN_KMS_PUBLIC_KEY`, `ESIGN_KMS_TRUSTED_KEY_SHA256` | The managed seal's AWS KMS key, its public key (base64 SPKI) and the trusted key hashes |
-| `ESIGN_AWS_ROLE_ARN`, `ESIGN_AWS_ACCESS_KEY_ID`, `ESIGN_AWS_SECRET_ACCESS_KEY` | The credentials that assume the role allowed to sign with the key |
-| `ESIGN_TSA_SIGNER_SPKI_SHA256` | The pinned signer keys of the timestamp authority |
 
 The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY` service binding they are used over.
+
+**The seal key** is not one of those secrets. `ESIGN_SEAL_KEY` is a Cloudflare `secret_key` binding on the Worker: the
+private half of the managed seal's ECDSA P-256 key, which the Worker gets as a `CryptoKey` that can sign and can't be
+exported (`src/app/server/seal-key-binding.ts`). `scripts/put-seal-key.mjs` makes a key and puts it there; the private
+key is never printed, stored or held in GitHub, and Cloudflare can't give it back. `insulin.secrets` doesn't list it,
+so the deploy never overwrites it, and `wrangler deploy` keeps a Worker's `secret_key` bindings. The public half of
+every key that has sealed is in `src/app/server/esign/seal/keys.ts`, with the time it was in use: that list, reviewed
+in the source, is what seals are verified against, never the deployment's configuration. Sealing refuses a binding
+that isn't a non-extractable P-256 signing key, or one that isn't the pair of the current entry in `keys.ts`; a
+finished envelope then waits, `FINALIZING`, until it is fixed.
 
 ## The members' app and the Docs
 
@@ -168,12 +177,20 @@ Two ways to sign:
 | Field | What is drawn |
 | --- | --- |
 | Signature | The typed text (Latin letters and single spaces, 1–64 characters) rendered on the server from a bundled Caveat bitmap atlas (`caveat-bitmap-v2`), 30 points high. It may extend to the right of its box but not off the page or over another field. Typed text is not the authenticated recipient name |
-| Title | The title the signer gave on Review (printable ASCII, at most 128 characters), 27-point text that must fit its box |
-| Date signed | The server's UTC date when the signature is accepted, 27-point text that must fit its box |
+| Title | The title the signer gave on Review (printable ASCII, at most 128 characters), 18-point text that must fit its box |
+| Date signed | The server's UTC date when the signature is accepted, 18-point text that must fit its box |
+
+Title and Date signed text is drawn from a bundled, anti-aliased Liberation Sans atlas 96 pixels high,
+each character at the font's own advance, 18 points high (its capitals 9 points, about half a
+signature's), on the baseline earlier versions used: 7.3 points below the box's top
+(`liberation-sans-aa-v4`); the preview says so in `X-Text-Top`. Signatures recorded with an earlier
+renderer name it in `render_json` and are still verified and drawn with it: the same atlas 27 points
+high from the box's top (`liberation-sans-aa-v3`), or a 1-bit, 32-pixel one 27 points high
+(`liberation-sans-bitmap-v2`). New signatures always use v4.
 
 Every field is previewed through `POST /api/public/signing/preview` with `{fieldId, text}` (no `text` for
 Date signed). It returns the PNG that will be drawn, with its size relative to the box
-(`X-Signature-Width`/`-Height` or `X-Text-Width`/`-Height`) and, for Signature and Title, a receipt
+(`X-Signature-Width`/`-Height`, or `X-Text-Width`/`-Height`/`-Top`) and, for Signature and Title, a receipt
 (`X-Signature-Preview`, `X-Text-Preview`) that binds the input, the template, the field, the text,
 the image and its geometry. The sign request sends back the receipts and the dates the page showed
 (`datePreviews`); a date that changed in between (after midnight UTC) is refused with
@@ -197,20 +214,22 @@ rendering and every later re-verification fail closed if the running renderer di
 - A recipient-view request may carry `hostAuthentication` (`{method, provider?, domain?,
   signedInAt?}`, `method` an upper-case word such as `SSO`): how the host signed the recipient in.
   Esign cannot check it; it is recorded and printed as the host's statement.
-- Certificates are versioned per envelope (`certificateVersion` in `envelopes.details_json`, now 2;
-  none means 1). A certificate is rebuilt on every read and must come out the same, so each
-  envelope keeps the layout it was created with. Change the layout only by adding a version.
+- The delivery PDF's certificate pages are stored once and rebuilt on every read, which must come
+  out byte for byte the same, so they show only what is fixed by completion: the sealed events (for
+  the local seal, those up to the last signature) and facts set at creation. A layout change
+  renames the stored file (`delivery-v2.pdf`, `local-delivery-v4.pdf`, see `delivery-pdf.ts`).
 
 ## Data model
 
 `src/app/db/schema.ts` declares the tables; `src/app/db/migrations/` holds the generated
-`0000_init.sql` and the custom `0001_triggers.sql` (the triggers Drizzle can't declare). Every record
+`0000_init.sql` and `0003_labels.sql`, the custom `0001_triggers.sql` (the triggers Drizzle can't declare), and
+`0002_seal_key.sql`, a rebuild of `seals` written by hand in drizzle-kit's form (it changes a CHECK constraint). Every record
 of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 16
 tables:
 
 | Table | Holds |
 | --- | --- |
-| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none) |
+| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none), the host's `name` and `metadata_json` |
 | `envelopes` | Tenant, template, status, creation time, `request_sha256`, `details_json` |
 | `tasks` | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
 | `artifacts` | Each envelope's initial document (D0): object key and SHA-256 |
@@ -218,8 +237,8 @@ tables:
 | `access_sessions` | Page sessions (hashed tokens) with the same fields and `otp_verified_at` |
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
-| `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KMS_TSA`), the seal's object key and hash, and for `KMS_TSA` the key ARN and timestamp time |
-| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the saved template |
+| `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |
+| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template |
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
@@ -230,7 +249,11 @@ JSON columns. A new optional fact about an envelope or task needs no new table o
 of `details_json` keep only known keys of the expected types. A fact that queries filter on is a
 real column (`tasks.expires_at`).
 
-- `envelopes.details_json`: `documentName`, `sender`, `certificateVersion` (`src/app/server/esign/details.ts`).
+- `envelopes.details_json`: `documentName`, `documentVersion`, `sender`, `metadata` (`src/app/server/esign/details.ts`).
+- `templates.name` and `templates.metadata_json`: the host's name and metadata for a template, which only label it
+  (`src/app/server/esign/metadata.ts`). An editing session keeps those it was opened with
+  (`editor_sessions.template_name`, `template_metadata_json`) for the template it saves; without them the saved template
+  keeps its source template's.
 - `tasks.details_json`: `title`, `onBehalfOf`, `namedBy`.
 - `signatures.facts_json` (`"version": 1`): who signed and how they were identified: the task,
   role, recipient name, the email the code was verified for (the task's), the page session hash,
@@ -391,22 +414,24 @@ byte for byte, and every stored file's hash. It then builds the manifest
 (`esign-evidence-manifest-v1`) with each signature's facts and rendering. The same checks run
 again on every certificate and delivery PDF read, so a changed record, image or PDF makes them fail.
 
-| | Local test seal (`LOCAL_TEST`) | Managed seal (`KMS_TSA`) |
+| | Local test seal (`LOCAL_TEST`) | Managed seal (`KEY_TSA`) |
 | --- | --- | --- |
-| Used | dev without `KMS_KEY_ARN` (locally) | whenever `KMS_KEY_ARN` is set; prod allows nothing else |
+| Used | dev (the local preview), which has no seal key | whenever the `ESIGN_SEAL_KEY` binding is there; prod allows nothing else |
 | Covers | The manifest | The manifest and the audit trail up to sealing (`esign-sealed-evidence-v2`); later events are listed as recorded after sealing |
-| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An AWS KMS ECDSA P-256 signature over a SHA-256 digest of a domain-separated message, verified against the pinned `KMS_PUBLIC_KEY`; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, signer and policy pinned in `src/app/server/esign/seal/tsa.ts` and within five minutes of the app's clock |
-| Stored | `envelopes/<id>/local-test-evidence.json` | `envelopes/<id>/managed-evidence.json`, made once; a retry reuses it |
-| Verified | Recomputed with the current key on each read, so changing the key breaks old seals | Signature and timestamp checked on each read, as of the timestamp's time; earlier keys stay trusted through `KMS_TRUSTED_KEY_SHA256` |
-| Certificate | `mode: LOCAL TEST ONLY` | `mode: KMS_TSA`; records a `COMPLETED` audit event |
+| How | Two HMACs with `TEST_SEAL_KEY`; the "timestamp" is the last signature's consent time | An ECDSA P-256 (SHA-256) signature with the seal key over a domain-separated message, checked against the current key's public half in `keys.ts` before anything is stored; then an RFC 3161 timestamp over that signature from DigiCert's public TSA, nonce-bound, verified against the root, the issuing CA and the policy pinned in `src/app/server/esign/seal/tsa.ts` and within five minutes of the app's clock |
+| Stored | `envelopes/<id>/local-test-evidence.json` | `envelopes/<id>/managed-evidence.json` (`esign-managed-seal-v2`), made once and verified before it is stored; a retry reuses it |
+| Verified | Recomputed with the current key on each read, so changing the key breaks old seals | Signature and timestamp checked on each read, as of the timestamp's time, with a key `keys.ts` lists as in use at that time; retired keys stay listed, with an end, so their seals keep verifying and they seal nothing new |
+| Certificate | `mode: LOCAL TEST ONLY` | `mode: KEY_TSA`, with the key's fingerprint; records a `COMPLETED` audit event |
 
 The seals' code is in `src/app/server/esign/seal/`: `evidence.ts` (the manifest and the seal commit), `local.ts`
 (the local test seal), `managed.ts` (the managed seal and its envelope flow), `config.ts` (which seal
-is configured), `kms.ts` (the signed message and local verification, the KMS `Sign` call and the
-conversion of its DER signature, and the assumed-role credentials: the app holds an IAM user key
-that may only assume one role, and that role may only sign with this key) and `tsa.ts` (the RFC 3161
-query, the response check and the pinned DigiCert trust). Revocation of the TSA certificates is not
-checked, and the certificate says so.
+is configured, and the trust to verify with), `keys.ts` (the trusted seal keys and their time in use),
+`signing.ts` (the signed message, which keys may sign, and signing checked against the named public key)
+and `tsa.ts` (the RFC 3161
+query, the response check and the pinned DigiCert trust). The pin is the CA that issues DigiCert's
+timestamping certificates, not the certificate itself, so DigiCert replacing it doesn't stop sealing;
+a new CA is a change to `tsa.ts`, and the deployment's configuration can't add one. Revocation of the
+TSA certificates is not checked, and the certificate says so.
 
 **Audit trail** (`src/app/server/esign/audit.ts`): the signing link issued, the page opened, each code sent, the
 code verified, the document fetched, pages viewed (the page posts `POST /api/public/signing/page-views`
@@ -419,8 +444,12 @@ version, an old version is refused (`409 disclosure_changed`), and the signature
 event record the version and its SHA-256.
 
 **Delivery PDF.** `GET /api/envelopes/:id/delivery-pdf` returns the final signed PDF, page for page,
-with certificate pages appended. It is created on the first request (`envelopes/<id>/delivery-v1.pdf`
-for the managed seal, `local-delivery-v3.pdf` for the local one) with a conditional create; later
+with certificate pages appended: the document (pages, status, the seal's time, authority and key
+fingerprint, the original and signed SHA-256), each signer (sealed email, title and company, who named
+them, how they were identified, consent version, IP and device) and one table of events with who and
+from which IP. Every fingerprint and the full audit trail stay on the certificate of completion. It
+is created on the first request (`envelopes/<id>/delivery-v2.pdf` for the managed seal,
+`local-delivery-v4.pdf` for the local one) with a conditional create; later
 requests rebuild it and check the stored bytes match. The seal covers the signed PDF, not the
 delivery PDF. There is no endpoint for the signed PDF alone. After completion each signer is
 emailed a link to this PDF once (`src/app/server/esign/signed-copies.ts`), which the public `/copy`
@@ -452,8 +481,8 @@ is enabled.
 | `POST /api/envelopes/:id/void` | Optional `{reason}` (at most 500 characters); a repeat is a no-op; any status other than `IN_PROGRESS` answers `409 envelope_not_voidable` |
 | `GET /api/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
 | `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{origin?, hostAuthentication?}`; returns `{code}` for the active task |
-| `GET /api/envelopes/:id/delivery-pdf` † | The signed PDF with its certificate, for a `COMPLETED` envelope |
-| `GET /api/envelopes/:id/certificate` † | The completion certificate as JSON (shown on the envelope page), verified on every read |
+| `GET /api/envelopes/:id/delivery-pdf` | The signed PDF with its certificate, for a `COMPLETED` envelope |
+| `GET /api/envelopes/:id/certificate` | The completion certificate as JSON (shown on the envelope page), verified on every read |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 

@@ -11,10 +11,16 @@ const digest = async (value:ArrayBuffer) => hex(await crypto.subtle.digest('SHA-
 export type SignatureRow={id:string;sequence:number;task_id:string;recipient_name:string;input_artifact_id:string;input_sha256:string;otp_verified_at:number;consented_at:number;previous_hash:string;event_hash:string;artifact_id:string;object_key:string;sha256:string};
 const MANIFEST_FORMAT='esign-evidence-manifest-v1';
 /**
+ * Who each signer was, as their sealed signing record says (SignatureFacts): the address the code was sent to and
+ * verified for, the role, the consent text and any title and company. The manifest seals it within `records`; this is
+ * that part again for the certificate, outside the manifest, so the manifest itself never changes.
+ */
+export type SealedIdentity={signatureId:string;email:string;role:string;disclosure?:{version:string;sha256:string};authority?:{title?:string;onBehalfOf?:string}};
+/**
  * The evidence manifest of a finished envelope, rebuilt from its stored signatures after checking
  * the whole chain: the source, each signature's record and event hash, its rendered PDF (rendered
  * again, byte for byte) and the files' hashes. Sealed by the local HMAC test seal (local.ts) or by
- * the managed KMS + TSA seal (managed.ts).
+ * the managed seal, a seal key signature + TSA (managed.ts).
  */
 export async function buildEvidenceManifest(db:D1Database,bucket:BlobStore,tenantId:string,envelopeId:string) {
   const envelope=await db.prepare('SELECT status FROM envelopes WHERE id=? AND tenant_id=?').bind(envelopeId,tenantId).first<{status:string}>();
@@ -26,7 +32,7 @@ export async function buildEvidenceManifest(db:D1Database,bucket:BlobStore,tenan
   const verifyFile=async (objectKey:string,hash:string) => {const object=await bucket.get(objectKey);if(!object || await digest(await object.arrayBuffer())!==hash) throw new Error('Artifact integrity failure');};
   await verifyFile(d0.object_key,d0.sha256);
   let previous:string|null=null, inputId=d0.id, inputHash=d0.sha256;
-  const rows:SignatureRow[]=[], records:{signatureId:string;facts:unknown;render:unknown}[]=[];
+  const rows:SignatureRow[]=[], records:{signatureId:string;facts:unknown;render:unknown}[]=[], identities:SealedIdentity[]=[];
   for(const [i,row] of stored.entries()) {
     if(row.sequence!==i+1 || row.previous_hash!==previous || row.input_artifact_id!==inputId || row.input_sha256!==inputHash || !row.output_artifact_id || !row.output_sha256) throw new Error('Invalid signature chain');
     const {facts}=await verifySignatureRecord(row);
@@ -36,10 +42,12 @@ export async function buildEvidenceManifest(db:D1Database,bucket:BlobStore,tenan
     await verifyFile(objectKey,row.output_sha256);
     rows.push({id:row.id,sequence:row.sequence,task_id:row.task_id,recipient_name:facts.recipientName,input_artifact_id:row.input_artifact_id,input_sha256:row.input_sha256,otp_verified_at:facts.otpVerifiedAt,consented_at:facts.consentedAt,previous_hash:row.previous_hash??'',event_hash:row.event_hash,artifact_id:row.output_artifact_id,object_key:objectKey,sha256:row.output_sha256});
     records.push({signatureId:row.id,facts:JSON.parse(row.facts_json),render:JSON.parse(row.render_json)});
+    const authority=facts.authority&&(facts.authority.title||facts.authority.onBehalfOf)?{...(facts.authority.title?{title:facts.authority.title}:{}),...(facts.authority.onBehalfOf?{onBehalfOf:facts.authority.onBehalfOf}:{})}:undefined;
+    identities.push({signatureId:row.id,email:facts.recipientEmail,role:facts.role,...(facts.disclosure?{disclosure:{version:facts.disclosure.version,sha256:facts.disclosure.sha256}}:{}),...(authority?{authority}:{})});
     previous=row.event_hash;inputId=row.output_artifact_id;inputHash=row.output_sha256;
   }
   const manifest=JSON.stringify({format:MANIFEST_FORMAT,envelopeId,source:d0,signatures:rows,finalArtifactId:inputId,finalSha256:inputHash,records});
-  return {source:d0,signatures:rows,finalArtifactId:inputId,finalSha256:inputHash,manifest};
+  return {source:d0,signatures:rows,identities,finalArtifactId:inputId,finalSha256:inputHash,manifest};
 }
 /**
  * Records a seal stored in R2 and completes the envelope. The seal object is written first and is
@@ -49,10 +57,10 @@ export async function buildEvidenceManifest(db:D1Database,bucket:BlobStore,tenan
  * crash) is completed by the next run, from completion or the cron sweep, which reuses the seal.
  * Throws unless the envelope ends COMPLETED with exactly this seal. True when this call completed it.
  */
-export async function commitSeal(db:D1Database,tenantId:string,envelopeId:string,seal:{mode:'LOCAL_TEST'|'KMS_TSA';objectKey:string;sha256:string;keyArn?:string;timestampTime?:number}):Promise<boolean> {
+export async function commitSeal(db:D1Database,tenantId:string,envelopeId:string,seal:{mode:'LOCAL_TEST'|'KEY_TSA';objectKey:string;sha256:string;keyId?:string;timestampTime?:number}):Promise<boolean> {
   const [,completed]=await db.batch([
-    db.prepare("INSERT OR IGNORE INTO seals (envelope_id,mode,object_key,sha256,key_arn,timestamp_time) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='FINALIZING')")
-      .bind(envelopeId,seal.mode,seal.objectKey,seal.sha256,seal.keyArn??null,seal.timestampTime??null,envelopeId,tenantId),
+    db.prepare("INSERT OR IGNORE INTO seals (envelope_id,mode,object_key,sha256,key_id,timestamp_time) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='FINALIZING')")
+      .bind(envelopeId,seal.mode,seal.objectKey,seal.sha256,seal.keyId??null,seal.timestampTime??null,envelopeId,tenantId),
     db.prepare("UPDATE envelopes SET status='COMPLETED' WHERE id=? AND tenant_id=? AND status='FINALIZING' AND EXISTS (SELECT 1 FROM seals WHERE envelope_id=? AND mode=? AND object_key=? AND sha256=?)")
       .bind(envelopeId,tenantId,envelopeId,seal.mode,seal.objectKey,seal.sha256),
   ]);

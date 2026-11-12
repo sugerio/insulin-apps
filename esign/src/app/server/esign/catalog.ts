@@ -35,6 +35,14 @@ const recipient = {
   },
 }
 
+/** The host's own labels: kept and returned as given, never read, sealed or shown to signers. */
+const metadata = {
+  type: 'object', maxProperties: 20, propertyNames: { pattern: '^[A-Za-z0-9_.-]{1,40}$' },
+  additionalProperties: { type: 'string', maxLength: 500 },
+  description: 'Your own keys and values (your ids, for instance), returned as given',
+}
+const templateName = text('A name for the template, shown in Esign\'s Templates page', 200)
+
 const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/me', summary: 'Who is calling: the organization, the role and its permissions', query: null, body: null, idempotencyKey: false, permission: null },
   { method: 'GET', path: '/api/catalog', summary: 'The endpoints the caller may use, with their query and body schemas', query: null, body: null, idempotencyKey: false, permission: null },
@@ -46,14 +54,14 @@ const ENTRIES: Entry[] = [
   {
     method: 'POST', path: '/api/templates', summary: 'Upload a PDF (at most 5 MiB and 100 pages) with the roles that sign it, in signing order',
     query: null,
-    body: { type: 'object', description: 'Sent as multipart/form-data fields', required: ['file', 'roles'], properties: { file: { type: 'string', contentMediaType: 'application/pdf' }, roles: { type: 'string', description: 'A JSON array of 1 to 20 distinct role names ([A-Za-z0-9_-], up to 64 characters)' } } },
+    body: { type: 'object', description: 'Sent as multipart/form-data fields', required: ['file', 'roles'], additionalProperties: false, properties: { file: { type: 'string', contentMediaType: 'application/pdf' }, roles: { type: 'string', description: 'A JSON array of 1 to 20 distinct role names ([A-Za-z0-9_-], up to 64 characters)' }, name: templateName, metadata: { type: 'string', description: 'A JSON object: your own keys and values (at most 20 keys of [A-Za-z0-9_.-], up to 40 characters; string values up to 500), returned as given' } } },
     idempotencyKey: false, permission: 'esign.manage',
   },
   { method: 'GET', path: '/api/templates/{id}', summary: 'A template: its roles and placed fields, and whether they can be signed', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   {
     method: 'POST', path: '/api/template-editing-sessions', summary: 'Open the field editor for a host page to embed: a new template, or a copy of an existing one',
     query: null,
-    body: { type: 'object', required: ['allowedParentOrigin'], additionalProperties: false, properties: { allowedParentOrigin: { type: 'string', description: 'The host origin that will frame the editor; one of the deployment\'s allowed origins' }, sourceTemplateId: { type: 'string' }, roles: { type: 'array', maxItems: 20, items: text('A role', 64) } } },
+    body: { type: 'object', required: ['allowedParentOrigin'], additionalProperties: false, properties: { allowedParentOrigin: { type: 'string', description: 'The host origin that will frame the editor; one of the deployment\'s allowed origins' }, sourceTemplateId: { type: 'string' }, roles: { type: 'array', maxItems: 20, items: text('A role', 64) }, name: { ...templateName, description: 'The saved template\'s name; the source template\'s when left out' }, metadata: { ...metadata, description: 'The saved template\'s metadata; the source template\'s when left out' } } },
     idempotencyKey: false, permission: 'esign.manage',
   },
   { method: 'POST', path: '/api/template-editing-sessions/{id}/source', summary: 'Stage the PDF an editing session starts from, before its page is opened (body: the PDF, application/pdf)', query: null, body: { type: 'string', contentMediaType: 'application/pdf' }, idempotencyKey: false, permission: 'esign.manage' },
@@ -72,8 +80,9 @@ const ENTRIES: Entry[] = [
         templateId: { type: 'string' },
         recipients: { type: 'array', minItems: 1, maxItems: 20, items: recipient },
         documentName: text('The document\'s name, shown to signers and named in the statement they agree to', 200),
-        documentVersion: { type: 'object', required: ['label'], properties: { label: text('The version, such as v3', 40), publishedAt: { type: 'string', format: 'date-time' } } },
-        sender: { type: 'object', required: ['name'], properties: { name: text('Who sent it', 200), email: { type: 'string', format: 'email' }, organization: text('Their company', 200) } },
+        documentVersion: { type: 'object', required: ['label'], additionalProperties: false, properties: { label: text('The version, such as v3', 16), publishedAt: { type: 'string', format: 'date-time' } } },
+        sender: { type: 'object', required: ['name'], additionalProperties: false, properties: { name: text('Who sent it', 200), email: { type: 'string', format: 'email' }, organization: text('Their company', 200) } },
+        metadata,
       },
     },
     idempotencyKey: true, permission: 'esign.manage',

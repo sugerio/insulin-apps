@@ -7,7 +7,7 @@
  * | Codes and notices        | kept in the preview's test mailbox; emailed only  | emailed through the mail relay |
  * |                          | if a mail relay is configured                     |                               |
  * | Test mailbox (TEST_MAIL) | every code is kept there for tests to read        | none                          |
- * | Seal                     | KMS + TSA when configured, else the HMAC test     | KMS + TSA, nothing else       |
+ * | Seal                     | seal key + TSA when bound, else the HMAC test     | seal key + TSA, nothing else  |
  * |                          | seal (TEST_SEAL_KEY)                              |                               |
  * | Signing page hosts       | the app, plus SIGNING_PAGE_ORIGINS                | the app only                  |
  * | Origins that may embed   | https, or http on a loopback host                 | https only                    |
@@ -15,6 +15,7 @@
  * Signing and the demo page run in both, once configured (signingEnabled).
  */
 import { relayConfig } from './mail.ts';
+import { currentSealKey, type SealKey } from './seal/keys.ts';
 
 export type EsignEnvironment = 'dev' | 'prod';
 
@@ -28,7 +29,10 @@ export type EnvironmentEnv = {
   TEST_MAIL?: unknown;
   SUGER_MAIL_URL?: string;
   SUGER_APP_TOKEN?: string;
-  KMS_KEY_ARN?: string;
+  /** The managed seal's private key: the Worker's ESIGN_SEAL_KEY binding (seal/config.ts). */
+  SEAL_KEY?: unknown;
+  /** The trusted seal keys (seal/keys.ts). */
+  SEAL_KEYS?: readonly SealKey[];
 };
 
 /** `prod` only when said so; anything else, including unset, is `dev`. */
@@ -53,7 +57,10 @@ export function prodProblems(env: EnvironmentEnv): string[] {
   if (!otpKey(env)) problems.push('ESIGN_OTP_KEY is not set');
   if (!relayConfig(env)) problems.push('the mail relay (SUGER_MAIL_URL, SUGER_APP_TOKEN) is not configured');
   if (env.TEST_MAIL) problems.push('a test mailbox is bound: prod keeps no codes');
-  if (!env.KMS_KEY_ARN) problems.push('ESIGN_KMS_KEY_ARN is not set: prod seals with KMS and TSA only');
+  // Bound, whatever it is: sealing itself refuses anything but a non-extractable P-256 signing key (seal/config.ts),
+  // and a local run of the published app, which can't bind one, signs and leaves envelopes unsealed (FINALIZING).
+  if (env.SEAL_KEY === undefined || env.SEAL_KEY === null || env.SEAL_KEY === '') problems.push('ESIGN_SEAL_KEY is not bound: prod seals with its seal key and a timestamp only');
+  if (!currentSealKey(env.SEAL_KEYS ?? [])) problems.push('seal/keys.ts names no current seal key');
   return problems;
 }
 

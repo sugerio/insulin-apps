@@ -66,7 +66,7 @@ export async function completeEnvelope(env: CompletionEnv, tenantId: string, env
   // The managed seal when configured; otherwise the local test seal, if there is a key for it.
   const managed = await managedEvidenceFromEnv(env);
   if (managed) { await finalizeManagedEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,managed); await sendCopies(env,tenantId,envelopeId); return 'completed'; }
-  // The HMAC test seal: dev only (testSealKey is null in prod, which seals with KMS and TSA only).
+  // The HMAC test seal: dev only (testSealKey is null in prod, which seals with its seal key and TSA only).
   const testKey = testSealKey(env);
   if (!testKey) return 'waiting';
   await finalizeLocalTestEvidence(env.DB,env.ARTIFACTS,tenantId,envelopeId,testKey);

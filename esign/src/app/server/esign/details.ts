@@ -5,9 +5,10 @@
  * expected types, so a malformed or unknown value is ignored rather than trusted.
  */
 import type { DocumentVersion, Sender, SignerFacts } from './signer-facts.ts';
+import { storedMetadata, type Metadata } from './metadata.ts';
 
-/** What the host said about the envelope, and the certificate layout it was created with. */
-export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender; certificateVersion?: number };
+/** What the host said about the envelope, and its metadata (metadata.ts). */
+export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender; metadata?: Metadata };
 /** What the host said about a task's signer, and what it says happens once they sign. */
 export type TaskDetails = SignerFacts & { namedBy?: string; afterSigning?: string[] };
 
@@ -28,7 +29,7 @@ export function envelopeDetails(raw: string | null | undefined): EnvelopeDetails
     documentName: text(value.documentName),
     documentVersion: label ? defined({ label, publishedAt: text(version.publishedAt) }) : undefined,
     sender: name ? defined({ name, email: text(sender.email), organization: text(sender.organization) }) : undefined,
-    certificateVersion: Number.isInteger(value.certificateVersion) ? value.certificateVersion as number : undefined,
+    metadata: Object.keys(storedMetadata(value.metadata)).length ? storedMetadata(value.metadata) : undefined,
   });
 }
 

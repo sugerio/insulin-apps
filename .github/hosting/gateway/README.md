@@ -166,9 +166,10 @@ invitations, stores a credential, creates two OAuth clients and rotates one's se
 Cap Table's own spreadsheet template filled with a fictional company, places Esign fields, sends an envelope and signs
 it, then creates a second organization under the same email domain so that the next one is a request to support
 (`ORG_REQUEST_EMAIL` is set to a synthetic address; mail is captured), with Cloudflare's always-passing Turnstile test
-widget as the only outside call. A completed Esign envelope can't be captured locally (its seal needs AWS KMS and a
-timestamp service), so `esign-completed.png` is a labelled placeholder. Nor can a domain be verified (`wrangler dev`
-can't stub the DNS-over-HTTPS lookup), so `platform-organization.png` shows the invitation setting before one is.
+widget as the only outside call. A completed Esign envelope can't be captured locally (its seal needs a seal key
+binding `wrangler dev` can't provide, and a timestamp service), so `esign-completed.png` is a labelled placeholder. Nor
+can a domain be verified (`wrangler dev` can't stub the DNS-over-HTTPS lookup), so `platform-organization.png` shows
+the invitation setting before one is.
 `--only` writes just the named images, so a change to a few pages doesn't rewrite the rest.
 
 `npm run dev` writes `.dev/gateway.wrangler.json` (from `wrangler.local.jsonc`) and the app Worker's config, applies

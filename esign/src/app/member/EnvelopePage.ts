@@ -104,7 +104,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
   return h('div', { className: 'flex flex-col gap-6' },
     back,
     h(PageHeader, {
-      title: 'Envelope',
+      title: envelope.documentName ?? 'Envelope',
       description: h('span', { className: 'flex flex-wrap items-center gap-2' }, h(StatusBadge, { status: envelope.status }), h('span', { className: 'font-mono text-xs' }, envelope.id), envelope.createdAt ? h('span', null, `Created ${dateTime(envelope.createdAt)}`) : null),
       actions: [
         completed ? h(Button, { key: 'pdf', variant: 'outline', disabled: busy, onClick: downloadPdf }, h(Download, { 'aria-hidden': true }), 'Signed PDF with certificate') : null,
@@ -134,6 +134,12 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
             task.expiresAt && task.status === 'ACTIVE' ? h('div', { className: 'text-xs text-muted-foreground' }, `Deadline ${dateTime(task.expiresAt)}`) : null),
           manage ? h(TableCell, { className: 'text-right' }, task.status === 'ACTIVE' && envelope.status === 'IN_PROGRESS'
             ? h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => openSigning(task) }, h(PenLine, { 'aria-hidden': true }), `Open ${task.recipientName}'s signing page`) : null) : null)))))),
+    envelope.metadata && Object.keys(envelope.metadata).length ? h(Card, null,
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Metadata')), h(CardDescription, null, 'Labels the sender\'s system gave this envelope. Esign keeps them as given; they are not part of the signed evidence.')),
+      h(CardContent, null, h('dl', { 'aria-label': 'Metadata', className: 'grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]' },
+        ...Object.entries(envelope.metadata).flatMap(([key, value]) => [
+          h('dt', { key: `k-${key}`, className: 'font-mono text-xs text-muted-foreground' }, key),
+          h('dd', { key: `v-${key}`, className: 'break-all' }, value)])))) : null,
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Audit trail')), h(CardDescription, null, 'What happened, when and from where, as recorded.')),
       h(CardContent, null, audit.length === 0 ? h('p', { className: 'text-sm text-muted-foreground' }, 'Nothing recorded yet.')
@@ -150,7 +156,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
     certificate && completed ? h(CompletionCertificate, { certificate }) : null,
     // The signing page in a dialog, as a host shows it.
     frame ? h('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4' },
-      h('div', { role: 'dialog', 'aria-modal': true, 'aria-label': 'Signing page', className: 'flex h-[88vh] w-full max-w-6xl flex-col gap-3 rounded-xl border bg-background p-5 shadow-lg' },
+      h('div', { role: 'dialog', 'aria-modal': true, 'aria-label': 'Signing page', className: 'flex h-[88vh] w-full max-w-[1440px] flex-col gap-3 rounded-xl border bg-background p-5 shadow-lg' },
         h('div', { className: 'flex items-start gap-3' },
           h('div', { className: 'flex-1' }, h('h2', { className: 'text-lg font-semibold' }, `${frame.task.recipientName}'s signing page`),
             h('p', { className: 'text-sm text-muted-foreground' }, 'What the signer sees. Their code goes to their own email address.')),

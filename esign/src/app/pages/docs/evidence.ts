@@ -26,7 +26,7 @@ export const evidence: DocTopic = {
       id: 'the-seal',
       title: 'The seal',
       body: [
-        p('When everyone has signed, Esign seals the envelope: it signs a summary of the evidence (the source PDF, each signature, the audit events and the signed PDF) with a key held in AWS KMS, and has that signature timestamped by an independent time-stamping authority (RFC 3161). The seal shows that the evidence hasn\'t changed since, and when it existed.'),
+        p('When everyone has signed, Esign seals the envelope: it signs a summary of the evidence (the source PDF, each signature, the audit events and the signed PDF) with Esign\'s seal key, and has that signature timestamped by an independent time-stamping authority (RFC 3161). The seal shows that the evidence hasn\'t changed since, and when it existed.'),
         p('Events after sealing, such as the signed copies being sent, are still recorded, and marked as recorded after sealing.'),
       ],
     },
@@ -39,13 +39,13 @@ export const evidence: DocTopic = {
           [b('Signed PDF with certificate: '), 'the signed document followed by its certificate of completion, the same file each signer gets.'],
           [b('Certificate of completion: '), 'the seal checked against the stored files, shown on the page, with its key, its timestamp and the fingerprints it binds, the signers and the audit trail. It can be downloaded as JSON.'],
         ),
-        p('What the certificate doesn\'t establish, it says. The envelope\'s current details, such as signers\' email addresses and statuses, are read from the database and aren\'t bound by the seal. Who a signer is, beyond control of their email address at the time, isn\'t established. The time-stamping authority\'s certificates aren\'t checked for revocation.'),
+        p('What the certificate doesn\'t establish, it says. Each signer\'s name, email address, role and the consent text they agreed to are sealed with their signing record; the envelope\'s other current details, such as each signer\'s status, are read from the database and aren\'t bound by the seal. For a signing link issued, the IP address and browser are those of whoever issued the link, not the signer\'s. Who a signer is, beyond control of their email address at the time, isn\'t established. The time-stamping authority\'s certificates aren\'t checked for revocation.'),
       ],
     },
     {
       id: 'the-local-test-seal',
       title: 'The local test seal',
-      body: p('A local preview has no AWS KMS key, so Esign seals with a test key instead, and the certificate says ', b('LOCAL TEST ONLY'), '. Such a certificate is a simulation, with server-recorded times and no independent timestamp. Don\'t rely on it. In a local preview, codes go to a test mailbox instead of being emailed, and the signing page says where to find them.'),
+      body: p('A local preview has no seal key, so Esign seals with a test key instead, and the certificate says ', b('LOCAL TEST ONLY'), '. Such a certificate is a simulation, with server-recorded times and no independent timestamp. Don\'t rely on it. In a local preview, codes go to a test mailbox instead of being emailed, and the signing page says where to find them.'),
     },
     {
       id: 'keeping-records',

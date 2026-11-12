@@ -1,7 +1,9 @@
 import { openAppD1, readAppEnv } from '#platform'
 import app, { type Bindings } from './esign/app.ts'
 import { D1BlobStore } from './esign/blob-store.ts'
+import { SEAL_KEYS } from './esign/seal/keys.ts'
 import { gatewayFetchOf } from './gateway-fetch.ts'
+import { sealKeyOf } from './seal-key-binding.ts'
 import { waitUntilOf } from './wait-until.ts'
 
 // The local preview runs without the deployment's secrets: these synthetic keys let it sign and seal
@@ -10,7 +12,7 @@ import { waitUntilOf } from './wait-until.ts'
 const PREVIEW_OTP_KEY = 'local-preview-otp-pepper-not-for-real-documents'
 const PREVIEW_SEAL_KEY = 'local-preview-hmac-seal-key-not-for-real-documents'
 
-/** What Esign runs with, from the platform: the D1 binding, the ESIGN_* secrets and the mail relay. */
+/** What Esign runs with, from the platform: the D1 binding, the ESIGN_* secrets, the seal key and the mail relay. */
 async function bindings(request: Request): Promise<Bindings> {
   const db = (await openAppD1()) as unknown as D1Database
   const dev = import.meta.env.DEV && readAppEnv('SUGER_ACCESS_MODE') !== 'console'
@@ -29,13 +31,10 @@ async function bindings(request: Request): Promise<Bindings> {
     OTP_KEY: secret('ESIGN_OTP_KEY') ?? (dev ? PREVIEW_OTP_KEY : undefined),
     TEST_SEAL_KEY: dev ? PREVIEW_SEAL_KEY : undefined,
     SIGNING_PAGE_FRAME_ANCESTORS: secret('ESIGN_FRAME_ANCESTORS'),
-    KMS_KEY_ARN: secret('ESIGN_KMS_KEY_ARN'),
-    KMS_PUBLIC_KEY: secret('ESIGN_KMS_PUBLIC_KEY'),
-    KMS_TRUSTED_KEY_SHA256: secret('ESIGN_KMS_TRUSTED_KEY_SHA256'),
-    AWS_ROLE_ARN: secret('ESIGN_AWS_ROLE_ARN'),
-    AWS_ACCESS_KEY_ID: secret('ESIGN_AWS_ACCESS_KEY_ID'),
-    AWS_SECRET_ACCESS_KEY: secret('ESIGN_AWS_SECRET_ACCESS_KEY'),
-    TSA_SIGNER_SPKI_SHA256: secret('ESIGN_TSA_SIGNER_SPKI_SHA256'),
+    // The managed seal: the Worker's seal key binding, never in the local preview, and the keys
+    // this code trusts (seal/keys.ts), never the deployment's configuration.
+    SEAL_KEY: dev ? undefined : sealKeyOf(request),
+    SEAL_KEYS,
     SUGER_MAIL_URL: secret('SUGER_MAIL_URL'),
     SUGER_APP_TOKEN: secret('SUGER_APP_TOKEN'),
     // The relay is called through the gateway's service binding when the deploy gave the app one (gateway-fetch.ts).

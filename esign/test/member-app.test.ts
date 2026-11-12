@@ -257,11 +257,28 @@ test('the completion certificate shows the managed seal, and keeps the local tes
  const {renderToStaticMarkup}=await import('react-dom/server');
  const {CompletionCertificate}=await import('../src/app/ui/CompletionCertificate.ts');
  const base={envelope:{id:'e1',template_id:'t1',created_at:Date.parse('2026-11-07T00:00:00Z'),status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'signed:x',finalSha256:'b'.repeat(64),recipients:[],signatures:[]};
- const managed=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...base,mode:'KMS_TSA',seal:{keyArn:'arn:aws:kms:us-west-2:123456789012:key/k',publicKeySha256:'c'.repeat(64),timestampTime:Date.parse('2026-11-07T01:02:03Z'),tsaUrl:'http://timestamp.digicert.com'}} as never}));
- assert.match(managed,/AWS KMS/);assert.match(managed,/2026-11-07T01:02:03.000Z/);assert.match(managed,/c{64}/);assert.match(managed,/timestamp\.digicert\.com/);
+ const managed=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...base,mode:'KEY_TSA',seal:{keyId:'c'.repeat(64),timestampTime:Date.parse('2026-11-07T01:02:03Z'),tsaUrl:'http://timestamp.digicert.com'}} as never}));
+ assert.match(managed,/Esign seal key/);assert.doesNotMatch(managed,/KMS/);assert.match(managed,/2026-11-07T01:02:03.000Z/);assert.match(managed,/c{64}/);assert.match(managed,/timestamp\.digicert\.com/);
  assert.doesNotMatch(managed,/LOCAL TEST ONLY/);
+ assert.doesNotMatch(managed,/Original filename|Test email/);
  const local=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...base,mode:'LOCAL TEST ONLY'} as never}));
  assert.match(local,/LOCAL TEST ONLY/);
+});
+
+test('the completion certificate shows each signer\'s sealed email, role and consent text, not the current ones', async()=>{
+ const {renderToStaticMarkup}=await import('react-dom/server');
+ const {CompletionCertificate}=await import('../src/app/ui/CompletionCertificate.ts');
+ const signature={id:'s1',sequence:1,task_id:'t1',recipient_name:'Ana Partner',input_artifact_id:'d0',input_sha256:'a'.repeat(64),otp_verified_at:0,consented_at:0,previous_hash:'',event_hash:'e'.repeat(64),artifact_id:'signed:s1',sha256:'b'.repeat(64)};
+ const certificate={mode:'KEY_TSA',seal:{keyId:'c'.repeat(64),timestampTime:0,tsaUrl:'http://timestamp.digicert.com'},envelope:{id:'e1',template_id:'t',created_at:0,status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'signed:s1',finalSha256:'b'.repeat(64),
+  recipients:[{id:'t1',role:'partner',recipient_name:'Ana Partner',recipient_email:'current@partner.test',routing_order:1,status:'SIGNED'}],signatures:[signature],
+  identities:[{signatureId:'s1',email:'ana@partner.test',role:'partner',disclosure:{version:'2026-11',sha256:'d'.repeat(64)},authority:{title:'CFO',onBehalfOf:'Partner Co'}}]};
+ const html=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:certificate as never}));
+ assert.match(html,/Email, where the code was sent \(sealed\)/);assert.match(html,/ana@partner\.test/);
+ assert.match(html,/Role \(sealed\)/);assert.match(html,/Version 2026-11, SHA-256 d{64}/);assert.match(html,/CFO, Partner Co/);
+ assert.doesNotMatch(html,/current@partner\.test/,'the sealed email replaces the current one');
+ assert.match(html,/Task status \(unsealed\)/);
+ const withoutIdentities=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:{...certificate,identities:undefined} as never}));
+ assert.match(withoutIdentities,/Current email \(unsealed\)/);assert.match(withoutIdentities,/current@partner\.test/);
 });
 
 test('the completion certificate lists the audit trail, marking events recorded after sealing', async()=>{
@@ -269,12 +286,14 @@ test('the completion certificate lists the audit trail, marking events recorded 
  const {CompletionCertificate}=await import('../src/app/ui/CompletionCertificate.ts');
  const event=(id:number,type:string,extra:Record<string,unknown>={})=>({id,envelopeId:'e1',taskId:'t1',type,occurredAt:Date.parse('2026-11-07T01:00:00Z')+id*1000,ip:'203.0.113.9',userAgent:'Mozilla/5.0 (Synthetic)',detail:null,...extra});
  const certificate={envelope:{id:'e1',template_id:'t1',created_at:0,status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'x',finalSha256:'b'.repeat(64),
-  recipients:[{id:'t1',role:'partner',recipient_name:'Ana Partner',recipient_email:'ana@partner.test',routing_order:1,status:'SIGNED'}],signatures:[],mode:'KMS_TSA',
-  seal:{keyArn:'arn:aws:kms:us-west-2:123456789012:key/k',publicKeySha256:'c'.repeat(64),timestampTime:0,tsaUrl:'http://timestamp.digicert.com'},
-  audit:{sealed:[event(1,'OTP_VERIFIED'),event(2,'SIGNED')],afterSeal:[event(3,'COPY_SENT',{ip:null,userAgent:null})]}};
+  recipients:[{id:'t1',role:'partner',recipient_name:'Ana Partner',recipient_email:'ana@partner.test',routing_order:1,status:'SIGNED'}],signatures:[],mode:'KEY_TSA',
+  seal:{keyId:'c'.repeat(64),timestampTime:0,tsaUrl:'http://timestamp.digicert.com'},
+  audit:{sealed:[event(0,'RECIPIENT_VIEW_ISSUED'),event(1,'OTP_VERIFIED'),event(2,'SIGNED')],afterSeal:[event(3,'COMPLETED',{taskId:null,ip:null,userAgent:null}),event(4,'COPY_SENT',{ip:null,userAgent:null})]}};
  const html=renderToStaticMarkup(React.createElement(CompletionCertificate,{certificate:certificate as never}));
  assert.match(html,/Audit trail/);
  assert.match(html,/OTP verified/);assert.match(html,/Ana Partner/);assert.match(html,/203\.0\.113\.9/);assert.match(html,/Mozilla\/5\.0 \(Synthetic\)/);
  assert.match(html,/2026-11-07T01:00:02/);
- assert.equal((html.match(/recorded after sealing/g)??[]).length,1);
+ assert.equal((html.match(/recorded after sealing/g)??[]).length,1,'the copy sent');
+ assert.match(html,/Sealed and completed/);assert.match(html,/records the seal/);
+ assert.match(html,/Signing link issued \(by the sender\)/);assert.match(html,/those of whoever issued it/);
 });

@@ -58,9 +58,6 @@ field editor inside its own pages.
 **Idempotency key.** A random value sent with a request to send an envelope. A retry with the same key never sends the
 envelope twice.
 
-**KMS.** AWS Key Management Service, which holds the key a published Esign seals completed envelopes with. The key
-never leaves it.
-
 **Local test seal.** The stand-in seal of a local preview, with a test key and no independent timestamp. Its certificate
 says LOCAL TEST ONLY.
 
@@ -80,7 +77,11 @@ sent. Not to be confused with your role in your organization, which decides what
 
 ## S
 
-**Seal.** A completed envelope's evidence, signed with the KMS key and timestamped, so a later change shows.
+**Seal.** A completed envelope's evidence, signed with the seal key and timestamped, so a later change shows.
+
+**Seal key.** The key a published Esign seals completed envelopes with. The deployment holds it so that it can sign
+but can't be read back; the public half of every seal key Esign has used is listed in its source, which is what a
+seal is checked against.
 
 **Service account.** Another system that calls Esign's API with a role of its own, such as a host product. On Insulin
 Apps it is an OAuth client, which the organization's owners and admins create on Esign's API access tab.

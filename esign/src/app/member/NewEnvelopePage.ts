@@ -76,7 +76,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
             : h(Field, { label: 'Template', htmlFor: 'envelope-template' },
               h(NativeSelect, { id: 'envelope-template', value: templateId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setTemplateId(e.target.value) },
                 h(NativeSelectOption, { value: '' }, 'Choose a template'),
-                ...templates.map((t) => h(NativeSelectOption, { key: t.id, value: t.id }, `${t.roles.join(', ')} · ${t.fields.length ? `${t.fields.length} fields` : 'signature page'} · ${dateTime(t.createdAt)}`)))))),
+                ...templates.map((t) => h(NativeSelectOption, { key: t.id, value: t.id }, `${t.name ? `${t.name} · ` : ''}${t.roles.join(', ')} · ${t.fields.length ? `${t.fields.length} fields` : 'signature page'} · ${dateTime(t.createdAt)}`)))))),
     template ? h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Signers')), h(CardDescription, null, 'One for each role. A title and a company are shown on the signing page and recorded with the signature.')),
       h(CardContent, { className: 'flex flex-col gap-6' }, ...template.roles.map((role, i) => h('fieldset', { key: role, className: 'grid gap-4 rounded-lg border p-4 sm:grid-cols-2' },

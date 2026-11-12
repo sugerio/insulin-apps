@@ -112,7 +112,7 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    - `SITE_DOMAIN` only when the domain is not `insulinapps.com`
 
    **App secrets.** An app that lists names under `insulin.secrets` in its `package.json` (DESIGN.md §8.3), such as
-   `ESIGN_KMS_KEY_ARN`, gets each one that this environment holds, as a secret or else a variable of exactly that name,
+   `ESIGN_OTP_KEY`, gets each one that this environment holds, as a secret or else a variable of exactly that name,
    uploaded with its Worker; names that aren't set are skipped and named in the deploy log. Add them here, as secrets
    for anything confidential. They reach only that app's deploy step, never another app, the gateway or a build.
 

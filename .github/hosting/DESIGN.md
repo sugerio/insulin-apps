@@ -459,7 +459,7 @@ declared in the app's `package.json` under `insulin`:
   "permissions": [ … ],
   "publicPaths": ["/sign", "/api/public/", "/assets/"],
   "scheduled": "/api/scheduled",
-  "secrets": ["ESIGN_KMS_KEY_ARN", "ESIGN_OTP_KEY"]
+  "secrets": ["ESIGN_OTP_KEY", "ESIGN_FRAME_ANCESTORS"]
 }
 ```
 

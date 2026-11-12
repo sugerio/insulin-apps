@@ -11,7 +11,7 @@ import { artifactObjectKey } from './signatures.ts';
 import { completeEnvelopeOfSession } from './envelope-completion.ts';
 import { MailRelayError, otpMailer } from './mail.ts';
 import { isProd, otpKey, signingEnabled, testSealKey } from './environment.ts';
-import { managedEvidenceFromEnv } from './seal/config.ts';
+import { sealTrustFromEnv } from './seal/config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
 import { expireIfDue } from './task-expiry.ts';
 import { consentStatement, lastHostAuthentication, parseHostAuthentication, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
@@ -58,6 +58,12 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   const whenSigningEnabled = async (c: import('hono').Context<Env>, next: import('hono').Next) => {
     c.header('Cache-Control','no-store');
     if (!signingEnabled(c.env)) return c.json({error:'signing_disabled'}, 404);
+    await next();
+  };
+  // Reading what was completed (the certificate, the delivery PDF, a signer's copy) verifies it with the trust in the
+  // code alone, so it works whether or not this deployment can sign now.
+  const noStore = async (c: import('hono').Context<Env>, next: import('hono').Next) => {
+    c.header('Cache-Control','no-store');
     await next();
   };
   app.use('/api/public/page-sessions/*', whenSigningEnabled);
@@ -270,11 +276,11 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const headers:Record<string,string>={'Content-Type':'image/png','X-Content-Type-Options':'nosniff','X-Preview-Text':text};
     const image=Uint8Array.from(await renderText(text));
     const source=await c.env.ARTIFACTS.get(artifact.object_key);if(!source)throw new Error('Missing input');const bytes=await source.arrayBuffer();if(await sha256(bytes)!==artifact.sha256)throw new Error('Input mismatch');const pdf=await PDFDocument.load(bytes,{updateMetadata:false,throwOnInvalidObject:true});if(field.page<1||field.page>pdf.getPageCount())throw new Error('Invalid page');validateFieldsPdf(pdf);validateFieldPlacement(pdf,all);const page=pdf.getPage(field.page-1);assertTextFits(page,field,image);const geometry=textGeometry(page,field,image);
-    headers['X-Text-Width']=String(geometry.width/(field.rect.width*page.getWidth()));headers['X-Text-Height']=String(geometry.height/(field.rect.height*page.getHeight()));
+    headers['X-Text-Width']=String(geometry.width/(field.rect.width*page.getWidth()));headers['X-Text-Height']=String(geometry.height/(field.rect.height*page.getHeight()));headers['X-Text-Top']=String((geometry.y-field.rect.y*page.getHeight())/(field.rect.height*page.getHeight()));
     // Title: a receipt binding the image and its place, checked when signing. Date signed: the
     // date shown, which the sign request repeats; another date by then is refused (date_changed).
     if(field.type==='Title')headers['X-Text-Preview']=await signaturePreviewHash(artifact.sha256,rolesJson,fieldsJson,field.id,text,await sha256(image.buffer),geometry);
-    headers['Access-Control-Expose-Headers']=field.type==='Title'?'X-Text-Preview, X-Preview-Text, X-Text-Width, X-Text-Height':'X-Preview-Text, X-Text-Width, X-Text-Height';
+    headers['Access-Control-Expose-Headers']=field.type==='Title'?'X-Text-Preview, X-Preview-Text, X-Text-Width, X-Text-Height, X-Text-Top':'X-Preview-Text, X-Text-Width, X-Text-Height, X-Text-Top';
     return c.body(image.buffer,200,headers);
   }catch(error){return c.json({error:type==='Signature'?'signature_does_not_fit':error instanceof TextDoesNotFitError?'title_does_not_fit':'invalid_preview'},422);}});
   app.get('/api/public/signing/pdf', async c => {try {const a=await current(c,{verified:false}), file=await c.env.ARTIFACTS.get(a.object_key);if (!file) throw new Error('Missing');const bytes=await file.arrayBuffer();if (await sha256(bytes)!==a.sha256) throw new Error('Mismatch');
@@ -296,7 +302,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     return c.json({viewed:seen.size+fresh.length,total});
   });
   // COMPLETE_AFTER_SIGN: once a signature is accepted, render it and, after the last one, seal the
-  // envelope (KMS and the timestamp authority). With the request's waitUntil (Nitro on Workers) that
+  // envelope (the seal key and the timestamp authority). With the request's waitUntil (Nitro on Workers) that
   // runs after the signer's response, so they never wait for the seal; without it (the tests), in the
   // request. Work cut short (a CPU limit, an outage) leaves the signature PENDING or the envelope
   // FINALIZING, which due work finishes: the platform's five-minute tick (POST /api/scheduled), or
@@ -343,7 +349,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       return c.json({id},202);
     } catch (error) {const raced=await replay();return raced ? c.json(raced,202) : c.json({error:error instanceof DateChanged?'date_changed':'signature_rejected'},409);}
   });
-  app.get('/api/envelopes/:id/delivery-pdf', whenSigningEnabled, async c => {
+  app.get('/api/envelopes/:id/delivery-pdf', noStore, async c => {
     const envelope=await c.env.DB.prepare("SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if(!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';
@@ -351,27 +357,26 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       // Described by the seal this envelope was completed with.
       let result;
       if (await hasManagedEvidence(c.env.DB,id)) {
-        const managed=await managedEvidenceFromEnv(c.env);if(!managed)throw new Error('Managed seal not configured');
-        result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managedDelivery(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managed.trust));
+        result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managedDelivery(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,sealTrustFromEnv(c.env)));
       } else {
         const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
         result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey);
       }
-      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${result.metadata.format==='esign-local-delivery-v3'?'delivery-local-test':'delivery'}.pdf"`,'X-Content-Type-Options':'nosniff'});
+      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${result.metadata.format.startsWith('esign-local-delivery')?'delivery-local-test':'delivery'}.pdf"`,'X-Content-Type-Options':'nosniff'});
     } catch {return c.json({error:'unavailable'},503);}
   });
   // A signer's copy, from the link in their completion notice (signed-copies.ts): the /copy page
   // posts the token from its fragment, once. The delivery PDF is built from the stored records.
-  app.post('/api/public/copies/open', whenSigningEnabled, bodyLimit({maxSize:1024}), async c => {
+  app.post('/api/public/copies/open', noStore, bodyLimit({maxSize:1024}), async c => {
     if (c.req.header('origin') !== new URL(c.req.url).origin) return c.json({error:'forbidden'},403);
     let body: {token?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     const link=typeof body?.token==='string'?await useCopyLink(c.env.DB,body.token):null;
     if(!link)return c.json({error:'link_unavailable'},410);
     try {
-      const managed=await hasManagedEvidence(c.env.DB,link.envelopeId)?await managedEvidenceFromEnv(c.env):null;
+      const managed=await hasManagedEvidence(c.env.DB,link.envelopeId);
       const testKey=managed?null:testSealKey(c.env);
       if(!managed&&!testKey)throw new Error('Seal unavailable');
-      const result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed?managedDelivery(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed.trust):testKey!);
+      const result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed?managedDelivery(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,sealTrustFromEnv(c.env)):testKey!);
       await recordAuditQuietly(c.env.DB,{envelopeId:link.envelopeId,taskId:link.taskId,type:AUDIT.copyDownloaded,...requestFacts(c.req.raw)});
       return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="signed-${link.envelopeId}.pdf"`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     } catch {
@@ -380,20 +385,19 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       return c.json({error:'unavailable'},503);
     }
   });
-  app.get('/api/envelopes/:id/certificate', whenSigningEnabled, async c => {
+  app.get('/api/envelopes/:id/certificate', noStore, async c => {
     const envelope=await c.env.DB.prepare("SELECT id,template_id,created_at,status FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if (!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';
     try {
       const recipients=async()=>(await c.env.DB.prepare('SELECT id,role,recipient_name,recipient_email,routing_order,status FROM tasks WHERE envelope_id=? ORDER BY routing_order').bind(id).all()).results;
       if (await hasManagedEvidence(c.env.DB,id)) {
-        const managed=await managedEvidenceFromEnv(c.env);if(!managed)throw new Error('Managed seal not configured');
-        const verified=await verifyManagedEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,managed.trust);
-        return c.json({mode:'KMS_TSA',notice:'Sealed with an AWS KMS signature (ECDSA P-256) over the evidence and an RFC 3161 timestamp over that signature. Revocation of the time-stamping authority certificates is not checked. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the sealed manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by the seal.',envelope,recipients:await recipients(),...verified});
+        const verified=await verifyManagedEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,sealTrustFromEnv(c.env));
+        return c.json({mode:'KEY_TSA',notice:'Sealed with a signature by Esign\'s seal key (ECDSA P-256) over the evidence and an RFC 3161 timestamp over that signature. Revocation of the time-stamping authority certificates is not checked. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the sealed manifest and stored files. Each signer\'s name, email address, role and consent text are sealed with their signing record. Envelope metadata and the tasks\' current routing order and status are database values, not bound by the seal.',envelope,recipients:await recipients(),...verified});
       }
       const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
       const verified=await finalizeLocalTestEvidence(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey,true);
-      return c.json({mode:'LOCAL TEST ONLY',notice:'Not a legal guarantee. Local HMAC is not a real KMS or TSA; the synthetic timestamp is not independent. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the existing local HMAC manifest and stored files. Envelope metadata and recipient task details are current database values, not bound by that manifest.',envelope,recipients:await recipients(),...verified,audit:{sealed:[],afterSeal:await auditTrail(c.env.DB,id)}});
+      return c.json({mode:'LOCAL TEST ONLY',notice:'Not a legal guarantee. Local HMAC is not the real seal key or TSA; the synthetic timestamp is not independent. This separate view is not the signed PDF.',binding:'Source, signatures, event links and output hashes are checked against the existing local HMAC manifest and stored files. Each signer\'s name, email address, role and consent text are bound with their signing record. Envelope metadata and the tasks\' current routing order and status are database values, not bound by that manifest.',envelope,recipients:await recipients(),...verified,audit:{sealed:[],afterSeal:await auditTrail(c.env.DB,id)}});
     } catch {return c.json({error:'unavailable'},503);}
   });
 }

@@ -27,7 +27,7 @@ certificate and the timestamp service still need review before real documents ar
   reviews the document, agrees to sign electronically and signs. Signing for a company records their
   title and authority.
 - **Evidence.** Every signature is hash-chained to the previous one and to the document it was made
-  on. The finished envelope is sealed with an AWS KMS signature and an RFC 3161 timestamp, and the
+  on. The finished envelope is sealed with a signature by Esign's seal key and an RFC 3161 timestamp, and the
   certificate of completion lists the signers, the audit trail and how it was sealed.
 
 ## The pages
@@ -95,20 +95,35 @@ NITRO_PRESET=cloudflare_module npm run build
 From the repository root: `node .github/scripts/check-insulin-app.mjs esign` (and with `--built`
 after the build) and `node .github/scripts/check-public-content.mjs`. The browser tests need Chrome
 (`ESIGN_TEST_CHROME`, or a usual install path) and skip without it. Tests use synthetic data,
-Miniflare D1, a stub of the mail relay, and fakes for KMS and the TSA (a recorded DigiCert response
-and locally generated OpenSSL responses).
+Miniflare D1, a stub of the mail relay, generated seal keys, and fakes for the TSA (a recorded DigiCert
+response and locally generated OpenSSL responses).
 
 ### Database changes
 
 Edit `src/app/db/schema.ts` and run `npm run db:generate` (drizzle-kit 0.31.11 with drizzle-orm
 0.45.3). The triggers that keep signatures and the audit trail append-only are the custom migration
-`src/app/db/migrations/0001_triggers.sql`.
+`src/app/db/migrations/0001_triggers.sql`. `0002_seal_key.sql` was written by hand, in the form drizzle-kit gives a
+table rebuild, to carry existing seals over to the new mode.
 
 ### Configuration
 
 The secrets (`ESIGN_*`) are declared in `package.json` under `insulin.secrets` and described in
 [docs/architecture.md](docs/architecture.md#configuration). A published app signs nothing until the
-code pepper, the mail relay and the KMS key are configured.
+code pepper, the mail relay and the seal key are configured.
+
+### The seal key
+
+The managed seal's private key is the Worker's `ESIGN_SEAL_KEY` binding, a Cloudflare `secret_key`; its public half,
+and every earlier key's, is listed in `src/app/server/esign/seal/keys.ts`. To make the first key, or a new one:
+
+```sh
+CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=... node esign/scripts/put-seal-key.mjs
+```
+
+The script generates the key in memory, puts the private half on the Worker, and prints the entry for `keys.ts`.
+Add it (when rotating, give the previous entry an `until` at least an hour after the script finished, such as the
+time of that deploy, not the new entry's `from`: requests already running seal with the old key for a while after;
+never remove one), then deploy.
 
 ### UI
 

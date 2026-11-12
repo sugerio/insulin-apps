@@ -49,10 +49,10 @@ export const gettingStarted: DocTopic = {
         ol(
           [b('Upload a template. '), 'On Templates, choose a PDF and name the roles that sign it, in signing order (for example ', code('partner'), ' and ', code('seller'), '). Upload it with a signature page, or place fields on its pages. See ', h(DocLink, { to: 'templates' }, 'Templates and fields'), '.'],
           [b('Send an envelope. '), 'On Envelopes, choose New envelope, pick the template and name one signer for each role. See ', h(DocLink, { to: 'sending' }, 'Sending an envelope'), '.'],
-          [b('Have each signer sign. '), 'The signer opens the signing page in your host product, the system your organization uses Esign from, or you open it for them from the envelope\'s page. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '.'],
+          [b('Have each signer sign. '), 'The signer opens the signing page from the invitation Esign emails them, in your host product, the system your organization uses Esign from, or you open it for them from the envelope\'s page. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '.'],
           [b('Keep the result. '), 'When the envelope is completed, download the signed PDF with its certificate from the envelope\'s page. Each signer also gets a link to their copy by email.'],
         ),
-        p('Esign doesn\'t email signers an invitation to sign. The only emails it sends a signer are their verification code and, at the end, the link to their signed copy.'),
+        p('Esign emails a signer their invitation (unless you open the page for them), their verification code and, at the end, the link to their signed copy.'),
       ],
     },
     {

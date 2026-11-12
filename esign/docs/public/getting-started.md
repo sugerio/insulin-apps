@@ -52,8 +52,9 @@ The envelope's page opens. Its status is **Out for signature**, and the first si
 
 ## 3. Have each signer sign
 
-Esign doesn't email an invitation to sign. The signer whose turn it is opens the signing page in one of two ways:
+The signer whose turn it is opens the signing page in one of three ways:
 
+- **From the invitation Esign emails them** when their turn comes, unless you chose to open the page for them.
 - **In your host product**, the system your organization uses Esign from, which shows the signing page inside its own
   pages.
 - **From the envelope's page**: choose **Open** *name*'s **signing page** next to the active signer (for example

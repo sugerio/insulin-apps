@@ -54,8 +54,11 @@ export function describeError(error: unknown): string {
 export const canManage = (me: Me | null) => !!me?.permissions.includes('esign.manage')
 
 /** A signer as the send form collects them: the facts a host may give about a signer, each optional but name and email. */
-/** `delivery` 'email': Esign emails them an invitation; otherwise ('host', the default) the page is opened for them. */
-export type Signer = { name: string; email: string; title: string; company: string; after: string; delivery?: 'host' | 'email' }
+/**
+ * `delivery` 'email': Esign emails them an invitation; otherwise ('host', the default) the page is opened for them.
+ * `subject` and `body`: a message to this signer alone, instead of the envelope's.
+ */
+export type Signer = { name: string; email: string; title: string; company: string; after: string; delivery?: 'host' | 'email'; subject?: string; body?: string }
 /** The sender's message to the signers: an invitation's subject, and a body shown in it and on the signing page. */
 export type EnvelopeMessage = { subject: string; body: string }
 /** What the sender says about the document and who sent it. */
@@ -84,6 +87,7 @@ export function envelopeRequest(templateId: string, roles: string[], people: Sig
         ...(text(s.company) ? { onBehalfOf: text(s.company) } : {}),
         ...(after.length ? { afterSigning: after } : {}),
         ...(s.delivery === 'email' ? { delivery: 'email' } : {}),
+        ...(text(s.subject ?? '') || text(s.body ?? '') ? { message: { ...(text(s.subject ?? '') ? { subject: text(s.subject ?? '') } : {}), ...(text(s.body ?? '') ? { body: text(s.body ?? '') } : {}) } } : {}),
       }
     }),
     ...(text(doc.name) ? { documentName: text(doc.name) } : {}),

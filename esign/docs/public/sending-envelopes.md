@@ -40,7 +40,8 @@ same request key, so the envelope is never sent twice.
 | **Email** | Where their verification code and, at the end, the link to their signed copy are sent. Only someone who can read this mailbox can sign. It can't be changed after sending. |
 | **Title (optional)** | Shown on the signing page and recorded with the signature. |
 | **Signs for company (optional)** | The company they sign for. The signer must then give their title and confirm "I'm authorized to sign for" that company. |
-| **After signing, one line each (optional, at most 3)** | What the signer reads once they have signed, such as what happens next. |
+| **How they get the signing page** | **Esign emails them an invitation when it is their turn** (the default here), or **You open it for them, from the envelope's page**, for someone who signs in person. |
+| **Email subject** and **Message to** *the signer* (optional) | Their own message, shown when **Write a different message to each signer** is chosen (below). |
 
 ### Document fields
 
@@ -50,6 +51,7 @@ same request key, so the envelope is never sent twice.
 | **Version** and **Published (YYYY-MM-DD)** | Which version of the document this is, and when it was published. |
 | **Sender name** and **Sender company** | Who sent it, shown on the signing page. |
 | **Sign by (optional)** | If a signer hasn't signed by the end of this day (in your time zone), the envelope expires and nobody can sign it. Up to 400 days ahead. |
+| **Email subject** and **Message to the signers** (optional) | Your message, shown on the signing page next to the document, and the subject and text of the invitations Esign emails. Without a subject, an invitation's is "Please sign:" and the document's name. Choose **Write a different message to each signer** to give each their own instead. |
 
 ## Signing order
 
@@ -57,16 +59,17 @@ Signers sign one at a time, in the template's role order. Only the signer whose 
 When they have signed, their signature is drawn into the PDF, and the next signer signs that result. So every signer signs
 exactly what the signer before them produced.
 
-Esign doesn't email signers an invitation. When it is someone's turn, they open the signing page in your host product,
-or someone who manages opens it for them from the envelope's page with **Open** *name*'s **signing page**. See
-[Signing](/docs/esign/signing).
+When it is someone's turn, they open the signing page from the invitation Esign emails them, in your host product, or
+from the envelope's page, where someone who manages chooses **Open** *name*'s **signing page** for them. An invited
+signer whose email went astray can be sent a new one with **Send the invitation again**, which replaces the earlier
+link. See [Signing](/docs/esign/signing).
 
 ## Follow an envelope
 
 The envelope's page shows:
 
 - the status, the envelope id and when it was created;
-- **Signers**: each one's order, name and email, role and status, when they opened the signing page and their deadline;
+- **Signers**: each one's order, name and email, role and status, when they were invited, when they opened the signing page and their deadline;
 - **Audit trail**: every event with its time, the signer and the IP address.
 
 The page refreshes by itself every few seconds while the envelope is out for signature or finishing. The **Envelopes**

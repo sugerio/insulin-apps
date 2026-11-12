@@ -87,10 +87,15 @@ test('sending from a template: one signer per role, the document, a sign-by day,
   assert.match(app.text(),/Enter a name and an email address for each signer\./);
   await app.type(app.byId('signer-0-name'),'Ana');await app.type(app.byId('signer-0-email'),'ana@partner.example');
   await app.type(app.byId('signer-0-title'),'Partner Manager');await app.type(app.byId('signer-0-company'),'Partner Company Ltd');
-  await app.type(app.byId('signer-0-after'),'Your onboarding moves on.\n\nTraining opens.');
   await app.type(app.byId('signer-1-name'),'Marcus');await app.type(app.byId('signer-1-email'),'marcus@seller.example');
   await app.type(app.byId('doc-name'),'Mutual NDA');await app.type(app.byId('doc-version'),'v3');await app.type(app.byId('doc-published'),'2026-09-02');
   await app.type(app.byId('doc-sender'),'Sam Seller');await app.type(app.byId('doc-sender-company'),'Example Seller Inc.');
+  // A message for everybody, then one of their own for each instead: only theirs is sent.
+  await app.type(app.byId('message-subject'),'Please sign the NDA');await app.type(app.byId('message-body'),'Hi both,\nThe NDA.');
+  assert.equal(app.byId('signer-0-body'),undefined,'no message of their own until asked for');
+  await app.act(async()=>{app.byId('message-per-signer').props.onChange({target:{checked:true}});});
+  assert.equal(app.byId('message-body'),undefined,'the message for everybody is gone');
+  await app.type(app.byId('signer-0-subject'),'Ana, please sign');await app.type(app.byId('signer-0-body'),'Hi Ana,\nOver to you.');
   await app.type(app.byId('sign-by'),'2020-01-01');
   await app.click(app.button('Send for signature'),'Send');
   assert.match(app.text(),/Choose a sign-by day from today up to 400 days ahead\./);
@@ -105,7 +110,7 @@ test('sending from a template: one signer per role, the document, a sign-by day,
   assert.equal(sends[0].headers['idempotency-key'],sends[1].headers['idempotency-key'],'a retry is the same send');
   const deadline=signByTime(day);
   assert.deepEqual(JSON.parse(String(sends[1].body)),{templateId:'tpl-1',documentName:'Mutual NDA',documentVersion:{label:'v3',publishedAt:'2026-09-02T00:00:00.000Z'},sender:{name:'Sam Seller',organization:'Example Seller Inc.'},
-   recipients:[{role:'partner',name:'Ana',email:'ana@partner.example',expiresAt:deadline,title:'Partner Manager',onBehalfOf:'Partner Company Ltd',afterSigning:['Your onboarding moves on.','Training opens.'],delivery:'email'},{role:'seller',name:'Marcus',email:'marcus@seller.example',expiresAt:deadline,delivery:'email'}]});
+   recipients:[{role:'partner',name:'Ana',email:'ana@partner.example',expiresAt:deadline,title:'Partner Manager',onBehalfOf:'Partner Company Ltd',delivery:'email',message:{subject:'Ana, please sign',body:'Hi Ana,\nOver to you.'}},{role:'seller',name:'Marcus',email:'marcus@seller.example',expiresAt:deadline,delivery:'email'}]});
   assert.ok(!app.calls.some(c=>c.path.endsWith('/prepare')),'creating the envelope prepares it');
   assert.equal(app.location.pathname,`/envelopes/${ENV_ID}`,'the new envelope opens');
   assert.match(app.text(),/Signers/);assert.ok(app.button("Open Ana's signing page"));

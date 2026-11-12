@@ -42,8 +42,8 @@ Run from `esign/` unless noted.
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |
 | `src/app/server/gateway-fetch.ts` | The `SUGER_GATEWAY` service binding's fetch, which the relay is called over |
 | `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the seal key + TSA seal, and `keys.ts`, the seal keys trusted |
-| `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql`) |
-| `scripts/` | The bitmap atlas generators (macOS, Swift) |
+| `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql` and the hand-written rebuild `0002_seal_key.sql`) |
+| `scripts/` | The bitmap atlas generators (macOS, Swift), and `put-seal-key.mjs`, which puts a new seal key on the Worker |
 | `test/`, `test/helpers/` | Tests (`node --test`); `helpers/platform.ts` plays the platform, `helpers/gateway.ts` the gateway and a host's service account, `helpers/member.ts` renders the members' app; `navigation.test.ts` and `shell.test.ts` cover the navigation |
 
 ## Platform files: leave them alone
@@ -100,7 +100,10 @@ secret in source.
 4. **One batch per write**, guarded by the statement itself (`INSERT ... SELECT ... WHERE`); see "How writes commit".
 5. **Migrations are generated.** Edit `schema.ts` and run `npm run db:generate`; never edit a published migration.
    Tables with triggers (`signatures`, `tasks`, `audit_events`) take additive changes only: a table rebuild drops
-   their triggers. Custom migrations are for developers: one statement per breakpoint, each safe to run again.
+   their triggers. Custom migrations are for developers: one statement per breakpoint, each safe to run again. The one
+   exception, `0002_seal_key.sql`, rebuilds `seals` (no triggers, nothing references it) to change a CHECK constraint, which
+   drizzle-kit can't: it is written by hand in drizzle-kit's table-rebuild form with its snapshot, and `npm run db:generate`
+   still writes nothing.
 
 ## Secrets
 

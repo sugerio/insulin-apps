@@ -424,7 +424,6 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
             previewUrl?h('img',{src:previewUrl,alt:'Your signature',className:'esign-preview-image'}):h('div',{className:'esign-preview-name'},fullName||' '),
             h('div',{className:'esign-preview-line'}),
             h('p',{className:'esign-preview-caption'},signatureCaption(fullName,signerTitle,forCompany))),
-          ...fieldPreviews,
           h('label',{className:'esign-check esign-consent'},
             h('input',{type:'checkbox',className:checkClass,'aria-label':'Consent to sign',checked:consent,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setConsent(event.target.checked);}}),
             h('span',null,consentText,' ',artifact.disclosure&&linkButton('Read the electronic records disclosure',(event:React.MouseEvent)=>{event.preventDefault();setShowDisclosure(true);})))),
@@ -447,7 +446,10 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       h('h2',null,'About signing'),
       h(SigningHelp,{sender:sender||'The sender',documentName:artifact?.documentName}),
       h('div',{className:'esign-modal-actions'},button('Close',()=>setShowHelp(false),{primary:true}))),
-    rendered&&fields.map((field,index)=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${artifact?.role ? `${artifact.role} ${field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature'}${fields.length>1?` ${index+1}`:""}` : `${field.type||'Signature'} field ${index+1}`} on page ${field.page}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:'2px dashed #135c9b',outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},imageUrls[field.id]&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,top:`${(signatureSizes[field.id]?.top??0)*100}%`,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,maxWidth:'none',objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)));
+    rendered&&fields.map((field,index)=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${artifact?.role ? `${artifact.role} ${field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature'}${fields.length>1?` ${index+1}`:""}` : `${field.type||'Signature'} field ${index+1}`} on page ${field.page}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:'2px dashed #135c9b',outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},imageUrls[field.id]&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,top:`${(signatureSizes[field.id]?.top??0)*100}%`,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,maxWidth:'none',objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)),
+    // The previews' fetchers stay mounted once the code is verified, not only on Sign: each revokes its image's URL when it
+    // unmounts, and Back then Continue would otherwise show the Sign step's preview from a URL already revoked.
+    ready&&verified&&!finished&&h(React.Fragment,null,...fieldPreviews));
 }
 
 type PreviewProps = {field:SignatureField;value:string;token:string;onReady:(value:string,url:string,receipt?:string)=>void;onError:(error:string)=>void};

@@ -16,7 +16,24 @@ import type {PDFDocumentLoadingTask, RenderTask} from 'pdfjs-dist';
 export async function renderPdf(blob:Blob, container:HTMLElement, signal:AbortSignal, shownIn:HTMLElement=container, fit=false) {
   const [{getDocument, GlobalWorkerOptions}, {default:workerUrl}]=await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
   GlobalWorkerOptions.workerSrc=workerUrl;
-  return renderPdfDocument(blob,container,signal,data=>getDocument(strictPdfOptions(data)),{...displayOf(shownIn),fit});
+  await renderPdfDocument(blob,container,signal,data=>getDocument(strictPdfOptions(data)),{...displayOf(shownIn),fit});
+  if (fit) followColumn(container,shownIn,signal);
+}
+
+/**
+ * Keeps fitted pages laid out across the width `shownIn` is shown at when it changes after they were drawn (a window
+ * resized), as the render laid them out (up to FIT_MAX_SCALE), until `signal` aborts. Their bitmaps stay as drawn.
+ */
+export function followColumn(container:HTMLElement, shownIn:HTMLElement, signal:AbortSignal) {
+  const view=shownIn.ownerDocument?.defaultView as (Window & typeof globalThis)|null|undefined;
+  if (!view || typeof view.ResizeObserver!=='function' || signal.aborted) return;
+  const observer=new view.ResizeObserver(()=>{
+    const {width}=displayOf(shownIn);
+    if (!width) return;
+    for (const canvas of Array.from(container.querySelectorAll('canvas'))) {const points=Number(canvas.dataset.pdfWidth);if (points>0) canvas.style.width=`${Math.min(FIT_MAX_SCALE*points,width)}px`;}
+  });
+  observer.observe(shownIn);
+  signal.addEventListener('abort',()=>observer.disconnect(),{once:true});
 }
 
 /** How pages will be shown: the CSS width of `element`'s content and the screen's device pixels per CSS pixel. */

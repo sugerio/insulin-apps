@@ -512,3 +512,38 @@ test('About signing explains the steps, the code, declining and the copy link, a
   await p.act(async()=>{p.renderer.unmount();});
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
+
+test('Back and Continue again keep the signature preview\'s image alive: the Sign step never shows a revoked URL', async()=>{
+ const {default:Renderer,act}=await import('react-test-renderer');(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+ const oldCreate=URL.createObjectURL,oldRevoke=URL.revokeObjectURL,oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ const revoked=new Set<string>();let made=0;
+ URL.createObjectURL=()=>`blob:test/${++made}`;URL.revokeObjectURL=(url:string)=>{revoked.add(url);};
+ try{
+  (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
+  globalThis.fetch=async(input:any)=>{const path=new URL(String(input)).pathname;
+   if(path.endsWith('/signing-page'))return Response.json({hosts:[],signingEnabled:true});
+   if(path.endsWith('/exchange'))return Response.json({token:'token'});
+   if(path.endsWith('/otp'))return Response.json({messageId:'test'});
+   if(path.endsWith('/verify'))return new Response(null,{status:204});
+   if(path.endsWith('/current'))return Response.json({id:'d0',sha256:'hash',fields:[{id:'s1',type:'Signature',page:1,required:true,rect:{x:0.1,y:0.6,width:0.4,height:0.08}}]});
+   if(path.endsWith('/pdf'))return new Response(new Blob(['pdf']));
+   if(path.endsWith('/api/public/signing/preview'))return new Response(new Blob(['png']),{headers:{'X-Signature-Preview':'a'.repeat(64),'X-Signature-Width':'0.4','X-Signature-Height':'0.08'}});
+   throw new Error(path);};
+  // Just enough DOM for one rendered page: a canvas the page wraps in its host.
+  const node=():any=>({nodeType:1,style:{},dataset:{},children:[] as any[],appendChild(child:any){this.children.push(child);},replaceChildren(...nodes:any[]){this.children=nodes;},replaceWith(){},querySelectorAll(){return this.children.filter((c:any)=>c.canvas);},ownerDocument:{createElement:()=>node()}});
+  const render=async(_blob:Blob,target:any)=>{target.appendChild({...node(),canvas:true});};
+  let r:any;await act(async()=>{r=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:render}),{createNodeMock:()=>node()});}); await settle(act);
+  const button=(s:string)=>r.root.findAllByType('button').find((b:any)=>b.children.includes(s));
+  await toSignStep(r,act);
+  await act(async()=>{r.root.findAll((n:any)=>n.props?.['aria-label']==='Full name')[0].props.onChange({target:{value:'Ana Ribeiro'}});}); await settle(act);
+  const shown=()=>r.root.findAll((n:any)=>n.type==='img'&&n.props.alt==='Your signature')[0]?.props.src;
+  const first=shown();
+  assert.ok(first&&!revoked.has(first),'the preview shows');
+  await act(async()=>{button('Back').props.onClick();});
+  await act(async()=>{button('Continue').props.onClick();});
+  const again=shown();
+  assert.ok(again,'the preview shows again');
+  assert.ok(!revoked.has(again),`the image a person sees is never a revoked URL: ${again} of ${[...revoked]}`);
+  await act(async()=>{r.unmount();});
+ } finally {URL.createObjectURL=oldCreate;URL.revokeObjectURL=oldRevoke;globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});

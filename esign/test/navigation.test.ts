@@ -24,7 +24,7 @@ const PLATFORM:PlatformMe={
 test('the navigation manifest in package.json is valid, and the members\' app renders from it',()=>{
  assert.deepEqual(navigationProblems(manifest),[]);
  assert.deepEqual(NAVIGATION,manifest,'the shell reads package.json itself');
- assert.deepEqual(manifest.map(i=>i.key),['envelopes','templates']);
+ assert.deepEqual(manifest.map(i=>i.key),['envelopes','templates','contacts','ownership']);
  assert.ok(!manifest.some(i=>i.key==='docs'||i.key==='settings'),'Docs and Settings are the platform\'s, not the manifest\'s');
  for(const item of manifest.flatMap(i=>[i,...(i.children??[])])){
   const [pathname,search='']=item.path.split('?');
@@ -55,12 +55,11 @@ test('a malformed manifest is refused, with the reason',()=>{
  assert.deepEqual(navigationProblems([{...item,path:'/envelopes?status=draft',group:'Work',role:'EDITOR',children:[{...item,key:'drafts',group:'Status'}]}]),[]);
 });
 
-test('each role sees the items its role reaches: New envelope is for editors and admins',()=>{
+test('each role sees the items its role reaches: Ownership is for admins',()=>{
  assert.deepEqual(['OWNER','ADMIN','EDITOR','USER','VIEWER',undefined,'SOMETHING'].map(appRole),['ADMIN','ADMIN','EDITOR','VIEWER','VIEWER','VIEWER','VIEWER']);
- const children=(role:'ADMIN'|'EDITOR'|'VIEWER')=>visibleNavigation(NAVIGATION,role)[0]!.children!.map(c=>c.key);
- assert.ok(!children('VIEWER').includes('new-envelope'));
- assert.ok(children('EDITOR').includes('new-envelope'));assert.ok(children('ADMIN').includes('new-envelope'));
- assert.deepEqual(visibleNavigation(NAVIGATION,'VIEWER').map(i=>i.key),['envelopes','templates'],'every role sees both sections');
+ assert.ok(NAVIGATION.every((item)=>!item.children),'no section has a level 2: each page has its own filters');
+ assert.deepEqual(visibleNavigation(NAVIGATION,'ADMIN').map(i=>i.key),['envelopes','templates','contacts','ownership']);
+ assert.deepEqual(visibleNavigation(NAVIGATION,'VIEWER').map(i=>i.key),['envelopes','templates','contacts'],'every role sees the sections but Ownership, which is for admins');
  const synthetic:NavItem[]=[{key:'a',label:'A',icon:'home',path:'/a'},{key:'b',label:'B',icon:'key',path:'/b',role:'ADMIN'},{key:'c',label:'C',icon:'bot',path:'/c',role:'EDITOR'}];
  assert.deepEqual(visibleNavigation(synthetic,'VIEWER').map(i=>i.key),['a']);
  assert.deepEqual(visibleNavigation(synthetic,'EDITOR').map(i=>i.key),['a','c']);

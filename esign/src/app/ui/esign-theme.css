@@ -68,7 +68,18 @@
 /* The step's body: Review and Sign have a side panel; Confirm it's you is one centred column. */
 .esign-signing-workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) 280px; gap: 16px; }
 .esign-signing-workspace.esign-at-step-2 { grid-template-columns: minmax(0,1fr); overflow-y: auto; }
-.esign-at-step-2 .esign-document, .esign-at-step-3 .esign-document { display: none; }
+.esign-at-step-2 .esign-document { display: none; }
+/* Sign: the document, its fields to select, beside the signature and the fields list. */
+.esign-signing-workspace.esign-at-step-3 { grid-template-columns: minmax(0,1fr) 340px; }
+.esign-sign-panel { overflow-y: auto; }
+.esign-sign-panel .esign-adopt { overflow: visible; }
+.esign-sign-panel .esign-adopt-inputs { grid-template-columns: 1fr; }
+.esign-apply-field { position: absolute; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; font-size: .75rem; font-weight: 600; color: oklch(0.205 0 0); background: oklch(0.95 0.1 95 / 92%); border: 0; cursor: pointer; }
+.esign-apply-field:hover, .esign-apply-field:focus-visible { background: oklch(0.9 0.14 95); }
+.esign-required { color: #b42318; }
+.esign-optional { font-weight: 400; color: var(--muted-foreground); }
+.esign-field-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 0; list-style: none; font-size: .875rem; }
+.esign-field-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .esign-document { min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--card); }
 .esign-document-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: .75rem; color: var(--muted-foreground); }
 .esign-document-name { font-weight: 500; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -134,9 +145,12 @@
 @media (max-width: 767px) {
   .esign-recipient { min-height: 0; }
   .esign-recipient.esign-embedded { height: auto; }
-  .esign-signing-workspace { grid-template-columns: minmax(0,1fr); }
+  .esign-signing-workspace, .esign-signing-workspace.esign-at-step-3 { grid-template-columns: minmax(0,1fr); }
   .esign-recipient .esign-document { height: 60vh; }
   .esign-adopt-inputs { grid-template-columns: 1fr; }
   .esign-steps { font-size: .75rem; }
   .esign-actions { flex-wrap: wrap; }
 }
+/* The sender's message on Review: its line breaks kept, long text scrolled. */
+.esign-message-subject { font-weight: 600; margin: 0 0 4px; }
+.esign-message-body { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow-y: auto; margin: 0; font-size: .875rem; }

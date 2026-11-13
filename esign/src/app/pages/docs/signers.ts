@@ -15,8 +15,8 @@ export const signers: DocTopic = {
       body: [
         p('Signers don\'t need an account. Each signer, when it is their turn, opens the signing page in one of two ways:'),
         ul(
+          [b('From the invitation Esign emails them. '), 'Every envelope sent from Esign\'s own pages works this way; the envelope\'s page can resend the invitation, but never opens a signer\'s page itself.'],
           [b('In your host product. '), 'The system your organization uses Esign from shows the signing page inside its own pages, to the signer it has signed in.'],
-          [b('From the envelope\'s page. '), 'Someone who manages envelopes chooses ', b('Open {name}\'s signing page'), ', for example when the signer signs in person, or to try Esign out.'],
         ),
         p('Either way, the page is opened with a one-time link that works once, within two minutes, and only for that signer. The page then stays usable for 15 minutes; after that, the signer opens it again the same way. The code that confirms who they are still goes to the signer\'s own email address.'),
         p('A signer whose turn hasn\'t come yet, or whose envelope has ended, can\'t open it.'),
@@ -29,7 +29,7 @@ export const signers: DocTopic = {
         ol(
           [b('Review. '), 'The signer reads the document. Its fingerprint (SHA-256) identifies exactly this file, and they can download a copy. Esign records which pages they looked at.'],
           [b('Confirm it\'s you. '), 'Esign emails a 6-digit code to the signer\'s address. It works for 10 minutes. They can ask for a new one after a minute, up to 3 codes and 5 tries in 15 minutes.'],
-          [b('Sign. '), 'The signer types their full name to adopt their signature, sees how it will look in each place it goes, gives their title if asked, reads the electronic records disclosure, agrees to sign electronically, and chooses ', b('Sign document'), '.'],
+          [b('Sign. '), 'The signer types their full name to adopt their signature, sees how it will look, gives their title if asked, signs each field by selecting it on the document (every required one, marked *; an optional one may stay empty), reads the electronic records disclosure, agrees to sign electronically, and chooses ', b('Sign document'), '.'],
         ),
         p('The name is typed in English letters with single spaces, up to 64 characters. If the envelope says they sign for a company, they also give their title and confirm they are authorized to sign for it.'),
         p('The signing page has an ', b('About signing'), ' panel that explains these steps to the signer.'),

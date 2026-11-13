@@ -36,12 +36,12 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     const details=await (await req(`/api/envelopes/${envelope.id}`,{headers:management})).json();
     // Every tenant signs on the Worker's own origin, plus SIGNING_PAGE_ORIGINS; nothing else.
     const firstTask=details.tasks[0].id;
-    assert.deepEqual(await (await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({origin:'https://other.example.com'},management))).json(),{error:'invalid_origin'});
-    const ownView=await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({},management));assert.equal(ownView.status,201);
+    assert.deepEqual(await (await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({origin:'https://other.example.com',signedInEmail:details.tasks[0].recipientEmail},management))).json(),{error:'invalid_origin'});
+    const ownView=await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({signedInEmail:details.tasks[0].recipientEmail},management));assert.equal(ownView.status,201);
     const ownExchange=await req('/api/public/page-sessions/exchange',json({code:(await ownView.json()).code},{origin:'http://localhost'}));assert.equal(ownExchange.status,200,'the default code is for the Worker\'s own origin');
     assert.equal((await req('/api/public/page-sessions/exchange',json({code:'0'.repeat(64)},{origin:'https://other.example.com'}))).status,403,'other origins are refused before the exchange');
     async function sign(task:any,index:number) {
-      const view=await req(`/api/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,json({origin},management));assert.equal(view.status,201,await view.clone().text());const {code}=await view.json();
+      const view=await req(`/api/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,json({signedInEmail:task.recipientEmail,origin},management));assert.equal(view.status,201,await view.clone().text());const {code}=await view.json();
       const exchange=await req('/api/public/page-sessions/exchange',json({code},{origin}));assert.equal(exchange.status,200);const {token}=await exchange.json();
       const headers={origin,'x-esign-session':token};
       // The document can be read before the code; signing it cannot (below, and in the record layer).
@@ -135,7 +135,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
       const envelope2=await created.json();
       assert.equal((await req(`/api/envelopes/${envelope2.id}/prepare`,{method:'POST',headers:management})).status,204);
       const task2=(await (await req(`/api/envelopes/${envelope2.id}`,{headers:management})).json()).tasks[0];
-      const view2=await (await req(`/api/envelopes/${envelope2.id}/tasks/${task2.id}/recipient-view`,json({origin},management))).json();
+      const view2=await (await req(`/api/envelopes/${envelope2.id}/tasks/${task2.id}/recipient-view`,json({signedInEmail:task2.recipientEmail,origin},management))).json();
       const session2=await (await req('/api/public/page-sessions/exchange',json({code:view2.code},{origin}))).json();
       sessions.push({origin,'x-esign-session':session2.token});
     }

@@ -10,15 +10,15 @@ need an account.
 
 ## Opening the signing page
 
-When it is a signer's turn, they open the signing page in one of two ways:
+When it is a signer's turn, they open the signing page in one of three ways:
 
+- **From an invitation.** When Esign invites the signer (always, for envelopes sent from Esign's own pages), Esign emails them when their turn comes,
+  with a link to the signing page and the sender's message. The link works while it is their turn; when the sender
+  sends the invitation again, only the newest link works.
 - **In a host product.** The system your organization uses Esign from shows the signing page inside its own pages, to
-  the signer it has signed in.
-- **From the envelope's page.** Someone who manages envelopes chooses **Open** *name*'s **signing page** next to the
-  active signer, for example when the signer signs in person, or to try Esign out. The page opens in a dialog that shows
-  what the signer sees.
+  the signer it has signed in, whose account must have the signer's email. Esign emails such a signer no invitation.
 
-Either way, the page is opened with a one-time link that works once, within two minutes, and only for that signer. The
+Each way, the page is opened with a one-time link that works once, within two minutes, and only for that signer. The
 page then stays usable for 15 minutes; after that, the signer opens it again the same way. A signer whose turn hasn't come
 yet, or whose envelope has ended, can't open it.
 
@@ -29,6 +29,7 @@ The page is titled **Sign document** and shows the three steps at the top: **Rev
 
 The signer reads the document. The page shows every page of the PDF and, beside it:
 
+- **Message from** *the sender*: the sender's message to them, when there is one;
 - **Document**: its name, version, number of pages and **Fingerprint (SHA-256)**, which identifies exactly this file;
 - **Signing as**: the signer's name and email;
 - their **Title**, which they can correct, when the sender gave one, the document has a Title field, or they sign for a
@@ -60,17 +61,22 @@ sign-in are recorded in the audit trail, with the time, the IP address and the b
 
 ## Step 3: Sign
 
-Under **Adopt your signature**, the signer:
+The document is shown again, with the signer's fields on it. Beside it, under **Adopt your signature**, the signer:
 
 1. types their **Full name**, in English letters with single spaces, up to 64 characters;
-2. checks the **Preview**, which shows how the signature will look in each place it goes, drawn by the server;
+2. checks the **Preview**, which shows how the signature will look, drawn by the server;
 3. gives their **Title**, when it is asked for (as on the first step);
-4. reads the electronic records disclosure (**Read the electronic records disclosure**);
-5. ticks the consent box, which says: "I agree to use electronic records and signatures, and I intend this to be my
+4. signs each field by selecting it, on the document (**Sign**, or **Title** for a title field) or under
+   **Fields to sign**. A required field is marked with \*; an optional one may be left empty. **Remove** clears a
+   field again, and **Next required field** shows the next one still to sign. **Date signed** fields fill in by
+   themselves;
+5. reads the electronic records disclosure (**Read the electronic records disclosure**);
+6. ticks the consent box, which says: "I agree to use electronic records and signatures, and I intend this to be my
    signature on" the document (and "on behalf of" the company, when there is one);
-6. chooses **Sign document**.
+7. chooses **Sign document**. It stays unavailable while a required field is not signed, and the panel says how many
+   are left.
 
-The side panel repeats the document's details and shows **After you sign**: what happens next, including any lines the
+The panel also repeats the document's details and shows **After you sign**: what happens next, including any lines the
 sender added.
 
 The page says "Signature recorded." and the next signer's turn starts. A host product that embeds the page is told the

@@ -37,10 +37,10 @@ async function setup(extra:Record<string,unknown>){
   assert.equal(created.status,201,await created.clone().text());
   const {id}=await created.json() as {id:string};
   assert.equal((await req(`/api/envelopes/${id}/prepare`,{method:'POST',headers:auth})).status,204);
-  const task=(await (await req(`/api/envelopes/${id}`,{headers:auth})).json() as {tasks:{id:string}[]}).tasks[0];
+  const task=(await (await req(`/api/envelopes/${id}`,{headers:auth})).json() as {tasks:{id:string;recipientEmail:string}[]}).tasks[0];
   const out:{origin:string;authorization:string}[]=[];
   for(let i=0;i<n;i++){
-   const {code}=await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`,json({origin:ORIGIN},auth))).json() as {code:string};
+   const {code}=await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`,json({signedInEmail:task.recipientEmail,origin:ORIGIN},auth))).json() as {code:string};
    const {token}=await (await req('/api/public/page-sessions/exchange',json({code},{origin:ORIGIN}))).json() as {token:string};
    out.push({origin:ORIGIN,'x-esign-session':token});
   }
@@ -52,8 +52,8 @@ async function setup(extra:Record<string,unknown>){
   const form=new FormData();form.set('file',new File([await pdf.save()],'synthetic.pdf',{type:'application/pdf'}));form.set('roles','["partner"]');
   const template=await (await req('/api/templates',{method:'POST',headers:auth,body:form})).json() as {id:string};
   const {id}=await (await req('/api/envelopes',json({templateId:template.id,recipients:[{role:'partner',name:'Ana Partner',email:'ana@partner.example'}]},{...auth,'idempotency-key':crypto.randomUUID()}))).json() as {id:string};
-  const task=(await (await req(`/api/envelopes/${id}`,{headers:auth})).json() as {tasks:{id:string}[]}).tasks[0];
-  return req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`,json({origin},auth));
+  const task=(await (await req(`/api/envelopes/${id}`,{headers:auth})).json() as {tasks:{id:string;recipientEmail:string}[]}).tasks[0];
+  return req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`,json({signedInEmail:task.recipientEmail,origin},auth));
  }
  return {mf,env,db,req,auth,json,session,sessions,recipientView};
 }

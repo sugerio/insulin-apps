@@ -42,12 +42,13 @@ for(const [who,session,status] of SESSIONS){
  test(`the Docs entry is in ${who}'s navigation, before any template exists, and opens Getting started`,async()=>{
   const app=await renderMember('/',c=>{
    if(c.path==='/api/me')return json(session,status);
-   if(c.path==='/api/envelopes')return json({envelopes:[]});
-   if(c.path==='/api/templates')return json({templates:[]});
+   if(c.path==='/api/envelopes'||c.path.startsWith('/api/envelopes?'))return json({envelopes:[]});
+   if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[]});
   });
   try{
    const nav=app.byLabel('Primary');assert.ok(nav,'the primary navigation');
-   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/envelopes'],['Templates','/templates'],['Docs','/docs']]);
+   const admin=status!==401&&['OWNER','ADMIN'].includes((session as {role?:string}).role??'')&&(session as {permissions:string[]}).permissions.includes('esign.manage');
+   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/envelopes'],['Templates','/templates'],['Contacts','/contacts'],...(admin?[['Ownership','/ownership']]:[]),['Docs','/docs']]);
    assert.ok(nav.findAll((n:any)=>n.type==='button'&&visibleText(n.children).trim()==='Settings').length===1,'and Settings');
    if(status===401)assert.match(app.text(),/Sign in to use Esign\./);
    else assert.match(app.text(),/No envelopes yet\./,'an organization that has sent nothing yet');
@@ -74,7 +75,7 @@ for(const [who,session,status] of SESSIONS){
 test('a Viewer can open a topic by its address, and the Templates page points them to it',async()=>{
  const app=await renderMember('/templates',c=>{
   if(c.path==='/api/me')return json(me('VIEWER',['esign.view']));
-  if(c.path==='/api/templates')return json({templates:[]});
+  if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[]});
  });
  try{
   assert.match(app.text(),/Your role can see templates but not change them\./);
@@ -138,7 +139,7 @@ for(const topic of DOC_TOPICS){
   assert.equal(html.includes('General information, not legal advice'),!!topic.generalInformation);
   for(const [,href] of html.matchAll(/href="([^"]*)"/g)){
    if(href.startsWith('#'))continue;
-   assert.match(href,/^\/(docs\/[a-z0-9-]+(#[a-z0-9-]+)?|templates|envelopes)?$/,`${href} stays in the app`);
+   assert.match(href,/^\/(docs\/[a-z0-9-]+(#[a-z0-9-]+)?|templates|envelopes|contacts)?$/,`${href} stays in the app`);
    const [, slug, section]=href.match(/^\/docs\/([a-z0-9-]+)(?:#([a-z0-9-]+))?$/)??[];
    if(!slug)continue;
    const target=docTopic(slug);assert.ok(target,`${href} names a topic`);
@@ -158,14 +159,14 @@ test('only the background on electronic signatures is general information, and i
 
 test('the Docs describe the navigation: both columns, Settings on Insulin Apps, the breadcrumb, collapsing and narrow screens',()=>{
  const text=textOf(render('getting-started'));
- for(const words of [/switch to one, go to All apps \(your home page on Insulin Apps\), or create a new one/,/For Docs: the topics, then Public docs/,/Envelopes and Templates, then Docs and Settings/,/All envelopes, New envelope \(for roles that send\)/,/People, Integrations, API access and Connect AI/,/Envelopes › Completed/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
+ for(const words of [/switch to one, go to All apps \(your home page on Insulin Apps\), or create a new one/,/For Docs: the topics, then Public docs/,/Envelopes, Templates and Contacts, then Docs and Settings/,/Envelopes, Templates, Contacts and Ownership have none/,/People, Integrations, API access and Connect AI/,/Envelopes › Envelope/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
   assert.match(text,words);
- assert.match(textOf(render('roles')),/New envelope, for example, is only in the navigation of roles that send/);
+ assert.match(textOf(render('roles')),/New envelope, for example, is only on the Envelopes page of roles that send/);
 });
 
 test('the Docs cover the main tasks, what each role sees, signers, statuses, evidence, and due work every five minutes',()=>{
  const all=textOf(DOC_TOPICS.map(t=>render(t.slug)).join(' '));
- for(const words of [/Upload with a signature page/,/Upload and place fields/,/Send for signature/,/Void envelope/,/Process due work/,/Owner/,/Admin/,/Editor/,/User/,/Viewer/,/custom role/,/Service accounts/,/AI agents/,/About signing/,/Decline to sign/,/6-digit code/,/LOCAL TEST ONLY/,/RFC 3161/,/audit trail/])
+ for(const words of [/Upload and place fields/,/Send for signature/,/Void envelope/,/Process due work/,/Owner/,/Admin/,/Editor/,/User/,/Viewer/,/custom role/,/Service accounts/,/AI agents/,/About signing/,/Decline to sign/,/6-digit code/,/LOCAL TEST ONLY/,/RFC 3161/,/audit trail/])
   assert.match(all,words);
  for(const slug of ['getting-started','statuses']){
   const text=textOf(render(slug));

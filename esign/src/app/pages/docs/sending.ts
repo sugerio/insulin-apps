@@ -23,7 +23,7 @@ export const sending: DocTopic = {
       body: ol(
         ['On ', h(PageLink, { to: '/' }, 'Envelopes'), ', choose ', b('New envelope'), '. Or, on Templates, choose ', b('Send'), ' next to a template.'],
         'Choose the template.',
-        'For each role, name the signer and give their email address. The signers sign in this order.',
+        ['For each role, name the signer and give their email address, or choose them from your contacts. The signers sign in this order.'],
         'Add what the signers should see about the document, and a sign-by day if there is one. Both are optional.',
         ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn.'],
       ),
@@ -37,11 +37,11 @@ export const sending: DocTopic = {
           label: 'What you give for each signer',
           columns: ['Field', 'What it does'],
           rows: [
-            ['Name', 'The signer\'s name, shown on their signing page and on the certificate.'],
+            ['Name', 'The signer\'s name, shown on their signing page and on the certificate. A role\'s default signer, if the template has one, is filled in.'],
             ['Email', 'Where their verification code and, at the end, the link to their signed copy are sent. Only someone who can read this mailbox can sign.'],
             ['Title', 'Optional. Shown on the signing page and recorded with the signature.'],
             ['Signs for company', 'Optional. When given, the signer must give their title and confirm they are authorized to sign for that company.'],
-            ['After signing', 'Optional, at most three lines: what the signer reads once they have signed, such as what happens next.'],
+            ['Email subject and message', 'Optional, when you write each signer a message of their own: shown on their signing page and in their invitation.'],
           ],
         }),
       ],
@@ -55,6 +55,7 @@ export const sending: DocTopic = {
           [b('Version'), ' and ', b('Published'), ': which version of the document this is, and when it was published.'],
           [b('Sender name'), ' and ', b('Sender company'), ': who sent it, shown on the signing page.'],
           [b('Sign by. '), 'If a signer hasn\'t signed by the end of this day, the envelope expires and nobody can sign it any more. It can be up to 400 days ahead.'],
+          [b('Message. '), 'Optional: an email subject and a message, shown on the signing page and in the invitations Esign emails. Choose Write a different message to each signer to give each their own instead.'],
         ),
         p('All of these are optional. Without a document name, signers see "the document".'),
       ],
@@ -64,15 +65,33 @@ export const sending: DocTopic = {
       title: 'After you send',
       body: [
         p('The envelope\'s page, titled with the document\'s name, shows its signers, where each one stands, the metadata the sending system gave it (if any; signers never see it), and the audit trail. It updates by itself while the envelope is out for signature.'),
-        p('The signer whose turn it is signs on the signing page: in your host product, or here, with ', b('Open {name}\'s signing page'), ' on the envelope\'s page. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '. To withdraw the envelope, void it; see ', h(DocLink, { to: 'statuses', section: 'voiding' }, 'Voiding'), '.'),
+        p('The signer whose turn it is gets an emailed invitation and signs from it; if it went astray, ', b('Resend invitation'), ' on the envelope\'s page sends a new link. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '. To withdraw the envelope, void it; see ', h(DocLink, { to: 'statuses', section: 'voiding' }, 'Voiding'), '.'),
         p('If sending fails, for example because the connection drops, choose Send again. The retry carries the same request key, so the envelope is never sent twice.'),
+        p('The envelope is yours: nobody else sees it until you share it under ', b('Who sees it'), ' on its page. Your tags on it, from the form or its page, are yours alone, with yours on its template. See ', h(DocLink, { to: 'roles', section: 'who-sees-what' }, 'Who sees each template and envelope'), '.'),
+      ],
+    },
+    {
+      id: 'the-list',
+      title: 'The Envelopes list',
+      body: [
+        p(h(PageLink, { to: '/envelopes' }, 'Envelopes'), ' lists the envelopes you own or that are shared with you, newest first, a page at a time. Out for signature, a row shows how many have signed and whose turn it is (point at it for every signer); otherwise its status. Its button fits its state: ', b('Resend'), ' to the signer whose turn it is, ', b('Download'), ' the signed PDF once completed, else ', b('View'), '; its ⋯ menu has View, Void, Tags and Share.'),
+        p('Search by the document\'s name, a signer\'s name or email, or an envelope id; while the search is empty, it offers the common filters. ', b('Date'), ', ', b('Status'), ', ', b('Sender'), ' (sent by me, shared with me), ', b('Quick views'), ' (waiting for others, expiring soon) and ', b('Tags'), ' (your own, picked by clicking) narrow it; each shows as a chip that removes it, and ', b('Clear all'), ' removes them all.'),
+      ],
+    },
+    {
+      id: 'contacts',
+      title: 'Contacts',
+      body: [
+        p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; delete one with ', b('Delete'), ' on their row (you confirm it); open a contact to change them or to see the envelopes you see that name them.'),
+        p('When you send, matching contacts are suggested under a signer\'s Name and Email as you type (from two characters on); choosing one fills in that signer\'s name, email, title and company.'),
+        p('A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact changes no envelope, and the next envelope that names them adds them again.'),
       ],
     },
     {
       id: 'from-another-system',
       title: 'Sending from another system',
       body: [
-        p('A host product, or an AI agent someone connects, sends with ', code('POST /api/envelopes'), ' and an ', code('Idempotency-Key'), ' header, a fresh random value for each new envelope. The API can also give each signer a deadline of their own and say who named them. ', code('GET /api/catalog'), ' lists the calls the caller may make, with their fields.'),
+        p('A host product, or an AI agent someone connects, sends with ', code('POST /api/envelopes'), ' and an ', code('Idempotency-Key'), ' header, a fresh random value for each new envelope. The API can also give each signer a deadline of their own and say who named them. ', code('GET /api/catalog'), ' lists the calls the caller may make, with their fields, including the contacts (', code('/api/contacts'), ').'),
       ],
     },
   ],

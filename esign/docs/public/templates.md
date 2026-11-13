@@ -27,26 +27,26 @@ reviewed Esign for real ones.
 
 A template is signed in one of two ways:
 
-- **On an added signature page.** Esign appends a page after the document's last page. Each signer gets a block on it
-  with their name and the time they signed, eight blocks to a page. This works with any PDF.
 - **In placed fields.** You put each role's **Signature**, and optionally **Title** and **Date signed**, exactly where
-  they belong on the document's pages.
+  they belong on the document's pages. This is how the **Templates** page makes templates.
+- **On an added signature page.** Esign appends a page after the document's last page. Each signer gets a block on it
+  with their name and the time they signed, eight blocks to a page. This works with any PDF; a host makes such a
+  template through the API (`POST /api/templates`).
 
 ## Upload a template
 
 You need a role that sends and manages envelopes.
 
 1. Open **Templates**.
-2. Under **New template**, choose the **PDF**.
+2. Choose **New template**, and in the dialog choose the **PDF**, and give the template a **Name** (it starts as the
+   file's name, up to 200 characters).
 3. Under **Signer roles, in signing order**, name each role. Choose **Add a role** for more (up to 20), or the bin icon to
-   remove one.
-4. Choose one of:
-   - **Upload with a signature page**: the template is saved at once. The page says "Template uploaded. Signers sign it
-     on a page added after its last page."
-   - **Upload and place fields**: the field editor opens on the PDF. See below.
+   remove one. Next to a role you can give its [default signer](#default-signers): a **Signer name**, a **Signer email**,
+   or both. Both are optional; matching contacts are suggested as you type.
+4. Choose **Upload and place fields**: the field editor opens on the PDF, in a dialog over the list. See below.
 
-The new template appears in the list with its id (under its name, when it has one: a host names its templates through
-the API, see [Names and metadata](/docs/esign/api#names-and-metadata)), its roles, what it is **Signed on** ("A signature page" or the number
+The new template appears in the list with its name and id (a host names its templates through the API, see
+[Names and metadata](/docs/esign/api#names-and-metadata)), its roles, what it is **Signed on** ("A signature page" or the number
 of placed fields) and when it was uploaded.
 
 ![The Templates page with the New template form and one template](/docs/assets/screenshots/esign-templates.png "Templates: the upload form and the organization's templates")
@@ -60,8 +60,12 @@ The editor shows the PDF's pages on the left and the tools on the right.
    A new box marks a starting area of 150 by 34 points.
 3. Move a placed field by dragging it, or select it and use the arrow keys. Page Up and Page Down move it to another
    page. Remove it with the × in the field.
-4. Repeat for every role. Each role needs exactly one **Signature** field.
-5. Choose **Save fields**. The page says "Fields saved as a new template. Send an envelope from it."
+4. Fields are required. To let the signer leave a Signature or Title field empty, select it and clear **Required**
+   under **Selected field**; the field then reads "(optional)". On the signing page the signer signs each field by
+   selecting it, and can't finish until every required one is signed.
+5. Repeat for every role. Each role needs at least one required **Signature** field. Place more where the same signer signs
+   again (on several pages, say): the name they type goes in each one they sign.
+6. Choose **Save fields**. The page says "Fields saved as a new template. Send an envelope from it."
 
 Choose **Close the editor** to leave without saving.
 
@@ -75,26 +79,63 @@ Choose **Close the editor** to leave without saving.
 
 Rules the editor and the server check:
 
-- every role has exactly one Signature field, and only these three field types are used;
+- every role has at least one required Signature field, and only these three field types are used;
 - at most 20 fields per template can be signed, and fields don't overlap;
 - each field is at least 20 by 10 points and stays on its page;
 - the PDF's pages are not rotated or cropped, and the PDF has no form fields or annotations. A PDF that breaks these rules
-  can still be uploaded with a signature page, but an envelope sent from it with placed fields is refused.
+  can still be uploaded through the API with a signature page, but an envelope sent from it with placed fields is refused.
 
-## Templates don't change
+## Default signers
 
-A saved template is never changed. **Place fields** next to an existing template opens the editor on a copy, and saving
-makes a new template; the old one stays as it was. An envelope keeps the exact PDF and fields it was sent with, so what a
-signer signs is what was sent.
+A role can have a default signer: who usually signs as it, such as the person who always countersigns for your company.
+Give a name, an email or both next to the role when you upload the template.
 
-There is no button to delete a template.
+- **New envelope** fills them in for that role. You can still change them before you send.
+- An envelope sent through the API with a recipient that leaves out its `name` or `email` gets its role's default.
+- **Place fields** on an existing template keeps its default signers in the copy, for the roles the copy keeps.
+- They aren't part of what is signed: an envelope records whom it was sent to, and changing a default later changes no
+  envelope already sent. The API can change them (`POST /api/templates/{id}/default-signers`).
+
+A default signer's name must be one the signature can draw, as for any signer.
+
+## Edit, tag, share or delete a template
+
+Each template's row has **Send** and a **⋯** menu:
+
+- **Edit** (its editors, admins and owner): on **Details**, its **Name** and its default signers; on **Fields**, the field
+  editor. Saving the fields makes a new version of the template, which takes its place in the list with the same name,
+  owner, people and tags.
+- **Tags**: your own tags on it.
+- **Share** (its admins and owner): see below.
+- **Delete** (its admins and owner): it no longer appears in Esign. You are asked first.
+
+The **Access** column says when a template is shared with you, and as what.
+
+## Envelopes keep what they were sent with
+
+A template's PDF and fields never change: editing its fields makes a new version, and the earlier one is archived, as a
+deleted template is: no longer listed in Esign, but kept, for the envelopes sent from it and for a system that sends with
+its id. An envelope keeps the exact PDF and fields it was sent with, so what a signer signs
+is what was sent, and it can still be signed after its template is edited or deleted. A new name or default signers
+change no envelope already sent.
+
+## Who sees a template
+
+A template is yours when you upload it, and nobody else sees it until you share it: **Share** in its row's menu shows who
+sees it, and there its admins and owner share it by email, as Viewer (sees it and sends envelopes from it), Editor (also
+edits it) or Admin (also shares and deletes it). Your **tags** on it are yours alone.
+
+Above the list, as on **Envelopes**: **Search templates** (a name, or a template id), **Date** (uploaded in the last 24
+hours to 12 months), **Owner** (**Mine** or **Shared with me**) and **Tags** (yours, picked by clicking), each shown as a
+chip that removes it, and **Clear all**; below it, pages. An envelope sent from a template is its sender's, not shared with the template's people. See
+[Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
 
 ## The editor on the Templates page
 
 The **Templates** page hosts the editor exactly as a host product would: it opens an editing session for its own address,
 stages the PDF, frames the editor and confirms the save with the server. The deployment's list of origins allowed to
 embed Esign's pages must therefore include Esign's own address for **Upload and place fields** and **Place fields** to
-work. Uploading with a signature page needs nothing more.
+work.
 
 ## Embed the editor in a host product
 

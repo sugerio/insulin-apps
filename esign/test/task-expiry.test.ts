@@ -71,7 +71,7 @@ test('past the deadline the envelope expires: no link, no code, and one EXPIRED 
   try {
     const { id } = await h.envelope('k2', new Date(Date.now() + DAY).toISOString());
     const task = (await h.read(id!)).tasks[0];
-    const { code } = await (await h.req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).json() as { code: string };
+    const { code } = await (await h.req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({signedInEmail:task.recipientEmail, origin: ORIGIN }, h.auth))).json() as { code: string };
     const { token } = await (await h.req('/api/public/page-sessions/exchange', h.json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
     const signer = { origin: ORIGIN, 'x-esign-session': token, ...SIGNER };
 
@@ -79,7 +79,7 @@ test('past the deadline the envelope expires: no link, no code, and one EXPIRED 
     await h.db.prepare('UPDATE tasks SET expires_at=? WHERE id=?').bind(Date.now() - 1000, task.id).run();
     assert.notEqual((await h.req('/api/public/signing/otp', h.json({}, signer))).status, 200, 'no code after the deadline');
     assert.equal((await h.read(id!)).status, 'EXPIRED');
-    assert.notEqual((await h.req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).status, 201, 'no new link');
+    assert.notEqual((await h.req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, h.json({signedInEmail:task.recipientEmail, origin: ORIGIN }, h.auth))).status, 201, 'no new link');
     assert.equal((await h.req(`/api/envelopes/${id}/void`, h.json({}, h.auth))).status, 409, 'an expired envelope is not voided');
     const events = (await auditTrail(h.db, id!)).filter(e => e.type === AUDIT.expired);
     assert.equal(events.length, 1);

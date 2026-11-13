@@ -27,14 +27,12 @@ navigation on the left shows your organization at the top and your name and role
 A template is a PDF and the roles that sign it, in signing order.
 
 1. Open **Templates**.
-2. Under **New template**, choose the **PDF** (up to 5 MB and 100 pages).
+2. Choose **New template**, and in the dialog choose the **PDF** (up to 5 MB and 100 pages). Its **Name** starts as
+   the file's name; change it if you like.
 3. Under **Signer roles, in signing order**, name each role, such as `partner` and `seller`. Use letters, digits, `-` and
    `_`, with no spaces. Choose **Add a role** for another one.
-4. Choose **Upload with a signature page** for the quickest start. Signers then sign on a page Esign adds after the
-   document's last page.
-
-Or choose **Upload and place fields** to put each role's signature, title and date exactly where they belong. See
-[Templates and fields](/docs/esign/templates).
+4. Choose **Upload and place fields**, and put each role's signature, and its title and date if you want them, where they
+   belong. See [Templates and fields](/docs/esign/templates).
 
 ![The Templates page with the New template form and one template](/docs/assets/screenshots/esign-templates.png "Templates: upload a PDF with its roles, then send it")
 
@@ -52,8 +50,9 @@ The envelope's page opens. Its status is **Out for signature**, and the first si
 
 ## 3. Have each signer sign
 
-Esign doesn't email an invitation to sign. The signer whose turn it is opens the signing page in one of two ways:
+The signer whose turn it is opens the signing page in one of three ways:
 
+- **From the invitation Esign emails them** when their turn comes, unless you chose to open the page for them.
 - **In your host product**, the system your organization uses Esign from, which shows the signing page inside its own
   pages.
 - **From the envelope's page**: choose **Open** *name*'s **signing page** next to the active signer (for example

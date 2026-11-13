@@ -39,8 +39,8 @@ async function harness() {
   /** Signs the envelope's only task through the page, the link carrying the host's sign-in; completes it. */
   const signAll = async (envelopeId: string, hostAuthentication?: unknown, views?: (headers: Record<string, string>) => Promise<void>) => {
     await req(`/api/envelopes/${envelopeId}/prepare`, { method: 'POST', headers: auth });
-    const task = (await (await req(`/api/envelopes/${envelopeId}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[0];
-    const view = await req(`/api/envelopes/${envelopeId}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN, ...(hostAuthentication ? { hostAuthentication } : {}) }, auth));
+    const task = (await (await req(`/api/envelopes/${envelopeId}`, { headers: auth })).json() as { tasks: { id: string; recipientEmail: string }[] }).tasks[0];
+    const view = await req(`/api/envelopes/${envelopeId}/tasks/${task.id}/recipient-view`, json({signedInEmail:task.recipientEmail, origin: ORIGIN, ...(hostAuthentication ? { hostAuthentication } : {}) }, auth));
     assert.equal(view.status, 201);
     const { code } = await view.json() as { code: string };
     const { token } = await (await req('/api/public/page-sessions/exchange', json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
@@ -78,8 +78,8 @@ test('the sender, who named the signer and the host sign-in are validated and pa
     assert.equal((await h.create('k1', { sender: { ...sender, name: 'Someone Else' } }, { namedBy: 'Pedro Alves (applicant)' })).status, 409);
     const created = await (await h.create('k2', {})).json() as { id: string };
     await h.req(`/api/envelopes/${created.id}/prepare`, { method: 'POST', headers: h.auth });
-    const task = (await (await h.req(`/api/envelopes/${created.id}`, { headers: h.auth })).json() as { tasks: { id: string }[] }).tasks[0];
-    const bad = await h.req(`/api/envelopes/${created.id}/tasks/${task.id}/recipient-view`, h.json({ origin: ORIGIN, hostAuthentication: { method: 'sso' } }, h.auth));
+    const task = (await (await h.req(`/api/envelopes/${created.id}`, { headers: h.auth })).json() as { tasks: { id: string; recipientEmail: string }[] }).tasks[0];
+    const bad = await h.req(`/api/envelopes/${created.id}/tasks/${task.id}/recipient-view`, h.json({signedInEmail:task.recipientEmail, origin: ORIGIN, hostAuthentication: { method: 'sso' } }, h.auth));
     assert.equal(bad.status, 400, 'the method is an upper-case word');
   } finally { await h.mf.dispose(); }
 });
@@ -91,7 +91,8 @@ test("identity confirmed records the host's sign-in with the code, and the audit
     const taskId = await h.signAll(id, AUTH);
     const verified = (await auditTrail(h.db, id)).find(e => e.type === 'OTP_VERIFIED' && e.taskId === taskId);
     const stored = { ...AUTH, signedInAt: '2026-11-08T09:30:00.000Z' };
-    assert.deepEqual(verified?.detail, { hostAuthentication: stored });
+    // With the signed-in account Esign checked has the signer's email.
+    assert.deepEqual(verified?.detail, { hostAuthentication: stored, signedInEmail: 'ana@northbeam.test' });
     const { events } = await (await h.req(`/api/envelopes/${id}/audit`, { headers: h.auth })).json() as { events: { type: string; detail?: Record<string, unknown> }[] };
     assert.deepEqual(events.find(e => e.type === 'OTP_VERIFIED')?.detail, { hostAuthentication: stored });
   } finally { await h.mf.dispose(); }

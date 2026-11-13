@@ -10,6 +10,9 @@ import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFiel
 import type {Hono} from 'hono';
 import type { BlobStore } from './blob-store.ts';
 import {parseMetadata,parseTemplateName,unknownKeys} from './metadata.ts';
+import {storedDefaultSigners} from './default-signers.ts';
+import {atLeast,clientShare,documentRole,parseShares,shareInserts,sharesFor} from './ownership.ts';
+import {mergeTags,parseTags,tagsOf,tagWrites} from './tags.ts';
 
 const limit=5*1024*1024;
 const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),n=>n.toString(16).padStart(2,'0')).join('');
@@ -30,25 +33,40 @@ export function mountEditorRoutes(app:Hono<Env>){
  const syncOrigins=async(c:import('hono').Context<Env>,next:import('hono').Next)=>{await syncEditorOrigins(c.env.DB,editorOrigins(new URL(c.req.url).origin,c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)));await next();};
  app.use('/api/template-editing-sessions',syncOrigins);app.use('/api/template-editing-sessions/*',syncOrigins);app.use('/api/public/editor/*',syncOrigins);
  app.post('/api/template-editing-sessions',bodyLimit({maxSize:32768}),async c=>{
-  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
-  if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
+  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown;tags?:unknown;share?:unknown;replace?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
+  if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata','tags','share','replace']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
   // The name and metadata the saved template gets (metadata.ts); without them, an edited template keeps its source's.
+  // Its owner is the caller, with their tags (and theirs on the source) and the shares asked for (ownership.ts).
   const templateName=parseTemplateName(input?.name),templateMetadata=parseMetadata(input?.metadata);
-  if(templateName==='invalid'||templateMetadata==='invalid')return c.json({error:'invalid_session'},422);
+  const tags=parseTags(input?.tags),shares=parseShares(input?.share);
+  if(templateName==='invalid'||templateMetadata==='invalid'||tags==='invalid'||shares==='invalid')return c.json({error:'invalid_session'},422);
   if(!input||typeof input.allowedParentOrigin!=='string'||(input.sourceTemplateId!==undefined&&(typeof input.sourceTemplateId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(input.sourceTemplateId)))||(input.roles!==undefined&&!rolesValid(input.roles)))return c.json({error:'invalid_session'},422);
-  const tenant=c.get('tenantId');
+  const tenant=c.get('tenantId'),caller=c.get('caller');
   let sourceHash:string|null=null;
+  // A copy of a template the caller sees only. `replace`: the saved template is the source's new version, which takes
+  // its place (its owner, shares and everyone's tags carry over, and it is no longer listed): its editors, admins and
+  // owner only, and only while it is the current version. Fields never change in place: envelopes in flight sign with
+  // the fields of the template they were sent from.
+  const replace=input.replace===true;
+  if(input.replace!==undefined&&typeof input.replace!=='boolean'||(replace&&!input.sourceTemplateId))return c.json({error:'invalid_session'},422);
+  if(input.sourceTemplateId){
+   const found=await documentRole(c.env.DB,tenant,caller,'template',input.sourceTemplateId as string);
+   if(!found)return c.json({error:'not_found'},404);
+   if(replace&&!atLeast(found.role,'editor'))return c.json({error:'forbidden',role:found.role},403);
+  }
   if(input.sourceTemplateId){const source=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(input.sourceTemplateId,tenant).first<{object_key:string}>();if(!source)return c.json({error:'not_found'},404);
    try{const object=await c.env.ARTIFACTS.get(source.object_key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');sourceHash=await sha256(new Uint8Array(await object.arrayBuffer()));}catch{return c.json({error:'source_unavailable'},503);}
   }
-  let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{sourceTemplateId:(input.sourceTemplateId as string|undefined)??null,sourceSha256:sourceHash,roles:(input.roles as string[]|undefined)??[],templateName,templateMetadata});}catch{return c.json({error:'origin_not_allowed'},403);}
+  const given=sharesFor([...shares,...[await clientShare(c.env.DB,tenant,caller)].filter(share=>share!==null)],caller);
+  const allTags=mergeTags(tags,input.sourceTemplateId?await tagsOf(c.env.DB,tenant,caller.userId,'template',input.sourceTemplateId as string):[]);
+  let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{sourceTemplateId:(input.sourceTemplateId as string|undefined)??null,sourceSha256:sourceHash,roles:(input.roles as string[]|undefined)??[],templateName,templateMetadata,ownerUserId:caller.userId,shares:replace?[]:given,tags:replace?[]:allTags,replacesSource:replace});}catch{return c.json({error:'origin_not_allowed'},403);}
   const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;
   c.header('Cache-Control','no-store');c.header('Referrer-Policy','no-referrer');return c.json({sessionId:issued.pageId,url:url.toString()},201);
  });
  app.post('/api/template-editing-sessions/:id/source',bodyLimit({maxSize:limit}),async c=>{
-  const pageId=c.req.param('id'),tenant=c.get('tenantId');
-  // A source can be staged only before the page is opened: while the session's code is unused and unexpired.
-  const row=await c.env.DB.prepare(`SELECT x.source_template_id,x.staged_object_key,${editorCodeOpen('x')} AS open FROM editor_sessions x WHERE x.id=? AND x.tenant_id=? AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(Date.now(),pageId,tenant).first<{source_template_id:string|null;staged_object_key:string|null;open:number}>();
+  const pageId=c.req.param('id'),tenant=c.get('tenantId'),owner=c.get('caller').userId;
+  // A source can be staged only before the page is opened: while the session's code is unused and unexpired; by whoever opened the session.
+  const row=await c.env.DB.prepare(`SELECT x.source_template_id,x.staged_object_key,${editorCodeOpen('x')} AS open FROM editor_sessions x WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(Date.now(),pageId,tenant,owner).first<{source_template_id:string|null;staged_object_key:string|null;open:number}>();
   if(!row)return c.json({error:'not_found'},404);
   if(row.source_template_id||row.staged_object_key||!row.open)return c.json({error:'source_immutable'},409);
   if(c.req.header('content-type')!=='application/pdf')return c.json({error:'invalid_file'},422);
@@ -56,10 +74,10 @@ export function mountEditorRoutes(app:Hono<Env>){
   try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});if(!pdf.getPageCount()||pdf.getPageCount()>100)throw new Error('pages');}catch{return c.json({error:'invalid_file'},422);}
   const hash=await sha256(bytes),key=`editor-sources/${pageId}/${crypto.randomUUID()}.pdf`;
   const stored=await c.env.ARTIFACTS.put(key,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/pdf'}});if(!stored)return c.json({error:'storage_conflict'},503);
-  const result=await c.env.DB.prepare(`UPDATE editor_sessions AS x SET staged_object_key=?,staged_sha256=? WHERE x.id=? AND x.tenant_id=? AND x.source_template_id IS NULL AND x.staged_object_key IS NULL AND ${editorCodeOpen('x')} AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(key,hash,pageId,tenant,Date.now()).run();
+  const result=await c.env.DB.prepare(`UPDATE editor_sessions AS x SET staged_object_key=?,staged_sha256=? WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND x.source_template_id IS NULL AND x.staged_object_key IS NULL AND ${editorCodeOpen('x')} AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(key,hash,pageId,tenant,owner,Date.now()).run();
   if(result.meta.changes!==1)return c.json({error:'source_immutable'},409);return c.json({ok:true},201);
  });
- app.get('/api/template-editing-sessions/:id',async c=>{const row=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=? AND tenant_id=?').bind(c.req.param('id'),c.get('tenantId')).first<{result_template_id:string|null}>();if(!row)return c.json({error:'not_found'},404);c.header('Cache-Control','no-store');return c.json({templateId:row.result_template_id});});
+ app.get('/api/template-editing-sessions/:id',async c=>{const row=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=? AND tenant_id=? AND owner_user_id=?').bind(c.req.param('id'),c.get('tenantId'),c.get('caller').userId).first<{result_template_id:string|null}>();if(!row)return c.json({error:'not_found'},404);c.header('Cache-Control','no-store');return c.json({templateId:row.result_template_id});});
  app.post('/api/public/editor/exchange',bodyLimit({maxSize:1024}),async c=>{if(!sameOrigin(c.req.raw))return c.json({error:'origin'},403);let data:{pageId?:unknown;code?:unknown;embedded?:unknown;embedder?:unknown;embedders?:unknown};try{data=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}if(!data||typeof data.pageId!=='string'||typeof data.code!=='string')return c.json({error:'invalid_code'},401);
   // Only the session's parent may frame the editor (signing-page.ts).
   const parent=await editorPageParent(c.env.DB,data.pageId,Date.now());if(!embedderAllowed(data,new URL(c.req.url).origin,parent?[parent]:[]))return c.json({error:'embedder_not_allowed'},403);
@@ -82,8 +100,18 @@ export function mountEditorRoutes(app:Hono<Env>){
   try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./fields.ts').TemplateField[]);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
   try{assertEditorSigningFields(fields as import('./fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
   // The session's name and metadata, else those of the template it edits.
-  let labels={name:session.templateName as string|null,metadata:session.templateMetadataJson};
-  if((labels.name===null||labels.metadata===null)&&session.sourceTemplateId){const source=await c.env.DB.prepare('SELECT name,metadata_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{name:string|null;metadata_json:string}>();if(source)labels={name:labels.name??source.name,metadata:labels.metadata??source.metadata_json};}
+  // The source template's default signers too, for the roles the saved template keeps (a new PDF's are set after
+  // the save: POST /api/templates/:id/default-signers).
+  let labels={name:session.templateName as string|null,metadata:session.templateMetadataJson,signers:null as string|null};
+  if(session.sourceTemplateId){const source=await c.env.DB.prepare('SELECT name,metadata_json,default_signers_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{name:string|null;metadata_json:string;default_signers_json:string}>();if(source)labels={name:labels.name??source.name,metadata:labels.metadata??source.metadata_json,signers:source.default_signers_json};}
+  const signers=storedDefaultSigners(labels.signers,roles);
+  // A new version keeps its source's owner, and replaces it: the source is archived (taken off the lists), if it isn't yet.
+  let owner=session.ownerUserId;
+  if(session.replacesSource){
+   const source=await c.env.DB.prepare('SELECT owner_user_id FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{owner_user_id:string}>();
+   if(!source)return c.json({error:'not_found'},404);
+   owner=source.owner_user_id;
+  }
   const id=crypto.randomUUID(),key=`templates/${id}/source.pdf`;const stored=await c.env.ARTIFACTS.put(key,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/pdf'}});if(!stored)return c.json({error:'storage_conflict'},503);
   // The template row first: nothing references it and its id is returned only after the commit
   // point, a compare-and-set that records it as this page's result while the page is still unsaved
@@ -91,8 +119,18 @@ export function mountEditorRoutes(app:Hono<Env>){
   // harmless orphan.
   let saved:D1Result;
   try{[,saved]=await c.env.DB.batch([
-   c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at,name,metadata_json) VALUES (?,?,?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now(),labels.name,labels.metadata??'{}'),
+   c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at,name,metadata_json,default_signers_json,owner_user_id) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now(),labels.name,labels.metadata??'{}',JSON.stringify(signers),owner),
    c.env.DB.prepare(`UPDATE editor_sessions AS x SET result_template_id=? WHERE x.id=? AND x.tenant_id=? AND x.result_template_id IS NULL AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND EXISTS (SELECT 1 FROM access_sessions s WHERE s.scope='editor' AND s.token_hash=? AND s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin AND s.expires_at>?)`).bind(id,session.pageId,session.tenantId,session.tokenHash,Date.now()),
+   // Owned by whoever opened the session, shared and tagged as they asked; or, for a new version, shared and tagged as
+   // its source was, which it replaces.
+   ...(session.replacesSource?[
+    c.env.DB.prepare(`INSERT INTO document_shares (tenant_id,resource_type,resource_id,grantee_email_key,grantee_email,role,granted_by,granted_at) SELECT tenant_id,'template',?,grantee_email_key,grantee_email,role,granted_by,granted_at FROM document_shares WHERE tenant_id=? AND resource_type='template' AND resource_id=?`).bind(id,session.tenantId,session.sourceTemplateId),
+    c.env.DB.prepare(`INSERT INTO document_tags (tenant_id,user_id,resource_type,resource_id,tag_key,tag) SELECT tenant_id,user_id,'template',?,tag_key,tag FROM document_tags WHERE tenant_id=? AND resource_type='template' AND resource_id=?`).bind(id,session.tenantId,session.sourceTemplateId),
+    c.env.DB.prepare('UPDATE templates SET archived_at=? WHERE id=? AND tenant_id=? AND archived_at IS NULL').bind(Date.now(),session.sourceTemplateId,session.tenantId),
+   ]:[
+    ...shareInserts(c.env.DB,session.tenantId,'template',id,session.shares,session.ownerUserId,Date.now()),
+    ...tagWrites(c.env.DB,session.tenantId,session.ownerUserId,'template',id,session.tags),
+   ]),
   ]);}catch{saved={meta:{changes:0}} as D1Result;}
   if(saved.meta.changes!==1){const result=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=?').bind(session.pageId).first<{result_template_id:string|null}>();if(result?.result_template_id)return c.json({error:'already_saved'},409);return c.json({error:'save_failed'},503);}
   return c.json({id},201);

@@ -5,12 +5,12 @@ order: 4
 ---
 
 An envelope is a template sent to named signers, one for each role, who sign in order. This page covers sending one step
-by step, what each field does, the statuses an envelope and its signers go through, voiding, declines, deadlines and due
-work. It is for people who send and for AI agents acting for them.
+by step, what each field does, the statuses an envelope and its signers go through, voiding, declines, deadlines, due
+work and contacts. It is for people who send and for AI agents acting for them.
 
 ## Before you send
 
-- You need a template. See [Templates and fields](/docs/esign/templates).
+- You need a template you see: yours, or one shared with you. See [Templates and fields](/docs/esign/templates).
 - Your role needs **Send and manage envelopes** (owners, admins and editors have it). See
   [Roles and access](/docs/esign/roles-and-access).
 - Signing needs to be set up on the deployment. If it isn't, the **Envelopes** page says so; you can still send, but
@@ -21,7 +21,9 @@ work. It is for people who send and for AI agents acting for them.
 1. On **Envelopes**, choose **New envelope**. Or, on **Templates**, choose **Send** next to a template.
 2. Under **Template**, choose the template.
 3. Under **Signers**, fill in one block for each role, numbered in signing order (for example **1. partner**,
-   **2. seller**). **Name** and **Email** are required.
+   **2. seller**). **Name** and **Email** are required; a role with a
+   [default signer](/docs/esign/templates#default-signers) has them filled in. As you type two or more characters in either, matching
+   [contacts](#contacts) are suggested; choose one (or use the arrow keys and Enter) to fill in the signer.
 4. Under **Document**, add what signers should see about the document, and a sign-by day if there is one. All optional.
 5. Choose **Send for signature**.
 
@@ -40,7 +42,7 @@ same request key, so the envelope is never sent twice.
 | **Email** | Where their verification code and, at the end, the link to their signed copy are sent. Only someone who can read this mailbox can sign. It can't be changed after sending. |
 | **Title (optional)** | Shown on the signing page and recorded with the signature. |
 | **Signs for company (optional)** | The company they sign for. The signer must then give their title and confirm "I'm authorized to sign for" that company. |
-| **After signing, one line each (optional, at most 3)** | What the signer reads once they have signed, such as what happens next. |
+| **Email subject** and **Message to** *the signer* (optional) | Their own message, shown when **Write a different message to each signer** is chosen (below). |
 
 ### Document fields
 
@@ -50,6 +52,15 @@ same request key, so the envelope is never sent twice.
 | **Version** and **Published (YYYY-MM-DD)** | Which version of the document this is, and when it was published. |
 | **Sender name** and **Sender company** | Who sent it, shown on the signing page. |
 | **Sign by (optional)** | If a signer hasn't signed by the end of this day (in your time zone), the envelope expires and nobody can sign it. Up to 400 days ahead. |
+| **Email subject** and **Message to the signers** (optional) | Your message, shown on the signing page next to the document, and the subject and text of the invitations Esign emails. Without a subject, an invitation's is "Please sign:" and the document's name. Choose **Write a different message to each signer** to give each their own instead. |
+
+## Who sees an envelope
+
+An envelope is yours when you send it, and nobody else sees it, your organization's owners and admins included, until
+you share it: **Who sees it** on its page shares it by email, as Viewer, Editor (who may also void it and resend
+invitations) or Admin (who may also share it). Tags you give it, on the form or on its page, are yours alone, along with
+yours on its template; **Envelopes** filters by them (**Tags**), and by **Sent by me** or **Shared with me** (**Sender**). See
+[Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
 
 ## Signing order
 
@@ -57,23 +68,47 @@ Signers sign one at a time, in the template's role order. Only the signer whose 
 When they have signed, their signature is drawn into the PDF, and the next signer signs that result. So every signer signs
 exactly what the signer before them produced.
 
-Esign doesn't email signers an invitation. When it is someone's turn, they open the signing page in your host product,
-or someone who manages opens it for them from the envelope's page with **Open** *name*'s **signing page**. See
-[Signing](/docs/esign/signing).
+When it is someone's turn, Esign emails them an invitation, and they open the signing page from it. A signer whose email
+went astray can be sent a new one with **Resend invitation** on the envelope's page, which replaces the earlier link.
+The envelope's page never opens a signer's page itself. See [Signing](/docs/esign/signing).
 
 ## Follow an envelope
 
 The envelope's page shows:
 
 - the document's name as its title, then the status, the envelope id and when it was created;
-- **Signers**: each one's order, name and email, role and status, when they opened the signing page and their deadline;
+- **Signers**: each one's order, name and email, role and status, when they were invited, when they opened the signing page and their deadline;
 - **Metadata**, when the sender's system gave the envelope any: its keys and values, as given (never shown to signers);
 - **Audit trail**: every event with its time, the signer and the IP address.
 
-The page refreshes by itself every few seconds while the envelope is out for signature or finishing. The **Envelopes**
-page lists every envelope, newest first; filter it with **Status**, or choose a status's view in the navigation's second
-column (**Out for signature**, **Completed** and so on), which is the same filter at its own address, such as
-`/envelopes?status=completed`.
+The page refreshes by itself every few seconds while the envelope is out for signature or finishing.
+
+## The Envelopes list
+
+**Envelopes** lists the envelopes you own or that are shared with you, newest first, a page at a time (**Per page**, and
+the arrows for the next and previous pages). Each row shows:
+
+- the document's name, and **To:** its signers;
+- where it stands: out for signature, a bar of how many have signed, **Waiting for** whose turn it is (point at it for
+  every signer and their status) and "1 of 2 signed"; otherwise its status;
+- its owner, and its **Last change** (its latest event);
+- one action that fits: **Resend** to the signer whose turn it is, when Esign invites them by email; **Download** the
+  signed PDF with its certificate once completed; otherwise **View**. Its **⋯** menu has **View**, **Void** (out for
+  signature), **Tags** and **Share**, for the roles in it that may.
+
+Above the list:
+
+- **Search envelopes**: the document's name, a signer's name or email, or an envelope id. While it is empty, it offers the
+  common filters below, one click each.
+- **Date**: created in the last 24 hours, 7 or 30 days, 6 or 12 months.
+- **Status**: In progress (which includes the few seconds an envelope spends finishing), Completed, Declined, Voided,
+  Expired. A status has its own address, such as `/envelopes?status=completed`, to bookmark or share.
+- **Sender**: **Sent by me** (yours) or **Shared with me**.
+- **Quick views**: **Waiting for others** (yours, out for signature) and **Expiring soon** (the signer whose turn it is
+  has a deadline within 7 days).
+- **Tags**: your own tags, picked from those you use, one click each; the list shows envelopes with all of those picked.
+
+Each filter in use shows as a chip under them, which removes it; **Clear all** removes them all.
 
 ![An envelope's page with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "An envelope out for signature: signers in order and the audit trail")
 
@@ -144,6 +179,25 @@ for your organization:
 - call `POST /api/process-due` with an OAuth client or an AI agent whose role can send and manage envelopes.
 
 One run looks at up to 25 envelopes to finish and 25 owing signed copies, so a backlog takes several runs.
+
+## Contacts
+
+**Contacts** is your organization's address book. Everyone an envelope names as a signer is added, or refreshed with the
+name, title and company you gave this time, and listed most recently used first, with how many envelopes named them since they were added.
+Search it by name or email.
+
+- To add someone before you send to them, choose **Add contact**. Adding an email that is already there changes that
+  contact.
+- To delete a contact, choose **Delete** on their row, then **Delete for good**. The next envelope you send them adds them
+  again.
+- To change a contact, open them. Their page also lists every envelope that names them (those from before they were
+  added too), and can delete them.
+- When you send, a contact suggested under **Name** or **Email** as you type fills in the signer's name, email, title and
+  company.
+- A contact's page lists only the envelopes you see.
+
+A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact
+changes no envelope. Everyone in your organization who can see envelopes sees the contacts; those who send can change them.
 
 ## Send from another system
 

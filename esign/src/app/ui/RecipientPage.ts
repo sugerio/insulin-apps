@@ -29,7 +29,7 @@ type Disclosure = {version:string;text:string};
 /** The host's statement of how it signed the recipient in (src/signer-facts.ts). */
 type HostAuthentication = {method:string;provider?:string;domain?:string;signedInAt?:string};
 type Artifact = {id:string;sha256:string;verified?:boolean;fields?:SignatureField[];recipientName?:string;role?:string;disclosure?:Disclosure;signer?:{title?:string;onBehalfOf?:string};intent?:string;signerName?:string;documentName?:string;recipientEmail?:string;
-  documentVersion?:{label:string;publishedAt?:string};sender?:{name:string;organization?:string};hostAuthentication?:HostAuthentication;
+  documentVersion?:{label:string;publishedAt?:string};sender?:{name:string;organization?:string};hostAuthentication?:HostAuthentication;message?:{subject?:string;body?:string};
   signers?:{before:number;after:number;next?:{name:string;organization?:string}};afterSigning?:string[]};
 /** A file name for the downloaded copy: the document's name, else "document". */
 const pdfFileName=(name?:string)=>`${(name??'').replace(/[^A-Za-z0-9 ._-]+/g,'').trim().slice(0,100)||'document'}.pdf`;
@@ -148,8 +148,11 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const [sentAt,setSentAt]=useState(0),[emailed,setEmailed]=useState(false),[testMailbox,setTestMailbox]=useState(false),[now,setNow]=useState(()=>Date.now()),autoSent=useRef(false);
   // Signing for a company: the signer's title (the host's, editable) and their confirmation of authority.
   const [signerTitle,setSignerTitle]=useState(''),[authority,setAuthority]=useState(false);
-  // The name the signer adopts: it fills every one of their Signature fields.
-  const [fullName,setFullName]=useState('');
+  // The name the signer adopts, and the fields they have signed with it (or, for a Title field, filled with their title):
+  // each field is signed by selecting it; the required ones must all be, the optional ones may be left empty.
+  const [fullName,setFullName]=useState(''),[applied,setApplied]=useState<Record<string,boolean>>({});
+  // How the adopted name looks (the first Signature field's image of it), before any field is signed; why it doesn't fit.
+  const [adoptUrl,setAdoptUrl]=useState(''),[adoptError,setAdoptError]=useState('');
   // Declining instead of signing, with a reason; the electronic records disclosure, opened from Sign.
   const [declining,setDeclining]=useState(false),[declineReason,setDeclineReason]=useState(''),[declineBusy,setDeclineBusy]=useState(false),[showDisclosure,setShowDisclosure]=useState(false),[showHelp,setShowHelp]=useState(false);
   // What the signer is about to sign: how many pages, the page in view, and the document itself to keep a copy before signing.
@@ -159,39 +162,50 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   // The host refused the document before the code (it requires the code first), or loading failed.
   const [docNeedsCode,setDocNeedsCode]=useState(false),[docFailed,setDocFailed]=useState(false);
   useEffect(()=>{if(!pdf){setPdfUrl('');return;}const url=URL.createObjectURL(pdf);setPdfUrl(url);return ()=>URL.revokeObjectURL(url);},[pdf]);
-  useEffect(()=>{setSignerTitle(artifact?.signer?.title??'');setAuthority(false);setFullName(artifact?.signerName??artifact?.recipientName??'');},[artifact?.id]);
+  useEffect(()=>{setSignerTitle(artifact?.signer?.title??'');setAuthority(false);setFullName(artifact?.signerName??artifact?.recipientName??'');setApplied({});},[artifact?.id]);
   const forCompany=artifact?.signer?.onBehalfOf;
-  // Title fields show the signer's title, so a template with one needs a title.
-  const titleFieldIds=(artifact?.fields??[]).filter(f=>f.type==='Title').map(f=>f.id),needsTitle=titleFieldIds.length>0;
-  const titleShown=!!(forCompany||artifact?.signer?.title||needsTitle);
+  // Title fields show the signer's title, so a template with a required one needs a title.
+  const titleFieldIds=(artifact?.fields??[]).filter(f=>f.type==='Title').map(f=>f.id),needsTitle=(artifact?.fields??[]).some(f=>f.type==='Title'&&f.required);
+  const titleShown=!!(forCompany||artifact?.signer?.title||titleFieldIds.length);
+  const appliedKey=Object.keys(applied).filter(id=>applied[id]).sort().join();
   const authorityReady=(!forCompany||(signerTitle.trim()!==''&&authority))&&(!needsTitle||signerTitle.trim()!=='');
-  // Every Title field carries the signer's title; a change asks for new previews.
+  // Every Title field the signer has filled carries their title; a change asks for new previews.
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the field ids
-  useEffect(()=>{if(!needsTitle)return;const title=signerTitle.trim();
-    setSignatures(old=>titleFieldIds.every(id=>old[id]===title)?old:{...old,...Object.fromEntries(titleFieldIds.map(id=>[id,title]))});},[signerTitle,titleFieldIds.join()]);
-  // Every Signature field carries the adopted name; a change drops the old previews.
+  useEffect(()=>{if(!titleFieldIds.length)return;const title=signerTitle.trim(),want=(id:string)=>applied[id]?title:'';
+    setSignatures(old=>titleFieldIds.every(id=>(old[id]??'')===want(id))?old:{...old,...Object.fromEntries(titleFieldIds.map(id=>[id,want(id)]))});},[signerTitle,titleFieldIds.join(),appliedKey]);
+  // Every Signature field the signer has signed carries the adopted name; a change drops the old previews.
   const signatureFieldIds=(artifact?.fields??[]).filter(f=>f.type==='Signature').map(f=>f.id);
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the field ids
-  useEffect(()=>{if(!signatureFieldIds.length)return;
-    setSignatures(old=>signatureFieldIds.every(id=>old[id]===fullName)?old:{...old,...Object.fromEntries(signatureFieldIds.map(id=>[id,fullName]))});
-    setPreviews(old=>signatureFieldIds.every(id=>old[id]===fullName||!old[id])?old:{...old,...Object.fromEntries(signatureFieldIds.filter(id=>old[id]!==fullName).map(id=>[id,'']))});},[fullName,signatureFieldIds.join()]);
+  useEffect(()=>{if(!signatureFieldIds.length)return;const want=(id:string)=>applied[id]?fullName:'';
+    setSignatures(old=>signatureFieldIds.every(id=>(old[id]??'')===want(id))?old:{...old,...Object.fromEntries(signatureFieldIds.map(id=>[id,want(id)]))});
+    setPreviews(old=>signatureFieldIds.every(id=>old[id]===want(id)||!old[id])?old:{...old,...Object.fromEntries(signatureFieldIds.filter(id=>old[id]!==want(id)).map(id=>[id,'']))});},[fullName,signatureFieldIds.join(),appliedKey]);
   useEffect(()=>{
-    const params=new URLSearchParams(window.location.hash.slice(1));const code=params.get('code');
+    // A host's link carries a one-time code (#code=); an invitation Esign emailed carries the
+    // invitation's token (#invite=), which this page exchanges for such a code first.
+    const params=new URLSearchParams(window.location.hash.slice(1));const given=params.get('code'),invite=params.get('invite');
     window.history.replaceState(null,'',window.location.pathname);
     // The API is this page's own origin (the app). The host told when the signer closes, signs or
     // declines must be one the app lets frame this page (GET /api/public/signing-page).
     api.current=window.location.origin;
-    if (!code) {setMessage('No recipient code provided.');return;}
+    if (!given && !invite) {setMessage('No recipient code provided.');return;}
+    let invitationRefused=false;
+    const codeFor=async():Promise<string>=>{
+      if (given) return given;
+      const response=await fetch(`${api.current}/api/public/signing/invitation`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:invite})});
+      if (!response.ok) {invitationRefused=true;throw new Error();}
+      return (await response.json() as {code:string}).code;
+    };
     const frame=embedding(window,window.document?.referrer??'');
     fetch(`${api.current}/api/public/signing-page`,{cache:'no-store'})
       .then(async response=>{
         const page=response.ok?await response.json() as {hosts?:unknown}:{};
         const hosts=Array.isArray(page.hosts)?page.hosts.filter((h):h is string=>typeof h==='string').join(' '):'';
         try {host.current=signingHost(params.get('host'),hosts,frame.embedded,frame.embedder||undefined);} catch {host.current='';}
+        const code=await codeFor();
         const exchange=await fetch(`${api.current}/api/public/page-sessions/exchange`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,...frame})});
         if(!exchange.ok) throw new Error();const value=await exchange.json() as {token:string};setToken(value.token);setMessage('Loading document…');
       })
-      .catch(()=>setMessage('Session unavailable or expired.'));
+      .catch(()=>setMessage(invitationRefused?'This invitation link no longer works: a newer email replaced it, your turn has passed, or the signing has ended. Use the latest email, or ask the sender to send it again.':'Session unavailable or expired.'));
   },[]);
   /** Tells the host (when there is one) that the signer closed the page, signed or declined. */
   const notifyHost=(msg:SigningHostMessage)=>{if(!host.current)return;try{window.parent.postMessage(msg,host.current);}catch{/* The host is gone: nothing to tell. */}};
@@ -291,9 +305,17 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     if(pendingDecline){setPendingDecline(false);setStep(1);await decline();return;}
     setStep(3);}
   const fields=artifact?.fields??[];
-  const signaturesReady=fields.every(field=>{const value=signatures[field.id]??'';if(field.type==='Date signed')return /^\d{4}-\d{2}-\d{2}$/.test(previews[field.id]??'');if(!field.required&&!value)return true;return (field.type==='Title'?value.length<=128&&value.length>0&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value):SIGNATURE_NAME.test(value)&&value.length<=64)&&previews[field.id]===value;});
+  // The fields the signer signs by selecting them (Date signed fills itself), and the required ones not signed yet.
+  const fillable=fields.filter(f=>f.type!=='Date signed'),requiredLeft=fillable.filter(f=>f.required&&!applied[f.id]);
+  /** Signs (or, with `on` false, clears) one field; clearing drops its preview. */
+  function applyField(id:string,on:boolean){if(signingLock.current)return;setApplied(old=>({...old,[id]:on}));
+    if(!on){const drop=<T,>(old:Record<string,T>)=>{if(!(id in old))return old;const next={...old};delete next[id];return next;};
+      setPreviews(drop);setImageUrls(drop);setSignatureReceipts(drop);setTextReceipts(drop);setSignatureSizes(drop);setFieldErrors(drop);}}
+  /** Brings a field into view, its Sign button focused. */
+  function showField(id:string){const box=container.current?.ownerDocument.querySelector(`[data-signature-field="${id}"]`);box?.scrollIntoView?.({block:'center',behavior:'smooth'});(box?.querySelector('button') as HTMLButtonElement|null)?.focus?.({preventScroll:true});}
+  const signaturesReady=fields.every(field=>{const value=signatures[field.id]??'';if(field.type==='Date signed')return /^\d{4}-\d{2}-\d{2}$/.test(previews[field.id]??'');if(!applied[field.id])return !field.required;return (field.type==='Title'?value.length<=128&&value.length>0&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value):SIGNATURE_NAME.test(value)&&value.length<=64)&&previews[field.id]===value;});
   async function sign() {if(signingLock.current || !artifact || !consent || !rendered || !signaturesReady || !authorityReady)return;signingLock.current=true;setSigning(true);try {
-    await request('/api/public/signing/sign',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({artifactId:artifact.id,artifactHash:artifact.sha256,consent:true,...(forCompany||signerTitle.trim()?{title:signerTitle.trim()}:{}),...(forCompany?{authorityConfirmed:true}:{}),...(artifact.disclosure?{disclosureVersion:artifact.disclosure.version}:{}),signaturePreviews:signatureReceipts,textPreviews:textReceipts,...(fields.length?{signatures:Object.fromEntries(fields.filter(f=>f.type!=='Date signed'&&signatures[f.id]).map(f=>[f.id,signatures[f.id]]))}:{}),...(fields.some(f=>f.type==='Date signed')?{datePreviews:Object.fromEntries(fields.filter(f=>f.type==='Date signed').map(f=>[f.id,previews[f.id]]))}:{})})});
+    await request('/api/public/signing/sign',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({artifactId:artifact.id,artifactHash:artifact.sha256,consent:true,...(forCompany||signerTitle.trim()?{title:signerTitle.trim()}:{}),...(forCompany?{authorityConfirmed:true}:{}),...(artifact.disclosure?{disclosureVersion:artifact.disclosure.version}:{}),signaturePreviews:Object.fromEntries(Object.entries(signatureReceipts).filter(([id])=>applied[id])),textPreviews:Object.fromEntries(Object.entries(textReceipts).filter(([id])=>applied[id])),...(fields.length?{signatures:Object.fromEntries(fields.filter(f=>f.type!=='Date signed'&&applied[f.id]&&signatures[f.id]).map(f=>[f.id,signatures[f.id]]))}:{}),...(fields.some(f=>f.type==='Date signed')?{datePreviews:Object.fromEntries(fields.filter(f=>f.type==='Date signed').map(f=>[f.id,previews[f.id]]))}:{})})});
     setArtifact(null);setPdf(null);setRendered(false);setFinished(true);setMessage('Signature recorded.');
     notifyHost({type:'esign.signing.finished',outcome:'signed'});
   } catch (error) {if(error instanceof RequestFailed&&error.status===409&&fields.some(f=>f.type==='Date signed')){const dates=fields.filter(f=>f.type==='Date signed');setPreviews(old=>{const next={...old};for(const f of dates)delete next[f.id];return next;});setImageUrls(old=>{const next={...old};for(const f of dates)delete next[f.id];return next;});setConsent(false);setDatePreviewVersion(v=>v+1);setMessage(error.code==='date_changed'?'The date changed (UTC). Review and sign again.':'Signature was rejected. Review the document and sign again.');}else setMessage('Signature rejected or unavailable. Check that it fits without overlapping another field, then retry.');}finally{signingLock.current=false;setSigning(false);}}
@@ -349,8 +371,8 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       h('p',null,`${sender||'The sender'} can require stronger checks, such as ID verification, for some documents.`)));
 
   // Step 3: the signature's preview (the server's image of the first Signature field, when the template places one).
-  const firstSignature=fields.find(f=>f.type==='Signature'),previewUrl=firstSignature?imageUrls[firstSignature.id]:'';
-  const nameError=fullName&&(!SIGNATURE_NAME.test(fullName)||fullName.length>64)?'Use English letters and single spaces only.':Object.entries(fieldErrors).find(([id,error])=>error&&signatureFieldIds.includes(id))?.[1]??'';
+  const firstSignature=fields.find(f=>f.type==='Signature'),previewUrl=firstSignature&&SIGNATURE_NAME.test(fullName)&&fullName.length<=64?adoptUrl:'';
+  const nameError=fullName&&(!SIGNATURE_NAME.test(fullName)||fullName.length>64)?'Use English letters and single spaces only.':Object.entries(fieldErrors).find(([id,error])=>error&&signatureFieldIds.includes(id))?.[1]??adoptError;
   const titleError=Object.entries(fieldErrors).find(([id,error])=>error&&titleFieldIds.includes(id))?.[1]??'';
   // The sentence the signer agrees to, with the document named in bold.
   const documentLabel=artifact?.documentName?`${artifact.documentName}${versionLabel?` (${versionLabel})`:''}`:'';
@@ -359,15 +381,20 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const previewProps=(field:SignatureField)=>({key:field.id,field,token,
     onReady:(value:string,url:string,receipt?:string)=>{setPreviews(old=>({...old,[field.id]:value}));setImageUrls(old=>({...old,[field.id]:url}));if(receipt&&field.type==='Title')setTextReceipts(old=>({...old,[field.id]:receipt}));},
     onError:(error:string)=>setFieldErrors(old=>old[field.id]===error?old:{...old,[field.id]:error})});
-  const fieldPreviews=fields.map(field=>field.type==='Signature'
-    ?h(SignaturePreview,{...previewProps(field),value:signatures[field.id]??'',
-      preview:async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,text})});const receipt=response.headers.get('X-Signature-Preview')??'',width=Number(response.headers.get('X-Signature-Width')),height=Number(response.headers.get('X-Signature-Height'));if(!/^[a-f0-9]{64}$/.test(receipt))throw new Error('Invalid preview receipt');if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),width,height,receipt};},
+  const signaturePreview=(field:SignatureField)=>async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,text})});const receipt=response.headers.get('X-Signature-Preview')??'',width=Number(response.headers.get('X-Signature-Width')),height=Number(response.headers.get('X-Signature-Height'));if(!/^[a-f0-9]{64}$/.test(receipt))throw new Error('Invalid preview receipt');if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),width,height,receipt};};
+  const fieldPreviews=[
+   firstSignature&&h(SignaturePreview,{key:'adopt',field:firstSignature,token,value:fullName,preview:signaturePreview(firstSignature),onSize:()=>{},onReady:(_value:string,url:string)=>setAdoptUrl(url),onError:setAdoptError}),
+   ...fields.map(field=>field.type==='Signature'
+    ?h(SignaturePreview,{...previewProps(field),value:signatures[field.id]??'',preview:signaturePreview(field),
       onSize:(size:{width:number;height:number;receipt:string})=>{setSignatureSizes(old=>({...old,[field.id]:size}));setSignatureReceipts(old=>({...old,[field.id]:size.receipt}));}})
     :h(TextPreview,{...previewProps(field),value:field.type==='Title'?signatures[field.id]??'':'',version:datePreviewVersion,
       onSize:(size:{width:number;height:number;top:number})=>setSignatureSizes(old=>({...old,[field.id]:size})),
-      preview:async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,...(field.type==='Title'?{text}:{})})});const width=Number(response.headers.get('X-Text-Width')),height=Number(response.headers.get('X-Text-Height')),top=Number(response.headers.get('X-Text-Top')??0);if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isFinite(top)||width<=0||height<=0||top<0||top+height>1+1e-9)throw new Error('Invalid preview geometry');return {blob:await response.blob(),previewId:response.headers.get(field.type==='Title'?'X-Text-Preview':'X-Preview-Text'),width,height,top};}}));
+      preview:async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,...(field.type==='Title'?{text}:{})})});const width=Number(response.headers.get('X-Text-Width')),height=Number(response.headers.get('X-Text-Height')),top=Number(response.headers.get('X-Text-Top')??0);if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isFinite(top)||width<=0||height<=0||top<0||top+height>1+1e-9)throw new Error('Invalid preview geometry');return {blob:await response.blob(),previewId:response.headers.get(field.type==='Title'?'X-Text-Preview':'X-Preview-Text'),width,height,top};}}))];
 
   const ready=!!artifact&&rendered;
+  const fieldKind=(field:SignatureField)=>field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature';
+  /** "signature 2 on page 1": the field's kind, its number among the signer's fields when there are several, and its page. */
+  const fieldName=(field:SignatureField)=>{const index=fields.indexOf(field);return `${artifact?.role?`${artifact.role} ${fieldKind(field)}${fields.length>1?` ${index+1}`:''}`:`${field.type||'Signature'} field ${index+1}`} on page ${field.page}`;};
   const actions=h('div',{className:'esign-actions'},
     h('div',{className:'esign-actions-start'},
       ready&&step===1&&button('Decline to sign',()=>setDeclining(true),{quiet:true,className:'esign-danger',disabled:signing}),
@@ -403,6 +430,10 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
             pdfUrl&&h('a',{href:pdfUrl,download:pdfFileName(artifact.documentName)},'Download PDF')),
           h('div',{ref:container,'aria-label':'Document to sign',className:'esign-document-surface'})),
         ready && step===1 && h('aside',{className:'esign-side'},
+          // The sender's message to this signer, as they wrote it (text only).
+          artifact.message&&section(`Message from ${sender||'the sender'}`,
+            artifact.message.subject&&h('p',{className:'esign-message-subject'},artifact.message.subject),
+            artifact.message.body&&h('p',{className:'esign-message-body'},artifact.message.body)),
           section('Document',documentFacts(true)),
           section('Signing as',
             h('dl',{className:'esign-facts'},signingAs&&fact('Name',signingAs),artifact.recipientEmail&&fact('Email',artifact.recipientEmail)),
@@ -412,7 +443,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
             h('div',{className:'esign-progress'},h('div',{style:{width:`${Math.round(Math.min(viewed,pageCount)/pageCount*100)}%`}})),
             h('span',null,`Viewed ${Math.min(viewed,pageCount)} of ${pageCount} ${pageCount===1?'page':'pages'}`))),
         showVerification && h('section',{className:'esign-confirm'},verification),
-        ready && step===3 && h('section',{className:'esign-adopt'},
+        ready && step===3 && h('aside',{className:'esign-side esign-sign-panel'},h('section',{className:'esign-adopt'},
           h('h2',null,'Adopt your signature'),h('p',{className:'esign-sub'},'This is how your signature appears on the document.'),
           h('div',{className:'esign-adopt-inputs'},
             h('label',{className:'esign-field'},h('span',null,'Full name'),h(Input,{'aria-label':'Full name',value:fullName,maxLength:64,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setFullName(event.target.value);}})),
@@ -427,7 +458,14 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
           h('label',{className:'esign-check esign-consent'},
             h('input',{type:'checkbox',className:checkClass,'aria-label':'Consent to sign',checked:consent,disabled:signing,onChange:(event:React.ChangeEvent<HTMLInputElement>)=>{if(!signingLock.current)setConsent(event.target.checked);}}),
             h('span',null,consentText,' ',artifact.disclosure&&linkButton('Read the electronic records disclosure',(event:React.MouseEvent)=>{event.preventDefault();setShowDisclosure(true);})))),
-        ready && step===3 && h('aside',{className:'esign-side'},
+          fillable.length>0&&section('Fields to sign',
+            h('p',{className:'esign-sub',role:'status'},requiredLeft.length?`${requiredLeft.length} required ${requiredLeft.length===1?'field':'fields'} left to sign. Select each one on the document, or here.`:'Every required field is signed.'),
+            h('ul',{className:'esign-field-list','aria-label':'Your fields'},...fillable.map(field=>h('li',{key:field.id,'data-field-state':applied[field.id]?'signed':field.required?'required':'optional'},
+              h('span',null,`${field.type==='Title'?'Title':'Signature'} · page ${field.page}`,field.required?h('span',{className:'esign-required',title:'Required'},' *'):h('span',{className:'esign-optional'},' (optional)')),
+              applied[field.id]
+                ?linkButton('Remove',()=>applyField(field.id,false),signing)
+                :linkButton(field.type==='Title'?'Fill in':'Sign',()=>{applyField(field.id,true);showField(field.id);},signing)))),
+            requiredLeft.length>0&&button('Next required field',()=>showField(requiredLeft[0]!.id),{disabled:signing})),
           section('Document',documentFacts(false)),
           section('After you sign',h('ul',{className:'esign-after'},...afterSigningLines(artifact).map((line,i)=>h('li',{key:i},line)))))),
     !finished && actions,
@@ -446,7 +484,10 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       h('h2',null,'About signing'),
       h(SigningHelp,{sender:sender||'The sender',documentName:artifact?.documentName}),
       h('div',{className:'esign-modal-actions'},button('Close',()=>setShowHelp(false),{primary:true}))),
-    rendered&&fields.map((field,index)=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${artifact?.role ? `${artifact.role} ${field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature'}${fields.length>1?` ${index+1}`:""}` : `${field.type||'Signature'} field ${index+1}`} on page ${field.page}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:'2px dashed #135c9b',outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},imageUrls[field.id]&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,top:`${(signatureSizes[field.id]?.top??0)*100}%`,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,maxWidth:'none',objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)),
+    rendered&&fields.map(field=>pageHosts[field.page-1]&&createPortal(h('div',{'data-signature-field':field.id,'aria-label':`${fieldName(field)}, ${field.required?'required':'optional'}`,role:'region',style:{position:'absolute',boxSizing:'border-box',left:`${field.rect.x*100}%`,top:`${field.rect.y*100}%`,width:`${field.rect.width*100}%`,height:`${field.rect.height*100}%`,outline:`2px dashed ${step===3&&field.required&&field.type!=='Date signed'&&!applied[field.id]?'#b42318':'#135c9b'}`,outlineOffset:'0px',lineHeight:'normal',overflow:'visible'}},
+      step===3&&verified&&field.type!=='Date signed'&&!applied[field.id]&&h('button',{type:'button','data-apply-field':field.id,className:'esign-apply-field','aria-label':`${field.type==='Title'?'Fill in':'Sign'} ${fieldName(field)}`,disabled:signing,onClick:()=>applyField(field.id,true)},
+        field.type==='Title'?'Title':'Sign',field.required?h('span',{className:'esign-required','aria-hidden':true},'*'):h('span',{className:'esign-optional'},'Optional')),
+      imageUrls[field.id]&&(field.type==='Date signed'||applied[field.id])&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,top:`${(signatureSizes[field.id]?.top??0)*100}%`,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,maxWidth:'none',objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)),
     // The previews' fetchers stay mounted once the code is verified, not only on Sign: each revokes its image's URL when it
     // unmounts, and Back then Continue would otherwise show the Sign step's preview from a URL already revoked.
     ready&&verified&&!finished&&h(React.Fragment,null,...fieldPreviews));

@@ -93,6 +93,8 @@ export type CodeRequest = {
   now: number;
   /** An extra precondition on the new row, aliased `v` (for example the task's envelope). */
   where?: { sql: string; binds: unknown[] };
+  /** How the code was issued (JSON), carried to the session it opens. */
+  entry?: string;
 };
 
 /**
@@ -105,11 +107,11 @@ export async function issueAccessCode(db: D1Database, request: CodeRequest, befo
   assertScope(request.scope);
   if (!validAccessOrigin(request.origin)) throw new Error('Invalid origin');
   const code = randomHex();
-  const insert = db.prepare(`INSERT INTO access_codes (code_hash, scope, tenant_id, subject_id, origin, expires_at)
-    SELECT v.code_hash, v.scope, v.tenant_id, v.subject_id, v.origin, v.expires_at
-    FROM (SELECT ? AS code_hash, ? AS scope, ? AS tenant_id, ? AS subject_id, ? AS origin, ? AS expires_at) v
+  const insert = db.prepare(`INSERT INTO access_codes (code_hash, scope, tenant_id, subject_id, origin, expires_at, entry_json)
+    SELECT v.code_hash, v.scope, v.tenant_id, v.subject_id, v.origin, v.expires_at, v.entry_json
+    FROM (SELECT ? AS code_hash, ? AS scope, ? AS tenant_id, ? AS subject_id, ? AS origin, ? AS expires_at, ? AS entry_json) v
     WHERE ${subjectOpen(request.scope, 'v')}${request.where ? ` AND ${request.where.sql}` : ''}`)
-    .bind(await accessHash(code), request.scope, request.tenantId, request.subjectId, request.origin, request.now + ACCESS_CODE_TTL_MS, ...(request.where?.binds ?? []));
+    .bind(await accessHash(code), request.scope, request.tenantId, request.subjectId, request.origin, request.now + ACCESS_CODE_TTL_MS, request.entry ?? null, ...(request.where?.binds ?? []));
   const results = await db.batch([...before, insert]);
   if (results[results.length - 1].meta.changes !== 1) throw new Error('Subject unavailable');
   return code;
@@ -143,8 +145,8 @@ export async function exchangeAccessCode(db: D1Database, request: ExchangeReques
   if (request.subjectId !== undefined) { conditions.push('c.subject_id=?'); binds.push(request.subjectId); }
   const valid = `${conditions.join(' AND ')} AND ${subjectOpen(request.scope, 'c')}`;
   const [, used] = await db.batch([
-    db.prepare(`INSERT INTO access_sessions (token_hash, scope, tenant_id, subject_id, origin, expires_at)
-      SELECT ?, c.scope, c.tenant_id, c.subject_id, c.origin, ? FROM access_codes c WHERE ${valid}`)
+    db.prepare(`INSERT INTO access_sessions (token_hash, scope, tenant_id, subject_id, origin, expires_at, entry_json)
+      SELECT ?, c.scope, c.tenant_id, c.subject_id, c.origin, ?, c.entry_json FROM access_codes c WHERE ${valid}`)
       .bind(tokenHash, request.now + ACCESS_SESSION_TTL_MS, ...binds),
     db.prepare(`UPDATE access_codes AS c SET used_at=? WHERE ${valid}
       AND EXISTS (SELECT 1 FROM access_sessions s WHERE s.token_hash=? AND s.scope=c.scope AND s.tenant_id=c.tenant_id AND s.subject_id=c.subject_id)`)

@@ -291,25 +291,35 @@ test('OAuth clients: below 1280px each row keeps its status and actions in view:
   await connect(h, editor, orgId, { name: 'Narrow Agent' })
   const html = (await page(owner, orgId)).text
   const classes = (tag) => /class="([^"]*)"/.exec(tag)?.[1].split(/\s+/) ?? []
-  // The columns: Client and the actions always; Type, Created by, Last used and Status from xl (1280px) only.
-  const heads = [...html.matchAll(/<th [^>]*>[\s\S]*?<\/th>/g)].map((match) => ({ text: match[0].replace(/<[^>]+>/g, '').trim(), hidden: classes(match[0]).includes('max-xl:hidden') }))
+  // The columns: Client always; Type, Created by, Last used and Status from xl (1280px) only; the actions from sm
+  // (640px), since on a phone they move into the client cell.
+  const hides = (tag) => ({ belowXl: classes(tag).includes('max-xl:hidden'), belowSm: classes(tag).includes('max-sm:hidden') })
+  const heads = [...html.matchAll(/<th [^>]*>[\s\S]*?<\/th>/g)].map((match) => ({ text: match[0].replace(/<[^>]+>/g, '').trim(), ...hides(match[0]) }))
+  const always = { belowXl: false, belowSm: false }, fromXl = { belowXl: true, belowSm: false }, fromSm = { belowXl: false, belowSm: true }
   assert.deepEqual(heads, [
-    { text: 'Client', hidden: false }, { text: 'Type', hidden: true }, { text: 'Created by', hidden: true },
-    { text: 'Last used', hidden: true }, { text: 'Status', hidden: true }, { text: 'Actions', hidden: false },
+    { text: 'Client', ...always }, { text: 'Type', ...fromXl }, { text: 'Created by', ...fromXl },
+    { text: 'Last used', ...fromXl }, { text: 'Status', ...fromXl }, { text: 'Actions', ...fromSm },
   ])
   const rows = html.split('<tbody')[1].split('<tr').slice(1)
   assert.equal(rows.length, 2)
   assert.ok(html.includes(`Cap Table · ${roleName} · created`), 'the client shows its custom role')
+  const forms = (html) => [...html.matchAll(/<form [^>]*action="([^"]+)"/g)].map((match) => match[1])
   for (const row of rows) {
-    const cells = [...row.matchAll(/<td [^>]*>/g)].map((match) => classes(match[0]).includes('max-xl:hidden'))
-    assert.deepEqual(cells, [false, true, true, true, true, false], 'the same columns hide in every row')
-    const first = /<td [^>]*>([\s\S]*?)<\/td>/.exec(row)[1]
+    const cells = [...row.matchAll(/<td [^>]*>/g)].map((match) => hides(match[0]))
+    assert.deepEqual(cells, [always, fromXl, fromXl, fromXl, fromXl, fromSm], 'the same columns hide in every row')
+    const [first, , , , , actions] = [...row.matchAll(/<td [^>]*>([\s\S]*?)<\/td>/g)].map((match) => match[1])
     // Below xl the first cell says what the hidden columns say.
     const narrow = /<div class="[^"]*\bxl:hidden\b[^"]*">([\s\S]*?)<\/div><\/div>/.exec(first)?.[1] ?? ''
     const text = first.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
     assert.match(text, /By (Nina Owner|Ned Editor) \([^)]+\) · last used (Never|\d{4}-\d{2}-\d{2})/, 'creator and last use')
     assert.match(narrow, /API access|AI agent \(MCP\)/, 'the type')
     assert.match(narrow, />Active</, 'the status')
+    // Its badges may wrap, so large text can't widen the table with them.
+    assert.match(first, /<div class="[^"]*\[&amp;_\[data-slot=badge\]\]:whitespace-normal[^"]*\bxl:hidden\b/, 'the folded badges wrap')
+    // Below sm it also holds the row's Revoke and Delete, the same forms as the actions column.
+    const phone = /<div class="[^"]*\bsm:hidden\b[^"]*">([\s\S]*?)<\/div>/.exec(first)?.[1] ?? ''
+    assert.equal(forms(actions).length, 2, 'Revoke and Delete')
+    assert.deepEqual(forms(phone), forms(actions), 'the actions, folded into the client cell on a phone')
     // A long name, role or address can't widen the table: it wraps anywhere.
     assert.match(first, /<div class="[^"]*\[overflow-wrap:anywhere\][^"]*">Narrow/, 'the name wraps anywhere')
     assert.match(first, /<div class="[^"]*\[overflow-wrap:anywhere\][^"]*">Cap Table[^<]* · created /, 'the app and role wrap anywhere')

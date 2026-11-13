@@ -84,6 +84,21 @@ function Status({ row }: { row: Row }) {
   )
 }
 
+function Actions({ row, base, className }: { row: Row; base: string; className: string }) {
+  return (
+    <div className={className}>
+      {row.revoked ? null : (
+        <PostButton action={`${base}/revoke`} variant="outline" size="sm">
+          Revoke<span className="sr-only"> {row.name}</span>
+        </PostButton>
+      )}
+      <PostButton action={`${base}/delete`} variant="ghost" size="sm" className={destructiveGhost}>
+        Delete<span className="sr-only"> {row.name}</span>
+      </PostButton>
+    </div>
+  )
+}
+
 function ClientsTable({ ctx, data }: { ctx: Context; data: OAuthClientsData }) {
   const all = rows(ctx, data)
   if (!all.length) {
@@ -91,7 +106,8 @@ function ClientsTable({ ctx, data }: { ctx: Context; data: OAuthClientsData }) {
   }
   // Six columns fit beside the navigation from xl (1280px) only. Below it the table keeps the client cell and the
   // actions, and the client cell says what the hidden columns say, so the status and the buttons stay in view; long
-  // names and addresses wrap anywhere so they can't widen the table.
+  // names and addresses wrap anywhere so they can't widen the table. On a phone (below sm) the actions move into the
+  // client cell too, and its badges may wrap, so even text at 200% fits the width.
   return (
     <Table>
       <TableCaption className="sr-only">OAuth clients of {data.orgName}</TableCaption>
@@ -102,7 +118,7 @@ function ClientsTable({ ctx, data }: { ctx: Context; data: OAuthClientsData }) {
           <TableHead scope="col" className="max-xl:hidden">Created by</TableHead>
           <TableHead scope="col" className="max-xl:hidden">Last used</TableHead>
           <TableHead scope="col" className="max-xl:hidden">Status</TableHead>
-          <TableHead scope="col"><span className="sr-only">Actions</span></TableHead>
+          <TableHead scope="col" className="max-sm:hidden"><span className="sr-only">Actions</span></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -117,26 +133,18 @@ function ClientsTable({ ctx, data }: { ctx: Context; data: OAuthClientsData }) {
                   : <div className="text-xs text-muted-foreground">{row.detail}</div>}
                 <div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.app} · created {day(row.createdAt)}</div>
                 <div className="text-xs text-muted-foreground [overflow-wrap:anywhere] xl:hidden">By {row.createdBy} · last used {day(row.lastUsedAt)}</div>
-                <div className="mt-2 flex flex-wrap items-start gap-2 xl:hidden">
+                <div className="mt-2 flex flex-wrap items-start gap-2 [&_[data-slot=badge]]:whitespace-normal xl:hidden">
                   <TypeBadge row={row} />
                   <Status row={row} />
                 </div>
+                <Actions row={row} base={base} className="mt-2 flex flex-wrap gap-2 sm:hidden" />
               </TableCell>
               <TableCell className="align-top max-xl:hidden"><TypeBadge row={row} /></TableCell>
               <TableCell className="align-top whitespace-normal text-muted-foreground [overflow-wrap:anywhere] max-xl:hidden">{row.createdBy}</TableCell>
               <TableCell className="align-top text-muted-foreground max-xl:hidden">{day(row.lastUsedAt)}</TableCell>
               <TableCell className="align-top whitespace-normal max-xl:hidden"><Status row={row} /></TableCell>
-              <TableCell className="align-top">
-                <div className="flex flex-col items-end gap-2 xl:flex-row xl:flex-wrap xl:items-center xl:justify-end">
-                  {row.revoked ? null : (
-                    <PostButton action={`${base}/revoke`} variant="outline" size="sm">
-                      Revoke<span className="sr-only"> {row.name}</span>
-                    </PostButton>
-                  )}
-                  <PostButton action={`${base}/delete`} variant="ghost" size="sm" className={destructiveGhost}>
-                    Delete<span className="sr-only"> {row.name}</span>
-                  </PostButton>
-                </div>
+              <TableCell className="align-top max-sm:hidden">
+                <Actions row={row} base={base} className="flex flex-col items-end gap-2 xl:flex-row xl:flex-wrap xl:items-center xl:justify-end" />
               </TableCell>
             </TableRow>
           )

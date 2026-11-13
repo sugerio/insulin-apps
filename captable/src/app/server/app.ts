@@ -1,7 +1,8 @@
 import { Hono, type MiddlewareHandler } from 'hono'
 import { requestConfig } from './lib/config.ts'
-import { resolveCurrentIdentity } from './lib/identity.ts'
-import { ApiError, logError, notFound } from './lib/http.ts'
+import { isScheduleTick, resolveCurrentIdentity } from './lib/identity.ts'
+import { ApiError, forbidden, logError, notFound } from './lib/http.ts'
+import { reportUsage } from './lib/usage-metrics.ts'
 import { accessMeetsMinimum } from './lib/access/resolve.ts'
 import { requireSameOrigin } from './middleware/same-origin.ts'
 import { securityHeaders } from './middleware/security-headers.ts'
@@ -41,6 +42,15 @@ export function createApp(options: Partial<AppDeps> & { enforceSameOrigin?: bool
   })
 
   app.get('/api/health', (c) => c.json({ ok: true, service: 'cap-table' }))
+
+  // The platform's tick, every five minutes (package.json `insulin.scheduled`): the hourly usage report
+  // (lib/usage-metrics.ts), sent by the first tick of each hour. Only the tick passes: a request with a member's, an API
+  // client's or an agent's identity, or without `x-suger-access-via: schedule`, is refused. It carries no identity and
+  // no Origin, so it comes before both checks; it is never in the catalog (which lists the route table).
+  app.post('/api/scheduled', async (c) => {
+    if (!isScheduleTick(c.req.raw)) throw forbidden('Only the platform can call this')
+    return c.json({ metrics: await reportUsage(c.env.DB, c.env, deps.now()) })
+  })
 
   if (options.enforceSameOrigin ?? !import.meta.env.DEV) {
     app.use('/api/*', requireSameOrigin())

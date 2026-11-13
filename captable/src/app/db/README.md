@@ -9,6 +9,9 @@ The app has one SQLite database: Cloudflare D1 when published, a local file in t
   `transaction_types` seed and the triggers that protect the ledger and the records (append-only rows, `version`
   checks, state transitions, the ledger head).
 
+`metrics_reports` isn't company data: it records which UTC hours' usage reports to the platform were claimed and sent
+(`src/app/server/lib/usage-metrics.ts`), and keeps three days of them.
+
 Documents are capped at 10 MiB and uploaded in 256 KiB chunks. Measure near-cap uploads and streamed downloads on a
 real Cloudflare D1 database before raising that cap; the local SQLite adapter cannot reproduce D1's BLOB transport or
 Worker memory costs. Failed uploads can leave rows in `document_upload_chunks`, which are invisible without document

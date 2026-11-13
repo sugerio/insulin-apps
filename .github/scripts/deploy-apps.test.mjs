@@ -160,6 +160,36 @@ test('the optional contact and organization-request addresses go to the gateway 
   assert.equal('orgRequestEmail' in readSettings(settings(), { gateway: false }), false, 'app deploys never get it')
 })
 
+test("the operator console's settings go to the gateway: its SAML app, group and admins as vars, the Cloudflare token as a secret", async () => {
+  const console = {
+    SUPER_SAML_IDP_ENTITY_ID: ' https://idp.example.com/workspace ',
+    SUPER_SAML_IDP_SSO_URL: 'https://idp.example.com/sso',
+    SUPER_SAML_IDP_CERT: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----',
+    SUPER_GOOGLE_GROUP: 'operators@example.com',
+    SUPER_ADMIN_EMAILS: 'admin@example.com',
+  }
+  const read = readSettings(settings(console))
+  const config = buildGatewayConfig({ root: '/repository', apps: [], settings: read, databaseId: null })
+  assert.equal(config.vars.SUPER_SAML_IDP_ENTITY_ID, 'https://idp.example.com/workspace')
+  assert.equal(config.vars.SUPER_GOOGLE_GROUP, 'operators@example.com')
+  assert.equal(config.vars.SUPER_ADMIN_EMAILS, 'admin@example.com')
+  assert.equal('SUPER_CLOUDFLARE_ACCOUNT_ID' in config.vars, false, 'no token, no account to read')
+  assert.equal(buildGatewayConfig({ root: '/repository', apps: [], settings: readSettings(settings()), databaseId: null }).vars.SUPER_GOOGLE_GROUP, '', 'unset: the console is off')
+  assert.equal('superGoogleGroup' in readSettings(settings(console), { gateway: false }), false, 'app deploys never get them')
+
+  const token = 'dummy-super-cloudflare-token'
+  const withToken = buildGatewayConfig({ root: '/repository', apps: [], settings: readSettings(settings({ ...console, SUPER_CLOUDFLARE_API_TOKEN: token })), databaseId: null })
+  assert.equal(withToken.vars.SUPER_CLOUDFLARE_ACCOUNT_ID, 'dummy-account', 'the account the platform deploys to')
+  assert.ok(!JSON.stringify(withToken).includes(token), 'the token is never a var')
+  const root = await fixtureRepository()
+  const out = await tempDirectory('deploy-gateway-super-')
+  await deployApps({ root, out, environment: settings({ ...console, SUPER_CLOUDFLARE_API_TOKEN: token }), dryRun: true, gatewayOnly: true })
+  const planText = await readFile(join(out, 'plan.json'), 'utf8')
+  assert.ok(!planText.includes(token), 'the plan never holds it')
+  const deploy = JSON.parse(planText).commands.find(({ args }) => args[0] === 'deploy')
+  assert.ok(deploy.secretNames.includes('SUPER_CLOUDFLARE_API_TOKEN'), 'it travels with the deploy as a secret')
+})
+
 test("every gateway variable for this repository's apps fits Cloudflare's 5 KB a variable", async () => {
   const config = buildGatewayConfig({ root: '/repository', apps: await listApps(), settings: readSettings(settings()), databaseId: null })
   for (const [name, value] of Object.entries(config.vars)) {
@@ -607,6 +637,7 @@ test("an app's declared secrets come from the environment's secrets, then its va
   assert.deepEqual(secretFiles.get('beta.wrangler.json'), { SUGER_APP_TOKEN: appToken(key, 'beta') }, 'another app gets none of them')
   const alpha = JSON.parse(readFileSync(join(result.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
   assert.equal(alpha.vars.SUGER_MAIL_URL, 'https://apps.example.com/__insulin/mail')
+  assert.equal(alpha.vars.SUGER_METRICS_URL, 'https://apps.example.com/__insulin/metrics', 'where the app reports its usage every hour')
   assert.deepEqual(alpha.services, [{ binding: 'SUGER_GATEWAY', service: 'insulin-apps-gateway' }], 'the app calls the gateway over a service binding, not its public URL')
   const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
   const site = gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'alpha-app')
@@ -639,6 +670,7 @@ test("an app's declared secrets come from the environment's secrets, then its va
   assert.deepEqual(Object.keys(withoutKey.get('alpha-app.wrangler.json')).sort(), ['ALPHA_APP_KMS_KEY', 'ALPHA_APP_REGION'], 'secrets need no gateway key')
   const plainAlpha = JSON.parse(readFileSync(join(plain.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
   assert.equal(plainAlpha.services, undefined, 'without the gateway key there is no relay or proxy to bind')
+  assert.equal(plainAlpha.vars.SUGER_METRICS_URL, undefined, 'nor anywhere to report usage')
   await assert.rejects(
     () => deployApps({ root, environment: { ...environment, APP_SECRETS_JSON: '{"ALPHA_APP_KMS_KEY": "kms-secret-value-1234"' }, dryRun: true, skipBuild: true, only: 'alpha-app' }),
     (error) => /APP_SECRETS_JSON is not valid JSON/.test(error.message) && !error.message.includes('kms-secret-value-1234'),

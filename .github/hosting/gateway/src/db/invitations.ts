@@ -195,6 +195,7 @@ export async function acceptInvitation(db: D1Database, id: string, userId: strin
        WHERE i.id = ?1 AND i.status = 'pending' AND i.expires_at > ?3 AND i.email = ?4
          AND (SELECT COUNT(*) FROM memberships m WHERE m.org_id = i.org_id) < ?5
          AND ${invitableDomain('i.org_id', '?6')}
+         AND EXISTS (SELECT 1 FROM orgs io WHERE io.id = i.org_id AND io.status = 'active')
        ON CONFLICT DO NOTHING`,
     ).bind(id, userId, now, email, memberLimit, domainOf(email)),
     db.prepare(
@@ -203,6 +204,7 @@ export async function acceptInvitation(db: D1Database, id: string, userId: strin
        FROM invitation_grants g JOIN invitations i ON i.id = g.invitation_id AND i.org_id = g.org_id
        WHERE g.invitation_id = ?1 AND i.status = 'pending' AND i.expires_at > ?3 AND i.email = ?4 AND i.role = 'APPS'
          AND (SELECT m.role FROM memberships m WHERE m.org_id = i.org_id AND m.user_id = ?2) = 'APPS'
+         AND EXISTS (SELECT 1 FROM orgs io WHERE io.id = i.org_id AND io.status = 'active')
        ON CONFLICT DO NOTHING`,
     ).bind(id, userId, now, email),
     db.prepare(

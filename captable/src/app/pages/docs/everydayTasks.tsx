@@ -134,9 +134,8 @@ export const everydayTasks: DocTopic = {
       body: (
         <>
           <p>
-            Cap Table has no background jobs: nothing runs on a timer. Two kinds of work fall due on a date: <b>scheduled
-            terminations</b> whose date has arrived, and <b>expiries</b> (options past their last exercise day and warrants past
-            their expiration date).
+            Nothing is recorded on a timer. Two kinds of work fall due on a date: <b>scheduled terminations</b> whose date has
+            arrived, and <b>expiries</b> (options past their last exercise day and warrants past their expiration date).
           </p>
           <ul>
             <li><b>Opening the dashboard</b> as an owner, admin or editor processes what has fallen due. The dashboard is where Cap Table opens for everyone in the company workspace.</li>

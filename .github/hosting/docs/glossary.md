@@ -130,6 +130,12 @@ identity; the app checks its own short-lived codes.
 **Stored credential**: a secret for an outside service, kept encrypted for one app and organization and used only through
 the integration proxy.
 
+**Suspended, disabled**: an account or organization that Insulin Apps has stopped for breaking the terms. Suspended
+pauses access while it is looked into; disabled ends it, along with its sessions and AI agents. Either can be lifted.
+
+**Usage report**: the counts and sizes each app sends Insulin Apps every hour, such as how many records and how many
+bytes of files each organization has. Never names, e-mail addresses or content.
+
 **Two-step sign-in**: a 6-digit code from an authenticator app asked for after your password, Google or single sign-on.
 
 **Verified domain**: an e-mail domain your organization proved it owns with a DNS TXT record, needed for single sign-on

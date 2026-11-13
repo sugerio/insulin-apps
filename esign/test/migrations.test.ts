@@ -25,7 +25,7 @@ test('the migrations make the app\'s tables only: the organization comes from th
     const { results } = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' ORDER BY name").all<{ name: string }>();
     assert.deepEqual(results.map((row) => row.name), [
       'access_codes', 'access_sessions', 'app_settings', 'artifacts', 'audit_events', 'blob_chunks', 'blobs', 'copy_deliveries',
-      'editor_sessions', 'envelopes', 'otp_challenges', 'seals', 'signatures', 'signed_copy_links', 'tasks', 'templates',
+      'editor_sessions', 'envelopes', 'metrics_reports', 'otp_challenges', 'seals', 'signatures', 'signed_copy_links', 'tasks', 'templates',
     ]);
     const triggers = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all<{ name: string }>();
     assert.deepEqual(triggers.results.map((row) => row.name), [

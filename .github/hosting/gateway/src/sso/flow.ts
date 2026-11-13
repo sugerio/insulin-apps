@@ -18,7 +18,7 @@ import { ssoLinkedMail } from '../mail/templates.ts'
 import { sendMail } from '../mail/transport.ts'
 import { MEMBER_LIMIT } from '../orgs/invitations.ts'
 import { ssoContinuePage, ssoFailedPage, ssoStartPage } from '../pages/sso.tsx'
-import { home, notFoundPage } from '../pages/status.tsx'
+import { home, notFoundPage, orgUnavailablePage } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { finishSignIn } from '../auth/sign-in.ts'
 import { NAME_MAX, cleanText, normalizeEmail, truncate } from '../validate.ts'
@@ -231,6 +231,12 @@ async function accountFor(ctx: Context, email: string, name: string | null): Pro
 
 async function completeSignIn(ctx: Context, connection: SsoConnectionRow, identity: { email: string; name: string | null }, returnTo: string | null): Promise<Response> {
   const db = ctx.config.db
+  // An organization the operators suspended or disabled signs nobody in (DESIGN.md §11.3); joinOrg checks it again.
+  const standing = await db.prepare('SELECT status FROM orgs WHERE id = ?1').bind(connection.org_id).first<{ status: string }>()
+  if (standing?.status === 'suspended' || standing?.status === 'disabled') {
+    log('sso_org_unavailable', { connection: connection.id })
+    return orgUnavailablePage(ctx, standing.status)
+  }
   const email = normalizeEmail(identity.email)
   if (!email || !(await isVerifiedDomain(db, connection.org_id, domainOf(email)))) {
     log('sso_domain_refused', { connection: connection.id })

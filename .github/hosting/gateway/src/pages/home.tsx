@@ -188,9 +188,10 @@ function NoOrgCard({ session, invitations }: { session: Session; invitations: In
 /**
  * `apps`: the apps the user can use in the active organization (all of them with an organization role); the others
  * aren't listed. The organizations themselves are in the navigation's organization menu, with "Create an
- * organization".
+ * organization". `unavailable`: the user's organizations that Insulin Apps suspended or disabled (DESIGN.md §11.3),
+ * which the menu leaves out.
  */
-export function homePage(ctx: Context, session: Session, memberships: MembershipRow[], invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, active: ActiveOrg | null, apps: HostedApp[]): Html {
+export function homePage(ctx: Context, session: Session, memberships: MembershipRow[], invitations: InvitationRow[], grants: Map<string, InvitationGrantRow[]>, active: ActiveOrg | null, apps: HostedApp[], unavailable: { id: string; name: string; status: "suspended" | "disabled" }[] = []): Html {
   const message = HOME_NOTICES[ctx.url.searchParams.get("notice") ?? ""]
   const shell = orgShell(ctx, session, { orgs: memberships, org: active, apps: apps.filter((app) => app.service) }, "home")
   return page(ctx, { title: "Your apps", shell }, (
@@ -200,6 +201,12 @@ export function homePage(ctx: Context, session: Session, memberships: Membership
         description={active ? "Each app opens in this organization. Switch organizations from the organization menu." : undefined}
       />
       {message ? <Notice kind="ok">{message}</Notice> : null}
+      {unavailable.map((org) => (
+        <Notice key={org.id}>
+          Insulin Apps has {org.status} <strong>{org.name}</strong>, so nobody can use it for now. Its owners can contact{" "}
+          <ContactLink ctx={ctx} />.
+        </Notice>
+      ))}
       {active ? (
         apps.length ? (
           <AppCards ctx={ctx} apps={apps} level={2} />

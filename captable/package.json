@@ -46,7 +46,8 @@
       { "key": "portfolio", "label": "Portfolio", "icon": "chart-pie", "path": "/portfolio", "group": "My equity", "role": "VIEWER", "maxRole": "VIEWER" },
       { "key": "how-to-exercise", "label": "How to exercise", "icon": "check-circle", "path": "/portfolio/how-to-exercise", "group": "My equity", "role": "VIEWER", "maxRole": "VIEWER" },
       { "key": "my-documents", "label": "Documents", "icon": "folder", "path": "/portfolio/documents", "group": "My equity", "role": "VIEWER", "maxRole": "VIEWER" }
-    ]
+    ],
+    "scheduled": "/api/scheduled"
   },
   "imports": {
     "#shared": "./src/app/shared/index.ts",

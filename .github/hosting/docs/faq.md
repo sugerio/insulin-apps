@@ -145,6 +145,22 @@ app's data, delete it in the app first.
 organization where you are the only member. If you are the only owner of an organization that has other members, make
 someone else an owner first, or remove the other members.
 
+### What can Insulin Apps staff see?
+
+A few Insulin Apps staff run an operator console to keep the service healthy and fair. They see each organization's
+name, when it was created and last used, its owner domain and its members, and each person's name, e-mail address and
+when they joined and were last active (to within an hour). From the apps they see only the usage report each app sends
+every hour: counts of records and bytes of storage per organization. They can't see what you enter in an app, and
+never see passwords, tokens or stored credentials. See [How it works](/docs/platform/how-it-works#the-operator-console).
+
+### What happens if Insulin Apps suspends my organization or account?
+
+An organization or account that breaks the terms, for example by sending spam or phishing, can be suspended while
+Insulin Apps looks into it, or disabled. A suspended or disabled account can't sign in, and is signed out everywhere at
+once. Nobody can use a suspended or disabled organization: its apps, settings, AI agents, API clients and single sign-on
+stop working, and your home page says so. Disabling also ends its sessions, AI agents and API clients for good. Your
+data is kept, and either can be lifted. If you think it's a mistake, contact support.
+
 ### Is the source code available?
 
 Yes. The gateway and every app are open source under the MIT License, and each app's card links to its source.

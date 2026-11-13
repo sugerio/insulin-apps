@@ -119,19 +119,32 @@ export async function setInviteVerifiedDomainsOnly(db: D1Database, orgId: string
   return result.meta.changes > 0
 }
 
+/**
+ * The user's membership of an active organization, or null. A suspended or disabled organization (DESIGN.md §11.3)
+ * gives its members nothing, so every page and form that starts from a membership refuses it.
+ */
 export function findMembership(db: D1Database, orgId: string, userId: string): Promise<MembershipRow | null> {
   return db.prepare(
-    `SELECT m.org_id, o.name AS org_name, m.role, m.created_at FROM memberships m JOIN orgs o ON o.id = m.org_id
+    `SELECT m.org_id, o.name AS org_name, m.role, m.created_at FROM memberships m JOIN orgs o ON o.id = m.org_id AND o.status = 'active'
      WHERE m.org_id = ?1 AND m.user_id = ?2`,
   ).bind(orgId, userId).first<MembershipRow>()
 }
 
-/** The user's memberships, oldest first: the first one is the default active organization. */
+/** The user's memberships of active organizations, oldest first: the first one is the default active organization. */
 export async function listMemberships(db: D1Database, userId: string): Promise<MembershipRow[]> {
   const { results } = await db.prepare(
-    `SELECT m.org_id, o.name AS org_name, m.role, m.created_at FROM memberships m JOIN orgs o ON o.id = m.org_id
+    `SELECT m.org_id, o.name AS org_name, m.role, m.created_at FROM memberships m JOIN orgs o ON o.id = m.org_id AND o.status = 'active'
      WHERE m.user_id = ?1 ORDER BY m.created_at, m.org_id`,
   ).bind(userId).all<MembershipRow>()
+  return results
+}
+
+/** The organizations the user belongs to that Insulin Apps suspended or disabled, for the notice on the home page. */
+export async function listUnavailableOrgs(db: D1Database, userId: string): Promise<{ id: string; name: string; status: 'suspended' | 'disabled' }[]> {
+  const { results } = await db.prepare(
+    `SELECT o.id, o.name, o.status FROM memberships m JOIN orgs o ON o.id = m.org_id AND o.status <> 'active'
+     WHERE m.user_id = ?1 ORDER BY o.name COLLATE NOCASE`,
+  ).bind(userId).all<{ id: string; name: string; status: 'suspended' | 'disabled' }>()
   return results
 }
 

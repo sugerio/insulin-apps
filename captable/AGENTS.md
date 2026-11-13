@@ -38,7 +38,8 @@ README's "Database changes".
 | `src/app/components/AppLayout.tsx`, `shell.css`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation from `insulin.navigation` in package.json, Docs and Settings, the organization switcher and the person (from the gateway's `/__insulin/*`) |
 | `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic, shown by one component in the workspace, the portfolio and before setup |
 | `src/app/api/`, `src/app/auth/` | The typed API client; the console identity (`/api/me`), access helpers and route guards |
-| `src/app/server/router.ts` | `handleAppRequest(request)`: every app `/api/**` request, handed to `createApp()` in `server/app.ts` |
+| `src/app/server/router.ts` | `handleAppRequest(request)`: every app `/api/**` request, handed to `createApp()` in `server/app.ts` with the bindings (D1, and the usage report's address, token and gateway binding) |
+| `src/app/server/lib/usage-metrics.ts`, `server/gateway-fetch.ts` | The hourly usage report the platform's tick (`POST /api/scheduled`) sends, and the gateway service binding it goes over |
 | `src/app/server/routes/`, `middleware/` | The HTTP layer |
 | `src/app/server/lib/` | `ledger/` (commands, the batch writer, reversal, due work, verification), `read/` (replay cache, read models), `access/` (roles, holder matching, self-dealing), `documents/` (uploads, D1 storage, visibility), `import/` (the import's form parsing, preview, database checks and writer), `reports/` (exports), identity |
 | `src/app/server/routes/imports.ts`, `src/app/components/ImportWizard.tsx` | The import's routes and its wizard (with `ImportPreview.tsx`, `lib/imports.ts`, `lib/useImportFiles.ts`) |
@@ -73,6 +74,16 @@ particular:
 - **Runtime:** one D1 database (`DB`), static assets, outbound `fetch`, and environment values. There is no cron, R2, KV,
   Queues, Durable Objects, e-mail binding, Workers AI, WebSockets, Server-Sent Events or service workers. Work runs inside
   a request: due work runs when someone with write access loads the dashboard and with `POST /api/orgs/:orgId/process-due`.
+- **The platform's tick** (`insulin.scheduled` in `package.json`): the gateway POSTs to `/api/scheduled` every five
+  minutes with only `x-suger-app-id` and `x-suger-access-via: schedule`. Its one job is the hourly usage report
+  (`server/lib/usage-metrics.ts`): counts of each organization's records and the bytes of its documents, never a name,
+  an e-mail address, an amount or a document, sent to `SUGER_METRICS_URL` with `SUGER_APP_TOKEN` over the deploy's
+  `SUGER_GATEWAY` service binding (`server/gateway-fetch.ts`), once per hour (claimed in `metrics_reports`). Keep the
+  route refusing anything but the tick (`isScheduleTick`: the marker exactly, no identity header), a request marked
+  `schedule` nobody on every other route, the route out of `GET /api/catalog` (it isn't in the route table), and its
+  work idempotent and bounded (one GROUP BY query per table, whatever the number of organizations). A new metric is a
+  count or a byte size only, in snake_case, and goes in the in-app Docs (Getting started, "Usage counts for Insulin
+  Apps") and `docs/public/how-it-works.md` in the same change.
 - **The UI runs in a sandboxed iframe in the console:** no `window.open`, `target="_blank"`, `alert`, `confirm`,
   `prompt`, `print`, `beforeunload` or top-level navigation. Downloads use `<a download>`. No fonts, scripts or images
   from CDNs. `localStorage` only for disposable UI preferences.
@@ -180,9 +191,9 @@ keeps the two equal. The organization's custom roles are built from them.
 - **Keep the self-dealing guard:** someone who records changes can't run a command touching a stakeholder linked to them.
 - **Anyone with write access but no e-mail can't make changes**; the server refuses before any route runs.
 - **No login of our own:** no sign-in screens, sessions, cookies or passwords. Use `getCurrentUser(request)` from
-  `@fours/app/server`; never read the platform's identity headers directly. The one exception is `readPlatformGrant` in
-  `src/app/server/lib/identity.ts`, which reads `x-suger-app-permissions` and `x-suger-access-via`; use what it puts on
-  the auth context. The fixed "Preview admin" exists only when `import.meta.env.DEV` is true.
+  `@fours/app/server`; never read the platform's identity headers directly. The exceptions are in
+  `src/app/server/lib/identity.ts`: `readPlatformGrant`, which reads `x-suger-app-permissions` and `x-suger-access-via`
+  (use what it puts on the auth context), and `isScheduleTick`, which recognises the platform's tick. The fixed "Preview admin" exists only when `import.meta.env.DEV` is true.
 - **One company per Insulin organization**, created by the first-run setup or by the import. `orgs.console_organization_id`
   is the opaque console organization id, and every pre-company record is scoped by it. A company is `active`, `importing`
   or `archived`; keep both the owner and `active` filters in every query that lists or resolves companies, so another

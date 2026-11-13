@@ -34,7 +34,7 @@ describe('the migrations', () => {
     expect(applied).toHaveLength(readMigrations().length)
     expect(readMigrations().map((migration) => migration.tag)).toEqual([
       '0000_init', '0001_ledger_triggers', '0002_tenant_per_organization', '0003_freeze_owner',
-      '0004_require_company_sequences',
+      '0004_require_company_sequences', '0005_metrics_reports',
     ])
   })
 
@@ -60,7 +60,7 @@ describe('the migrations', () => {
       .map((object) => `${object.type} ${object.name}`)
       .sort()
     expect(created).toEqual(declared)
-    expect(declared.filter((object) => object.startsWith('table '))).toHaveLength(36)
+    expect(declared.filter((object) => object.startsWith('table '))).toHaveLength(37)
     expect(declared.filter((object) => object.startsWith('trigger '))).toHaveLength(81)
   })
 

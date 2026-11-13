@@ -394,5 +394,8 @@ holdings once they have an Insulin Apps account with that address and the Viewer
 
 ## Other endpoints
 
-`GET /api/health` answers without any identity, for monitoring. The platform's own paths (`/api/__suger/*`) are never
-reachable with a token.
+`GET /api/health` answers without any identity, for monitoring. `POST /api/scheduled` is the platform's own call every
+five minutes, which sends the hourly usage counts (see
+[How it works](/docs/captable/how-it-works#usage-counts-sent-to-insulin-apps)); it refuses any request that carries an
+identity, so no agent or OAuth client can call it, and it isn't in the catalog. The platform's own paths
+(`/api/__suger/*`) are never reachable with a token.

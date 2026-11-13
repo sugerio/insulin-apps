@@ -233,3 +233,13 @@ export const blobChunks = sqliteTable('blob_chunks', {
   chunk_index: integer('chunk_index').notNull(),
   bytes: blob('bytes').notNull(),
 }, (table) => [primaryKey({ columns: [table.upload_id, table.chunk_index] })])
+
+/**
+ * The hourly usage report to the platform (usage-metrics.ts): one row per UTC hour (epoch ms of its start), claimed
+ * by the tick that sends it and marked sent once the platform accepted it. Rows older than a few days are pruned.
+ */
+export const metricsReports = sqliteTable('metrics_reports', {
+  hour: integer('hour').primaryKey().notNull(),
+  started_at: integer('started_at').notNull(),
+  sent_at: integer('sent_at'),
+})

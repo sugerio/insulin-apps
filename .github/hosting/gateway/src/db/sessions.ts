@@ -21,16 +21,17 @@ export function findSession(db: D1Database, idHash: string, now: number): Promis
        u.email, u.name, u.email_verified_at, (u.password_hash IS NOT NULL) AS has_password,
        m.role AS active_role, o.name AS active_org_name
      FROM sessions s
-     JOIN users u ON u.id = s.user_id AND u.credential_version = s.credential_version
-     LEFT JOIN memberships m ON m.org_id = s.active_org_id AND m.user_id = s.user_id
-     LEFT JOIN orgs o ON o.id = m.org_id
+     JOIN users u ON u.id = s.user_id AND u.credential_version = s.credential_version AND u.status = 'active'
+     LEFT JOIN orgs o ON o.id = s.active_org_id AND o.status = 'active'
+     LEFT JOIN memberships m ON m.org_id = o.id AND m.user_id = s.user_id
      WHERE s.id_hash = ?1 AND s.expires_at > ?2`,
   ).bind(idHash, now).first<SessionRow>()
 }
 
 /**
- * Creates a session under the credential version the sign-in verified, only if that is still the user's version: a
- * password reset that lands between the check and this insert means no session. False in that case.
+ * Creates a session under the credential version the sign-in verified, only if that is still the user's version and
+ * the account is active: a password reset, a suspension or a disabling (DESIGN.md §11.3) that lands between the check
+ * and this insert means no session. False in that case. The sign-in counts as activity.
  */
 export async function insertSession(db: D1Database, session: {
   idHash: string
@@ -40,15 +41,27 @@ export async function insertSession(db: D1Database, session: {
   now: number
   expiresAt: number
 }): Promise<boolean> {
-  const result = await db.prepare(
-    `INSERT INTO sessions (id_hash, user_id, active_org_id, credential_version, created_at, last_seen_at, expires_at)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?5, ?6 FROM users WHERE id = ?2 AND credential_version = ?4`,
-  ).bind(session.idHash, session.userId, session.activeOrgId, session.credentialVersion, session.now, session.expiresAt).run()
-  return result.meta.changes > 0
+  const [result] = await db.batch([
+    db.prepare(
+      `INSERT INTO sessions (id_hash, user_id, active_org_id, credential_version, created_at, last_seen_at, expires_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?5, ?6 FROM users WHERE id = ?2 AND credential_version = ?4 AND status = 'active'`,
+    ).bind(session.idHash, session.userId, session.activeOrgId, session.credentialVersion, session.now, session.expiresAt),
+    db.prepare('UPDATE users SET last_active_at = ?2 WHERE id = ?1 AND EXISTS (SELECT 1 FROM sessions WHERE id_hash = ?3)')
+      .bind(session.userId, session.now, session.idHash),
+  ])
+  return (result?.meta.changes ?? 0) > 0
 }
 
+/**
+ * Slides the session's expiry (at most once an hour), and notes the person and the session's organization as active
+ * then: the operator console's "last active", to within an hour.
+ */
 export async function touchSession(db: D1Database, idHash: string, now: number, expiresAt: number): Promise<void> {
-  await db.prepare('UPDATE sessions SET last_seen_at = ?2, expires_at = ?3 WHERE id_hash = ?1').bind(idHash, now, expiresAt).run()
+  await db.batch([
+    db.prepare('UPDATE sessions SET last_seen_at = ?2, expires_at = ?3 WHERE id_hash = ?1').bind(idHash, now, expiresAt),
+    db.prepare('UPDATE users SET last_active_at = ?2 WHERE id = (SELECT user_id FROM sessions WHERE id_hash = ?1)').bind(idHash, now),
+    db.prepare('UPDATE orgs SET last_active_at = ?2 WHERE id = (SELECT active_org_id FROM sessions WHERE id_hash = ?1)').bind(idHash, now),
+  ])
 }
 
 export async function setSessionOrg(db: D1Database, idHash: string, orgId: string): Promise<void> {

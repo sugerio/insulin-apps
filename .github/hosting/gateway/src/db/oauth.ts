@@ -229,8 +229,13 @@ export async function deleteAppGrant(db: D1Database, grant: { id: string; orgId:
   return result.meta.changes > 0
 }
 
+/** Notes an agent's use (at most once an hour), and its person and organization as active then. */
 export async function touchGrant(db: D1Database, id: string, now: number): Promise<void> {
-  await db.prepare('UPDATE oauth_grants SET last_used_at = ?2 WHERE id = ?1').bind(id, now).run()
+  await db.batch([
+    db.prepare('UPDATE oauth_grants SET last_used_at = ?2 WHERE id = ?1').bind(id, now),
+    db.prepare('UPDATE users SET last_active_at = ?2 WHERE id = (SELECT user_id FROM oauth_grants WHERE id = ?1)').bind(id, now),
+    db.prepare('UPDATE orgs SET last_active_at = ?2 WHERE id = (SELECT org_id FROM oauth_grants WHERE id = ?1)').bind(id, now),
+  ])
 }
 
 export function issueStatements(db: D1Database, tokens: TokenToIssue[], now: number): D1PreparedStatement[] {
@@ -257,8 +262,10 @@ export function findAccessToken(db: D1Database, hash: string, now: number): Prom
      LEFT JOIN users u ON u.id = g.user_id
      LEFT JOIN service_accounts s ON s.id = t.service_account_id
      LEFT JOIN custom_roles cr ON cr.id = s.custom_role_id
+     JOIN orgs o ON o.id = COALESCE(g.org_id, s.org_id) AND o.status = 'active'
      WHERE t.token_hash = ?1 AND t.kind = 'access' AND t.expires_at > ?2
-       AND (t.grant_id IS NULL OR g.revoked_at IS NULL) AND (t.service_account_id IS NULL OR s.revoked_at IS NULL)`,
+       AND (t.grant_id IS NULL OR (g.revoked_at IS NULL AND u.status = 'active'))
+       AND (t.service_account_id IS NULL OR s.revoked_at IS NULL)`,
   ).bind(hash, now).first<AccessTokenRow>()
 }
 
@@ -269,7 +276,9 @@ export function findAccessToken(db: D1Database, hash: string, now: number): Prom
 export async function redeemRefresh(db: D1Database, hash: string, clientId: string, now: number): Promise<string | null> {
   const row = await db.prepare(
     `UPDATE oauth_tokens SET used_at = ?2 WHERE token_hash = ?1 AND kind = 'refresh' AND used_at IS NULL AND expires_at > ?2
-       AND EXISTS (SELECT 1 FROM oauth_grants g WHERE g.id = oauth_tokens.grant_id AND g.client_id = ?3 AND g.revoked_at IS NULL)
+       AND EXISTS (SELECT 1 FROM oauth_grants g JOIN users u ON u.id = g.user_id AND u.status = 'active'
+         JOIN orgs o ON o.id = g.org_id AND o.status = 'active'
+         WHERE g.id = oauth_tokens.grant_id AND g.client_id = ?3 AND g.revoked_at IS NULL)
      RETURNING grant_id`,
   ).bind(hash, now, clientId).first<{ grant_id: string | null }>()
   return row?.grant_id ?? null
@@ -323,7 +332,8 @@ export async function issueServiceToken(db: D1Database, token: { hash: string; s
   const result = await db.prepare(
     `INSERT INTO oauth_tokens (token_hash, kind, grant_id, service_account_id, client_secret_hash, created_at, expires_at)
      SELECT ?1, 'access', NULL, ?2, ?3, ?4, ?5
-     WHERE EXISTS (SELECT 1 FROM service_accounts s WHERE s.id = ?2 AND s.revoked_at IS NULL
+     WHERE EXISTS (SELECT 1 FROM service_accounts s JOIN orgs o ON o.id = s.org_id AND o.status = 'active'
+       WHERE s.id = ?2 AND s.revoked_at IS NULL
        AND (s.secret_hash = ?3 OR (s.previous_secret_hash = ?3 AND s.previous_secret_expires_at > ?4)))`,
   ).bind(token.hash, token.serviceAccountId, token.secretHash, token.now, token.expiresAt).run()
   return result.meta.changes > 0
@@ -514,8 +524,12 @@ export async function deleteOrgGrant(db: D1Database, grant: { id: string; orgId:
   return result.meta.changes > 0
 }
 
+/** Notes an API client's use (at most once an hour), and its organization as active then. */
 export async function touchServiceAccount(db: D1Database, id: string, now: number): Promise<void> {
-  await db.prepare('UPDATE service_accounts SET last_used_at = ?2 WHERE id = ?1').bind(id, now).run()
+  await db.batch([
+    db.prepare('UPDATE service_accounts SET last_used_at = ?2 WHERE id = ?1').bind(id, now),
+    db.prepare('UPDATE orgs SET last_active_at = ?2 WHERE id = (SELECT org_id FROM service_accounts WHERE id = ?1)').bind(id, now),
+  ])
 }
 
 /** The bounded cleanup (housekeeping.ts): expired requests, codes, tokens and grants, and clients nobody uses. */

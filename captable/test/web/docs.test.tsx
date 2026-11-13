@@ -214,6 +214,10 @@ describe("the topics", () => {
     for (const permission of ["Record changes", "View the cap table", "See own holdings"]) expect(gettingStarted).toContain(permission);
     expect(gettingStarted).toContain("Cap Table shows \"Custom role\" under the person's name");
     expect(gettingStarted).toContain("An AI agent acts with the role and permissions of the person who connected it");
+    // The hourly usage counts: what they are, and what never leaves the app.
+    expect(gettingStarted).toContain("Cap Table sends Insulin Apps a few counts every hour");
+    expect(gettingStarted).toContain("stakeholders, share classes, equity plans, securities, ledger transactions, documents, valuations and exercise requests");
+    expect(gettingStarted).toContain("Cap Table never sends names, e-mail addresses, share numbers, prices or other amounts, or documents.");
     expect(gettingStarted).not.toMatch(/captable\.|portfolio\.|admin_r[ow]/);
     expect(textOf("glossary")).toContain("It acts with that person's role and permissions, and no more.");
     const stakeholders = textOf("for-stakeholders");

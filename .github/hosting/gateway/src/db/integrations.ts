@@ -37,8 +37,10 @@ export function findIntegration(db: D1Database, orgId: string, app: string, id: 
   return db.prepare(`SELECT ${COLUMNS} FROM integrations WHERE org_id = ?1 AND app = ?2 AND id = ?3`).bind(orgId, app, id).first<IntegrationRow>()
 }
 
+/** A stored credential with its sealed secret, for the proxy; null in an organization that isn't active (DESIGN.md §11.3). */
 export function findIntegrationSecret(db: D1Database, orgId: string, app: string, key: string): Promise<IntegrationSecretRow | null> {
-  return db.prepare(`SELECT ${COLUMNS}, secret_enc FROM integrations WHERE org_id = ?1 AND app = ?2 AND key = ?3`)
+  return db.prepare(`SELECT ${COLUMNS}, secret_enc FROM integrations
+    WHERE org_id = ?1 AND app = ?2 AND key = ?3 AND EXISTS (SELECT 1 FROM orgs o WHERE o.id = ?1 AND o.status = 'active')`)
     .bind(orgId, app, key).first<IntegrationSecretRow>()
 }
 

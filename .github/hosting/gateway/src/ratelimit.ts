@@ -5,7 +5,7 @@ import type { Context } from './context.ts'
 import { sha256Hex } from './crypto.ts'
 import { log, logError } from './log.ts'
 
-export type AuthAction = 'signup' | 'login' | 'resend' | 'forgot' | 'reset' | 'verify' | 'google' | 'password' | 'mfa' | 'sso' | 'org_request'
+export type AuthAction = 'signup' | 'login' | 'resend' | 'forgot' | 'reset' | 'verify' | 'google' | 'password' | 'mfa' | 'sso' | 'org_request' | 'super'
 
 /**
  * True while the action is within its limits for this IP (and e-mail address or user, when given). Fails closed: if

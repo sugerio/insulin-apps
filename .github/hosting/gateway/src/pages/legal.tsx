@@ -126,6 +126,18 @@ export function privacyPage(ctx: Context): Html {
           we can limit how many emails one address receives and how many requests one person, or one owner domain, sends.
         </li>
         <li>
+          <strong>Activity and standing:</strong> when your account, and each organization, was last used (when you sign in,
+          use a page, or an AI agent or API client acts, to within an hour), and whether we suspended or disabled an account or
+          organization for breaking the terms, with when and our reason. An organization we create for someone past their
+          domain&apos;s limit records that we did.
+        </li>
+        <li>
+          <strong>Usage reports from the apps:</strong> every hour, each app sends us counts and sizes for each organization (for
+          example, how many envelopes or documents it has and how many bytes of files it stores) and the size of the app&apos;s
+          database. They never contain names, email addresses, amounts or what you entered. We keep the hourly figures for three
+          days and one figure per day for 400 days.
+        </li>
+        <li>
           <strong>Your IP address, briefly:</strong> used to rate-limit sign-in, sign-up and other account requests, and sent to
           Cloudflare Turnstile with the bot check. We don&apos;t store it in our database.
         </li>
@@ -146,7 +158,8 @@ export function privacyPage(ctx: Context): Html {
         <li>To limit how many organizations each email domain can have, and to answer requests for more.</li>
         <li>To let the AI agents you connect, and the service accounts owners and admins create, use the apps with the access given.</li>
         <li>To run the apps you use for your organization.</li>
-        <li>To limit abuse of the service: rate limits, the bot check and email limits.</li>
+        <li>To limit abuse of the service: rate limits, the bot check and email limits, and suspending accounts and organizations that break the terms.</li>
+        <li>To keep the service running: watching its usage and capacity, so we add resources before they run out, and seeing which apps people use.</li>
       </ul>
       <p>We process this data to provide the service you ask for, and in our legitimate interest in limiting abuse of it.</p>
 
@@ -160,6 +173,12 @@ export function privacyPage(ctx: Context): Html {
         <li>
           <strong>Insulin Apps support</strong>, only if you ask for more organizations: they receive your request by email, as
           described above, and reply to you.
+        </li>
+        <li>
+          <strong>Insulin Apps operators</strong>, a few staff who run the service: in an operator console they see organizations&apos;
+          names, owner domains and members, people&apos;s names, email addresses, roles and when they joined and were last active,
+          and the apps&apos; usage reports. They can suspend or disable an account or organization, and every such action is
+          recorded with its reason. They have no access to what you enter in the apps, to passwords, tokens or stored credentials.
         </li>
         <li>
           <strong>Google</strong>, only if you choose &quot;Continue with Google&quot;: Google then knows you signed in to the service.

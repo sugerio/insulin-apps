@@ -3,6 +3,7 @@
 import { appAccess } from './access.ts'
 import { integrationProxy } from './integrations/proxy.ts'
 import { appMailRelay } from './mail/relay.ts'
+import { appMetricsReport } from './metrics/report.ts'
 import type { Context } from './context.ts'
 import { apexUrl, appSettingsPath, originOf } from './context.ts'
 import { listCapturedMail } from './db/mail.ts'
@@ -26,6 +27,9 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
     // The mail relay (mail/relay.ts), called by app Workers with their own token: POST, apex only.
     case '/__insulin/mail':
       return appMailRelay(ctx)
+    // Usage reports (metrics/report.ts), sent by app Workers every hour with their own token: POST, apex only.
+    case '/__insulin/metrics':
+      return appMetricsReport(ctx)
     case '/__insulin/me':
       return method === 'GET' || method === 'HEAD' ? me(ctx) : methodNotAllowed(ctx, ['GET', 'HEAD'])
     case '/__insulin/switch-org':

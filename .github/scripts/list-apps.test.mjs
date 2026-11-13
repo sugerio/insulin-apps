@@ -123,7 +123,7 @@ test("reads an app's secret names, which carry its own prefix", async () => {
 })
 
 test("never hands an app the platform's own settings, or a name in another app's namespace", async () => {
-  for (const name of ['cloudflare', 'google', 'turnstile', 'github', 'site', 'suger']) {
+  for (const name of ['cloudflare', 'google', 'turnstile', 'github', 'site', 'suger', 'super']) {
     const reserved = await repository({ [name]: { insulin: { secrets: [`${name.toUpperCase()}_API_TOKEN`] } } })
     await assert.rejects(() => listApps(reserved), /is reserved/, name)
   }

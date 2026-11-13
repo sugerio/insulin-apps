@@ -1,3 +1,4 @@
+import { gatewayEndpoint } from '../gateway-fetch.ts';
 import { isValidOtpEmailAddress } from './email-address.ts';
 import { isProd } from './environment.ts';
 import { OTP_TTL_MS } from './otp.ts';
@@ -28,16 +29,7 @@ const OTP_MINUTES = OTP_TTL_MS / 60_000;
 
 /** The relay's address and token, when both are set and the address is https (http only on loopback). */
 export function relayConfig(env: MailEnv): { url: string; token: string } | null {
-  const url = env.SUGER_MAIL_URL?.trim() ?? '', token = env.SUGER_APP_TOKEN?.trim() ?? '';
-  if (!url || !token) return null;
-  try {
-    const parsed = new URL(url);
-    const loopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname.endsWith('.localhost');
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback)) return null;
-  } catch {
-    return null;
-  }
-  return { url, token };
+  return gatewayEndpoint(env.SUGER_MAIL_URL, env.SUGER_APP_TOKEN);
 }
 
 export class MailRelayError extends Error {

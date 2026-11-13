@@ -40,7 +40,8 @@ Run from `esign/` unless noted.
 | `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |
-| `src/app/server/gateway-fetch.ts` | The `SUGER_GATEWAY` service binding's fetch, which the relay is called over |
+| `src/app/server/esign/usage-metrics.ts` | The hourly usage report to the platform (counts and byte sizes per organization), sent by the tick, once an hour (`metrics_reports`) |
+| `src/app/server/gateway-fetch.ts` | The `SUGER_GATEWAY` service binding's fetch, which the relay and the usage reports are called over, and `gatewayEndpoint` (their address and the app's token, https only) |
 | `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the seal key + TSA seal, and `keys.ts`, the seal keys trusted |
 | `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql` and the hand-written rebuild `0002_seal_key.sql`) |
 | `scripts/` | The bitmap atlas generators (macOS, Swift), and `put-seal-key.mjs`, which puts a new seal key on the Worker |
@@ -61,7 +62,7 @@ secret in source.
 - **Runtime:** one D1 database, static assets, outbound `fetch` and environment values. No cron, R2, KV, Queues,
   Durable Objects or email binding: objects live in D1 (`blob-store.ts`), mail goes through the relay (`mail.ts`), and
   due work runs in requests, on the platform's five-minute tick (`insulin.scheduled`, `POST /api/scheduled`) and with
-  `POST /api/process-due`.
+  `POST /api/process-due`. The platform can't read the database: the tick reports usage to it (`usage-metrics.ts`).
 - **The members' app runs in a sandboxed iframe in the console:** no `window.open`, `alert`, `confirm`, `prompt` or
   top-level navigation (it moves with `history.pushState`); downloads use `<a download>`; no fonts, scripts or images
   from CDNs.
@@ -86,6 +87,14 @@ secret in source.
   `x-suger-app-id` and `x-suger-access-via: schedule`. The route refuses (403) anything else, a member's or service
   account's identity included, and runs every organization's due work; `readCaller` treats a request marked
   `schedule` as nobody, so it never reaches a management route. Keep it off the public paths and out of the catalog.
+  After the due work, whatever its outcome, it sends the hour's usage report unless a tick already has (below).
+- **Usage reports** (`usage-metrics.ts`): once an hour, `POST $SUGER_METRICS_URL` with `SUGER_APP_TOKEN` over the
+  `SUGER_GATEWAY` binding; without them nothing is sent, and signing never waits for them. Counts and byte sizes only,
+  per organization (its tenant id) and for the app: never a name, an email address, a document's title or contents.
+  Each metric is a gauge (the total now, never "in the last hour"), snake_case, at most 20 per organization; at most
+  500 organizations a request. One conditional statement claims the hour in `metrics_reports`; a non-202 or any error
+  releases it for the next tick and never fails the tick's due work. A new metric is listed in the Docs ("Usage
+  reports every hour" in Getting started) and in `docs/public/how-it-works.md`.
 - **Page sessions** travel in the `x-esign-session` header, never `Authorization` (the gateway drops it on public
   paths) and never an `x-suger-*` name (the gateway strips those). `helpers/gateway.ts` behaves the same way.
 - **No login of our own.** The preview Owner exists only in the local preview.

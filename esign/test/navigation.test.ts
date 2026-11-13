@@ -24,7 +24,7 @@ const PLATFORM:PlatformMe={
 test('the navigation manifest in package.json is valid, and the members\' app renders from it',()=>{
  assert.deepEqual(navigationProblems(manifest),[]);
  assert.deepEqual(NAVIGATION,manifest,'the shell reads package.json itself');
- assert.deepEqual(manifest.map(i=>i.key),['envelopes','templates','contacts']);
+ assert.deepEqual(manifest.map(i=>i.key),['envelopes','templates','contacts','ownership']);
  assert.ok(!manifest.some(i=>i.key==='docs'||i.key==='settings'),'Docs and Settings are the platform\'s, not the manifest\'s');
  for(const item of manifest.flatMap(i=>[i,...(i.children??[])])){
   const [pathname,search='']=item.path.split('?');
@@ -60,7 +60,7 @@ test('each role sees the items its role reaches: New envelope is for editors and
  const children=(role:'ADMIN'|'EDITOR'|'VIEWER')=>visibleNavigation(NAVIGATION,role)[0]!.children!.map(c=>c.key);
  assert.ok(!children('VIEWER').includes('new-envelope'));
  assert.ok(children('EDITOR').includes('new-envelope'));assert.ok(children('ADMIN').includes('new-envelope'));
- assert.deepEqual(visibleNavigation(NAVIGATION,'VIEWER').map(i=>i.key),['envelopes','templates','contacts'],'every role sees every section');
+ assert.deepEqual(visibleNavigation(NAVIGATION,'VIEWER').map(i=>i.key),['envelopes','templates','contacts'],'every role sees the sections but Ownership, which is for admins');
  const synthetic:NavItem[]=[{key:'a',label:'A',icon:'home',path:'/a'},{key:'b',label:'B',icon:'key',path:'/b',role:'ADMIN'},{key:'c',label:'C',icon:'bot',path:'/c',role:'EDITOR'}];
  assert.deepEqual(visibleNavigation(synthetic,'VIEWER').map(i=>i.key),['a']);
  assert.deepEqual(visibleNavigation(synthetic,'EDITOR').map(i=>i.key),['a','c']);

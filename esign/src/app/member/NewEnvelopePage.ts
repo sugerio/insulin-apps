@@ -12,6 +12,7 @@ import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, si
 import { ContactField } from './ContactField.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
+import { TagsField } from './TagsField.ts'
 
 const h = React.createElement
 // Esign emails every signer an invitation when it is their turn: here Esign is the signing product, not a host that
@@ -30,6 +31,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   const [note, setNote] = useState<EnvelopeMessage>({ subject: '', body: '' })
   // One message for every signer, or a message of their own for each.
   const [perSigner, setPerSigner] = useState(false)
+  // The sender's own tags for it; theirs on the template are added by Esign.
+  const [tags, setTags] = useState<string[]>([])
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
   const attempt = useRef<{ body: string; key: string } | null>(null)
@@ -68,7 +71,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     setMessage({ text: '', error: false })
     // Each signer's own message, or the one for everybody: never both.
     const people = perSigner ? signers : signers.map((s) => ({ ...s, subject: '', body: '' }))
-    const body = JSON.stringify(envelopeRequest(template.id, template.roles, people, doc, signBy, perSigner ? { subject: '', body: '' } : note))
+    const body = JSON.stringify({ ...envelopeRequest(template.id, template.roles, people, doc, signBy, perSigner ? { subject: '', body: '' } : note), ...(tags.length ? { tags } : {}) })
     if (!attempt.current || attempt.current.body !== body) attempt.current = { body, key: crypto.randomUUID() }
     apiJson<{ id: string }>('/api/envelopes', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': attempt.current.key }, body })
       .then(({ id }) => { attempt.current = null; navigate(`/envelopes/${id}`) })
@@ -113,7 +116,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
         text('doc-published', 'Published (YYYY-MM-DD)', doc.published, (v) => setDoc((d) => ({ ...d, published: v }))),
         text('doc-sender', 'Sender name', doc.senderName, (v) => setDoc((d) => ({ ...d, senderName: v }))),
         text('doc-sender-company', 'Sender company', doc.senderCompany, (v) => setDoc((d) => ({ ...d, senderCompany: v }))),
-        text('sign-by', 'Sign by (optional)', signBy, setSignBy, { type: 'date', hint: 'If someone hasn\'t signed by the end of this day, the envelope expires and nobody can sign it.' })),
+        text('sign-by', 'Sign by (optional)', signBy, setSignBy, { type: 'date', hint: 'If someone hasn\'t signed by the end of this day, the envelope expires and nobody can sign it.' }),
+        h('div', { className: 'sm:col-span-2' }, h(TagsField, { id: 'envelope-tags', value: tags, onChange: setTags, hint: 'Only you see your tags. Your tags on the template are added too.' }))),
       h(CardContent, { className: 'grid gap-4 border-t pt-6' },
         h('p', { className: 'text-sm text-muted-foreground' }, 'A message is shown on the signing page, and is the subject and text of the invitations Esign emails. Without a subject: "Please sign: <document name>".'),
         h('label', { className: 'flex items-center gap-2 text-sm' },

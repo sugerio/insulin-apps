@@ -67,13 +67,14 @@ export const sending: DocTopic = {
         p('The envelope\'s page, titled with the document\'s name, shows its signers, where each one stands, the metadata the sending system gave it (if any; signers never see it), and the audit trail. It updates by itself while the envelope is out for signature.'),
         p('The signer whose turn it is gets an emailed invitation and signs from it; if it went astray, ', b('Resend invitation'), ' on the envelope\'s page sends a new link. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '. To withdraw the envelope, void it; see ', h(DocLink, { to: 'statuses', section: 'voiding' }, 'Voiding'), '.'),
         p('If sending fails, for example because the connection drops, choose Send again. The retry carries the same request key, so the envelope is never sent twice.'),
+        p('The envelope is yours: nobody else sees it until you share it under ', b('Who sees it'), ' on its page. Your tags on it, from the form or its page, are yours alone, with yours on its template. See ', h(DocLink, { to: 'roles', section: 'who-sees-what' }, 'Who sees each template and envelope'), '.'),
       ],
     },
     {
       id: 'contacts',
       title: 'Contacts',
       body: [
-        p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; delete one with ', b('Delete'), ' on their row (you confirm it); open a contact to change them or to see every envelope that names them.'),
+        p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; delete one with ', b('Delete'), ' on their row (you confirm it); open a contact to change them or to see the envelopes you see that name them.'),
         p('When you send, matching contacts are suggested under a signer\'s Name and Email as you type (from two characters on); choosing one fills in that signer\'s name, email, title and company.'),
         p('A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact changes no envelope, and the next envelope that names them adds them again.'),
       ],

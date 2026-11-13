@@ -10,7 +10,7 @@ work and contacts. It is for people who send and for AI agents acting for them.
 
 ## Before you send
 
-- You need a template. See [Templates and fields](/docs/esign/templates).
+- You need a template you see: yours, or one shared with you. See [Templates and fields](/docs/esign/templates).
 - Your role needs **Send and manage envelopes** (owners, admins and editors have it). See
   [Roles and access](/docs/esign/roles-and-access).
 - Signing needs to be set up on the deployment. If it isn't, the **Envelopes** page says so; you can still send, but
@@ -53,6 +53,14 @@ same request key, so the envelope is never sent twice.
 | **Sender name** and **Sender company** | Who sent it, shown on the signing page. |
 | **Sign by (optional)** | If a signer hasn't signed by the end of this day (in your time zone), the envelope expires and nobody can sign it. Up to 400 days ahead. |
 | **Email subject** and **Message to the signers** (optional) | Your message, shown on the signing page next to the document, and the subject and text of the invitations Esign emails. Without a subject, an invitation's is "Please sign:" and the document's name. Choose **Write a different message to each signer** to give each their own instead. |
+
+## Who sees an envelope
+
+An envelope is yours when you send it, and nobody else sees it, your organization's owners and admins included, until
+you share it: **Who sees it** on its page shares it by email, as Viewer, Editor (who may also void it and resend
+invitations) or Admin (who may also share it). Tags you give it, on the form or on its page, are yours alone, along with
+yours on its template; **Envelopes** filters by them, and by **Mine** or **Shared with me**. See
+[Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
 
 ## Signing order
 
@@ -162,6 +170,7 @@ Search it by name or email.
   added too), and can delete them.
 - When you send, a contact suggested under **Name** or **Email** as you type fills in the signer's name, email, title and
   company.
+- A contact's page lists only the envelopes you see.
 
 A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact
 changes no envelope. Everyone in your organization who can see envelopes sees the contacts; those who send can change them.

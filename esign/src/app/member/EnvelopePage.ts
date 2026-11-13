@@ -1,5 +1,6 @@
-// One envelope: its signers in order and where each stands, the audit trail, and, for those who manage, voiding it and
-// emailing the active signer's invitation again. Esign is the signing product here, not a host: signers reach their
+// One envelope: its signers in order and where each stands, the audit trail, who sees it (its owner and the people it
+// is shared with) and the member's own tags; for its editors, admins and owner, voiding it and emailing the active
+// signer's invitation again. Esign is the signing product here, not a host: signers reach their
 // page from the invitation in their email, never from this page. A completed envelope offers the signed PDF with its
 // certificate.
 import React, { useEffect, useState } from 'react'
@@ -10,9 +11,11 @@ import { Label } from '../components/ui/label.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { Textarea } from '../components/ui/textarea.ts'
 import { AUDIT_LABELS, CompletionCertificate } from '../ui/CompletionCertificate.ts'
-import { api, apiJson, canManage, dateTime, describeError, taskLabel, type AuditEvent, type Envelope, type Me, type Task } from './api.ts'
+import { allows, api, apiJson, canManage, dateTime, describeError, ownerName, taskLabel, type AuditEvent, type Envelope, type Me, type Task } from './api.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
-import { Link } from './router.ts'
+import { Link, navigate } from './router.ts'
+import { SharePanel } from './SharePanel.ts'
+import { TagsField } from './TagsField.ts'
 
 const h = React.createElement
 type Certificate = Parameters<typeof CompletionCertificate>[0]['certificate']
@@ -20,8 +23,9 @@ const POLL_MS = 3000
 const OPEN = new Set(['IN_PROGRESS', 'FINALIZING'])
 
 export function EnvelopePage({ me, id }: { me: Me; id: string }) {
-  const manage = canManage(me)
   const [envelope, setEnvelope] = useState<Envelope | null>(null)
+  // Changing it takes an editor's role in it, besides managing in Esign.
+  const manage = canManage(me) && allows(envelope?.myRole, 'editor')
   const [audit, setAudit] = useState<AuditEvent[]>([])
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
@@ -71,6 +75,10 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
       setMessage({ text: 'The envelope is voided. Nobody can sign it any more.', error: false })
     })
   }
+  function saveTags(tags: string[]) {
+    setEnvelope((old) => old && { ...old, tags })
+    void run(async () => { await apiJson(`/api/envelopes/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }) })
+  }
   function downloadPdf() {
     void run(async () => {
       const blob = await (await api(`/api/envelopes/${id}/delivery-pdf`)).blob()
@@ -89,7 +97,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
     back,
     h(PageHeader, {
       title: envelope.documentName ?? 'Envelope',
-      description: h('span', { className: 'flex flex-wrap items-center gap-2' }, h(StatusBadge, { status: envelope.status }), h('span', { className: 'font-mono text-xs' }, envelope.id), envelope.createdAt ? h('span', null, `Created ${dateTime(envelope.createdAt)}`) : null),
+      description: h('span', { className: 'flex flex-wrap items-center gap-2' }, h(StatusBadge, { status: envelope.status }), h('span', { className: 'font-mono text-xs' }, envelope.id), envelope.createdAt ? h('span', null, `Created ${dateTime(envelope.createdAt)}`) : null, envelope.owner ? h('span', null, `Owner: ${ownerName(envelope.owner, me)}`) : null),
       actions: [
         completed ? h(Button, { key: 'pdf', variant: 'outline', disabled: busy, onClick: downloadPdf }, h(Download, { 'aria-hidden': true }), 'Signed PDF with certificate') : null,
         completed ? h(Button, { key: 'cert', variant: 'outline', disabled: busy, onClick: showCertificate }, h(FileCheck2, { 'aria-hidden': true }), 'Certificate of completion') : null,
@@ -127,6 +135,11 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
         ...Object.entries(envelope.metadata).flatMap(([key, value]) => [
           h('dt', { key: `k-${key}`, className: 'font-mono text-xs text-muted-foreground' }, key),
           h('dd', { key: `v-${key}`, className: 'break-all' }, value)])))) : null,
+    h(Card, { 'aria-label': 'Sharing' },
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Who sees it')), h(CardDescription, null, 'Its owner and the people it is shared with. Nobody else in your organization sees it.')),
+      h(CardContent, { className: 'flex flex-col gap-6' },
+        h(SharePanel, { kind: 'envelopes', id, me, onLeft: () => navigate('/envelopes') }),
+        h(TagsField, { id: 'envelope-tags', value: envelope.tags ?? [], onChange: saveTags }))),
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Audit trail')), h(CardDescription, null, 'What happened, when and from where, as recorded.')),
       h(CardContent, null, audit.length === 0 ? h('p', { className: 'text-sm text-muted-foreground' }, 'Nothing recorded yet.')

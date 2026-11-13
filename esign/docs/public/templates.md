@@ -101,6 +101,14 @@ signer signs is what was sent.
 
 There is no button to delete a template.
 
+## Who sees a template
+
+A template is yours when you upload it, and nobody else sees it until you share it: **Sharing** on its row shows who
+sees it, and there its admins and owner share it by email, as Viewer (sees it and sends envelopes from it), Editor (also
+changes its default signers) or Admin (also shares it). Your **tags** on it are yours alone, and **Show** and **With your
+tags** filter the list. An envelope sent from a template is its sender's, not shared with the template's people. See
+[Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
+
 ## The editor on the Templates page
 
 The **Templates** page hosts the editor exactly as a host product would: it opens an editing session for its own address,

@@ -29,7 +29,7 @@ Run from `esign/` unless noted.
 | Path | What |
 |---|---|
 | `src/app/App.tsx` | The pages: `/sign` (signing), `/editor/page/:id` (embedded editor), `/copy` (a signer's copy), and every other path the members' app |
-| `src/app/member/` | The members' app: `MemberApp.ts` (routes), `Shell.ts` (the two-level navigation), `navigation.ts` (the manifest, role filtering, Settings links, the remembered collapse), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `ContactsPage.ts`, `ContactPage.ts`, `ContactField.ts` (a name or email field suggesting contacts as typed), `api.ts`, `router.ts` (pushState, no router library) |
+| `src/app/member/` | The members' app: `MemberApp.ts` (routes), `Shell.ts` (the two-level navigation), `navigation.ts` (the manifest, role filtering, Settings links, the remembered collapse), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `ContactsPage.ts`, `ContactPage.ts`, `ContactField.ts` (a name or email field suggesting contacts as typed), `SharePanel.ts` (who sees a template or envelope, and sharing it), `TagsField.ts` (the member's own tags), `ListFilters.ts`, `OwnershipPage.ts` (API clients' shares, taking over), `api.ts`, `router.ts` (pushState, no router library) |
 | `src/app/pages/docs/`, `src/app/components/Docs.ts` | The in-app Docs: one file per topic, `topics.ts` (reading order), `parts.ts`, and the Docs component |
 | `src/app/ui/` | The public pages and their parts: `RecipientPage.ts`, `SigningHelp.ts` ("About signing"), `FieldEditor.ts`, `EditorPage.ts`, `CopyPage.ts`, `CompletionCertificate.ts`, `pdf.ts`, `esign-theme.css` (layout hooks) |
 | `src/app/components/ui/`, `src/app/lib/utils.ts`, `src/app/styles.css` | shadcn/ui components (copied, as `.ts`; `sidebar.ts` is the sidebar's class names), `cn()`, and Tailwind with the shadcn neutral theme and sidebar colours, light and dark |
@@ -37,6 +37,7 @@ Run from `esign/` unless noted.
 | `src/app/server/router.ts` | `handleAppRequest(request)`: builds the bindings from `#platform` and hands every `/api/**` request to the Hono app |
 | `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due`, and the platform's tick `/api/scheduled` |
 | `src/app/server/esign/identity.ts` | The platform identity, the two permissions and `can()` |
+| `src/app/server/esign/ownership.ts`, `tags.ts`, `members.ts` | Who sees and changes each template and envelope (owners, shares, the one check `documentRole`/`requireRole`/`visibleIds`), each person's own tags, and the members and API clients seen (owners' names, taking over, API clients' shares) |
 | `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |

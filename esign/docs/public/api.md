@@ -19,14 +19,17 @@ The base URL is `https://esign.insulinapps.com`. Every endpoint is under `/api/`
 | An AI agent | Through the MCP server at `https://esign.insulinapps.com/mcp` | Acts with the person's role. Esign's **Connect AI** page (`https://insulinapps.com/apps/esign/settings/connect-ai`, or **Connect AI** in the account bar) has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
 | A signer's page | A one-time code exchanged for a page session (`x-esign-session` header) | Only the public `/api/public/` endpoints. |
 
-Every management call sees only the caller's organization. An id from another organization answers `404 not_found`, as
-if it didn't exist.
+Every management call sees only the caller's organization, and in it only the templates and envelopes the caller owns or
+that are shared with them (see [Owners, sharing and tags](#owners-sharing-and-tags)). Any other id answers
+`404 not_found`, as if it didn't exist.
 
 ## Conventions
 
 - **JSON** in and out, except uploads (multipart or PDF bytes) and PDF downloads.
 - **Permissions.** Reading (`GET`) needs **View envelopes** (`esign.view`); anything else needs **Send and manage
-  envelopes** (`esign.manage`). `GET /api/me` and `GET /api/catalog` work for every role.
+  envelopes** (`esign.manage`), except setting your own tags and leaving what is shared with you. `GET /api/me` and `GET /api/catalog` work for every role.
+  On a template or an envelope, the caller also needs a role in it: **Viewer**, **Editor** or **Admin** below, which
+  its owner has, and someone who may only view Esign is a Viewer at most. Too low a role answers `403 forbidden`.
 - **Errors** are `{"error": "<code>"}` with an HTTP status: `400` and `422` for a request Esign doesn't accept, `401
   unauthorized` without an identity, `403 forbidden` when the role doesn't allow it, `404 not_found`, `409` when the state
   changed meanwhile (for example `envelope_not_voidable` or `idempotency_conflict`).
@@ -34,6 +37,9 @@ if it didn't exist.
   whether it is (`signingEnabled`).
 - **Paging.** Lists are newest first: `limit` (1 to 100, default 50) and `before` (a time in epoch milliseconds: pass the
   last item's `createdAt` for the next page).
+- **Lists of templates and envelopes** take `scope` (`mine` or `shared`; both by default) and `tag` (up to 5 of your own
+  tags, repeated: those with all of them). Each item has its `owner` (`{id, kind: person|client, name?, email?}`), your
+  role in it (`myRole`) and your `tags`.
 - **Ids** are opaque strings. Times in lists are epoch milliseconds (`createdAt`); deadlines and audit times are ISO 8601.
 
 ## Endpoints
@@ -49,27 +55,27 @@ if it didn't exist.
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/templates` | View | The organization's templates, newest first: `{templates: [{id, name?, metadata, defaultSigners, roles, fields, createdAt}]}`. |
-| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name`, `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)) and `defaultSigners` (a JSON object; see [Default signers](#default-signers)). Answers `201 {id, name?, metadata, roles, defaultSigners}`. Signed on an added signature page. |
-| `GET /api/templates/{id}` | View | A template's name, metadata and default signers, its roles and placed fields (type, role, page, box), and whether they can be signed. |
-| `POST /api/templates/{id}/default-signers` | Manage | Replace the template's default signers: `{defaultSigners}` (`{}` clears them). Answers `{id, defaultSigners}`. Envelopes already sent keep their signers. |
-| `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?, name?, metadata?}`. The template it saves gets that name and metadata, or the source template's. Answers `{sessionId, url}`. |
-| `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. |
-| `GET /api/template-editing-sessions/{id}` | View | `{templateId}` once the editor has saved, else `{templateId: null}`. |
+| `GET /api/templates` | View | The templates you own or that are shared with you, newest first: `{templates: [{id, name?, metadata, defaultSigners, roles, fields, createdAt, owner, myRole, tags}]}`. |
+| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name`, `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)), `defaultSigners` (a JSON object; see [Default signers](#default-signers)), `tags` and `share` (JSON arrays; see [Owners, sharing and tags](#owners-sharing-and-tags)). You own it. Answers `201 {id, name?, metadata, roles, defaultSigners, tags}`. Signed on an added signature page. |
+| `GET /api/templates/{id}` | Viewer | A template's name, metadata and default signers, its roles and placed fields (type, role, page, box), whether they can be signed, its owner, your role and your tags. |
+| `POST /api/templates/{id}/default-signers` | Editor | Replace the template's default signers: `{defaultSigners}` (`{}` clears them). Answers `{id, defaultSigners}`. Envelopes already sent keep their signers. |
+| `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?, name?, metadata?, tags?, share?}`. A source template must be one you see (Viewer). The template it saves is yours, gets that name and metadata, or the source template's, your tags (with yours on the source) and the shares asked for. Answers `{sessionId, url}`. |
+| `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. Whoever opened the session only. |
+| `GET /api/template-editing-sessions/{id}` | View | `{templateId}` once the editor has saved, else `{templateId: null}`. Whoever opened the session only. |
 
 ### Envelopes
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/envelopes` | View | The organization's envelopes, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?, metadata}]}`. Filter with `status`. |
-| `POST /api/envelopes` | Manage | Send a template for signature, one recipient per role. Needs an `Idempotency-Key` header. Answers `201 {id, status: "IN_PROGRESS"}`; the first signer's turn starts at once. |
-| `GET /api/envelopes/{id}` | View | The status, `documentName`, `metadata` and `message`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `delivery`, `message`, `expiresAt`, `openedAt`, `invitedAt`. |
-| `GET /api/envelopes/{id}/audit` | View | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
-| `POST /api/envelopes/{id}/void` | Manage | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. |
-| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Manage | A one-time code for the active signer's signing page: `{code}`. Body: `{signedInEmail, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
-| `POST /api/envelopes/{id}/tasks/{taskId}/invitation` | Manage | Email the active signer's invitation again, with a new link; the earlier link stops working. Answers `204`; `409 not_invited` for a signer Esign doesn't invite. |
-| `GET /api/envelopes/{id}/delivery-pdf` | View | A completed envelope's signed PDF followed by its certificate of completion. |
-| `GET /api/envelopes/{id}/certificate` | View | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
+| `GET /api/envelopes` | View | The envelopes you own or that are shared with you, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?, metadata, owner, myRole, tags}]}`. Filter with `status`, `scope` and `tag`. |
+| `POST /api/envelopes` | Manage | Send a template you see (Viewer) for signature, one recipient per role. Needs an `Idempotency-Key` header. You own the envelope; it isn't shared with the template's people. Answers `201 {id, status: "IN_PROGRESS"}`; the first signer's turn starts at once. |
+| `GET /api/envelopes/{id}` | Viewer | The status, `documentName`, `metadata` and `message`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `delivery`, `message`, `expiresAt`, `openedAt`, `invitedAt`; its owner, your role and your tags. |
+| `GET /api/envelopes/{id}/audit` | Viewer | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
+| `POST /api/envelopes/{id}/void` | Editor | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. |
+| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Editor | A one-time code for the active signer's signing page: `{code}`. Body: `{signedInEmail, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
+| `POST /api/envelopes/{id}/tasks/{taskId}/invitation` | Editor | Email the active signer's invitation again, with a new link; the earlier link stops working. Answers `204`; `409 not_invited` for a signer Esign doesn't invite. |
+| `GET /api/envelopes/{id}/delivery-pdf` | Viewer | A completed envelope's signed PDF followed by its certificate of completion. |
+| `GET /api/envelopes/{id}/certificate` | Viewer | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
 | `POST /api/process-due` † | Manage | Due work for the caller's organization, at once: answers `{expired, completed, waiting, failed}`. The platform runs it for every organization every five minutes anyway. |
 
 `POST /api/envelopes/{id}/prepare` still exists for older callers and does nothing; don't use it.
@@ -82,13 +88,30 @@ The organization's address book: everyone its envelopes named as a signer, and a
 | Method and path | Permission | What it does |
 | --- | --- | --- |
 | `GET /api/contacts` | View | The contacts, most recently used (or added) first: `{contacts: [{id, email, name, title?, company?, envelopeCount, lastUsedAt?, createdAt, updatedAt}], next?}`: `envelopeCount` and `lastUsedAt` count the envelopes that named them since they were added. `q` keeps those whose name or email contains it (up to 100 characters, case-insensitive); `limit` is 1 to 100 (50 by default); pass `next` as `cursor` for the following page. |
-| `GET /api/contacts/{id}` | View | A contact, with `envelopes`: every envelope that names them as a signer, those from before they were added too, newest first (at most 50), each `{id, status, createdAt, documentName?, role, taskStatus}`. |
+| `GET /api/contacts/{id}` | View | A contact, with `envelopes`: every envelope you see that names them as a signer, those from before they were added too, newest first (at most 50), each `{id, status, createdAt, documentName?, role, taskStatus}`. |
 | `POST /api/contacts` | Manage | Add a contact, `{email, name, title?, company?}`, or change the one with this email (compared case-insensitively). Answers `201` when added, `200` when changed, with the contact. A `title` or `company` left out is kept; `null` or `""` clears it. |
 | `POST /api/contacts/{id}` | Manage | Change a contact's `name`, `title` or `company`, as above. The email can't change: another email is another contact. |
 | `POST /api/contacts/{id}/delete` | Manage | Delete a contact. Answers `{id, deleted: true}`. |
 
 Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLINED` and `EXPIRED`; a signer's task is
 `PENDING`, `ACTIVE` or `SIGNED`. See [Sending envelopes](/docs/esign/sending-envelopes#statuses).
+
+### Sharing, tags and ownership
+
+`{kind}` is `templates` or `envelopes`.
+
+| Method and path | Permission | What it does |
+| --- | --- | --- |
+| `GET /api/{kind}/{id}/shares` | Viewer | Who sees it: `{id, myRole, owner, shares: [{email, name?, role, sharedAt}]}`. |
+| `POST /api/{kind}/{id}/shares` | Admin | Share it with someone, or change their role: `{email, role}`, `role` one of `admin`, `editor`, `viewer`. Answers as above. Its owner's own email answers `422 owner_not_shared`; an API client's address is refused. |
+| `POST /api/{kind}/{id}/shares/delete` | Admin, or anyone for themselves | Stop sharing it with someone: `{email}`. Removing yourself answers `{id, removed: true}`. Someone it isn't shared with answers `404 not_shared`. |
+| `POST /api/{kind}/{id}/tags` | Viewer | Replace your own tags on it: `{tags}` (`[]` clears them). Answers `{id, tags}`. |
+| `GET /api/tags` | View | Your own tags, most used first: `{tags: [{tag, uses}]}`. `q` keeps those containing it; `limit` 1 to 100 (20 by default). |
+| `GET /api/members` | View | People Esign has seen in your organization, to share with: `{members: [{id, email, name?}]}`. `q` and `limit` as for tags. |
+| `GET /api/owners` | Organization owners | Everyone who owns templates or envelopes: `{owners: [{id, kind, name?, email?, templates, envelopes, lastSeenAt?}]}`. |
+| `POST /api/owners/{id}/transfer` | Organization owners | Take over everything someone (a person or an API client) owns: answers `{from, to, templates, envelopes}`. Shares stay, but yours on those documents (you own them now). |
+| `GET /api/api-clients` | Organization owners and admins | The API clients that have called Esign: `{clients: [{id, name?, firstSeenAt, lastSeenAt, shareWith?: {email, name?, since}}]}`. |
+| `POST /api/api-clients/{id}` | Organization owners and admins | Whom an API client's new templates and envelopes are shared with, as Admin: `{shareEmail}` (`null` for nobody). With `shareExisting: true`, those it already owns too. Answers `{id, shareWith?, shared}`. |
 
 ## Send an envelope
 
@@ -160,6 +183,38 @@ by the request as sent: a retry gets the envelope the first request made, even i
 
 A copy made in the field editor (`sourceTemplateId`) keeps its source's default signers for the roles it keeps; a new
 PDF placed in the editor gets them with `POST /api/templates/{id}/default-signers` once saved.
+
+## Owners, sharing and tags
+
+Every template and envelope has one **owner**: the person or the API client that created it, or whom an organization
+owner transferred it to. Nobody else sees it, not even your organization's owners and admins, unless it is shared with
+them by email, with a role:
+
+| Role | What it may do |
+| --- | --- |
+| **Viewer** | See it: an envelope's tasks, audit trail, signed PDF and certificate; who it is shared with. Send envelopes from a template, and copy it in the field editor. Tag it for themselves. |
+| **Editor** | Also change it: a template's default signers; an envelope's void, invitations and signing pages. |
+| **Admin** | Also share it, with anyone, as Admin at most, and stop sharing it. |
+| **Owner** | All of that. The owner is never a share. |
+
+A role is capped by the caller's role in Esign: someone who may only view Esign is a Viewer at most. Anyone it is shared
+with can remove themselves. An envelope isn't shared with its template's people: it is its sender's.
+
+When you create a template, an envelope or an editing session, `share` (an array of at most 20 `{email, role}`) shares it
+with others at once; each person once, at the highest role given, and never with yourself.
+
+**API clients.** An API client owns what it creates, and nobody else sees it unless your organization's owners or admins
+choose, in Esign's **Ownership** page (or `POST /api/api-clients/{id}`), one person its new templates and envelopes are
+shared with as Admin. A client appears there once it has called Esign. `share` adds others.
+
+**Taking over.** An organization owner can take over everything someone owns, for someone who left or an API client no
+longer used (`POST /api/owners/{id}/transfer`, or **Ownership** › **Owners**).
+
+**Tags** are your own: up to 20 per template or envelope, each up to 50 characters, compared case-insensitively. Nobody
+else sees them, the owner included. `tags` on a create request sets them; an envelope also gets yours on its template,
+and a copy made in the field editor yours on its source. Lists filter by them with `tag`.
+
+Ownership, shares and tags are never evidence: the certificate and the signed PDF don't mention them.
 
 ## How contacts are kept
 

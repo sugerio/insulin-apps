@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from './app.ts';
-import type { Caller } from './identity.ts';
+import { can, type Caller } from './identity.ts';
 import { emailKey, isClient, ownerSummary, shareableEmail } from './ownership.ts';
 import { unknownKeys } from './metadata.ts';
 
@@ -32,8 +32,9 @@ export function recordMember(db: D1Database, tenantId: string, caller: Caller, n
 }
 
 const likeContaining = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-const orgOwner = (caller: Caller) => caller.role === 'OWNER';
-const orgAdmin = (caller: Caller) => caller.role === 'OWNER' || caller.role === 'ADMIN';
+/** An organization owner, or owner or admin, who may also manage Esign (a custom role that only views may not). */
+const orgOwner = (caller: Caller) => caller.role === 'OWNER' && can(caller, 'esign.manage');
+const orgAdmin = (caller: Caller) => (caller.role === 'OWNER' || caller.role === 'ADMIN') && can(caller, 'esign.manage');
 
 export function mountMemberRoutes(app: Hono<Env>) {
   // People to share with: members seen in Esign whose name or email contains `q`, most recently seen first.

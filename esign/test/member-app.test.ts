@@ -10,7 +10,10 @@ import {checkRoles} from '../src/app/member/TemplatesPage.ts';
 import {EDITOR,ENV_ID,ORIGIN,VIEWER,json,renderMember,visibleText} from './helpers/member.ts';
 
 const pdf=()=>new File(['%PDF-1.7 synthetic'],'synthetic.pdf',{type:'application/pdf'});
-const envelope=(status:string,tasks:[string,string][])=>({id:ENV_ID,templateId:'tpl-1',status,createdAt:Date.parse('2026-11-07T00:00:00Z'),tasks:tasks.map(([name,s],i)=>({id:`task-${i}`,role:`signer-${i+1}`,recipientName:name,recipientEmail:`${name.toLowerCase()}@partner.example`,status:s,routingOrder:i+1}))});
+// The member owns it (server/esign/ownership.ts): they may change it.
+const OWNED={myRole:'owner',owner:{id:'u1',kind:'person',name:'Sam Example',email:'sam@example.com'},tags:[]};
+const SHARING={id:ENV_ID,myRole:'owner',owner:OWNED.owner,shares:[]};
+const envelope=(status:string,tasks:[string,string][])=>({id:ENV_ID,templateId:'tpl-1',status,createdAt:Date.parse('2026-11-07T00:00:00Z'),...OWNED,tasks:tasks.map(([name,s],i)=>({id:`task-${i}`,role:`signer-${i+1}`,recipientName:name,recipientEmail:`${name.toLowerCase()}@partner.example`,status:s,routingOrder:i+1}))});
 const TEMPLATE={id:'tpl-1',roles:['partner','seller'],fields:[],createdAt:Date.parse('2026-11-01T00:00:00Z')};
 const CERTIFICATE={envelope:{id:ENV_ID,template_id:'tpl-1',created_at:0,status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'x',finalSha256:'b'.repeat(64),recipients:[],signatures:[],mode:'LOCAL TEST ONLY'};
 
@@ -34,6 +37,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   if(c.path==='/api/templates')return json({templates:[TEMPLATE]});
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]));
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[]});
+  if(c.path===`/api/envelopes/${ENV_ID}/shares`)return json(SHARING);
  };
  const editor=await renderMember('/',routes(EDITOR));
  try{
@@ -79,6 +83,7 @@ test('sending from a template: one signer per role, the document, a sign-by day,
   if(c.path==='/api/envelopes'&&c.method==='POST'){if(fail){fail=false;return json({error:'unavailable'},503);}return json({id:ENV_ID,status:'IN_PROGRESS'},201);}
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]));
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[]});
+  if(c.path===`/api/envelopes/${ENV_ID}/shares`)return json(SHARING);
  });
  try{
   assert.equal(app.byId('envelope-template').props.value,'tpl-1','the template the address names');
@@ -208,6 +213,7 @@ test('an envelope: no signer\'s page opens here; the active invited signer\'s in
   if(c.path==='/api/me')return json(EDITOR);
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(inviting);
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[]});
+  if(c.path===`/api/envelopes/${ENV_ID}/shares`)return json(SHARING);
   if(c.path===`/api/envelopes/${ENV_ID}/tasks/task-0/invitation`&&c.method==='POST')return new Response(null,{status:204});
  });
  try{
@@ -223,6 +229,7 @@ test('an envelope: no signer\'s page opens here; the active invited signer\'s in
   if(c.path==='/api/me')return json(EDITOR);
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('COMPLETED',[['Ana','SIGNED'],['Marcus','SIGNED']]));
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[{type:'SIGNED',at:'2026-11-07T01:00:00.000Z',recipient:{role:'signer-1',name:'Ana',email:'ana@partner.example'},ip:'203.0.113.9'}]});
+  if(c.path===`/api/envelopes/${ENV_ID}/shares`)return json(SHARING);
   if(c.path===`/api/envelopes/${ENV_ID}/delivery-pdf`)return new Response(new Blob(['%PDF-delivery']),{status:200});
   if(c.path===`/api/envelopes/${ENV_ID}/certificate`)return json(CERTIFICATE);
  });
@@ -244,6 +251,7 @@ test('voiding asks first, sends the reason, and the envelope says it is voided',
   if(c.path==='/api/me')return json(EDITOR);
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(state);
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:state.status==='VOIDED'?[{type:'VOIDED',at:'2026-11-07T01:00:00.000Z',detail:{reason:'Wrong version'}}]:[]});
+  if(c.path===`/api/envelopes/${ENV_ID}/shares`)return json(SHARING);
   // Voiding changes the envelope's status; the signer's task keeps its own (the API never sets a task to VOIDED).
   if(c.path===`/api/envelopes/${ENV_ID}/void`){state=envelope('VOIDED',[['Ana','ACTIVE']]);return new Response(null,{status:204});}
  });

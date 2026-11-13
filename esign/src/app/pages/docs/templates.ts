@@ -66,6 +66,11 @@ export const templates: DocTopic = {
       ],
     },
     {
+      id: 'who-sees-it',
+      title: 'Who sees a template',
+      body: p('A template is yours when you upload it, and nobody else sees it until you share it: ', b('Sharing'), ' on its row shows who sees it, and there you share it by email as Viewer (who sends envelopes from it), Editor (who also changes its default signers) or Admin (who also shares it). Your tags on it are yours alone. See ', h(DocLink, { to: 'roles', section: 'who-sees-what' }, 'Who sees each template and envelope'), '.'),
+    },
+    {
       id: 'in-a-host-product',
       title: 'The editor in a host product',
       body: [

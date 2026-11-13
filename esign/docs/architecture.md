@@ -19,6 +19,14 @@ seals the finished envelope and emails each signer a link to their copy.
   (every role: see them), declared in `package.json` `insulin.permissions`. A custom role's
   `x-suger-app-permissions` header only narrows a role, never widens it. `can(caller, permission)`
   in `identity.ts` is the one check; `esign.manage` implies `esign.view`.
+- **Ownership.** Every template and envelope has an owner (`owner_user_id`: the member or API client
+  that created it) and is seen only by its owner and those it is shared with (`document_shares`, by
+  email, as admin, editor or viewer), organization owners and admins included. `ownership.ts` is the
+  one check (`documentRole`, `requireRole`, `visibleIds`): a role is capped at viewer for a caller
+  without `esign.manage`, and a document the caller can't see answers 404. Tags (`tags.ts`) are each
+  person's own. `members.ts` records each caller as seen (Esign has no directory), names owners, lets
+  an organization owner take over what someone owns, and keeps, per API client, the person its new
+  documents are shared with as admin (`api_clients`). None of it is evidence.
 - **Public paths.** Recipients and embedded editors aren't members. `insulin.publicPaths` lists
   `/sign`, `/editor/`, `/copy`, `/assets/` and `/api/public/`; those requests carry a one-time code
   or token instead of an identity, and the management routes refuse anything the gateway marks public.
@@ -90,7 +98,7 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
 
 - **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` and `/envelopes`
   (envelopes, `?status=` filtering by status), `/envelopes/new`, `/envelopes/:id`, `/templates`,
-  `/contacts`, `/contacts/:id` and `/docs/:topic?`. It moves with
+  `/contacts`, `/contacts/:id`, `/ownership` (organization owners and admins) and `/docs/:topic?`. It moves with
   `history.pushState` (`router.ts`), the only navigation the console's sandboxed iframe allows. Every
   call is a same-origin request as the signed-in member; there is no key in the browser.
 - **Navigation.** `src/app/member/Shell.ts` draws DESIGN.md §3.2's two levels around every member
@@ -249,11 +257,15 @@ tables:
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
 | `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |
-| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template |
+| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template; who opened it (its owner) and the shares and tags it gets, since the save carries no identity |
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
 | `contacts` | The organization's address book (`contacts.ts`): one per email (`email_key`, trimmed and lower-cased), name, title, company, how many envelopes named them since and `last_used_at` (counted in each envelope's creating batch), and `recent_at` (last used or added, the list's order). A contact's page finds their envelopes through `tasks_by_recipient_email`, an index on `lower(recipient_email)`. Never evidence |
+| `document_shares` | Who else sees a template or an envelope (`ownership.ts`): one row per person, by email (`grantee_email_key`), with their role; the owner (`owner_user_id` on the template or envelope) is never a row |
+| `document_tags` | Each person's own tags on what they see (`tags.ts`), by `tag_key` (trimmed, lower-cased) |
+| `members` | The members and API clients Esign has seen (`members.ts`): kind, email, name, organization role, when first and last seen |
+| `api_clients` | Per API client, the person its new templates and envelopes are shared with as admin |
 | `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
 
@@ -471,8 +483,10 @@ due work for envelopes created in the last seven days.
 ## API
 
 Management routes take the Insulin platform identity (the console, insulinapps.com, an MCP client
-or a service-account token, all through the gateway) and see only the caller's organization (another
-organization's ids answer 404). Reading needs `esign.view`, anything else `esign.manage`. A request
+or a service-account token, all through the gateway) and see only the caller's organization, and in
+it only what the caller owns or is shared with (any other id answers 404). Reading needs `esign.view`,
+anything else `esign.manage` (but setting one's own tags); a template or an envelope also needs the
+caller's role in it (`ownership.ts`). A request
 the gateway marks public or as its tick (`x-suger-access-via: public` or `schedule`) never reaches
 them. `GET /api/catalog` lists
 the routes the caller may use, with JSON Schemas. Routes marked † are available only while signing
@@ -484,7 +498,7 @@ is enabled.
 | --- | --- |
 | `GET /api/me` | The caller: organization, user, role, permissions, how the request came, whether signing is enabled |
 | `GET /api/catalog` | The management routes the caller may use |
-| `GET /api/templates`, `GET /api/envelopes` | The organization's templates and envelopes, newest first (`limit`, `before`; envelopes also `status`) |
+| `GET /api/templates`, `GET /api/envelopes` | The templates and envelopes the caller sees, newest first (`limit`, `before`, `scope`, `tag`; envelopes also `status`), each with its owner, the caller's role and tags |
 | `POST /api/process-due` † | Expires envelopes past a deadline, finishes envelopes the signing request did not, and retries completion notices, for the caller's organization, at once (the platform's tick does it for every organization every five minutes) |
 | `POST /api/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`), optionally `name`, `metadata` and `defaultSigners`; returns `{id, roles, defaultSigners, ...}` |
 | `POST /api/templates/:id/default-signers` | Replaces the template's default signers; a recipient of a new envelope that leaves out its name or email gets its role's |
@@ -498,6 +512,11 @@ is enabled.
 | `GET /api/envelopes/:id/certificate` | The completion certificate as JSON (shown on the envelope page), verified on every read |
 | `GET /api/contacts`, `GET /api/contacts/:id` | The address book, most recently used first (`q`, `limit`, `cursor`), and one contact with the envelopes that name them |
 | `POST /api/contacts`, `POST /api/contacts/:id`, `POST /api/contacts/:id/delete` | Add a contact (or change the one with that email), change one, delete one |
+| `GET`/`POST /api/{templates,envelopes}/:id/shares`, `POST .../shares/delete` | Who sees it; share it or change a role (admin); stop sharing (admin, or oneself) |
+| `POST /api/{templates,envelopes}/:id/tags`, `GET /api/tags` | Replace one's own tags on it; one's tags, most used first |
+| `GET /api/members` | Members Esign has seen, to share with |
+| `GET /api/owners`, `POST /api/owners/:id/transfer` | Organization owners: everyone who owns something; take over all of it |
+| `GET /api/api-clients`, `POST /api/api-clients/:id` | Organization owners and admins: the API clients seen, and whom each one's documents are shared with |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 

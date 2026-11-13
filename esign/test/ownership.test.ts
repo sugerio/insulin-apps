@@ -103,6 +103,8 @@ test('shared as viewer, editor or admin: each role does what it allows, capped b
     assert.equal((await share(h.ana, 'vic@example.test', 'admin')).status, 200);
     assert.equal((await h.templates(h.viewer))[0].myRole, 'viewer');
     assert.equal((await h.post(`/api/templates/${id}/shares`, h.viewer, { email: 'dee@example.test', role: 'viewer' })).status, 403);
+    assert.equal((await h.post(`/api/templates/${id}/shares/delete`, h.viewer, { email: 'bo@example.test' })).status, 403, 'a viewer removes only themselves');
+    assert.deepEqual(await (await h.post(`/api/templates/${id}/shares/delete`, h.viewer, { email: 'vic@example.test' })).json(), { id, removed: true });
     // Refused: an API client's address, the owner's own, an unknown role or field.
     for (const bad of [{ email: `${CLIENT}@service-accounts.invalid`, role: 'viewer' }, { email: 'x@example.test', role: 'owner' }, { email: 'x@example.test', role: 'viewer', note: 1 }]) assert.equal((await h.post(`/api/templates/${id}/shares`, h.ana, bad)).status, 422, JSON.stringify(bad));
     assert.deepEqual(await (await share(h.ana, 'ana@example.test', 'viewer')).json(), { error: 'owner_not_shared' });

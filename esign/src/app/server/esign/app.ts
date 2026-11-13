@@ -60,8 +60,11 @@ export type Env = { Bindings: Bindings; Variables: { tenantId: string; caller: C
  */
 const isOpenPath = (path: string) => path.startsWith('/api/public/') || path === '/api/health' || path === '/api/scheduled';
 
-/** A person's own tags (tags.ts) change nothing anyone else sees: someone who may only view Esign sets theirs too. */
-const isOwnTags = (path: string) => /^\/api\/(templates|envelopes)\/[^/]+\/tags$/.test(path);
+/**
+ * What concerns the caller alone, which someone who may only view Esign does too: setting their own tags (tags.ts), and
+ * leaving a document shared with them (ownership.ts, which lets anyone without an admin's role remove only themselves).
+ */
+const isOwnChoice = (path: string) => /^\/api\/(templates|envelopes)\/[^/]+\/(tags|shares\/delete)$/.test(path);
 
 /**
  * Management routes (`/api/*` but the public ones) belong to the organization of the platform
@@ -76,7 +79,7 @@ export const managementAuth = async (context: import('hono').Context<Env>, next:
   const path = context.req.path;
   const reading = context.req.method === 'GET' || context.req.method === 'HEAD';
   const anyRole = path === '/api/me' || path === '/api/catalog';
-  if (!anyRole && !can(caller, reading || isOwnTags(path) ? 'esign.view' : 'esign.manage')) return context.json({ error: 'forbidden' }, 403);
+  if (!anyRole && !can(caller, reading || isOwnChoice(path) ? 'esign.view' : 'esign.manage')) return context.json({ error: 'forbidden' }, 403);
   context.set('caller', caller);
   context.set('tenantId', caller.organizationId);
   const recorded = recordMember(context.env.DB, caller.organizationId, caller, Date.now()).catch(() => undefined);

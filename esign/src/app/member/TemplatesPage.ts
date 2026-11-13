@@ -1,18 +1,23 @@
-// Templates: the PDFs envelopes are sent from, each with its signer roles and, when someone placed them, its fields.
+// Templates: the PDFs envelopes are sent from that the member owns or that are shared with them, each with its signer
+// roles, its owner, the member's own tags and, when someone placed them, its fields. Anyone who sees one opens who sees
+// it and their tags on it; its admins and owner share it.
 // Those who manage upload a PDF and place its fields in the embedded editor (a template signed on an appended signature
 // page is the API's alone), which this page hosts exactly as a host product would: a session for this origin, the source staged, then the
 // editor's own save, confirmed against the server.
 import React, { useEffect, useRef, useState } from 'react'
-import { Plus, Send, SquarePen, Trash2 } from 'lucide-react'
+import { Plus, Send, SquarePen, Trash2, Users } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { Input } from '../components/ui/input.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
-import { api, apiJson, canManage, dateTime, defaultSignersOf, describeError, MAX_PDF_BYTES, type Me, type TemplateSummary } from './api.ts'
+import { api, apiJson, canManage, dateTime, defaultSignersOf, describeError, listPath, MAX_PDF_BYTES, ownerName, type Me, type Scope, type TemplateSummary } from './api.ts'
 import { ContactField } from './ContactField.ts'
+import { ListFilters } from './ListFilters.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
+import { SharePanel } from './SharePanel.ts'
+import { TagList, TagsField } from './TagsField.ts'
 
 const h = React.createElement
 const ROLE = /^[A-Za-z0-9_-]{1,64}$/
@@ -39,12 +44,21 @@ export function TemplatesPage({ me }: { me: Me }) {
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
   const editorFrame = useRef<HTMLIFrameElement | null>(null)
+  // The new template's tags; the list's filters; the template whose sharing and tags are open.
+  const [newTags, setNewTags] = useState<string[]>([])
+  const [scope, setScope] = useState<Scope>('')
+  const [filterTags, setFilterTags] = useState<string[]>([])
+  const [opened, setOpened] = useState('')
 
   async function load() {
-    try { setTemplates((await apiJson<{ templates: TemplateSummary[] }>('/api/templates')).templates) }
+    try { setTemplates((await apiJson<{ templates: TemplateSummary[] }>(listPath('/api/templates', { scope, tags: filterTags }))).templates) }
     catch (error) { setMessage({ text: describeError(error), error: true }) }
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [scope, filterTags.join('\n')])
+  function saveTags(id: string, tags: string[]) {
+    setTemplates((old) => old?.map((t) => t.id === id ? { ...t, tags } : t) ?? null)
+    void run(async () => { await apiJson(`/api/templates/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }) })
+  }
   async function run(work: () => Promise<void>) {
     setBusy(true)
     setMessage({ text: '', error: false })
@@ -63,7 +77,7 @@ export function TemplatesPage({ me }: { me: Me }) {
   /** A session on this origin for the editor: a new PDF (staged as its source) or an existing template's fields. */
   function openEditor(source: { file: File; roles: string[]; defaultSigners: ReturnType<typeof defaultSigners> } | { templateId: string }) {
     void run(async () => {
-      const body = 'templateId' in source ? { allowedParentOrigin: window.location.origin, sourceTemplateId: source.templateId } : { allowedParentOrigin: window.location.origin, roles: source.roles }
+      const body = 'templateId' in source ? { allowedParentOrigin: window.location.origin, sourceTemplateId: source.templateId } : { allowedParentOrigin: window.location.origin, roles: source.roles, ...(newTags.length ? { tags: newTags } : {}) }
       const session = await apiJson<{ sessionId: string; url: string }>('/api/template-editing-sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       const url = new URL(session.url)
       if (url.origin !== window.location.origin || url.pathname !== `/editor/page/${session.sessionId}`) throw new Error('Unexpected editor address.')
@@ -102,6 +116,7 @@ export function TemplatesPage({ me }: { me: Me }) {
         if (Object.keys(kept).length) await apiJson(`/api/templates/${saved.templateId}/default-signers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ defaultSigners: kept }) })
         setEditor(null)
         setFile(null)
+        setNewTags([])
         setPeople((old) => old.map(() => ({ name: '', email: '' })))
         await load()
         setMessage({ text: 'Fields saved as a new template. Send an envelope from it.', error: false })
@@ -112,7 +127,7 @@ export function TemplatesPage({ me }: { me: Me }) {
   }, [editor])
 
   return h('div', { className: 'flex flex-col gap-6' },
-    h(PageHeader, { title: 'Templates', description: 'The documents your organization sends for signature, with their signer roles and fields.' }),
+    h(PageHeader, { title: 'Templates', description: 'The documents you send for signature, yours or shared with you, with their signer roles and fields.' }),
     h(Notice, { message: message.text, error: message.error }),
     manage && !editor ? h(Card, { 'aria-label': 'New template' },
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'New template')),
@@ -129,7 +144,8 @@ export function TemplatesPage({ me }: { me: Me }) {
             h(ContactField, { id: `role-${i}-name`, label: 'Signer name (optional)', required: false, value: people[i]?.name ?? '', onChange: (v) => setPerson(i, { name: v }), onChoose: (c) => setPerson(i, { name: c.name, email: c.email }) }),
             h(ContactField, { id: `role-${i}-email`, label: 'Signer email (optional)', type: 'email', required: false, value: people[i]?.email ?? '', onChange: (v) => setPerson(i, { email: v }), onChoose: (c) => setPerson(i, { name: c.name, email: c.email }) }),
             roles.length > 1 ? h(Button, { variant: 'ghost', size: 'icon', 'aria-label': `Remove role ${i + 1}`, onClick: () => removeRole(i) }, h(Trash2, { 'aria-hidden': true })) : h('span'))),
-          roles.length < 20 ? h(Button, { variant: 'outline', size: 'sm', className: 'w-fit', onClick: () => { setRoles((old) => [...old, `signer-${old.length + 1}`]); setPeople((old) => [...old, { name: '', email: '' }]) } }, h(Plus, { 'aria-hidden': true }), 'Add a role') : null)),
+          roles.length < 20 ? h(Button, { variant: 'outline', size: 'sm', className: 'w-fit', onClick: () => { setRoles((old) => [...old, `signer-${old.length + 1}`]); setPeople((old) => [...old, { name: '', email: '' }]) } }, h(Plus, { 'aria-hidden': true }), 'Add a role') : null),
+        h(TagsField, { id: 'template-tags', value: newTags, onChange: setNewTags })),
       h(CardFooter, { className: 'flex-wrap gap-2' },
         h(Button, { disabled: busy, onClick: placeFields }, h(SquarePen, { 'aria-hidden': true }), 'Upload and place fields'))) : null,
     editor ? h(Card, { 'aria-label': 'Field editor' },
@@ -139,18 +155,30 @@ export function TemplatesPage({ me }: { me: Me }) {
       h(CardFooter, { className: 'gap-2' },
         h(Button, { disabled: !editor.ready || !!editor.requestId, onClick: saveFields }, editor.requestId ? 'Saving…' : 'Save fields'),
         h(Button, { variant: 'outline', disabled: !!editor.requestId, onClick: () => setEditor(null) }, 'Close the editor'))) : null,
+    h(ListFilters, { id: 'templates', scope, onScope: setScope, onTags: setFilterTags }),
+    opened && templates?.some((t) => t.id === opened) ? (() => {
+      const t = templates.find((x) => x.id === opened)!
+      return h(Card, { 'aria-label': 'Who sees the template' },
+        h(CardHeader, null, h(CardTitle, null, h('h2', null, `Who sees ${t.name ?? 'this template'}`)), h(CardDescription, null, 'Its owner and the people it is shared with. Viewers send envelopes from it; editors also change its default signers; admins also share it.')),
+        h(CardContent, { className: 'flex flex-col gap-6' },
+          h(SharePanel, { key: t.id, kind: 'templates', id: t.id, me, onLeft: () => { setOpened(''); void load() } }),
+          h(TagsField, { id: 'opened-template-tags', value: t.tags ?? [], onChange: (tags) => saveTags(t.id, tags) })),
+        h(CardFooter, null, h(Button, { variant: 'outline', onClick: () => setOpened('') }, 'Close')))
+    })() : null,
     h(Card, { className: 'py-0' }, h(CardContent, { className: 'px-0' },
       templates === null ? h('p', { role: 'status', className: 'p-6 text-sm text-muted-foreground' }, 'Loading templates…')
-        : templates.length === 0 ? h('p', { className: 'p-6 text-sm text-muted-foreground' }, manage ? 'No templates yet. Upload a PDF above.' : 'No templates yet.')
+        : templates.length === 0 ? h('p', { className: 'p-6 text-sm text-muted-foreground' }, scope || filterTags.length ? 'No templates match.' : manage ? 'No templates yet. Upload a PDF above.' : 'No templates shared with you yet.')
           : h(Table, { 'aria-label': 'Templates' },
-            h(TableHeader, null, h(TableRow, null, h(TableHead, { className: 'pl-6' }, 'Template'), h(TableHead, null, 'Roles'), h(TableHead, null, 'Signed on'), h(TableHead, null, 'Uploaded'), manage ? h(TableHead, { className: 'pr-6' }, h('span', { className: 'sr-only' }, 'Actions')) : null)),
+            h(TableHeader, null, h(TableRow, null, h(TableHead, { className: 'pl-6' }, 'Template'), h(TableHead, null, 'Roles'), h(TableHead, null, 'Signed on'), h(TableHead, null, 'Owner'), h(TableHead, null, 'Uploaded'), h(TableHead, { className: 'pr-6' }, h('span', { className: 'sr-only' }, 'Actions')))),
             h(TableBody, null, ...templates.map((t) => h(TableRow, { key: t.id },
-              h(TableCell, { className: 'pl-6 whitespace-normal' }, t.name ? h('div', { className: 'font-medium' }, t.name) : null, h('div', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id)),
+              h(TableCell, { className: 'pl-6 whitespace-normal' }, t.name ? h('div', { className: 'font-medium' }, t.name) : null, h('div', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id), h(TagList, { tags: t.tags })),
               h(TableCell, { className: 'whitespace-normal' }, t.roles.map((role) => { const d = t.defaultSigners?.[role]; return d ? `${role} (${d.name ?? d.email})` : role }).join(', ')),
               h(TableCell, null, t.fields.length ? `${t.fields.length} placed ${t.fields.length === 1 ? 'field' : 'fields'}` : 'A signature page'),
+              h(TableCell, { className: 'text-muted-foreground' }, ownerName(t.owner, me)),
               h(TableCell, { className: 'text-muted-foreground' }, dateTime(t.createdAt)),
-              manage ? h(TableCell, { className: 'pr-6 text-right' }, h('div', { className: 'flex justify-end gap-2' },
-                h(Button, { size: 'sm', variant: 'ghost', disabled: busy || !!editor, onClick: () => openEditor({ templateId: t.id }) }, h(SquarePen, { 'aria-hidden': true }), 'Place fields'),
-                h(Link, { to: `/envelopes/new?template=${encodeURIComponent(t.id)}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Send, { 'aria-hidden': true }), 'Send'))) : null)))))),
+              h(TableCell, { className: 'pr-6 text-right' }, h('div', { className: 'flex justify-end gap-2' },
+                h(Button, { size: 'sm', variant: 'ghost', 'aria-label': `Who sees ${t.name ?? t.id}`, onClick: () => setOpened(opened === t.id ? '' : t.id) }, h(Users, { 'aria-hidden': true }), 'Sharing'),
+                manage ? h(Button, { size: 'sm', variant: 'ghost', disabled: busy || !!editor, onClick: () => openEditor({ templateId: t.id }) }, h(SquarePen, { 'aria-hidden': true }), 'Place fields') : null,
+                manage ? h(Link, { to: `/envelopes/new?template=${encodeURIComponent(t.id)}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Send, { 'aria-hidden': true }), 'Send') : null)))))))),
     !manage ? h('p', { className: 'text-sm text-muted-foreground' }, 'Your role can see templates but not change them. ', h('a', { href: '/docs/roles', onClick: (e: React.MouseEvent) => { e.preventDefault(); navigate('/docs/roles') }, className: 'font-medium text-foreground underline underline-offset-4' }, 'Roles and permissions')) : null)
 }

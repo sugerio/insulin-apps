@@ -47,7 +47,8 @@ for(const [who,session,status] of SESSIONS){
   });
   try{
    const nav=app.byLabel('Primary');assert.ok(nav,'the primary navigation');
-   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/envelopes'],['Templates','/templates'],['Contacts','/contacts'],['Docs','/docs']]);
+   const admin=status!==401&&['OWNER','ADMIN'].includes((session as {role?:string}).role??'')&&(session as {permissions:string[]}).permissions.includes('esign.manage');
+   assert.deepEqual(nav.findAll((n:any)=>n.type==='a').map((a:any)=>[visibleText(a.children).trim(),a.props.href]),[['Envelopes','/envelopes'],['Templates','/templates'],['Contacts','/contacts'],...(admin?[['Ownership','/ownership']]:[]),['Docs','/docs']]);
    assert.ok(nav.findAll((n:any)=>n.type==='button'&&visibleText(n.children).trim()==='Settings').length===1,'and Settings');
    if(status===401)assert.match(app.text(),/Sign in to use Esign\./);
    else assert.match(app.text(),/No envelopes yet\./,'an organization that has sent nothing yet');

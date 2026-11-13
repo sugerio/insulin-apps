@@ -82,7 +82,7 @@ test('the catalog lists what the caller may use, and process-due needs the manag
     const endpoints = async (headers: Record<string, string>) => ((await (await call('/api/catalog', headers)).json()) as { endpoints: { method: string; path: string }[] }).endpoints;
     const viewer = await endpoints(identity('org-a', { role: 'VIEWER' }));
     assert.ok(viewer.some((e) => e.method === 'GET' && e.path === '/api/envelopes/{id}'));
-    assert.equal(viewer.some((e) => e.method === 'POST'), false, 'a Viewer is offered no change');
+    assert.deepEqual(viewer.filter((e) => e.method === 'POST').map((e) => e.path), ['/api/templates/{id}/shares/delete', '/api/templates/{id}/tags', '/api/envelopes/{id}/shares/delete', '/api/envelopes/{id}/tags'], 'a Viewer is offered no change but their own tags and leaving');
     const editor = await endpoints(identity('org-a', { role: 'EDITOR' }));
     assert.ok(editor.some((e) => e.method === 'POST' && e.path === '/api/envelopes'));
     assert.ok(editor.every((e) => e.path.startsWith('/api/') && !e.path.startsWith('/api/public/')), 'the signer pages\' API is left out');

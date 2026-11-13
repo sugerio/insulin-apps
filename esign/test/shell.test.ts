@@ -38,7 +38,7 @@ for(const [who,session,editor] of [['an Admin',me('ADMIN',['esign.manage','esign
    const root=app.renderer.root.findAll((n:any)=>typeof n.type==='string'&&'data-insulin-shell' in n.props);
    assert.equal(root.length,1,'the root says it draws the navigation');
    const primary=app.byLabel('Primary');
-   assert.deepEqual(links(primary),[['Envelopes','/envelopes'],['Templates','/templates'],['Contacts','/contacts'],['Docs','/docs']]);
+   assert.deepEqual(links(primary),[['Envelopes','/envelopes'],['Templates','/templates'],['Contacts','/contacts'],...(who==='an Admin'?[['Ownership','/ownership']]:[]),['Docs','/docs']],'Ownership is for admins');
    assert.ok(named(primary,'button','Settings'));
    assert.match(visibleText(primary.children),/^\s*Esign\b/,'the sections under the app\'s heading');
    assert.equal(named(primary,'a','Envelopes').props['aria-current'],'true','the open section; its view is the page');

@@ -24,7 +24,7 @@ export const templates: DocTopic = {
       id: 'two-ways',
       title: 'A signature page, or placed fields',
       body: [
-        p('On ', h(PageLink, { to: '/templates' }, 'Templates'), ', choose the PDF, name the roles, then choose ', b('Upload and place fields'), ': the field editor opens, so you can put each role\'s signature, title and date exactly where they belong in the document.'),
+        p('On ', h(PageLink, { to: '/templates' }, 'Templates'), ', choose ', b('New template'), '; in the dialog, choose the PDF, name the roles, then choose ', b('Upload and place fields'), ': the field editor opens, so you can put each role\'s signature, title and date exactly where they belong in the document.'),
         p('A host product can also upload a template through the API without placing fields; its signers then sign on a page Esign adds after the document\'s last page, one after another.'),
         p('Templates lists each one by its name, when a host product gave it one through the API, then its id; a new envelope\'s template picker shows the name first too.'),
       ],

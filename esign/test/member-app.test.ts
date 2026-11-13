@@ -47,7 +47,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   assert.equal(me.headers.authorization,undefined,'no key: the session is the platform\'s');
   assert.equal(editor.session.map.size+editor.local.map.size,0,'nothing is stored in the browser');
   await editor.click(editor.link('Templates'),'Templates');
-  assert.ok(editor.byLabel('New template'));assert.ok(editor.button('Place fields'));assert.ok(editor.link('Send'));
+  assert.ok(editor.button('New template'),'New template opens its dialog');assert.ok(editor.button('Place fields'));assert.ok(editor.link('Send'));
   await editor.click(editor.link('Envelopes'),'Envelopes');
   assert.equal(editor.location.pathname,'/envelopes');
  }finally{await editor.unmount();}
@@ -60,7 +60,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   assert.match(viewer.text(),/Asked to sign/);
   assert.equal(viewer.button('Void envelope'),undefined);assert.equal(viewer.button("Open Ana's signing page"),undefined);
   await viewer.click(viewer.link('Templates'),'Templates');
-  assert.equal(viewer.byLabel('New template'),undefined);assert.equal(viewer.button('Place fields'),undefined);assert.equal(viewer.link('Send'),undefined);
+  assert.equal(viewer.button('New template'),undefined);assert.equal(viewer.button('Place fields'),undefined);assert.equal(viewer.link('Send'),undefined);
   assert.match(viewer.text(),/Your role can see templates but not change them/);
  }finally{await viewer.unmount();}
  const viewerSending=await renderMember('/envelopes/new',routes(VIEWER));
@@ -139,6 +139,9 @@ test('templates: the roles and default signers are checked before the editor ope
  });
  try{
   assert.match(app.text(),/No templates yet/);
+  assert.equal(app.button('Upload and place fields'),undefined,'the page is the list: New template opens a dialog');
+  await app.click(app.button('New template'),'New template');
+  assert.ok(app.byLabel('New template'),'the dialog');
   assert.equal(app.button('Upload with a signature page'),undefined,'templates are made with placed fields here');
   await app.click(app.button('Upload and place fields'),'Place fields');
   assert.match(app.text(),/Choose a PDF\./);
@@ -179,6 +182,7 @@ test('placing fields opens the editor on this origin, ignores other frames, and 
   if(c.path===`/api/templates/${SAVED}/default-signers`)return json({id:SAVED,defaultSigners:{partner:{email:'pat@partner.example'}}});
  });
  try{
+  await app.click(app.button('New template'),'New template');
   await app.act(async()=>{app.byId('template-pdf').props.onChange({target:{files:[pdf()]}});});
   await app.type(app.byLabel('Role 1'),'partner');
   await app.type(app.byId('role-0-email'),'pat@partner.example');

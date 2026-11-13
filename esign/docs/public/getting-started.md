@@ -27,7 +27,7 @@ navigation on the left shows your organization at the top and your name and role
 A template is a PDF and the roles that sign it, in signing order.
 
 1. Open **Templates**.
-2. Under **New template**, choose the **PDF** (up to 5 MB and 100 pages).
+2. Choose **New template**, and in the dialog choose the **PDF** (up to 5 MB and 100 pages).
 3. Under **Signer roles, in signing order**, name each role, such as `partner` and `seller`. Use letters, digits, `-` and
    `_`, with no spaces. Choose **Add a role** for another one.
 4. Choose **Upload and place fields**, and put each role's signature, and its title and date if you want them, where they

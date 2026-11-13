@@ -22,6 +22,7 @@ test('a template\'s sharing: its owner shares it by email and role, and tags it;
     assert.match(app.text(), /You/, 'the owner column names the member');
     assert.match(app.text(), /NDA/, 'their tags');
     await app.click(app.byLabel('Who sees Mutual NDA'), 'Sharing');
+    assert.ok(app.byLabel('Who sees the template'), 'sharing opens in a dialog over the list');
     assert.match(app.text(), /Not shared with anyone else/);
     await app.type(app.byId('templates-tpl-1-share-email'), 'bo');
     await app.click(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Choose Bo Example (bo@example.com)')[0], 'suggestion');
@@ -33,6 +34,8 @@ test('a template\'s sharing: its owner shares it by email and role, and tags it;
     // Removing a tag saves the member's tags at once.
     await app.click(app.byLabel('Remove tag NDA'), 'remove tag');
     assert.deepEqual(JSON.parse(String(app.calls.find((c) => c.path === '/api/templates/tpl-1/tags')!.body)), { tags: [] });
+    await app.click(app.button('Close'), 'Close');
+    assert.equal(app.byLabel('Who sees the template'), undefined, 'and closes');
     // Filters: shared with me, with two tags.
     await app.type(app.byId('templates-scope'), 'shared');
     await app.settle();

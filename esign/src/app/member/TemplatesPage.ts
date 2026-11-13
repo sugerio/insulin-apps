@@ -1,13 +1,15 @@
-// Templates: the PDFs envelopes are sent from that the member owns or that are shared with them, each with its signer
-// roles, its owner, the member's own tags and, when someone placed them, its fields. Anyone who sees one opens who sees
-// it and their tags on it; its admins and owner share it.
+// Templates: a list of the PDFs envelopes are sent from that the member owns or that are shared with them, each with its
+// signer roles, its owner, the member's own tags and, when someone placed them, its fields. Everything else opens in a
+// dialog over the list: New template, the field editor, and a template's sharing and the member's tags on it (its
+// admins and owner share it).
 // Those who manage upload a PDF and place its fields in the embedded editor (a template signed on an appended signature
 // page is the API's alone), which this page hosts exactly as a host product would: a session for this origin, the source staged, then the
 // editor's own save, confirmed against the server.
 import React, { useEffect, useRef, useState } from 'react'
 import { Plus, Send, SquarePen, Trash2, Users } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.ts'
+import { Card, CardContent } from '../components/ui/card.ts'
+import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog.ts'
 import { Input } from '../components/ui/input.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
@@ -49,6 +51,8 @@ export function TemplatesPage({ me }: { me: Me }) {
   const [scope, setScope] = useState<Scope>('')
   const [filterTags, setFilterTags] = useState<string[]>([])
   const [opened, setOpened] = useState('')
+  // The New template dialog.
+  const [creating, setCreating] = useState(false)
 
   async function load() {
     try { setTemplates((await apiJson<{ templates: TemplateSummary[] }>(listPath('/api/templates', { scope, tags: filterTags }))).templates) }
@@ -83,6 +87,7 @@ export function TemplatesPage({ me }: { me: Me }) {
       if (url.origin !== window.location.origin || url.pathname !== `/editor/page/${session.sessionId}`) throw new Error('Unexpected editor address.')
       if ('file' in source) await api(`/api/template-editing-sessions/${session.sessionId}/source`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: source.file })
       setEditor({ sessionId: session.sessionId, url: url.href, ready: false, requestId: '', defaultSigners: 'defaultSigners' in source ? source.defaultSigners : null })
+      setCreating(false)
     })
   }
   function placeFields() {
@@ -126,13 +131,20 @@ export function TemplatesPage({ me }: { me: Me }) {
     return () => window.removeEventListener('message', listen)
   }, [editor])
 
+  const notice = h(Notice, { message: message.text, error: message.error })
+  const sharedTemplate = opened ? templates?.find((t) => t.id === opened) ?? null : null
   return h('div', { className: 'flex flex-col gap-6' },
-    h(PageHeader, { title: 'Templates', description: 'The documents you send for signature, yours or shared with you, with their signer roles and fields.' }),
-    h(Notice, { message: message.text, error: message.error }),
-    manage && !editor ? h(Card, { 'aria-label': 'New template' },
-      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'New template')),
-        h(CardDescription, null, 'A PDF of up to 5 MB and 100 pages, and the roles that sign it, in signing order. Use synthetic documents until your organization has reviewed Esign for real ones.')),
-      h(CardContent, { className: 'flex flex-col gap-4' },
+    h(PageHeader, {
+      title: 'Templates', description: 'The documents you send for signature, yours or shared with you, with their signer roles and fields.',
+      actions: manage ? h(Button, { disabled: !!editor, onClick: () => { setMessage({ text: '', error: false }); setCreating(true) } }, h(Plus, { 'aria-hidden': true }), 'New template') : null,
+    }),
+    // A message shows where it was asked: in the open dialog, else on the page.
+    h(Notice, { message: creating || editor || sharedTemplate ? '' : message.text, error: message.error }),
+    h(Dialog, { open: creating, onOpenChange: setCreating, label: 'New template', dismissible: !busy, className: 'sm:max-w-3xl' },
+      h(DialogHeader, null, h(DialogTitle, null, 'New template'),
+        h(DialogDescription, null, 'A PDF of up to 5 MB and 100 pages, and the roles that sign it, in signing order. Use synthetic documents until your organization has reviewed Esign for real ones.')),
+      notice,
+      h('div', { className: 'flex flex-col gap-4' },
         h(Field, { label: 'PDF', htmlFor: 'template-pdf' },
           h(Input, { id: 'template-pdf', type: 'file', accept: 'application/pdf', disabled: busy, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null) })),
         h('fieldset', { className: 'flex flex-col gap-2' },
@@ -146,28 +158,29 @@ export function TemplatesPage({ me }: { me: Me }) {
             roles.length > 1 ? h(Button, { variant: 'ghost', size: 'icon', 'aria-label': `Remove role ${i + 1}`, onClick: () => removeRole(i) }, h(Trash2, { 'aria-hidden': true })) : h('span'))),
           roles.length < 20 ? h(Button, { variant: 'outline', size: 'sm', className: 'w-fit', onClick: () => { setRoles((old) => [...old, `signer-${old.length + 1}`]); setPeople((old) => [...old, { name: '', email: '' }]) } }, h(Plus, { 'aria-hidden': true }), 'Add a role') : null),
         h(TagsField, { id: 'template-tags', value: newTags, onChange: setNewTags })),
-      h(CardFooter, { className: 'flex-wrap gap-2' },
-        h(Button, { disabled: busy, onClick: placeFields }, h(SquarePen, { 'aria-hidden': true }), 'Upload and place fields'))) : null,
-    editor ? h(Card, { 'aria-label': 'Field editor' },
-      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Place the fields')),
-        h(CardDescription, null, 'Give each role one Signature field, and Title or Date signed fields where you want them; then save. Saving makes a new template.')),
-      h(CardContent, null, h('iframe', { ref: editorFrame, title: 'Signature field editor', src: editor.url, className: 'h-[760px] w-full rounded-md border' })),
-      h(CardFooter, { className: 'gap-2' },
-        h(Button, { disabled: !editor.ready || !!editor.requestId, onClick: saveFields }, editor.requestId ? 'Saving…' : 'Save fields'),
-        h(Button, { variant: 'outline', disabled: !!editor.requestId, onClick: () => setEditor(null) }, 'Close the editor'))) : null,
+      h(DialogFooter, null,
+        h(Button, { variant: 'outline', disabled: busy, onClick: () => setCreating(false) }, 'Cancel'),
+        h(Button, { disabled: busy, onClick: placeFields }, h(SquarePen, { 'aria-hidden': true }), 'Upload and place fields'))),
+    h(Dialog, { open: !!editor, onOpenChange: (open) => { if (!open) setEditor(null) }, label: 'Field editor', dismissible: !editor?.requestId, className: 'sm:max-w-6xl' },
+      h(DialogHeader, null, h(DialogTitle, null, 'Place the fields'),
+        h(DialogDescription, null, 'Give each role one Signature field, and Title or Date signed fields where you want them; then save. Saving makes a new template.')),
+      notice,
+      editor ? h('iframe', { ref: editorFrame, title: 'Signature field editor', src: editor.url, className: 'h-[70vh] w-full rounded-md border' }) : null,
+      h(DialogFooter, null,
+        h(Button, { variant: 'outline', disabled: !!editor?.requestId, onClick: () => setEditor(null) }, 'Close the editor'),
+        h(Button, { disabled: !editor?.ready || !!editor?.requestId, onClick: saveFields }, editor?.requestId ? 'Saving…' : 'Save fields'))),
+    h(Dialog, { open: !!sharedTemplate, onOpenChange: (open) => { if (!open) setOpened('') }, label: 'Who sees the template', className: 'sm:max-w-2xl' },
+      sharedTemplate ? [
+        h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Who sees ${sharedTemplate.name ?? 'this template'}`),
+          h(DialogDescription, null, 'Its owner and the people it is shared with. Viewers send envelopes from it; editors also change its default signers; admins also share it.')),
+        h(SharePanel, { key: sharedTemplate.id, kind: 'templates', id: sharedTemplate.id, me, onLeft: () => { setOpened(''); void load() } }),
+        h(TagsField, { key: 'tags', id: 'opened-template-tags', value: sharedTemplate.tags ?? [], onChange: (tags) => saveTags(sharedTemplate.id, tags) }),
+        h(DialogFooter, { key: 'footer' }, h(Button, { variant: 'outline', onClick: () => setOpened('') }, 'Close')),
+      ] : null),
     h(ListFilters, { id: 'templates', scope, onScope: setScope, onTags: setFilterTags }),
-    opened && templates?.some((t) => t.id === opened) ? (() => {
-      const t = templates.find((x) => x.id === opened)!
-      return h(Card, { 'aria-label': 'Who sees the template' },
-        h(CardHeader, null, h(CardTitle, null, h('h2', null, `Who sees ${t.name ?? 'this template'}`)), h(CardDescription, null, 'Its owner and the people it is shared with. Viewers send envelopes from it; editors also change its default signers; admins also share it.')),
-        h(CardContent, { className: 'flex flex-col gap-6' },
-          h(SharePanel, { key: t.id, kind: 'templates', id: t.id, me, onLeft: () => { setOpened(''); void load() } }),
-          h(TagsField, { id: 'opened-template-tags', value: t.tags ?? [], onChange: (tags) => saveTags(t.id, tags) })),
-        h(CardFooter, null, h(Button, { variant: 'outline', onClick: () => setOpened('') }, 'Close')))
-    })() : null,
     h(Card, { className: 'py-0' }, h(CardContent, { className: 'px-0' },
       templates === null ? h('p', { role: 'status', className: 'p-6 text-sm text-muted-foreground' }, 'Loading templates…')
-        : templates.length === 0 ? h('p', { className: 'p-6 text-sm text-muted-foreground' }, scope || filterTags.length ? 'No templates match.' : manage ? 'No templates yet. Upload a PDF above.' : 'No templates shared with you yet.')
+        : templates.length === 0 ? h('p', { className: 'p-6 text-sm text-muted-foreground' }, scope || filterTags.length ? 'No templates match.' : manage ? 'No templates yet. Choose New template to upload a PDF.' : 'No templates shared with you yet.')
           : h(Table, { 'aria-label': 'Templates' },
             h(TableHeader, null, h(TableRow, null, h(TableHead, { className: 'pl-6' }, 'Template'), h(TableHead, null, 'Roles'), h(TableHead, null, 'Signed on'), h(TableHead, null, 'Owner'), h(TableHead, null, 'Uploaded'), h(TableHead, { className: 'pr-6' }, h('span', { className: 'sr-only' }, 'Actions')))),
             h(TableBody, null, ...templates.map((t) => h(TableRow, { key: t.id },
@@ -177,7 +190,7 @@ export function TemplatesPage({ me }: { me: Me }) {
               h(TableCell, { className: 'text-muted-foreground' }, ownerName(t.owner, me)),
               h(TableCell, { className: 'text-muted-foreground' }, dateTime(t.createdAt)),
               h(TableCell, { className: 'pr-6 text-right' }, h('div', { className: 'flex justify-end gap-2' },
-                h(Button, { size: 'sm', variant: 'ghost', 'aria-label': `Who sees ${t.name ?? t.id}`, onClick: () => setOpened(opened === t.id ? '' : t.id) }, h(Users, { 'aria-hidden': true }), 'Sharing'),
+                h(Button, { size: 'sm', variant: 'ghost', 'aria-label': `Who sees ${t.name ?? t.id}`, onClick: () => setOpened(t.id) }, h(Users, { 'aria-hidden': true }), 'Sharing'),
                 manage ? h(Button, { size: 'sm', variant: 'ghost', disabled: busy || !!editor, onClick: () => openEditor({ templateId: t.id }) }, h(SquarePen, { 'aria-hidden': true }), 'Place fields') : null,
                 manage ? h(Link, { to: `/envelopes/new?template=${encodeURIComponent(t.id)}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Send, { 'aria-hidden': true }), 'Send') : null)))))))),
     !manage ? h('p', { className: 'text-sm text-muted-foreground' }, 'Your role can see templates but not change them. ', h('a', { href: '/docs/roles', onClick: (e: React.MouseEvent) => { e.preventDefault(); navigate('/docs/roles') }, className: 'font-medium text-foreground underline underline-offset-4' }, 'Roles and permissions')) : null)

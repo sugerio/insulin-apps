@@ -38,11 +38,11 @@ A template is signed in one of two ways:
 You need a role that sends and manages envelopes.
 
 1. Open **Templates**.
-2. Under **New template**, choose the **PDF**.
+2. Choose **New template**, and in the dialog choose the **PDF**.
 3. Under **Signer roles, in signing order**, name each role. Choose **Add a role** for more (up to 20), or the bin icon to
    remove one. Next to a role you can give its [default signer](#default-signers): a **Signer name**, a **Signer email**,
    or both. Both are optional; matching contacts are suggested as you type.
-4. Choose **Upload and place fields**: the field editor opens on the PDF. See below.
+4. Choose **Upload and place fields**: the field editor opens on the PDF, in a dialog over the list. See below.
 
 The new template appears in the list with its id (under its name, when it has one: a host names its templates through
 the API, see [Names and metadata](/docs/esign/api#names-and-metadata)), its roles, what it is **Signed on** ("A signature page" or the number

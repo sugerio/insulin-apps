@@ -119,8 +119,11 @@ change no envelope already sent.
 
 A template is yours when you upload it, and nobody else sees it until you share it: **Share** in its row's menu shows who
 sees it, and there its admins and owner share it by email, as Viewer (sees it and sends envelopes from it), Editor (also
-edits it) or Admin (also shares and deletes it). Your **tags** on it are yours alone, and **Show** and **With your
-tags** filter the list. An envelope sent from a template is its sender's, not shared with the template's people. See
+edits it) or Admin (also shares and deletes it). Your **tags** on it are yours alone.
+
+Above the list, as on **Envelopes**: **Search templates** (a name, or a template id), **Date** (uploaded in the last 24
+hours to 12 months), **Owner** (**Mine** or **Shared with me**) and **Tags** (yours, picked by clicking), each shown as a
+chip that removes it, and **Clear all**; below it, pages. An envelope sent from a template is its sender's, not shared with the template's people. See
 [Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
 
 ## The editor on the Templates page

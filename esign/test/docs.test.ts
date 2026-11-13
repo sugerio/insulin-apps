@@ -42,8 +42,8 @@ for(const [who,session,status] of SESSIONS){
  test(`the Docs entry is in ${who}'s navigation, before any template exists, and opens Getting started`,async()=>{
   const app=await renderMember('/',c=>{
    if(c.path==='/api/me')return json(session,status);
-   if(c.path==='/api/envelopes')return json({envelopes:[]});
-   if(c.path==='/api/templates')return json({templates:[]});
+   if(c.path==='/api/envelopes'||c.path.startsWith('/api/envelopes?'))return json({envelopes:[]});
+   if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[]});
   });
   try{
    const nav=app.byLabel('Primary');assert.ok(nav,'the primary navigation');
@@ -75,7 +75,7 @@ for(const [who,session,status] of SESSIONS){
 test('a Viewer can open a topic by its address, and the Templates page points them to it',async()=>{
  const app=await renderMember('/templates',c=>{
   if(c.path==='/api/me')return json(me('VIEWER',['esign.view']));
-  if(c.path==='/api/templates')return json({templates:[]});
+  if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[]});
  });
  try{
   assert.match(app.text(),/Your role can see templates but not change them\./);
@@ -159,9 +159,9 @@ test('only the background on electronic signatures is general information, and i
 
 test('the Docs describe the navigation: both columns, Settings on Insulin Apps, the breadcrumb, collapsing and narrow screens',()=>{
  const text=textOf(render('getting-started'));
- for(const words of [/switch to one, go to All apps \(your home page on Insulin Apps\), or create a new one/,/For Docs: the topics, then Public docs/,/Envelopes, Templates and Contacts, then Docs and Settings/,/All envelopes, New envelope \(for roles that send\)/,/People, Integrations, API access and Connect AI/,/Envelopes › Completed/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
+ for(const words of [/switch to one, go to All apps \(your home page on Insulin Apps\), or create a new one/,/For Docs: the topics, then Public docs/,/Envelopes, Templates and Contacts, then Docs and Settings/,/Envelopes, Templates, Contacts and Ownership have none/,/People, Integrations, API access and Connect AI/,/Envelopes › Envelope/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
   assert.match(text,words);
- assert.match(textOf(render('roles')),/New envelope, for example, is only in the navigation of roles that send/);
+ assert.match(textOf(render('roles')),/New envelope, for example, is only on the Envelopes page of roles that send/);
 });
 
 test('the Docs cover the main tasks, what each role sees, signers, statuses, evidence, and due work every five minutes',()=>{

@@ -71,6 +71,14 @@ export const sending: DocTopic = {
       ],
     },
     {
+      id: 'the-list',
+      title: 'The Envelopes list',
+      body: [
+        p(h(PageLink, { to: '/envelopes' }, 'Envelopes'), ' lists the envelopes you own or that are shared with you, newest first, a page at a time. Out for signature, a row shows how many have signed and whose turn it is (point at it for every signer); otherwise its status. Its button fits its state: ', b('Resend'), ' to the signer whose turn it is, ', b('Download'), ' the signed PDF once completed, else ', b('View'), '; its ⋯ menu has View, Void, Tags and Share.'),
+        p('Search by the document\'s name, a signer\'s name or email, or an envelope id; while the search is empty, it offers the common filters. ', b('Date'), ', ', b('Status'), ', ', b('Sender'), ' (sent by me, shared with me), ', b('Quick views'), ' (waiting for others, expiring soon) and ', b('Tags'), ' (your own, picked by clicking) narrow it; each shows as a chip that removes it, and ', b('Clear all'), ' removes them all.'),
+      ],
+    },
+    {
       id: 'contacts',
       title: 'Contacts',
       body: [

@@ -59,7 +59,7 @@ same request key, so the envelope is never sent twice.
 An envelope is yours when you send it, and nobody else sees it, your organization's owners and admins included, until
 you share it: **Who sees it** on its page shares it by email, as Viewer, Editor (who may also void it and resend
 invitations) or Admin (who may also share it). Tags you give it, on the form or on its page, are yours alone, along with
-yours on its template; **Envelopes** filters by them, and by **Mine** or **Shared with me**. See
+yours on its template; **Envelopes** filters by them (**Tags**), and by **Sent by me** or **Shared with me** (**Sender**). See
 [Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
 
 ## Signing order
@@ -81,10 +81,34 @@ The envelope's page shows:
 - **Metadata**, when the sender's system gave the envelope any: its keys and values, as given (never shown to signers);
 - **Audit trail**: every event with its time, the signer and the IP address.
 
-The page refreshes by itself every few seconds while the envelope is out for signature or finishing. The **Envelopes**
-page lists every envelope, newest first; filter it with **Status**, or choose a status's view in the navigation's second
-column (**Out for signature**, **Completed** and so on), which is the same filter at its own address, such as
-`/envelopes?status=completed`.
+The page refreshes by itself every few seconds while the envelope is out for signature or finishing.
+
+## The Envelopes list
+
+**Envelopes** lists the envelopes you own or that are shared with you, newest first, a page at a time (**Per page**, and
+the arrows for the next and previous pages). Each row shows:
+
+- the document's name, and **To:** its signers;
+- where it stands: out for signature, a bar of how many have signed, **Waiting for** whose turn it is (point at it for
+  every signer and their status) and "1 of 2 signed"; otherwise its status;
+- its owner, and its **Last change** (its latest event);
+- one action that fits: **Resend** to the signer whose turn it is, when Esign invites them by email; **Download** the
+  signed PDF with its certificate once completed; otherwise **View**. Its **⋯** menu has **View**, **Void** (out for
+  signature), **Tags** and **Share**, for the roles in it that may.
+
+Above the list:
+
+- **Search envelopes**: the document's name, a signer's name or email, or an envelope id. While it is empty, it offers the
+  common filters below, one click each.
+- **Date**: created in the last 24 hours, 7 or 30 days, 6 or 12 months.
+- **Status**: In progress (which includes the few seconds an envelope spends finishing), Completed, Declined, Voided,
+  Expired. A status has its own address, such as `/envelopes?status=completed`, to bookmark or share.
+- **Sender**: **Sent by me** (yours) or **Shared with me**.
+- **Quick views**: **Waiting for others** (yours, out for signature) and **Expiring soon** (the signer whose turn it is
+  has a deadline within 7 days).
+- **Tags**: your own tags, picked from those you use, one click each; the list shows envelopes with all of those picked.
+
+Each filter in use shows as a chip under them, which removes it; **Clear all** removes them all.
 
 ![An envelope's page with its signers and audit trail](/docs/assets/screenshots/esign-envelope.png "An envelope out for signature: signers in order and the audit trail")
 

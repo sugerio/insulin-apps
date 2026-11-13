@@ -81,8 +81,8 @@ const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/me', summary: 'Who is calling: the organization, the role and its permissions', query: null, body: null, idempotencyKey: false, permission: null },
   { method: 'GET', path: '/api/catalog', summary: 'The endpoints the caller may use, with their query and body schemas', query: null, body: null, idempotencyKey: false, permission: null },
   {
-    method: 'GET', path: '/api/templates', summary: `The templates you own or that are shared with you, newest first. ${ownedFields}`,
-    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only templates created before this time (epoch ms), for the next page' }, ...listFilters } },
+    method: 'GET', path: '/api/templates', summary: `The templates you own or that are shared with you, newest first; next is the following page's before. ${ownedFields}`,
+    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only templates created before this time (epoch ms), for the next page' }, q: text('Only those whose name contains this, or whose id it is', 100), since: { type: 'integer', description: 'Only those uploaded at or after this time (epoch ms)' }, ...listFilters } },
     body: null, idempotencyKey: false, permission: 'esign.view',
   },
   {
@@ -104,8 +104,8 @@ const ENTRIES: Entry[] = [
   { method: 'POST', path: '/api/template-editing-sessions/{id}/source', summary: 'Stage the PDF an editing session starts from, before its page is opened (body: the PDF, application/pdf)', query: null, body: { type: 'string', contentMediaType: 'application/pdf' }, idempotencyKey: false, permission: 'esign.manage' },
   { method: 'GET', path: '/api/template-editing-sessions/{id}', summary: 'The template an editing session saved, once it has', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   {
-    method: 'GET', path: '/api/envelopes', summary: `The envelopes you own or that are shared with you, newest first, with their status. ${ownedFields}`,
-    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only envelopes created before this time (epoch ms), for the next page' }, status: { type: 'string', enum: ['IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED'] }, ...listFilters } },
+    method: 'GET', path: '/api/envelopes', summary: `The envelopes you own or that are shared with you, newest first, with their status, signers, progress (signed of total), whose turn it is (current) and last change; next is the following page's before. ${ownedFields}`,
+    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only envelopes created before this time (epoch ms), for the next page' }, status: { type: 'string', description: 'One or more of IN_PROGRESS, FINALIZING, COMPLETED, VOIDED, DECLINED, EXPIRED, comma-separated or repeated' }, q: text('Only those whose document name, or a signer\'s name or email, contains this; or whose id it is', 100), since: { type: 'integer', description: 'Only those created at or after this time (epoch ms)' }, view: { type: 'string', enum: ['waiting', 'expiring'], description: 'waiting: yours, out for signature; expiring: out for signature, the active signer\'s deadline within 7 days' }, ...listFilters } },
     body: null, idempotencyKey: false, permission: 'esign.view',
   },
   {

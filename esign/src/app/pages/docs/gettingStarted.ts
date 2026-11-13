@@ -35,8 +35,8 @@ export const gettingStarted: DocTopic = {
         p('The navigation on the left has two columns.'),
         ul(
           [b('The first column'), ' has your organization at the top: choose it to see your other organizations, switch to one, go to All apps (your home page on Insulin Apps), or create a new one. Below are Envelopes, Templates and Contacts, then Docs and Settings, and at the bottom your name and role, with your Insulin Apps account and Sign out.'],
-          [b('The second column'), ' lists what the open section holds. For Envelopes: All envelopes, New envelope (for roles that send), and one view for each status, such as Out for signature or Completed. For Docs: the topics, then Public docs, Esign\'s documentation on the web. For Settings: People, Integrations, API access and Connect AI, which open on insulinapps.com (in the console\'s preview they are listed without links). Templates has no second column.'],
-          [b('The bar above the page'), ' shows where you are, such as Envelopes › Completed. Choose the section\'s name to go back to it.'],
+          [b('The second column'), ' lists what the open section holds. For Docs: the topics, then Public docs, Esign\'s documentation on the web. For Settings: People, Integrations, API access and Connect AI, which open on insulinapps.com (in the console\'s preview they are listed without links). Envelopes, Templates, Contacts and Ownership have none: each of those pages has its own search, filters and buttons.'],
+          [b('The bar above the page'), ' shows where you are, such as Envelopes › Envelope. Choose the section\'s name to go back to it.'],
         ),
         p('Each column has its own button to collapse it to icons; point at an icon to see its name. Esign remembers your choice in this browser. On a narrow screen, such as a phone, the menu button at the top opens both columns.'),
       ],

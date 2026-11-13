@@ -15,7 +15,12 @@ export type Owner = { id: string; kind: 'person' | 'client'; name?: string; emai
 export type DocumentRole = 'owner' | 'admin' | 'editor' | 'viewer'
 export type Owned = { owner?: Owner; myRole?: DocumentRole; tags?: string[] }
 export type TemplateSummary = Owned & { id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
-export type EnvelopeSummary = Owned & { id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata }
+/** A list's envelope: its signers in order, how many have signed, whose turn it is (and how they are invited), and when it last changed. */
+export type EnvelopeSummary = Owned & {
+  id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata
+  signers?: { role: string; name: string; email: string; status: string }[]; progress?: { signed: number; total: number }
+  current?: { taskId: string; name: string; email: string; delivery: 'host' | 'email' }; lastChangeAt?: number
+}
 export type Share = { email: string; name?: string; role: Exclude<DocumentRole, 'owner'>; sharedAt: number }
 export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; shares: Share[] }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
@@ -100,11 +105,16 @@ export const ownerName = (owner: Owner | undefined, me?: Me | null) =>
 /** Which documents a list shows: all the member sees, theirs, or those shared with them. */
 export type Scope = '' | 'mine' | 'shared'
 /** A list's address: `/api/templates` or `/api/envelopes` with the filters given, and nothing else when there are none. */
-export function listPath(base: string, filters: { status?: string; scope?: Scope; tags?: string[] }): string {
+export function listPath(base: string, filters: { status?: string; scope?: Scope; tags?: string[]; q?: string; since?: number; view?: string; limit?: number; before?: number }): string {
   const query = new URLSearchParams()
   if (filters.status) query.set('status', filters.status)
   if (filters.scope) query.set('scope', filters.scope)
   for (const tag of filters.tags ?? []) query.append('tag', tag)
+  if (filters.q?.trim()) query.set('q', filters.q.trim())
+  if (filters.since !== undefined) query.set('since', String(filters.since))
+  if (filters.view) query.set('view', filters.view)
+  if (filters.limit !== undefined) query.set('limit', String(filters.limit))
+  if (filters.before !== undefined) query.set('before', String(filters.before))
   const text = query.toString()
   return text ? `${base}?${text}` : base
 }

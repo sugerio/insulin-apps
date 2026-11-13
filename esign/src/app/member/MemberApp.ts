@@ -3,7 +3,7 @@
 // platform's identity; the server checks every request again, so what a role can't do is hidden here and refused there.
 // The Docs need no identity: they open for every role, and before sign-in.
 import React, { useEffect, useState } from 'react'
-import { apiJson, describeError, RequestError, STATUS_LABELS, statusFilter, type Me } from './api.ts'
+import { apiJson, describeError, RequestError, statusFilter, type Me } from './api.ts'
 import { ContactPage } from './ContactPage.ts'
 import { ContactsPage } from './ContactsPage.ts'
 import { EnvelopePage } from './EnvelopePage.ts'
@@ -48,7 +48,8 @@ export function route(path: string): Route {
 
 /** The page's name, the breadcrumb's last part. */
 export function pageTitle(current: Route, status: string): string {
-  if (current.page === 'list' && current.section === 'envelopes') return status ? STATUS_LABELS[status]! : 'All envelopes'
+  // The list's own filters (Status among them) narrow it: no level 2, so the page is its section.
+  if (current.page === 'list' && current.section === 'envelopes') return 'Envelopes'
   if (current.page === 'new') return 'New envelope'
   if (current.page === 'envelope') return 'Envelope'
   if (current.page === 'contact') return 'Contact'

@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
 import { allows, api, apiJson, canManage, dateTime, defaultSignersOf, describeError, listPath, MAX_PDF_BYTES, ownerName, ROLE_NAMES, type Me, type Scope, type TemplateSummary } from './api.ts'
 import { ContactField } from './ContactField.ts'
-import { ListFilters } from './ListFilters.ts'
+import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, sinceOf, TagsFilter, toggled, useMyTags, usePages, type Chip, type Suggestion } from './ListFilters.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { SharePanel } from './SharePanel.ts'
@@ -57,8 +57,12 @@ export function TemplatesPage({ me }: { me: Me }) {
   const editorFrame = useRef<HTMLIFrameElement | null>(null)
   // The new template's tags; the list's filters; the template whose sharing and tags are open.
   const [newTags, setNewTags] = useState<string[]>([])
-  const [scope, setScope] = useState<Scope>('')
-  const [filterTags, setFilterTags] = useState<string[]>([])
+  // The list's search and filters (Owner: the member's own, or shared with them), its pages, the member's own tags.
+  const [filters, setFilters] = useState<{ q: string; date: string; scope: Scope; tags: string[] }>({ q: '', date: '', scope: '', tags: [] })
+  const [pageSize, setPageSize] = useState(25)
+  const pager = usePages()
+  const [myTags, reloadTags] = useMyTags()
+  const latest = useRef(0)
   const [opened, setOpened] = useState<Open | null>(null)
   // The Edit dialog's Details, as typed.
   const [draft, setDraft] = useState<Draft>({ name: '', people: [] })
@@ -66,14 +70,36 @@ export function TemplatesPage({ me }: { me: Me }) {
   const [creating, setCreating] = useState(false)
   const [templateName, setTemplateName] = useState('')
 
-  async function load() {
-    try { setTemplates((await apiJson<{ templates: TemplateSummary[] }>(listPath('/api/templates', { scope, tags: filterTags }))).templates) }
-    catch (error) { setMessage({ text: describeError(error), error: true }) }
+  /** Loads a page: `at.before`, else (no argument) the page being shown again. */
+  async function load(at: { before: number | undefined } = { before: pager.before }) {
+    const ask = ++latest.current
+    try {
+      const data = await apiJson<{ templates: TemplateSummary[]; next?: number }>(listPath('/api/templates', { q: filters.q, scope: filters.scope, tags: filters.tags, ...sinceOf(filters.date), limit: pageSize, before: at.before }))
+      if (ask !== latest.current) return
+      setTemplates(data.templates)
+      pager.setNext(data.next)
+    } catch (error) { if (ask === latest.current) setMessage({ text: describeError(error), error: true }) }
   }
-  useEffect(() => { void load() }, [scope, filterTags.join('\n')])
+  // A new filter or page size starts again on page 1.
+  useEffect(() => { pager.reset(); setTemplates(null); void load({ before: undefined }) }, [filters.q, filters.date, filters.scope, filters.tags.join('\n'), pageSize])
+  const set = (change: Partial<typeof filters>) => setFilters((f) => ({ ...f, ...change }))
+  const OWNERS: Record<Exclude<Scope, ''>, string> = { mine: 'Mine', shared: 'Shared with me' }
+  const suggestions: Suggestion[] = Object.entries(OWNERS).map(([key, label]) => ({ label, kind: 'Owner', apply: () => set({ scope: key as Scope }) }))
+  const chips: Chip[] = [
+    ...(filters.q ? [{ label: `Search: ${filters.q}`, clear: () => set({ q: '' }) }] : []),
+    ...(filters.date ? [{ label: `Date: ${DATES[filters.date]!.label}`, clear: () => set({ date: '' }) }] : []),
+    ...(filters.scope ? [{ label: `Owner: ${OWNERS[filters.scope]}`, clear: () => set({ scope: '' }) }] : []),
+    ...filters.tags.map((tag) => ({ label: `Tag: ${tag}`, clear: () => set({ tags: toggled(filters.tags, tag) }) })),
+  ]
+  function turn(to: 'next' | 'previous') {
+    const at = pager.turn(to)
+    if (!at) return
+    setTemplates(null)
+    void load(at)
+  }
   function saveTags(id: string, tags: string[]) {
     setTemplates((old) => old?.map((t) => t.id === id ? { ...t, tags } : t) ?? null)
-    void run(async () => { await apiJson(`/api/templates/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }) })
+    void run(async () => { await apiJson(`/api/templates/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }); reloadTags() })
   }
   async function run(work: () => Promise<void>) {
     setBusy(true)
@@ -299,10 +325,17 @@ export function TemplatesPage({ me }: { me: Me }) {
           h(Button, { variant: 'outline', disabled: busy, onClick: close }, 'Keep it'),
           h(Button, { variant: 'destructive', disabled: busy, onClick: () => remove(current) }, busy ? 'Deleting…' : 'Delete template')),
       ] : null),
-    h(ListFilters, { id: 'templates', scope, onScope: setScope, onTags: setFilterTags }),
+    h('div', { className: 'flex flex-col gap-3' },
+      h('div', { className: 'flex flex-wrap items-center gap-2' },
+        h(SearchBox, { id: 'template-search', label: 'Search templates', value: filters.q, onSearch: (q) => set({ q }), suggestions }),
+        h(FilterButton, { name: 'Date', value: filters.date, options: dateLabels, onChange: (date) => set({ date }) }),
+        h(FilterButton, { name: 'Owner', value: filters.scope, options: OWNERS, onChange: (scope) => set({ scope: scope as Scope }) }),
+        h(TagsFilter, { picked: filters.tags, mine: myTags, what: 'templates', onChange: (tags) => set({ tags }) }),
+        chips.length ? h(Button, { variant: 'ghost', onClick: () => setFilters({ q: '', date: '', scope: '', tags: [] }) }, 'Clear all') : null),
+      h(FilterChips, { chips })),
     h(Card, { className: 'py-0' }, h(CardContent, { className: 'px-0' },
       templates === null ? h('p', { role: 'status', className: 'p-6 text-sm text-muted-foreground' }, 'Loading templates…')
-        : templates.length === 0 ? h('p', { className: 'p-6 text-sm text-muted-foreground' }, scope || filterTags.length ? 'No templates match.' : manage ? 'No templates yet. Choose New template to upload a PDF.' : 'No templates shared with you yet.')
+        : templates.length === 0 ? h('p', { className: 'p-6 text-sm text-muted-foreground' }, chips.length ? 'No templates match.' : manage ? 'No templates yet. Choose New template to upload a PDF.' : 'No templates shared with you yet.')
           : h(Table, { 'aria-label': 'Templates' },
             h(TableHeader, null, h(TableRow, null, h(TableHead, { className: 'pl-6' }, 'Template'), h(TableHead, null, 'Roles'), h(TableHead, null, 'Signed on'), h(TableHead, null, 'Owner'), h(TableHead, null, 'Access'), h(TableHead, null, 'Uploaded'), h(TableHead, { className: 'pr-6' }, h('span', { className: 'sr-only' }, 'Actions')))),
             h(TableBody, null, ...templates.map((t) => h(TableRow, { key: t.id },
@@ -316,5 +349,6 @@ export function TemplatesPage({ me }: { me: Me }) {
               h(TableCell, { className: 'pr-6 text-right' }, h('div', { className: 'flex items-center justify-end gap-2' },
                 manage ? h(Link, { to: `/envelopes/new?template=${encodeURIComponent(t.id)}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Send, { 'aria-hidden': true }), 'Send') : null,
                 h(DropdownMenu, { label: `More for ${t.name ?? t.id}`, items: menu(t), trigger: (props) => h(Button, { ...props, variant: 'ghost', size: 'icon-sm', disabled: !!editor }, h(Ellipsis, { 'aria-hidden': true })) }))))))))),
+    h(Pager, { id: 'template', page: pager.page, pageSize, hasNext: pager.next !== undefined, busy: templates === null, onPageSize: setPageSize, onTurn: turn }),
     !manage ? h('p', { className: 'text-sm text-muted-foreground' }, 'Your role can see templates but not change them. ', h('a', { href: '/docs/roles', onClick: (e: React.MouseEvent) => { e.preventDefault(); navigate('/docs/roles') }, className: 'font-medium text-foreground underline underline-offset-4' }, 'Roles and permissions')) : null)
 }

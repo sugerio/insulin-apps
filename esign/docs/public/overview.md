@@ -44,7 +44,7 @@ Members open Esign at `https://esign.insulinapps.com`. Its navigation has four e
 
 | Page | What it shows |
 | --- | --- |
-| **Envelopes** | Every envelope in your organization, newest first, with its status. Open one to see its signers, its audit trail and, once completed, the signed PDF and the certificate. Those who manage also find **New envelope** and **Process due work** here. |
+| **Envelopes** | The envelopes you own or that are shared with you, newest first, with where each stands, searched and filtered by date, status, sender and quick views. Open one to see its signers, its audit trail and, once completed, the signed PDF and the certificate. Those who manage also find **New envelope** and **Process due work** here. |
 | **Templates** | The PDFs your organization sends, with their signer roles and placed fields. Those who manage upload new ones here. |
 | **Docs** | The built-in help: getting started, the main tasks, what signers see, statuses, evidence, roles, background on electronic signatures and a glossary. Every role can open it. |
 | **Settings** | Esign's **People**, **Integrations**, **API access** and **Connect AI** pages, which are the platform's pages on `https://insulinapps.com/apps/esign/settings/` (see [Roles and access](/docs/esign/roles-and-access#people-and-integrations-live-on-the-platform)). |
@@ -61,12 +61,11 @@ role, with your Insulin Apps **Account** and **Sign out**. The second column lis
 
 | Section | Second column |
 | --- | --- |
-| **Envelopes** | **All envelopes**, **New envelope** (only for roles that send), and under Status one view per status: **Out for signature**, **Finishing**, **Completed**, **Declined**, **Expired**, **Voided**. A view is an address such as `/envelopes?status=completed`, the same as choosing that status in the list's filter. |
 | **Docs** | The topics, under Using Esign and Electronic signatures, then **Public docs**, a link to these pages. |
 | **Settings** | **People**, **Integrations**, **API access** and **Connect AI**, links to the platform's pages (in the console's preview, listed without links). |
-| **Templates** | None. |
+| **Envelopes**, **Templates**, **Contacts**, **Ownership** | None: each page has its own search, filters and buttons. |
 
-The bar above the page shows where you are, such as Envelopes › Completed; the section's name goes back to it.
+The bar above the page shows where you are, such as Envelopes › Envelope; the section's name goes back to it.
 
 Each column has its own button that collapses it to icons, whose names show when you point at them. The choice is kept
 in this browser (`localStorage`, key `insulin-nav`). Below 768 pixels wide, a top bar holds the organization switcher and

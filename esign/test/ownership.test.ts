@@ -317,3 +317,70 @@ test('editing a template\'s fields saves a new version that replaces it, with it
     assert.equal((await h.send(h.ana, source)).status, 201);
   } finally { await h.mf.dispose(); }
 });
+
+test('the envelope list searches, filters by date, statuses and quick views, and says who signs, how far along and when it changed', async () => {
+  const h = await setup();
+  try {
+    const template = await h.template(h.ana);
+    await h.post(`/api/templates/${template}/shares`, h.ana, { email: 'bo@example.test', role: 'viewer' });
+    const sendAs = async (who: Record<string, string>, documentName: string, name: string, email: string, expiresAt?: string) => {
+      const sent = await h.post('/api/envelopes', who, { templateId: template, documentName, recipients: [{ role: 'partner', name, email, delivery: 'email', ...(expiresAt ? { expiresAt } : {}) }] }, { 'idempotency-key': crypto.randomUUID() });
+      assert.equal(sent.status, 201, await sent.clone().text());
+      return (await sent.json() as { id: string }).id;
+    };
+    const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const nda = await sendAs(h.ana, 'Mutual NDA', 'Pat Partner', 'pat@partner.example');
+    const msa = await sendAs(h.ana, 'Master services', 'Quinn Buyer', 'quinn@buyer.example', soon);
+    const bos = await sendAs(h.bo, 'Reseller agreement', 'Rae Reseller', 'rae@reseller.example');
+    await h.post(`/api/envelopes/${bos}/shares`, h.bo, { email: 'ana@example.test', role: 'viewer' });
+    await h.post(`/api/envelopes/${msa}/void`, h.ana, {});
+    type Row = { id: string; status: string; signers: { name: string; status: string }[]; progress: { signed: number; total: number }; current?: { taskId: string; name: string; delivery: string }; lastChangeAt: number; createdAt: number };
+    const list = async (query = '') => (await h.get<{ envelopes: Row[]; next?: number }>(`/api/envelopes${query}`, h.ana));
+    const ids = async (query = '') => (await list(query)).envelopes.map((e) => e.id);
+    // Each row: its signers, progress, whose turn it is and how they are invited, and its last change.
+    const row = (await list()).envelopes.find((e) => e.id === nda)!;
+    assert.deepEqual([row.signers.map((s) => [s.name, s.status]), row.progress, row.current?.name, row.current?.delivery], [[['Pat Partner', 'ACTIVE']], { signed: 0, total: 1 }, 'Pat Partner', 'email']);
+    assert.ok(row.lastChangeAt >= row.createdAt);
+    assert.equal((await list()).envelopes.find((e) => e.id === msa)!.current, undefined, 'a voided envelope waits for nobody');
+    // Search: the document's name, a signer's name or email, or the envelope's id; % and _ are literal.
+    assert.deepEqual(await ids('?q=mutual'), [nda]);
+    assert.deepEqual(await ids('?q=QUINN%40buyer'), [msa]);
+    assert.deepEqual(await ids('?q=Rae'), [bos], 'shared with Ana');
+    assert.deepEqual(await ids(`?q=${bos}`), [bos]);
+    assert.deepEqual(await ids('?q=%25'), []);
+    // Statuses, one or several.
+    assert.deepEqual(await ids('?status=VOIDED'), [msa]);
+    assert.deepEqual((await ids('?status=IN_PROGRESS,FINALIZING')).sort(), [nda, bos].sort());
+    assert.deepEqual((await ids('?status=IN_PROGRESS&status=VOIDED')).length, 3);
+    // Since, and the quick views: waiting for others (hers, out for signature), expiring soon.
+    assert.deepEqual(await ids(`?since=${Date.now() + 60_000}`), []);
+    assert.deepEqual(await ids('?view=waiting'), [nda]);
+    const expiring = await sendAs(h.ana, 'Order form', 'Sol Signer', 'sol@buyer.example', soon);
+    assert.deepEqual(await ids('?view=expiring'), [expiring]);
+    // Pages: `next` is the following page's `before`.
+    const first = await list('?limit=2');
+    assert.equal(first.envelopes.length, 2);
+    const second = await list(`?limit=2&before=${first.next}`);
+    assert.deepEqual([...first.envelopes, ...second.envelopes].map((e) => e.id).length, 4);
+    for (const bad of ['?status=DONE', `?q=${'x'.repeat(101)}`, '?since=-1', '?view=mine']) assert.equal((await h.req(`/api/envelopes${bad}`, h.ana)).status, 400, bad);
+  } finally { await h.mf.dispose(); }
+});
+
+test('the template list searches names and ids, filters by date, and pages', async () => {
+  const h = await setup();
+  try {
+    const nda = await h.template(h.ana);
+    await h.post(`/api/templates/${nda}`, h.ana, { name: 'Mutual NDA' });
+    const msa = await h.template(h.ana);
+    await h.post(`/api/templates/${msa}`, h.ana, { name: 'Master 100% services' });
+    const ids = async (query: string) => (await h.templates(h.ana, query)).map((t) => t.id);
+    assert.deepEqual(await ids('?q=nda'), [nda]);
+    assert.deepEqual(await ids(`?q=${msa}`), [msa]);
+    assert.deepEqual(await ids('?q=100%25'), [msa], '% is literal');
+    assert.deepEqual(await ids(`?since=${Date.now() + 60_000}`), []);
+    const first = await h.get<{ templates: { id: string }[]; next?: number }>('/api/templates?limit=1', h.ana);
+    const second = await h.get<{ templates: { id: string }[]; next?: number }>(`/api/templates?limit=1&before=${first.next}`, h.ana);
+    assert.deepEqual([...first.templates, ...second.templates].map((t) => t.id).sort(), [nda, msa].sort());
+    for (const bad of [`?q=${'x'.repeat(101)}`, '?since=x']) assert.equal((await h.req(`/api/templates${bad}`, h.ana)).status, 400, bad);
+  } finally { await h.mf.dispose(); }
+});

@@ -163,35 +163,98 @@ async function ownership(context: import('hono').Context<Env>, type: ResourceTyp
   return new Map(rows.map((row) => [row.id, { owner: owners.get(row.owner_user_id)!, myRole: effectiveRole(row.owner_user_id, row.shared_role, caller) ?? 'viewer', tags: tags.get(row.id) ?? [] }]));
 }
 
-// The templates the caller sees, newest first.
+/** `%` and `_` match themselves in a LIKE pattern (with ESCAPE '\\'). */
+const likeContaining = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/** A list's `q` (up to 100 characters, trimmed) and `since` (epoch ms), or 'invalid'. */
+function searchQuery(context: import('hono').Context<Env>): { q: string; since: number | null } | 'invalid' {
+  const q = (context.req.query('q') ?? '').trim();
+  const raw = context.req.query('since');
+  const since = raw === undefined ? null : Number(raw);
+  return q.length > 100 || (since !== null && (!Number.isSafeInteger(since) || since < 0)) ? 'invalid' : { q, since };
+}
+
+// The templates the caller sees, newest first. Filters: `q` (its name contains it, or it is its id), `since` (uploaded at
+// or after, epoch ms), and the lists' `scope` and `tag`; `next` is the `before` of the following page, when there may be one.
 app.get('/api/templates', async (context) => {
-  const query = listQuery(context);
-  if (!query) return context.json({ error: 'invalid_query' }, 400);
+  const query = listQuery(context), search = searchQuery(context);
+  if (!query || search === 'invalid') return context.json({ error: 'invalid_query' }, 400);
   const list = listed(context, 'template', query);
+  const where: string[] = [], binds: unknown[] = [];
+  if (search.q) { where.push(`(x.id = ? OR lower(x.name) LIKE ? ESCAPE '\\')`); binds.push(search.q, likeContaining(search.q.toLowerCase())); }
+  if (search.since !== null) { where.push('x.created_at >= ?'); binds.push(search.since); }
   const { results } = await context.env.DB.prepare(`SELECT x.id, x.roles_json, x.fields_json, x.created_at, x.name, x.metadata_json, x.default_signers_json, x.owner_user_id, ${list.sharedRole}
-      FROM templates x WHERE ${list.where} AND x.created_at < ? ORDER BY x.created_at DESC, x.id LIMIT ?`)
-    .bind(...list.binds([]), query.before, query.limit).all<Owned & { roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string }>();
+      FROM templates x WHERE ${list.where} AND x.created_at < ?${where.map((w) => ` AND ${w}`).join('')} ORDER BY x.created_at DESC, x.id LIMIT ?`)
+    .bind(...list.binds([]), query.before, ...binds, query.limit).all<Owned & { roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string }>();
   const owned = await ownership(context, 'template', results);
-  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at, ...owned.get(row.id) })) });
+  const last = results.length === query.limit ? results[results.length - 1] : undefined;
+  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at, ...owned.get(row.id) })), ...(last ? { next: last.created_at } : {}) });
 });
 
 const ENVELOPE_STATUSES = new Set(['IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED']);
 
-// The envelopes the caller sees, newest first, optionally of one status.
+/** How soon an active signer's sign-by deadline makes an envelope "expiring soon" (`view=expiring`). */
+const EXPIRING_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The envelopes the caller sees, newest first. Filters, all optional: `status` (one or more, repeated or comma-separated),
+ * `q` (the document name, a signer's name or email, contains it; or the envelope's id), `since` (created at or after,
+ * epoch ms), `view` (`waiting`: the caller's own, out for signature; `expiring`: out for signature with the active
+ * signer's deadline within 7 days), and the lists' `scope` and `tag`. Each envelope comes with its signers in order, how
+ * many have signed, whose turn it is, and when it last changed (its latest audit event); `next` is the `before` of the
+ * following page, when there may be one.
+ */
 app.get('/api/envelopes', async (context) => {
   const query = listQuery(context);
-  const status = context.req.query('status');
-  if (!query || (status !== undefined && !ENVELOPE_STATUSES.has(status))) return context.json({ error: 'invalid_query' }, 400);
+  const statuses = (context.req.queries('status') ?? []).flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean);
+  const search = searchQuery(context);
+  const view = context.req.query('view');
+  if (!query || search === 'invalid' || statuses.some((status) => !ENVELOPE_STATUSES.has(status)) || (view !== undefined && view !== 'waiting' && view !== 'expiring')) return context.json({ error: 'invalid_query' }, 400);
+  const { q, since } = search;
   const list = listed(context, 'envelope', query);
+  const caller = context.get('caller'), now = Date.now();
+  const where: string[] = [], binds: unknown[] = [];
+  if (statuses.length) { where.push(`x.status IN (SELECT value FROM json_each(?))`); binds.push(JSON.stringify(statuses)); }
+  if (since !== null) { where.push('x.created_at >= ?'); binds.push(since); }
+  if (q) {
+    const pattern = likeContaining(q.toLowerCase());
+    where.push(`(x.id = ? OR lower(json_extract(x.details_json, '$.documentName')) LIKE ? ESCAPE '\\'
+      OR EXISTS (SELECT 1 FROM tasks qt WHERE qt.envelope_id = x.id AND (lower(qt.recipient_name) LIKE ? ESCAPE '\\' OR lower(qt.recipient_email) LIKE ? ESCAPE '\\')))`);
+    binds.push(q, pattern, pattern, pattern);
+  }
+  if (view === 'waiting') { where.push(`x.status = 'IN_PROGRESS' AND x.owner_user_id = ?`); binds.push(caller.userId); }
+  if (view === 'expiring') { where.push(`x.status = 'IN_PROGRESS' AND EXISTS (SELECT 1 FROM tasks et WHERE et.envelope_id = x.id AND et.status = 'ACTIVE' AND et.expires_at IS NOT NULL AND et.expires_at BETWEEN ? AND ?)`); binds.push(now, now + EXPIRING_WITHIN_MS); }
   const { results } = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, ${list.sharedRole} FROM envelopes x
-      WHERE ${list.where} AND x.created_at < ? AND (? IS NULL OR x.status = ?) ORDER BY x.created_at DESC, x.id LIMIT ?`)
-    .bind(...list.binds([]), query.before, status ?? null, status ?? null, query.limit).all<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
-  const owned = await ownership(context, 'envelope', results);
+      WHERE ${list.where} AND x.created_at < ?${where.map((w) => ` AND ${w}`).join('')} ORDER BY x.created_at DESC, x.id LIMIT ?`)
+    .bind(...list.binds([]), query.before, ...binds, query.limit).all<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
+  const ids = JSON.stringify(results.map((row) => row.id));
+  const [owned, tasks, changes] = await Promise.all([
+    ownership(context, 'envelope', results),
+    context.env.DB.prepare('SELECT envelope_id, id, role, recipient_name, recipient_email, routing_order, status, details_json FROM tasks WHERE envelope_id IN (SELECT value FROM json_each(?)) ORDER BY envelope_id, routing_order')
+      .bind(ids).all<{ envelope_id: string; id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string; details_json: string }>(),
+    context.env.DB.prepare('SELECT envelope_id, max(occurred_at) AS at FROM audit_events WHERE envelope_id IN (SELECT value FROM json_each(?)) GROUP BY envelope_id')
+      .bind(ids).all<{ envelope_id: string; at: number }>(),
+  ]);
+  const lastChange = new Map(changes.results.map((row) => [row.envelope_id, row.at]));
+  const signersOf = new Map<string, typeof tasks.results>();
+  for (const task of tasks.results) signersOf.set(task.envelope_id, [...(signersOf.get(task.envelope_id) ?? []), task]);
+  const last = results.length === query.limit ? results[results.length - 1] : undefined;
   return context.json({
     envelopes: results.map((row) => {
       const details = envelopeDetails(row.details_json);
-      return { id: row.id, templateId: row.template_id, status: row.status, createdAt: row.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...owned.get(row.id) };
+      const signers = signersOf.get(row.id) ?? [];
+      // Whose turn it is, while it is out for signature (voiding or declining leaves the task as it was).
+      const active = row.status === 'IN_PROGRESS' ? signers.find((task) => task.status === 'ACTIVE') : undefined;
+      return {
+        id: row.id, templateId: row.template_id, status: row.status, createdAt: row.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {},
+        signers: signers.map((task) => ({ role: task.role, name: task.recipient_name, email: task.recipient_email, status: task.status })),
+        progress: { signed: signers.filter((task) => task.status === 'SIGNED').length, total: signers.length },
+        ...(active ? { current: { taskId: active.id, name: active.recipient_name, email: active.recipient_email, delivery: taskDetails(active.details_json).delivery ?? 'host' } } : {}),
+        lastChangeAt: Math.max(row.created_at, lastChange.get(row.id) ?? 0),
+        ...owned.get(row.id),
+      };
     }),
+    ...(last ? { next: last.created_at } : {}),
   });
 });
 

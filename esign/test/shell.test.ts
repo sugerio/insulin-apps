@@ -28,11 +28,11 @@ const routes=(who:unknown,platform:PlatformMe|null=null,extra:(c:Call)=>Response
  if(c.path==='/api/me')return json(who);
  if(c.path==='/__insulin/me')return platform?json(platform):new Response('<!doctype html>',{status:200,headers:{'content-type':'text/html'}});
  if(c.path==='/api/envelopes'||c.path.startsWith('/api/envelopes?'))return json({envelopes:[]});
- if(c.path==='/api/templates')return json({templates:[]});
+ if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[]});
 };
 
 for(const [who,session,editor] of [['an Admin',me('ADMIN',['esign.manage','esign.view']),true],['an Editor',EDITOR,true],['a Viewer',VIEWER,false],['a custom role on Viewer',me('VIEWER',['esign.view']),false],['a custom role on Editor that may only view',me('EDITOR',['esign.view']),false]] as const){
- test(`the shell for ${who}: Envelopes with its views, the breadcrumb, Templates without a level 2`,async()=>{
+ test(`the shell for ${who}: Envelopes and Templates without a level 2, the list's Status filter at its address`,async()=>{
   const app=await renderMember('/',routes(session));
   try{
    const root=app.renderer.root.findAll((n:any)=>typeof n.type==='string'&&'data-insulin-shell' in n.props);
@@ -41,24 +41,18 @@ for(const [who,session,editor] of [['an Admin',me('ADMIN',['esign.manage','esign
    assert.deepEqual(links(primary),[['Envelopes','/envelopes'],['Templates','/templates'],['Contacts','/contacts'],...(who==='an Admin'?[['Ownership','/ownership']]:[]),['Docs','/docs']],'Ownership is for admins');
    assert.ok(named(primary,'button','Settings'));
    assert.match(visibleText(primary.children),/^\s*Esign\b/,'the sections under the app\'s heading');
-   assert.equal(named(primary,'a','Envelopes').props['aria-current'],'true','the open section; its view is the page');
-   const section=app.byLabel('Section');
-   const views=links(section).map(([label]:[string])=>label);
-   assert.deepEqual(views,['All envelopes',...(editor?['New envelope']:[]),'Out for signature','Finishing','Completed','Declined','Expired','Voided']);
-   assert.match(visibleText(section.children),/Status/,'the status views under their heading');
-   assert.equal(named(section,'a','All envelopes').props['aria-current'],'page');
-   assert.equal(crumbs(app),'Envelopes All envelopes');
-   await app.click(named(section,'a','Completed'),'Completed');
+   assert.equal(named(primary,'a','Envelopes').props['aria-current'],'page','the open section is the page');
+   assert.equal(byId(app,'insulin-nav-l2').props.hidden,true,'Envelopes has no level 2: the list has its own filters');
+   assert.equal(crumbs(app),'Envelopes');
+   assert.equal(editor,!!app.link('New envelope'),'New envelope is on the page, for those who send');
+   // A status is the list's filter, at its own address.
+   await app.click(app.byLabel('Status filter'),'the Status filter');
+   await app.click(app.renderer.root.findAll((n:any)=>n.props?.role==='menuitemradio'&&visibleText(n.children).trim()==='Completed')[0],'Completed');
    assert.equal(app.location.pathname,'/envelopes');assert.equal(app.location.search,'?status=completed');
-   assert.ok(app.calls.some(c=>c.path==='/api/envelopes?status=COMPLETED'),'the list asks for that status');
-   assert.equal(app.byId('envelope-status').props.value,'COMPLETED','the filter agrees with the address');
-   assert.equal(named(app.byLabel('Section'),'a','Completed').props['aria-current'],'page');
-   assert.equal(crumbs(app),'Envelopes Completed');
-   await app.act(async()=>{app.byId('envelope-status').props.onChange({target:{value:'DECLINED'}});});await app.settle();
-   assert.equal(app.location.search,'?status=declined','choosing a status moves to its view');
-   assert.equal(named(app.byLabel('Section'),'a','Declined').props['aria-current'],'page');
-   await app.click(named(app.byLabel('Breadcrumb'),'a','Envelopes'),'the section in the breadcrumb');
-   assert.equal(app.location.pathname,'/envelopes');assert.equal(app.location.search,'');
+   assert.ok(app.calls.some(c=>c.path==='/api/envelopes?status=COMPLETED&limit=25'),'the list asks for that status');
+   assert.equal(visibleText(app.byLabel('Status filter').children).trim(),'Status: Completed','the filter agrees with the address');
+   await app.click(app.byLabel('Remove Status: Completed'),'its chip');
+   assert.equal(app.location.search,'');
    await app.click(named(app.byLabel('Primary'),'a','Templates'),'Templates');
    assert.equal(byId(app,'insulin-nav-l2').props.hidden,true,'Templates has no level 2');
    assert.equal(named(app.byLabel('Primary'),'a','Templates').props['aria-current'],'page');
@@ -97,11 +91,11 @@ test('a page outside the navigation keeps its section: an envelope, a new envelo
  }));
  try{
   assert.equal(crumbs(app),'Envelopes Envelope');
-  assert.equal(named(app.byLabel('Primary'),'a','Envelopes').props['aria-current'],'page','no view of it is the page');
-  assert.deepEqual(app.byLabel('Section').findAll((n:any)=>n.props['aria-current']==='page'),[]);
-  await app.click(named(app.byLabel('Section'),'a','New envelope'),'New envelope');
-  assert.equal(app.location.pathname,'/envelopes/new');assert.equal(crumbs(app),'Envelopes New envelope');
+  assert.equal(named(app.byLabel('Primary'),'a','Envelopes').props['aria-current'],'page','its section, with no level 2, stands for the page');
+  assert.equal(byId(app,'insulin-nav-l2').props.hidden,true);
  }finally{await app.unmount();}
+ const sending=await renderMember('/envelopes/new',routes(EDITOR));
+ try{assert.equal(crumbs(sending),'Envelopes New envelope');}finally{await sending.unmount();}
  const lost=await renderMember('/elsewhere',routes(EDITOR));
  try{
   assert.equal(crumbs(lost),'Page not found');
@@ -141,7 +135,8 @@ test('Settings opens People, Integrations, API access and Connect AI on the apex
 });
 
 test('each level collapses to its icons with their labels as tooltips, remembered in localStorage insulin-nav',async()=>{
- const app=await renderMember('/',routes(EDITOR));
+ // Docs has a level 2: its topics.
+ const app=await renderMember('/docs',routes(EDITOR));
  try{
   assert.equal(app.local.map.size,0,'nothing is stored until a level is collapsed');
   const toggle=app.byLabel('Collapse navigation');
@@ -153,10 +148,10 @@ test('each level collapses to its icons with their labels as tooltips, remembere
   const envelopes=named(app.byLabel('Primary'),'a','Envelopes');
   assert.equal(envelopes.props.title,'Envelopes');assert.equal(envelopes.props['aria-label'],'Envelopes');
   assert.equal(named(app.byLabel('Primary'),'button','Settings').props.title,'Settings');
-  assert.equal(named(app.byLabel('Section'),'a','Completed').props.title,undefined,'level 2 has its own toggle');
+  assert.equal(named(app.byLabel('Section'),'a','Roles and permissions').props.title,undefined,'level 2 has its own toggle');
   await app.click(app.byLabel('Collapse section'),'Collapse section');
   assert.equal(app.local.map.get('insulin-nav'),'{"l1":"collapsed","l2":"collapsed"}');
-  assert.equal(named(app.byLabel('Section'),'a','Completed').props.title,'Completed');
+  assert.equal(named(app.byLabel('Section'),'a','Roles and permissions').props.title,'Roles and permissions');
   assert.equal(app.byLabel('Expand section').props['aria-controls'],'insulin-nav-l2');
  }finally{await app.unmount();}
  const again=await renderMember('/',routes(EDITOR),{'insulin-nav':'{"l1":"collapsed","l2":"collapsed"}'});
@@ -230,7 +225,7 @@ test('below 768px a menu button opens both levels in a drawer, which Escape and 
   await app.keyDown(root,'Escape');
   assert.equal(byId(app,'insulin-nav').props['data-open'],'false');
   await app.click(menuButton(),'Open menu');
-  await app.click(named(app.byLabel('Section'),'a','Completed'),'Completed');
+  await app.click(named(app.byLabel('Primary'),'a','Templates'),'Templates');
   assert.equal(byId(app,'insulin-nav').props['data-open'],'false','choosing a page closes the drawer');
  }finally{await app.unmount();}
 });

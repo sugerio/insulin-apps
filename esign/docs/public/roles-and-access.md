@@ -35,8 +35,8 @@ them. A role in a template or an envelope never goes beyond your role in Esign: 
 Viewer of everything shared with you. **Share** in a template's ⋯ menu, or **Who sees it** on an envelope, shows its owner and
 the people it is shared with; its admins and owner share it there.
 
-Your **tags** on a template or an envelope are yours alone: nobody else sees them. Lists filter by them, and by
-**Mine** or **Shared with me**.
+Your **tags** on a template or an envelope are yours alone: nobody else sees them. Lists filter by them (**Tags**),
+and by whether they are yours or shared with you (**Sender** on Envelopes, **Owner** on Templates).
 
 **Ownership**, in the navigation of organization owners and admins:
 
@@ -63,7 +63,7 @@ specific apps, with a role in each. See [Organizations and roles](/docs/platform
 | Specific apps, without Esign | None | None | Esign isn't available to them. |
 
 The bottom of Esign's navigation shows your name and role. What your role can't do isn't shown (**New envelope** is
-only in the navigation of roles that send), and Esign refuses it on the server too, however it is asked: from the page,
+only on the Envelopes page of roles that send), and Esign refuses it on the server too, however it is asked: from the page,
 through the API or by an AI agent. A refused request answers `403 forbidden`, and the page
 says "Your role in Esign doesn't allow that."
 

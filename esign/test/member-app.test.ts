@@ -33,8 +33,8 @@ test('addresses name pages: envelopes, a new one, one by id, templates and the D
 test('an Editor sees the actions; a Viewer the same pages without them; a visitor is asked to sign in',async()=>{
  const routes=(who:unknown)=>(c:{path:string;method:string})=>{
   if(c.path==='/api/me')return json(who);
-  if(c.path==='/api/envelopes')return json({envelopes:[{id:ENV_ID,templateId:'tpl-1',status:'IN_PROGRESS',createdAt:0,documentName:'Mutual NDA'}]});
-  if(c.path==='/api/templates')return json({templates:[TEMPLATE]});
+  if(c.path==='/api/envelopes'||c.path.startsWith('/api/envelopes?'))return json({envelopes:[{id:ENV_ID,templateId:'tpl-1',status:'IN_PROGRESS',createdAt:0,documentName:'Mutual NDA'}]});
+  if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[TEMPLATE]});
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]));
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[]});
   if(c.path===`/api/envelopes/${ENV_ID}/shares`)return json(SHARING);
@@ -83,7 +83,7 @@ test('sending from a template: one signer per role, the document, a sign-by day,
  let fail=true;
  const app=await renderMember('/envelopes/new?template=tpl-1',c=>{
   if(c.path==='/api/me')return json(EDITOR);
-  if(c.path==='/api/templates')return json({templates:[TEMPLATE]});
+  if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[TEMPLATE]});
   if(c.path==='/api/envelopes'&&c.method==='POST'){if(fail){fail=false;return json({error:'unavailable'},503);}return json({id:ENV_ID,status:'IN_PROGRESS'},201);}
   if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]));
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[]});
@@ -137,7 +137,7 @@ test('templates: the roles and default signers are checked before the editor ope
  const SESSION='c'.repeat(64);
  const app=await renderMember('/templates',c=>{
   if(c.path==='/api/me')return json(EDITOR);
-  if(c.path==='/api/templates'&&c.method==='GET')return json({templates:[]});
+  if((c.path==='/api/templates'||c.path.startsWith('/api/templates?'))&&c.method==='GET')return json({templates:[]});
   if(c.path==='/api/template-editing-sessions'&&c.method==='POST')return json({sessionId:SESSION,url:`${ORIGIN}/editor/page/${SESSION}#${'d'.repeat(64)}`},201);
   if(c.path===`/api/template-editing-sessions/${SESSION}/source`)return json({},201);
  });
@@ -183,7 +183,7 @@ test('placing fields opens the editor on this origin, ignores other frames, and 
  let templates:unknown[]=[];
  const app=await renderMember('/templates',c=>{
   if(c.path==='/api/me')return json(EDITOR);
-  if(c.path==='/api/templates')return json({templates});
+  if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates});
   if(c.path==='/api/template-editing-sessions'&&c.method==='POST')return json({sessionId:SESSION,url:`${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}`},201);
   if(c.path===`/api/template-editing-sessions/${SESSION}/source`)return json({},201);
   if(c.path===`/api/template-editing-sessions/${SESSION}`)return json({templateId:SAVED});
@@ -287,7 +287,7 @@ test('voiding asks first, sends the reason, and the envelope says it is voided',
 test('Process due work says what it did, and a deployment without signing says so',async()=>{
  const app=await renderMember('/',c=>{
   if(c.path==='/api/me')return json({...EDITOR,signingEnabled:false});
-  if(c.path==='/api/envelopes')return json({envelopes:[]});
+  if(c.path==='/api/envelopes'||c.path.startsWith('/api/envelopes?'))return json({envelopes:[]});
   if(c.path==='/api/process-due')return json({expired:1,completed:2,waiting:0,failed:0});
  });
  try{
@@ -399,7 +399,7 @@ test('contacts: the address book lists, searches and adds; a contact\'s page cha
 test('sending: a contact suggested as a name or email is typed fills in the signer, title and company included',async()=>{
  const app=await renderMember('/envelopes/new?template=tpl-1',c=>{
   if(c.path==='/api/me')return json(EDITOR);
-  if(c.path==='/api/templates')return json({templates:[TEMPLATE]});
+  if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[TEMPLATE]});
   if(c.path.startsWith('/api/contacts?'))return json({contacts:[ANA]});
  });
  try{
@@ -437,7 +437,7 @@ test('sending: a template\'s default signers are filled in, can be changed, and 
  const OTHER_DEFAULTS={...TEMPLATE,id:'tpl-3',defaultSigners:{seller:{name:'Nia New',email:'nia@seller.example'}}};
  const app=await renderMember('/envelopes/new?template=tpl-2',c=>{
   if(c.path==='/api/me')return json(EDITOR);
-  if(c.path==='/api/templates')return json({templates:[TEMPLATE,WITH,OTHER_DEFAULTS]});
+  if(c.path==='/api/templates'||c.path.startsWith('/api/templates?'))return json({templates:[TEMPLATE,WITH,OTHER_DEFAULTS]});
   if(c.path.startsWith('/api/contacts?'))return json({contacts:[]});
  });
  try{

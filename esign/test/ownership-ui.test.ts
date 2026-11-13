@@ -22,6 +22,7 @@ test('a template\'s menu: its owner shares it by email and role, and tags it; th
     if (c.path === '/api/templates/tpl-1/shares') return json({ id: 'tpl-1', myRole: 'owner', owner: TEMPLATE.owner, shares });
     if (c.path === '/api/templates/tpl-1/tags') return json({ id: 'tpl-1', tags: JSON.parse(String(c.body)).tags });
     if (c.path.startsWith('/api/members?')) return json({ members: [{ id: 'u2', email: 'bo@example.com', name: 'Bo Example' }] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [{ tag: 'NDA', uses: 1 }] });
   });
   try {
     assert.match(app.text(), /You/, 'the owner column names the member');
@@ -45,11 +46,12 @@ test('a template\'s menu: its owner shares it by email and role, and tags it; th
     assert.deepEqual(JSON.parse(String(app.calls.find((c) => c.path === '/api/templates/tpl-1/tags')!.body)), { tags: [] });
     await app.click(app.button('Done'), 'Done');
     // Filters: shared with me, with two tags.
-    await app.type(app.byId('templates-scope'), 'shared');
-    await app.settle();
-    await app.type(app.byId('templates-tags'), 'nda, Partners');
-    await app.keyDown(app.byId('templates-tags'), 'Enter');
-    assert.ok(app.calls.some((c) => c.path === '/api/templates?scope=shared&tag=nda&tag=Partners'), app.calls.map((c) => c.path).join('\n'));
+    await app.click(app.byLabel('Owner filter'), 'Owner');
+    await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitemradio' && visibleText(n.children).trim() === 'Shared with me')[0], 'shared');
+    await app.click(app.byLabel('Tags filter'), 'Tags');
+    await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitemcheckbox' && visibleText(n.children).trim() === 'NDA')[0], 'NDA');
+    assert.ok(app.calls.some((c) => c.path === '/api/templates?scope=shared&tag=NDA&limit=25'), app.calls.map((c) => c.path).join('\n'));
+    assert.ok(app.byLabel('Remove Owner: Shared with me') && app.byLabel('Remove Tag: NDA'), 'each filter as a chip');
   } finally { await app.unmount(); }
 });
 
@@ -58,7 +60,7 @@ test('a template\'s menu: Edit renames it and changes its default signers, or op
   const SESSION = 'e'.repeat(64);
   const app = await renderMember('/templates', (c) => {
     if (c.path === '/api/me') return json(EDITOR);
-    if (c.path === '/api/templates') return json({ templates: [TEMPLATE, shared] });
+    if (c.path === '/api/templates' || c.path.startsWith('/api/templates?')) return json({ templates: [TEMPLATE, shared] });
     if (c.path === '/api/templates/tpl-1' && c.method === 'POST') return json({ id: 'tpl-1', name: 'Mutual NDA v2' });
     if (c.path === '/api/templates/tpl-1/default-signers') return json({ id: 'tpl-1', defaultSigners: {} });
     if (c.path === '/api/templates/tpl-1/delete') return json({ id: 'tpl-1', deleted: true });

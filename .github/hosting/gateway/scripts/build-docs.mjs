@@ -9,7 +9,9 @@
 // Each page is rendered with React on the server (scripts/docs/), in the gateway's shadcn style: the two-level
 // navigation (the sections, each with its icon, then the open section's pages), the article, its table of contents,
 // previous and next. The module also holds each page's Markdown, for llms.txt,
-// llms-full.txt and the .md address of every page. The result is committed, so the deploy needs no docs step.
+// llms-full.txt and the .md address of every page; the search index (each page's passages, scripts/docs/search-index.mjs)
+// and the navigation around /docs/search, for src/docs-search.ts, the search page, its JSON and the docs' MCP server. The
+// result is committed, so the deploy needs no docs step.
 //
 // npm run check:docs (`--check`) writes nothing and fails while the committed module differs from a fresh build; the
 // test suite runs the same check. `--allow-todo` and `--allow-missing-images` render diagram placeholders and missing
@@ -23,8 +25,9 @@ import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { listApps } from '../../../scripts/list-apps.mjs'
 import { appIconName } from '../src/nav-icons.ts'
-import { DocsIndex, DocsPage } from './docs/layout.mjs'
+import { DocsIndex, DocsPage, DocsSearch, SEARCH_SLOT } from './docs/layout.mjs'
 import { DocsError, collectHeadings, lex, parseFrontMatter, renderTokens, textForAgents } from './docs/markdown.mjs'
+import { searchIndex } from './docs/search-index.mjs'
 
 export const gatewayDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const repositoryDir = resolve(gatewayDir, '..', '..', '..')
@@ -87,6 +90,8 @@ async function readSources() {
   const sources = [{ ...PLATFORM, dir: PLATFORM_DOCS }]
   for (const app of apps) {
     if (app.name === PLATFORM.slug) throw new DocsError(`an app named "${PLATFORM.slug}" would share the platform's docs section`)
+    // /docs/assets/, /docs/search and /docs/mcp are the docs' own addresses, not sections.
+    if (['assets', 'search', 'mcp'].includes(app.name)) throw new DocsError(`an app named "${app.name}" would take /docs/${app.name}, which the docs use`)
     sources.push({ slug: app.name, title: app.title, summary: app.summary, icon: appIconName(app.name), dir: join(repositoryDir, app.name, 'docs', 'public') })
   }
   const sections = []
@@ -124,7 +129,7 @@ export async function loadDocs({ allowTodo = false, allowMissingImages = false }
     allowTodo,
     allowMissingImages,
     image: (src) => assets.get(src) ?? null,
-    anchors: (path) => (path === '/docs/' ? new Set() : path === '/docs/llms.txt' || path === '/docs/llms-full.txt' ? new Set() : byPath.get(path) ? new Set(byPath.get(path).headings.map((heading) => heading.id)) : null),
+    anchors: (path) => (['/docs/', '/docs/llms.txt', '/docs/llms-full.txt', '/docs/search'].includes(path) ? new Set() : byPath.get(path) ? new Set(byPath.get(path).headings.map((heading) => heading.id)) : null),
   }
   pages.forEach((page, index) => {
     const link = (other) => (other ? { path: other.path, title: other.title, sectionTitle: other.section.title } : null)
@@ -153,7 +158,9 @@ export async function buildDocs({ allowTodo = false, allowMissingImages = false 
       markdown: `# ${page.title}\n\n> ${page.description}\n\n${textForAgents(page.body)}\n`,
     }
   }
-  return docsModule(out, Object.fromEntries(sections.map((section) => [section.slug, section.pages[0].path])), llmsTxt(sections))
+  const search = render(h(DocsSearch, { site }), 'the search page')
+  if (search.split(SEARCH_SLOT).length !== 2) throw new DocsError('the search page needs its slot once')
+  return docsModule(out, Object.fromEntries(sections.map((section) => [section.slug, section.pages[0].path])), llmsTxt(sections), searchIndex(sections), search)
 }
 
 /** React's static markup, refused if anything in it could run or style itself. */
@@ -171,6 +178,8 @@ function llmsTxt(sections) {
     '> Open-source business apps hosted at insulinapps.com: one account and organization for every app, roles from Owner to Viewer, AI agents over MCP and service accounts for each app\'s API.',
     '',
     `These pages explain how to set up an organization, sign in, manage people and roles, connect AI agents and call the API, and how to use each app. Each link is the page's Markdown; the same page as HTML is at the address without .md. ${ORIGIN_TOKEN}/docs/llms-full.txt has every page in one file.`,
+    '',
+    `To search them, with no sign-in: GET ${ORIGIN_TOKEN}/docs/search.json?q=<words> answers in JSON, each result with its page, section and a passage; and the docs' MCP server at ${ORIGIN_TOKEN}/docs/mcp (Streamable HTTP, no OAuth) has the tools search_docs, read_doc and list_docs.`,
   ]
   for (const section of sections) {
     lines.push('', `## ${section.title}`, '', ...section.pages.map((page) => `- [${page.title}](${ORIGIN_TOKEN}${page.path}.md): ${page.description}`))
@@ -178,7 +187,7 @@ function llmsTxt(sections) {
   return `${lines.join('\n')}\n`
 }
 
-function docsModule(pages, sections, llms) {
+function docsModule(pages, sections, llms, search, searchHtml) {
   return [
     '// Generated by `npm run build:docs` from the docs\' Markdown (.github/hosting/docs/, <app>/docs/public/): do not edit.',
     '// The pages of /docs/, rendered with React at build time (scripts/docs/); src/docs.ts serves them.',
@@ -203,6 +212,22 @@ function docsModule(pages, sections, llms) {
     '',
     '/** /docs/llms.txt. */',
     `export const DOCS_LLMS_TXT = ${JSON.stringify(llms)}`,
+    '',
+    '/** A page as the search sees it: cut at its headings into passages of plain text, each under its anchor (null: the top). */',
+    'export interface DocsSearchPage {',
+    '  readonly path: string',
+    '  readonly title: string',
+    '  readonly section: string',
+    '  readonly sectionSlug: string',
+    '  readonly description: string',
+    '  readonly passages: readonly { readonly anchor: string | null; readonly heading: string | null; readonly text: string }[]',
+    '}',
+    '',
+    '/** Every page in reading order, for src/docs-search.ts. */',
+    `export const DOCS_SEARCH_INDEX: readonly DocsSearchPage[] = ${JSON.stringify(search, null, 1)}`,
+    '',
+    `/** /docs/search below the top bar: the navigation, and ${SEARCH_SLOT} where the search box and results go. */`,
+    `export const DOCS_SEARCH_HTML = ${JSON.stringify(searchHtml)}`,
     '',
   ].join('\n')
 }

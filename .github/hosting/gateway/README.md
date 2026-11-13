@@ -7,7 +7,7 @@ over a service binding with the console identity headers. The apps need no hosti
 
 | Host | What it serves |
 |---|---|
-| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; the public docs at `/docs/` (every page, `/docs/llms.txt`, `/docs/llms-full.txt`, each page's `.md`, and the images at `/docs/assets/*`); sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`; each app's `/apps/<app>/settings/users`, `/apps/<app>/settings/integrations`, `/apps/<app>/settings/api` (API access) and `/apps/<app>/settings/connect-ai` (Connect AI); invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
+| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; `/robots.txt`, `/sitemap.xml`, `/llms.txt` and `/llms-full.txt`; the public docs at `/docs/` (every page, `/docs/llms.txt`, `/docs/llms-full.txt`, each page's `.md`, the images at `/docs/assets/*`, the search at `/docs/search` and `/docs/search.json`, and the docs' MCP server at `/docs/mcp`); sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`, `/settings/oauth-clients`; each app's `/apps/<app>/settings/users`, `/apps/<app>/settings/integrations`, `/apps/<app>/settings/api` (API access) and `/apps/<app>/settings/connect-ai` (Connect AI); invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
 | `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
@@ -40,11 +40,12 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/roles.ts` | organization roles, app roles, permissions and who may give what |
 | `src/owner-domain.ts` | owner domains (registrable domain, or a provider address in Gmail's form), the public mail providers, and the strict check `allow-orgs.mjs` and the request to support apply; pure, so the script imports it too |
 | `src/access.ts` | someone's role and permissions in one app, from their organization role or their grant; every way into an app ends here |
-| `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), access in forms and words (`access-forms.ts`) |
+| `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), every OAuth client of the organization (`oauth-clients.ts`), access in forms and words (`access-forms.ts`) |
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
 | `src/scheduled.ts` | the crons: the apps' five-minute tick to their `insulin.scheduled` path, and which cron runs the daily cleanup |
 | `src/oauth/` | the authorization server: metadata, registration, authorize and consent, token, revoke; token formats and lifetimes, `resolveBearer`, and calls to an app with a token (`app-api.ts`) |
 | `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
+| `src/mcp/docs.ts` | the docs' MCP server at `/docs/mcp` on the apex: public, no sign-in, tools `search_docs`, `read_doc`, `list_docs` |
 | `src/mcp/connect-ai.ts` | an app's Connect AI page (`/apps/<app>/settings/connect-ai`): its MCP server and each client's setup, the person's agents for the app, and everyone's for owners and admins, with Disconnect |
 | `src/integrations/` | an app's integrations page (`settings.ts`, stored credentials), its API access page (`api-clients.ts`, OAuth clients: owners and admins manage them, rotation with a 24-hour overlap) and the integration proxy (`proxy.ts`) |
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, disconnecting them, and links to each app's Connect AI |
@@ -56,7 +57,9 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/pages/` | the pages, as React components; `pages/document.tsx` is the shared document (the top bar or, signed in, the navigation; footer, favicon links); `settings.tsx` the organization's settings; `app-settings.tsx` an app's settings frame and People page, with `integrations.tsx`, `api-access.tsx` and `connect-ai.tsx` its other pages |
 | `src/pages/html.ts` | the `html` tag, which escapes the HTML of the e-mails (React escapes the pages) |
 | `src/docs.ts`, `src/pages/docs.tsx` | `/docs/` on the apex: the pages from `src/assets/docs-content.ts` in the shared document, `llms.txt`, `llms-full.txt`, each page's `.md`, and `/docs/assets/*` from the `DOCS_ASSETS` binding |
-| `scripts/build-docs.mjs`, `scripts/docs/` | `npm run build:docs`: the Markdown of `.github/hosting/docs/` and every app's `docs/public/` rendered with React (`markdown.mjs`; `layout.mjs`, with the two-level navigation) into `src/assets/docs-content.ts`, with the diagram blocks drawn as SVG (`diagram.mjs`) |
+| `src/docs-search.ts`, `src/pages/docs-search.tsx` | searching the docs: the passages of the generated index ranked in memory, for `/docs/search` (the page), `/docs/search.json` and the docs' MCP server |
+| `src/crawl.ts` | `/robots.txt` and `/sitemap.xml` on the apex |
+| `scripts/build-docs.mjs`, `scripts/docs/` | `npm run build:docs`: the Markdown of `.github/hosting/docs/` and every app's `docs/public/` rendered with React (`markdown.mjs`; `layout.mjs`, with the two-level navigation) into `src/assets/docs-content.ts`, with the diagram blocks drawn as SVG (`diagram.mjs`) and the search index (`search-index.mjs`) |
 | `src/components/ui/` | shadcn/ui components (new-york style), as the shadcn CLI writes them; see "shadcn/ui" below |
 | `src/components/` | the gateway's own pieces: top bar, the navigation (`shell.tsx`, with the manifest's icons in `nav-icon.tsx`), footer, `<details>` menus, form fields, brand marks |
 | `src/lib/utils.ts` | `cn()`, shadcn's class-name helper (`clsx` and `tailwind-merge`) |
@@ -149,6 +152,20 @@ account; the pages are public, indexable and under the usual CSP. `/docs/llms.tx
 agents, `/docs/llms-full.txt` holds all of them, and each page's Markdown is at its address with `.md`. Commit the
 regenerated module with the change; `npm test` fails while it is stale, and the gateway workflow runs when a docs page
 changes.
+
+**Search, crawlers and agents** (`.github/hosting/docs/searching-the-docs.md` is the page for readers). The build also
+cuts each page at its headings into passages of plain text, each under its anchor (`scripts/docs/search-index.mjs`),
+and renders the navigation around `/docs/search` with a slot for the results. `src/docs-search.ts` ranks those
+passages in memory per request: a word matches the words starting with its stem, a heading counts most, then the
+page's title, its description and the passage's text; a passage with every word comes first, and only the pages with
+the most of the words are listed. Three entries use it, all public and limited per IP (`allowPublic`, `RL_APP`):
+`/docs/search?q=` (a page, not indexed, `robots.txt` keeps crawlers off its results), `/docs/search.json?q=&limit=`
+(CORS open) and the docs' MCP server at `/docs/mcp` (`src/mcp/docs.ts`: stateless JSON-RPC like the apps' servers, no
+OAuth; `search_docs`, `read_doc`, `list_docs`). Every page has a search box at the top of level 1 (above the menu on
+narrow screens), Open Graph tags (`src/pages/document.tsx`, on every page with a description) and schema.org
+microdata, `TechArticle` and `BreadcrumbList`, written as attributes because JSON-LD would need a `<script>`.
+`/robots.txt` allows every crawler, `/sitemap.xml` lists the landing page, privacy, terms and every docs page, and
+`/llms.txt` and `/llms-full.txt` are the docs' own, at the root.
 
 The screenshots in `.github/hosting/docs/assets/screenshots/` come from a real local run, driven in Chrome with
 Playwright through synthetic data (`.github/hosting/docs/screenshots.mjs`, a small package with its own lockfile):

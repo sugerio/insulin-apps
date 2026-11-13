@@ -26,8 +26,11 @@ every app. Each app also has its own `AGENTS.md` with app-specific rules; read b
    `GET /api/catalog` publishes it) and its domain background, labelled general information, not advice. It is updated
    in the same change as the behaviour it describes, like the in-app Docs, with synthetic data only. Then run
    `npm run build:docs` in `.github/hosting/gateway/` and commit the regenerated `src/assets/docs-content.ts`
-   (`npm run check:docs` fails while it is stale). The platform's own pages are in `.github/hosting/docs/`; the format
-   is in the gateway's README under "The public docs".
+   (`npm run check:docs` fails while it is stale), which also rebuilds the docs' search: the pages are open to search
+   engines and AI crawlers (`robots.txt`, `sitemap.xml`, `llms.txt`), searchable at `/docs/search`, and readable by
+   agents through the docs' MCP server at `https://insulinapps.com/docs/mcp`, so headings that name the task help people
+   and agents find it. The platform's own pages are in `.github/hosting/docs/`; the format is in the gateway's README
+   under "The public docs".
 3. **UI.** New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default theme (the hosting gateway in
    `.github/hosting/gateway/` follows it). Apps that already have their own design keep it until they are restyled.
    **Navigation:** every app has the two-level, collapsible navigation of
@@ -91,6 +94,10 @@ client registration per agent, and API clients (OAuth clients, stored as service
   rotate and delete an app's OAuth clients, on its API access page (`/apps/<app>/settings/api`); an app's Admins by
   grant can't. Everyone who can use the app sees the list, never a secret. Rotating keeps the previous secret valid for
   24 hours. Stored credentials stay with the app's admins, on the integrations page.
+- **The organization's OAuth clients.** Its Owners and Admins, and no one else, see every app's OAuth clients and
+  everyone's AI agents at `insulinapps.com/settings/oauth-clients`, with who created each, when and when it was last
+  used. They revoke one there (its access ends at once and it stays listed, marked revoked) or delete it; nobody sees
+  or rotates a secret there. A secret is shown once, when it is made or rotated on the app's API access page.
 - **Same role as the person.** An agent acts with its person's current role; an API client has the role an owner or
   admin gave it. The app sees the same headers as for a browser, with `x-suger-access-via: mcp` or `api`, and a
   `User-Agent` naming the client (`Insulin Apps MCP: <client>` or `Insulin Apps API: <account>`) for its audit trail.

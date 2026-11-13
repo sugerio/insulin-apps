@@ -10,7 +10,7 @@ are in the repository's [AGENTS.md](../../AGENTS.md).
 
 | Host | Serves |
 |---|---|
-| `insulinapps.com` | The single entry for everything that is not an app: landing, privacy and terms; the public docs at `/docs/` (generated from `.github/hosting/docs/` and each app's `docs/public/`, with `/docs/llms.txt` for AI agents and the images at `/docs/assets/*` from the static-assets binding); sign-up, sign-in, MFA, Google and enterprise SSO; account and organizations; `/settings/users` and `/settings/roles` (the organization's people and roles); `/settings/organization` (name, who can be invited, leave, delete); `/settings/sso` (SAML or OIDC and SCIM); each app's settings: people, integrations, API access and Connect AI at `/apps/<app>/settings/users`, `/integrations`, `/api` and `/connect-ai`; the OAuth authorization server for MCP clients and OAuth clients (service accounts); SCIM. |
+| `insulinapps.com` | The single entry for everything that is not an app: landing, privacy and terms; the public docs at `/docs/` (generated from `.github/hosting/docs/` and each app's `docs/public/`, with `/docs/llms.txt` for AI agents and the images at `/docs/assets/*` from the static-assets binding), searchable at `/docs/search` and `/docs/search.json` and through the docs' own MCP server at `/docs/mcp`, all public with no sign-in and limited per IP; `/robots.txt` (every crawler, AI crawlers included, may read all but the search results), `/sitemap.xml` (the landing page, privacy, terms and every docs page) and `/llms.txt`; sign-up, sign-in, MFA, Google and enterprise SSO; account and organizations; `/settings/users` and `/settings/roles` (the organization's people and roles); `/settings/organization` (name, who can be invited, leave, delete); `/settings/oauth-clients` (every OAuth client of the organization, §5.4); `/settings/sso` (SAML or OIDC and SCIM); each app's settings: people, integrations, API access and Connect AI at `/apps/<app>/settings/users`, `/integrations`, `/api` and `/connect-ai`; the OAuth authorization server for MCP clients and OAuth clients (service accounts); SCIM. |
 | `auth.insulinapps.com` | A 308 redirect to the same path on the apex, so links in e-mails already sent keep working. |
 | `www.insulinapps.com` | A 301 redirect to the apex. |
 | `<app>.insulinapps.com` | The app, plus the gateway's endpoints on that host: `/mcp` and its OAuth metadata, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which only redirect (GET) to the app's settings on the apex. Everything else goes to the app Worker: after sign-in, or, on the paths the app declares public (§8.1), for anyone, with no identity. |
@@ -215,7 +215,7 @@ pages (landing, sign-in, the docs), invitations, the consent page and the messag
 
 - **The organization's pages**: level 1 is Home; **Apps**, the deployed apps the person can use in that organization,
   each opening on its own host; **Settings**: People and Organization for everyone, Roles for an organization role,
-  Single sign-on for owners; and the platform's Docs at the bottom. No level 2; the breadcrumb is Settings › the page.
+  OAuth clients for owners and admins, Single sign-on for owners; and the platform's Docs at the bottom. No level 2; the breadcrumb is Settings › the page.
 - **The account pages**: the organization's level 1, and **Account** in level 2: Profile, Security, AI agents.
 - **An app's settings pages**: the app's level 1 with the items the person's role in that app reaches (a custom role
   counts as the built-in role it is sent as, §2.4), consecutive items of one `group` under one heading, and no
@@ -323,8 +323,8 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
   (`x-suger-access-via: mcp`), and the app sees `User-Agent: Insulin Apps MCP: <client name>`, which its audit trail can
   record. Leaving or being removed from an organization deletes the person's grants there, so a later invitation
   doesn't bring old agents back, and a credential change (a password set, changed or reset, two-step sign-in turned
-  on or off) deletes all of them, so an agent connected by someone who took over the account doesn't outlive its
-  recovery.
+  on or off) deletes all their live ones, so an agent connected by someone who took over the account doesn't outlive
+  its recovery (a revoked one, which holds no token, stays on the organization's list, §5.4).
 - **Limits.** The token endpoint is limited per IP before anything is checked, and per client only on failed
   attempts, so junk requests naming a public client id can't lock that client out. A JSON-RPC batch holds at most 10
   messages, and every tool call in one counts against the person's app rate.
@@ -383,6 +383,39 @@ role in that app (Admin, Editor, Viewer or a custom role).
   the current secret's tokens are untouched. A previous secret that simply reaches its 24 hours issues no more tokens,
   and those it issued run out within the hour. Delete ends the client, its secrets and all its tokens at once. Tokens
   issued before migration `0008` recorded no secret and count as the previous secret's.
+- **Revoked.** A client revoked on `/settings/oauth-clients` (§5.4) stays on the page, marked Revoked with the day, and
+  can't be renamed, given another role or rotated; Delete still removes it.
+
+### 5.4 OAuth clients across the organization
+
+`insulinapps.com/settings/oauth-clients` (Settings › OAuth clients, §3.2) lists every OAuth client of the organization in
+one table, for its owners and admins only: each app's clients for API access (§5.3) and every member's AI agents
+(§5.2, a grant each), of every app.
+
+- **Who opens it.** The organization's owners and admins; the item isn't in anyone else's navigation, an editor, viewer
+  or specific-apps member (an app admin by grant included) gets 403, and someone outside the organization 404. The
+  list and every write re-check OWNER or ADMIN in their own statement, so an admin demoted meanwhile reads and changes
+  nothing.
+- **What it shows.** For each client: its name (and client id for API access), the app (and role for API access), the
+  type (API access, or AI agent (MCP)), who created it (the owner or admin who made an API client; the person who
+  connected an agent, as whom it acts), when, when it was last used, and its status: Active (an agent's with the day its
+  grant expires) or Revoked, with the day and who revoked it. A creator whose account is gone reads "A deleted
+  account". Expired agents aren't listed.
+- **No secret, no rotation.** The page never shows a secret, a secret's hash or a way to rotate one. A secret is shown
+  once, on the app's API access page, when it is made or rotated (§5.3); the page links there for each app.
+- **Revoke** ends a client's access at once and keeps it listed. For an API client, one batch records `revoked_at` and
+  `revoked_by`, drops its previous secret and deletes its tokens; the token endpoint then refuses it
+  (`invalid_client`), whichever secret it presents, and its API access page shows it Revoked without rename, role or
+  rotation (the writes refuse it too). For an agent, one batch records the same on its grant and deletes the grant's
+  tokens and codes; its access token gets 401, its refresh token `invalid_grant`, and the person's own lists (Account ›
+  AI agents, Connect AI) no longer show it. The person can allow the agent again, which makes a new grant. Every token
+  check refuses a revoked client or grant, not only the deleted tokens, so nothing issued in the meantime works.
+  Revoking something already revoked or gone changes nothing and answers 409, as does an id from another organization,
+  so ids reveal nothing.
+- **Delete** removes the client or the grant and, with it, its tokens. A revoked agent is deleted anyway when its grant
+  would have expired (the daily cleanup), or when its person leaves the organization. Only the organization's owners
+  and admins delete it before then: the person's own Disconnect (Account › AI agents, Connect AI) reaches only live
+  agents, and a credential change leaves it.
 
 ## 6. Integrations
 
@@ -572,6 +605,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | `0007_org_limits` | `orgs.invite_verified_domains_only` (§3) and `orgs.owner_domain`, filled from each creator's address; `org_domain_allowances`; `mail_log.user_id` for the per-person cap on requests (§3.1) |
 | `0008_api_clients` | `service_accounts.previous_secret_hash`, `previous_secret_expires_at` and `secret_rotated_at` (rotation with a 24-hour overlap, §5.3); `oauth_tokens.client_secret_hash`, the secret that issued a client's token |
 | `0009_owner_domains` | `orgs.owner_domain` filled where it was missing and Gmail owner domains (and allowances) in one form; `mail_log.owner_domain_hash` for the per-domain cap on requests (§3.1) |
+| `0010_oauth_client_revocation` | `revoked_at` and `revoked_by` on `service_accounts` and `oauth_grants` (§5.4) |
 
 ## 10. Configuration added
 

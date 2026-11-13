@@ -2,13 +2,16 @@
 // Platform, one item per app, and the files for AI agents at the bottom; level 2: the open section's pages under its
 // title), the article, its table of contents, previous and next, and the /docs/ index. The navigation is static: the
 // docs are public, so it has no organization switcher, no person and no per-request state, and its levels don't
-// collapse. On narrow screens a <details> menu above the article holds both levels. The gateway puts the result inside
-// its shared document (top bar and footer), per request (src/pages/docs.tsx). Classes are Tailwind's, in shadcn's
+// collapse. On narrow screens a <details> menu above the article holds both levels. A search box (a plain GET form to
+// /docs/search) heads level 1, and on narrow screens sits above the menu, so one shows at a time (/docs/search has its
+// own instead). Pages carry schema.org microdata (TechArticle,
+// BreadcrumbList) as attributes: JSON-LD would need a <script>, which the docs never have. The gateway puts the result
+// inside its shared document (top bar and footer), per request (src/pages/docs.tsx). Classes are Tailwind's, in shadcn's
 // neutral theme, the navigation in its sidebar colours and spacing as components/shell.tsx draws them;
 // src/styles/gateway.css scans this directory for them.
-import { createElement as h } from 'react'
+import { Fragment, createElement as h } from 'react'
 import * as lucide from 'lucide-react'
-import { ArrowRight, Bot, BookOpen, ChevronLeft, ChevronRight, KeyRound, Menu, Rocket } from 'lucide-react'
+import { ArrowRight, Bot, BookOpen, ChevronLeft, ChevronRight, KeyRound, Menu, Rocket, Search } from 'lucide-react'
 
 const CARD = 'flex flex-col gap-1.5 rounded-xl border bg-card p-4 text-card-foreground shadow-xs transition-colors hover:bg-accent/60'
 
@@ -21,6 +24,13 @@ const PAGE_ITEM = `flex min-h-8 w-full items-center rounded-md px-2 py-1.5 text-
 const GROUP_LABEL = 'flex h-8 shrink-0 items-center px-2 text-xs font-medium tracking-wider text-sidebar-foreground/70 uppercase'
 /** A column of the navigation on wide screens, below the top bar (3.5rem), scrolling on its own. */
 const COLUMN = 'sticky top-14 hidden h-[calc(100svh-3.5rem)] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex'
+
+/** shadcn's Input, a size smaller to sit in the navigation, and an outline icon button beside it. */
+const SEARCH_INPUT = 'h-8 w-full min-w-0 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50'
+const SEARCH_BUTTON = 'inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground shadow-xs outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&>svg]:size-4'
+
+/** Where the gateway puts the search box and results on /docs/search (src/pages/docs-search.tsx). */
+export const SEARCH_SLOT = '<div data-docs-search-slot=""></div>'
 
 /** Lucide's older names for two icons, mapped as components/nav-icon.tsx maps them. */
 const ICON_ALIASES = { home: 'house', 'check-circle': 'circle-check' }
@@ -74,6 +84,13 @@ function Groups({ groups, idPrefix }) {
   })
 }
 
+/** A search box: a GET form to /docs/search, a named search landmark. It has no id, so a page can hold two (one per width). */
+export function SearchForm({ className = '' }) {
+  return h('form', { action: '/docs/search', method: 'get', role: 'search', 'aria-label': 'Search the docs', className: `flex items-center gap-2 ${className}`.trim() },
+    h('input', { type: 'search', name: 'q', required: true, maxLength: 200, placeholder: 'Search the docs', 'aria-label': 'Search the docs', className: SEARCH_INPUT }),
+    h('button', { type: 'submit', className: SEARCH_BUTTON }, h(Search, { 'aria-hidden': 'true' }), h('span', { className: 'sr-only' }, 'Search')))
+}
+
 /** Level 2: the open section's pages, the current one marked. */
 function Pages({ section, current, labelledBy }) {
   return h('ul', { 'aria-labelledby': labelledBy, className: 'flex flex-col gap-1' },
@@ -81,12 +98,16 @@ function Pages({ section, current, labelledBy }) {
       h('a', { href: page.path, className: PAGE_ITEM, ...(page.path === current ? { 'aria-current': 'page', 'data-active': 'true' } : {}) }, page.title))))
 }
 
-/** The columns on wide screens: level 1, then level 2 when a section is open (on every page but /docs/). */
-function Navigation({ site, current }) {
+/**
+ * The columns on wide screens: level 1, headed by the search box (not on /docs/search, `search` false, which has its
+ * own), then level 2 when a section is open (on every page but /docs/).
+ */
+function Navigation({ site, current, search = true }) {
   const { open, groups, agents } = primaryOf(site, current)
   return [
     h('nav', { key: 'primary', 'aria-label': 'Documentation', 'data-slot': 'docs-nav-primary', className: `${COLUMN} z-20 w-60` },
       h('div', { className: 'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-2' },
+        search ? h(SearchForm) : null,
         h(Groups, { groups, idPrefix: 'docs-nav' }),
         h('div', { className: 'mt-auto flex flex-col' }, h(Groups, { groups: [agents], idPrefix: 'docs-nav' })))),
     open ? h('nav', { key: 'section', 'aria-label': 'Section', 'data-slot': 'docs-nav-section', className: `${COLUMN} z-10 w-56` },
@@ -97,10 +118,15 @@ function Navigation({ site, current }) {
   ]
 }
 
-/** Below 1024px, a <details> menu above the article with both levels: level 1, the open section's pages, the agents' files. */
-function MobileNav({ site, current }) {
+/**
+ * Below 1024px, a search box and a <details> menu above the article, with both levels: level 1, the open section's pages,
+ * the agents' files. /docs/search has its own search box instead (`search` false).
+ */
+function MobileNav({ site, current, search = true }) {
   const { open, groups, agents } = primaryOf(site, current)
-  return h('details', { className: 'group mb-8 rounded-lg border lg:hidden' },
+  return h(Fragment, null,
+    search ? h(SearchForm, { className: 'mb-3 lg:hidden' }) : null,
+    h('details', { className: 'group mb-8 rounded-lg border lg:hidden' },
     h('summary', { className: 'flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden' },
       h(Menu, { className: 'size-4', 'aria-hidden': 'true' }),
       'Documentation menu',
@@ -110,15 +136,19 @@ function MobileNav({ site, current }) {
       open ? h('div', { 'data-slot': 'docs-menu-section', className: 'flex flex-col gap-2 border-t border-sidebar-border pt-4' },
         h('div', { id: 'docs-menu-section-title', className: 'px-2 text-sm font-semibold' }, open.title),
         h(Pages, { section: open, current, labelledBy: 'docs-menu-section-title' })) : null,
-      h('div', { className: 'flex flex-col border-t border-sidebar-border pt-2' }, h(Groups, { groups: [agents], idPrefix: 'docs-menu' }))))
+      h('div', { className: 'flex flex-col border-t border-sidebar-border pt-2' }, h(Groups, { groups: [agents], idPrefix: 'docs-menu' })))))
 }
 
+/** Docs › the section, as a schema.org BreadcrumbList too. */
 function Breadcrumb({ section }) {
+  const crumb = (href, name, position) => h('li', { itemProp: 'itemListElement', itemScope: true, itemType: 'https://schema.org/ListItem' },
+    h('a', { href, itemProp: 'item', className: 'hover:text-foreground' }, h('span', { itemProp: 'name' }, name)),
+    h('meta', { itemProp: 'position', content: String(position) }))
   return h('nav', { 'aria-label': 'Breadcrumb', className: 'mb-4 text-sm text-muted-foreground' },
-    h('ol', { className: 'flex flex-wrap items-center gap-1.5' },
-      h('li', null, h('a', { href: '/docs/', className: 'hover:text-foreground' }, 'Docs')),
+    h('ol', { className: 'flex flex-wrap items-center gap-1.5', itemScope: true, itemType: 'https://schema.org/BreadcrumbList' },
+      crumb('/docs/', 'Docs', 1),
       section ? h('li', { className: 'flex items-center gap-1.5', 'aria-hidden': 'true' }, h(ChevronRight, { className: 'size-3.5' })) : null,
-      section ? h('li', null, h('a', { href: section.pages[0].path, className: 'hover:text-foreground' }, section.title)) : null))
+      section ? crumb(section.pages[0].path, section.title, 2) : null))
 }
 
 function TableOfContents({ headings }) {
@@ -160,10 +190,10 @@ export function DocsPage({ site, page, body }) {
       h('div', { className: 'min-w-0 py-8 lg:py-10' },
         h(MobileNav, { site, current: page.path }),
         h(Breadcrumb, { section: page.section }),
-        h('article', { className: 'max-w-3xl text-[0.9375rem] text-pretty' },
+        h('article', { className: 'max-w-3xl text-[0.9375rem] text-pretty', itemScope: true, itemType: 'https://schema.org/TechArticle' },
           h('header', { className: 'mb-10 flex flex-col gap-3' },
-            h('div', { className: 'text-3xl font-semibold tracking-tight text-balance sm:text-4xl' }, h('h1', null, page.title)),
-            h('p', { className: 'text-lg text-muted-foreground text-balance' }, page.description)),
+            h('div', { className: 'text-3xl font-semibold tracking-tight text-balance sm:text-4xl', itemProp: 'headline' }, h('h1', null, page.title)),
+            h('p', { className: 'text-lg text-muted-foreground text-balance', itemProp: 'description' }, page.description)),
           body),
         h('div', { className: 'max-w-3xl' }, h(PreviousNext, { previous: page.previous, next: page.next }))),
       h(TableOfContents, { headings: page.headings })))
@@ -209,6 +239,21 @@ export function DocsIndex({ site, next }) {
             h('a', { href: '/docs/llms.txt', className: 'font-medium text-foreground underline underline-offset-4' }, '/docs/llms.txt'),
             ' lists them, ',
             h('a', { href: '/docs/llms-full.txt', className: 'font-medium text-foreground underline underline-offset-4' }, '/docs/llms-full.txt'),
-            ' has all of them in one file, and each page is at its address with .md added.')),
+            ' has all of them in one file, and each page is at its address with .md added. Agents can search them too, with no sign-in: ',
+            h('code', { className: 'font-mono text-foreground' }, '/docs/search.json?q='),
+            ' answers in JSON, and the docs\' MCP server at ',
+            h('code', { className: 'font-mono text-foreground' }, '/docs/mcp'),
+            ' has the tools search_docs, read_doc and list_docs. ',
+            h('a', { href: '/docs/platform/searching-the-docs', className: 'font-medium text-foreground underline underline-offset-4' }, 'Searching the docs'),
+            ' says how to connect.')),
         h(PreviousNext, { previous: null, next }))))
+}
+
+/** /docs/search: the navigation, and the slot the gateway fills per request with the search box and the results. */
+export function DocsSearch({ site }) {
+  return h('div', { className: FRAME },
+    h(Navigation, { site, current: '/docs/search', search: false }),
+    h('div', { className: `${CONTENT} py-8 lg:py-10` },
+      h(MobileNav, { site, current: '/docs/search', search: false }),
+      h('div', { className: 'max-w-3xl' }, h('div', { 'data-docs-search-slot': '' }))))
 }

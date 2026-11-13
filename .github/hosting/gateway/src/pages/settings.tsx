@@ -36,7 +36,7 @@ import { InvitationList } from "./home.tsx"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-export type SettingsTab = "users" | "roles" | "organization" | "sso"
+export type SettingsTab = "users" | "roles" | "organization" | "oauth-clients" | "sso"
 
 function roleChoices(roles: Role[]): Choice[] {
   return roles.map((role) => ({ value: role, label: ROLE_LABELS[role] }))

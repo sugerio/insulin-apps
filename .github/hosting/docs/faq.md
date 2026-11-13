@@ -1,7 +1,7 @@
 ---
 title: FAQ
 description: Short answers to the questions people ask most about accounts, organizations, roles, AI agents and data on Insulin Apps.
-order: 8
+order: 9
 ---
 
 Short, direct answers to common questions about Insulin Apps, with links to the page that explains each one in full. It

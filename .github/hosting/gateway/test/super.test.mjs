@@ -235,7 +235,8 @@ test('a suspended organization gives its people nothing, at once, and reinstatin
   assert.equal((await owner.client.post(h.url('apex', `/orgs/${orgId}/rename`), { name: 'Renamed' })).status, 404, 'its forms')
   assert.equal((await owner.client.post(h.url('apex', `/orgs/${orgId}/delete`), { confirm: 'Watched Org' })).status, 404, 'deleting it')
   const home = await owner.client.get(h.url('apex', '/'))
-  assert.match(home.text, /Insulin Apps has suspended <strong>Watched Org<\/strong>/)
+  // One paragraph: the alert's description is a grid, which would put each loose piece of the sentence on a line.
+  assert.match(home.text, /data-slot="alert-description"[^>]*><p>Insulin Apps has suspended <strong>Watched Org<\/strong>, so nobody can use it for now\./)
   const relay = await h.client().post(h.url('apex', '/__insulin/mail'), {}, {
     contentType: 'application/json', headers: { Authorization: `Bearer ${token}`, 'x-suger-organization-id': orgId },
     body: JSON.stringify({ to: uniqueEmail(), subject: 'Hi', text: 'Hello' }),
@@ -257,6 +258,9 @@ test('a suspended organization gives its people nothing, at once, and reinstatin
   ], 'the repeated suspension changed and recorded nothing')
   const page = await admin.get(h.url('apex', `/super/orgs/${orgId}`))
   assert.match(page.text, /Phishing reported by a recipient/)
+  // Disabling an organization keeps its members' sessions (they may belong to others); the form says what it ends.
+  assert.match(page.text, /<strong>Disable:<\/strong> End access for abuse or fraud\. Also ends its AI agents, API clients, invitations and SCIM tokens for good\./)
+  assert.doesNotMatch(page.text.match(/<strong>Disable:<\/strong>[^<]*/)[0], /session/)
 })
 
 test('disabling an organization also ends its agents, API clients, invitations and SCIM tokens for good', async () => {
@@ -285,6 +289,7 @@ test('a suspended account is signed out everywhere and can\'t sign in; disabling
   const { member, orgId } = await orgWithMember()
   const agent = await connect(h, member, orgId)
   const admin = await operator(ADMIN)
+  assert.match((await admin.get(h.url('apex', `/super/users/${member.id}`))).text, /<strong>Disable:<\/strong> End access for abuse or fraud\. Also ends its sessions and AI agents for good\./)
   assert.equal((await admin.post(h.url('apex', `/super/users/${member.id}/status`), { status: 'suspended', reason: 'Spam invitations' })).status, 303)
   assert.equal((await echo(member)).status, 401, 'the app')
   const home = await member.client.get(h.url('apex', '/'))

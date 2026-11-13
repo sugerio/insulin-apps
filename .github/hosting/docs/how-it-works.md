@@ -238,8 +238,9 @@ do is recorded with the reason they give.
 - **What they never see:** what anyone enters in an app (the console has no way into an app's database), passwords,
   tokens, stored credentials or what any e-mail said.
 - **What they can do:** suspend an organization or account that breaks the terms (access paused, everything kept),
-  disable it (access ended, with its sessions, AI agents and API clients), lift either, and create an organization for
-  someone whose e-mail domain has used its two.
+  disable it (access ended, with an account's sessions and AI agents, or an organization's AI agents, API clients,
+  invitations and SCIM tokens), lift either, and create an organization for someone whose e-mail domain has used its
+  two.
 - **What suspension does:** a suspended or disabled account can't sign in and is signed out everywhere. Nobody can use a
   suspended or disabled organization in any way: apps, settings, AI agents, API clients, single sign-on and SCIM all
   stop, and its members' home page says so. Data is kept.

@@ -158,8 +158,10 @@ never see passwords, tokens or stored credentials. See [How it works](/docs/plat
 An organization or account that breaks the terms, for example by sending spam or phishing, can be suspended while
 Insulin Apps looks into it, or disabled. A suspended or disabled account can't sign in, and is signed out everywhere at
 once. Nobody can use a suspended or disabled organization: its apps, settings, AI agents, API clients and single sign-on
-stop working, and your home page says so. Disabling also ends its sessions, AI agents and API clients for good. Your
-data is kept, and either can be lifted. If you think it's a mistake, contact support.
+stop working, and your home page says so. Disabling also ends some things for good: an account's sessions and AI
+agents, or an organization's AI agents, API clients, pending invitations and SCIM tokens (its members stay signed in,
+for their other organizations). Your data is kept, and either can be lifted. If you think it's a mistake, contact
+support.
 
 ### Is the source code available?
 

@@ -256,18 +256,28 @@ export function SortLink({ label, value, current, href }: { label: string; value
   )
 }
 
-const ACTIONS: { status: Status; label: string; description: string }[] = [
-  { status: "suspended", label: "Suspend", description: "Pause all access while you look into it. Everything is kept, and reinstating gives it back." },
-  { status: "disabled", label: "Disable", description: "End access for abuse or fraud. Also ends sessions, AI agents, API clients, invitations and SCIM tokens for good." },
-  { status: "active", label: "Reinstate", description: "Lift a suspension or a disabling. What disabling ended stays ended." },
-]
+type StandingTarget = "organization" | "account"
+
+/** What disabling ends for good (DESIGN.md §11.3): an organization's members keep their sessions, for their other organizations. */
+const DISABLE_ENDS: Record<StandingTarget, string> = {
+  organization: "its AI agents, API clients, invitations and SCIM tokens",
+  account: "its sessions and AI agents",
+}
+
+function actions(what: StandingTarget): { status: Status; label: string; description: string }[] {
+  return [
+    { status: "suspended", label: "Suspend", description: "Pause all access while you look into it. Everything is kept, and reinstating gives it back." },
+    { status: "disabled", label: "Disable", description: `End access for abuse or fraud. Also ends ${DISABLE_ENDS[what]} for good.` },
+    { status: "active", label: "Reinstate", description: "Lift a suspension or a disabling. What disabling ended stays ended." },
+  ]
+}
 
 /**
  * The admins' form to change a standing: what to do (anything but the current standing) and the reason, which the
- * audit log keeps. `what` names the target ("organization", "account") in the descriptions.
+ * audit log keeps. `what` names the target in the descriptions.
  */
-export function StandingForm({ action, current, what, error }: { action: string; current: Status; what: string; error?: string }) {
-  const choices = ACTIONS.filter((choice) => choice.status !== current)
+export function StandingForm({ action, current, what, error }: { action: string; current: Status; what: StandingTarget; error?: string }) {
+  const choices = actions(what).filter((choice) => choice.status !== current)
   return (
     <form method="post" action={action} className="flex flex-col gap-4">
       <Field>

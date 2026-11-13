@@ -249,8 +249,9 @@ The person then creates the organization themselves at `/orgs/new`. To go back t
 
 In the operator console (`https://insulinapps.com/super`, owner setup step 9), an admin opens the organization or
 the person, chooses **Suspend** (pause while you look into it), **Disable** (end it for abuse or fraud, which also ends
-its sessions, AI agents, API clients, invitations and SCIM tokens for good) or **Reinstate**, and gives a reason, which
-the audit log keeps and the people concerned never see. It applies at once (DESIGN.md §11.3). For someone at their
+an account's sessions and AI agents, or an organization's AI agents, API clients, invitations and SCIM tokens, for
+good) or **Reinstate**, and gives a reason, which the audit log keeps and the people concerned never see. It applies at
+once (DESIGN.md §11.3). For someone at their
 owner domain's organization limit who asked for one more, an admin can create it for them under **Organizations ›
 Create an organization for someone**, or raise the domain's limit with `allow-orgs.mjs` (above) so they create it
 themselves.

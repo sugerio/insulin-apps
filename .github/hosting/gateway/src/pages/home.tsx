@@ -203,8 +203,11 @@ export function homePage(ctx: Context, session: Session, memberships: Membership
       {message ? <Notice kind="ok">{message}</Notice> : null}
       {unavailable.map((org) => (
         <Notice key={org.id}>
-          Insulin Apps has {org.status} <strong>{org.name}</strong>, so nobody can use it for now. Its owners can contact{" "}
-          <ContactLink ctx={ctx} />.
+          {/* One paragraph: the notice's description is a grid, which would put each loose piece on a line of its own. */}
+          <p>
+            Insulin Apps has {org.status} <strong>{org.name}</strong>, so nobody can use it for now. Its owners can contact{" "}
+            <ContactLink ctx={ctx} />.
+          </p>
         </Notice>
       ))}
       {active ? (

@@ -131,7 +131,8 @@ identity; the app checks its own short-lived codes.
 the integration proxy.
 
 **Suspended, disabled**: an account or organization that Insulin Apps has stopped for breaking the terms. Suspended
-pauses access while it is looked into; disabled ends it, along with its sessions and AI agents. Either can be lifted.
+pauses access while it is looked into; disabled ends it, along with an account's sessions and AI agents, or an
+organization's AI agents, API clients, invitations and SCIM tokens. Either can be lifted.
 
 **Usage report**: the counts and sizes each app sends Insulin Apps every hour, such as how many records and how many
 bytes of files each organization has. Never names, e-mail addresses or content.

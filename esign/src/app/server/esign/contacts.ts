@@ -3,6 +3,7 @@ import { bodyLimit } from 'hono/body-limit';
 import type { Env } from './app.ts';
 import { envelopeDetails } from './details.ts';
 import { unknownKeys } from './metadata.ts';
+import { visibleBinds, visibleIds } from './ownership.ts';
 
 /**
  * The organization's contacts: an address book of the people its envelopes name, for filling in
@@ -103,7 +104,7 @@ export function mountContactRoutes(app: Hono<Env>) {
     return context.json({ contacts: results.map(contact), ...(last ? { next: `${last.recent_at}.${last.id}` } : {}) });
   });
 
-  // A contact, with the envelopes that name them as a signer, newest first.
+  // A contact, with the envelopes that name them as a signer that the caller sees (ownership.ts), newest first.
   app.get('/api/contacts/:id', async (context) => {
     const tenantId = context.get('tenantId');
     const row = await context.env.DB.prepare('SELECT * FROM contacts WHERE id = ? AND tenant_id = ?').bind(context.req.param('id'), tenantId).first<Row>();
@@ -113,8 +114,8 @@ export function mountContactRoutes(app: Hono<Env>) {
     // they were added too; envelopeCount counts those since.
     const { results } = await context.env.DB.prepare(`SELECT e.id, e.status, e.created_at, e.details_json, t.role, t.status AS task_status
         FROM tasks t JOIN envelopes e ON e.id = t.envelope_id
-        WHERE e.tenant_id = ? AND lower(t.recipient_email) = ? ORDER BY e.created_at DESC, e.id LIMIT ?`)
-      .bind(tenantId, emailKey(row.email), CONTACT_ENVELOPES).all<{ id: string; status: string; created_at: number; details_json: string; role: string; task_status: string }>();
+        WHERE e.tenant_id = ? AND lower(t.recipient_email) = ? AND e.id IN ${visibleIds('envelope')} ORDER BY e.created_at DESC, e.id LIMIT ?`)
+      .bind(tenantId, emailKey(row.email), ...visibleBinds(tenantId, context.get('caller')), CONTACT_ENVELOPES).all<{ id: string; status: string; created_at: number; details_json: string; role: string; task_status: string }>();
     return context.json({
       ...contact(row),
       envelopes: results.map((e) => {

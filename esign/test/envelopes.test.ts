@@ -17,7 +17,7 @@ test('envelope creation is tenant-isolated, role-bound, idempotent and prepares 
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret))), (n) => n.toString(16).padStart(2, '0')).join('');
     await db.prepare("INSERT INTO tenants (id) VALUES ('tenant-a'),('tenant-b')").run();
     await db.prepare("INSERT INTO api_keys (key_hash, tenant_id) VALUES (?, 'tenant-a')").bind(hash).run();
-    await db.prepare("INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1), ('template-b', 'tenant-b', 'object-b', '[\"ana\"]', 1)").run();
+    await db.prepare("INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at,owner_user_id) VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1, 'service-account-tenant-a'), ('template-b', 'tenant-b', 'object-b', '[\"ana\"]', 1, 'service-account-tenant-b')").run();
     const env = { DB: db, ARTIFACTS: await blobStore(mf,'artifacts') };
     const body = { templateId: 'template-a', recipients: [{ role: 'ana', name: 'Ana', email: 'ana@example.com' }, { role: 'marcus', name: 'Marcus', email: 'marcus@example.com' }] };
     const create = (data: unknown, key = 'request-1') => app.fetch(new Request('http://localhost/api/envelopes', { method: 'POST', headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(data) }), env);
@@ -107,7 +107,7 @@ test('concurrent creations with one Idempotency-Key make one envelope, and a los
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret))), (n) => n.toString(16).padStart(2, '0')).join('');
     await db.prepare("INSERT INTO tenants (id) VALUES ('tenant-a')").run();
     await db.prepare("INSERT INTO api_keys (key_hash, tenant_id) VALUES (?, 'tenant-a')").bind(hash).run();
-    await db.prepare("INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1)").run();
+    await db.prepare("INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at,owner_user_id) VALUES ('template-a', 'tenant-a', 'object-a', '[\"ana\",\"marcus\"]', 1, 'service-account-tenant-a')").run();
     const env = { DB: db, ARTIFACTS: await blobStore(mf,'artifacts') };
     await env.ARTIFACTS.put('object-a', 'document');
     const body = { templateId: 'template-a', recipients: [{ role: 'ana', name: 'Ana', email: 'ana@example.com' }, { role: 'marcus', name: 'Marcus', email: 'marcus@example.com' }] };

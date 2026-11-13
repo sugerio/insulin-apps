@@ -21,6 +21,9 @@ import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
 import { contactUpserts, mountContactRoutes } from './contacts.ts';
 import { defaultSignerNames, parseDefaultSigners, storedDefaultSigners, type DefaultSigners } from './default-signers.ts';
+import { clientShare, documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKey, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
+import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsByDocument, tagsOf, tagWrites } from './tags.ts';
+import { mountMemberRoutes, recordMember } from './members.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -57,10 +60,15 @@ export type Env = { Bindings: Bindings; Variables: { tenantId: string; caller: C
  */
 const isOpenPath = (path: string) => path.startsWith('/api/public/') || path === '/api/health' || path === '/api/scheduled';
 
+/** A person's own tags (tags.ts) change nothing anyone else sees: someone who may only view Esign sets theirs too. */
+const isOwnTags = (path: string) => /^\/api\/(templates|envelopes)\/[^/]+\/tags$/.test(path);
+
 /**
  * Management routes (`/api/*` but the public ones) belong to the organization of the platform
  * identity: org members in the browser, the host product's service accounts and MCP agents alike.
- * Reading needs `esign.view`, anything else `esign.manage`; a public request never gets here.
+ * Reading needs `esign.view`, anything else `esign.manage`; a public request never gets here. What
+ * each may do with a given template or envelope is then its role in it (ownership.ts). Every caller
+ * is recorded as Esign sees them (members.ts), after the response where the platform allows.
  */
 export const managementAuth = async (context: import('hono').Context<Env>, next: import('hono').Next) => {
   const caller = readCaller(context.req.raw, context.env.IDENTITY_PREVIEW === true);
@@ -68,9 +76,12 @@ export const managementAuth = async (context: import('hono').Context<Env>, next:
   const path = context.req.path;
   const reading = context.req.method === 'GET' || context.req.method === 'HEAD';
   const anyRole = path === '/api/me' || path === '/api/catalog';
-  if (!anyRole && !can(caller, reading ? 'esign.view' : 'esign.manage')) return context.json({ error: 'forbidden' }, 403);
+  if (!anyRole && !can(caller, reading || isOwnTags(path) ? 'esign.view' : 'esign.manage')) return context.json({ error: 'forbidden' }, 403);
   context.set('caller', caller);
   context.set('tenantId', caller.organizationId);
+  const recorded = recordMember(context.env.DB, caller.organizationId, caller, Date.now()).catch(() => undefined);
+  if (context.env.WAIT_UNTIL) context.env.WAIT_UNTIL(recorded);
+  else await recorded;
   await next();
 };
 export function createApp() {
@@ -111,37 +122,70 @@ app.get('/api/me', (context) => {
 // The management API as data, for AI agents and API clients (catalog.ts).
 app.get('/api/catalog', (context) => context.json(apiCatalog(context.get('caller'))));
 
-/** `limit` (1 to 100, default 50) and `before` (epoch ms) of a list request, or null when malformed. */
-function page(query: (name: string) => string | undefined): { limit: number; before: number } | null {
+/**
+ * A list request's paging and filters, or null when malformed: `limit` (1 to 100, default 50), `before`
+ * (epoch ms), `scope` (`mine`, `shared`, or both by default: everything the caller sees) and `tag` (up
+ * to 5 of the caller's own tags, all of which a document has).
+ */
+function listQuery(context: import('hono').Context<Env>): { limit: number; before: number; scope: 'all' | 'mine' | 'shared'; tags: string[] } | null {
+  const query = (name: string) => context.req.query(name);
   const limit = query('limit') === undefined ? 50 : Number(query('limit'));
   const before = query('before') === undefined ? Number.MAX_SAFE_INTEGER : Number(query('before'));
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger(before) || before < 1) return null;
-  return { limit, before };
+  const scope = query('scope') ?? 'all';
+  const tags = parseTagFilter(context.req.queries('tag'));
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger(before) || before < 1 || !['all', 'mine', 'shared'].includes(scope) || tags === 'invalid') return null;
+  return { limit, before, scope: scope as 'all' | 'mine' | 'shared', tags };
 }
 
-// The organization's templates, newest first.
+/**
+ * SQL and binds: the rows `x` of `type` a list shows the caller (theirs, shared with them, or both;
+ * with all the tags asked for), and their share role as `shared_role`.
+ */
+function listed(context: import('hono').Context<Env>, type: ResourceType, query: NonNullable<ReturnType<typeof listQuery>>) {
+  const tenantId = context.get('tenantId'), caller = context.get('caller');
+  return {
+    sharedRole: `${sharedRoleColumn(type, 'x')} AS shared_role`,
+    where: `x.tenant_id = ? AND x.id IN ${visibleIds(type, query.scope)}${query.tags.length ? ` AND x.id IN ${taggedIds(type)}` : ''}`,
+    binds: (first: unknown[]) => [shareKey(caller), ...first, tenantId, ...visibleBinds(tenantId, caller, query.scope), ...(query.tags.length ? [tenantId, caller.userId, JSON.stringify(query.tags), query.tags.length] : [])],
+  };
+}
+
+type Owned = { id: string; owner_user_id: string; shared_role: string | null };
+/** What a list or a document shows of its ownership to the caller: its owner, the caller's role, the caller's own tags. */
+async function ownership(context: import('hono').Context<Env>, type: ResourceType, rows: Owned[]): Promise<Map<string, { owner: OwnerSummary; myRole: DocumentRole; tags: string[] }>> {
+  const tenantId = context.get('tenantId'), caller = context.get('caller');
+  const [owners, tags] = await Promise.all([ownersOf(context.env.DB, tenantId, rows.map((row) => row.owner_user_id)), tagsByDocument(context.env.DB, tenantId, caller.userId, type, rows.map((row) => row.id))]);
+  return new Map(rows.map((row) => [row.id, { owner: owners.get(row.owner_user_id)!, myRole: effectiveRole(row.owner_user_id, row.shared_role, caller) ?? 'viewer', tags: tags.get(row.id) ?? [] }]));
+}
+
+// The templates the caller sees, newest first.
 app.get('/api/templates', async (context) => {
-  const paging = page((name) => context.req.query(name));
-  if (!paging) return context.json({ error: 'invalid_query' }, 400);
-  const { results } = await context.env.DB.prepare('SELECT id, roles_json, fields_json, created_at, name, metadata_json, default_signers_json FROM templates WHERE tenant_id = ? AND created_at < ? ORDER BY created_at DESC, id LIMIT ?')
-    .bind(context.get('tenantId'), paging.before, paging.limit).all<{ id: string; roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string }>();
-  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at })) });
+  const query = listQuery(context);
+  if (!query) return context.json({ error: 'invalid_query' }, 400);
+  const list = listed(context, 'template', query);
+  const { results } = await context.env.DB.prepare(`SELECT x.id, x.roles_json, x.fields_json, x.created_at, x.name, x.metadata_json, x.default_signers_json, x.owner_user_id, ${list.sharedRole}
+      FROM templates x WHERE ${list.where} AND x.created_at < ? ORDER BY x.created_at DESC, x.id LIMIT ?`)
+    .bind(...list.binds([]), query.before, query.limit).all<Owned & { roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string }>();
+  const owned = await ownership(context, 'template', results);
+  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at, ...owned.get(row.id) })) });
 });
 
 const ENVELOPE_STATUSES = new Set(['IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED']);
 
-// The organization's envelopes, newest first, optionally of one status.
+// The envelopes the caller sees, newest first, optionally of one status.
 app.get('/api/envelopes', async (context) => {
-  const paging = page((name) => context.req.query(name));
+  const query = listQuery(context);
   const status = context.req.query('status');
-  if (!paging || (status !== undefined && !ENVELOPE_STATUSES.has(status))) return context.json({ error: 'invalid_query' }, 400);
-  const { results } = await context.env.DB.prepare(`SELECT id, template_id, status, created_at, details_json FROM envelopes
-      WHERE tenant_id = ? AND created_at < ? AND (? IS NULL OR status = ?) ORDER BY created_at DESC, id LIMIT ?`)
-    .bind(context.get('tenantId'), paging.before, status ?? null, status ?? null, paging.limit).all<{ id: string; template_id: string; status: string; created_at: number; details_json: string }>();
+  if (!query || (status !== undefined && !ENVELOPE_STATUSES.has(status))) return context.json({ error: 'invalid_query' }, 400);
+  const list = listed(context, 'envelope', query);
+  const { results } = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, ${list.sharedRole} FROM envelopes x
+      WHERE ${list.where} AND x.created_at < ? AND (? IS NULL OR x.status = ?) ORDER BY x.created_at DESC, x.id LIMIT ?`)
+    .bind(...list.binds([]), query.before, status ?? null, status ?? null, query.limit).all<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
+  const owned = await ownership(context, 'envelope', results);
   return context.json({
     envelopes: results.map((row) => {
       const details = envelopeDetails(row.details_json);
-      return { id: row.id, templateId: row.template_id, status: row.status, createdAt: row.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {} };
+      return { id: row.id, templateId: row.template_id, status: row.status, createdAt: row.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...owned.get(row.id) };
     }),
   });
 });
@@ -166,7 +210,7 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   const rawRoles = form.get('roles');
   if (!(file instanceof File) || typeof rawRoles !== 'string' || file.size === 0) return context.json({ error: 'invalid_template' }, 400);
   // The host's name and metadata for the template (metadata.ts), as form fields; metadata is a JSON object.
-  const unknown = unknownKeys(Object.fromEntries(Array.from(form.keys(), (key) => [key, true])), ['file', 'roles', 'name', 'metadata', 'defaultSigners']);
+  const unknown = unknownKeys(Object.fromEntries(Array.from(form.keys(), (key) => [key, true])), ['file', 'roles', 'name', 'metadata', 'defaultSigners', 'tags', 'share']);
   if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
   const name = parseTemplateName(form.get('name') ?? undefined);
   let metadata: ReturnType<typeof parseMetadata> = null;
@@ -175,6 +219,9 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
     try { metadata = typeof rawMetadata === 'string' ? parseMetadata(JSON.parse(rawMetadata)) : 'invalid'; } catch { metadata = 'invalid'; }
   }
   if (name === 'invalid' || metadata === 'invalid') return context.json({ error: 'invalid_template' }, 422);
+  // The caller's own tags for it (tags.ts) and whom else it is shared with (ownership.ts), JSON arrays.
+  const tags = jsonField(form.get('tags'), parseTags), shares = jsonField(form.get('share'), parseShares);
+  if (tags === 'invalid' || shares === 'invalid') return context.json({ error: 'invalid_template' }, 422);
   if (file.size > MAX_PDF_BYTES) return context.json({ error: 'too_large' }, 413);
   let roles: unknown;
   try { roles = JSON.parse(rawRoles); } catch { return context.json({ error: 'invalid_roles' }, 422); }
@@ -198,16 +245,30 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   const stored = await context.env.ARTIFACTS.put(key, bytes, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } });
   if (!stored) return context.json({ error: 'storage_conflict' }, 503);
   // An ambiguous D1 failure may have committed. Keep the object for later reconciliation;
-  // deleting it here could leave a committed template without its source.
-  await context.env.DB.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(id, context.get('tenantId'), key, JSON.stringify(roles), Date.now(), name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {})).run();
-  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles, defaultSigners: defaultSigners ?? {} }, 201);
+  // deleting it here could leave a committed template without its source. The template, its shares and
+  // the caller's tags commit together; the caller owns it.
+  const tenantId = context.get('tenantId'), caller = context.get('caller'), now = Date.now(), db = context.env.DB;
+  const given = sharesFor([...shares, ...[await clientShare(db, tenantId, caller)].filter((share) => share !== null)], caller);
+  await db.batch([
+    db.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json, owner_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, tenantId, key, JSON.stringify(roles), now, name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {}), caller.userId),
+    ...shareInserts(db, tenantId, 'template', id, given, caller.userId, now),
+    ...tagWrites(db, tenantId, caller.userId, 'template', id, tags),
+  ]);
+  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles, defaultSigners: defaultSigners ?? {}, tags }, 201);
 });
 
+/** A multipart field holding JSON, parsed by `parse`; absent is the parser's undefined. */
+function jsonField<T>(raw: FormDataEntryValue | null, parse: (value: unknown) => T | 'invalid'): T | 'invalid' {
+  if (raw === null) return parse(undefined);
+  if (typeof raw !== 'string') return 'invalid';
+  try { return parse(JSON.parse(raw)); } catch { return 'invalid'; }
+}
+
 app.get('/api/templates/:id', async (context) => {
-  const row = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?')
-    .bind(context.req.param('id'), context.get('tenantId')).first<{ id: string; roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string }>();
-  if (!row) return context.json({ error: 'not_found' }, 404);
+  const row = await context.env.DB.prepare(`SELECT x.*, ${sharedRoleColumn('template', 'x')} AS shared_role FROM templates x WHERE x.id = ? AND x.tenant_id = ?`)
+    .bind(shareKey(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string }>();
+  if (!row || !effectiveRole(row.owner_user_id, row.shared_role, context.get('caller'))) return context.json({ error: 'not_found' }, 404);
   // The response names keep the word "positioned": hosts read them.
   let hasFields = false;
   if (row.fields_json !== undefined) {
@@ -220,7 +281,7 @@ app.get('/api/templates/:id', async (context) => {
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
     const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);fieldsSupported=true;
   }catch{fieldsSupported=false;}}
-  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json) });
+  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json), ...(await ownership(context, 'template', [row])).get(row.id) });
 });
 
 // Replaces a template's default signers (default-signers.ts): who usually signs as some of its roles. They
@@ -233,6 +294,8 @@ app.post('/api/templates/:id/default-signers', bodyLimit({ maxSize: 16384 }), as
   const unknown = unknownKeys(body, ['defaultSigners']);
   if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
   const id = context.req.param('id'), tenantId = context.get('tenantId');
+  const refused = await requireRole(context, 'template', id, 'editor');
+  if (refused) return refused;
   const template = await context.env.DB.prepare('SELECT roles_json FROM templates WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ roles_json: string }>();
   if (!template) return context.json({ error: 'not_found' }, 404);
   const value = (body as { defaultSigners?: unknown }).defaultSigners;
@@ -272,7 +335,7 @@ function placedFields(raw: string | undefined): { type: string; role: string; pa
 }
 
 /** The fields a create-envelope request and each of its recipients may have; any other is refused. */
-const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata', 'message'];
+const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata', 'message', 'tags', 'share'];
 const validRecipientName = (name: unknown): name is string => typeof name === 'string' && !!name.trim() && name.length <= 200;
 const validRecipientEmail = (email: unknown): email is string => typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBehalfOf', 'namedBy', 'afterSigning', 'delivery', 'message'];
@@ -295,7 +358,10 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     if (value && typeof value === 'object' && !Array.isArray(value)) unknownFields.push(...unknownKeys(value, allowed).map((field) => `${name}.${field}`));
   }
   if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
-  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown; message?: unknown };
+  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown; message?: unknown; tags?: unknown; share?: unknown };
+  // The sender's own tags for it (tags.ts), and whom else it is shared with (ownership.ts).
+  const tags = parseTags(input.tags), shares = parseShares(input.share);
+  if (tags === 'invalid' || shares === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
   // The sender's message to every signer (invitations.ts): in an invitation's email, and on the signing page.
   const message = parseMessage(input.message);
   if (message === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
@@ -355,7 +421,7 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     recipients.push({ role: recipient.role, ...(recipient.name === undefined ? {} : { name: recipient.name as string }), ...(recipient.email === undefined ? {} : { email: recipient.email as string }), ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}), ...(delivery === 'email' ? { delivery } : {}), ...(own ? { message: own } : {}) });
   }
   const tenantId = context.get('tenantId');
-  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) });
+  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}), ...(tags.length ? { tags } : {}), ...(shares.length ? { share: shares } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
   // Idempotency is by the envelope itself: its id comes from the tenant and the Idempotency-Key, and
   // it keeps the hash of the request that created it. A retry of that request gets the response a
@@ -366,6 +432,9 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const replay = (existing: { request_sha256: string }) => existing.request_sha256 === hash ? context.json(createdResponse(id), 201) : context.json({ error: 'idempotency_conflict' }, 409);
   const existing = await lookup();
   if (existing) return replay(existing);
+  // Anyone who sees the template sends from it (ownership.ts); one they can't see doesn't exist for them.
+  const caller = context.get('caller');
+  if (!await documentRole(context.env.DB, tenantId, caller, 'template', input.templateId)) return context.json({ error: 'not_found' }, 404);
   const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string }>();
   if (!template) return context.json({ error: 'not_found' }, 404);
   const roles = JSON.parse(template.roles_json) as string[];
@@ -402,15 +471,22 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     return raced ? replay(raced) : context.json({ error: 'idempotency_conflict' }, 409);
   }
   const taskIds = recipients.map(() => crypto.randomUUID());
-  // One batch: the envelope (with the request's hash), its tasks and its D0 artifact commit together
-  // or not at all.
+  // The sender owns it. It is shared with whom the request names and, for an API client, its person (members.ts),
+  // not with the template's people; the sender's tags are the request's and theirs on the template.
+  const given = sharesFor([...shares, ...[await clientShare(context.env.DB, tenantId, caller)].filter((share) => share !== null)], caller);
+  const allTags = mergeTags(tags, await tagsOf(context.env.DB, tenantId, caller.userId, 'template', input.templateId));
+  const now = Date.now();
+  // One batch: the envelope (with the request's hash), its tasks, its D0 artifact, its shares and the sender's
+  // tags commit together or not at all.
   const statements = [
     // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
-    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, Date.now(), hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
+    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
     ...people.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
     // The organization's contacts (contacts.ts): each signer added or refreshed, with the envelope only.
-    ...contactUpserts(context.env.DB, tenantId, people, Date.now()),
+    ...contactUpserts(context.env.DB, tenantId, people, now),
+    ...shareInserts(context.env.DB, tenantId, 'envelope', id, given, caller.userId, now),
+    ...tagWrites(context.env.DB, tenantId, caller.userId, 'envelope', id, allTags),
   ];
   try { await context.env.DB.batch(statements); }
   catch (error) {
@@ -431,9 +507,11 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
 app.get('/api/envelopes/:id', async (context) => {
   const id = context.req.param('id');
   const tenantId = context.get('tenantId');
-  // A tenant's own envelope only (checked below); expiring a stranger's id is a no-op lookup.
-  if (await context.env.DB.prepare('SELECT 1 FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first()) await expireIfDue(context.env.DB, id);
-  const envelope = await context.env.DB.prepare('SELECT id, template_id, status, created_at, details_json FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ id: string; template_id: string; status: string; created_at: number; details_json: string }>();
+  // An envelope the caller sees only; expiring a stranger's id is a no-op lookup.
+  const refused = await requireRole(context, 'envelope', id, 'viewer');
+  if (refused) return refused;
+  await expireIfDue(context.env.DB, id);
+  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKey(context.get('caller')), id, tenantId).first<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
   // invitedAt: when Esign last emailed the signer's invitation (delivery 'email').
@@ -442,7 +520,7 @@ app.get('/api/envelopes/:id', async (context) => {
       (SELECT i.sent_at FROM invitations i WHERE i.task_id = t.id) AS invited_at
     FROM tasks t WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; details_json: string; opened_at: number | null; invited_at: number | null }>();
   const details = envelopeDetails(envelope.details_json);
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
 });
 
 /**
@@ -450,6 +528,8 @@ app.get('/api/envelopes/:id', async (context) => {
  * still call it after creating one: 204 for an envelope of this tenant (always prepared), else 404.
  */
 app.post('/api/envelopes/:id/prepare', async (context) => {
+  const refused = await requireRole(context, 'envelope', context.req.param('id'), 'editor');
+  if (refused) return refused;
   const prepared = await context.env.DB.prepare('SELECT 1 FROM envelopes e JOIN artifacts a ON a.envelope_id = e.id WHERE e.id = ? AND e.tenant_id = ?').bind(context.req.param('id'), context.get('tenantId')).first();
   if (!prepared) return context.json({ error: 'not_found' }, 404);
   return context.body(null, 204);
@@ -460,7 +540,8 @@ app.post('/api/envelopes/:id/prepare', async (context) => {
 const AUDIT_DETAIL_SHOWN = ['reason', 'title', 'onBehalfOf', 'authorityConfirmed', 'consentDisclosureVersion', 'to', 'delivery', 'hostAuthentication', 'pages', 'total'];
 app.get('/api/envelopes/:id/audit', async (context) => {
   const id = context.req.param('id');
-  if (!await context.env.DB.prepare('SELECT 1 FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, context.get('tenantId')).first()) return context.json({ error: 'not_found' }, 404);
+  const refused = await requireRole(context, 'envelope', id, 'viewer');
+  if (refused) return refused;
   const rows = await context.env.DB.prepare('SELECT a.type, a.occurred_at, a.ip, a.user_agent, a.detail_json, t.role, t.recipient_name, t.recipient_email FROM audit_events a LEFT JOIN tasks t ON t.id = a.task_id WHERE a.envelope_id = ? ORDER BY a.id')
     .bind(id).all<{ type: string; occurred_at: number; ip: string | null; user_agent: string | null; detail_json: string | null; role: string | null; recipient_name: string | null; recipient_email: string | null }>();
   const events = rows.results.map(row => {
@@ -496,6 +577,8 @@ app.post('/api/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context
   const id = context.req.param('id');
   const tenantId = context.get('tenantId');
   const db = context.env.DB;
+  const refused = await requireRole(context, 'envelope', id, 'editor');
+  if (refused) return refused;
   const read = () => db.prepare('SELECT status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ status: string }>();
   const envelope = await read();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
@@ -513,6 +596,9 @@ app.post('/api/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context
 });
 
 mountContactRoutes(app);
+mountShareRoutes(app);
+mountTagRoutes(app);
+mountMemberRoutes(app);
 mountSigningRoutes(app);
 return app;
 }

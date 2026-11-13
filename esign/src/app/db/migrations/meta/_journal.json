@@ -57,6 +57,13 @@
       "when": 1794531830802,
       "tag": "0007_tasks_by_recipient_email",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794551221522,
+      "tag": "0008_ownership",
+      "breakpoints": true
     }
   ]
 }

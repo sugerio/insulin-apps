@@ -24,8 +24,8 @@ test('the migrations make the app\'s tables only: the organization comes from th
     await applyMigrations(db, { gateway: false });
     const { results } = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' ORDER BY name").all<{ name: string }>();
     assert.deepEqual(results.map((row) => row.name), [
-      'access_codes', 'access_sessions', 'app_settings', 'artifacts', 'audit_events', 'blob_chunks', 'blobs', 'contacts', 'copy_deliveries',
-      'editor_sessions', 'envelopes', 'invitations', 'otp_challenges', 'seals', 'signatures', 'signed_copy_links', 'tasks', 'templates',
+      'access_codes', 'access_sessions', 'api_clients', 'app_settings', 'artifacts', 'audit_events', 'blob_chunks', 'blobs', 'contacts', 'copy_deliveries',
+      'document_shares', 'document_tags', 'editor_sessions', 'envelopes', 'invitations', 'members', 'otp_challenges', 'seals', 'signatures', 'signed_copy_links', 'tasks', 'templates',
     ]);
     const triggers = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all<{ name: string }>();
     assert.deepEqual(triggers.results.map((row) => row.name), [

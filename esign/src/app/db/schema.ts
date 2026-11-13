@@ -24,7 +24,12 @@ export const templates = sqliteTable('templates', {
   metadata_json: text('metadata_json').notNull().default('{}'),
   /** Who usually signs as some of its roles, `{role: {name?, email?}}` (default-signers.ts). */
   default_signers_json: text('default_signers_json').notNull().default('{}'),
-}, (table) => [index('templates_by_tenant').on(table.tenant_id, table.created_at)])
+  /** Its owner (ownership.ts): the member or API client that created it, or whom it was transferred to. */
+  owner_user_id: text('owner_user_id').notNull().default(''),
+}, (table) => [
+  index('templates_by_tenant').on(table.tenant_id, table.created_at),
+  index('templates_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),
+])
 
 export const envelopes = sqliteTable('envelopes', {
   id: text('id').primaryKey().notNull(),
@@ -36,8 +41,11 @@ export const envelopes = sqliteTable('envelopes', {
   request_sha256: text('request_sha256').notNull(),
   /** Optional facts (details.ts): document name and version, sender, the host's metadata. */
   details_json: text('details_json').notNull().default('{}'),
+  /** Its owner (ownership.ts): the member or API client that sent it, or whom it was transferred to. */
+  owner_user_id: text('owner_user_id').notNull().default(''),
 }, (table) => [
   index('envelopes_by_tenant').on(table.tenant_id, table.created_at),
+  index('envelopes_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),
   check('envelopes_details_json', sql`json_valid(${table.details_json})`),
 ])
 
@@ -178,6 +186,13 @@ export const editorSessions = sqliteTable('editor_sessions', {
   /** The name and metadata (JSON) the saved template gets; none means the source template's. */
   template_name: text('template_name'),
   template_metadata_json: text('template_metadata_json'),
+  /**
+   * Who opened it, and the shares and tags the saved template gets (ownership.ts, tags.ts): the save comes
+   * from the editor page, which carries no identity of its own.
+   */
+  owner_user_id: text('owner_user_id').notNull().default(''),
+  shares_json: text('shares_json').notNull().default('[]'),
+  tags_json: text('tags_json').notNull().default('[]'),
 })
 
 /**
@@ -280,3 +295,71 @@ export const blobChunks = sqliteTable('blob_chunks', {
   chunk_index: integer('chunk_index').notNull(),
   bytes: blob('bytes').notNull(),
 }, (table) => [primaryKey({ columns: [table.upload_id, table.chunk_index] })])
+
+/**
+ * Who else may see a template or an envelope (ownership.ts): one row per person it is shared with, by
+ * email (`grantee_email_key`, trimmed and lower-cased), with their role. The owner is never a row.
+ */
+export const documentShares = sqliteTable('document_shares', {
+  tenant_id: text('tenant_id').notNull(),
+  resource_type: text('resource_type').notNull(),
+  resource_id: text('resource_id').notNull(),
+  grantee_email_key: text('grantee_email_key').notNull(),
+  grantee_email: text('grantee_email').notNull(),
+  role: text('role').notNull(),
+  granted_by: text('granted_by').notNull(),
+  granted_at: integer('granted_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.resource_type, table.resource_id, table.grantee_email_key] }),
+  index('document_shares_by_grantee').on(table.tenant_id, table.grantee_email_key, table.resource_type),
+  check('document_shares_type', sql`${table.resource_type} IN ('template', 'envelope')`),
+  check('document_shares_role', sql`${table.role} IN ('admin', 'editor', 'viewer')`),
+])
+
+/**
+ * Each person's own tags on the templates and envelopes they can see (tags.ts): nobody else sees them.
+ * `tag_key` is the tag trimmed and lower-cased; `tag` is how it was written.
+ */
+export const documentTags = sqliteTable('document_tags', {
+  tenant_id: text('tenant_id').notNull(),
+  user_id: text('user_id').notNull(),
+  resource_type: text('resource_type').notNull(),
+  resource_id: text('resource_id').notNull(),
+  tag_key: text('tag_key').notNull(),
+  tag: text('tag').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.tenant_id, table.user_id, table.resource_type, table.resource_id, table.tag_key] }),
+  index('document_tags_by_tag').on(table.tenant_id, table.user_id, table.resource_type, table.tag_key),
+  check('document_tags_type', sql`${table.resource_type} IN ('template', 'envelope')`),
+])
+
+/**
+ * The organization's members and API clients as Esign has seen them (members.ts): who owns what, by
+ * name, and whom to share with. Refreshed as they use Esign; never removed.
+ */
+export const members = sqliteTable('members', {
+  tenant_id: text('tenant_id').notNull(),
+  user_id: text('user_id').notNull(),
+  /** `person`, or `client` for an API client (a service account). */
+  kind: text('kind').notNull(),
+  email: text('email'),
+  email_key: text('email_key'),
+  name: text('name'),
+  org_role: text('org_role').notNull(),
+  first_seen_at: integer('first_seen_at').notNull(),
+  last_seen_at: integer('last_seen_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.tenant_id, table.user_id] }),
+  index('members_by_email').on(table.tenant_id, table.email_key),
+  check('members_kind', sql`${table.kind} IN ('person', 'client')`),
+])
+
+/** Whom an API client's templates and envelopes are shared with, as admin (members.ts): set in Esign's settings. */
+export const apiClients = sqliteTable('api_clients', {
+  tenant_id: text('tenant_id').notNull(),
+  client_user_id: text('client_user_id').notNull(),
+  share_email: text('share_email').notNull(),
+  share_email_key: text('share_email_key').notNull(),
+  updated_by: text('updated_by').notNull(),
+  updated_at: integer('updated_at').notNull(),
+}, (table) => [primaryKey({ columns: [table.tenant_id, table.client_user_id] })])

@@ -16,7 +16,8 @@ export type CatalogEndpoint = {
   idempotencyKey: boolean;
 };
 
-type Entry = CatalogEndpoint & { permission: Permission | null };
+/** `orgRoles`: only callers with one of these roles in Esign may call it (members.ts). */
+type Entry = CatalogEndpoint & { permission: Permission | null; orgRoles?: readonly string[] };
 
 const text = (description: string, maxLength: number) => ({ type: 'string', maxLength, description });
 /** The sender's message (invitations.ts): an invitation's subject, and a body in it and on the signing page. */
@@ -58,19 +59,36 @@ const defaultSigners = {
   description: 'Keyed by role: who usually signs as it, a name, an email or both. A recipient of a new envelope that leaves out its name or email gets its role\'s default',
 }
 const templateName = text('A name for the template, shown in Esign\'s Templates page', 200)
+/** The caller's own tags (tags.ts): nobody else sees them. */
+const tags = { type: 'array', maxItems: 20, items: text('A tag (compared case-insensitively)', 50), description: 'Your own tags for it: nobody else sees them' }
+const shareRole = { type: 'string', enum: ['admin', 'editor', 'viewer'], description: 'viewer: sees it (and sends envelopes from a template); editor: also changes it; admin: also shares it' }
+/** Whom else a new document is shared with (ownership.ts). */
+const share = {
+  type: 'array', maxItems: 20,
+  items: { type: 'object', required: ['email', 'role'], additionalProperties: false, properties: { email: { type: 'string', format: 'email', maxLength: 254 }, role: shareRole } },
+  description: 'People it is shared with besides you, its owner (an API client\'s documents are also shared with the person its settings in Esign name)',
+}
+/** A list's filters (ownership.ts, tags.ts). */
+const listFilters = {
+  scope: { type: 'string', enum: ['mine', 'shared'], description: 'mine: those you own; shared: those shared with you; both by default' },
+  tag: { type: 'array', maxItems: 5, items: text('One of your tags', 50), description: 'Only those with all of these tags of yours (repeat the parameter)' },
+}
+const ownedFields = 'Each has its owner, your role in it (myRole) and your tags'
+const ORG_OWNER = ['OWNER'] as const
+const ORG_ADMIN = ['OWNER', 'ADMIN'] as const
 
 const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/me', summary: 'Who is calling: the organization, the role and its permissions', query: null, body: null, idempotencyKey: false, permission: null },
   { method: 'GET', path: '/api/catalog', summary: 'The endpoints the caller may use, with their query and body schemas', query: null, body: null, idempotencyKey: false, permission: null },
   {
-    method: 'GET', path: '/api/templates', summary: 'The organization\'s templates, newest first',
-    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only templates created before this time (epoch ms), for the next page' } } },
+    method: 'GET', path: '/api/templates', summary: `The templates you own or that are shared with you, newest first. ${ownedFields}`,
+    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only templates created before this time (epoch ms), for the next page' }, ...listFilters } },
     body: null, idempotencyKey: false, permission: 'esign.view',
   },
   {
     method: 'POST', path: '/api/templates', summary: 'Upload a PDF (at most 5 MiB and 100 pages) with the roles that sign it, in signing order',
     query: null,
-    body: { type: 'object', description: 'Sent as multipart/form-data fields', required: ['file', 'roles'], additionalProperties: false, properties: { file: { type: 'string', contentMediaType: 'application/pdf' }, roles: { type: 'string', description: 'A JSON array of 1 to 20 distinct role names ([A-Za-z0-9_-], up to 64 characters)' }, name: templateName, metadata: { type: 'string', description: 'A JSON object: your own keys and values (at most 20 keys of [A-Za-z0-9_.-], up to 40 characters; string values up to 500), returned as given' }, defaultSigners: { type: 'string', description: `A JSON object. ${defaultSigners.description}` } } },
+    body: { type: 'object', description: 'Sent as multipart/form-data fields', required: ['file', 'roles'], additionalProperties: false, properties: { file: { type: 'string', contentMediaType: 'application/pdf' }, roles: { type: 'string', description: 'A JSON array of 1 to 20 distinct role names ([A-Za-z0-9_-], up to 64 characters)' }, name: templateName, metadata: { type: 'string', description: 'A JSON object: your own keys and values (at most 20 keys of [A-Za-z0-9_.-], up to 40 characters; string values up to 500), returned as given' }, defaultSigners: { type: 'string', description: `A JSON object. ${defaultSigners.description}` }, tags: { type: 'string', description: `A JSON array. ${tags.description}` }, share: { type: 'string', description: `A JSON array of {email, role}. ${share.description}` } } },
     idempotencyKey: false, permission: 'esign.manage',
   },
   { method: 'GET', path: '/api/templates/{id}', summary: 'A template: its roles and placed fields, whether they can be signed, and its default signers', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
@@ -78,14 +96,14 @@ const ENTRIES: Entry[] = [
   {
     method: 'POST', path: '/api/template-editing-sessions', summary: 'Open the field editor for a host page to embed: a new template, or a copy of an existing one (which keeps its default signers, for the roles it keeps; a new one\'s are set with POST /api/templates/{id}/default-signers once saved)',
     query: null,
-    body: { type: 'object', required: ['allowedParentOrigin'], additionalProperties: false, properties: { allowedParentOrigin: { type: 'string', description: 'The host origin that will frame the editor; one of the deployment\'s allowed origins' }, sourceTemplateId: { type: 'string' }, roles: { type: 'array', maxItems: 20, items: text('A role', 64) }, name: { ...templateName, description: 'The saved template\'s name; the source template\'s when left out' }, metadata: { ...metadata, description: 'The saved template\'s metadata; the source template\'s when left out' } } },
+    body: { type: 'object', required: ['allowedParentOrigin'], additionalProperties: false, properties: { allowedParentOrigin: { type: 'string', description: 'The host origin that will frame the editor; one of the deployment\'s allowed origins' }, sourceTemplateId: { type: 'string' }, roles: { type: 'array', maxItems: 20, items: text('A role', 64) }, name: { ...templateName, description: 'The saved template\'s name; the source template\'s when left out' }, metadata: { ...metadata, description: 'The saved template\'s metadata; the source template\'s when left out' }, tags: { ...tags, description: 'Your tags for the saved template, with yours on the source template' }, share } },
     idempotencyKey: false, permission: 'esign.manage',
   },
   { method: 'POST', path: '/api/template-editing-sessions/{id}/source', summary: 'Stage the PDF an editing session starts from, before its page is opened (body: the PDF, application/pdf)', query: null, body: { type: 'string', contentMediaType: 'application/pdf' }, idempotencyKey: false, permission: 'esign.manage' },
   { method: 'GET', path: '/api/template-editing-sessions/{id}', summary: 'The template an editing session saved, once it has', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   {
-    method: 'GET', path: '/api/envelopes', summary: 'The organization\'s envelopes, newest first, with their status',
-    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only envelopes created before this time (epoch ms), for the next page' }, status: { type: 'string', enum: ['IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED'] } } },
+    method: 'GET', path: '/api/envelopes', summary: `The envelopes you own or that are shared with you, newest first, with their status. ${ownedFields}`,
+    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only envelopes created before this time (epoch ms), for the next page' }, status: { type: 'string', enum: ['IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED'] }, ...listFilters } },
     body: null, idempotencyKey: false, permission: 'esign.view',
   },
   {
@@ -101,6 +119,8 @@ const ENTRIES: Entry[] = [
         sender: { type: 'object', required: ['name'], additionalProperties: false, properties: { name: text('Who sent it', 200), email: { type: 'string', format: 'email' }, organization: text('Their company', 200) } },
         metadata,
         message: message('The sender\'s message to every signer'),
+        tags: { ...tags, description: 'Your tags for it, with yours on the template' },
+        share,
       },
     },
     idempotencyKey: true, permission: 'esign.manage',
@@ -130,13 +150,25 @@ const ENTRIES: Entry[] = [
   },
   { method: 'POST', path: '/api/contacts/{id}', summary: 'Change a contact\'s name, title or company (null or \'\' clears a title or company); the email stays', query: null, body: { type: 'object', additionalProperties: false, properties: CONTACT_FIELDS }, idempotencyKey: false, permission: 'esign.manage' },
   { method: 'POST', path: '/api/contacts/{id}/delete', summary: 'Delete a contact; their envelopes are untouched, and the next envelope that names them adds them again', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },
+  ...(['templates', 'envelopes'] as const).flatMap((kind): Entry[] => [
+    { method: 'GET', path: `/api/${kind}/{id}/shares`, summary: 'Who sees it: its owner and the people it is shared with, and your role in it', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
+    { method: 'POST', path: `/api/${kind}/{id}/shares`, summary: 'Share it with someone, or change their role (admins and the owner; admin at most)', query: null, body: { type: 'object', required: ['email', 'role'], additionalProperties: false, properties: { email: { type: 'string', format: 'email', maxLength: 254 }, role: shareRole } }, idempotencyKey: false, permission: 'esign.manage' },
+    { method: 'POST', path: `/api/${kind}/{id}/shares/delete`, summary: 'Stop sharing it with someone (admins and the owner, or anyone for themselves)', query: null, body: { type: 'object', required: ['email'], additionalProperties: false, properties: { email: { type: 'string', format: 'email' } } }, idempotencyKey: false, permission: 'esign.manage' },
+    { method: 'POST', path: `/api/${kind}/{id}/tags`, summary: 'Replace your own tags on it ([] clears them)', query: null, body: { type: 'object', required: ['tags'], additionalProperties: false, properties: { tags } }, idempotencyKey: false, permission: 'esign.view' },
+  ]),
+  { method: 'GET', path: '/api/tags', summary: 'Your own tags, most used first', query: { type: 'object', properties: { q: text('Only tags containing this', 50), limit: { type: 'integer', minimum: 1, maximum: 100 } } }, body: null, idempotencyKey: false, permission: 'esign.view' },
+  { method: 'GET', path: '/api/members', summary: 'People Esign has seen in your organization, to share with', query: { type: 'object', properties: { q: text('Only those whose name or email contains this', 100), limit: { type: 'integer', minimum: 1, maximum: 100 } } }, body: null, idempotencyKey: false, permission: 'esign.view' },
+  { method: 'GET', path: '/api/owners', summary: 'Everyone who owns templates or envelopes, with how many (organization owners)', query: null, body: null, idempotencyKey: false, permission: 'esign.view', orgRoles: ORG_OWNER },
+  { method: 'POST', path: '/api/owners/{id}/transfer', summary: 'Take over every template and envelope someone owns (organization owners)', query: null, body: null, idempotencyKey: false, permission: 'esign.manage', orgRoles: ORG_OWNER },
+  { method: 'GET', path: '/api/api-clients', summary: 'The API clients that have called Esign, and whom each one\'s documents are shared with (organization owners and admins)', query: null, body: null, idempotencyKey: false, permission: 'esign.view', orgRoles: ORG_ADMIN },
+  { method: 'POST', path: '/api/api-clients/{id}', summary: 'Choose whom an API client\'s new documents are shared with, as admin (null: nobody); shareExisting shares those it already owns too (organization owners and admins)', query: null, body: { type: 'object', required: ['shareEmail'], additionalProperties: false, properties: { shareEmail: { type: ['string', 'null'], format: 'email' }, shareExisting: { type: 'boolean' } } }, idempotencyKey: false, permission: 'esign.manage', orgRoles: ORG_ADMIN },
   { method: 'POST', path: '/api/process-due', summary: 'Expire envelopes past a deadline, finish those left unfinished, and send signed-copy notices still owed', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },
 ];
 
 export function apiCatalog(caller: Caller): { endpoints: CatalogEndpoint[] } {
   return {
     endpoints: ENTRIES
-      .filter((entry) => entry.permission === null || can(caller, entry.permission))
-      .map(({ permission: _permission, ...endpoint }) => endpoint),
+      .filter((entry) => (entry.permission === null || can(caller, entry.permission)) && (!entry.orgRoles || entry.orgRoles.includes(caller.role)))
+      .map(({ permission: _permission, orgRoles: _orgRoles, ...endpoint }) => endpoint),
   };
 }

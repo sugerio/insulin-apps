@@ -89,7 +89,10 @@ test("the host opens only its own signers' pages, for the signed-in account with
     assert.deepEqual(await (await view({ signedInEmail: 'ana@partner.test', reason: 'x' })).json(), { error: 'unknown_field', fields: ['reason'] });
     const ok = await view({ signedInEmail: ' ANA@Partner.test ' });
     assert.equal(ok.status, 201, 'the same address, whatever its case');
-    // A member in the browser (Esign's console) is held to the same rules: the console opens no signer's page.
+    // A member in the browser (Esign's console) the envelope is shared with is held to the same rules: the console
+    // opens no signer's page. Before it is shared with them, they don't see it at all.
+    assert.equal((await view({ signedInEmail: 'ana@partner.test' }, identity('tenant'))).status, 404);
+    assert.equal((await h.req(`/api/envelopes/${id}/shares`, h.json({ email: 'user-tenant@example.test', role: 'editor' }, h.auth))).status, 200);
     assert.deepEqual(await (await view({}, identity('tenant'))).json(), { error: 'signed_in_email_required' });
     assert.equal((await view({ signedInEmail: 'ana@partner.test' }, identity('tenant'))).status, 201);
     // The signer sees the sender's message on Review; the code check records the account Esign checked.

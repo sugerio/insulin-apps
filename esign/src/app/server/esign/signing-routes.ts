@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { requireRole } from './ownership.ts';
 import { SESSION_HEADER, sessionToken } from './session-header.ts';
 import {PDFDocument} from 'pdf-lib';
 import { bodyLimit } from 'hono/body-limit';
@@ -94,6 +95,8 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     return c.json({hosts:[own,...frameAncestors(c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env))],signingEnabled:signingEnabled(c.env)});
   });
   app.post('/api/envelopes/:id/tasks/:taskId/recipient-view', whenSigningEnabled, bodyLimit({maxSize:4096}), async c => {
+    // Opening a signer's page acts on the envelope: its editors, admins and owner (ownership.ts).
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','editor');if(refused)return refused;
     await expireIfDue(c.env.DB, c.req.param('id') ?? '');
     let body: {origin?:unknown;hostAuthentication?:unknown;signedInEmail?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body !== 'object' || Array.isArray(body) || (body.origin !== undefined && typeof body.origin !== 'string') || (body.signedInEmail !== undefined && typeof body.signedInEmail !== 'string')) return c.json({error:'invalid_request'},400);
@@ -121,6 +124,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   });
   // The sender sends an invited signer's invitation again, with a new link (the old one stops working).
   app.post('/api/envelopes/:id/tasks/:taskId/invitation', whenSigningEnabled, async c => {
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','editor');if(refused)return refused;
     await expireIfDue(c.env.DB, c.req.param('id') ?? '');
     const mailer=mailerFor(c.env,c.get('tenantId'));
     if (!mailer||!c.env.APP_ORIGIN) return c.json({error:'mail_unavailable'},503);
@@ -389,6 +393,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     } catch (error) {const raced=await replay();return raced ? c.json(raced,202) : c.json({error:error instanceof DateChanged?'date_changed':'signature_rejected'},409);}
   });
   app.get('/api/envelopes/:id/delivery-pdf', noStore, async c => {
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','viewer');if(refused)return refused;
     const envelope=await c.env.DB.prepare("SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if(!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';
@@ -425,6 +430,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     }
   });
   app.get('/api/envelopes/:id/certificate', noStore, async c => {
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','viewer');if(refused)return refused;
     const envelope=await c.env.DB.prepare("SELECT id,template_id,created_at,status FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if (!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';

@@ -291,8 +291,8 @@ Rules:
 - The code works once, within two minutes, only for that signer and while their task is active.
 - Only for your signers (`delivery` `host`), and only when `signedInEmail` is the signer's email, compared without
   regard to case: otherwise `422 signed_in_email_required` or `403 signer_mismatch`. Esign records the account it
-  checked, and the certificate shows it. A member opening the page in Esign's own console, for signing in person,
-  doesn't give one.
+  checked, and the certificate shows it. This holds for every caller, a member in the browser included: Esign's own
+  console opens no signer's page.
 - The host's origin must be one of the origins the deployment allows to embed Esign's pages. The page refuses to start
   in a frame from any other origin, or in one that hides its origin.
 - `hostAuthentication` (`{method, provider?, domain?, signedInAt?}`, `method` an upper-case word such as `SSO`) tells

@@ -7,7 +7,7 @@ import React from 'react';
 import {route} from '../src/app/member/MemberApp.ts';
 import {envelopeRequest,signByTime} from '../src/app/member/api.ts';
 import {checkRoles} from '../src/app/member/TemplatesPage.ts';
-import {EDITOR,ENV_ID,ORIGIN,VIEWER,json,renderMember} from './helpers/member.ts';
+import {EDITOR,ENV_ID,ORIGIN,VIEWER,json,renderMember,visibleText} from './helpers/member.ts';
 
 const pdf=()=>new File(['%PDF-1.7 synthetic'],'synthetic.pdf',{type:'application/pdf'});
 const envelope=(status:string,tasks:[string,string][])=>({id:ENV_ID,templateId:'tpl-1',status,createdAt:Date.parse('2026-11-07T00:00:00Z'),tasks:tasks.map(([name,s],i)=>({id:`task-${i}`,role:`signer-${i+1}`,recipientName:name,recipientEmail:`${name.toLowerCase()}@partner.example`,status:s,routingOrder:i+1}))});
@@ -113,7 +113,7 @@ test('sending from a template: one signer per role, the document, a sign-by day,
    recipients:[{role:'partner',name:'Ana',email:'ana@partner.example',expiresAt:deadline,title:'Partner Manager',onBehalfOf:'Partner Company Ltd',delivery:'email',message:{subject:'Ana, please sign',body:'Hi Ana,\nOver to you.'}},{role:'seller',name:'Marcus',email:'marcus@seller.example',expiresAt:deadline,delivery:'email'}]});
   assert.ok(!app.calls.some(c=>c.path.endsWith('/prepare')),'creating the envelope prepares it');
   assert.equal(app.location.pathname,`/envelopes/${ENV_ID}`,'the new envelope opens');
-  assert.match(app.text(),/Signers/);assert.ok(app.button("Open Ana's signing page"));
+  assert.match(app.text(),/Signers/);assert.equal(app.button("Open Ana's signing page"),undefined);
  }finally{await app.unmount();}
 });
 
@@ -201,36 +201,41 @@ test('placing fields opens the editor on this origin, ignores other frames, and 
  }finally{await app.unmount();}
 });
 
-test('an envelope: the active signer\'s page in a dialog, its messages followed, and the results once completed',async()=>{
- let state=envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING']]);
+test('an envelope: no signer\'s page opens here; the active invited signer\'s invitation can be resent; the results once completed',async()=>{
+ const inviting=envelope('IN_PROGRESS',[['Ana','ACTIVE'],['Marcus','PENDING'],['Host','PENDING']]);
+ inviting.tasks=inviting.tasks.map((t,i)=>i<2?{...t,delivery:'email',...(i===0?{invitedAt:'2026-11-07T00:10:00.000Z'}:{})}:{...t,delivery:'host'});
  const app=await renderMember(`/envelopes/${ENV_ID}`,c=>{
   if(c.path==='/api/me')return json(EDITOR);
-  if(c.path===`/api/envelopes/${ENV_ID}`)return json(state);
-  if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:state.status==='COMPLETED'?[{type:'SIGNED',at:'2026-11-07T01:00:00.000Z',recipient:{role:'signer-1',name:'Ana',email:'ana@partner.example'},ip:'203.0.113.9'}]:[]});
-  if(c.path===`/api/envelopes/${ENV_ID}/tasks/task-0/recipient-view`)return json({code:'c0de'},201);
+  if(c.path===`/api/envelopes/${ENV_ID}`)return json(inviting);
+  if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[]});
+  if(c.path===`/api/envelopes/${ENV_ID}/tasks/task-0/invitation`&&c.method==='POST')return new Response(null,{status:204});
+ });
+ try{
+  assert.equal(app.button("Open Ana's signing page"),undefined,'Esign\'s pages never open a signer\'s page');
+  assert.match(app.text(),/Invited by email/);assert.match(app.text(),/Signs in the sender's own system/);
+  assert.equal(app.renderer.root.findAll((n:any)=>n.type==='button'&&visibleText(n.children).trim()==='Resend invitation').length,1,'only for the signer whose turn it is');
+  await app.click(app.button('Resend invitation'),'Resend');
+  assert.ok(app.calls.some(c=>c.path===`/api/envelopes/${ENV_ID}/tasks/task-0/invitation`&&c.method==='POST'));
+  assert.ok(!app.calls.some(c=>c.path.endsWith('/recipient-view')));
+  assert.match(app.text(),/The invitation was emailed again to ana@partner\.example/);
+ }finally{await app.unmount();}
+ const done=await renderMember(`/envelopes/${ENV_ID}`,c=>{
+  if(c.path==='/api/me')return json(EDITOR);
+  if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('COMPLETED',[['Ana','SIGNED'],['Marcus','SIGNED']]));
+  if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[{type:'SIGNED',at:'2026-11-07T01:00:00.000Z',recipient:{role:'signer-1',name:'Ana',email:'ana@partner.example'},ip:'203.0.113.9'}]});
   if(c.path===`/api/envelopes/${ENV_ID}/delivery-pdf`)return new Response(new Blob(['%PDF-delivery']),{status:200});
   if(c.path===`/api/envelopes/${ENV_ID}/certificate`)return json(CERTIFICATE);
  });
  try{
-  assert.equal(app.button("Open Marcus's signing page"),undefined,'only the signer whose turn it is');
-  await app.click(app.button("Open Ana's signing page"),'Open');
-  const view=app.calls.find(c=>c.path.endsWith('/recipient-view'))!;
-  assert.deepEqual(JSON.parse(String(view.body)),{origin:ORIGIN},'the code is for this origin, which serves /sign');
-  const frame=app.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Recipient signing page');
-  assert.equal(frame.props.src,`/sign#code=c0de&host=${encodeURIComponent(ORIGIN)}`,'this page is the host the signing page reports to');
-  await app.dispatch({origin:'https://other.example.test',source:app.frameWindow,data:{type:'esign.signing.finished',outcome:'signed'}});
-  assert.equal(app.renderer.root.findAll((n:any)=>n.type==='iframe'&&n.props.title==='Recipient signing page').length,1,'another origin is ignored');
-  state=envelope('COMPLETED',[['Ana','SIGNED'],['Marcus','SIGNED']]);
-  await app.dispatch({origin:ORIGIN,source:app.frameWindow,data:{type:'esign.signing.finished',outcome:'signed'}});
-  assert.equal(app.renderer.root.findAll((n:any)=>n.type==='iframe'&&n.props.title==='Recipient signing page').length,0,'the dialog closes');
-  assert.match(app.text(),/Ana signed\./);assert.match(app.text(),/Completed/);assert.match(app.text(),/203\.0\.113\.9/);
-  assert.equal(app.button('Void envelope'),undefined,'a completed envelope can\'t be voided');
-  await app.click(app.button('Signed PDF with certificate'),'Signed PDF');
-  assert.ok(app.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signed PDF'));
-  assert.ok(app.renderer.root.find((n:any)=>n.type==='a'&&n.props.download==='signed-with-certificate.pdf'));
-  await app.click(app.button('Certificate of completion'),'Certificate');
-  assert.ok(app.byLabel('Certificate of completion'));assert.match(app.text(),/LOCAL TEST ONLY/);
- }finally{await app.unmount();}
+  assert.match(done.text(),/Completed/);assert.match(done.text(),/203\.0\.113\.9/);
+  assert.equal(done.button('Void envelope'),undefined,'a completed envelope can\'t be voided');
+  assert.equal(done.button('Resend invitation'),undefined);
+  await done.click(done.button('Signed PDF with certificate'),'Signed PDF');
+  assert.ok(done.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signed PDF'));
+  assert.ok(done.renderer.root.find((n:any)=>n.type==='a'&&n.props.download==='signed-with-certificate.pdf'));
+  await done.click(done.button('Certificate of completion'),'Certificate');
+  assert.ok(done.byLabel('Certificate of completion'));assert.match(done.text(),/LOCAL TEST ONLY/);
+ }finally{await done.unmount();}
 });
 
 test('voiding asks first, sends the reason, and the envelope says it is voided',async()=>{
@@ -370,21 +375,16 @@ test('contacts: the address book lists, searches and adds; a contact\'s page cha
  }finally{await viewer.unmount();}
 });
 
-test('sending: a signer chosen from the contacts, or suggested as typed, is filled in, title and company included',async()=>{
+test('sending: a contact suggested as a name or email is typed fills in the signer, title and company included',async()=>{
  const app=await renderMember('/envelopes/new?template=tpl-1',c=>{
   if(c.path==='/api/me')return json(EDITOR);
   if(c.path==='/api/templates')return json({templates:[TEMPLATE]});
   if(c.path.startsWith('/api/contacts?'))return json({contacts:[ANA]});
  });
  try{
+  assert.equal(app.button('Choose partner from contacts'),undefined,'no browsing: suggestions as you type');
+  assert.equal(app.byId('signer-0-delivery'),undefined,'every signer is invited by email');
   await app.type(app.byId('signer-0-title'),'Typed title');
-  await app.click(app.button('Choose partner from contacts'),'the picker');
-  await app.type(app.byId('signer-0-contact-search'),'ana');await app.settle();
-  assert.ok(app.calls.some(c=>c.path==='/api/contacts?limit=8&q=ana'));
-  await app.click(app.byLabel('Choose Ana Example (ana@partner.example)'),'Ana');
-  assert.deepEqual(['signer-0-name','signer-0-email','signer-0-title','signer-0-company'].map(id=>app.byId(id).props.value),['Ana Example','ana@partner.example','Partner Manager','Partner Company Ltd']);
-  assert.equal(app.byId('signer-0-contact-search'),undefined,'the picker closes');
-  assert.equal(app.byId('signer-1-name').props.value,'','the other signer is untouched');
   // Suggested as they are typed: from two characters on; arrow keys and Enter choose one.
   await app.type(app.byId('signer-1-name'),'a');await app.settle();
   assert.equal(app.byLabel('Contacts matching name'),undefined,'not after one character');
@@ -396,6 +396,7 @@ test('sending: a signer chosen from the contacts, or suggested as typed, is fill
   assert.equal(app.byId('signer-1-name').props['aria-activedescendant'],'signer-1-name-suggestions-0');
   await app.keyDown(app.byId('signer-1-name'),'Enter');
   assert.deepEqual(['signer-1-name','signer-1-email','signer-1-title','signer-1-company'].map(id=>app.byId(id).props.value),['Ana Example','ana@partner.example','Partner Manager','Partner Company Ltd']);
+  assert.equal(app.byId('signer-0-title').props.value,'Typed title','the other signer is untouched');
   assert.equal(app.byLabel('Contacts matching name'),undefined,'the suggestions close');
   // Or clicked, under the Email field; Escape closes them without choosing.
   await app.type(app.byId('signer-0-email'),'ana@');await app.settle();

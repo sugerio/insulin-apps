@@ -75,7 +75,7 @@ test('a message and a delivery parse strictly; the certificate says how the sign
   assert.match(mail.text, /Dana \(Pigment\) asks you to sign Mutual NDA\./);
 });
 
-test("the host opens only its own signers' pages, for the signed-in account with their email; Esign's console opens any", async () => {
+test("the host opens only its own signers' pages, for the signed-in account with their email; a member in the browser too", async () => {
   const h = await setup();
   try {
     const id = await h.envelope([{ role: 'partner', name: 'Ana Partner', email: 'ana@partner.test' }], { message: { subject: 'Your NDA', body: 'Hi Ana,\nPlease sign by Friday.' } });
@@ -89,8 +89,9 @@ test("the host opens only its own signers' pages, for the signed-in account with
     assert.deepEqual(await (await view({ signedInEmail: 'ana@partner.test', reason: 'x' })).json(), { error: 'unknown_field', fields: ['reason'] });
     const ok = await view({ signedInEmail: ' ANA@Partner.test ' });
     assert.equal(ok.status, 201, 'the same address, whatever its case');
-    // A member in Esign's console opens it in person, without a signed-in account to check.
-    assert.equal((await view({}, identity('tenant'))).status, 201);
+    // A member in the browser (Esign's console) is held to the same rules: the console opens no signer's page.
+    assert.deepEqual(await (await view({}, identity('tenant'))).json(), { error: 'signed_in_email_required' });
+    assert.equal((await view({ signedInEmail: 'ana@partner.test' }, identity('tenant'))).status, 201);
     // The signer sees the sender's message on Review; the code check records the account Esign checked.
     const headers = await h.open((await ok.json() as { code: string }).code);
     const current = await (await h.req('/api/public/signing/current', { headers })).json() as { message?: unknown };

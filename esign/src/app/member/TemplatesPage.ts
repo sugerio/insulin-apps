@@ -10,7 +10,7 @@ import { Input } from '../components/ui/input.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
 import { api, apiJson, canManage, dateTime, defaultSignersOf, describeError, MAX_PDF_BYTES, type Me, type TemplateSummary } from './api.ts'
-import { ContactField } from './ContactPicker.ts'
+import { ContactField } from './ContactField.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 

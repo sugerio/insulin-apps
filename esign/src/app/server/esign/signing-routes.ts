@@ -100,26 +100,22 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const unknown=Object.keys(body).filter(key=>!['origin','hostAuthentication','signedInEmail'].includes(key));
     if (unknown.length) return c.json({error:'unknown_field',fields:unknown},422);
     // The host opens only its own signers' pages, for the account signed in to it, which must have the
-    // signer's email; a signer Esign invites signs from their invitation. Esign's own console (a member
-    // in the browser) opens any signer's page, for signing in person.
+    // signer's email; a signer Esign invites signs from their invitation. Every caller alike: Esign's own
+    // console opens no signer's page (its signers sign from their invitations).
     const task=await c.env.DB.prepare('SELECT t.recipient_email,t.details_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id WHERE t.id=? AND e.id=? AND e.tenant_id=?').bind(c.req.param('taskId'),c.req.param('id'),c.get('tenantId')).first<{recipient_email:string;details_json:string}>();
     if (!task) return c.json({error:'recipient_unavailable'},404);
-    const console_=c.get('caller')?.accessVia==='browser';
-    let signedInEmail:string|undefined;
-    if (!console_) {
-      if (taskDetails(task.details_json).delivery==='email') return c.json({error:'recipient_signs_by_email'},409);
-      if (typeof body.signedInEmail!=='string'||!body.signedInEmail.trim()) return c.json({error:'signed_in_email_required'},422);
-      if (!sameEmail(body.signedInEmail,task.recipient_email)) return c.json({error:'signer_mismatch'},403);
-      signedInEmail=body.signedInEmail.trim().toLowerCase();
-    }
+    if (taskDetails(task.details_json).delivery==='email') return c.json({error:'recipient_signs_by_email'},409);
+    if (typeof body.signedInEmail!=='string'||!body.signedInEmail.trim()) return c.json({error:'signed_in_email_required'},422);
+    if (!sameEmail(body.signedInEmail,task.recipient_email)) return c.json({error:'signer_mismatch'},403);
+    const signedInEmail=body.signedInEmail.trim().toLowerCase();
     // The page origin the code is for: the app's own unless the host names another allowed one.
     const origin=typeof body.origin==='string'?body.origin:new URL(c.req.url).origin;
     if (!pageOrigins(c).has(origin)) return c.json({error:'invalid_origin'},400);
     // How the host signed the recipient in, recorded as the host's statement.
     const hostAuthentication=parseHostAuthentication(body.hostAuthentication);
     if (hostAuthentication==='invalid') return c.json({error:'invalid_request'},400);
-    try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin,now:Date.now(),entry:{...(hostAuthentication?{hostAuthentication}:{}),...(signedInEmail?{signedInEmail}:{})}});
-      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:origin,...(hostAuthentication?{hostAuthentication}:{}),...(signedInEmail?{signedInEmail}:{})}});
+    try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin,now:Date.now(),entry:{...(hostAuthentication?{hostAuthentication}:{}),...{signedInEmail}}});
+      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:origin,...(hostAuthentication?{hostAuthentication}:{}),signedInEmail}});
       return c.json({code},201);}
     catch {return c.json({error:'recipient_unavailable'},404);}
   });

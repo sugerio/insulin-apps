@@ -9,12 +9,13 @@ import { checkClass, Input } from '../components/ui/input.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
 import { Textarea } from '../components/ui/textarea.ts'
 import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, signByTime, type Contact, type DocumentFacts, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
-import { ContactField, ContactPicker } from './ContactPicker.ts'
+import { ContactField } from './ContactField.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 
 const h = React.createElement
-// Esign invites a signer by email unless the sender opens the page for them (in person, from the envelope's page).
+// Esign emails every signer an invitation when it is their turn: here Esign is the signing product, not a host that
+// opens signers' pages itself (POST /api/envelopes' `delivery` 'host' is for host products).
 const EMPTY_SIGNER: Signer = { name: '', email: '', title: '', company: '', after: '', delivery: 'email', subject: '', body: '' }
 const EMPTY_DOCUMENT: DocumentFacts = { name: '', version: '', published: '', senderName: '', senderCompany: '' }
 
@@ -92,18 +93,13 @@ export function NewEnvelopePage({ me }: { me: Me }) {
                 h(NativeSelectOption, { value: '' }, 'Choose a template'),
                 ...templates.map((t) => h(NativeSelectOption, { key: t.id, value: t.id }, `${t.name ? `${t.name} · ` : ''}${t.roles.join(', ')} · ${t.fields.length ? `${t.fields.length} fields` : 'signature page'} · ${dateTime(t.createdAt)}`)))))),
     template ? h(Card, null,
-      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Signers')), h(CardDescription, null, 'One for each role: type them in (your contacts are suggested as you type), or choose them from your contacts. A title and a company are shown on the signing page and recorded with the signature.')),
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Signers')), h(CardDescription, null, 'One for each role: your contacts are suggested as you type a name or email. Each is emailed an invitation when it is their turn. A title and a company are shown on the signing page and recorded with the signature.')),
       h(CardContent, { className: 'flex flex-col gap-6' }, ...template.roles.map((role, i) => h('fieldset', { key: role, className: 'grid gap-4 rounded-lg border p-4 sm:grid-cols-2' },
         h('legend', { className: 'px-1 text-sm font-medium' }, `${i + 1}. ${role}`),
-        h('div', { className: 'sm:col-span-2' }, h(ContactPicker, { id: `signer-${i}-contact-search`, label: role, onChoose: (c) => chooseContact(i, c) })),
         h(ContactField, { id: `signer-${i}-name`, label: 'Name', value: signers[i]?.name ?? '', onChange: (v) => setSigner(i, 'name', v), onChoose: (c) => chooseContact(i, c) }),
         h(ContactField, { id: `signer-${i}-email`, label: 'Email', type: 'email', value: signers[i]?.email ?? '', onChange: (v) => setSigner(i, 'email', v), onChoose: (c) => chooseContact(i, c) }),
         text(`signer-${i}-title`, 'Title (optional)', signers[i]?.title ?? '', (v) => setSigner(i, 'title', v)),
         text(`signer-${i}-company`, 'Signs for company (optional)', signers[i]?.company ?? '', (v) => setSigner(i, 'company', v), { hint: 'They confirm they are authorized to sign for it.' }),
-        h('div', { className: 'sm:col-span-2' }, h(Field, { label: 'How they get the signing page', htmlFor: `signer-${i}-delivery` },
-          h(NativeSelect, { id: `signer-${i}-delivery`, value: signers[i]?.delivery ?? 'email', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSigner(i, 'delivery', e.target.value) },
-            h(NativeSelectOption, { value: 'email' }, 'Esign emails them an invitation when it is their turn'),
-            h(NativeSelectOption, { value: 'host' }, 'You open it for them, from the envelope\'s page')))),
         ...(perSigner ? [
           h('div', { key: 'subject', className: 'sm:col-span-2' }, text(`signer-${i}-subject`, 'Email subject (optional)', signers[i]?.subject ?? '', (v) => setSigner(i, 'subject', v))),
           h('div', { key: 'body', className: 'sm:col-span-2' }, h(Field, { label: `Message to ${signers[i]?.name.trim() || 'this signer'} (optional)`, htmlFor: `signer-${i}-body` },

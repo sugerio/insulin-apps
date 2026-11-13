@@ -41,7 +41,6 @@ export const sending: DocTopic = {
             ['Email', 'Where their verification code and, at the end, the link to their signed copy are sent. Only someone who can read this mailbox can sign.'],
             ['Title', 'Optional. Shown on the signing page and recorded with the signature.'],
             ['Signs for company', 'Optional. When given, the signer must give their title and confirm they are authorized to sign for that company.'],
-            ['How they get the signing page', 'Esign emails them an invitation when it is their turn (the default), or you open it for them from the envelope\'s page.'],
             ['Email subject and message', 'Optional, when you write each signer a message of their own: shown on their signing page and in their invitation.'],
           ],
         }),
@@ -66,7 +65,7 @@ export const sending: DocTopic = {
       title: 'After you send',
       body: [
         p('The envelope\'s page, titled with the document\'s name, shows its signers, where each one stands, the metadata the sending system gave it (if any; signers never see it), and the audit trail. It updates by itself while the envelope is out for signature.'),
-        p('The signer whose turn it is signs on the signing page: in your host product, or here, with ', b('Open {name}\'s signing page'), ' on the envelope\'s page. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '. To withdraw the envelope, void it; see ', h(DocLink, { to: 'statuses', section: 'voiding' }, 'Voiding'), '.'),
+        p('The signer whose turn it is gets an emailed invitation and signs from it; if it went astray, ', b('Resend invitation'), ' on the envelope\'s page sends a new link. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '. To withdraw the envelope, void it; see ', h(DocLink, { to: 'statuses', section: 'voiding' }, 'Voiding'), '.'),
         p('If sending fails, for example because the connection drops, choose Send again. The retry carries the same request key, so the envelope is never sent twice.'),
       ],
     },
@@ -75,7 +74,7 @@ export const sending: DocTopic = {
       title: 'Contacts',
       body: [
         p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; delete one with ', b('Delete'), ' on their row (you confirm it); open a contact to change them or to see every envelope that names them.'),
-        p('When you send, matching contacts are suggested under a signer\'s Name and Email as you type (from two characters on); choosing one, or a contact found with ', b('Choose {role} from contacts'), ', fills in that signer\'s name, email, title and company.'),
+        p('When you send, matching contacts are suggested under a signer\'s Name and Email as you type (from two characters on); choosing one fills in that signer\'s name, email, title and company.'),
         p('A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact changes no envelope, and the next envelope that names them adds them again.'),
       ],
     },

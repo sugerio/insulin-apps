@@ -23,8 +23,7 @@ work and contacts. It is for people who send and for AI agents acting for them.
 3. Under **Signers**, fill in one block for each role, numbered in signing order (for example **1. partner**,
    **2. seller**). **Name** and **Email** are required; a role with a
    [default signer](/docs/esign/templates#default-signers) has them filled in. As you type two or more characters in either, matching
-   [contacts](#contacts) are suggested; choose one (or use the arrow keys and Enter) to fill in the signer. Or choose
-   **Choose** *the role* **from contacts**, search, and choose the person.
+   [contacts](#contacts) are suggested; choose one (or use the arrow keys and Enter) to fill in the signer.
 4. Under **Document**, add what signers should see about the document, and a sign-by day if there is one. All optional.
 5. Choose **Send for signature**.
 
@@ -43,7 +42,6 @@ same request key, so the envelope is never sent twice.
 | **Email** | Where their verification code and, at the end, the link to their signed copy are sent. Only someone who can read this mailbox can sign. It can't be changed after sending. |
 | **Title (optional)** | Shown on the signing page and recorded with the signature. |
 | **Signs for company (optional)** | The company they sign for. The signer must then give their title and confirm "I'm authorized to sign for" that company. |
-| **How they get the signing page** | **Esign emails them an invitation when it is their turn** (the default here), or **You open it for them, from the envelope's page**, for someone who signs in person. |
 | **Email subject** and **Message to** *the signer* (optional) | Their own message, shown when **Write a different message to each signer** is chosen (below). |
 
 ### Document fields
@@ -62,10 +60,9 @@ Signers sign one at a time, in the template's role order. Only the signer whose 
 When they have signed, their signature is drawn into the PDF, and the next signer signs that result. So every signer signs
 exactly what the signer before them produced.
 
-When it is someone's turn, they open the signing page from the invitation Esign emails them, in your host product, or
-from the envelope's page, where someone who manages chooses **Open** *name*'s **signing page** for them. An invited
-signer whose email went astray can be sent a new one with **Send the invitation again**, which replaces the earlier
-link. See [Signing](/docs/esign/signing).
+When it is someone's turn, Esign emails them an invitation, and they open the signing page from it. A signer whose email
+went astray can be sent a new one with **Resend invitation** on the envelope's page, which replaces the earlier link.
+The envelope's page never opens a signer's page itself. See [Signing](/docs/esign/signing).
 
 ## Follow an envelope
 
@@ -163,8 +160,8 @@ Search it by name or email.
   again.
 - To change a contact, open them. Their page also lists every envelope that names them (those from before they were
   added too), and can delete them.
-- When you send, a contact suggested under **Name** or **Email** as you type, or chosen with **Choose** *the role*
-  **from contacts**, fills in the signer's name, email, title and company.
+- When you send, a contact suggested under **Name** or **Email** as you type fills in the signer's name, email, title and
+  company.
 
 A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact
 changes no envelope. Everyone in your organization who can see envelopes sees the contacts; those who send can change them.

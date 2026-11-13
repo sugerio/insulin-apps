@@ -1,15 +1,15 @@
 // One envelope: its signers in order and where each stands, the audit trail, and, for those who manage, voiding it and
-// opening the active signer's page here (this page is then the host that embeds it). A completed envelope offers the
-// signed PDF with its certificate.
-import React, { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Ban, Download, FileCheck2, Mail, PenLine, X } from 'lucide-react'
+// emailing the active signer's invitation again. Esign is the signing product here, not a host: signers reach their
+// page from the invitation in their email, never from this page. A completed envelope offers the signed PDF with its
+// certificate.
+import React, { useEffect, useState } from 'react'
+import { ArrowLeft, Ban, Download, FileCheck2, Mail } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { Label } from '../components/ui/label.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { Textarea } from '../components/ui/textarea.ts'
 import { AUDIT_LABELS, CompletionCertificate } from '../ui/CompletionCertificate.ts'
-import { readSigningHostMessage } from '../ui/signing-host-protocol.ts'
 import { api, apiJson, canManage, dateTime, describeError, taskLabel, type AuditEvent, type Envelope, type Me, type Task } from './api.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link } from './router.ts'
@@ -27,10 +27,8 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
   const [busy, setBusy] = useState(false)
   const [voiding, setVoiding] = useState(false)
   const [reason, setReason] = useState('')
-  const [frame, setFrame] = useState<{ url: string; task: Task } | null>(null)
   const [pdf, setPdf] = useState<{ url: string; name: string } | null>(null)
   const [certificate, setCertificate] = useState<Certificate | null>(null)
-  const signingFrame = useRef<HTMLIFrameElement | null>(null)
 
   async function refresh() {
     const [data, trail] = await Promise.all([
@@ -58,34 +56,12 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
   // A new link to the invited signer (the old one stops working).
   function resendInvitation(task: Task) {
     void run(async () => {
-      await apiJson(`/api/envelopes/${id}/tasks/${task.id}/invitation`, { method: 'POST' })
+      // 204, no body.
+      await api(`/api/envelopes/${id}/tasks/${task.id}/invitation`, { method: 'POST' })
       await refresh()
       setMessage({ text: `The invitation was emailed again to ${task.recipientEmail}. The earlier link no longer works.`, error: false })
     })
   }
-  function openSigning(task: Task) {
-    void run(async () => {
-      const origin = window.location.origin
-      const { code } = await apiJson<{ code: string }>(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ origin }),
-      })
-      setFrame({ url: `/sign#code=${encodeURIComponent(code)}&host=${encodeURIComponent(origin)}`, task })
-    })
-  }
-  // The signing page's own messages: Cancel closes it; signing or declining closes it and reads the envelope again.
-  useEffect(() => {
-    if (!frame) return
-    const name = frame.task.recipientName
-    const listen = (event: MessageEvent) => {
-      const msg = readSigningHostMessage(event, window.location.origin, signingFrame.current?.contentWindow)
-      if (!msg) return
-      setFrame(null)
-      if (msg.type === 'esign.signing.finished') void run(async () => { await refresh(); setMessage({ text: msg.outcome === 'signed' ? `${name} signed.` : `${name} declined.`, error: false }) })
-    }
-    window.addEventListener('message', listen)
-    return () => window.removeEventListener('message', listen)
-  }, [frame])
-
   function voidEnvelope() {
     void run(async () => {
       await api(`/api/envelopes/${id}/void`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(reason.trim() ? { reason: reason.trim() } : {}) })
@@ -138,13 +114,13 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
           h(TableCell, { className: 'whitespace-normal' }, h('div', { className: 'font-medium' }, task.recipientName), h('div', { className: 'text-xs text-muted-foreground' }, task.recipientEmail)),
           h(TableCell, null, task.role),
           h(TableCell, { className: 'whitespace-normal' }, taskLabel(task.status),
-            task.delivery === 'email' ? h('div', { className: 'text-xs text-muted-foreground' }, task.invitedAt ? `Invited by email ${dateTime(task.invitedAt)}` : task.status === 'ACTIVE' ? 'Invitation not sent yet' : 'Invited by email when it is their turn') : null,
+            task.delivery === 'email' ? h('div', { className: 'text-xs text-muted-foreground' }, task.invitedAt ? `Invited by email ${dateTime(task.invitedAt)}` : task.status === 'ACTIVE' ? 'Invitation not sent yet' : 'Invited by email when it is their turn')
+              : h('div', { className: 'text-xs text-muted-foreground' }, 'Signs in the sender\'s own system'),
             task.openedAt ? h('div', { className: 'text-xs text-muted-foreground' }, `Opened ${dateTime(task.openedAt)}`) : null,
             task.expiresAt && task.status === 'ACTIVE' ? h('div', { className: 'text-xs text-muted-foreground' }, `Deadline ${dateTime(task.expiresAt)}`) : null),
           manage ? h(TableCell, { className: 'text-right' }, task.status === 'ACTIVE' && envelope.status === 'IN_PROGRESS'
             ? h('div', { className: 'flex flex-wrap justify-end gap-2' },
-              task.delivery === 'email' ? h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => resendInvitation(task) }, h(Mail, { 'aria-hidden': true }), 'Send the invitation again') : null,
-              h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => openSigning(task) }, h(PenLine, { 'aria-hidden': true }), `Open ${task.recipientName}'s signing page`)) : null) : null)))))),
+              task.delivery === 'email' ? h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => resendInvitation(task) }, h(Mail, { 'aria-hidden': true }), 'Resend invitation') : null) : null) : null)))))),
     envelope.metadata && Object.keys(envelope.metadata).length ? h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Metadata')), h(CardDescription, null, 'Labels the sender\'s system gave this envelope. Esign keeps them as given; they are not part of the signed evidence.')),
       h(CardContent, null, h('dl', { 'aria-label': 'Metadata', className: 'grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]' },
@@ -164,13 +140,5 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
     pdf ? h(Card, null, h(CardContent, { className: 'flex flex-col gap-3' },
       h('a', { href: pdf.url, download: pdf.name, className: buttonVariants({ className: 'w-fit' }) }, h(Download, { 'aria-hidden': true }), `Download ${pdf.name}`),
       h('iframe', { title: 'Signed PDF', src: pdf.url, className: 'h-[70vh] w-full rounded-md border' }))) : null,
-    certificate && completed ? h(CompletionCertificate, { certificate }) : null,
-    // The signing page in a dialog, as a host shows it.
-    frame ? h('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4' },
-      h('div', { role: 'dialog', 'aria-modal': true, 'aria-label': 'Signing page', className: 'flex h-[88vh] w-full max-w-[1440px] flex-col gap-3 rounded-xl border bg-background p-5 shadow-lg' },
-        h('div', { className: 'flex items-start gap-3' },
-          h('div', { className: 'flex-1' }, h('h2', { className: 'text-lg font-semibold' }, `${frame.task.recipientName}'s signing page`),
-            h('p', { className: 'text-sm text-muted-foreground' }, 'What the signer sees. Their code goes to their own email address.')),
-          h(Button, { variant: 'ghost', size: 'icon', 'aria-label': 'Close the signing page', onClick: () => setFrame(null) }, h(X, { 'aria-hidden': true }))),
-        h('iframe', { ref: signingFrame, title: 'Recipient signing page', src: frame.url, className: 'w-full flex-1 rounded-md border', sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads' }))) : null)
+    certificate && completed ? h(CompletionCertificate, { certificate }) : null)
 }

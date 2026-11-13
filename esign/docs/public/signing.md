@@ -12,14 +12,11 @@ need an account.
 
 When it is a signer's turn, they open the signing page in one of three ways:
 
-- **From an invitation.** When the sender chose that Esign invites the signer, Esign emails them when their turn comes,
+- **From an invitation.** When Esign invites the signer (always, for envelopes sent from Esign's own pages), Esign emails them when their turn comes,
   with a link to the signing page and the sender's message. The link works while it is their turn; when the sender
   sends the invitation again, only the newest link works.
 - **In a host product.** The system your organization uses Esign from shows the signing page inside its own pages, to
   the signer it has signed in, whose account must have the signer's email. Esign emails such a signer no invitation.
-- **From the envelope's page.** Someone who manages envelopes chooses **Open** *name*'s **signing page** next to the
-  active signer, for example when the signer signs in person, or to try Esign out. The page opens in a dialog that shows
-  what the signer sees.
 
 Each way, the page is opened with a one-time link that works once, within two minutes, and only for that signer. The
 page then stays usable for 15 minutes; after that, the signer opens it again the same way. A signer whose turn hasn't come

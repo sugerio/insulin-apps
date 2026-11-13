@@ -60,8 +60,12 @@ The editor shows the PDF's pages on the left and the tools on the right.
    A new box marks a starting area of 150 by 34 points.
 3. Move a placed field by dragging it, or select it and use the arrow keys. Page Up and Page Down move it to another
    page. Remove it with the × in the field.
-4. Repeat for every role. Each role needs exactly one **Signature** field.
-5. Choose **Save fields**. The page says "Fields saved as a new template. Send an envelope from it."
+4. Fields are required. To let the signer leave a Signature or Title field empty, select it and clear **Required**
+   under **Selected field**; the field then reads "(optional)". On the signing page the signer signs each field by
+   selecting it, and can't finish until every required one is signed.
+5. Repeat for every role. Each role needs at least one required **Signature** field. Place more where the same signer signs
+   again (on several pages, say): the name they type goes in each one they sign.
+6. Choose **Save fields**. The page says "Fields saved as a new template. Send an envelope from it."
 
 Choose **Close the editor** to leave without saving.
 
@@ -75,7 +79,7 @@ Choose **Close the editor** to leave without saving.
 
 Rules the editor and the server check:
 
-- every role has exactly one Signature field, and only these three field types are used;
+- every role has at least one required Signature field, and only these three field types are used;
 - at most 20 fields per template can be signed, and fields don't overlap;
 - each field is at least 20 by 10 points and stays on its page;
 - the PDF's pages are not rotated or cropped, and the PDF has no form fields or annotations. A PDF that breaks these rules

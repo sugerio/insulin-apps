@@ -199,13 +199,21 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await wait(()=>evaluate("document.querySelectorAll('input[type=radio]')[1].checked",legacyContext),'keyboard role selection');
   await evaluate("document.querySelector('[aria-label=\"Add Signature field\"]').click()",legacyContext);
   await wait(()=>evaluate("document.querySelectorAll('[data-page=\"1\"] [data-editor-field]').length===3",legacyContext),'keyboard-added legacy field');
-  await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'legacy host ready');await evaluate("document.querySelector('#continue').click()");await wait(()=>evaluate("document.querySelector('#status').textContent.includes('duplicate')"),'duplicate validation');await evaluate("[...document.querySelectorAll('[data-page] button')].filter(b=>b.getAttribute('aria-label')==='Delete Signature field').at(-1).click()",legacyContext);
+  await evaluate("[...document.querySelectorAll('[data-page] button')].filter(b=>b.getAttribute('aria-label')==='Delete Signature field').at(-1).click()",legacyContext);
   await evaluate("document.querySelectorAll('[data-page=\"1\"] button')[0].click()",legacyContext);
   await evaluate(`document.querySelectorAll('[data-page="1"] button')[0].dispatchEvent(new KeyboardEvent('keydown',{key:'PageDown',bubbles:true}))`,legacyContext);
   await wait(()=>evaluate("document.querySelectorAll('[data-page=\"2\"] [data-editor-field]').length===1",legacyContext),'existing legacy field moved');
+  // The role whose only Signature is optional can't be saved until one is required: select it and tick Required.
+  await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'legacy host ready');await evaluate("document.querySelector('#continue').click()");
+  await wait(()=>evaluate("document.querySelector('#status').textContent.includes('make at least one Signature field required')"),'required signature validation');
+  await evaluate("document.querySelector('[data-page=\"1\"] [data-editor-field] button').click()",legacyContext);
+  await wait(()=>evaluate("Boolean(document.querySelector('input[aria-label=Required]'))",legacyContext),'selected field');
+  assert.equal(await evaluate("document.querySelector('input[aria-label=Required]').checked",legacyContext),false,'the legacy field is optional');
+  await evaluate("document.querySelector('input[aria-label=Required]').click()",legacyContext);
+  await wait(()=>evaluate("!document.querySelector('[data-page=\"1\"] [data-editor-field] button').textContent.includes('optional')",legacyContext),'made required');
   await evaluate("document.querySelector('#continue').click()");
   const legacyVersion=await wait(async()=>{const v=await evaluate("document.querySelector('#status').textContent.match(/Saved template: ([a-f0-9-]+)/)?.[1]");return v&&v!==second?v:null;},'legacy version');
-  for(const id of [legacy,legacyVersion]){const row=await db.prepare('SELECT roles_json,fields_json FROM templates WHERE id=?').bind(id).first() as any;assert.deepEqual(JSON.parse(row.roles_json),['Signer','signer']);const fields=JSON.parse(row.fields_json);if(id===legacy){assert.deepEqual(fields,legacyFields);}else{assert.equal(fields.length,2);assert.deepEqual(fields[0],{...legacyFields[0],page:2,rect:{...legacyFields[0].rect,width:.375,height:.05*800/600}});assert.deepEqual(fields[1],legacyFields[1]);}}
+  for(const id of [legacy,legacyVersion]){const row=await db.prepare('SELECT roles_json,fields_json FROM templates WHERE id=?').bind(id).first() as any;assert.deepEqual(JSON.parse(row.roles_json),['Signer','signer']);const fields=JSON.parse(row.fields_json);if(id===legacy){assert.deepEqual(fields,legacyFields);}else{assert.equal(fields.length,2);assert.deepEqual(fields[0],{...legacyFields[0],page:2,rect:{...legacyFields[0].rect,width:.375,height:.05*800/600}});assert.deepEqual(fields[1],{...legacyFields[1],required:true});}}
   // Exercise real cross-page drags with differently sized PDF pages. Keep both
   // pages visible so CDP moves a genuine pointer through the iframe, not a
   // synthesized DragEvent. The temporary viewport belongs only to this browser.
@@ -287,8 +295,10 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    await evaluate(`(()=>{const x=document.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(otp)});x.dispatchEvent(new Event('input',{bubbles:true}));[...document.querySelectorAll('button')].find(b=>b.textContent==='Verify code').click();})()`);
    await wait(()=>evaluate(`Boolean(document.querySelector('input[aria-label="Full name"]'))`),'signing fields');
    await evaluate(`(()=>{const x=document.querySelector('input[aria-label="Full name"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(i?'Marcus':'Ana')});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-   // Sign hides the document (it was read on Review); show it again, full width above the step, to check the previews on it.
+   // Show the document full width above the step, to check the previews on it.
    await evaluate("(()=>{if(document.querySelector('#show-document'))return;const s=document.createElement('style');s.id='show-document';s.textContent='.esign-at-step-3 .esign-document{display:flex!important;grid-column:1/-1;grid-row:1}';document.head.appendChild(s);})()");
+   // The signer signs each of their fields by selecting it.
+   await evaluate("document.querySelectorAll('[data-apply-field]').forEach(b=>b.click())");
    await wait(()=>evaluate("document.querySelectorAll('[data-signature-field] img').length===2"),'signature and date previews');
    for(const zoom of [.8,1.25]){
     await evaluate(`document.documentElement.style.zoom='${zoom}'`);

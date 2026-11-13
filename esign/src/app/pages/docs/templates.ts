@@ -44,18 +44,19 @@ export const templates: DocTopic = {
         ol(
           'Choose a role in the editor.',
           'Drag a field from the toolbar onto a page. Move a placed field by dragging it, or select it and use the arrow keys. Remove it with ×.',
+          ['Fields are required. To let the signer leave one empty, select it and clear ', b('Required'), ' under ', b('Selected field'), '.'],
           ['Repeat for every role, then choose ', b('Save fields'), '.'],
         ),
         h(DocTable, {
           label: 'Field types',
           columns: ['Field', 'What the signer gives'],
           rows: [
-            ['Signature', 'Their signature, from the full name they type. Each role needs exactly one. A long name can extend to the right of the field.'],
+            ['Signature', 'Their signature, from the full name they type. Each role needs at least one; add more where they sign again, and the name they type goes in each one they sign. A long name can extend to the right of the field.'],
             ['Title', 'Their title, which they type.'],
             ['Date signed', 'Nothing: Esign fills in the date they sign.'],
           ],
         }),
-        p('The editor won\'t save until every role has its one Signature field.'),
+        p('The signer signs each field by selecting it, and can\'t finish until every required one is signed. The editor won\'t save until every role has a required Signature field, and it saves at most 20 fields.'),
       ],
     },
     {

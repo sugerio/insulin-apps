@@ -49,8 +49,10 @@ test('positioned signatures bind each role and preserve a sequential PDF chain',
     for(const invalid of invalidTemplates){await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(invalid),template.id).run();assert.equal((await req('/api/public/signing/current',{headers})).status,401);assert.equal((await req('/api/public/signing/sign',post({...base,signatures:{a:'ANA'}},headers))).status,409);assert.equal((await db.prepare('SELECT count(*) AS n FROM signatures').first())!.n,0);}
     await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(fields),template.id).run();
    }
-   assert.equal((await req('/api/public/signing/sign',post({...base,signatures:{}},headers))).status,409);
-   assert.equal((await req('/api/public/signing/sign',post({...base,signatures:{[fields[1-i].id]:'Wrong'}},headers))).status,409);
+   // The signer's required Signature not signed: refused, naming it.
+   const unsigned=await req('/api/public/signing/sign',post({...base,signatures:{}},headers));assert.equal(unsigned.status,422);assert.deepEqual(await unsigned.json(),{error:'required_fields_missing',fields:[fields[i].id]});
+   // Another role's field, even beside their own: refused.
+   assert.equal((await req('/api/public/signing/sign',post({...base,signatures:{[fields[i].id]:'ANA',[fields[1-i].id]:'Wrong'}},headers))).status,409);
    const body={...base,signatures:{[fields[i].id]:i?'MARCUS':'ANA'}};
    const keyRow=i===0?await db.prepare('SELECT object_key FROM artifacts WHERE id=?').bind(current.id).first<{object_key:string}>():{object_key:`envelopes/${envelope.id}/${current.id}.pdf`};const inputBytes=await (await bucket.get(keyRow!.object_key))!.arrayBuffer();await bucket.put(keyRow!.object_key,'tampered');assert.equal((await req('/api/public/signing/sign',post(body,headers))).status,409);await bucket.put(keyRow!.object_key,inputBytes);
    assert.equal((await req('/api/public/signing/sign',post({...body,consent:false},headers))).status,400);

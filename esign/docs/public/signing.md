@@ -61,17 +61,22 @@ sign-in are recorded in the audit trail, with the time, the IP address and the b
 
 ## Step 3: Sign
 
-Under **Adopt your signature**, the signer:
+The document is shown again, with the signer's fields on it. Beside it, under **Adopt your signature**, the signer:
 
 1. types their **Full name**, in English letters with single spaces, up to 64 characters;
-2. checks the **Preview**, which shows how the signature will look in each place it goes, drawn by the server;
+2. checks the **Preview**, which shows how the signature will look, drawn by the server;
 3. gives their **Title**, when it is asked for (as on the first step);
-4. reads the electronic records disclosure (**Read the electronic records disclosure**);
-5. ticks the consent box, which says: "I agree to use electronic records and signatures, and I intend this to be my
+4. signs each field by selecting it, on the document (**Sign**, or **Title** for a title field) or under
+   **Fields to sign**. A required field is marked with \*; an optional one may be left empty. **Remove** clears a
+   field again, and **Next required field** shows the next one still to sign. **Date signed** fields fill in by
+   themselves;
+5. reads the electronic records disclosure (**Read the electronic records disclosure**);
+6. ticks the consent box, which says: "I agree to use electronic records and signatures, and I intend this to be my
    signature on" the document (and "on behalf of" the company, when there is one);
-6. chooses **Sign document**.
+7. chooses **Sign document**. It stays unavailable while a required field is not signed, and the panel says how many
+   are left.
 
-The side panel repeats the document's details and shows **After you sign**: what happens next, including any lines the
+The panel also repeats the document's details and shows **After you sign**: what happens next, including any lines the
 sender added.
 
 The page says "Signature recorded." and the next signer's turn starts. A host product that embeds the page is told the

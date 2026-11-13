@@ -39,11 +39,16 @@ test('editor sessions enforce scope and persist immutable template versions with
   const current=await req('/api/public/editor/current',{headers:editorHeaders});assert.deepEqual((await current.json() as any).roles,['Partner','Seller']);
   const pdf=await PDFDocument.create();pdf.addPage();const bytes=await pdf.save();
   const field={id:'field-1',type:'Signature',role:'Partner',page:1,required:true,rect:{x:.1,y:.2,width:.2,height:.1}};
-  const fields=[field,{...field,id:'field-2',role:'Seller',rect:{...field.rect,x:.4}},{...field,id:'field-3',role:'Legal',rect:{...field.rect,x:.7}}];
+  // Partner signs in two places.
+  const fields=[field,{...field,id:'field-2',role:'Seller',rect:{...field.rect,x:.4}},{...field,id:'field-3',role:'Legal',rect:{...field.rect,x:.7}},{...field,id:'field-4',rect:{...field.rect,y:.6}}];
   const invalidForm=(items:unknown[])=>{const f=new FormData();f.set('file',new File([bytes],'test.pdf'));f.set('roles',JSON.stringify(['Partner','Seller','Legal']));f.set('fields',JSON.stringify(items));return f;};
   for(const invalid of [[],[field], [{...field,type:'Text box'},...fields.slice(1)]])assert.equal((await req('/api/public/editor/save',{method:'POST',headers:editorHeaders,body:invalidForm(invalid)})).status,422);
-  const duplicate=await req('/api/public/editor/save',{method:'POST',headers:editorHeaders,body:invalidForm([...fields,{...field,id:'extra',rect:{...field.rect,y:.5}}])});
-  assert.equal(duplicate.status,422);assert.deepEqual(await duplicate.json(),{error:'invalid_signing_fields',message:'Role Partner: duplicate Signature field'});
+  const missing=await req('/api/public/editor/save',{method:'POST',headers:editorHeaders,body:invalidForm(fields.filter(f=>f.role!=='Partner'))});
+  assert.equal(missing.status,422);assert.deepEqual(await missing.json(),{error:'invalid_signing_fields',message:'Role Partner: missing Signature field'});
+  // More than can be signed: 21 fields.
+  const many=Array.from({length:21},(_,i)=>({...field,id:`many-${i}`,role:['Partner','Seller','Legal'][i%3],rect:{x:(i%7)*.14,y:Math.floor(i/7)*.2,width:.12,height:.1}}));
+  const tooMany=await req('/api/public/editor/save',{method:'POST',headers:editorHeaders,body:invalidForm(many)});
+  assert.equal(tooMany.status,422);assert.deepEqual(await tooMany.json(),{error:'invalid_signing_fields',message:'At most 20 fields'});
   const form=()=>{const f=new FormData();f.set('file',new File([bytes],'test.pdf',{type:'application/pdf'}));f.set('roles',JSON.stringify(['Partner','Seller','Legal']));f.set('fields',JSON.stringify(fields));return f;};
   const saves=await Promise.all([req('/api/public/editor/save',{method:'POST',headers:editorHeaders,body:form()}),req('/api/public/editor/save',{method:'POST',headers:editorHeaders,body:form()})]);
   assert.deepEqual(saves.map(r=>r.status).sort(),[201,409]);const one=(await saves.find(r=>r.status===201)!.json() as any).id;

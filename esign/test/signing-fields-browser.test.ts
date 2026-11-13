@@ -109,10 +109,12 @@ test('Chrome completes two typed positioned signatures using server previews',{s
   for(let i=0;i<2;i++){
    const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[i].id}/recipient-view`,post({signedInEmail:tasks[i].recipientEmail,origin:'http://127.0.0.1:5173'},mgmt))).json();await call('Page.navigate',{url:`http://127.0.0.1:5173/sign?signer=${i}#code=${view.code}`});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Continue'&&!b.disabled)",'session');await setupPixelVerifier();await click('Continue');const otp=await wait("document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]",'OTP');
    await evaluate(`(()=>{const x=document.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(otp)});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);await click('Verify code');await wait("Boolean(document.querySelector('input[aria-label=\"Full name\"]'))",'name input');
-   // One adopted name fills every Signature field of the signer.
+   // One adopted name fills every Signature field the signer signs.
    await evaluate(`(()=>{const x=document.querySelector('input[aria-label="Full name"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(x,${JSON.stringify(i?'Marcus':'Alexander')});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);assert.equal(await evaluate("document.querySelectorAll('[data-signature-field]').length"),i===0?3:1,'signature positions are placed');
-   // Sign hides the document (it was read on Review); show it again, full width above the step, to measure where the previews land.
+   // Show the document full width above the step, to measure where the previews land.
    await evaluate("(()=>{if(document.querySelector('#show-document'))return;const s=document.createElement('style');s.id='show-document';s.textContent='.esign-at-step-3 .esign-document{display:flex!important;grid-column:1/-1;grid-row:1}';document.head.appendChild(s);})()");
+   // The signer signs each of their fields by selecting it.
+   await evaluate("document.querySelectorAll('[data-apply-field]').forEach(b=>b.click())");
    await wait(`document.querySelectorAll('[data-signature-field] img').length===${i===0?3:1}`,'positioned previews');
    const captured=await evaluate(`Promise.all([...document.querySelectorAll('[data-signature-field]')].map(async e=>{const image=e.querySelector('img'),style=getComputedStyle(image),bytes=new Uint8Array(await (await fetch(image.src)).arrayBuffer());let raw='';for(const byte of bytes)raw+=String.fromCharCode(byte);return {id:e.dataset.signatureField,fit:style.objectFit,position:style.objectPosition,png:btoa(raw)};}))`);
    for(const image of captured){assert.equal(image.fit,'contain',`${image.id} image fit`);assert.equal(image.position,'0% 0%',`${image.id} image position`);previewImages[image.id]=image.png;}

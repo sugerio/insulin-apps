@@ -383,8 +383,12 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const existing=await replay();if (existing) return c.json(existing,202);
     try {const a=await current(c);if (a.id!==body.artifactId || a.sha256!==body.artifactHash) throw new Error('Stale artifact');const file=await c.env.ARTIFACTS.get(a.object_key);if (!file || await sha256(await file.arrayBuffer())!==a.sha256) throw new Error('Input mismatch');
       const {fields,hasTextFields}=await fieldsFor(c);const command={token,origin:requestOrigin(c),now:Date.now(),artifactId:a.id,artifactHash:a.sha256};
-      // A Title field shows the title the signer gave on Review, nothing else.
-      if(hasTextFields&&fields.some(f=>f.type==='Title')){const values=body.signatures as Record<string,unknown>|undefined;if(!signerTitle||signerTitle==='invalid'||fields.some(f=>f.type==='Title'&&values?.[f.id]!==signerTitle))return c.json({error:'title_mismatch'},422);}
+      // Every required field signed (or filled in); an optional one may be left empty. Date signed is the server's.
+      const given=(body.signatures&&typeof body.signatures==='object'?body.signatures:{}) as Record<string,unknown>;
+      const missing=fields.filter(f=>f.required&&f.type!=='Date signed'&&given[f.id]===undefined).map(f=>f.id);
+      if(missing.length)return c.json({error:'required_fields_missing',fields:missing},422);
+      // A Title field the signer fills shows the title they gave on Review, nothing else.
+      if(hasTextFields){const values=body.signatures as Record<string,unknown>|undefined,filled=fields.filter(f=>f.type==='Title'&&values?.[f.id]!==undefined);if(filled.length&&(!signerTitle||signerTitle==='invalid'||filled.some(f=>values?.[f.id]!==signerTitle)))return c.json({error:'title_mismatch'},422);}
       const disclosure=await consentDisclosure();
       const id=await recordSignature(c.env.DB,c.env.ARTIFACTS,{...command,consent:true,values:body.signatures,signaturePreviews:body.signaturePreviews,textPreviews:body.textPreviews,datePreviews:body.datePreviews,disclosure:{version:disclosure.version,sha256:disclosure.sha256},authority});
       const session=await sessionContext(c.env.DB,token);

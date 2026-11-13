@@ -37,13 +37,19 @@ export function assertNoOverlappingFields(fields:TemplateField[]):void {
   }
 }
 
-/** Applied only when saving an editor version, never when reading historical templates. */
+/** At most this many placed fields can be signed (validateFields), so the editor saves no more. */
+export const MAX_SIGNED_FIELDS=20;
+/**
+ * Applied only when saving an editor version, never when reading historical templates: every role signs at least once
+ * (a required Signature field), and may sign in several places; an optional field the signer may leave empty.
+ */
 export function assertEditorSigningFields(fields:TemplateField[],roles:string[]):void {
+  if(fields.length>MAX_SIGNED_FIELDS)throw new Error(`At most ${MAX_SIGNED_FIELDS} fields`);
   for(const role of roles){
     const owned=fields.filter(f=>f.role===role);
     if(owned.some(f=>!['Signature','Date signed','Title'].includes(f.type)))throw new Error(`Role ${role}: unsupported field type`);
-    const signatures=owned.filter(f=>f.type==='Signature');
-    if(signatures.length!==1)throw new Error(`Role ${role}: ${signatures.length===0?'missing':'duplicate'} Signature field`);
+    if(!owned.some(f=>f.type==='Signature'))throw new Error(`Role ${role}: missing Signature field`);
+    if(!owned.some(f=>f.type==='Signature'&&f.required))throw new Error(`Role ${role}: no required Signature field`);
   }
 }
 
@@ -62,11 +68,11 @@ export function validateFieldPlacement(pdf:PDFDocument,fields:TemplateField[]):v
 export type CapturedField={id:string;type:string;page:number;rect:TemplateField['rect'];text:string};
 export type CapturedFields={role:string;templateFields:TemplateField[];fields:CapturedField[]};
 
-/** The placed fields a document can be signed with: Signature, Date signed and Title, a Signature for every role. */
+/** The placed fields a document can be signed with: Signature, Date signed and Title, at least one Signature for every role. */
 export function validateFields(value:unknown,roles:string[],pageCount:number):TemplateField[]{
  if(!roles.length||roles.some(r=>typeof r!=='string'||!r)||new Set(roles).size!==roles.length)throw new Error('Invalid roles');
  const fields=validateTemplateFields(value,roles,pageCount);
- if(fields.length>20||fields.some(f=>!['Signature','Date signed','Title'].includes(f.type))||roles.some(role=>!fields.some(f=>f.role===role&&f.type==='Signature')))throw new Error('Unsupported fields');
+ if(fields.length>MAX_SIGNED_FIELDS||fields.some(f=>!['Signature','Date signed','Title'].includes(f.type))||roles.some(role=>!fields.some(f=>f.role===role&&f.type==='Signature')))throw new Error('Unsupported fields');
  assertNoOverlappingFields(fields);return fields;
 }
 function dateText(now:number):string{

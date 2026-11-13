@@ -29,7 +29,7 @@ export const signers: DocTopic = {
         ol(
           [b('Review. '), 'The signer reads the document. Its fingerprint (SHA-256) identifies exactly this file, and they can download a copy. Esign records which pages they looked at.'],
           [b('Confirm it\'s you. '), 'Esign emails a 6-digit code to the signer\'s address. It works for 10 minutes. They can ask for a new one after a minute, up to 3 codes and 5 tries in 15 minutes.'],
-          [b('Sign. '), 'The signer types their full name to adopt their signature, sees how it will look in each place it goes, gives their title if asked, reads the electronic records disclosure, agrees to sign electronically, and chooses ', b('Sign document'), '.'],
+          [b('Sign. '), 'The signer types their full name to adopt their signature, sees how it will look, gives their title if asked, signs each field by selecting it on the document (every required one, marked *; an optional one may stay empty), reads the electronic records disclosure, agrees to sign electronically, and chooses ', b('Sign document'), '.'],
         ),
         p('The name is typed in English letters with single spaces, up to 64 characters. If the envelope says they sign for a company, they also give their title and confirm they are authorized to sign for it.'),
         p('The signing page has an ', b('About signing'), ' panel that explains these steps to the signer.'),

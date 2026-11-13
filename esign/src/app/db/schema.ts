@@ -242,7 +242,7 @@ export const invitations = sqliteTable('invitations', {
  * The organization's contacts (contacts.ts): one per email address (`email_key`, trimmed and
  * lower-cased), added by every envelope that names them and by members. A convenience for filling
  * in signers, never evidence. `recent_at` is when an envelope last named them, or when they were
- * added: the list's order. How many envelopes name them, and the latest, are read from `tasks`.
+ * added: the list's order.
  */
 export const contacts = sqliteTable('contacts', {
   id: text('id').primaryKey(),
@@ -252,6 +252,8 @@ export const contacts = sqliteTable('contacts', {
   name: text('name').notNull(),
   title: text('title'),
   company: text('company'),
+  envelope_count: integer('envelope_count').notNull().default(0),
+  last_used_at: integer('last_used_at'),
   recent_at: integer('recent_at').notNull(),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),

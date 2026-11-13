@@ -253,7 +253,7 @@ tables:
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
-| `contacts` | The organization's address book (`contacts.ts`): one per email (`email_key`, trimmed and lower-cased), name, title, company, and `recent_at` (last named by an envelope or added, the list's order). How many envelopes name them, and the latest, are counted from `tasks` through `tasks_by_recipient_email` (an index on `lower(recipient_email)`). Never evidence |
+| `contacts` | The organization's address book (`contacts.ts`): one per email (`email_key`, trimmed and lower-cased), name, title, company, how many envelopes named them since and `last_used_at` (counted in each envelope's creating batch), and `recent_at` (last used or added, the list's order). A contact's page finds their envelopes through `tasks_by_recipient_email`, an index on `lower(recipient_email)`. Never evidence |
 | `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
 

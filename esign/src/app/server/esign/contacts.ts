@@ -14,10 +14,7 @@ import { unknownKeys } from './metadata.ts';
  * Deleting a contact deletes no envelope; the next envelope that names them adds them again.
  *
  * Contacts are one per email address in an organization, compared as Esign compares a signer's
- * (trimmed and case-insensitive). How many of the organization's envelopes name them, and when the
- * latest was created, are counted from the envelopes themselves, those sent before the contact was
- * added included (by `tasks_by_recipient_email`); the list is ordered by when an envelope last named
- * them since, or when they were added. An envelope's name, title and company for them replace the
+ * (trimmed and case-insensitive). An envelope's name, title and company for them replace the
  * contact's (what the sender said last), except that a title or company it leaves out is kept.
  */
 
@@ -36,16 +33,6 @@ const CURSOR = /^(\d{1,16})\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 export const emailKey = (email: string) => email.trim().toLowerCase();
 
 type Row = { id: string; email: string; name: string; title: string | null; company: string | null; envelope_count: number; last_used_at: number | null; recent_at: number; created_at: number; updated_at: number };
-
-/**
- * A contact's columns with how many of the organization's envelopes name them and when the latest was created.
- * Signers' emails have no spaces (every recipient's is checked), so lower() alone matches the key; it is the
- * expression `tasks_by_recipient_email` indexes.
- */
-const CONTACT_COLUMNS = `c.*,
-  (SELECT count(DISTINCT t.envelope_id) FROM tasks t JOIN envelopes e ON e.id = t.envelope_id WHERE lower(t.recipient_email) = c.email_key AND e.tenant_id = c.tenant_id) AS envelope_count,
-  (SELECT max(e.created_at) FROM tasks t JOIN envelopes e ON e.id = t.envelope_id WHERE lower(t.recipient_email) = c.email_key AND e.tenant_id = c.tenant_id) AS last_used_at`;
-const readContact = (db: D1Database, tenantId: string, id: string) => db.prepare(`SELECT ${CONTACT_COLUMNS} FROM contacts c WHERE c.id = ? AND c.tenant_id = ?`).bind(id, tenantId).first<Row>();
 export type Contact = { id: string; email: string; name: string; title?: string; company?: string; envelopeCount: number; lastUsedAt?: number; createdAt: number; updatedAt: number };
 
 const contact = (row: Row): Contact => ({
@@ -57,17 +44,17 @@ const contact = (row: Row): Contact => ({
 
 /**
  * The statements that add or refresh a contact for each signer of a new envelope, to run in the
- * envelope's own batch: they commit with it or not at all. A person named twice in one envelope is
- * refreshed once, with what the last of those names says.
+ * envelope's own batch: they commit with it or not at all, so a retried creation counts once. A
+ * person named twice in one envelope counts once, with what the last of those names says.
  */
 export function contactUpserts(db: D1Database, tenantId: string, signers: { name: string; email: string; title?: string; onBehalfOf?: string }[], now: number): D1PreparedStatement[] {
   const byKey = new Map<string, (typeof signers)[number]>();
   for (const signer of signers) byKey.set(emailKey(signer.email), signer);
-  return [...byKey].map(([key, signer]) => db.prepare(`INSERT INTO contacts (id, tenant_id, email, email_key, name, title, company, recent_at, created_at, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?8)
+  return [...byKey].map(([key, signer]) => db.prepare(`INSERT INTO contacts (id, tenant_id, email, email_key, name, title, company, envelope_count, last_used_at, recent_at, created_at, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?8, ?8, ?8)
       ON CONFLICT (tenant_id, email_key) DO UPDATE SET email = excluded.email, name = excluded.name,
         title = COALESCE(excluded.title, contacts.title), company = COALESCE(excluded.company, contacts.company),
-        recent_at = excluded.recent_at, updated_at = excluded.updated_at`)
+        envelope_count = contacts.envelope_count + 1, last_used_at = excluded.last_used_at, recent_at = excluded.recent_at, updated_at = excluded.updated_at`)
     .bind(crypto.randomUUID(), tenantId, signer.email.trim(), key, signer.name.trim(), signer.title ?? null, signer.onBehalfOf ?? null, now));
 }
 
@@ -107,10 +94,10 @@ export function mountContactRoutes(app: Hono<Env>) {
     const after = cursor === undefined ? null : CURSOR.exec(cursor);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || q.length > MAX_QUERY || (cursor !== undefined && !after)) return context.json({ error: 'invalid_query' }, 400);
     const pattern = q ? likeContaining(q) : null;
-    const { results } = await context.env.DB.prepare(`SELECT ${CONTACT_COLUMNS} FROM contacts c WHERE c.tenant_id = ?1
-        AND (?2 IS NULL OR c.email_key LIKE ?2 ESCAPE '\\' OR c.name LIKE ?2 ESCAPE '\\')
-        AND (?3 IS NULL OR c.recent_at < ?3 OR (c.recent_at = ?3 AND c.id > ?4))
-        ORDER BY c.recent_at DESC, c.id LIMIT ?5`)
+    const { results } = await context.env.DB.prepare(`SELECT * FROM contacts WHERE tenant_id = ?1
+        AND (?2 IS NULL OR email_key LIKE ?2 ESCAPE '\\' OR name LIKE ?2 ESCAPE '\\')
+        AND (?3 IS NULL OR recent_at < ?3 OR (recent_at = ?3 AND id > ?4))
+        ORDER BY recent_at DESC, id LIMIT ?5`)
       .bind(context.get('tenantId'), pattern, after ? Number(after[1]) : null, after ? after[2] : null, limit).all<Row>();
     const last = results.length === limit ? results[results.length - 1] : undefined;
     return context.json({ contacts: results.map(contact), ...(last ? { next: `${last.recent_at}.${last.id}` } : {}) });
@@ -119,8 +106,11 @@ export function mountContactRoutes(app: Hono<Env>) {
   // A contact, with the envelopes that name them as a signer, newest first.
   app.get('/api/contacts/:id', async (context) => {
     const tenantId = context.get('tenantId');
-    const row = await readContact(context.env.DB, tenantId, context.req.param('id'));
+    const row = await context.env.DB.prepare('SELECT * FROM contacts WHERE id = ? AND tenant_id = ?').bind(context.req.param('id'), tenantId).first<Row>();
     if (!row) return context.json({ error: 'not_found' }, 404);
+    // Signers' emails have no spaces (every recipient's is checked), so lower() alone matches the key; it is the
+    // expression tasks_by_recipient_email indexes. Every envelope that names them is listed, those from before
+    // they were added too; envelopeCount counts those since.
     const { results } = await context.env.DB.prepare(`SELECT e.id, e.status, e.created_at, e.details_json, t.role, t.status AS task_status
         FROM tasks t JOIN envelopes e ON e.id = t.envelope_id
         WHERE e.tenant_id = ? AND lower(t.recipient_email) = ? ORDER BY e.created_at DESC, e.id LIMIT ?`)
@@ -145,15 +135,14 @@ export function mountContactRoutes(app: Hono<Env>) {
     const email = typeof body.email === 'string' ? body.email.trim() : '';
     if (name === 'invalid' || title === 'invalid' || company === 'invalid' || email.length > MAX_EMAIL || !EMAIL.test(email)) return context.json({ error: 'invalid_contact' }, 422);
     const id = crypto.randomUUID(), now = Date.now();
-    const saved = await context.env.DB.prepare(`INSERT INTO contacts (id, tenant_id, email, email_key, name, title, company, recent_at, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?10, ?10, ?10)
+    const row = await context.env.DB.prepare(`INSERT INTO contacts (id, tenant_id, email, email_key, name, title, company, envelope_count, last_used_at, recent_at, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, NULL, ?10, ?10, ?10)
         ON CONFLICT (tenant_id, email_key) DO UPDATE SET email = excluded.email, name = excluded.name,
           title = CASE WHEN ?8 THEN excluded.title ELSE contacts.title END, company = CASE WHEN ?9 THEN excluded.company ELSE contacts.company END,
           updated_at = excluded.updated_at
-        RETURNING id`)
-      .bind(id, context.get('tenantId'), email, emailKey(email), name, title ?? null, company ?? null, title === undefined ? 0 : 1, company === undefined ? 0 : 1, now).first<{ id: string }>();
-    const row = await readContact(context.env.DB, context.get('tenantId'), saved!.id);
-    return context.json(contact(row!), saved!.id === id ? 201 : 200);
+        RETURNING *`)
+      .bind(id, context.get('tenantId'), email, emailKey(email), name, title ?? null, company ?? null, title === undefined ? 0 : 1, company === undefined ? 0 : 1, now).first<Row>();
+    return context.json(contact(row!), row!.id === id ? 201 : 200);
   });
 
   // Changes a contact's name, title or company; its email stays (another email is another contact).
@@ -164,11 +153,10 @@ export function mountContactRoutes(app: Hono<Env>) {
     if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
     const name = body.name === undefined ? undefined : contactName(body.name), title = optionalText(body.title, MAX_TITLE), company = optionalText(body.company, MAX_COMPANY);
     if (name === 'invalid' || title === 'invalid' || company === 'invalid') return context.json({ error: 'invalid_contact' }, 422);
-    const saved = await context.env.DB.prepare(`UPDATE contacts SET name = COALESCE(?3, name),
+    const row = await context.env.DB.prepare(`UPDATE contacts SET name = COALESCE(?3, name),
         title = CASE WHEN ?5 THEN ?4 ELSE title END, company = CASE WHEN ?7 THEN ?6 ELSE company END, updated_at = ?8
-        WHERE id = ?1 AND tenant_id = ?2 RETURNING id`)
-      .bind(context.req.param('id'), context.get('tenantId'), name ?? null, title ?? null, title === undefined ? 0 : 1, company ?? null, company === undefined ? 0 : 1, Date.now()).first<{ id: string }>();
-    const row = saved && await readContact(context.env.DB, context.get('tenantId'), saved.id);
+        WHERE id = ?1 AND tenant_id = ?2 RETURNING *`)
+      .bind(context.req.param('id'), context.get('tenantId'), name ?? null, title ?? null, title === undefined ? 0 : 1, company ?? null, company === undefined ? 0 : 1, Date.now()).first<Row>();
     if (!row) return context.json({ error: 'not_found' }, 404);
     return context.json(contact(row));
   });

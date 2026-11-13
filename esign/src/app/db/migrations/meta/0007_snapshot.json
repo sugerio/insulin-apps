@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d526a363-b397-4b4c-a533-d7d9d61ed992",
+  "id": "cbfa802d-1048-4735-a451-0eb427d713be",
   "prevId": "8ada1ca5-51d6-44ed-8a8a-6b29e2dfac73",
   "tables": {
     "access_codes": {
@@ -512,6 +512,21 @@
         "company": {
           "name": "company",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "envelope_count": {
+          "name": "envelope_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

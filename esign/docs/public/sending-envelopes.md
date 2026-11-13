@@ -71,8 +71,9 @@ link. See [Signing](/docs/esign/signing).
 
 The envelope's page shows:
 
-- the status, the envelope id and when it was created;
+- the document's name as its title, then the status, the envelope id and when it was created;
 - **Signers**: each one's order, name and email, role and status, when they were invited, when they opened the signing page and their deadline;
+- **Metadata**, when the sender's system gave the envelope any: its keys and values, as given (never shown to signers);
 - **Audit trail**: every event with its time, the signer and the IP address.
 
 The page refreshes by itself every few seconds while the envelope is out for signature or finishing. The **Envelopes**

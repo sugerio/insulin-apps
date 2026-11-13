@@ -232,7 +232,8 @@ rendering and every later re-verification fail closed if the running renderer di
 ## Data model
 
 `src/app/db/schema.ts` declares the tables; `src/app/db/migrations/` holds the generated
-`0000_init.sql` and the custom `0001_triggers.sql` (the triggers Drizzle can't declare). Every record
+`0000_init.sql` and `0003_labels.sql` onward, the custom `0001_triggers.sql` (the triggers Drizzle can't declare), and
+`0002_seal_key.sql`, a rebuild of `seals` written by hand in drizzle-kit's form (it changes a CHECK constraint). Every record
 of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 17
 tables:
 

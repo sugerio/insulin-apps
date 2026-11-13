@@ -197,7 +197,7 @@ curl -s https://esign.insulinapps.com/api/templates \
 ```
 
 ```json
-{ "id": "3f0c8a5e-0d7b-4b7e-9a51-2f6d0c1e7a90", "roles": ["partner", "seller"] }
+{ "id": "3f0c8a5e-0d7b-4b7e-9a51-2f6d0c1e7a90", "metadata": {}, "roles": ["partner", "seller"] }
 ```
 
 ### Send it

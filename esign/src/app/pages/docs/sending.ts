@@ -65,7 +65,7 @@ export const sending: DocTopic = {
       id: 'after-you-send',
       title: 'After you send',
       body: [
-        p('The envelope\'s page shows its signers, where each one stands, and the audit trail. It updates by itself while the envelope is out for signature.'),
+        p('The envelope\'s page, titled with the document\'s name, shows its signers, where each one stands, the metadata the sending system gave it (if any; signers never see it), and the audit trail. It updates by itself while the envelope is out for signature.'),
         p('The signer whose turn it is signs on the signing page: in your host product, or here, with ', b('Open {name}\'s signing page'), ' on the envelope\'s page. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '. To withdraw the envelope, void it; see ', h(DocLink, { to: 'statuses', section: 'voiding' }, 'Voiding'), '.'),
         p('If sending fails, for example because the connection drops, choose Send again. The retry carries the same request key, so the envelope is never sent twice.'),
       ],

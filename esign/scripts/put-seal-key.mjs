@@ -45,29 +45,44 @@ const failure = async (response) => {
 
 const pair = await crypto.subtle.generateKey(P256, true, ['sign', 'verify'])
 const spki = Buffer.from(await crypto.subtle.exportKey('spki', pair.publicKey))
-const put = await api('/secrets', {
-  method: 'PUT',
-  body: JSON.stringify({
-    name: BINDING,
-    type: 'secret_key',
-    format: 'pkcs8',
-    algorithm: P256,
-    usages: ['sign'],
-    key_base64: Buffer.from(await crypto.subtle.exportKey('pkcs8', pair.privateKey)).toString('base64'),
-  }),
-})
+const id = Buffer.from(await crypto.subtle.digest('SHA-256', spki)).toString('hex')
+const entry = JSON.stringify({ id, spki: spki.toString('base64'), from }, null, 2)
+// When the key may be on the Worker but this can't confirm it (no answer to the PUT, a failed listing), the public entry is
+// printed anyway: the key may already seal, and only this process knows its public half.
+const unconfirmed = (why) => {
+  console.error(`${why} If the Worker lists ${BINDING} as a secret_key, add this entry to src/app/server/esign/seal/keys.ts (SEAL_KEYS); if not, run this again.`)
+  console.log(entry)
+  process.exit(1)
+}
+
+let put
+try {
+  put = await api('/secrets', {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: BINDING,
+      type: 'secret_key',
+      format: 'pkcs8',
+      algorithm: P256,
+      usages: ['sign'],
+      key_base64: Buffer.from(await crypto.subtle.exportKey('pkcs8', pair.privateKey)).toString('base64'),
+    }),
+  })
+} catch (error) {
+  unconfirmed(`Putting ${BINDING} on ${values.worker} got no answer (${error.message}).`)
+}
 if (!put.ok) {
   console.error(`Putting ${BINDING} on ${values.worker} failed: ${await failure(put)}`)
   process.exit(1)
 }
 
-const listed = await api('/secrets')
-const binding = listed.ok ? (await listed.json()).result?.find((secret) => secret.name === BINDING) : undefined
+const listed = await api('/secrets').catch(() => null)
+if (!listed?.ok) unconfirmed(`${BINDING} was put, but listing the Worker's secrets failed: ${listed ? await failure(listed) : 'no answer'}.`)
+const binding = (await listed.json()).result?.find((secret) => secret.name === BINDING)
 if (binding?.type !== 'secret_key') {
-  console.error(`${BINDING} was put, but listing the Worker's secrets ${listed.ok ? `shows it as ${binding?.type ?? 'missing'}` : `failed: ${await failure(listed)}`}.`)
+  console.error(`${BINDING} was put, but listing the Worker's secrets shows it as ${binding?.type ?? 'missing'}.`)
   process.exit(1)
 }
 
-const id = Buffer.from(await crypto.subtle.digest('SHA-256', spki)).toString('hex')
 console.error(`${BINDING} is on ${values.worker}. Add this entry to src/app/server/esign/seal/keys.ts (SEAL_KEYS):`)
-console.log(JSON.stringify({ id, spki: spki.toString('base64'), from }, null, 2))
+console.log(entry)

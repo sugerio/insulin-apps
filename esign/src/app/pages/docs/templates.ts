@@ -29,6 +29,7 @@ export const templates: DocTopic = {
           [b('Upload with a signature page. '), 'Signers sign on a page Esign adds after the document\'s last page, one after another.'],
           [b('Upload and place fields. '), 'The field editor opens, so you can put each role\'s signature, title and date exactly where they belong in the document.'],
         ),
+        p('Templates lists each one by its name, when a host product gave it one through the API, then its id; a new envelope\'s template picker shows the name first too.'),
       ],
     },
     {

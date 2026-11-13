@@ -33,7 +33,7 @@ export function CompletionCertificate({certificate:c}:{certificate:Certificate})
     ]:[
       h('h3',null,'LOCAL TEST ONLY'),
       h('p',null,'Local simulation only, not a legal guarantee. The local HMAC uses a test key, not Esign\'s seal key or a real TSA. Times are server-recorded, not independently timestamped. This certificate is a separate view, not the signed PDF.'),
-      h('p',null,'The source, signature records, event links and output hashes are checked against the local HMAC manifest and stored files. Envelope metadata (including template and creation time) and recipient task details (including email, role and status) are current database values and are not sealed by the manifest. Each signer\'s name, email address, role and consent text are bound with their signing record.')
+      h('p',null,'The source, signature records, event links and output hashes are checked against the local HMAC manifest and stored files. Envelope metadata (including template and creation time) and each task\'s current routing order and status are current database values and are not sealed by the manifest. Each signer\'s name, email address, role and consent text are bound with their signing record.')
     ]),
     h('h3',null,'Envelope and document'),h('dl',null,
       field('Envelope ID',c.envelope.id),field('Status',c.envelope.status),field('Template ID (unsealed)',c.envelope.template_id),field('Envelope created, server time (unsealed)',utc(c.envelope.created_at)),

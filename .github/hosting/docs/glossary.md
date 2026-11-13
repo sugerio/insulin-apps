@@ -1,7 +1,7 @@
 ---
 title: Glossary
 description: Plain definitions of the terms used across Insulin Apps, from access token to service account and SCIM.
-order: 9
+order: 10
 ---
 
 The terms used across the Insulin Apps platform docs, in alphabetical order, each with a one- or two-sentence

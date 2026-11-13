@@ -56,7 +56,8 @@ export function privacyPage(ctx: Context): Html {
   const oauthCookie = "__Host-insulin_oauth"
   const mfaCookie = "__Host-insulin_mfa"
   const ssoCookie = "__Host-insulin_sso"
-  return page(ctx, { title: "Privacy notice" }, (
+  const description = `What Insulin Apps at ${domain} collects, why, who processes it, and how to delete it.`
+  return page(ctx, { title: "Privacy notice", description, canonical: apexUrl(ctx, "/privacy") }, (
     <LegalPage title="Privacy notice">
       <p>
         This notice explains what Insulin Apps at {domain} and its subdomains (the &quot;service&quot;) collects, why, who processes
@@ -242,7 +243,8 @@ export function privacyPage(ctx: Context): Html {
 
 export function termsPage(ctx: Context): Html {
   const domain = ctx.config.domain
-  return page(ctx, { title: "Terms of use" }, (
+  const description = `The terms that apply to Insulin Apps at ${domain}: the service as it is, your account, acceptable use, suspension and the open-source code.`
+  return page(ctx, { title: "Terms of use", description, canonical: apexUrl(ctx, "/terms") }, (
     <LegalPage title="Terms of use">
       <p>
         These terms apply to Insulin Apps at {domain} and its subdomains (the &quot;service&quot;). By creating an account or using the

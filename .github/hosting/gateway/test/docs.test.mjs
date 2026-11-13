@@ -101,12 +101,16 @@ function only(html, pattern, what) {
   return all[0] ?? null
 }
 
-/** The docs' navigation in a page: level 1, level 2 and the narrow screens' menu (null where there is none). */
+/**
+ * The docs' navigation in a page: level 1, level 2, the narrow screens' menu and the search box above it (null where
+ * there is none).
+ */
 function navigationOf(html) {
   return {
     primary: only(html, /<nav aria-label="Documentation"[\s\S]*?<\/nav>/, 'level 1'),
     section: only(html, /<nav aria-label="Section"[\s\S]*?<\/nav>/, 'level 2'),
     menu: only(html, /<details class="group mb-8 rounded-lg border lg:hidden">[\s\S]*?<\/details>/, 'menu'),
+    search: only(html, /<form (?=[^>]*\saction="\/docs\/search")(?=[^>]*\sclass="[^"]*\blg:hidden\b)[^>]*>[\s\S]*?<\/form>/, 'search box above the menu'),
   }
 }
 

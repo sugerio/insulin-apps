@@ -28,7 +28,7 @@ there, and in the app's navigation it is under **Settings**, next to **People**,
 
 | Who | What they can do |
 |---|---|
-| The organization's **owners** and **admins** | Create, rename, change the role of, rotate and delete OAuth clients |
+| The organization's **owners** and **admins** | Create, rename, change the role of, rotate and delete OAuth clients; see every app's clients and revoke them on **Settings › OAuth clients** |
 | Everyone else who can use the app, including an app's admins through access to specific apps | See the list: each client's name, client id, role, when it was created, last used and last rotated. Never a secret. |
 | AI agents and OAuth clients themselves | Nothing: tokens never reach this page |
 
@@ -77,6 +77,21 @@ After 24 hours the previous secret simply stops issuing tokens, and those it iss
 
 **Delete** removes the client at once: both its secrets and every token it holds stop working.
 
+## Every OAuth client of the organization
+
+The organization's owners and admins, and nobody else, have **Settings › OAuth clients**
+(`https://insulinapps.com/settings/oauth-clients`). It lists every app's OAuth clients for API access and every AI agent
+anyone in the organization connected ([AI agents](/docs/platform/ai-agents)), in one table: the name, the app, the type
+(**API access** or **AI agent (MCP)**), who created it and when, when it was last used, and its status.
+
+- **Revoke** ends a client's access at once: neither of its secrets gets a token again, and the tokens it holds stop
+  working. The client stays listed, marked **Revoked** with the day and who revoked it, so you can see what happened;
+  its app's API access page shows it as revoked too, without **Edit** or **Rotate secret**.
+- **Delete** takes it off the list, as **Delete** on the API access page does.
+
+The page never shows a secret, and nothing there rotates one: a secret is shown only once, on the app's **API access**
+page, when the client is created or its secret rotated. A program that should work again needs a new client.
+
 ## Get a token
 
 Ask the token endpoint for a `client_credentials` token, with the client id and secret as HTTP Basic credentials:
@@ -108,7 +123,7 @@ The token lasts an hour. There is no refresh token: ask for a new token when it 
 
 | Error | Meaning |
 |---|---|
-| `401 invalid_client` | The client id or secret is wrong, the client was deleted, or the secret is a previous one whose 24 hours are over or that was revoked. |
+| `401 invalid_client` | The client id or secret is wrong, the client was deleted or revoked, or the secret is a previous one whose 24 hours are over or that was revoked. |
 | `400 invalid_target` | `resource` names a different app. |
 | `400 unsupported_grant_type` | Use `client_credentials`. |
 | `415 invalid_request` | Send the parameters as a form or as JSON. |
@@ -214,4 +229,6 @@ OAuth client can't make those changes, whatever its role.
 - The least role that works: Viewer for reporting, Editor for systems that record changes.
 - Keep the secret in your secret store, never in source code. Rotate it with **Rotate secret** when someone who knew it
   leaves, switch your program to the new secret, then choose **Revoke previous secret now**.
+- If a secret may have leaked and the program can stop, an owner or admin revokes the client on **Settings › OAuth
+  clients**: it stops at once, and stays listed as a record.
 - Cache the token for its hour instead of asking for a new one on every call.

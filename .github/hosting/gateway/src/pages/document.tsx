@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader, type HeaderAccount } from "@/components/site-header"
 import type { Session } from "../auth/session.ts"
 import type { Context } from "../context.ts"
+import { apexUrl } from "../context.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import type { ShellModel } from "../navigation.ts"
 import { Html } from "./html.ts"
@@ -30,6 +31,8 @@ export interface PageOptions {
   description?: string
   /** The page's canonical address, when it answers at more than one (the docs at /docs and /docs/). */
   canonical?: string
+  /** For link previews (Open Graph), on a page with a description: a docs page is an article; the default, a website. */
+  kind?: "website" | "article"
   /**
    * A signed-in page's two-level navigation (DESIGN.md §3.2, navigation.ts): the page is drawn inside the shell, with
    * its breadcrumb, instead of under the top bar. `user` is then unused.
@@ -63,7 +66,25 @@ function IconLinks({ site }: { site: Context["site"] | null }) {
   )
 }
 
-function Head({ title, site, options }: { title: string; site: Context["site"] | null; options?: PageOptions }) {
+/**
+ * Link previews for an indexable page (one with a description): Open Graph, which chat apps and AI assistants read
+ * too, and Twitter's summary card, with the Apple touch icon as the image (an absolute address, on the apex only).
+ */
+function OpenGraph({ title, description, options, image }: { title: string; description: string; options: PageOptions; image: string | null }) {
+  return (
+    <>
+      <meta property="og:site_name" content={SITE_NAME} />
+      <meta property="og:type" content={options.kind ?? "website"} />
+      <meta property="og:title" content={title} />
+      <meta property="og:description" content={description} />
+      {options.canonical ? <meta property="og:url" content={options.canonical} /> : null}
+      {image ? <meta property="og:image" content={image} /> : null}
+      <meta name="twitter:card" content="summary" />
+    </>
+  )
+}
+
+function Head({ title, site, options, image = null }: { title: string; site: Context["site"] | null; options?: PageOptions; image?: string | null }) {
   return (
     <head>
       <meta charSet="utf-8" />
@@ -71,6 +92,7 @@ function Head({ title, site, options }: { title: string; site: Context["site"] |
       <title>{`${title} · ${SITE_NAME}`}</title>
       {options?.description ? <meta name="description" content={options.description} /> : null}
       {options?.canonical ? <link rel="canonical" href={options.canonical} /> : null}
+      {options?.description ? <OpenGraph title={title} description={options.description} options={options} image={image} /> : null}
       {options?.refreshTo ? <meta httpEquiv="refresh" content={`0; url=${options.refreshTo}`} /> : null}
       <link rel="stylesheet" href="/__insulin/gateway.css" />
       <IconLinks site={site} />
@@ -97,9 +119,10 @@ export function page(ctx: Context, options: PageOptions, content: ReactNode): Ht
       </html>
     )
   }
+  const image = ctx.site === "apex" ? apexUrl(ctx, "/apple-touch-icon.png") : null
   return renderDocument(
     <html lang="en">
-      <Head title={options.title} site={ctx.site} options={options} />
+      <Head title={options.title} site={ctx.site} options={options} image={image} />
       <body className={BODY}>
         <a className="skip" href="#main">
           Skip to content

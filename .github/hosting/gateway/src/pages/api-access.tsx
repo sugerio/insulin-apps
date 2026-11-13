@@ -140,6 +140,14 @@ function UsageCard({ ctx, app }: { ctx: Context; app: HostedApp }) {
 }
 
 function SecretStatus({ ctx, app, data, client }: { ctx: Context; app: HostedApp; data: ApiAccessData; client: ServiceAccountRow }) {
+  if (client.revoked_at !== null) {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Badge variant="destructive">Revoked</Badge>
+        <span className="text-xs text-muted-foreground">{day(client.revoked_at)}: it gets no token</span>
+      </div>
+    )
+  }
   const previous = hasPrevious(ctx, client)
   return (
     <div className="flex flex-col gap-2">
@@ -168,7 +176,8 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
         </CardTitle>
         <CardDescription>
           Programs that call {app.title}&apos;s API in {data.orgName}, each with a role here like a person&apos;s. Rotate secret makes a new secret and keeps
-          the previous one working for 24 hours, so a running program can switch over; Delete ends a client and its tokens at once.
+          the previous one working for 24 hours, so a running program can switch over; Delete ends a client and its tokens at once. A client revoked
+          on the organization&apos;s OAuth clients page gets no token again and can only be deleted.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -191,7 +200,7 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
                     <div className="font-medium">{client.name}</div>
                     <code className="font-mono text-xs break-all text-muted-foreground select-all">{client.client_id}</code>
                     <div className="text-xs text-muted-foreground">Created {day(client.created_at)}</div>
-                    {data.manage ? (
+                    {data.manage && client.revoked_at === null ? (
                       <details className="group mt-2">
                         <summary className={disclosure}>
                           Edit<span className="sr-only"> {client.name}</span>
@@ -216,9 +225,11 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
                   {data.manage ? (
                     <TableCell className="align-top">
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        <PostButton action={appSettingsPath(app, "api", `/clients/${client.id}/rotate`)} fields={{ org_id: data.orgId }} variant="outline" size="sm">
-                          Rotate secret<span className="sr-only"> for {client.name}</span>
-                        </PostButton>
+                        {client.revoked_at === null ? (
+                          <PostButton action={appSettingsPath(app, "api", `/clients/${client.id}/rotate`)} fields={{ org_id: data.orgId }} variant="outline" size="sm">
+                            Rotate secret<span className="sr-only"> for {client.name}</span>
+                          </PostButton>
+                        ) : null}
                         <PostButton action={appSettingsPath(app, "api", `/clients/${client.id}/delete`)} fields={{ org_id: data.orgId }} variant="ghost" size="sm" className={destructiveGhost}>
                           Delete<span className="sr-only"> {client.name}</span>
                         </PostButton>

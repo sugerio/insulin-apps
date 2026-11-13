@@ -66,6 +66,14 @@ export function canManageAppClients(role: Role): boolean {
   return role === 'OWNER' || role === 'ADMIN'
 }
 
+/**
+ * OWNER and ADMIN see every OAuth client of the organization on /settings/oauth-clients (each app's clients for API
+ * access and everyone's AI agents) and revoke or delete them (DESIGN.md §5.4). Nobody sees a secret there.
+ */
+export function canManageOAuthClients(role: Role): boolean {
+  return role === 'OWNER' || role === 'ADMIN'
+}
+
 /** Only OWNERs create, change and delete custom roles (anyone who manages members may give them). */
 export function canManageCustomRoles(role: Role): boolean {
   return role === 'OWNER'

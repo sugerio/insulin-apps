@@ -5,7 +5,16 @@
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { PASSWORD, SECRET_KEY, TOKENS, UUID, startGateway, uniqueEmail } from './helpers/harness.mjs'
-import { appToken, connect, rpc } from './helpers/oauth.mjs'
+import { randomUUID } from 'node:crypto'
+import { LOOPBACK, appToken, connect, registerClient, rpc } from './helpers/oauth.mjs'
+import { insertGrantWithCode, redeemCode, touchGrant, touchServiceAccount } from '../src/db/oauth.ts'
+import { changeRole, deleteOrg, leaveOrg, removeMember, renameOrg, setAppAccess } from '../src/db/orgs.ts'
+import { insertInvitation, revokeInvitation } from '../src/db/invitations.ts'
+import { joinOrg, joinOrgByScim } from '../src/db/sso.ts'
+import { PLAN, headroom, isWarning } from '../src/super/cloudflare.ts'
+import { base32Decode, hotp, timeStep } from '../src/auth/totp.ts'
+import { authorizeUrl, form, openConsent, pkce } from './helpers/oauth.mjs'
+import { setOrgStatus, setUserStatus } from '../src/super/db.ts'
 import { encode, makeIdentityProviderKey, requestIdFrom, samlResponse, signResponse } from './helpers/saml-idp.mjs'
 
 const IDP_KEY = makeIdentityProviderKey('Stand-in Workspace')
@@ -13,7 +22,8 @@ const OTHER_KEY = makeIdentityProviderKey('Somebody Else')
 const IDP_ENTITY = 'https://accounts.example.test/o/saml2/workspace'
 const IDP_SSO = 'https://accounts.example.test/o/saml2/sso'
 const IDP_ORIGIN = 'https://accounts.example.test'
-const GROUP = 'operators@staff.example.test'
+// Google's group membership mapping sends each group's name, not its address.
+const GROUP = 'Insulin Apps Operators'
 const ADMIN = 'ada.admin@staff.example.test'
 const OPERATOR = 'otto.operator@staff.example.test'
 
@@ -123,7 +133,8 @@ test('a member of the operators\' group signs in; the session is the console\'s 
   assert.match(xml, /AssertionConsumerServiceURL="http:\/\/insulinapps\.localhost\/super\/saml\/acs"/)
   assert.match(xml, /<saml:Issuer>http:\/\/insulinapps\.localhost\/super<\/saml:Issuer>/)
   assert.ok(client.jar.get('insulin_super_flow'), 'the flow cookie binds the sign-in to this browser')
-  const signedIn = await acs(client, answer(id))
+  // Google sends the name as the group is called; the console compares it without regard to case.
+  const signedIn = await acs(client, answer(id, { groups: ['Everyone at Staff', GROUP.toUpperCase()] }))
   assert.equal(signedIn.status, 303, signedIn.text.slice(0, 300))
   const cookie = signedIn.cookies.find((line) => line.startsWith('insulin_super='))
   assert.match(cookie, /^insulin_super=[A-Za-z0-9_-]{43}; Path=\/; Max-Age=28800; HttpOnly; SameSite=Lax$/)
@@ -151,7 +162,9 @@ test('everyone else is turned away: no group, another group, another key, a repl
   assert.ok(!noGroup.cookies.some((line) => line.startsWith('insulin_super=') && !line.startsWith('insulin_super=;')))
 
   const second = await startSignIn(outsider)
-  assert.equal((await acs(outsider, answer(second.id, { groups: ['everyone@staff.example.test'] }))).status, 403)
+  assert.equal((await acs(outsider, answer(second.id, { groups: ['Everyone at Staff'] }))).status, 403)
+  const named = await startSignIn(outsider)
+  assert.equal((await acs(outsider, answer(named.id, { groups: ['operators@staff.example.test'] }))).status, 403, "the group's address isn't its name")
 
   const third = await startSignIn(outsider)
   assert.equal((await acs(outsider, answer(third.id, { key: OTHER_KEY }))).status, 400, 'signed with another key')
@@ -306,9 +319,11 @@ test('an admin creates an organization for someone past their owner domain\'s li
   const admin = await operator(ADMIN)
   const form = await admin.get(h.url('apex', '/super/orgs/new'))
   assert.equal(form.status, 200)
-  assert.equal((await admin.post(h.url('apex', '/super/orgs'), { email: uniqueEmail('nobody'), name: 'X', reason: 'Support request' })).status, 404)
-  assert.equal((await admin.post(h.url('apex', '/super/orgs'), { email, name: 'Third', reason: '' })).status, 400)
-  const created = await admin.post(h.url('apex', '/super/orgs'), { email, name: 'Third', reason: 'Support request about a third team' })
+  const org_id = new RegExp(`name="org_id" value="(${UUID})"`).exec(form.text)[1]
+  assert.equal((await admin.post(h.url('apex', '/super/orgs'), { org_id, email: uniqueEmail('nobody'), name: 'X', reason: 'Support request' })).status, 404)
+  assert.equal((await admin.post(h.url('apex', '/super/orgs'), { org_id, email, name: 'Third', reason: '' })).status, 400)
+  assert.equal((await admin.post(h.url('apex', '/super/orgs'), { email, name: 'Third', reason: 'No form id' })).status, 400, 'a form without its id')
+  const created = await admin.post(h.url('apex', '/super/orgs'), { org_id, email, name: 'Third', reason: 'Support request about a third team' })
   assert.equal(created.status, 303, created.text.slice(0, 300))
   const orgId = new RegExp(`/super/orgs/(${UUID})\\?notice=created$`).exec(created.location)[1]
   const [org] = await h.sql('SELECT name, owner_domain, created_by, created_by_operator FROM orgs WHERE id = ?1', orgId)
@@ -475,30 +490,47 @@ test('five hundred organizations are stored in one report; the console ranks the
   assert.match(org.text, /2\.00 MB/)
 })
 
-// The synthetic Cap Table database's uuid, as the D1 list and the analytics name it.
+// The synthetic databases' uuids, as the Workers' bindings and the analytics name them.
+const GATEWAY_DB = '00000000-0000-4000-8000-0000000000d1'
 const CAPTABLE_DB = '00000000-0000-4000-8000-0000000000d2'
 
-/** Answers Cloudflare's API like the account would, counting the calls; `fail` makes one part answer 500. */
-function cloudflareApi({ fail = null } = {}) {
+/**
+ * Answers Cloudflare's API like the account would, counting the calls; `fail` makes one part answer 500, and `sized`
+ * lists the databases the storage analytics know.
+ */
+function cloudflareApi({ fail = null, sized = [GATEWAY_DB, CAPTABLE_DB] } = {}) {
   const calls = []
   const answer = (part, body) => (fail === part ? new Response('{}', { status: 500 }) : body)
+  const settings = { 'insulin-apps-gateway': GATEWAY_DB, 'insulin-apps-captable': CAPTABLE_DB }
   const stop = h.outbound.on('https://api.cloudflare.com/client/v4/', (request, url, params, body) => {
     calls.push({ path: url.pathname, auth: request.headers.get('authorization'), body })
     if (url.pathname.endsWith('/workers/scripts')) {
       return answer('workers', { success: true, result: [{ id: 'insulin-apps-gateway' }, { id: 'insulin-apps-captable' }, { id: 'someone-elses-worker' }] })
     }
-    if (url.pathname.endsWith('/d1/database')) {
-      return answer('databases', { success: true, result: [
-        { name: 'insulin-apps-gateway', uuid: '00000000-0000-4000-8000-0000000000d1', file_size: 9 * 1024 ** 3, num_tables: 40 },
-        { name: 'insulin-apps-captable', uuid: CAPTABLE_DB, file_size: 1024 ** 2, num_tables: 12 },
-        { name: 'unrelated', uuid: '00000000-0000-4000-8000-0000000000d3', file_size: 1, num_tables: 1 },
-      ] })
+    const script = /\/workers\/scripts\/([^/]+)\/settings$/.exec(url.pathname)?.[1]
+    if (script) {
+      return answer('settings', { success: true, result: { bindings: [
+        { type: 'd1', name: 'DB', id: settings[script] },
+        { type: 'service', name: 'SUGER_GATEWAY', service: 'insulin-apps-gateway' },
+      ] } })
+    }
+    if (url.pathname === '/client/v4/graphql' && body.includes('d1StorageAdaptiveGroups')) {
+      return answer('storage', { data: { viewer: { accounts: [{ storage: [
+        { dimensions: { databaseId: GATEWAY_DB, date: '2026-01-01' }, max: { databaseSizeBytes: 9 * 1024 ** 3 } },
+        { dimensions: { databaseId: CAPTABLE_DB, date: '2026-01-01' }, max: { databaseSizeBytes: 1024 ** 2 } },
+      ].filter((group) => sized.includes(group.dimensions.databaseId)) }] } } })
     }
     if (url.pathname === '/client/v4/graphql') {
       return answer('analytics', { data: { viewer: { accounts: [{
-        day: [{ dimensions: { scriptName: 'insulin-apps-captable' }, sum: { requests: 1200, errors: 12 }, quantiles: { cpuTimeP50: 2500, cpuTimeP99: 40_000 } }],
-        month: [{ dimensions: { scriptName: 'insulin-apps-captable' }, sum: { requests: 9_000_000, errors: 100 } }],
-        d1Day: [{ dimensions: { databaseId: CAPTABLE_DB }, sum: { rowsRead: 5000, rowsWritten: 50 } }],
+        day: [
+          { dimensions: { scriptName: 'insulin-apps-gateway' }, sum: { requests: 1500, errors: 3 }, quantiles: { cpuTimeP50: 1500, cpuTimeP99: 9000 } },
+          { dimensions: { scriptName: 'insulin-apps-captable' }, sum: { requests: 1200, errors: 12 }, quantiles: { cpuTimeP50: 2500, cpuTimeP99: 40_000 } },
+        ],
+        month: [
+          { dimensions: { scriptName: 'insulin-apps-gateway' }, sum: { requests: 9_000_000, errors: 30 } },
+          { dimensions: { scriptName: 'insulin-apps-captable' }, sum: { requests: 5_000_000, errors: 100 } },
+        ],
+        d1Yesterday: [{ dimensions: { databaseId: CAPTABLE_DB }, sum: { rowsRead: 5000, rowsWritten: 50 } }],
         d1Month: [{ dimensions: { databaseId: CAPTABLE_DB }, sum: { rowsRead: 900_000, rowsWritten: 9000 } }],
       }] } } })
     }
@@ -528,30 +560,44 @@ test('the hourly tick reads the Cloudflare resources once an hour, with the toke
     await tick()
     const [job] = await waitFor(async () => (await h.sql("SELECT outcome FROM super_jobs WHERE name = 'cloudflare' AND finished_at IS NOT NULL")).length ? h.sql("SELECT outcome FROM super_jobs WHERE name = 'cloudflare'") : null)
     assert.equal(job.outcome, 'ok')
-    assert.equal(api.calls.length, 3)
+    assert.deepEqual(api.calls.map((call) => call.path).sort(), [
+      '/client/v4/graphql',
+      '/client/v4/graphql',
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts`,
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts/insulin-apps-captable/settings`,
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts/insulin-apps-gateway/settings`,
+    ].sort(), "no D1 endpoint: a D1 token could read the apps' databases")
     assert.ok(api.calls.every((call) => call.auth === `Bearer ${CLOUDFLARE_TOKEN}`))
-    assert.ok(api.calls.some((call) => call.path === `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts`))
     const [{ data }] = await h.sql('SELECT data FROM super_cloudflare_snapshots')
     const snapshot = JSON.parse(data)
     assert.deepEqual(snapshot.workers.map((worker) => worker.name), ['insulin-apps-captable', 'insulin-apps-gateway'])
-    assert.deepEqual(snapshot.databases.map((db) => db.name), ['insulin-apps-captable', 'insulin-apps-gateway'])
+    assert.deepEqual(snapshot.databases.map((db) => [db.name, db.sizeBytes, db.rowsReadYesterday]), [
+      ['insulin-apps-captable', 1024 ** 2, 5000], ['insulin-apps-gateway', 9 * 1024 ** 3, 0],
+    ], "each database named after the Worker that binds it, its size from the analytics")
     assert.deepEqual(snapshot.problems, [])
 
     await tick()
     await new Promise((accept) => setTimeout(accept, 300))
-    assert.equal(api.calls.length, 3, 'the hour is taken: no second read')
+    assert.equal(api.calls.length, 5, 'the hour is taken: no second read')
     assert.doesNotMatch(h.logText(), new RegExp(CLOUDFLARE_TOKEN), 'the token is never logged')
 
     const reader = await operator()
     const page = await reader.get(h.url('apex', '/super/cloudflare'))
     assert.equal(page.status, 200)
     assert.match(page.text, /insulin-apps-captable/)
-    assert.doesNotMatch(page.text, /someone-elses-worker|unrelated/)
-    assert.match(page.text, /9,000,000 of 10,000,000 \(90%\)/, 'the month\'s requests against the plan')
+    assert.doesNotMatch(page.text, /someone-elses-worker/)
+    assert.match(page.text, /Gateway requests this month/)
+    assert.match(page.text, /9,000,000 of 10,000,000 \(90%\)/, "the gateway's requests alone: the apps' come through bindings, which aren't billed")
+    assert.doesNotMatch(page.text, /14,000,000/)
+    assert.match(page.text, /Rows read yesterday/)
+    assert.doesNotMatch(page.text, /Rows read, 24 h/)
     assert.match(page.text, /Largest database \(insulin-apps-gateway\)/)
     assert.match(page.text, /Above 80%/)
+    for (const resource of ['Email Service', 'RL_AUTH', 'RL_APP', 'RL_PUBLIC', 'DOCS_ASSETS', '\\*/5 \\* \\* \\* \\*', '17 3 \\* \\* \\*', 'captable\\.insulinapps\\.localhost']) {
+      assert.match(page.text, new RegExp(resource), `the inventory names ${resource}`)
+    }
     const overview = await reader.get(h.url('apex', '/super'))
-    assert.match(overview.text, /Worker requests this month<\/a>: 9,000,000 of 10,000,000/, 'on the watch list')
+    assert.match(overview.text, /Gateway requests this month<\/a>: 9,000,000 of 10,000,000/, 'on the watch list')
   } finally {
     api.stop()
   }
@@ -568,11 +614,361 @@ test('a part of Cloudflare that fails is named, and the rest is kept', async () 
     const snapshot = JSON.parse((await h.sql('SELECT data FROM super_cloudflare_snapshots'))[0].data)
     assert.deepEqual(snapshot.problems, ['analytics:http_500'])
     assert.equal(snapshot.workers.length, 2, 'the lists still came')
+    assert.equal(snapshot.databases.find((db) => db.name === 'insulin-apps-captable').sizeBytes, 1024 ** 2, 'and the sizes')
+    assert.equal(snapshot.workers[0].requestsMonth, null, 'figures that weren\'t read are unknown, not zero')
+    assert.equal(snapshot.databases[0].rowsReadMonth, null)
     const reader = await operator()
-    assert.match((await reader.get(h.url('apex', '/super/cloudflare'))).text, /couldn(?:&#x27;|')t be read: analytics:http_500/)
+    const page = await reader.get(h.url('apex', '/super/cloudflare'))
+    assert.match(page.text, /couldn(?:&#x27;|')t be read: analytics:http_500/)
+    assert.doesNotMatch(page.text, /Gateway requests this month/, 'no meter from unknown figures')
+    const overview = await reader.get(h.url('apex', '/super'))
+    assert.match(overview.text, /Part of the last Cloudflare read failed \(analytics:http_500\)/)
+    assert.doesNotMatch(overview.text, /0 of 10,000,000/)
   } finally {
     api.stop()
   }
+  // The next tick tries the hour again, and the hour keeps one snapshot.
+  const healthy = cloudflareApi()
+  try {
+    await tick()
+    await waitFor(async () => (await h.sql("SELECT 1 FROM super_jobs WHERE name = 'cloudflare' AND outcome = 'ok'")).length)
+    assert.ok(healthy.calls.length > 0)
+    const rows = await h.sql('SELECT data FROM super_cloudflare_snapshots')
+    assert.equal(rows.length, 1, 'one snapshot an hour')
+    assert.equal(JSON.parse(rows[0].data).workers.find((worker) => worker.name === 'insulin-apps-gateway').requestsMonth, 9_000_000)
+  } finally {
+    healthy.stop()
+  }
+})
+
+test('a consent decided after its person or organization stopped being active grants nothing', async () => {
+  const { member, orgId } = await orgWithMember()
+  const client = await registerClient(h)
+  const now = Date.now()
+  const grant = () => insertGrantWithCode(h.db, {
+    id: randomUUID(), clientId: client.client_id, userId: member.id, orgId, app: 'captable', now, expiresAt: now + 3_600_000,
+    codeHash: randomUUID().replaceAll('-', '').repeat(2), redirectUri: LOOPBACK, codeChallenge: 'c'.repeat(43), codeExpiresAt: now + 60_000,
+  })
+  await h.sql("UPDATE users SET status = 'disabled' WHERE id = ?1", member.id)
+  assert.equal(await grant(), false, 'a disabled account')
+  await h.sql("UPDATE users SET status = 'active' WHERE id = ?1", member.id)
+  await h.sql("UPDATE orgs SET status = 'suspended' WHERE id = ?1", orgId)
+  assert.equal(await grant(), false, 'a suspended organization')
+  await h.sql("UPDATE orgs SET status = 'active' WHERE id = ?1", orgId)
+  assert.equal(await grant(), true, 'active again')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM oauth_grants WHERE user_id = ?1 AND org_id = ?2', member.id, orgId))[0].n, 1)
+})
+
+test('a standing change asked for twice at the same moment is recorded once', async () => {
+  const { member, orgId } = await orgWithMember()
+  const operator = { id: randomUUID(), email: ADMIN, name: 'Ada Admin' }
+  const now = Date.now()
+  const change = { orgId, status: 'disabled', reason: 'Twice at once', operator, label: 'Watched Org', now }
+  assert.equal(await setOrgStatus(h.db, change), true)
+  assert.equal(await setOrgStatus(h.db, change), false)
+  assert.equal((await h.sql("SELECT COUNT(*) AS n FROM super_audit WHERE target_id = ?1 AND action = 'org.disable'", orgId))[0].n, 1)
+  const user = { userId: member.id, status: 'suspended', reason: 'Twice at once', operator, label: member.email, now }
+  assert.equal(await setUserStatus(h.db, user), true)
+  assert.equal(await setUserStatus(h.db, user), false)
+  assert.equal((await h.sql("SELECT COUNT(*) AS n FROM super_audit WHERE target_id = ?1 AND action = 'user.suspend'", member.id))[0].n, 1)
+})
+
+test("deleting the account of a suspended organization's only member leaves the organization, still counted for its domain", async () => {
+  const owner = await h.user({ name: 'Sole Owner' })
+  const orgId = await h.org(owner.client, 'Solo Suspect')
+  const admin = await operator(ADMIN)
+  assert.equal((await admin.post(h.url('apex', `/super/orgs/${orgId}/status`), { status: 'suspended', reason: 'Under review' })).status, 303)
+  const deleted = await owner.client.post(h.url('apex', '/account/delete'), { confirm: owner.email })
+  assert.equal(deleted.status, 200, deleted.text.slice(0, 300))
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM users WHERE id = ?1', owner.id))[0].n, 0, 'the account is gone')
+  const [org] = await h.sql('SELECT status, owner_domain FROM orgs WHERE id = ?1', orgId)
+  assert.deepEqual(org, { status: 'suspended', owner_domain: 'example.test' }, 'the organization stays')
+})
+
+test("an organization's last activity: switching to it, and never a suspended one or one the person left", async () => {
+  const person = await h.user()
+  const first = await h.org(person.client, 'First Active')
+  const second = await h.org(person.client, 'Second Active')
+  await h.sql('UPDATE orgs SET last_active_at = 0 WHERE id IN (?1, ?2)', first, second)
+  assert.equal((await person.client.post(h.url('apex', '/orgs/switch'), { org_id: second })).status, 303)
+  assert.ok((await h.sql('SELECT last_active_at FROM orgs WHERE id = ?1', second))[0].last_active_at > 0, 'switching counts')
+
+  await h.sql("UPDATE orgs SET status = 'suspended', last_active_at = 0 WHERE id = ?1", second)
+  await h.sql('UPDATE sessions SET last_seen_at = 0, active_org_id = ?2 WHERE user_id = ?1', person.id, second)
+  await person.client.get(h.url('apex', '/'))
+  assert.equal((await h.sql('SELECT last_active_at FROM orgs WHERE id = ?1', second))[0].last_active_at, 0, 'not a suspended one')
+
+  const stranger = await h.user()
+  const left = await h.org(stranger.client, 'Left Behind')
+  await h.sql('UPDATE orgs SET last_active_at = 0 WHERE id = ?1', left)
+  await h.sql('UPDATE sessions SET last_seen_at = 0, active_org_id = ?2 WHERE user_id = ?1', person.id, left)
+  await person.client.get(h.url('apex', '/'))
+  assert.equal((await h.sql('SELECT last_active_at FROM orgs WHERE id = ?1', left))[0].last_active_at, 0, 'not one the person is no member of')
+})
+
+test("an app's organizations page through every organization it reported, a hundred at a time", async () => {
+  const hour = topOfHour()
+  const ids = Array.from({ length: 150 }, (_, index) => `00000000-0000-4000-9000-${String(index).padStart(12, '0')}`)
+  for (const [index, id] of ids.entries()) {
+    await h.sql('INSERT INTO orgs (id, name, created_at, updated_at) VALUES (?1, ?2, 0, 0)', id, `Paged Org ${String(index).padStart(3, '0')}`)
+  }
+  const sent = await report({ hour, organizations: ids.map((id, index) => ({ id, metrics: { records: 1000 - index } })) }, { app: 'ledger' })
+  assert.equal(JSON.parse(sent.text).organizations, 150)
+  const reader = await operator()
+  const first = await reader.get(h.url('apex', '/super/apps/ledger'))
+  assert.match(first.text, /Paged Org 000/)
+  assert.match(first.text, /Paged Org 099/)
+  assert.doesNotMatch(first.text, /Paged Org 100/)
+  assert.match(first.text, /href="\/super\/apps\/ledger\?sort=records&amp;page=2"/)
+  const second = await reader.get(h.url('apex', '/super/apps/ledger?sort=records&page=2'))
+  assert.match(second.text, /Paged Org 149/)
+  assert.doesNotMatch(second.text, /Paged Org 099/)
+})
+
+
+test("an organization's own writes refuse it once it is suspended, even a request that passed its checks before", async () => {
+  const { owner, member, orgId } = await orgWithMember()
+  const invited = await owner.client.post(h.url('apex', `/orgs/${orgId}/invitations`), { email: uniqueEmail('pending'), role: 'VIEWER' })
+  assert.equal(invited.status, 303)
+  const [invitation] = await h.sql("SELECT id FROM invitations WHERE org_id = ?1 AND status = 'pending'", orgId)
+  await h.sql("UPDATE orgs SET status = 'suspended' WHERE id = ?1", orgId)
+  const now = Date.now()
+  assert.equal(await renameOrg(h.db, orgId, owner.id, 'Renamed', now), false, 'rename')
+  assert.equal(await changeRole(h.db, { orgId, userId: member.id, current: 'EDITOR', next: 'VIEWER', actorId: owner.id, now }), false, 'a role')
+  assert.equal(await revokeInvitation(h.db, invitation.id, owner.id, now), false, 'an invitation')
+  assert.equal(await removeMember(h.db, orgId, member.id, 'EDITOR', owner.id), false, 'a removal')
+  assert.equal(await leaveOrg(h.db, orgId, member.id, 'EDITOR'), false, 'leaving')
+  assert.equal(await deleteOrg(h.db, orgId, owner.id), false, 'deleting it')
+  const [org] = await h.sql('SELECT name, status FROM orgs WHERE id = ?1', orgId)
+  assert.deepEqual(org, { name: 'Watched Org', status: 'suspended' })
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?1', orgId))[0].n, 2)
+})
+
+test('an agent or API client used as its account or organization is suspended leaves no sign of activity', async () => {
+  const { owner, member, orgId } = await orgWithMember()
+  const agent = await connect(h, member, orgId)
+  const [grant] = await h.sql('SELECT id FROM oauth_grants WHERE user_id = ?1 AND org_id = ?2', member.id, orgId)
+  void agent
+  const created = await owner.client.post(h.url('apex', '/apps/captable/settings/api/clients'), { org_id: orgId, name: 'Exporter', role: 'VIEWER' })
+  assert.equal(created.status, 200)
+  const [account] = await h.sql('SELECT id FROM service_accounts WHERE org_id = ?1', orgId)
+  await h.sql("UPDATE users SET status = 'suspended', last_active_at = 0 WHERE id = ?1", member.id)
+  await h.sql("UPDATE orgs SET status = 'suspended', last_active_at = 0 WHERE id = ?1", orgId)
+  await touchGrant(h.db, grant.id, Date.now())
+  await touchServiceAccount(h.db, account.id, Date.now())
+  assert.equal((await h.sql('SELECT last_active_at FROM users WHERE id = ?1', member.id))[0].last_active_at, 0)
+  assert.equal((await h.sql('SELECT last_active_at FROM orgs WHERE id = ?1', orgId))[0].last_active_at, 0)
+})
+
+test('a report for an hour that exists only after normalizing (yesterday at 24:00) is refused', async () => {
+  const yesterday = new Date(Date.now() - 24 * HOUR).toISOString().slice(0, 10)
+  const refused = await report({ hour: `${yesterday}T24:00:00Z`, app: { database_bytes: 1 } })
+  assert.equal(refused.status, 400)
+  assert.match(JSON.parse(refused.text).detail, /not a valid time/)
+})
+
+test('creating an organization for someone twice from one form creates it once', async () => {
+  const email = `twice.${Date.now()}@twice-over.test`
+  await h.user({ name: 'Twice Person', email })
+  const admin = await operator(ADMIN)
+  const form = await admin.get(h.url('apex', '/super/orgs/new'))
+  const orgId = new RegExp(`name="org_id" value="(${UUID})"`).exec(form.text)?.[1]
+  assert.ok(orgId, 'the form carries the id of the organization it will create')
+  const fields = { org_id: orgId, email, name: 'Only Once', reason: 'Support request, double-clicked' }
+  const first = await admin.post(h.url('apex', '/super/orgs'), fields)
+  const second = await admin.post(h.url('apex', '/super/orgs'), fields)
+  assert.equal(first.status, 303)
+  assert.equal(second.status, 303)
+  assert.equal(second.location, first.location, 'the second lands on the same organization')
+  assert.equal((await h.sql("SELECT COUNT(*) AS n FROM orgs WHERE name = 'Only Once'"))[0].n, 1)
+  assert.equal((await h.sql("SELECT COUNT(*) AS n FROM super_audit WHERE action = 'org.create' AND target_id = ?1", orgId))[0].n, 1)
+  // An id that is another organization's takes nothing over.
+  const { orgId: taken } = await orgWithMember()
+  const hijack = await admin.post(h.url('apex', '/super/orgs'), { ...fields, org_id: taken, name: 'Hijack' })
+  assert.equal(hijack.status, 409)
+  assert.equal((await h.sql("SELECT COUNT(*) AS n FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ?1 AND u.email = ?2", taken, email))[0].n, 0)
+  assert.equal((await h.sql('SELECT name FROM orgs WHERE id = ?1', taken))[0].name, 'Watched Org')
+})
+
+test('a failed hourly snapshot is tried again at the next tick', async () => {
+  await h.sql('DELETE FROM super_jobs')
+  await h.sql('DELETE FROM super_cloudflare_snapshots')
+  const hour = Math.floor(Date.now() / HOUR) * HOUR
+  await h.sql("INSERT INTO super_jobs (name, hour, started_at, finished_at, outcome) VALUES ('cloudflare', ?1, ?2, ?2, 'failed')", hour, Date.now() - 60_000)
+  const api = cloudflareApi()
+  try {
+    await tick()
+    await waitFor(async () => (await h.sql("SELECT 1 FROM super_jobs WHERE name = 'cloudflare' AND outcome = 'ok'")).length)
+    assert.ok(api.calls.length > 0)
+  } finally {
+    api.stop()
+  }
+})
+
+test('each report clears the app\'s hourly numbers past three days, however many there are', async () => {
+  const { orgId } = await orgWithMember()
+  const old = Math.floor(Date.now() / HOUR) * HOUR - 4 * 24 * HOUR
+  for (let batch = 0; batch < 6; batch += 1) {
+    await h.db.batch(Array.from({ length: 100 }, (_, index) => h.db.prepare(
+      "INSERT INTO app_metrics_hourly (app, org_id, hour, metrics, received_at) VALUES ('ledger', ?1, ?2, '{}', 0)",
+    ).bind(`00000000-0000-4000-a000-${String(batch * 100 + index).padStart(12, '0')}`, old)))
+  }
+  assert.equal((await report({ hour: topOfHour(), organizations: [{ id: orgId, metrics: { records: 1 } }] }, { app: 'ledger' })).status, 202)
+  assert.equal((await h.sql("SELECT COUNT(*) AS n FROM app_metrics_hourly WHERE app = 'ledger' AND hour < ?1", old + HOUR))[0].n, 0)
+})
+
+
+test("a suspended organization's SCIM token, integration proxy, API client and its pending ways in are all refused", async () => {
+  const { owner, member, orgId } = await orgWithMember()
+  // SCIM, with a token from the settings page and a verified domain.
+  await h.sql("INSERT INTO sso_domains (org_id, domain, token, created_at, verified_at) VALUES (?1, 'suspended-scim.test', 'synthetic-token', ?2, ?2)", orgId, Date.now())
+  const scimCreated = await owner.client.post(h.url('apex', `/orgs/${orgId}/sso/scim-tokens`), { name: 'Test IdP' })
+  assert.equal(scimCreated.status, 201)
+  const scimToken = /<code[^>]*>([A-Za-z0-9_-]{43})<\/code>/.exec(scimCreated.text)[1]
+  const scim = (method, path, body) => h.client().request(h.url('apex', `/scim/v2${path}`), {
+    method, headers: { Authorization: `Bearer ${scimToken}`, ...(body ? { 'Content-Type': 'application/scim+json' } : {}) }, body: body ? JSON.stringify(body) : undefined,
+  })
+  assert.equal((await scim('GET', '/Users')).status, 200)
+  // A stored credential, an API client and a pending invitation.
+  const saved = await owner.client.post(h.url('apex', '/apps/captable/settings/integrations/credentials'), {
+    org_id: orgId, key: 'upstream', name: 'Upstream', base_url: 'https://api.example.test/v1', allowed_hosts: '', auth_scheme: 'bearer', secret: 'bearer-synthetic',
+  })
+  assert.ok([200, 303].includes(saved.status), saved.text.slice(0, 200))
+  const created = await owner.client.post(h.url('apex', '/apps/captable/settings/api/clients'), { org_id: orgId, name: 'Nightly', role: 'VIEWER' })
+  const clientId = /(ia_sa_[A-Za-z0-9_-]{22})/.exec(created.text)[1]
+  const secret = /(ia_sk_[A-Za-z0-9_-]{43})/.exec(created.text)[1]
+  const credentials = () => form(h.client(), h.url('apex', '/oauth/token'), { grant_type: 'client_credentials' }, { Authorization: `Basic ${Buffer.from(`${clientId}:${secret}`).toString('base64')}` })
+  const issued = await credentials()
+  assert.equal(issued.status, 200)
+  const apiToken = issued.json.access_token
+  const invitee = await h.user({ name: 'Later Invitee' })
+  assert.equal((await owner.client.post(h.url('apex', `/orgs/${orgId}/invitations`), { email: invitee.email, role: 'VIEWER' })).status, 303)
+  const link = await h.link(invitee.email, '/invitations/')
+  const outbound = []
+  const stop = h.outbound.on('https://api.example.test/', (request, url) => { outbound.push(url.href); return { ok: true } })
+  try {
+    const admin = await operator(ADMIN)
+    assert.equal((await admin.post(h.url('apex', `/super/orgs/${orgId}/status`), { status: 'suspended', reason: 'Checking everything' })).status, 303)
+    const [before] = await h.sql('SELECT last_used_at FROM scim_tokens WHERE org_id = ?1', orgId)
+    assert.equal((await scim('GET', '/Users')).status, 401, 'SCIM')
+    assert.equal((await scim('POST', '/Users', { schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'], userName: 'new@suspended-scim.test' })).status, 401)
+    assert.deepEqual(await h.sql('SELECT last_used_at FROM scim_tokens WHERE org_id = ?1', orgId), [before], 'a refused token is not marked used')
+    const proxied = await h.client().request(h.url('apex', '/__insulin/integrations/upstream/proxy/_/items'), {
+      headers: { Authorization: `Bearer ${appToken(SECRET_KEY, 'captable')}`, 'x-suger-organization-id': orgId },
+    })
+    assert.equal(proxied.status, 404, 'the integration proxy')
+    assert.deepEqual(outbound, [], 'and nothing went out')
+    assert.equal((await credentials()).status, 401, 'client credentials')
+    assert.equal((await h.client().request(h.url('captable', '/api/echo'), { headers: { Authorization: `Bearer ${apiToken}` } })).status, 401, 'an API client\'s token')
+    assert.notEqual((await invitee.client.post(`${link}/accept`, {})).status, 303, 'accepting an invitation')
+    assert.equal((await h.sql('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?1 AND user_id = ?2', orgId, invitee.id))[0].n, 0)
+    assert.equal(await joinOrg(h.db, orgId, invitee.id, 'VIEWER', Date.now(), 1000), false, 'single sign-on joining')
+    await h.sql("INSERT INTO users (id, email, name, email_verified_at, created_at, updated_at) VALUES ('00000000-0000-4000-8000-00000000510e', 'scim@suspended-scim.test', 'Scim Person', 0, 0, 0)")
+    assert.equal(await joinOrgByScim(h.db, orgId, '00000000-0000-4000-8000-00000000510e', 'VIEWER', Date.now(), 1000), false, 'SCIM joining')
+    assert.equal((await member.client.post(h.url('apex', '/orgs/switch'), { org_id: orgId })).status, 404, 'switching to it')
+    assert.equal(await setAppAccess(h.db, { orgId, userId: member.id, current: 'EDITOR', grants: [{ app: 'captable', role: 'VIEWER', customRoleId: null }], actorId: owner.id, now: Date.now() }), false, 'app access')
+    assert.equal(await insertInvitation(h.db, {
+      id: randomUUID(), orgId, email: uniqueEmail('blocked'), role: 'VIEWER', grants: [], invitedBy: owner.id, now: Date.now(), expiresAt: Date.now() + 86_400_000, pendingLimit: 50, app: null,
+    }), false, 'a new invitation')
+  } finally {
+    stop()
+  }
+})
+
+test("a suspended account's agent can't refresh or redeem a code, and the code step refuses it", async () => {
+  const { member, orgId } = await orgWithMember()
+  const agent = await connect(h, member, orgId)
+  // A code allowed just before the suspension, not yet exchanged.
+  const client = await registerClient(h)
+  const { challenge } = pkce()
+  const now = Date.now()
+  const codeHash = randomUUID().replaceAll('-', '').repeat(2)
+  assert.equal(await insertGrantWithCode(h.db, {
+    id: randomUUID(), clientId: client.client_id, userId: member.id, orgId, app: 'captable', now, expiresAt: now + 3_600_000,
+    codeHash, redirectUri: LOOPBACK, codeChallenge: challenge, codeExpiresAt: now + 60_000,
+  }), true)
+  const admin = await operator(ADMIN)
+  assert.equal((await admin.post(h.url('apex', `/super/users/${member.id}/status`), { status: 'suspended', reason: 'Agents too' })).status, 303)
+  const refresh = await form(h.client(), h.url('apex', '/oauth/token'), { grant_type: 'refresh_token', refresh_token: agent.refresh_token, client_id: agent.client.client_id })
+  assert.equal(refresh.status, 400, 'refresh')
+  assert.equal(await redeemCode(h.db, codeHash, client.client_id, Date.now()), null, 'a code allowed before')
+
+  // Two-step sign-in: the suspension lands between the password and the code.
+  const person = await h.user({ name: 'Two Step' })
+  assert.equal((await person.client.post(h.url('apex', '/account/security/setup'), { password: PASSWORD })).status, 303)
+  const setup = await person.client.get(h.url('apex', '/account/security'))
+  const totp = base32Decode(/<code[^>]*>([A-Z2-7 ]+)<\/code>/.exec(setup.text)[1].replaceAll(' ', ''))
+  assert.equal((await person.client.post(h.url('apex', '/account/security/enable'), { code: await hotp(totp, timeStep(Date.now()) - 1), password: PASSWORD })).status, 200)
+  const browser = h.client()
+  const first = await h.signIn(browser, { email: person.email })
+  assert.equal(first.location, h.url('apex', '/login/mfa'))
+  assert.equal((await admin.post(h.url('apex', `/super/users/${person.id}/status`), { status: 'suspended', reason: 'Mid sign-in' })).status, 303)
+  const code = await browser.post(h.url('apex', '/login/mfa'), { code: await hotp(totp, timeStep(Date.now()) + 1) })
+  assert.equal(code.status, 403)
+  assert.match(code.text, /This account is suspended/)
+  assert.ok(!code.cookies.some((line) => /^insulin_session=[^;]+;/.test(line) && !/Max-Age=0/.test(line)), 'no session')
+})
+
+test("the consent page doesn't offer a suspended organization", async () => {
+  const person = await h.user()
+  const kept = await h.org(person.client, 'Offered Org')
+  const suspended = await h.org(person.client, 'Hidden Org')
+  await h.sql("UPDATE orgs SET status = 'suspended' WHERE id = ?1", suspended)
+  const client = await registerClient(h)
+  const { challenge } = pkce()
+  const { page } = await openConsent(person, authorizeUrl(h, { client, challenge }))
+  assert.match(page.text, new RegExp(kept))
+  assert.doesNotMatch(page.text, new RegExp(suspended))
+  assert.doesNotMatch(page.text, /Hidden Org/)
+})
+
+
+test("a database the storage analytics don't know leaves the storage meters out rather than understating them", async () => {
+  await h.sql('DELETE FROM super_jobs')
+  await h.sql('DELETE FROM super_cloudflare_snapshots')
+  const api = cloudflareApi({ sized: [CAPTABLE_DB] })
+  try {
+    await tick()
+    await waitFor(async () => (await h.sql("SELECT 1 FROM super_jobs WHERE name = 'cloudflare' AND finished_at IS NOT NULL")).length)
+    const snapshot = JSON.parse((await h.sql('SELECT data FROM super_cloudflare_snapshots'))[0].data)
+    assert.equal(snapshot.databases.find((db) => db.name === 'insulin-apps-gateway').sizeBytes, null)
+    const reader = await operator()
+    const page = await reader.get(h.url('apex', '/super/cloudflare'))
+    assert.doesNotMatch(page.text, /D1 storage, all databases/, "a total that leaves a database out isn't the total")
+    assert.doesNotMatch(page.text, /Largest database/, 'nor is the largest known database the largest')
+    assert.match(page.text, /Gateway requests this month/, 'the other meters stay')
+  } finally {
+    api.stop()
+  }
+})
+
+
+test('the meters against the plan: right, or left out, whatever the snapshot could read', () => {
+  const day = 24 * HOUR
+  const may = Date.UTC(2026, 4, 1)
+  const gateway = (requestsMonth) => ({ name: 'insulin-apps-gateway', requests24h: 1, errors24h: 0, requestsMonth, errorsMonth: 0, cpuP50: null, cpuP99: null })
+  const db = (name, sizeBytes, rows) => ({ name, id: name, sizeBytes, rowsReadYesterday: rows, rowsWrittenYesterday: rows, rowsReadMonth: rows, rowsWrittenMonth: rows })
+  const snapshot = (takenAt, workers, databases) => ({ takenAt, monthStart: Date.UTC(new Date(takenAt).getUTCFullYear(), new Date(takenAt).getUTCMonth(), 1), workers, databases, problems: [] })
+  const keys = (rows) => rows.map((row) => row.key)
+
+  // Ten days into a 31-day month, at half the allowance: heading for 155%, a warning from the projection alone.
+  const mid = headroom(snapshot(may + 10 * day, [gateway(PLAN.workerRequestsPerMonth / 2)], [db('insulin-apps-gateway', 1024, 100)]))
+  assert.deepEqual(keys(mid), ['requests', 'rows_read', 'rows_written', 'storage', 'largest_db'])
+  assert.equal(mid[0].projected, Math.round((PLAN.workerRequestsPerMonth / 2) * 3.1))
+  assert.equal(isWarning(mid[0]), true)
+
+  // Five minutes into a month there is too little of it to project from: no projection, not a twelfth of one.
+  const early = headroom(snapshot(may + 5 * 60_000, [gateway(13_000)], []))
+  assert.equal(early[0].projected, null)
+  assert.equal(isWarning(early[0]), false)
+  // December runs to the first of January.
+  const december = headroom(snapshot(Date.UTC(2026, 11, 16), [gateway(1500)], []))
+  assert.equal(december[0].projected, 3100)
+
+  assert.deepEqual(keys(headroom(snapshot(may + day, null, null))), [], 'nothing read')
+  assert.deepEqual(keys(headroom(snapshot(may + day, [], []))), [], 'no Worker, no database: no meter at all, never zeros')
+  assert.deepEqual(keys(headroom(snapshot(may + day, [gateway(null)], [db('a', 1, null)]))), ['storage', 'largest_db'], 'rows unknown')
+  assert.deepEqual(keys(headroom(snapshot(may + day, [{ ...gateway(5), name: 'insulin-apps-captable' }], [db('a', null, 5), db('b', 2, 5)]))), ['rows_read', 'rows_written'], 'a size unknown, and no gateway')
 })
 
 // Last in the file: the gateway stops reading a body past its limit, and the connection it came on may not be usable

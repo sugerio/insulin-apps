@@ -4,7 +4,7 @@
 import type { HostedApp } from '../config.ts'
 import type { Context } from '../context.ts'
 import { apexUrl } from '../context.ts'
-import { UUID_PATTERN, newId } from '../crypto.ts'
+import { UUID_PATTERN, isId, newId } from '../crypto.ts'
 import { DAY_MS, dailySeries, fastestGrowing, latestForOrg, latestReport, latestReports, parseMetrics } from '../db/metrics.ts'
 import { field } from '../http/request.ts'
 import { redirect } from '../http/response.ts'
@@ -23,13 +23,15 @@ import { checkOrgName, cleanText, length, normalizeEmail } from '../validate.ts'
 import { assertionConsumer, loadOperator, metadata, signInResponse, signOut, startSignIn, type OperatorSession } from './auth.ts'
 import { headroom, parseSnapshot } from './cloudflare.ts'
 import {
-  createOrgForUser, dailyNew, findAccount, isStatus, lastJob, listAudit, listOrgs, listUsers, orgDetail, orgNames, overview,
+  createOrgForUser, createdBy, dailyNew, findAccount, isStatus, lastJob, listAudit, listOrgs, listUsers, orgDetail, orgNames, overview,
   setOrgStatus, setUserStatus, signals, snapshots, userDetail, type OrgSort, type Status, type UserSort,
 } from './db.ts'
 import { CLOUDFLARE_JOB } from './jobs.ts'
 
 export const REASON_MIN = 3
 export const REASON_MAX = 500
+/** Organizations per page of an app's latest report. */
+const APP_PAGE_SIZE = 100
 
 type Page = (ctx: Context, session: OperatorSession, params: string[]) => Promise<Response> | Response
 
@@ -53,7 +55,8 @@ const ROUTES: Route[] = [
   route('GET', '', overviewRoute),
   route('POST', '/logout', (ctx, session) => signOut(ctx, session)),
   route('GET', '/orgs', orgsRoute),
-  route('GET', '/orgs/new', (ctx, session) => newOrgPage(ctx, session, {}), { admin: true }),
+  // The form carries the id of the organization it creates, so sending it twice creates one (createOrgForUser).
+  route('GET', '/orgs/new', (ctx, session) => newOrgPage(ctx, session, { values: { orgId: newId(), email: '', name: '', reason: '' } }), { admin: true }),
   route('POST', '/orgs', createOrgRoute, { admin: true }),
   route('GET', `/orgs/(${ORG})`, orgRoute),
   route('POST', `/orgs/(${ORG})/status`, orgStatusRoute, { admin: true }),
@@ -124,7 +127,10 @@ async function overviewRoute(ctx: Context, session: OperatorSession): Promise<Re
     snapshots(db, ctx.now - 2 * 60 * 60 * 1000),
   ])
   const latest = recent.length ? parseSnapshot(recent[recent.length - 1]!.data) : null
-  return overviewPage(ctx, session, { counts, daily, since, signals: watch, reports, headroom: latest ? headroom(latest) : null, snapshotAt: latest?.takenAt ?? null })
+  return overviewPage(ctx, session, {
+    counts, daily, since, signals: watch, reports, headroom: latest ? headroom(latest) : null, snapshotAt: latest?.takenAt ?? null,
+    snapshotProblems: latest?.problems ?? [],
+  })
 }
 
 async function orgsRoute(ctx: Context, session: OperatorSession): Promise<Response> {
@@ -206,7 +212,9 @@ async function userStatusRoute(ctx: Context, session: OperatorSession, [userId]:
  * person is told by e-mail, from the platform, without the operator's name.
  */
 async function createOrgRoute(ctx: Context, session: OperatorSession): Promise<Response> {
-  const values = { email: field(ctx.form, 'email').slice(0, 254), name: field(ctx.form, 'name').slice(0, 200), reason: field(ctx.form, 'reason').slice(0, 1000) }
+  const orgId = field(ctx.form, 'org_id')
+  if (!isId(orgId)) return newOrgPage(ctx, session, { values: { orgId: newId(), email: '', name: '', reason: '' }, error: 'That form is out of date. Fill in this one.' }, 400)
+  const values = { orgId, email: field(ctx.form, 'email').slice(0, 254), name: field(ctx.form, 'name').slice(0, 200), reason: field(ctx.form, 'reason').slice(0, 1000) }
   const again = (error: string, status = 400) => newOrgPage(ctx, session, { values, error }, status)
   const email = normalizeEmail(values.email)
   if (!email) return again('Enter the address of the account that will own the organization.')
@@ -218,8 +226,13 @@ async function createOrgRoute(ctx: Context, session: OperatorSession): Promise<R
   if (!account) return again('There is no account with that address. The person signs up first.', 404)
   if (!account.verified) return again('That account hasn\'t confirmed its address yet.', 409)
   if (account.status !== 'active') return again(`That account is ${account.status}.`, 409)
-  const orgId = newId()
   if (!(await createOrgForUser(ctx.config.db, { id: orgId, name: name.name, user: account, reason: reason.reason, operator: session.operator, now: ctx.now }))) {
+    // The same form sent again lands on what it created; an id that is someone else's organization is refused.
+    const existing = await createdBy(ctx.config.db, orgId)
+    if (existing?.created_by === account.id && existing.created_by_operator === session.operator.email) {
+      return redirect(apexUrl(ctx, `/super/orgs/${orgId}?notice=created`), 303)
+    }
+    if (existing) return newOrgPage(ctx, session, { values: { ...values, orgId: newId() }, error: 'That form was already used. Fill in this one.' }, 409)
     return again('The organization wasn\'t created: the account changed meanwhile. Check it and try again.', 409)
   }
   log('super_org_created', { operator: session.operator.id, org: orgId, user: account.id })
@@ -261,7 +274,8 @@ async function appRoute(ctx: Context, session: OperatorSession, [name]: string[]
   const requested = ctx.url.searchParams.get('sort') ?? ''
   const sort = metricNames.includes(requested) ? requested : (metricNames.includes('storage_bytes') ? 'storage_bytes' : metricNames[0] ?? null)
   orgRows.sort((a, b) => (sort ? (b.metrics[sort] ?? 0) - (a.metrics[sort] ?? 0) : 0) || a.orgId.localeCompare(b.orgId))
-  const top = orgRows.slice(0, 200)
+  const current = page(ctx)
+  const top = orgRows.slice((current - 1) * APP_PAGE_SIZE, current * APP_PAGE_SIZE)
   const growth = sort ? await fastestGrowing(db, app.name, sort, 10) : []
   const names = await orgNames(db, [...new Set([...top.map((row) => row.orgId), ...growth.map((row) => row.org_id)])])
   return appDetailPage(ctx, session, {
@@ -272,13 +286,19 @@ async function appRoute(ctx: Context, session: OperatorSession, [name]: string[]
     sort,
     organizations: top.map((row) => ({ ...row, name: names.get(row.orgId) ?? null })),
     total: orgRows.length,
+    page: current,
+    pageSize: APP_PAGE_SIZE,
     growth: growth.map((row) => ({ ...row, name: names.get(row.org_id) ?? null })),
   })
 }
 
 async function cloudflareRoute(ctx: Context, session: OperatorSession): Promise<Response> {
   const db = ctx.config.db
-  const [rows, job] = await Promise.all([snapshots(db, ctx.now - 30 * DAY_MS), lastJob(db, CLOUDFLARE_JOB)])
+  const [rows, job, mail] = await Promise.all([
+    snapshots(db, ctx.now - 30 * DAY_MS),
+    lastJob(db, CLOUDFLARE_JOB),
+    db.prepare('SELECT COUNT(*) AS count FROM mail_log WHERE created_at >= ?1').bind(ctx.now - 2 * DAY_MS).first<{ count: number }>(),
+  ])
   const parsed = rows.map((row) => parseSnapshot(row.data)).filter((snapshot) => snapshot !== null)
   const latest = parsed[parsed.length - 1] ?? null
   return cloudflarePage(ctx, session, {
@@ -287,6 +307,7 @@ async function cloudflareRoute(ctx: Context, session: OperatorSession): Promise<
     headroom: latest ? headroom(latest) : [],
     history: parsed,
     job,
+    mail2d: mail?.count ?? 0,
   })
 }
 

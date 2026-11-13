@@ -27,6 +27,11 @@ const HOUR_MS = 3_600_000
 const STALE_CLAIM_MS = 10 * 60_000
 /** Hours older than this are deleted. */
 const KEEP_MS = 3 * 24 * HOUR_MS
+/**
+ * How long the report's requests may take together: well inside the platform's 25 seconds for the tick, so a gateway
+ * that doesn't answer still leaves this tick time to release the claim, and the next tick tries again.
+ */
+const REQUESTS_BUDGET_MS = 15_000
 /** The platform takes at most this many organizations in one request. */
 export const ORGANIZATIONS_PER_REQUEST = 500
 
@@ -160,12 +165,14 @@ export async function reportUsage(db: D1Database, env: MetricsEnv, now: number):
   try {
     const report = await measureUsage(db, hour, typeof size === 'number' && Number.isFinite(size) && size >= 0 ? size : null)
     const send = env.METRICS_FETCH ?? fetch
+    const signal = AbortSignal.timeout(REQUESTS_BUDGET_MS)
     for (const body of reportBodies(report)) {
       const response = await send(target.url, {
         method: 'POST',
         headers: { authorization: `Bearer ${target.token}`, 'content-type': 'application/json' },
         body: JSON.stringify(body),
         redirect: 'manual',
+        signal,
       })
       if (response.status !== 202) throw new MetricsReportError(response.status)
     }

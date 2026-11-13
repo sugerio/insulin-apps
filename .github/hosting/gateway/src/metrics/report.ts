@@ -50,7 +50,8 @@ export function readReport(value: unknown, now: number): Parsed | string {
   if (unknown.length) return 'unknown field'
   if (typeof body.hour !== 'string' || !HOUR_PATTERN.test(body.hour)) return 'hour must be the top of a UTC hour, like 2026-01-01T10:00:00Z'
   const hour = Date.parse(body.hour)
-  if (Number.isNaN(hour) || hour % HOUR_MS !== 0) return 'hour is not a valid time'
+  // Date.parse rolls an impossible date over (February 30, 24:00): only an hour that reads back as sent is one.
+  if (Number.isNaN(hour) || hour % HOUR_MS !== 0 || new Date(hour).toISOString() !== body.hour.replace('Z', '.000Z')) return 'hour is not a valid time'
   if (hour > now + CLOCK_SKEW_MS) return 'hour is in the future'
   if (hour < now - MAX_AGE_MS) return 'hour is more than seven days old'
   let appMetrics: Metrics | null = null

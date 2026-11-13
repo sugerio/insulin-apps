@@ -20,6 +20,8 @@ export interface OverviewData {
   reports: { app: string; hour: number; received_at: number; organizations: number }[]
   headroom: Headroom[] | null
   snapshotAt: number | null
+  /** What the latest snapshot couldn't read, by part; its meters leave those figures out. */
+  snapshotProblems: string[]
 }
 
 /** An app's report is late when the latest one arrived more than two hours ago. */
@@ -121,6 +123,12 @@ export function overviewPage(ctx: Context, session: OperatorSession, data: Overv
           </Table>
         </Section>
         <Section title="Cloudflare limits" description={data.snapshotAt ? `Read ${when(data.snapshotAt)}.` : "No snapshot in the last two hours."}>
+          {data.snapshotProblems.length ? (
+            <p className="mb-4 flex items-start gap-2 text-sm text-muted-foreground">
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <span>Part of the last Cloudflare read failed ({data.snapshotProblems.join(", ")}); the next tick tries again, and its figures are left out until then.</span>
+            </p>
+          ) : null}
           {data.headroom?.length ? (
             <div className="flex flex-col gap-4">
               {data.headroom.map((row) => (

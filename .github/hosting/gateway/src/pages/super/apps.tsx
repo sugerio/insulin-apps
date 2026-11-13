@@ -7,7 +7,7 @@ import type { Context } from "../../context.ts"
 import type { Metrics } from "../../db/metrics.ts"
 import type { OperatorSession } from "../../super/auth.ts"
 import { superPage } from "./layout.tsx"
-import { Bars, Section, SortLink, ago, day, metricLabel, metricValue, when } from "./parts.tsx"
+import { Bars, Pagination, Section, SortLink, ago, day, metricLabel, metricValue, when } from "./parts.tsx"
 
 export interface AppSummary {
   app: { name: string; title: string; scheduled: string | null }
@@ -23,7 +23,7 @@ function MetricList({ metrics }: { metrics: Metrics }) {
   return (
     <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-4">
       {names.map((name) => (
-        <div key={name}><dt className="text-muted-foreground">{metricLabel(name)}</dt><dd className="tabular-nums">{metricValue(name, metrics[name])}</dd></div>
+        <div key={name} className="min-w-0 break-words"><dt className="text-muted-foreground">{metricLabel(name)}</dt><dd className="tabular-nums">{metricValue(name, metrics[name])}</dd></div>
       ))}
     </dl>
   )
@@ -76,8 +76,11 @@ export interface AppDetail {
   appWide: Metrics
   metricNames: string[]
   sort: string | null
+  /** One page of the organizations in the latest report, ranked by `sort`. */
   organizations: { orgId: string; name: string | null; metrics: Metrics }[]
   total: number
+  page: number
+  pageSize: number
   growth: { org_id: string; name: string | null; now: number; before: number }[]
 }
 
@@ -136,7 +139,7 @@ export function appDetailPage(ctx: Context, session: OperatorSession, data: AppD
           </Table>
         </CardContent>
       </Card>
-      {data.total > data.organizations.length ? <p className="text-sm text-muted-foreground">The first {data.organizations.length} of {data.total}.</p> : null}
+      <Pagination path={`/super/apps/${data.app.name}`} params={{ sort: data.sort ?? "" }} page={data.page} total={data.total} pageSize={data.pageSize} />
     </>
   ))
 }

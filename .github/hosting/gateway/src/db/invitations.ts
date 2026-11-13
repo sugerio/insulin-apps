@@ -37,7 +37,7 @@ export interface InvitationGrantRow {
  * role other than OWNER; or, with an app, that app's admin for a specific-apps invitation to that app alone.
  */
 function mayHandle(org: string, actor: string, app: string): string {
-  return `(EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor}
+  return `(EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ${org} AND a.user_id = ${actor}
       AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND invitations.role <> 'OWNER')))
     OR (${app} IS NOT NULL AND invitations.role = 'APPS'
       AND NOT EXISTS (SELECT 1 FROM invitation_grants og WHERE og.invitation_id = invitations.id AND og.app <> ${app})
@@ -52,7 +52,7 @@ function mayHandle(org: string, actor: string, app: string): string {
 function mayInvite(appName: string | null, org: string, role: string, actor: string, app: string): string {
   return appName
     ? `(${role} = 'APPS' AND ${appAdmin(org, actor, app)})`
-    : `(${app} IS NULL AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor}
+    : `(${app} IS NULL AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ${org} AND a.user_id = ${actor}
         AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ${role} <> 'OWNER'))))`
 }
 

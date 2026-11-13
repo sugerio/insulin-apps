@@ -142,7 +142,7 @@ app's data, delete it in the app first.
 ### What happens when I delete my account?
 
 **Delete my account** on your **Account** page deletes your account, signs you out everywhere and deletes every
-organization where you are the only member. If you are the only owner of an organization that has other members, make
+organization where you are the only member (except one Insulin Apps has suspended or disabled, which stays). If you are the only owner of an organization that has other members, make
 someone else an owner first, or remove the other members.
 
 ### What can Insulin Apps staff see?

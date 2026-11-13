@@ -184,17 +184,20 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
      `https://insulinapps.com/super`, name ID format `EMAIL`, name ID **Basic Information › Primary email**. Leave
      "Signed response" as it is: the console accepts a signed response or a signed assertion.
    - **Attribute mapping:** First name to `firstName`, Last name to `lastName`; under **Group membership**, pick the
-     operators' Google group and name the app attribute `groups` (exactly). Add operators to the group directly.
+     operators' Google group and name the app attribute `groups` (exactly). Google sends the group's name; members of
+     a group nested in it count too.
    - **User access:** turn the app on for that group only, off for everyone else. The console also refuses anyone whose
      assertion doesn't list the group, so either lock alone keeps others out.
-   - Set the variable `SUPER_GOOGLE_GROUP` to the group's address, and `SUPER_ADMIN_EMAILS` to the admins' addresses
+   - Set the variable `SUPER_GOOGLE_GROUP` to the group's **name**, exactly as Google shows it (not its address; check
+     with the app's **Test SAML login** that the assertion's `groups` holds it), and `SUPER_ADMIN_EMAILS` to the admins' addresses
      (commas or spaces between them): they may also suspend, disable and reinstate organizations and accounts, and
      create organizations past an owner domain's limit. Keep these addresses in GitHub only, never in the repository.
 
    Without all of the first four variables the console isn't there (every `/super` path is a 404). For its Cloudflare
-   page, create a second, read-only account API token (Account · Account Analytics · Read, Account · Workers Scripts ·
-   Read, Account · D1 · Read) and add it as the environment secret `SUPER_CLOUDFLARE_API_TOKEN`; the deploy gives the
-   gateway its own `CLOUDFLARE_ACCOUNT_ID` with it. Signing in to the console also needs no change to Google's OAuth
+   page, create a second, read-only account API token with **Account · Account Analytics · Read** and **Account ·
+   Workers Scripts · Read** only, and add it as the environment secret `SUPER_CLOUDFLARE_API_TOKEN`; the deploy gives the
+   gateway its own `CLOUDFLARE_ACCOUNT_ID` with it. Never give it a D1 permission: even D1 Read can query the apps'
+   databases, which the console must not reach. Signing in to the console also needs no change to Google's OAuth
    client of step 3: the console never uses it.
 
 Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and

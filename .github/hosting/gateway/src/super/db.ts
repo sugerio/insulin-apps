@@ -107,40 +107,42 @@ export async function listAudit(db: D1Database, options: { target?: { type: 'org
 }
 
 /**
- * Changes an organization's standing (DESIGN.md §11.3) and records it, in one batch. Every statement after the update
- * runs only if the update happened (the organization now has this standing, stamped `now`), so a repeated or stale
- * request changes and records nothing. Disabling also ends, for good, what acts in the organization without a person
- * present: every AI agent's grant (with its tokens), every API client (revoked, its tokens deleted), the pending
- * invitations and the SCIM tokens. False when nothing changed.
+ * Changes an organization's standing (DESIGN.md §11.3) and records it, in one batch. D1 runs a batch as one
+ * transaction, one batch at a time, so the statements before the update see the standing as it was: the audit record
+ * and the side effects are written only by the batch that changes it, and a repeated request, however close in time,
+ * changes and records nothing. Disabling also ends, for good, what acts in the organization without a person present:
+ * every AI agent's grant (with its tokens), every API client (revoked, its tokens deleted), the pending invitations and
+ * the SCIM tokens. False when nothing changed.
  */
 export async function setOrgStatus(db: D1Database, change: { orgId: string; status: Status; reason: string; operator: Operator; label: string; now: number }): Promise<boolean> {
-  // The standing is one of three constants (isStatus), so it is written into the condition; ?6 is the target, ?1 now.
-  const changed = `EXISTS (SELECT 1 FROM orgs c WHERE c.id = ?6 AND c.status = '${change.status}' AND c.status_changed_at = ?1)`
+  // The standing is one of three constants (isStatus), so it is written into the conditions; ?6 is the audit's target.
   const statements = [
-    db.prepare('UPDATE orgs SET status = ?2, status_reason = ?3, status_changed_at = ?4, updated_at = ?4 WHERE id = ?1 AND status <> ?2')
-      .bind(change.orgId, change.status, change.status === 'active' ? null : change.reason, change.now),
     auditStatement(db, {
       operator: change.operator, action: `org.${verb(change.status)}`, targetType: 'org', targetId: change.orgId, targetLabel: change.label,
       reason: change.reason, now: change.now,
-    }, changed),
+    }, `EXISTS (SELECT 1 FROM orgs c WHERE c.id = ?6 AND c.status <> '${change.status}')`),
   ]
   if (change.status === 'disabled') {
-    const done = "EXISTS (SELECT 1 FROM orgs c WHERE c.id = ?1 AND c.status = 'disabled' AND c.status_changed_at = ?2)"
+    const changing = "EXISTS (SELECT 1 FROM orgs c WHERE c.id = ?1 AND c.status <> 'disabled')"
     statements.push(
-      db.prepare(`DELETE FROM oauth_grants WHERE org_id = ?1 AND ${done}`).bind(change.orgId, change.now),
-      db.prepare(`DELETE FROM oauth_tokens WHERE service_account_id IN (SELECT id FROM service_accounts WHERE org_id = ?1) AND ${done}`)
-        .bind(change.orgId, change.now),
+      db.prepare(`DELETE FROM oauth_grants WHERE org_id = ?1 AND ${changing}`).bind(change.orgId),
+      db.prepare(`DELETE FROM oauth_tokens WHERE service_account_id IN (SELECT id FROM service_accounts WHERE org_id = ?1) AND ${changing}`)
+        .bind(change.orgId),
       db.prepare(
         `UPDATE service_accounts SET revoked_at = ?2, revoked_by = NULL, previous_secret_hash = NULL, previous_secret_expires_at = NULL
-         WHERE org_id = ?1 AND revoked_at IS NULL AND ${done}`,
+         WHERE org_id = ?1 AND revoked_at IS NULL AND ${changing}`,
       ).bind(change.orgId, change.now),
-      db.prepare(`UPDATE invitations SET status = 'revoked', responded_at = ?2 WHERE org_id = ?1 AND status = 'pending' AND ${done}`)
+      db.prepare(`UPDATE invitations SET status = 'revoked', responded_at = ?2 WHERE org_id = ?1 AND status = 'pending' AND ${changing}`)
         .bind(change.orgId, change.now),
-      db.prepare(`DELETE FROM scim_tokens WHERE org_id = ?1 AND ${done}`).bind(change.orgId, change.now),
+      db.prepare(`DELETE FROM scim_tokens WHERE org_id = ?1 AND ${changing}`).bind(change.orgId),
     )
   }
-  const [updated] = await db.batch(statements)
-  return (updated?.meta.changes ?? 0) > 0
+  statements.push(
+    db.prepare('UPDATE orgs SET status = ?2, status_reason = ?3, status_changed_at = ?4, updated_at = ?4 WHERE id = ?1 AND status <> ?2')
+      .bind(change.orgId, change.status, change.status === 'active' ? null : change.reason, change.now),
+  )
+  const results = await db.batch(statements)
+  return (results[results.length - 1]?.meta.changes ?? 0) > 0
 }
 
 /**
@@ -149,25 +151,26 @@ export async function setOrgStatus(db: D1Database, change: { orgId: string; stat
  * while it lasts, so reinstating gives everything back. False when nothing changed.
  */
 export async function setUserStatus(db: D1Database, change: { userId: string; status: Status; reason: string; operator: Operator; label: string; now: number }): Promise<boolean> {
-  const changed = `EXISTS (SELECT 1 FROM users c WHERE c.id = ?6 AND c.status = '${change.status}' AND c.status_changed_at = ?1)`
   const statements = [
-    db.prepare('UPDATE users SET status = ?2, status_reason = ?3, status_changed_at = ?4, updated_at = ?4 WHERE id = ?1 AND status <> ?2')
-      .bind(change.userId, change.status, change.status === 'active' ? null : change.reason, change.now),
     auditStatement(db, {
       operator: change.operator, action: `user.${verb(change.status)}`, targetType: 'user', targetId: change.userId, targetLabel: change.label,
       reason: change.reason, now: change.now,
-    }, changed),
+    }, `EXISTS (SELECT 1 FROM users c WHERE c.id = ?6 AND c.status <> '${change.status}')`),
   ]
   if (change.status === 'disabled') {
-    const done = "EXISTS (SELECT 1 FROM users c WHERE c.id = ?1 AND c.status = 'disabled' AND c.status_changed_at = ?2)"
+    const changing = "EXISTS (SELECT 1 FROM users c WHERE c.id = ?1 AND c.status <> 'disabled')"
     statements.push(
-      db.prepare(`DELETE FROM sessions WHERE user_id = ?1 AND ${done}`).bind(change.userId, change.now),
-      db.prepare(`DELETE FROM oauth_grants WHERE user_id = ?1 AND ${done}`).bind(change.userId, change.now),
-      db.prepare(`DELETE FROM mfa_challenges WHERE user_id = ?1 AND ${done}`).bind(change.userId, change.now),
+      db.prepare(`DELETE FROM sessions WHERE user_id = ?1 AND ${changing}`).bind(change.userId),
+      db.prepare(`DELETE FROM oauth_grants WHERE user_id = ?1 AND ${changing}`).bind(change.userId),
+      db.prepare(`DELETE FROM mfa_challenges WHERE user_id = ?1 AND ${changing}`).bind(change.userId),
     )
   }
-  const [updated] = await db.batch(statements)
-  return (updated?.meta.changes ?? 0) > 0
+  statements.push(
+    db.prepare('UPDATE users SET status = ?2, status_reason = ?3, status_changed_at = ?4, updated_at = ?4 WHERE id = ?1 AND status <> ?2')
+      .bind(change.userId, change.status, change.status === 'active' ? null : change.reason, change.now),
+  )
+  const results = await db.batch(statements)
+  return (results[results.length - 1]?.meta.changes ?? 0) > 0
 }
 
 function verb(status: Status): string {
@@ -180,23 +183,30 @@ function verb(status: Status): string {
  * so the person's own next one is limited as before. False when the account isn't there, confirmed and active.
  */
 export async function createOrgForUser(db: D1Database, org: { id: string; name: string; user: { id: string; email: string }; reason: string; operator: Operator; now: number }): Promise<boolean> {
+  // The id comes from the form, so a form sent twice creates one organization; the statements after the insert run only
+  // for the row this batch wrote (its operator and time), never for an organization that already had the id.
+  const ours = 'EXISTS (SELECT 1 FROM orgs WHERE id = ?1 AND created_by = ?2 AND created_by_operator = ?4 AND created_at = ?3)'
   const [created] = await db.batch([
     db.prepare(
       `INSERT INTO orgs (id, name, created_by, owner_domain, created_at, updated_at, created_by_operator)
-       SELECT ?1, ?2, u.id, ?4, ?5, ?5, ?6 FROM users u WHERE u.id = ?3 AND u.email_verified_at IS NOT NULL AND u.status = 'active'`,
+       SELECT ?1, ?2, u.id, ?4, ?5, ?5, ?6 FROM users u WHERE u.id = ?3 AND u.email_verified_at IS NOT NULL AND u.status = 'active'
+       ON CONFLICT (id) DO NOTHING`,
     ).bind(org.id, org.name, org.user.id, ownerDomainOf(org.user.email), org.now, org.operator.email),
-    db.prepare(
-      `INSERT INTO memberships (org_id, user_id, role, created_at, updated_at)
-       SELECT ?1, ?2, 'OWNER', ?3, ?3 WHERE EXISTS (SELECT 1 FROM orgs WHERE id = ?1)`,
-    ).bind(org.id, org.user.id, org.now),
-    db.prepare('UPDATE users SET orgs_created = orgs_created + 1, updated_at = ?3 WHERE id = ?2 AND EXISTS (SELECT 1 FROM orgs WHERE id = ?1)')
-      .bind(org.id, org.user.id, org.now),
+    db.prepare(`INSERT INTO memberships (org_id, user_id, role, created_at, updated_at) SELECT ?1, ?2, 'OWNER', ?3, ?3 WHERE ${ours}`)
+      .bind(org.id, org.user.id, org.now, org.operator.email),
+    db.prepare(`UPDATE users SET orgs_created = orgs_created + 1, updated_at = ?3 WHERE id = ?2 AND ${ours}`)
+      .bind(org.id, org.user.id, org.now, org.operator.email),
     auditStatement(db, {
       operator: org.operator, action: 'org.create', targetType: 'org', targetId: org.id, targetLabel: `${org.name} (for ${org.user.email})`,
       reason: org.reason, now: org.now,
-    }, 'EXISTS (SELECT 1 FROM orgs WHERE id = ?6)'),
+    }, 'EXISTS (SELECT 1 FROM orgs WHERE id = ?6 AND created_by_operator = ?3 AND created_at = ?1)'),
   ])
   return (created?.meta.changes ?? 0) > 0
+}
+
+/** Who an organization was created for and by which operator, for a create form sent again. */
+export function createdBy(db: D1Database, orgId: string): Promise<{ created_by: string | null; created_by_operator: string | null } | null> {
+  return db.prepare('SELECT created_by, created_by_operator FROM orgs WHERE id = ?1').bind(orgId).first()
 }
 
 export interface Overview {
@@ -476,14 +486,14 @@ export async function orgNames(db: D1Database, ids: string[]): Promise<Map<strin
 }
 
 /**
- * Claims this hour's run of a job, once: true for the one caller that gets it (or that takes over a run that started
- * fifteen minutes ago and never finished).
+ * Claims this hour's run of a job, once: true for the one caller that gets it, or that takes over a run that failed or
+ * read only part of what it needed (the next tick tries again), or started fifteen minutes ago and never finished.
  */
 export async function claimJob(db: D1Database, name: string, hour: number, now: number): Promise<boolean> {
   const result = await db.prepare(
     `INSERT INTO super_jobs (name, hour, started_at) VALUES (?1, ?2, ?3)
-     ON CONFLICT (name, hour) DO UPDATE SET started_at = excluded.started_at
-     WHERE super_jobs.finished_at IS NULL AND super_jobs.started_at < ?4`,
+     ON CONFLICT (name, hour) DO UPDATE SET started_at = excluded.started_at, finished_at = NULL, outcome = NULL
+     WHERE super_jobs.outcome IN ('failed', 'partial') OR (super_jobs.finished_at IS NULL AND super_jobs.started_at < ?4)`,
   ).bind(name, hour, now, now - JOB_STALE_MS).run()
   return result.meta.changes > 0
 }
@@ -496,9 +506,13 @@ export async function lastJob(db: D1Database, name: string): Promise<{ hour: num
   return db.prepare('SELECT hour, started_at, finished_at, outcome FROM super_jobs WHERE name = ?1 ORDER BY hour DESC LIMIT 1').bind(name).first()
 }
 
-export async function insertSnapshot(db: D1Database, takenAt: number, data: unknown): Promise<void> {
-  await db.prepare('INSERT INTO super_cloudflare_snapshots (taken_at, data) VALUES (?1, ?2) ON CONFLICT (taken_at) DO UPDATE SET data = excluded.data')
-    .bind(takenAt, JSON.stringify(data)).run()
+/** Keeps one snapshot an hour: a later try in the hour (after a partial read) replaces the earlier one. */
+export async function insertSnapshot(db: D1Database, takenAt: number, hour: number, data: unknown): Promise<void> {
+  await db.batch([
+    db.prepare('DELETE FROM super_cloudflare_snapshots WHERE taken_at >= ?1 AND taken_at < ?2').bind(hour, hour + 60 * 60 * 1000),
+    db.prepare('INSERT INTO super_cloudflare_snapshots (taken_at, data) VALUES (?1, ?2) ON CONFLICT (taken_at) DO UPDATE SET data = excluded.data')
+      .bind(takenAt, JSON.stringify(data)),
+  ])
 }
 
 export async function snapshots(db: D1Database, since: number): Promise<{ taken_at: number; data: string }[]> {

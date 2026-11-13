@@ -27,12 +27,24 @@ export function dayOf(hour: number): number {
 }
 
 /**
+ * How many of an app's expired rows each report deletes, per table: more than one report can add (500 organizations
+ * and the app), so the app's own reports keep its retention whatever the rest of the traffic.
+ */
+const PRUNE_PER_REPORT = 1000
+
+/**
  * Stores a report: each value it carries replaces the one for that hour, so a resent report changes nothing, and a
- * day keeps its latest hour. Organizations the gateway doesn't know are skipped. Returns how many were stored.
+ * day keeps its latest hour. Organizations the gateway doesn't know are skipped. It also deletes the app's rows past
+ * their retention. Returns how many organizations were stored.
  */
 export async function storeReport(db: D1Database, report: MetricsReport): Promise<number> {
   const day = dayOf(report.hour)
-  const statements: D1PreparedStatement[] = []
+  const statements: D1PreparedStatement[] = [
+    db.prepare('DELETE FROM app_metrics_hourly WHERE rowid IN (SELECT rowid FROM app_metrics_hourly WHERE app = ?1 AND hour < ?2 LIMIT ?3)')
+      .bind(report.app, report.now - HOURLY_RETENTION_MS, PRUNE_PER_REPORT),
+    db.prepare('DELETE FROM app_metrics_daily WHERE rowid IN (SELECT rowid FROM app_metrics_daily WHERE app = ?1 AND day < ?2 LIMIT ?3)')
+      .bind(report.app, report.now - DAILY_RETENTION_MS, PRUNE_PER_REPORT),
+  ]
   if (report.appMetrics) {
     const metrics = JSON.stringify(report.appMetrics)
     statements.push(

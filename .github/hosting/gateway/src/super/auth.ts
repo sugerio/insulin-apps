@@ -105,7 +105,8 @@ export async function assertionConsumer(ctx: Context, config: SuperConfig): Prom
     return signInFailedPage(ctx, 400, 'This sign-in expired, was already used, or was started in another browser. Start again.')
   }
   const email = normalizeEmail(identity.email)
-  const groups = (identity.attributes.get(GROUPS_ATTRIBUTE) ?? []).map((group) => group.trim().toLowerCase())
+  // Google sends each group's name, as the group is called now; the comparison ignores case and extra spaces.
+  const groups = (identity.attributes.get(GROUPS_ATTRIBUTE) ?? []).map((group) => cleanText(group).toLowerCase())
   if (!email || !groups.includes(config.group)) {
     log('super_group_refused')
     return signInFailedPage(ctx, 403, 'Your Google account isn\'t one of the console\'s operators. Ask an admin to add you to the operators\' group.')

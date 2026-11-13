@@ -1,6 +1,6 @@
 // The operator console's hourly work, on the gateway's five-minute tick (scheduled.ts): the first tick of each hour
-// that claims the hour's run takes the Cloudflare snapshot (DESIGN.md §11.5). A tick that finds the hour claimed does
-// nothing, so a missed or failed tick is made up by the next one, and two ticks never both run it.
+// that claims the hour's run takes the Cloudflare snapshot (DESIGN.md §11.5). A tick that finds the hour taken does
+// nothing, so a missed, failed or partial run is made up by the next tick, and two ticks never both run it.
 import type { Config } from '../config.ts'
 import { HOUR_MS } from '../db/metrics.ts'
 import { log, logError } from '../log.ts'
@@ -17,7 +17,7 @@ export async function runHourlyJobs(config: Pick<Config, 'db' | 'cloudflare'>, n
   if (!(await claimJob(config.db, CLOUDFLARE_JOB, hour, now))) return
   try {
     const snapshot = await takeSnapshot(cloudflare, now, fetchImpl)
-    await insertSnapshot(config.db, now, snapshot)
+    await insertSnapshot(config.db, now, hour, snapshot)
     const outcome = snapshot.problems.length ? 'partial' : 'ok'
     await finishJob(config.db, CLOUDFLARE_JOB, hour, outcome, Date.now())
     log('cloudflare_snapshot', { outcome })

@@ -127,7 +127,8 @@ export function takeRequest(db: D1Database, idHash: string, sessionHash: string,
 
 /**
  * Records what the person allowed and the code for it, in one batch: the grant only while they are still a member of
- * the organization, and the code only with the grant. False when the membership was gone.
+ * the organization and both are active (a consent decided as the operators disable either leaves no grant to outlive
+ * it, DESIGN.md §11.3), and the code only with the grant. False when the membership was gone.
  */
 export async function insertGrantWithCode(db: D1Database, grant: {
   id: string; clientId: string; userId: string; orgId: string; app: string; now: number; expiresAt: number
@@ -137,7 +138,8 @@ export async function insertGrantWithCode(db: D1Database, grant: {
     db.prepare(
       `INSERT INTO oauth_grants (id, client_id, user_id, org_id, app, created_at, expires_at)
        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
-       WHERE EXISTS (SELECT 1 FROM memberships m WHERE m.org_id = ?4 AND m.user_id = ?3)`,
+       WHERE EXISTS (SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id AND u.status = 'active'
+         JOIN orgs o ON o.id = m.org_id AND o.status = 'active' WHERE m.org_id = ?4 AND m.user_id = ?3)`,
     ).bind(grant.id, grant.clientId, grant.userId, grant.orgId, grant.app, grant.now, grant.expiresAt),
     db.prepare(
       `INSERT INTO oauth_codes (code_hash, grant_id, redirect_uri, code_challenge, created_at, expires_at)
@@ -154,7 +156,9 @@ export async function insertGrantWithCode(db: D1Database, grant: {
 export function redeemCode(db: D1Database, codeHash: string, clientId: string, now: number): Promise<{ grant_id: string; redirect_uri: string; code_challenge: string } | null> {
   return db.prepare(
     `UPDATE oauth_codes SET used_at = ?2 WHERE code_hash = ?1 AND used_at IS NULL AND expires_at > ?2
-       AND EXISTS (SELECT 1 FROM oauth_grants g WHERE g.id = oauth_codes.grant_id AND g.client_id = ?3 AND g.revoked_at IS NULL)
+       AND EXISTS (SELECT 1 FROM oauth_grants g JOIN users u ON u.id = g.user_id AND u.status = 'active'
+         JOIN orgs o ON o.id = g.org_id AND o.status = 'active'
+         WHERE g.id = oauth_codes.grant_id AND g.client_id = ?3 AND g.revoked_at IS NULL)
      RETURNING grant_id, redirect_uri, code_challenge`,
   ).bind(codeHash, now, clientId).first()
 }
@@ -229,12 +233,15 @@ export async function deleteAppGrant(db: D1Database, grant: { id: string; orgId:
   return result.meta.changes > 0
 }
 
-/** Notes an agent's use (at most once an hour), and its person and organization as active then. */
+/**
+ * Notes an agent's use (at most once an hour, after the request), and its person and organization as active then,
+ * unless the operators suspended or disabled them meanwhile.
+ */
 export async function touchGrant(db: D1Database, id: string, now: number): Promise<void> {
   await db.batch([
     db.prepare('UPDATE oauth_grants SET last_used_at = ?2 WHERE id = ?1').bind(id, now),
-    db.prepare('UPDATE users SET last_active_at = ?2 WHERE id = (SELECT user_id FROM oauth_grants WHERE id = ?1)').bind(id, now),
-    db.prepare('UPDATE orgs SET last_active_at = ?2 WHERE id = (SELECT org_id FROM oauth_grants WHERE id = ?1)').bind(id, now),
+    db.prepare("UPDATE users SET last_active_at = ?2 WHERE status = 'active' AND id = (SELECT user_id FROM oauth_grants WHERE id = ?1)").bind(id, now),
+    db.prepare("UPDATE orgs SET last_active_at = ?2 WHERE status = 'active' AND id = (SELECT org_id FROM oauth_grants WHERE id = ?1)").bind(id, now),
   ])
 }
 
@@ -524,11 +531,11 @@ export async function deleteOrgGrant(db: D1Database, grant: { id: string; orgId:
   return result.meta.changes > 0
 }
 
-/** Notes an API client's use (at most once an hour), and its organization as active then. */
+/** Notes an API client's use (at most once an hour, after the request), and its organization as active then, if it still is. */
 export async function touchServiceAccount(db: D1Database, id: string, now: number): Promise<void> {
   await db.batch([
     db.prepare('UPDATE service_accounts SET last_used_at = ?2 WHERE id = ?1').bind(id, now),
-    db.prepare('UPDATE orgs SET last_active_at = ?2 WHERE id = (SELECT org_id FROM service_accounts WHERE id = ?1)').bind(id, now),
+    db.prepare("UPDATE orgs SET last_active_at = ?2 WHERE status = 'active' AND id = (SELECT org_id FROM service_accounts WHERE id = ?1)").bind(id, now),
   ])
 }
 

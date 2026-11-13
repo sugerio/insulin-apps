@@ -97,9 +97,9 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `ORG_REQUEST_EMAIL` | var | optional; Insulin Apps support's address, which gets requests for more organizations (DESIGN.md §3.1) with Reply-To the requester. Empty: the page at the limit shows the contact above instead. An unusable value is ignored and logged by name |
 | `GATEWAY_SECRET_KEY` | secret | optional, base64 of 32 random bytes; seals stored secrets (AES-256-GCM, a key per purpose) and derives per-app secrets. A value that isn't 32 bytes fails closed |
 | `SITE_ENV` | var | **local development and tests only**: `test` captures mail and relaxes cookies on `http://*.localhost`. Any non-empty value is a configuration error unless it is `test` and `SITE_DOMAIN` ends in `.localhost` |
-| `SUPER_SAML_IDP_ENTITY_ID`, `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_CERT`, `SUPER_GOOGLE_GROUP` | var | optional; the operator console's Google Workspace SAML app (entity id, sign-in URL, signing certificate as PEM) and the group whose members may sign in (DESIGN.md §11.1). All four, or the console is off: set in part or unusable, it stays off and the names are logged, and the rest of the site is unaffected |
+| `SUPER_SAML_IDP_ENTITY_ID`, `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_CERT`, `SUPER_GOOGLE_GROUP` | var | optional; the operator console's Google Workspace SAML app (entity id, sign-in URL, signing certificate as PEM) and the group whose members may sign in, by its name as Google sends it (DESIGN.md §11.1). All four, or the console is off: set in part or unusable, it stays off and the names are logged, and the rest of the site is unaffected |
 | `SUPER_ADMIN_EMAILS` | var | optional; the console's admins, addresses separated by commas or whitespace; an entry that isn't an address is ignored and logged |
-| `SUPER_CLOUDFLARE_API_TOKEN`, `SUPER_CLOUDFLARE_ACCOUNT_ID` | secret, var | optional; a read-only Cloudflare API token and the 32-hex account it reads, for the console's hourly resource snapshot (DESIGN.md §11.5). Both, or none |
+| `SUPER_CLOUDFLARE_API_TOKEN`, `SUPER_CLOUDFLARE_ACCOUNT_ID` | secret, var | optional; a Cloudflare API token with Workers Scripts: Read and Account Analytics: Read only (never D1, which could query the apps' databases) and the 32-hex account it reads, for the console's hourly resource snapshot (DESIGN.md §11.5). Both, or none |
 
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
@@ -382,18 +382,21 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **Suspended and disabled** (DESIGN.md §11.3). `users.status` and `orgs.status` are checked where access is decided,
   so nothing downstream needs to know: the session lookup and insert (an account), `findMembership`,
   `listMemberships` and the session's active organization (an organization's members), `findAccessRow` (every way into
-  an app), `findAccessToken`, `redeemRefresh` and `issueServiceToken` (tokens), `useScimToken`, the invitation
-  acceptance, `joinOrg`, `findIntegrationSecret`, and the `orgAdmin`, `appAdmin` and `owner` actor checks every
-  organization change repeats. Sign-in pages say so (`auth/standing.ts`); the mail relay answers 403.
+  an app), `findAccessToken`, `redeemRefresh`, `issueServiceToken`, `insertGrantWithCode` and `redeemCode` (tokens and
+  consent), `useScimToken`, the invitation acceptance, `joinOrg`, `findIntegrationSecret`, and the actor check every
+  organization change repeats (`orgAdmin`, `appAdmin`, `owner` and the inline ones in `db/orgs.ts` and
+  `db/invitations.ts`), which counts a membership only in an active organization. Sign-in pages say so (`auth/standing.ts`); the mail relay answers 403.
 - **Last active**, to within an hour: the hourly session touch, the sign-in's session insert and the hourly touches of
   an agent's grant and an API client write `users.last_active_at` and `orgs.last_active_at` in the same batch, so
   activity costs no extra write per request.
-- **Usage reports** (DESIGN.md §8.6) are stored in four statements however many organizations they carry: the
+- **Usage reports** (DESIGN.md §8.6) are stored in a few statements however many organizations they carry: the
   organizations go as one JSON parameter that `json_each` unpacks, so a report of 500 never meets D1's limits on
-  statements per invocation or parameters per statement, and only organizations the gateway knows are stored.
+  statements per invocation or parameters per statement, and only organizations the gateway knows are stored. Each
+  report also prunes up to 1,000 of its app's expired rows per table, more than it can add.
 - **The Cloudflare snapshot** (DESIGN.md §11.5) is the five-minute tick's: the first tick of each hour to claim the
   run in `super_jobs` reads the account (`api.cloudflare.com` only, no redirects, a 20-second timeout, the token never
-  logged), keeps whatever parts it could read and names the rest.
+  logged), keeps whatever parts it could read and names the rest. It finds each Worker's D1 database in the Worker's
+  settings and the database's size in the analytics, so its token needs no D1 permission.
 - **Logs** carry event names, ids, error class names and identifier-like codes; never exception messages.
 - **Retention.** Expired sessions, used or expired links, mail-log rows older than two days, apps' hourly usage
   reports past three days and daily ones past 400, and the console's expired sessions and sign-ins, job records past

@@ -227,7 +227,7 @@ export function privacyPage(ctx: Context): Html {
         <li>
           On your <a href={apexUrl(ctx, "/account")}>account page</a>, choose <strong>Delete my account</strong>. This deletes your
           account, your sessions and your memberships, and every organization where you are the only member, with its
-          invitations.
+          invitations. An organization we suspended or disabled stays, with its records, until we deal with it.
         </li>
         <li>
           If you are the only owner of an organization that has other members, make another member an owner, or remove the other

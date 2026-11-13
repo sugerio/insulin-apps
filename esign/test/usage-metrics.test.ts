@@ -246,6 +246,29 @@ test('anything but 202 releases the claim, and the next tick sends the whole rep
   }
 });
 
+test('the report gets fifteen seconds in all: a gateway that never answers is given up on, and the claim released', async (t: TestContext) => {
+  t.mock.method(console, 'error', () => {});
+  // Only the report's own deadline ends the wait, well inside the tick's 25 seconds.
+  const timeout = t.mock.method(AbortSignal, 'timeout', () => AbortSignal.abort(new DOMException('The report took too long', 'TimeoutError')));
+  const signals: (AbortSignal | null | undefined)[] = [];
+  const stalled = (async (_url: string, init: RequestInit) => {
+    signals.push(init.signal);
+    return new Promise<Response>((_resolve, reject) => {
+      if (init.signal?.aborted) reject(init.signal.reason);
+      init.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    });
+  }) as typeof fetch;
+  const { mf, db, env } = await harness({ ...platform().env, METRICS_FETCH: stalled });
+  try {
+    await db.prepare(`INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at) VALUES ('tpl-1', 'org-a', 'templates/tpl-1/source.pdf', '["signer"]', 1)`).run();
+    assert.equal(await reportUsage(env, NOW), 'failed');
+    assert.deepEqual(timeout.mock.calls.map((call) => call.arguments), [[15_000]]);
+    assert.equal(signals.length, 1);
+    assert.equal(signals[0]?.aborted, true);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS n FROM metrics_reports').first<{ n: number }>())?.n, 0);
+  } finally { await mf.dispose(); }
+});
+
 test('without the platform\'s address or token nothing is reported or written, and signing doesn\'t need them', async () => {
   for (const config of [{}, { SUGER_METRICS_URL: METRICS_URL }, { SUGER_APP_TOKEN: TOKEN }, { SUGER_METRICS_URL: ' ', SUGER_APP_TOKEN: TOKEN }, { SUGER_METRICS_URL: 'http://apps.example.com/__insulin/metrics', SUGER_APP_TOKEN: TOKEN }, { SUGER_METRICS_URL: 'not a url', SUGER_APP_TOKEN: TOKEN }]) {
     const { sent, env: metrics } = platform();

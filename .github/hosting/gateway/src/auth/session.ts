@@ -116,13 +116,13 @@ export async function activeOrg(ctx: Context, session: Session): Promise<ActiveO
   if (session.activeOrg) return session.activeOrg
   const [oldest] = await listMemberships(ctx.config.db, session.user.id)
   if (!oldest) return null
-  await setSessionOrg(ctx.config.db, session.idHash, oldest.org_id)
+  await setSessionOrg(ctx.config.db, session.idHash, oldest.org_id, ctx.now)
   session.activeOrg = { id: oldest.org_id, name: oldest.org_name, role: oldest.role }
   return session.activeOrg
 }
 
 /** Makes `org` the session's active organization (the caller has checked the membership). */
 export async function switchActiveOrg(ctx: Context, session: Session, org: ActiveOrg): Promise<void> {
-  await setSessionOrg(ctx.config.db, session.idHash, org.id)
+  await setSessionOrg(ctx.config.db, session.idHash, org.id, ctx.now)
   session.activeOrg = org
 }

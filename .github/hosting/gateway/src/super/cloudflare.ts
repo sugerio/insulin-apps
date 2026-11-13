@@ -1,8 +1,10 @@
 // The Cloudflare resources the platform runs on (DESIGN.md §11.5), read once an hour by the five-minute tick with a
-// read-only API token: every insulin-apps Worker with its requests, errors and CPU time, and every insulin-apps D1
-// database with its size and the rows it read and wrote, for the last day and the month so far. The console compares
-// them with the plan's allowances and projects the month, so the operators see a limit coming. The token is sent to
-// api.cloudflare.com only, never logged, and no redirect is followed.
+// read-only API token: every insulin-apps Worker with its requests, errors and CPU time, and the D1 database each one
+// binds, with its size and the rows it read and wrote yesterday and this month. The console compares them with the
+// plan's allowances and projects the month, so the operators see a limit coming. The token needs only Workers Scripts:
+// Read and Account Analytics: Read, never a D1 permission, which could query the apps' databases: the databases come
+// from the Workers' bindings and their sizes from the analytics. It is sent to api.cloudflare.com only, never logged,
+// and no redirect is followed.
 import type { CloudflareConfig } from '../config.ts'
 import { log } from '../log.ts'
 
@@ -10,6 +12,8 @@ const API = 'https://api.cloudflare.com/client/v4'
 const TIMEOUT_MS = 20_000
 /** The platform's Workers and databases are named insulin-apps-<name> (deploy-apps.mjs). */
 export const RESOURCE_PREFIX = 'insulin-apps-'
+/** The Worker every request from outside reaches. */
+export const GATEWAY_WORKER = `${RESOURCE_PREFIX}gateway`
 
 /**
  * What the Workers Paid plan includes each month, and the hard limits that matter here, as Cloudflare documents them.
@@ -25,26 +29,29 @@ export const PLAN = {
   d1DatabaseMaxBytes: 10 * 1024 ** 3,
 } as const
 
+/** A Worker's usage; each figure is null when the analytics couldn't be read (unknown, never zero). */
 export interface WorkerUsage {
   name: string
-  requests24h: number
-  errors24h: number
-  requestsMonth: number
-  errorsMonth: number
+  requests24h: number | null
+  errors24h: number | null
+  requestsMonth: number | null
+  errorsMonth: number | null
   /** CPU time per request in the last day, microseconds: median and 99th percentile, or null without requests. */
   cpuP50: number | null
   cpuP99: number | null
 }
 
 export interface DatabaseUsage {
+  /** The Worker that binds it (each Worker has one database, named after it). */
   name: string
   id: string
-  sizeBytes: number
-  tables: number | null
-  rowsRead24h: number
-  rowsWritten24h: number
-  rowsReadMonth: number
-  rowsWrittenMonth: number
+  /** Its size from the analytics, or null when they couldn't be read. */
+  sizeBytes: number | null
+  /** D1's analytics count by UTC day, so the shortest window they give is a whole day: yesterday. Null when unread. */
+  rowsReadYesterday: number | null
+  rowsWrittenYesterday: number | null
+  rowsReadMonth: number | null
+  rowsWrittenMonth: number | null
 }
 
 export interface Snapshot {
@@ -53,7 +60,7 @@ export interface Snapshot {
   monthStart: number
   workers: WorkerUsage[] | null
   databases: DatabaseUsage[] | null
-  /** What failed, by part ("workers", "databases", "analytics"), as a short code; empty when everything was read. */
+  /** What failed, by part ("workers", "settings", "analytics", "storage"), as a short code; empty when everything was read. */
   problems: string[]
 }
 
@@ -106,18 +113,24 @@ async function workerNames(fetchImpl: Fetch, config: CloudflareConfig): Promise<
   return list(body.result).map((script) => record(script).id).filter((id): id is string => typeof id === 'string' && id.startsWith(RESOURCE_PREFIX)).sort()
 }
 
-/** The account's insulin-apps D1 databases, with their size and table count. */
-async function databases(fetchImpl: Fetch, config: CloudflareConfig): Promise<{ name: string; id: string; sizeBytes: number; tables: number | null }[]> {
-  const body = record(await call(fetchImpl, config, `/accounts/${config.accountId}/d1/database?per_page=100`))
-  if (body.success !== true) throw new CloudflareError('api_error')
-  return list(body.result).map(record)
-    .filter((db) => typeof db.name === 'string' && db.name.startsWith(RESOURCE_PREFIX) && typeof db.uuid === 'string')
-    .map((db) => ({ name: db.name as string, id: db.uuid as string, sizeBytes: number(db.file_size), tables: typeof db.num_tables === 'number' ? db.num_tables : null }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+/**
+ * The D1 database each Worker binds, from its settings (Workers Scripts: Read): the database's id, named after the
+ * Worker, as the deploy names each database after its Worker.
+ */
+async function boundDatabases(fetchImpl: Fetch, config: CloudflareConfig, names: string[]): Promise<{ name: string; id: string }[]> {
+  const found = await Promise.all(names.map(async (name) => {
+    const body = record(await call(fetchImpl, config, `/accounts/${config.accountId}/workers/scripts/${encodeURIComponent(name)}/settings`))
+    if (body.success !== true) throw new CloudflareError('api_error')
+    return list(record(body.result).bindings).map(record).filter((binding) => binding.type === 'd1')
+      .map((binding) => binding.id ?? binding.database_id).filter((id): id is string => typeof id === 'string')
+      .map((id) => ({ name, id }))
+  }))
+  return found.flat().sort((a, b) => a.name.localeCompare(b.name))
 }
 
-// Workers' invocations and D1's queries, for the last day and the month so far, in one GraphQL request.
-const ANALYTICS_QUERY = `query ($account: String!, $dayStart: Time!, $monthStart: Time!, $end: Time!, $dayStartDate: Date!, $monthStartDate: Date!, $endDate: Date!) {
+// Workers' invocations for the last 24 hours and the month so far, and D1's rows for yesterday and the month (D1's
+// analytics count by UTC day), in one GraphQL request.
+const ANALYTICS_QUERY = `query ($account: String!, $dayStart: Time!, $monthStart: Time!, $end: Time!, $yesterday: Date!, $monthStartDate: Date!, $endDate: Date!) {
   viewer {
     accounts(filter: { accountTag: $account }) {
       day: workersInvocationsAdaptive(limit: 1000, filter: { datetime_geq: $dayStart, datetime_lt: $end }) {
@@ -129,7 +142,7 @@ const ANALYTICS_QUERY = `query ($account: String!, $dayStart: Time!, $monthStart
         dimensions { scriptName }
         sum { requests errors }
       }
-      d1Day: d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $dayStartDate, date_leq: $endDate }) {
+      d1Yesterday: d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $yesterday, date_leq: $yesterday }) {
         dimensions { databaseId }
         sum { rowsRead rowsWritten }
       }
@@ -141,34 +154,46 @@ const ANALYTICS_QUERY = `query ($account: String!, $dayStart: Time!, $monthStart
   }
 }`
 
+// Each database's size, the largest it was each day of the last two (so there is one for today early in the day), in
+// a request of its own: a part that fails leaves the rest of the snapshot.
+const STORAGE_QUERY = `query ($account: String!, $yesterday: Date!, $endDate: Date!) {
+  viewer {
+    accounts(filter: { accountTag: $account }) {
+      storage: d1StorageAdaptiveGroups(limit: 1000, filter: { date_geq: $yesterday, date_leq: $endDate }) {
+        dimensions { databaseId date }
+        max { databaseSizeBytes }
+      }
+    }
+  }
+}`
+
 interface Analytics {
   workers: Map<string, { requests24h: number; errors24h: number; requestsMonth: number; errorsMonth: number; cpuP50: number | null; cpuP99: number | null }>
-  databases: Map<string, { rowsRead24h: number; rowsWritten24h: number; rowsReadMonth: number; rowsWrittenMonth: number }>
+  databases: Map<string, { rowsReadYesterday: number; rowsWrittenYesterday: number; rowsReadMonth: number; rowsWrittenMonth: number }>
 }
 
 function date(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10)
 }
 
-async function analytics(fetchImpl: Fetch, config: CloudflareConfig, now: number, monthStart: number): Promise<Analytics> {
-  const dayStart = now - 24 * 60 * 60 * 1000
-  const body = record(await call(fetchImpl, config, '/graphql', {
-    method: 'POST',
-    body: JSON.stringify({
-      query: ANALYTICS_QUERY,
-      variables: {
-        account: config.accountId,
-        dayStart: new Date(dayStart).toISOString(),
-        monthStart: new Date(monthStart).toISOString(),
-        end: new Date(now).toISOString(),
-        dayStartDate: date(dayStart),
-        monthStartDate: date(monthStart),
-        endDate: date(now),
-      },
-    }),
-  }))
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** The first (only) account of a GraphQL answer, or an error. */
+async function graphql(fetchImpl: Fetch, config: CloudflareConfig, query: string, variables: Record<string, string>): Promise<Record<string, unknown>> {
+  const body = record(await call(fetchImpl, config, '/graphql', { method: 'POST', body: JSON.stringify({ query, variables: { account: config.accountId, ...variables } }) }))
   if (list(body.errors).length) throw new CloudflareError('graphql_error')
-  const account = record(list(record(record(body.data).viewer).accounts)[0])
+  return record(list(record(record(body.data).viewer).accounts)[0])
+}
+
+async function analytics(fetchImpl: Fetch, config: CloudflareConfig, now: number, monthStart: number): Promise<Analytics> {
+  const account = await graphql(fetchImpl, config, ANALYTICS_QUERY, {
+    dayStart: new Date(now - DAY_MS).toISOString(),
+    monthStart: new Date(monthStart).toISOString(),
+    end: new Date(now).toISOString(),
+    yesterday: date(now - DAY_MS),
+    monthStartDate: date(monthStart),
+    endDate: date(now),
+  })
   const workers: Analytics['workers'] = new Map()
   const worker = (name: string) => {
     let entry = workers.get(name)
@@ -195,15 +220,15 @@ async function analytics(fetchImpl: Fetch, config: CloudflareConfig, now: number
   const dbs: Analytics['databases'] = new Map()
   const database = (id: string) => {
     let entry = dbs.get(id)
-    if (!entry) dbs.set(id, entry = { rowsRead24h: 0, rowsWritten24h: 0, rowsReadMonth: 0, rowsWrittenMonth: 0 })
+    if (!entry) dbs.set(id, entry = { rowsReadYesterday: 0, rowsWrittenYesterday: 0, rowsReadMonth: 0, rowsWrittenMonth: 0 })
     return entry
   }
-  for (const group of list(account.d1Day).map(record)) {
+  for (const group of list(account.d1Yesterday).map(record)) {
     const id = record(group.dimensions).databaseId
     if (typeof id !== 'string') continue
     const entry = database(id)
-    entry.rowsRead24h += number(record(group.sum).rowsRead)
-    entry.rowsWritten24h += number(record(group.sum).rowsWritten)
+    entry.rowsReadYesterday += number(record(group.sum).rowsRead)
+    entry.rowsWrittenYesterday += number(record(group.sum).rowsWritten)
   }
   for (const group of list(account.d1Month).map(record)) {
     const id = record(group.dimensions).databaseId
@@ -213,6 +238,22 @@ async function analytics(fetchImpl: Fetch, config: CloudflareConfig, now: number
     entry.rowsWrittenMonth += number(record(group.sum).rowsWritten)
   }
   return { workers, databases: dbs }
+}
+
+/** Each database's latest size: the most recent day's largest. */
+async function storage(fetchImpl: Fetch, config: CloudflareConfig, now: number): Promise<Map<string, number>> {
+  const account = await graphql(fetchImpl, config, STORAGE_QUERY, { yesterday: date(now - DAY_MS), endDate: date(now) })
+  const latest = new Map<string, { date: string; size: number }>()
+  for (const group of list(account.storage).map(record)) {
+    const dimensions = record(group.dimensions)
+    const id = dimensions.databaseId
+    const day = typeof dimensions.date === 'string' ? dimensions.date : ''
+    if (typeof id !== 'string') continue
+    const size = number(record(group.max).databaseSizeBytes)
+    const seen = latest.get(id)
+    if (!seen || day > seen.date) latest.set(id, { date: day, size })
+  }
+  return new Map([...latest].map(([id, entry]) => [id, entry.size]))
 }
 
 export function monthStartOf(now: number): number {
@@ -227,31 +268,36 @@ export function monthStartOf(now: number): number {
 export async function takeSnapshot(config: CloudflareConfig, now: number, fetchImpl: Fetch = fetch): Promise<Snapshot> {
   const monthStart = monthStartOf(now)
   const problems: string[] = []
-  const [names, dbs, usage] = await Promise.all([
-    workerNames(fetchImpl, config).catch((error) => { problems.push(`workers:${code(error)}`); return null }),
-    databases(fetchImpl, config).catch((error) => { problems.push(`databases:${code(error)}`); return null }),
-    analytics(fetchImpl, config, now, monthStart).catch((error) => { problems.push(`analytics:${code(error)}`); return null }),
+  const failed = (part: string) => (error: unknown) => { problems.push(`${part}:${code(error)}`); return null }
+  const [names, usage, sizes] = await Promise.all([
+    workerNames(fetchImpl, config).catch(failed('workers')),
+    analytics(fetchImpl, config, now, monthStart).catch(failed('analytics')),
+    storage(fetchImpl, config, now).catch(failed('storage')),
   ])
+  const bound = names ? await boundDatabases(fetchImpl, config, names).catch(failed('settings')) : null
+  // A Worker or database the analytics don't mention had no traffic (zero); with no analytics at all, it's unknown.
+  const known = (value: number | undefined) => (usage ? value ?? 0 : null)
   const workers = names?.map((name) => {
     const entry = usage?.workers.get(name)
     return {
       name,
-      requests24h: entry?.requests24h ?? 0,
-      errors24h: entry?.errors24h ?? 0,
-      requestsMonth: entry?.requestsMonth ?? 0,
-      errorsMonth: entry?.errorsMonth ?? 0,
+      requests24h: known(entry?.requests24h),
+      errors24h: known(entry?.errors24h),
+      requestsMonth: known(entry?.requestsMonth),
+      errorsMonth: known(entry?.errorsMonth),
       cpuP50: entry?.cpuP50 ?? null,
       cpuP99: entry?.cpuP99 ?? null,
     }
   }) ?? null
-  const databaseUsage = dbs?.map((db) => {
+  const databaseUsage = bound?.map((db) => {
     const entry = usage?.databases.get(db.id)
     return {
       ...db,
-      rowsRead24h: entry?.rowsRead24h ?? 0,
-      rowsWritten24h: entry?.rowsWritten24h ?? 0,
-      rowsReadMonth: entry?.rowsReadMonth ?? 0,
-      rowsWrittenMonth: entry?.rowsWrittenMonth ?? 0,
+      sizeBytes: sizes?.get(db.id) ?? null,
+      rowsReadYesterday: known(entry?.rowsReadYesterday),
+      rowsWrittenYesterday: known(entry?.rowsWrittenYesterday),
+      rowsReadMonth: known(entry?.rowsReadMonth),
+      rowsWrittenMonth: known(entry?.rowsWrittenMonth),
     }
   }) ?? null
   if (problems.length) log('cloudflare_snapshot_partial', { problems: problems.join(', ') })
@@ -289,29 +335,40 @@ export interface Headroom {
 
 /**
  * The account against the plan: the month's requests and rows so far with the month's projection at this pace, the
- * storage of all databases together, and the largest database against the hard limit.
+ * storage of all databases together, and the largest database against the hard limit. Requests are the gateway's:
+ * every request from outside reaches it first, and its calls to the apps go over service bindings, which Cloudflare
+ * doesn't bill as requests. The allowances are the account's, so the meters assume an account that runs Insulin Apps
+ * alone.
  */
 export function headroom(snapshot: Snapshot): Headroom[] {
-  const elapsed = Math.max(snapshot.takenAt - snapshot.monthStart, 60 * 60 * 1000)
+  const elapsed = snapshot.takenAt - snapshot.monthStart
   const monthEnd = Date.UTC(new Date(snapshot.monthStart).getUTCFullYear(), new Date(snapshot.monthStart).getUTCMonth() + 1, 1)
-  const project = (used: number) => Math.round(used * ((monthEnd - snapshot.monthStart) / elapsed))
+  // Less than an hour into the month is too little to project from: the meter then shows no projection.
+  const project = (used: number) => (elapsed < 60 * 60 * 1000 ? null : Math.round(used * ((monthEnd - snapshot.monthStart) / elapsed)))
   const rows: Headroom[] = []
-  if (snapshot.workers) {
-    const requests = snapshot.workers.reduce((sum, worker) => sum + worker.requestsMonth, 0)
-    rows.push({ key: 'requests', label: 'Worker requests this month', used: requests, limit: PLAN.workerRequestsPerMonth, projected: project(requests), unit: 'count', hard: false })
+  // A figure that wasn't read makes no meter: an unknown is never shown as zero.
+  const gateway = snapshot.workers?.find((worker) => worker.name === GATEWAY_WORKER)
+  if (gateway && gateway.requestsMonth !== null) {
+    rows.push({ key: 'requests', label: 'Gateway requests this month', used: gateway.requestsMonth, limit: PLAN.workerRequestsPerMonth, projected: project(gateway.requestsMonth), unit: 'count', hard: false })
   }
   if (snapshot.databases) {
-    const read = snapshot.databases.reduce((sum, db) => sum + db.rowsReadMonth, 0)
-    const written = snapshot.databases.reduce((sum, db) => sum + db.rowsWrittenMonth, 0)
-    const storage = snapshot.databases.reduce((sum, db) => sum + db.sizeBytes, 0)
-    const largest = snapshot.databases.reduce<DatabaseUsage | null>((top, db) => (!top || db.sizeBytes > top.sizeBytes ? db : top), null)
-    rows.push(
-      { key: 'rows_read', label: 'D1 rows read this month', used: read, limit: PLAN.d1RowsReadPerMonth, projected: project(read), unit: 'count', hard: false },
-      { key: 'rows_written', label: 'D1 rows written this month', used: written, limit: PLAN.d1RowsWrittenPerMonth, projected: project(written), unit: 'count', hard: false },
-      { key: 'storage', label: 'D1 storage, all databases', used: storage, limit: PLAN.d1StorageBytes, projected: null, unit: 'bytes', hard: false },
-    )
-    if (largest) {
-      rows.push({ key: 'largest_db', label: `Largest database (${largest.name})`, used: largest.sizeBytes, limit: PLAN.d1DatabaseMaxBytes, projected: null, unit: 'bytes', hard: true })
+    // A meter needs every database's figure: a total that leaves one out understates, and none at all isn't zero.
+    const any = snapshot.databases.length > 0
+    const rowsKnown = any && snapshot.databases.every((db) => db.rowsReadMonth !== null && db.rowsWrittenMonth !== null)
+    const sizesKnown = any && snapshot.databases.every((db) => db.sizeBytes !== null)
+    const read = snapshot.databases.reduce((sum, db) => sum + (db.rowsReadMonth ?? 0), 0)
+    const written = snapshot.databases.reduce((sum, db) => sum + (db.rowsWrittenMonth ?? 0), 0)
+    const storage = snapshot.databases.reduce((sum, db) => sum + (db.sizeBytes ?? 0), 0)
+    const largest = snapshot.databases.reduce<DatabaseUsage | null>((top, db) => (!top || (db.sizeBytes ?? 0) > (top.sizeBytes ?? 0) ? db : top), null)
+    if (rowsKnown) {
+      rows.push(
+        { key: 'rows_read', label: 'D1 rows read this month', used: read, limit: PLAN.d1RowsReadPerMonth, projected: project(read), unit: 'count', hard: false },
+        { key: 'rows_written', label: 'D1 rows written this month', used: written, limit: PLAN.d1RowsWrittenPerMonth, projected: project(written), unit: 'count', hard: false },
+      )
+    }
+    if (sizesKnown) rows.push({ key: 'storage', label: 'D1 storage, all databases', used: storage, limit: PLAN.d1StorageBytes, projected: null, unit: 'bytes', hard: false })
+    if (sizesKnown && largest) {
+      rows.push({ key: 'largest_db', label: `Largest database (${largest.name})`, used: largest.sizeBytes ?? 0, limit: PLAN.d1DatabaseMaxBytes, projected: null, unit: 'bytes', hard: true })
     }
   }
   return rows

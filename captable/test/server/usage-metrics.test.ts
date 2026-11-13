@@ -221,6 +221,26 @@ describe('once an hour', () => {
     expect(await claims(db)).toEqual([])
   })
 
+  it('gives the platform fifteen seconds for the whole report, then releases the claim for the next tick', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await seedOrganizations(db)
+    // A gateway that never answers: only the report's own deadline ends the wait, well inside the tick's 25 seconds.
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(AbortSignal.abort(new DOMException('The report took too long', 'TimeoutError')))
+    const signals: (AbortSignal | null | undefined)[] = []
+    const stalled = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      signals.push(init?.signal)
+      return new Promise<Response>((_resolve, reject) => {
+        if (init?.signal?.aborted) reject(init.signal.reason)
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+      })
+    }) as typeof fetch
+    expect(await reportUsage(db, { ...platform().env, METRICS_FETCH: stalled }, NOW)).toBe('failed')
+    expect(timeout).toHaveBeenCalledWith(15_000)
+    expect(signals).toHaveLength(1)
+    expect(signals[0]?.aborted).toBe(true)
+    expect(await claims(db)).toEqual([])
+  })
+
   it('retakes an unsent claim only once its tick must have died, and never a sent hour', async () => {
     const { sent, env } = platform()
     const hour = hourOf(NOW)

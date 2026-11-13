@@ -48,8 +48,21 @@ export async function insertSession(db: D1Database, session: {
     ).bind(session.idHash, session.userId, session.activeOrgId, session.credentialVersion, session.now, session.expiresAt),
     db.prepare('UPDATE users SET last_active_at = ?2 WHERE id = ?1 AND EXISTS (SELECT 1 FROM sessions WHERE id_hash = ?3)')
       .bind(session.userId, session.now, session.idHash),
+    activeOrgStamp(db, session.idHash, session.now),
   ])
   return (result?.meta.changes ?? 0) > 0
+}
+
+/**
+ * Notes the session's organization as active now, if it is still active and the person still a member: an
+ * organization the operators suspended, or one the person left, never looks used (the console's "last active").
+ */
+function activeOrgStamp(db: D1Database, idHash: string, now: number): D1PreparedStatement {
+  return db.prepare(
+    `UPDATE orgs SET last_active_at = ?2 WHERE status = 'active' AND id = (
+       SELECT s.active_org_id FROM sessions s JOIN memberships m ON m.org_id = s.active_org_id AND m.user_id = s.user_id
+       WHERE s.id_hash = ?1)`,
+  ).bind(idHash, now)
 }
 
 /**
@@ -60,12 +73,16 @@ export async function touchSession(db: D1Database, idHash: string, now: number, 
   await db.batch([
     db.prepare('UPDATE sessions SET last_seen_at = ?2, expires_at = ?3 WHERE id_hash = ?1').bind(idHash, now, expiresAt),
     db.prepare('UPDATE users SET last_active_at = ?2 WHERE id = (SELECT user_id FROM sessions WHERE id_hash = ?1)').bind(idHash, now),
-    db.prepare('UPDATE orgs SET last_active_at = ?2 WHERE id = (SELECT active_org_id FROM sessions WHERE id_hash = ?1)').bind(idHash, now),
+    activeOrgStamp(db, idHash, now),
   ])
 }
 
-export async function setSessionOrg(db: D1Database, idHash: string, orgId: string): Promise<void> {
-  await db.prepare('UPDATE sessions SET active_org_id = ?2 WHERE id_hash = ?1').bind(idHash, orgId).run()
+/** Moves the session to an organization (the caller checked the membership), which counts as using it. */
+export async function setSessionOrg(db: D1Database, idHash: string, orgId: string, now: number): Promise<void> {
+  await db.batch([
+    db.prepare('UPDATE sessions SET active_org_id = ?2 WHERE id_hash = ?1').bind(idHash, orgId),
+    activeOrgStamp(db, idHash, now),
+  ])
 }
 
 export async function deleteSession(db: D1Database, idHash: string): Promise<void> {

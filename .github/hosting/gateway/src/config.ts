@@ -75,7 +75,10 @@ export interface HostedApp {
  */
 export interface SuperConfig {
   idp: { entityId: string; ssoUrl: string; certificates: string[] }
-  /** The Google group (its address, lower case) the assertion's `groups` attribute must list. */
+  /**
+   * The Google group the assertion's `groups` attribute must list, lower case: its name, which is what Google's group
+   * membership mapping sends (not its address).
+   */
   group: string
   /** Operators who may also suspend, disable, reinstate and create organizations: SUPER_ADMIN_EMAILS, lower case. */
   admins: ReadonlySet<string>
@@ -416,7 +419,8 @@ export function readSuperConfig(env: Env): SuperConfig | null {
   const entityId = text(env.SUPER_SAML_IDP_ENTITY_ID)
   const ssoUrl = httpsUrl(text(env.SUPER_SAML_IDP_SSO_URL))
   const certificates = parseCertificates(text(env.SUPER_SAML_IDP_CERT))
-  const group = normalizeEmail(env.SUPER_GOOGLE_GROUP)
+  // A group's name as Google sends it, compared without regard to case (super/auth.ts).
+  const group = truncate(cleanText(env.SUPER_GOOGLE_GROUP), 200).toLowerCase()
   const given = [env.SUPER_SAML_IDP_ENTITY_ID, env.SUPER_SAML_IDP_SSO_URL, env.SUPER_SAML_IDP_CERT, env.SUPER_GOOGLE_GROUP].some((value) => text(value))
   if (!given) return null
   const problems = [
@@ -435,7 +439,7 @@ export function readSuperConfig(env: Env): SuperConfig | null {
     if (email) admins.add(email)
     else log('config_super_admin_ignored')
   }
-  return { idp: { entityId, ssoUrl: ssoUrl!, certificates: certificates! }, group: group!, admins }
+  return { idp: { entityId, ssoUrl: ssoUrl!, certificates: certificates! }, group, admins }
 }
 
 /** The console's Cloudflare token and account: both, or neither (set in part, it is off and logged). */

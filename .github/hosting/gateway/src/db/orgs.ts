@@ -30,7 +30,9 @@ const ROLE_ORDER = `CASE m.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 WHEN 'ED
 const ANOTHER_OWNER = `(SELECT COUNT(*) FROM memberships o WHERE o.org_id = ?1 AND o.role = 'OWNER') > 1`
 
 // Every privileged mutation re-reads the actor's role inside its own statement (the organization is ?1). The page
-// checked the role earlier, but a member whose role was lowered, or who was removed, since then must change nothing.
+// checked the role earlier, but a member whose role was lowered, or who was removed, since then must change nothing; nor
+// may anyone change an organization the operators suspended or disabled meanwhile (DESIGN.md §11.3), so the actor's
+// membership counts only in an active organization.
 
 /** How many organizations an owner domain may have, unless `org_domain_allowances` says otherwise (DESIGN.md §3.1). */
 export const ORGS_PER_DOMAIN = 2
@@ -171,7 +173,7 @@ export async function countOwners(db: D1Database, orgId: string): Promise<number
 export async function renameOrg(db: D1Database, orgId: string, actorId: string, name: string, now: number): Promise<boolean> {
   const result = await db.prepare(
     `UPDATE orgs SET name = ?2, updated_at = ?3 WHERE id = ?1
-       AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ?1 AND a.user_id = ?4 AND a.role = 'OWNER')`,
+       AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?4 AND a.role = 'OWNER')`,
   ).bind(orgId, name, now, actorId).run()
   return result.meta.changes > 0
 }
@@ -183,7 +185,7 @@ export async function renameOrg(db: D1Database, orgId: string, actorId: string, 
 export async function deleteOrg(db: D1Database, orgId: string, actorId: string): Promise<boolean> {
   const result = await db.prepare(
     `DELETE FROM orgs WHERE id = ?1
-       AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ?1 AND a.user_id = ?2 AND a.role = 'OWNER')`,
+       AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?2 AND a.role = 'OWNER')`,
   ).bind(orgId, actorId).run()
   return result.meta.changes > 0
 }
@@ -198,7 +200,7 @@ export async function changeRole(db: D1Database, change: { orgId: string; userId
     `UPDATE memberships SET role = ?4, updated_at = ?5
      WHERE org_id = ?1 AND user_id = ?2 AND role = ?3
        AND (?3 <> 'OWNER' OR ?4 = 'OWNER' OR ${ANOTHER_OWNER})
-       AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ?1 AND a.user_id = ?6
+       AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?6
          AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?3 <> 'OWNER' AND ?4 <> 'OWNER')))`,
   ).bind(change.orgId, change.userId, change.current, change.next, change.now, change.actorId).run()
   return result.meta.changes > 0
@@ -213,7 +215,7 @@ export async function changeRole(db: D1Database, change: { orgId: string; userId
  * was written.
  */
 export async function setAppAccess(db: D1Database, change: { orgId: string; userId: string; current: Role; grants: GrantInput[]; actorId: string; now: number }): Promise<boolean> {
-  const actor = `EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ?1 AND a.user_id = ?3
+  const actor = `EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?3
     AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?4 <> 'OWNER')))`
   // ?6 is this batch's time: when the member had an organization role, the first statement stamps it on the membership.
   const ours = `(?4 = 'APPS' OR (SELECT m.updated_at FROM memberships m WHERE m.org_id = ?1 AND m.user_id = ?2 AND m.role = 'APPS') = ?6)`
@@ -250,17 +252,20 @@ export async function removeMember(db: D1Database, orgId: string, userId: string
   const result = await db.prepare(
     `DELETE FROM memberships WHERE org_id = ?1 AND user_id = ?2 AND role = ?3
        AND (?3 <> 'OWNER' OR ${ANOTHER_OWNER})
-       AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ?1 AND a.user_id = ?4
+       AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?4
          AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?3 <> 'OWNER')))`,
   ).bind(orgId, userId, current, actorId).run()
   return result.meta.changes > 0
 }
 
-/** Leaves the organization (anyone may) unless that would remove its last OWNER. Returns false otherwise. */
+/**
+ * Leaves the organization (anyone may) unless that would remove its last OWNER, or the organization isn't active: a
+ * suspended one keeps its people as they were. Returns false otherwise.
+ */
 export async function leaveOrg(db: D1Database, orgId: string, userId: string, current: Role): Promise<boolean> {
   const result = await db.prepare(
     `DELETE FROM memberships WHERE org_id = ?1 AND user_id = ?2 AND role = ?3
-       AND (?3 <> 'OWNER' OR ${ANOTHER_OWNER})`,
+       AND (?3 <> 'OWNER' OR ${ANOTHER_OWNER}) AND EXISTS (SELECT 1 FROM orgs o WHERE o.id = ?1 AND o.status = 'active')`,
   ).bind(orgId, userId, current).run()
   return result.meta.changes > 0
 }

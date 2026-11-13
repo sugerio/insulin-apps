@@ -175,7 +175,7 @@ export function orgDetailPage(ctx: Context, session: OperatorSession, data: OrgD
             <div className="flex flex-col gap-6">
               <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-4">
                 {names.map((name) => (
-                  <div key={name}><dt className="text-muted-foreground">{metricLabel(name)}</dt><dd className="tabular-nums">{metricValue(name, entry.metrics[name])}</dd></div>
+                  <div key={name} className="min-w-0 break-words"><dt className="text-muted-foreground">{metricLabel(name)}</dt><dd className="tabular-nums">{metricValue(name, entry.metrics[name])}</dd></div>
                 ))}
               </dl>
               {trend && entry.days.length > 1 ? (
@@ -207,7 +207,8 @@ export function orgDetailPage(ctx: Context, session: OperatorSession, data: OrgD
 }
 
 export interface NewOrgState {
-  values?: { email: string; name: string; reason: string }
+  /** The form's fields; `orgId` is the id of the organization it will create, kept when the form is shown again. */
+  values: { orgId: string; email: string; name: string; reason: string }
   error?: string
 }
 
@@ -222,11 +223,12 @@ export function newOrgPage(ctx: Context, session: OperatorSession, state: NewOrg
       <CardContent>
         <form method="post" action="/super/orgs" className="flex max-w-xl flex-col gap-6">
           <ErrorSummary errors={[state.error]} />
-          <TextField label="Owner's email" name="email" type="email" value={state.values?.email} hint="An existing account with a confirmed address." maxLength={254} />
-          <TextField label="Organization name" name="name" value={state.values?.name} maxLength={80} />
+          <input type="hidden" name="org_id" defaultValue={state.values.orgId} />
+          <TextField label="Owner's email" name="email" type="email" value={state.values.email} hint="An existing account with a confirmed address." maxLength={254} />
+          <TextField label="Organization name" name="name" value={state.values.name} maxLength={80} />
           <Field>
             <FieldLabel htmlFor="field-reason">Reason</FieldLabel>
-            <Textarea id="field-reason" name="reason" required minLength={3} maxLength={500} rows={3} defaultValue={state.values?.reason || undefined} aria-describedby="field-reason-hint" />
+            <Textarea id="field-reason" name="reason" required minLength={3} maxLength={500} rows={3} defaultValue={state.values.reason || undefined} aria-describedby="field-reason-hint" />
             <FieldDescription id="field-reason-hint">The audit log keeps it with your address, for instance the support request it answers.</FieldDescription>
           </Field>
           <div className="flex gap-2">

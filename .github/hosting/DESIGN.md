@@ -611,7 +611,8 @@ of each kind and the bytes of files stored. Counts and sizes only: never a name,
     "organizations": [ { "id": "<organization id>", "metrics": { "envelopes": 12, "storage_bytes": 2048 } } ] }
   ```
 
-  `hour` is the top of the UTC hour the values were measured in, not in the future and at most seven days old. Each
+  `hour` is the top of a real UTC hour (one that reads back as sent: no February 30 or 24:00), the one the values were
+  measured in, not in the future and at most seven days old. Each
   metrics object holds at most 20 entries, each a name matching `[a-z][a-z0-9_]{0,39}` and a number from 0 to 10^15;
   `organizations` at most 500, each id once. A larger report is several requests for the same hour (`app` in the
   first). Every value is a gauge, the total when measured; activity shows as the difference between reports. A name
@@ -621,7 +622,8 @@ of each kind and the bytes of files stored. Counts and sizes only: never a name,
   replacing that hour's values, so a resent report changes nothing. Organizations it doesn't know are skipped. It
   answers 202 `{ "status": "accepted", "organizations": <stored>, "skipped": <unknown> }`, and 503 `not_configured`
   without `GATEWAY_SECRET_KEY`. Reports for a suspended organization are still stored. Hourly values are kept three
-  days, the last report of each UTC day 400 days.
+  days, the last report of each UTC day 400 days; each report also deletes up to 1,000 of its app's expired rows from
+  each table, more than one report adds, so an app's reports keep its retention whatever the rest of the traffic.
 - **Configuration.** The deploy gives each app `SUGER_METRICS_URL` next to `SUGER_MAIL_URL`, when `GATEWAY_SECRET_KEY`
   is set. Without it (a local preview), an app reports nothing.
 
@@ -650,7 +652,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | `RL_PUBLIC` | ratelimit | Requests to public paths that aren't GET or HEAD, per app and IP; 60 a minute suggested (§8.1) |
 | `ORG_REQUEST_EMAIL` | var | Optional: Insulin Apps support's address for requests for more organizations (§3.1). A GitHub variable, never written in the repository |
 | Cron triggers | trigger | `*/5 * * * *` (the apps' tick, §8.5, and the console's hourly work, §11.5) and `17 3 * * *` (the daily cleanup) |
-| `SUPER_SAML_IDP_ENTITY_ID`, `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_CERT`, `SUPER_GOOGLE_GROUP` | var | The operator console's Google Workspace SAML app and the operators' group (§11.1). All four, or the console isn't there. GitHub variables, never written in the repository |
+| `SUPER_SAML_IDP_ENTITY_ID`, `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_CERT`, `SUPER_GOOGLE_GROUP` | var | The operator console's Google Workspace SAML app and the operators' group, by its name (§11.1). All four, or the console isn't there. GitHub variables, never written in the repository |
 | `SUPER_ADMIN_EMAILS` | var | The console's admins, addresses separated by commas or spaces (§11.1). A GitHub variable, never written in the repository |
 | `SUPER_CLOUDFLARE_API_TOKEN` | secret | Optional: a read-only Cloudflare API token for the console's resource snapshot (§11.5). The deploy passes its own account as `SUPER_CLOUDFLARE_ACCOUNT_ID` |
 | `SUGER_METRICS_URL` | app var | Where each app sends its hourly usage report (§8.6) |
@@ -679,8 +681,10 @@ basic facts, and numbers.
   what is read), issued by `SUPER_SAML_IDP_ENTITY_ID`, for the audience `https://insulinapps.com/super` and the ACS,
   within its validity window, answering the request this browser started. `GET /super/saml/metadata` is the
   console's SP metadata.
-- **The operators' group.** The signed assertion's `groups` attribute must list `SUPER_GOOGLE_GROUP` (compared in
-  lower case): the Workspace app's group membership mapping sends it. The runbook also turns the app on for that
+- **The operators' group.** The signed assertion's `groups` attribute must list `SUPER_GOOGLE_GROUP`, the group's
+  name, which is what the Workspace app's group membership mapping sends (not its address), compared without regard
+  to case. Someone in a group nested in it counts: Google sends the outer group. Renaming the group means setting the
+  variable again. The runbook also turns the app on for that
   group only, so Google itself refuses everyone else: two locks. Anyone else is told they aren't an operator; the log
   says so without their address.
 - **Operators and admins.** Everyone who gets in is an operator and reads everything below. An operator whose
@@ -739,16 +743,18 @@ already has changes and records nothing. **Reinstate** makes it active again.
 - **A suspended organization** gives its members nothing: their memberships of it stop counting (`findMembership`,
   `listMemberships`, the session's active organization, `findAccessRow`), so its settings pages and forms answer 404,
   its apps can't be opened in it (the session moves to another organization, or none), the organization switcher
-  leaves it out, and the home page tells its members it is suspended. The actor checks every organization change
-  repeats in its statement (`orgAdmin`, `appAdmin`, `owner`) refuse it, so even a change racing the suspension
-  writes nothing. Its agents' and API clients' tokens are refused, and so are refreshing and issuing new ones; SCIM
+  leaves it out, and the home page tells its members it is suspended. The actor check every organization change
+  repeats in its statement (`orgAdmin`, `appAdmin`, `owner`, and the inline ones of renaming, deleting, roles, access,
+  removals, leaving and invitations) counts a membership only in an active organization, so even a change racing the
+  suspension writes nothing, and an agent's or API client's use doesn't mark it active. Its agents' and API clients' tokens are refused, and so are refreshing and issuing new ones; SCIM
   gets 401; single sign-on to it shows the suspension; its invitations can't be accepted; the integration proxy finds
   no credential; the mail relay answers 403 `organization_unavailable`. Its usage reports are still stored.
 - **A disabled organization** is refused the same way; disabling also deletes its AI agents' grants (with their
   tokens), revokes its API clients (their tokens deleted, a previous secret dropped), revokes its pending invitations
   and deletes its SCIM tokens. Reinstating doesn't bring those back.
 - **Data stays.** Neither deletes anything else, and both organizations still count for their owner domain's limit,
-  so a disabled organization can't be replaced by a new one. An organization that requires its single sign-on for a
+  so a disabled organization can't be replaced by a new one. Deleting the account of its only member leaves it in
+  place too (the account goes; the organization, without members, stays suspended or disabled). An organization that requires its single sign-on for a
   domain keeps requiring it while suspended, so its people can't sign in with a password either until it is
   reinstated.
 
@@ -756,30 +762,44 @@ already has changes and records nothing. **Reinstate** makes it active again.
 
 For someone whose owner domain has all the organizations it may have (§3.1) and who asked support for another, an
 admin creates one at `/super/orgs/new`: the owner's address (an existing, confirmed, active account), the name and a
-reason. One batch writes the organization (its owner domain as usual, `created_by` the person, `created_by_operator`
-the admin's address), the OWNER membership and the audit record, without the domain's count; the organization still
+reason. The form carries the id of the organization it creates, so a form sent twice creates one (the second lands
+on it), and an id that is already another organization's takes nothing over. One batch writes the organization (its
+owner domain as usual, `created_by` the person, `created_by_operator` the admin's address), the OWNER membership and
+the audit record, without the domain's count; the organization still
 counts for the domain, so the person's own next one is limited as before. The person gets an e-mail from Insulin Apps
 support, which doesn't name the operator, linking to the organization's settings. Raising a domain's allowance with
 `allow-orgs.mjs` remains the way to let someone create more themselves.
 
 ### 11.5 Cloudflare resources
 
-Once an hour, the first five-minute tick of the hour that claims the run in `super_jobs` (a run unfinished after 15
-minutes may be claimed again) reads the Cloudflare account with `SUPER_CLOUDFLARE_API_TOKEN`, a read-only token
-(Account Analytics: Read, Workers Scripts: Read, D1: Read), on the account the platform deploys to
-(`SUPER_CLOUDFLARE_ACCOUNT_ID`, which the deploy sets from its own `CLOUDFLARE_ACCOUNT_ID`):
+Once an hour, the first five-minute tick of the hour that claims the run in `super_jobs` (a run that failed or read
+only part of the account, or one unfinished after 15 minutes, is claimed again by the next tick) reads the Cloudflare
+account with `SUPER_CLOUDFLARE_API_TOKEN`, a read-only token with
+**Workers Scripts: Read** and **Account Analytics: Read** only, on the account the platform deploys to
+(`SUPER_CLOUDFLARE_ACCOUNT_ID`, which the deploy sets from its own `CLOUDFLARE_ACCOUNT_ID`). It never has a D1
+permission: Cloudflare's D1 query API takes a read-only D1 token, so one would let the console read every app's
+database. So:
 
-- the Worker scripts and D1 databases named `insulin-apps-*`, each database with its size and tables;
+- the Worker scripts named `insulin-apps-*`, and from each one's settings the D1 database it binds (named after the
+  Worker, as the deploy names it);
 - from the GraphQL Analytics API, each Worker's requests, errors and CPU time (median and 99th percentile) for the
-  last 24 hours, and its requests and errors since the month began; each database's rows read and written for the
-  last day and the month.
+  last 24 hours, and its requests and errors since the month began; each database's size, and its rows read and
+  written yesterday and this month (D1's analytics count by UTC day, so a whole day is the shortest window).
 
-It stores a snapshot (kept 90 days) even when a part fails, naming the part. Requests go to `api.cloudflare.com`
+It stores a snapshot (one an hour, the latest try; kept 90 days) even when a part fails, naming the part: figures
+that weren't read are unknown, never zero, so they make no meter (a D1 meter needs every database's figure: a total
+that leaves one out would understate), and the overview says part of the read failed. Requests go to `api.cloudflare.com`
 only, follow no redirect and time out after 20 seconds; the token is never logged. The console compares the month's
 figures with what the Workers Paid plan includes (10 million requests, 25 billion D1 rows read and 50 million written a
 month, 5 GB of D1 storage) and the largest database with D1's hard limit of 10 GB, projects the month at the current
-pace, and puts anything past 80%, or heading past a limit, on the watch list. The figures are in
-`gateway/src/super/cloudflare.ts` (`PLAN`); without a token the page says how to add one.
+pace (from an hour into the month: before that there's too little to go on), and puts anything past 80%, or heading
+past a limit, on the watch list. Requests count the gateway's alone:
+every request from outside reaches it first, and its calls to the apps go over service bindings, which Cloudflare
+doesn't bill as requests. The allowances are the account's, so the meters assume an account that runs Insulin Apps
+alone. The figures are in `gateway/src/super/cloudflare.ts` (`PLAN`); without a token the page says how to add one.
+The page also lists everything else the platform uses, from the gateway's configuration: its custom domains, each
+app's Worker and binding, the Email Service (with the last 48 hours' messages), the rate limiters, the docs' static
+assets and the cron triggers.
 
 ### 11.6 Audit log
 

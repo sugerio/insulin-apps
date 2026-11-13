@@ -145,12 +145,14 @@ export async function orgsBlockingDeletion(db: D1Database, userId: string): Prom
 
 /**
  * Deletes the account, and with it every organization where the user is the only member, unless an organization
- * would be left without an OWNER (checked inside the same transaction). Sessions, tokens and memberships cascade.
+ * would be left without an OWNER (checked inside the same transaction). Sessions, tokens and memberships cascade. An
+ * organization the operators suspended or disabled stays, still counting for its owner domain (DESIGN.md §11.3), so
+ * deleting its only member's account can't clear it away or free its place.
  */
 export async function deleteAccount(db: D1Database, userId: string): Promise<boolean> {
   const [, deleted] = await db.batch([
     db.prepare(
-      `DELETE FROM orgs WHERE id IN (
+      `DELETE FROM orgs WHERE status = 'active' AND id IN (
          SELECT m.org_id FROM memberships m WHERE m.user_id = ?1
            AND NOT EXISTS (SELECT 1 FROM memberships o WHERE o.org_id = m.org_id AND o.user_id <> ?1))
        AND NOT EXISTS (${BLOCKING_ORGS})`,

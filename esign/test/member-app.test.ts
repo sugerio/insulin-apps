@@ -427,3 +427,26 @@ test('sending: a template\'s default signers are filled in, can be changed, and 
   assert.equal(app.byId('signer-1-name').props.value,'Typed Seller','what was typed is kept');
  }finally{await app.unmount();}
 });
+
+test('contacts: a row is deleted from the list after it is confirmed; a Viewer sees no delete',async()=>{
+ const LEE={...ANA,id:'33333333-3333-4333-8333-333333333333',email:'lee@buyer.example',name:'Lee Buyer'};
+ const routes=(who:unknown)=>(c:{path:string;method:string})=>{
+  if(c.path==='/api/me')return json(who);
+  if(c.path.startsWith('/api/contacts?'))return json({contacts:[ANA,LEE]});
+  if(c.path===`/api/contacts/${LEE.id}/delete`&&c.method==='POST')return json({id:LEE.id,deleted:true});
+ };
+ const app=await renderMember('/contacts',routes(EDITOR));
+ try{
+  await app.click(app.byLabel('Delete Lee Buyer'),'Delete');
+  assert.ok(!app.calls.some(c=>c.path.endsWith('/delete')),'not until confirmed');
+  await app.click(app.button('Keep'),'Keep');
+  assert.equal(app.button('Delete for good'),undefined);
+  await app.click(app.byLabel('Delete Lee Buyer'),'Delete');
+  await app.click(app.button('Delete for good'),'Confirm');
+  assert.ok(app.calls.some(c=>c.path===`/api/contacts/${LEE.id}/delete`&&c.method==='POST'));
+  assert.doesNotMatch(app.text(),/lee@buyer\.example/);assert.match(app.text(),/Ana Example/);
+  assert.match(app.text(),/Lee Buyer was deleted from your contacts\. Their envelopes are kept\./);
+ }finally{await app.unmount();}
+ const viewer=await renderMember('/contacts',routes(VIEWER));
+ try{assert.equal(viewer.byLabel('Delete Lee Buyer'),undefined);}finally{await viewer.unmount();}
+});

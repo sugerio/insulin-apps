@@ -154,13 +154,15 @@ One run looks at up to 25 envelopes to finish and 25 owing signed copies, so a b
 ## Contacts
 
 **Contacts** is your organization's address book. Everyone an envelope names as a signer is added, or refreshed with the
-name, title and company you gave this time, and listed most recently used first, with how many envelopes named them.
+name, title and company you gave this time, and listed most recently used first, with how many of your organization's
+envelopes name them (those sent before they were added too).
 Search it by name or email.
 
 - To add someone before you send to them, choose **Add contact**. Adding an email that is already there changes that
   contact.
-- To change or delete a contact, open them. Their page also lists the envelopes that name them. Deleting asks you to
-  confirm; the next envelope you send them adds them again.
+- To delete a contact, choose **Delete** on their row, then **Delete for good**. The next envelope you send them adds them
+  again.
+- To change a contact, open them. Their page also lists the envelopes that name them, and can delete them too.
 - When you send, a contact suggested under **Name** or **Email** as you type, or chosen with **Choose** *the role*
   **from contacts**, fills in the signer's name, email, title and company.
 

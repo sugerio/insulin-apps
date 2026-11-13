@@ -56,6 +56,9 @@ export const tasks = sqliteTable('tasks', {
 }, (table) => [
   unique('tasks_envelope_role').on(table.envelope_id, table.role),
   index('tasks_expires_at').on(table.expires_at),
+  // A contact's envelopes (contacts.ts), by the email compared as Esign compares a signer's. An index only: tasks
+  // has triggers, which a table rebuild would drop.
+  index('tasks_by_recipient_email').on(sql`lower(${table.recipient_email})`),
   check('tasks_details_json', sql`json_valid(${table.details_json})`),
 ])
 
@@ -239,7 +242,7 @@ export const invitations = sqliteTable('invitations', {
  * The organization's contacts (contacts.ts): one per email address (`email_key`, trimmed and
  * lower-cased), added by every envelope that names them and by members. A convenience for filling
  * in signers, never evidence. `recent_at` is when an envelope last named them, or when they were
- * added: the list's order.
+ * added: the list's order. How many envelopes name them, and the latest, are read from `tasks`.
  */
 export const contacts = sqliteTable('contacts', {
   id: text('id').primaryKey(),
@@ -249,8 +252,6 @@ export const contacts = sqliteTable('contacts', {
   name: text('name').notNull(),
   title: text('title'),
   company: text('company'),
-  envelope_count: integer('envelope_count').notNull().default(0),
-  last_used_at: integer('last_used_at'),
   recent_at: integer('recent_at').notNull(),
   created_at: integer('created_at').notNull(),
   updated_at: integer('updated_at').notNull(),

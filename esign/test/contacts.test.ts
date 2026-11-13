@@ -107,7 +107,8 @@ test('members add, change and delete contacts; envelopes keep what they were sen
     assert.equal((await req(`/api/envelopes/${sent.id}`, { headers: { authorization: `Bearer ${KEY}` } })).status, 200);
     assert.deepEqual((await list()).contacts, []);
     await envelope([{ role: 'buyer', name: 'Lee Buyer', email: 'lee@buyer.example' }]);
-    assert.deepEqual((await list()).contacts.map(c => [c.name, c.envelopeCount]), [['Lee Buyer', 1]]);
+    // Counted from the envelopes themselves: the one sent before the contact was deleted too.
+    assert.deepEqual((await list()).contacts.map(c => [c.name, c.envelopeCount]), [['Lee Buyer', 2]]);
   } finally { await mf.dispose(); }
 });
 
@@ -116,7 +117,7 @@ test('the list searches names and emails, and pages by a cursor without skipping
   try {
     // Twelve contacts, four of them used at the same moment (the cursor breaks the tie by id).
     const rows = Array.from({ length: 12 }, (_, i) => [crypto.randomUUID(), `person${i}@example.com`, i < 6 ? `Person ${i}` : `Partner_${i}%`, i < 4 ? 1000 : 1000 + i]);
-    for (const [id, email, name, at] of rows) await db.prepare("INSERT INTO contacts (id,tenant_id,email,email_key,name,envelope_count,recent_at,created_at,updated_at) VALUES (?,'tenant',?,?,?,0,?,?,?)").bind(id, email, email, name, at, at, at).run();
+    for (const [id, email, name, at] of rows) await db.prepare("INSERT INTO contacts (id,tenant_id,email,email_key,name,recent_at,created_at,updated_at) VALUES (?,'tenant',?,?,?,?,?,?)").bind(id, email, email, name, at, at, at).run();
     const seen: string[] = [];
     let cursor = '';
     for (let pages = 0; pages < 10; pages++) {
@@ -135,5 +136,24 @@ test('the list searches names and emails, and pages by a cursor without skipping
     assert.equal((await list('?q=%25')).contacts.length, 6);
     assert.deepEqual((await list('?q=person3@')).contacts.map(c => c.email), ['person3@example.com']);
     for (const bad of ['?limit=0', '?limit=101', `?q=${'x'.repeat(101)}`, '?cursor=nope']) assert.equal((await req(`/api/contacts${bad}`, { headers: { authorization: `Bearer ${KEY}` } })).status, 400, bad);
+  } finally { await mf.dispose(); }
+});
+
+test('a contact\'s envelopes count those sent before the address book had them, found through the email index', async () => {
+  const { mf, db, envelope, list, post } = await setup();
+  try {
+    // Two envelopes before the contact exists (as before contacts were kept), then one after.
+    await envelope([{ role: 'a', name: 'Kim', email: 'kim@partner.example' }]);
+    await envelope([{ role: 'a', name: 'Kim', email: 'KIM@partner.example' }]);
+    await db.prepare('DELETE FROM contacts').run();
+    assert.equal((await post('/api/contacts', { email: 'kim@partner.example', name: 'Kim' })).status, 201);
+    let [kim] = (await list()).contacts;
+    assert.equal(kim.envelopeCount, 2, 'both envelopes sent before, whatever the spelling of the email');
+    assert.equal(typeof kim.lastUsedAt, 'number');
+    await envelope([{ role: 'a', name: 'Kim', email: 'kim@partner.example' }]);
+    [kim] = (await list()).contacts;
+    assert.equal(kim.envelopeCount, 3);
+    const plan = await db.prepare("EXPLAIN QUERY PLAN SELECT count(*) FROM tasks t WHERE lower(t.recipient_email) = ?").bind('kim@partner.example').all<{ detail: string }>();
+    assert.ok(plan.results.some(r => r.detail.includes('tasks_by_recipient_email')), JSON.stringify(plan.results));
   } finally { await mf.dispose(); }
 });

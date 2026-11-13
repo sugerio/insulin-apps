@@ -124,35 +124,37 @@ test('a sign-by day ends that day in the member\'s time zone, and empty facts ar
  assert.deepEqual(envelopeRequest('t',['partner'],[signer],{name:'',version:'',published:'',senderName:'',senderCompany:'Ignored without a name'}),{templateId:'t',recipients:[{role:'partner',name:'Ana',email:'ana@partner.example'}]});
 });
 
-test('templates: upload with a signature page, with roles checked first',async()=>{
+test('templates: the roles and default signers are checked before the editor opens',async()=>{
+ const SESSION='c'.repeat(64);
  const app=await renderMember('/templates',c=>{
   if(c.path==='/api/me')return json(EDITOR);
   if(c.path==='/api/templates'&&c.method==='GET')return json({templates:[]});
-  if(c.path==='/api/templates'&&c.method==='POST')return json({id:'tpl-1',roles:['partner','seller']},201);
+  if(c.path==='/api/template-editing-sessions'&&c.method==='POST')return json({sessionId:SESSION,url:`${ORIGIN}/editor/page/${SESSION}#${'d'.repeat(64)}`},201);
+  if(c.path===`/api/template-editing-sessions/${SESSION}/source`)return json({},201);
  });
  try{
   assert.match(app.text(),/No templates yet/);
-  await app.click(app.button('Upload with a signature page'),'Upload');
+  assert.equal(app.button('Upload with a signature page'),undefined,'templates are made with placed fields here');
+  await app.click(app.button('Upload and place fields'),'Place fields');
   assert.match(app.text(),/Choose a PDF\./);
   await app.act(async()=>{app.byId('template-pdf').props.onChange({target:{files:[pdf()]}});});
   await app.type(app.byLabel('Role 1'),'partner seller');
-  await app.click(app.button('Upload with a signature page'),'Upload');
+  await app.click(app.button('Upload and place fields'),'Place fields');
   assert.match(app.text(),/Use letters, digits, - and _ in role names/);
   await app.type(app.byLabel('Role 1'),'partner');
   await app.click(app.button('Add a role'),'Add a role');
   await app.type(app.byLabel('Role 2'),'seller');
   // Who usually signs as a role: optional, and an email must be one.
   await app.type(app.byId('role-1-email'),'sam@');
-  await app.click(app.button('Upload with a signature page'),'Upload');
+  await app.click(app.button('Upload and place fields'),'Place fields');
   assert.match(app.text(),/Enter a valid email address for seller, or leave it empty\./);
-  await app.type(app.byId('role-1-name'),'Sam Seller');await app.type(app.byId('role-1-email'),'sam@seller.example');
-  await app.click(app.button('Upload with a signature page'),'Upload');
-  const upload=app.calls.find(c=>c.path==='/api/templates'&&c.method==='POST')!;
-  assert.ok(upload.body instanceof FormData);assert.equal((upload.body as FormData).get('roles'),'["partner","seller"]');
-  assert.deepEqual(JSON.parse(String((upload.body as FormData).get('defaultSigners'))),{seller:{name:'Sam Seller',email:'sam@seller.example'}});
-  assert.equal(app.byId('role-1-name').props.value,'','the form is cleared');
-  assert.equal(upload.headers.authorization,undefined,'the member\'s session, not a key');
-  assert.match(app.text(),/Template uploaded/);
+  assert.ok(!app.calls.some(c=>c.path==='/api/template-editing-sessions'),'nothing is sent until the form is right');
+  await app.type(app.byId('role-1-email'),'sam@seller.example');
+  await app.click(app.button('Upload and place fields'),'Place fields');
+  const session=app.calls.find(c=>c.path==='/api/template-editing-sessions')!;
+  assert.deepEqual(JSON.parse(String(session.body)),{allowedParentOrigin:ORIGIN,roles:['partner','seller']});
+  assert.equal(session.headers.authorization,undefined,'the member\'s session, not a key');
+  assert.ok(app.renderer.root.findAll((n:any)=>n.type==='iframe').length===1,'the editor opens');
  }finally{await app.unmount();}
  assert.equal(checkRoles(['a','A']),'Give each role a different name.');
  assert.equal(checkRoles(['a','']),'Name every role.');

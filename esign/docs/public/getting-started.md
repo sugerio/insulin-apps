@@ -30,11 +30,8 @@ A template is a PDF and the roles that sign it, in signing order.
 2. Under **New template**, choose the **PDF** (up to 5 MB and 100 pages).
 3. Under **Signer roles, in signing order**, name each role, such as `partner` and `seller`. Use letters, digits, `-` and
    `_`, with no spaces. Choose **Add a role** for another one.
-4. Choose **Upload with a signature page** for the quickest start. Signers then sign on a page Esign adds after the
-   document's last page.
-
-Or choose **Upload and place fields** to put each role's signature, title and date exactly where they belong. See
-[Templates and fields](/docs/esign/templates).
+4. Choose **Upload and place fields**, and put each role's signature, and its title and date if you want them, where they
+   belong. See [Templates and fields](/docs/esign/templates).
 
 ![The Templates page with the New template form and one template](/docs/assets/screenshots/esign-templates.png "Templates: upload a PDF with its roles, then send it")
 

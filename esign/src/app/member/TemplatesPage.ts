@@ -1,9 +1,9 @@
 // Templates: the PDFs envelopes are sent from, each with its signer roles and, when someone placed them, its fields.
-// Those who manage upload a PDF (signed on an appended signature page) or place fields on it in the embedded editor,
-// which this page hosts exactly as a host product would: a session for this origin, the source staged, then the
+// Those who manage upload a PDF and place its fields in the embedded editor (a template signed on an appended signature
+// page is the API's alone), which this page hosts exactly as a host product would: a session for this origin, the source staged, then the
 // editor's own save, confirmed against the server.
 import React, { useEffect, useRef, useState } from 'react'
-import { Plus, Send, SquarePen, Trash2, Upload } from 'lucide-react'
+import { Plus, Send, SquarePen, Trash2 } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { Input } from '../components/ui/input.ts'
@@ -60,22 +60,6 @@ export function TemplatesPage({ me }: { me: Me }) {
   const removeRole = (i: number) => { setRoles((old) => old.filter((_, j) => j !== i)); setPeople((old) => old.filter((_, j) => j !== i)) }
   const setPerson = (i: number, value: Partial<{ name: string; email: string }>) => setPeople((old) => roles.map((_, j) => j === i ? { ...(old[j] ?? { name: '', email: '' }), ...value } : old[j] ?? { name: '', email: '' }))
 
-  function upload() {
-    const invalid = problem()
-    if (invalid) { setMessage({ text: invalid, error: true }); return }
-    void run(async () => {
-      const form = new FormData()
-      form.set('file', file!)
-      form.set('roles', JSON.stringify(roles.map((r) => r.trim())))
-      const signers = defaultSigners()
-      if (signers) form.set('defaultSigners', JSON.stringify(signers))
-      await api('/api/templates', { method: 'POST', body: form })
-      setFile(null)
-      setPeople((old) => old.map(() => ({ name: '', email: '' })))
-      await load()
-      setMessage({ text: 'Template uploaded. Signers sign it on a page added after its last page.', error: false })
-    })
-  }
   /** A session on this origin for the editor: a new PDF (staged as its source) or an existing template's fields. */
   function openEditor(source: { file: File; roles: string[]; defaultSigners: ReturnType<typeof defaultSigners> } | { templateId: string }) {
     void run(async () => {
@@ -147,8 +131,7 @@ export function TemplatesPage({ me }: { me: Me }) {
             roles.length > 1 ? h(Button, { variant: 'ghost', size: 'icon', 'aria-label': `Remove role ${i + 1}`, onClick: () => removeRole(i) }, h(Trash2, { 'aria-hidden': true })) : h('span'))),
           roles.length < 20 ? h(Button, { variant: 'outline', size: 'sm', className: 'w-fit', onClick: () => { setRoles((old) => [...old, `signer-${old.length + 1}`]); setPeople((old) => [...old, { name: '', email: '' }]) } }, h(Plus, { 'aria-hidden': true }), 'Add a role') : null)),
       h(CardFooter, { className: 'flex-wrap gap-2' },
-        h(Button, { disabled: busy, onClick: upload }, h(Upload, { 'aria-hidden': true }), 'Upload with a signature page'),
-        h(Button, { variant: 'outline', disabled: busy, onClick: placeFields }, h(SquarePen, { 'aria-hidden': true }), 'Upload and place fields'))) : null,
+        h(Button, { disabled: busy, onClick: placeFields }, h(SquarePen, { 'aria-hidden': true }), 'Upload and place fields'))) : null,
     editor ? h(Card, { 'aria-label': 'Field editor' },
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Place the fields')),
         h(CardDescription, null, 'Give each role one Signature field, and Title or Date signed fields where you want them; then save. Saving makes a new template.')),

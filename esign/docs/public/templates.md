@@ -27,10 +27,11 @@ reviewed Esign for real ones.
 
 A template is signed in one of two ways:
 
-- **On an added signature page.** Esign appends a page after the document's last page. Each signer gets a block on it
-  with their name and the time they signed, eight blocks to a page. This works with any PDF.
 - **In placed fields.** You put each role's **Signature**, and optionally **Title** and **Date signed**, exactly where
-  they belong on the document's pages.
+  they belong on the document's pages. This is how the **Templates** page makes templates.
+- **On an added signature page.** Esign appends a page after the document's last page. Each signer gets a block on it
+  with their name and the time they signed, eight blocks to a page. This works with any PDF; a host makes such a
+  template through the API (`POST /api/templates`).
 
 ## Upload a template
 
@@ -41,10 +42,7 @@ You need a role that sends and manages envelopes.
 3. Under **Signer roles, in signing order**, name each role. Choose **Add a role** for more (up to 20), or the bin icon to
    remove one. Next to a role you can give its [default signer](#default-signers): a **Signer name**, a **Signer email**,
    or both. Both are optional; matching contacts are suggested as you type.
-4. Choose one of:
-   - **Upload with a signature page**: the template is saved at once. The page says "Template uploaded. Signers sign it
-     on a page added after its last page."
-   - **Upload and place fields**: the field editor opens on the PDF. See below.
+4. Choose **Upload and place fields**: the field editor opens on the PDF. See below.
 
 The new template appears in the list with its id (under its name, when it has one: a host names its templates through
 the API, see [Names and metadata](/docs/esign/api#names-and-metadata)), its roles, what it is **Signed on** ("A signature page" or the number
@@ -80,7 +78,7 @@ Rules the editor and the server check:
 - at most 20 fields per template can be signed, and fields don't overlap;
 - each field is at least 20 by 10 points and stays on its page;
 - the PDF's pages are not rotated or cropped, and the PDF has no form fields or annotations. A PDF that breaks these rules
-  can still be uploaded with a signature page, but an envelope sent from it with placed fields is refused.
+  can still be uploaded through the API with a signature page, but an envelope sent from it with placed fields is refused.
 
 ## Default signers
 
@@ -108,7 +106,7 @@ There is no button to delete a template.
 The **Templates** page hosts the editor exactly as a host product would: it opens an editing session for its own address,
 stages the PDF, frames the editor and confirms the save with the server. The deployment's list of origins allowed to
 embed Esign's pages must therefore include Esign's own address for **Upload and place fields** and **Place fields** to
-work. Uploading with a signature page needs nothing more.
+work.
 
 ## Embed the editor in a host product
 

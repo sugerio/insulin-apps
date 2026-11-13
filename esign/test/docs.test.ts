@@ -158,14 +158,14 @@ test('only the background on electronic signatures is general information, and i
 
 test('the Docs describe the navigation: both columns, Settings on Insulin Apps, the breadcrumb, collapsing and narrow screens',()=>{
  const text=textOf(render('getting-started'));
- for(const words of [/switch to one, go to All apps \(your home page on Insulin Apps\), or create a new one/,/For Docs: the topics, then Public docs/,/Envelopes and Templates, then Docs and Settings/,/All envelopes, New envelope \(for roles that send\)/,/People, Integrations, API access and Connect AI/,/Envelopes › Completed/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
+ for(const words of [/switch to one, go to All apps \(your home page on Insulin Apps\), or create a new one/,/For Docs: the topics, then Public docs/,/Envelopes, Templates and Contacts, then Docs and Settings/,/All envelopes, New envelope \(for roles that send\)/,/People, Integrations, API access and Connect AI/,/Envelopes › Completed/,/collapse it to icons/,/remembers your choice in this browser/,/menu button at the top opens both columns/])
   assert.match(text,words);
  assert.match(textOf(render('roles')),/New envelope, for example, is only in the navigation of roles that send/);
 });
 
 test('the Docs cover the main tasks, what each role sees, signers, statuses, evidence, and due work every five minutes',()=>{
  const all=textOf(DOC_TOPICS.map(t=>render(t.slug)).join(' '));
- for(const words of [/Upload with a signature page/,/Upload and place fields/,/Send for signature/,/Void envelope/,/Process due work/,/Owner/,/Admin/,/Editor/,/User/,/Viewer/,/custom role/,/Service accounts/,/AI agents/,/About signing/,/Decline to sign/,/6-digit code/,/LOCAL TEST ONLY/,/RFC 3161/,/audit trail/])
+ for(const words of [/Upload and place fields/,/Send for signature/,/Void envelope/,/Process due work/,/Owner/,/Admin/,/Editor/,/User/,/Viewer/,/custom role/,/Service accounts/,/AI agents/,/About signing/,/Decline to sign/,/6-digit code/,/LOCAL TEST ONLY/,/RFC 3161/,/audit trail/])
   assert.match(all,words);
  for(const slug of ['getting-started','statuses']){
   const text=textOf(render(slug));

@@ -6,7 +6,9 @@ const HEX64=/^[a-f0-9]{64}$/;
 /** The session's source, preset roles, and the name and metadata (metadata.ts) the saved template gets. */
 export type EditorSource={sourceTemplateId?:string|null;sourceSha256?:string|null;roles?:string[];templateName?:string|null;templateMetadata?:Record<string,string>|null;
   /** Who opened it (the saved template's owner), and the shares and the owner's tags the saved template gets (ownership.ts, tags.ts). */
-  ownerUserId?:string;shares?:Share[];tags?:string[]};
+  ownerUserId?:string;shares?:Share[];tags?:string[];
+  /** The saved template is a new version of the source, replacing it (editor-routes.ts). */
+  replacesSource?:boolean};
 
 /**
  * SQL: the editor session `alias` still has its one-time code unused and unexpired, so the page
@@ -24,8 +26,8 @@ export const editorCodeOpen=(alias:string)=>`EXISTS (SELECT 1 FROM access_codes 
 export async function issueEditorPage(db:D1Database,tenantId:string,parentOrigin:string,now:number,source:EditorSource={}):Promise<{pageId:string;code:string}>{
   if(!validEditorOrigin(parentOrigin))throw new Error('Invalid origin');
   const pageId=randomHex();
-  const session=db.prepare(`INSERT INTO editor_sessions (id,tenant_id,parent_origin,source_template_id,source_sha256,preset_roles_json,template_name,template_metadata_json,owner_user_id,shares_json,tags_json) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${editorOriginAllowed('?','?')}`)
-    .bind(pageId,tenantId,parentOrigin,source.sourceTemplateId??null,source.sourceSha256??null,JSON.stringify(source.roles??[]),source.templateName??null,source.templateMetadata?JSON.stringify(source.templateMetadata):null,source.ownerUserId??'',JSON.stringify(source.shares??[]),JSON.stringify(source.tags??[]),tenantId,parentOrigin);
+  const session=db.prepare(`INSERT INTO editor_sessions (id,tenant_id,parent_origin,source_template_id,source_sha256,preset_roles_json,template_name,template_metadata_json,owner_user_id,shares_json,tags_json,replaces_source) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE ${editorOriginAllowed('?','?')}`)
+    .bind(pageId,tenantId,parentOrigin,source.sourceTemplateId??null,source.sourceSha256??null,JSON.stringify(source.roles??[]),source.templateName??null,source.templateMetadata?JSON.stringify(source.templateMetadata):null,source.ownerUserId??'',JSON.stringify(source.shares??[]),JSON.stringify(source.tags??[]),source.replacesSource?1:0,tenantId,parentOrigin);
   let code:string;
   try{code=await issueAccessCode(db,{scope:'editor',tenantId,subjectId:pageId,origin:parentOrigin,now},[session]);}catch{throw new Error('Origin not allowed');}
   return {pageId,code};
@@ -45,12 +47,12 @@ export async function exchangeEditorPage(db:D1Database,pageId:string,code:string
   return exchangeAccessCode(db,{scope:'editor',code,subjectId:pageId,now});
 }
 
-export type EditorContext={pageId:string;tenantId:string;parentOrigin:string;tokenHash:string;sourceTemplateId:string|null;sourceSha256:string|null;stagedObjectKey:string|null;stagedSha256:string|null;roles:string[];resultTemplateId:string|null;templateName:string|null;templateMetadataJson:string|null;ownerUserId:string;shares:Share[];tags:string[]};
+export type EditorContext={pageId:string;tenantId:string;parentOrigin:string;tokenHash:string;sourceTemplateId:string|null;sourceSha256:string|null;stagedObjectKey:string|null;stagedSha256:string|null;roles:string[];resultTemplateId:string|null;templateName:string|null;templateMetadataJson:string|null;ownerUserId:string;shares:Share[];tags:string[];replacesSource:boolean};
 
 /** The editing session a live editor token opens. */
 export async function editorPageContext(db:D1Database,token:string,now:number):Promise<EditorContext>{
   const access=await authorizeAccess(db,{scope:'editor',token,now});
-  const row=await db.prepare('SELECT id,tenant_id,parent_origin,source_template_id,source_sha256,staged_object_key,staged_sha256,preset_roles_json,result_template_id,template_name,template_metadata_json,owner_user_id,shares_json,tags_json FROM editor_sessions WHERE id=? AND tenant_id=?').bind(access.subjectId,access.tenantId).first<{id:string;tenant_id:string;parent_origin:string;source_template_id:string|null;source_sha256:string|null;staged_object_key:string|null;staged_sha256:string|null;preset_roles_json:string;result_template_id:string|null;template_name:string|null;template_metadata_json:string|null;owner_user_id:string;shares_json:string;tags_json:string}>();
+  const row=await db.prepare('SELECT id,tenant_id,parent_origin,source_template_id,source_sha256,staged_object_key,staged_sha256,preset_roles_json,result_template_id,template_name,template_metadata_json,owner_user_id,shares_json,tags_json,replaces_source FROM editor_sessions WHERE id=? AND tenant_id=?').bind(access.subjectId,access.tenantId).first<{id:string;tenant_id:string;parent_origin:string;source_template_id:string|null;source_sha256:string|null;staged_object_key:string|null;staged_sha256:string|null;preset_roles_json:string;result_template_id:string|null;template_name:string|null;template_metadata_json:string|null;owner_user_id:string;shares_json:string;tags_json:string;replaces_source:number}>();
   if(!row)throw new Error('Invalid session');
-  return {pageId:row.id,tenantId:row.tenant_id,parentOrigin:row.parent_origin,tokenHash:access.tokenHash,sourceTemplateId:row.source_template_id,sourceSha256:row.source_sha256,stagedObjectKey:row.staged_object_key,stagedSha256:row.staged_sha256,roles:JSON.parse(row.preset_roles_json),resultTemplateId:row.result_template_id,templateName:row.template_name,templateMetadataJson:row.template_metadata_json,ownerUserId:row.owner_user_id,shares:JSON.parse(row.shares_json),tags:JSON.parse(row.tags_json)};
+  return {pageId:row.id,tenantId:row.tenant_id,parentOrigin:row.parent_origin,tokenHash:access.tokenHash,sourceTemplateId:row.source_template_id,sourceSha256:row.source_sha256,stagedObjectKey:row.staged_object_key,stagedSha256:row.staged_sha256,roles:JSON.parse(row.preset_roles_json),resultTemplateId:row.result_template_id,templateName:row.template_name,templateMetadataJson:row.template_metadata_json,ownerUserId:row.owner_user_id,shares:JSON.parse(row.shares_json),tags:JSON.parse(row.tags_json),replacesSource:row.replaces_source===1};
 }

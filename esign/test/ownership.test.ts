@@ -264,3 +264,56 @@ test('an edited copy is of a template the caller sees, and is theirs, with the s
     assert.equal((await h.get<{ templateId: string }>(`/api/template-editing-sessions/${session.sessionId}`, h.ana)).templateId, id);
   } finally { await h.mf.dispose(); }
 });
+
+test('a template is renamed by its editors and deleted by its admins; envelopes sent from it keep it', async () => {
+  const h = await setup();
+  try {
+    const id = await h.template(h.ana, { share: [{ email: 'bo@example.test', role: 'editor' }, { email: 'cy@example.test', role: 'viewer' }] });
+    const envelope = await h.envelope(h.ana, id);
+    assert.equal((await h.post(`/api/templates/${id}`, h.cy, { name: 'Renamed' })).status, 403, 'a viewer doesn\'t rename');
+    assert.deepEqual(await (await h.post(`/api/templates/${id}`, h.bo, { name: ' Mutual NDA v2 ' })).json(), { id, name: 'Mutual NDA v2' });
+    assert.equal((await h.templates(h.cy))[0].id, id);
+    for (const bad of [{}, { name: 'x'.repeat(201) }, { name: 'N', extra: 1 }]) assert.equal((await h.post(`/api/templates/${id}`, h.bo, bad)).status, 422, JSON.stringify(bad));
+    assert.equal((await h.post(`/api/templates/${id}/delete`, h.bo, {})).status, 403, 'an editor doesn\'t delete');
+    assert.deepEqual(await (await h.post(`/api/templates/${id}/delete`, h.ana, {})).json(), { id, deleted: true });
+    for (const who of [h.ana, h.bo, h.cy]) assert.deepEqual(await h.templates(who), []);
+    // Archived: off the lists only. By its id, as a host that keeps it uses it, it is read, sent from and renamed as before.
+    assert.equal(typeof (await h.get<{ archivedAt?: number }>(`/api/templates/${id}`, h.cy)).archivedAt, 'number');
+    assert.equal((await h.send(h.ana, id)).status, 201, 'sent from by its id');
+    assert.equal((await h.post(`/api/templates/${id}`, h.ana, { name: 'Again' })).status, 200);
+    assert.deepEqual(await h.envelopes(h.cy), [], 'the envelopes are its sender\'s, as ever');
+    assert.equal((await h.req(`/api/envelopes/${envelope}`, h.ana)).status, 200, 'the envelope sent from it is kept');
+  } finally { await h.mf.dispose(); }
+});
+
+test('editing a template\'s fields saves a new version that replaces it, with its owner, name, shares and everyone\'s tags', async () => {
+  const h = await setup();
+  try {
+    const source = await h.template(h.ana, { tags: ['NDA'], share: [{ email: 'bo@example.test', role: 'editor' }, { email: 'cy@example.test', role: 'viewer' }] });
+    await h.post(`/api/templates/${source}`, h.ana, { name: 'Mutual NDA' });
+    await h.post(`/api/templates/${source}/tags`, h.bo, { tags: ['legal'] });
+    const sent = await h.envelope(h.ana, source);
+    const open = (who: Record<string, string>, extra: Record<string, unknown> = {}) => h.post('/api/template-editing-sessions', who, { allowedParentOrigin: HOST, sourceTemplateId: source, replace: true, ...extra });
+    assert.equal((await open(h.cy)).status, 403, 'a viewer copies, but doesn\'t replace');
+    assert.equal((await h.post('/api/template-editing-sessions', h.bo, { allowedParentOrigin: HOST, replace: true })).status, 422, 'replace needs a source');
+    const save = async (who: Record<string, string>) => {
+      const session = await (await open(who)).json() as { sessionId: string; url: string };
+      const exchanged = await h.req('/api/public/editor/exchange', {}, { method: 'POST', headers: { 'content-type': 'application/json', origin: ORIGIN }, body: JSON.stringify({ pageId: session.sessionId, code: new URL(session.url).hash.slice(1), embedded: true, embedder: HOST }) });
+      const form = new FormData(); form.set('roles', JSON.stringify(['partner']));
+      form.set('fields', JSON.stringify([{ id: 'f1', type: 'Signature', role: 'partner', page: 1, required: true, rect: { x: 0.1, y: 0.2, width: 0.2, height: 0.1 } }]));
+      return h.req('/api/public/editor/save', { 'x-esign-session': (await exchanged.json() as { token: string }).token, origin: ORIGIN }, { method: 'POST', body: form });
+    };
+    const saved = await save(h.bo);
+    assert.equal(saved.status, 201, await saved.clone().text());
+    const { id } = await saved.json() as { id: string };
+    // Listed in its place, Ana's still, with the same name, people and tags.
+    const [current] = await h.templates(h.ana);
+    assert.deepEqual([(await h.templates(h.ana)).length, current.id, current.owner.id, current.myRole, current.tags, (current as unknown as { name: string }).name], [1, id, 'user-ana', 'owner', ['NDA'], 'Mutual NDA']);
+    assert.deepEqual((await h.templates(h.bo)).map(t => [t.id, t.myRole, t.tags]), [[id, 'editor', ['legal']]]);
+    assert.deepEqual((await h.get<{ shares: { email: string; role: string }[] }>(`/api/templates/${id}/shares`, h.ana)).shares.map(s => [s.email, s.role]), [['bo@example.test', 'editor'], ['cy@example.test', 'viewer']]);
+    // The earlier version is archived: off the lists, but by its id still read and sent from, for a host that keeps it.
+    assert.equal(typeof (await h.get<{ archivedAt?: number }>(`/api/templates/${source}`, h.cy)).archivedAt, 'number');
+    assert.equal((await h.req(`/api/envelopes/${sent}`, h.ana)).status, 200);
+    assert.equal((await h.send(h.ana, source)).status, 201);
+  } finally { await h.mf.dispose(); }
+});

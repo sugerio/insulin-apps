@@ -47,7 +47,7 @@ export const roles: DocTopic = {
             ['Admin', 'Also share it with others, and stop sharing it.'],
           ],
         }),
-        p('A role in a template or an envelope never goes beyond your role in Esign: with View envelopes only, you are a Viewer of everything shared with you. ', b('Sharing'), ' on a template\'s row, or ', b('Who sees it'), ' on an envelope\'s page, shows its owner and the people it is shared with; its admins and owner share it there, and anyone can leave. An envelope sent from a template is its sender\'s, not shared with the template\'s people.'),
+        p('A role in a template or an envelope never goes beyond your role in Esign: with View envelopes only, you are a Viewer of everything shared with you. ', b('Share'), ' in a template\'s ⋯ menu, or ', b('Who sees it'), ' on an envelope\'s page, shows its owner and the people it is shared with; its admins and owner share it there, and anyone can leave. An envelope sent from a template is its sender\'s, not shared with the template\'s people.'),
         p('Your tags on a template or an envelope are yours alone. The lists filter by them, and by ', b('Mine'), ' or ', b('Shared with me'), '.'),
         p(b('Ownership'), ', in the navigation of organization owners and admins, lists the API clients that have called Esign and the one person what each creates is shared with, as Admin (without one, only the client sees it); and, for organization owners, everyone who owns templates or envelopes, with ', b('Take over'), ' to become the owner of everything someone owns.'),
       ],

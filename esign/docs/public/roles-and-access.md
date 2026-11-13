@@ -32,7 +32,7 @@ Your role decides what you may do in Esign; each template and envelope decides w
 
 This holds for everyone, your organization's owners and admins included: they see what they own and what is shared with
 them. A role in a template or an envelope never goes beyond your role in Esign: with **View envelopes** only, you are a
-Viewer of everything shared with you. **Sharing** on a template, or **Who sees it** on an envelope, shows its owner and
+Viewer of everything shared with you. **Share** in a template's ⋯ menu, or **Who sees it** on an envelope, shows its owner and
 the people it is shared with; its admins and owner share it there.
 
 Your **tags** on a template or an envelope are yours alone: nobody else sees them. Lists filter by them, and by

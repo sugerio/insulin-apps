@@ -14,7 +14,7 @@ const pdf=()=>new File(['%PDF-1.7 synthetic'],'synthetic.pdf',{type:'application
 const OWNED={myRole:'owner',owner:{id:'u1',kind:'person',name:'Sam Example',email:'sam@example.com'},tags:[]};
 const SHARING={id:ENV_ID,myRole:'owner',owner:OWNED.owner,shares:[]};
 const envelope=(status:string,tasks:[string,string][])=>({id:ENV_ID,templateId:'tpl-1',status,createdAt:Date.parse('2026-11-07T00:00:00Z'),...OWNED,tasks:tasks.map(([name,s],i)=>({id:`task-${i}`,role:`signer-${i+1}`,recipientName:name,recipientEmail:`${name.toLowerCase()}@partner.example`,status:s,routingOrder:i+1}))});
-const TEMPLATE={id:'tpl-1',roles:['partner','seller'],fields:[],createdAt:Date.parse('2026-11-01T00:00:00Z')};
+const TEMPLATE={id:'tpl-1',roles:['partner','seller'],fields:[],createdAt:Date.parse('2026-11-01T00:00:00Z'),...OWNED};
 const CERTIFICATE={envelope:{id:ENV_ID,template_id:'tpl-1',created_at:0,status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'x',finalSha256:'b'.repeat(64),recipients:[],signatures:[],mode:'LOCAL TEST ONLY'};
 
 test('addresses name pages: envelopes, a new one, one by id, templates and the Docs',()=>{
@@ -47,7 +47,9 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   assert.equal(me.headers.authorization,undefined,'no key: the session is the platform\'s');
   assert.equal(editor.session.map.size+editor.local.map.size,0,'nothing is stored in the browser');
   await editor.click(editor.link('Templates'),'Templates');
-  assert.ok(editor.button('New template'),'New template opens its dialog');assert.ok(editor.button('Place fields'));assert.ok(editor.link('Send'));
+  assert.ok(editor.button('New template'),'New template opens its dialog');assert.ok(editor.link('Send'));
+  await editor.click(editor.byLabel('More for tpl-1'),'the row\'s menu');
+  assert.deepEqual(editor.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['Edit','Tags','Share','Delete'],'its owner may do everything');
   await editor.click(editor.link('Envelopes'),'Envelopes');
   assert.equal(editor.location.pathname,'/envelopes');
  }finally{await editor.unmount();}
@@ -60,7 +62,9 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   assert.match(viewer.text(),/Asked to sign/);
   assert.equal(viewer.button('Void envelope'),undefined);assert.equal(viewer.button("Open Ana's signing page"),undefined);
   await viewer.click(viewer.link('Templates'),'Templates');
-  assert.equal(viewer.button('New template'),undefined);assert.equal(viewer.button('Place fields'),undefined);assert.equal(viewer.link('Send'),undefined);
+  assert.equal(viewer.button('New template'),undefined);assert.equal(viewer.link('Send'),undefined);
+  await viewer.click(viewer.byLabel('More for tpl-1'),'the row\'s menu');
+  assert.deepEqual(viewer.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['Tags'],'someone who only views tags it, and nothing else');
   assert.match(viewer.text(),/Your role can see templates but not change them/);
  }finally{await viewer.unmount();}
  const viewerSending=await renderMember('/envelopes/new',routes(VIEWER));
@@ -146,6 +150,11 @@ test('templates: the roles and default signers are checked before the editor ope
   await app.click(app.button('Upload and place fields'),'Place fields');
   assert.match(app.text(),/Choose a PDF\./);
   await app.act(async()=>{app.byId('template-pdf').props.onChange({target:{files:[pdf()]}});});
+  assert.equal(app.byId('template-name').props.value,'synthetic','the name starts as the file\'s');
+  await app.type(app.byId('template-name'),' ');
+  await app.click(app.button('Upload and place fields'),'Place fields');
+  assert.match(app.text(),/Name the template\./);
+  await app.type(app.byId('template-name'),'Mutual NDA');
   await app.type(app.byLabel('Role 1'),'partner seller');
   await app.click(app.button('Upload and place fields'),'Place fields');
   assert.match(app.text(),/Use letters, digits, - and _ in role names/);
@@ -160,7 +169,7 @@ test('templates: the roles and default signers are checked before the editor ope
   await app.type(app.byId('role-1-email'),'sam@seller.example');
   await app.click(app.button('Upload and place fields'),'Place fields');
   const session=app.calls.find(c=>c.path==='/api/template-editing-sessions')!;
-  assert.deepEqual(JSON.parse(String(session.body)),{allowedParentOrigin:ORIGIN,roles:['partner','seller']});
+  assert.deepEqual(JSON.parse(String(session.body)),{allowedParentOrigin:ORIGIN,roles:['partner','seller'],name:'Mutual NDA'},'with the name typed');
   assert.equal(session.headers.authorization,undefined,'the member\'s session, not a key');
   assert.ok(app.renderer.root.findAll((n:any)=>n.type==='iframe').length===1,'the editor opens');
  }finally{await app.unmount();}
@@ -188,7 +197,7 @@ test('placing fields opens the editor on this origin, ignores other frames, and 
   await app.type(app.byId('role-0-email'),'pat@partner.example');
   await app.click(app.button('Upload and place fields'),'Place fields');
   const session=app.calls.find(c=>c.path==='/api/template-editing-sessions')!;
-  assert.deepEqual(JSON.parse(String(session.body)),{allowedParentOrigin:ORIGIN,roles:['partner']});
+  assert.deepEqual(JSON.parse(String(session.body)),{allowedParentOrigin:ORIGIN,roles:['partner'],name:'synthetic'},'named after the file');
   assert.equal(app.calls.find(c=>c.path.endsWith('/source'))!.headers['content-type'],'application/pdf');
   const frame=app.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signature field editor');
   assert.equal(frame.props.src,`${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}`);

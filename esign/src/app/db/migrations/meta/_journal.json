@@ -64,6 +64,13 @@
       "when": 1794551221522,
       "tag": "0008_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794556069120,
+      "tag": "0009_template_archive",
+      "breakpoints": true
     }
   ]
 }

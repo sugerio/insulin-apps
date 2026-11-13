@@ -148,7 +148,9 @@ function listed(context: import('hono').Context<Env>, type: ResourceType, query:
   const tenantId = context.get('tenantId'), caller = context.get('caller');
   return {
     sharedRole: `${sharedRoleColumn(type, 'x')} AS shared_role`,
-    where: `x.tenant_id = ? AND x.id IN ${visibleIds(type, query.scope)}${query.tags.length ? ` AND x.id IN ${taggedIds(type)}` : ''}`,
+    // A template list shows the live ones only: not those archived (deleted, or replaced by a new version), which are
+    // otherwise as they were: read, sent from and edited by their id.
+    where: `x.tenant_id = ? AND x.id IN ${visibleIds(type, query.scope)}${query.tags.length ? ` AND x.id IN ${taggedIds(type)}` : ''}${type === 'template' ? ' AND x.archived_at IS NULL' : ''}`,
     binds: (first: unknown[]) => [shareKey(caller), ...first, tenantId, ...visibleBinds(tenantId, caller, query.scope), ...(query.tags.length ? [tenantId, caller.userId, JSON.stringify(query.tags), query.tags.length] : [])],
   };
 }
@@ -270,7 +272,7 @@ function jsonField<T>(raw: FormDataEntryValue | null, parse: (value: unknown) =>
 
 app.get('/api/templates/:id', async (context) => {
   const row = await context.env.DB.prepare(`SELECT x.*, ${sharedRoleColumn('template', 'x')} AS shared_role FROM templates x WHERE x.id = ? AND x.tenant_id = ?`)
-    .bind(shareKey(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string }>();
+    .bind(shareKey(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string; archived_at: number | null }>();
   if (!row || !effectiveRole(row.owner_user_id, row.shared_role, context.get('caller'))) return context.json({ error: 'not_found' }, 404);
   // The response names keep the word "positioned": hosts read them.
   let hasFields = false;
@@ -284,7 +286,7 @@ app.get('/api/templates/:id', async (context) => {
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
     const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);fieldsSupported=true;
   }catch{fieldsSupported=false;}}
-  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json), ...(await ownership(context, 'template', [row])).get(row.id) });
+  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json), ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }), ...(await ownership(context, 'template', [row])).get(row.id) });
 });
 
 // Replaces a template's default signers (default-signers.ts): who usually signs as some of its roles. They
@@ -308,6 +310,35 @@ app.post('/api/templates/:id/default-signers', bodyLimit({ maxSize: 16384 }), as
   catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
   await context.env.DB.prepare('UPDATE templates SET default_signers_json = ? WHERE id = ? AND tenant_id = ?').bind(JSON.stringify(signers ?? {}), id, tenantId).run();
   return context.json({ id, defaultSigners: signers ?? {} });
+});
+
+// Renames a template: `{name}` (null or '' leaves it without one). A name only labels it, so unlike its PDF and fields it
+// can change; envelopes already sent keep the document name they were sent with. Its editors, admins and owner.
+app.post('/api/templates/:id', bodyLimit({ maxSize: 4096 }), async (context) => {
+  let body: unknown;
+  try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_template' }, 422);
+  const unknown = unknownKeys(body, ['name']);
+  if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
+  const value = (body as { name?: unknown }).name;
+  const name = value === undefined ? 'invalid' : parseTemplateName(value);
+  if (name === 'invalid') return context.json({ error: 'invalid_template' }, 422);
+  const id = context.req.param('id');
+  const refused = await requireRole(context, 'template', id, 'editor');
+  if (refused) return refused;
+  await context.env.DB.prepare('UPDATE templates SET name = ? WHERE id = ? AND tenant_id = ?').bind(name, id, context.get('tenantId')).run();
+  return context.json({ id, ...(name ? { name } : {}) });
+});
+
+// Deletes a template: it is archived, which takes it off every list (Esign's pages show it no more). Everything by its id
+// works as before, so a host that keeps the id is unaffected, and envelopes sent from it are signed as before. Its
+// admins and owner; again is a no-op.
+app.post('/api/templates/:id/delete', async (context) => {
+  const id = context.req.param('id');
+  const refused = await requireRole(context, 'template', id, 'admin');
+  if (refused) return refused;
+  await context.env.DB.prepare('UPDATE templates SET archived_at = ? WHERE id = ? AND tenant_id = ? AND archived_at IS NULL').bind(Date.now(), id, context.get('tenantId')).run();
+  return context.json({ id, deleted: true });
 });
 
 /** A template's name, when it has one, its metadata and its default signers, as the API returns them. */
@@ -435,7 +466,8 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const replay = (existing: { request_sha256: string }) => existing.request_sha256 === hash ? context.json(createdResponse(id), 201) : context.json({ error: 'idempotency_conflict' }, 409);
   const existing = await lookup();
   if (existing) return replay(existing);
-  // Anyone who sees the template sends from it (ownership.ts); one they can't see doesn't exist for them.
+  // Anyone who sees the template sends from it (ownership.ts), an archived one too (archiving only takes it off the
+  // lists: a host that keeps its id goes on using it); one they can't see doesn't exist for them.
   const caller = context.get('caller');
   if (!await documentRole(context.env.DB, tenantId, caller, 'template', input.templateId)) return context.json({ error: 'not_found' }, 404);
   const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string }>();

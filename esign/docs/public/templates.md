@@ -38,14 +38,15 @@ A template is signed in one of two ways:
 You need a role that sends and manages envelopes.
 
 1. Open **Templates**.
-2. Choose **New template**, and in the dialog choose the **PDF**.
+2. Choose **New template**, and in the dialog choose the **PDF**, and give the template a **Name** (it starts as the
+   file's name, up to 200 characters).
 3. Under **Signer roles, in signing order**, name each role. Choose **Add a role** for more (up to 20), or the bin icon to
    remove one. Next to a role you can give its [default signer](#default-signers): a **Signer name**, a **Signer email**,
    or both. Both are optional; matching contacts are suggested as you type.
 4. Choose **Upload and place fields**: the field editor opens on the PDF, in a dialog over the list. See below.
 
-The new template appears in the list with its id (under its name, when it has one: a host names its templates through
-the API, see [Names and metadata](/docs/esign/api#names-and-metadata)), its roles, what it is **Signed on** ("A signature page" or the number
+The new template appears in the list with its name and id (a host names its templates through the API, see
+[Names and metadata](/docs/esign/api#names-and-metadata)), its roles, what it is **Signed on** ("A signature page" or the number
 of placed fields) and when it was uploaded.
 
 ![The Templates page with the New template form and one template](/docs/assets/screenshots/esign-templates.png "Templates: the upload form and the organization's templates")
@@ -93,19 +94,32 @@ Give a name, an email or both next to the role when you upload the template.
 
 A default signer's name must be one the signature can draw, as for any signer.
 
-## Templates don't change
+## Edit, tag, share or delete a template
 
-A saved template is never changed, except its default signers. **Place fields** next to an existing template opens the editor on a copy, and saving
-makes a new template; the old one stays as it was. An envelope keeps the exact PDF and fields it was sent with, so what a
-signer signs is what was sent.
+Each template's row has **Send** and a **⋯** menu:
 
-There is no button to delete a template.
+- **Edit** (its editors, admins and owner): on **Details**, its **Name** and its default signers; on **Fields**, the field
+  editor. Saving the fields makes a new version of the template, which takes its place in the list with the same name,
+  owner, people and tags.
+- **Tags**: your own tags on it.
+- **Share** (its admins and owner): see below.
+- **Delete** (its admins and owner): it no longer appears in Esign. You are asked first.
+
+The **Access** column says when a template is shared with you, and as what.
+
+## Envelopes keep what they were sent with
+
+A template's PDF and fields never change: editing its fields makes a new version, and the earlier one is archived, as a
+deleted template is: no longer listed in Esign, but kept, for the envelopes sent from it and for a system that sends with
+its id. An envelope keeps the exact PDF and fields it was sent with, so what a signer signs
+is what was sent, and it can still be signed after its template is edited or deleted. A new name or default signers
+change no envelope already sent.
 
 ## Who sees a template
 
-A template is yours when you upload it, and nobody else sees it until you share it: **Sharing** on its row shows who
+A template is yours when you upload it, and nobody else sees it until you share it: **Share** in its row's menu shows who
 sees it, and there its admins and owner share it by email, as Viewer (sees it and sends envelopes from it), Editor (also
-changes its default signers) or Admin (also shares it). Your **tags** on it are yours alone, and **Show** and **With your
+edits it) or Admin (also shares and deletes it). Your **tags** on it are yours alone, and **Show** and **With your
 tags** filter the list. An envelope sent from a template is its sender's, not shared with the template's people. See
 [Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
 

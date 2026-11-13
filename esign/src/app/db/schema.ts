@@ -26,6 +26,12 @@ export const templates = sqliteTable('templates', {
   default_signers_json: text('default_signers_json').notNull().default('{}'),
   /** Its owner (ownership.ts): the member or API client that created it, or whom it was transferred to. */
   owner_user_id: text('owner_user_id').notNull().default(''),
+  /**
+   * When it was archived: deleted, or replaced by a new version when its fields were edited (a template's fields never
+   * change: envelopes in flight sign with them). An archived template is no longer listed and starts no envelope, nor an
+   * editing session; it is still read by its id, and the envelopes sent from it are signed as before.
+   */
+  archived_at: integer('archived_at'),
 }, (table) => [
   index('templates_by_tenant').on(table.tenant_id, table.created_at),
   index('templates_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),
@@ -193,6 +199,8 @@ export const editorSessions = sqliteTable('editor_sessions', {
   owner_user_id: text('owner_user_id').notNull().default(''),
   shares_json: text('shares_json').notNull().default('[]'),
   tags_json: text('tags_json').notNull().default('[]'),
+  /** 1: the saved template is a new version of the source, which it replaces (its owner, shares and tags carry over). */
+  replaces_source: integer('replaces_source').notNull().default(0),
 })
 
 /**

@@ -72,7 +72,10 @@ export function effectiveRole(ownerId: string, sharedRole: string | null, caller
 export const sharedRoleColumn = (type: ResourceType, alias: string) =>
   `(SELECT s.role FROM document_shares s WHERE s.resource_type = '${type}' AND s.resource_id = ${alias}.id AND s.grantee_email_key = ?)`;
 
-/** The caller's role in one document of their organization, or null when they can't see it (or it doesn't exist). */
+/**
+ * The caller's role in one document of their organization, or null when they can't see it (or it doesn't exist). An
+ * archived template (deleted, or replaced by a new version) is no different here: archiving only takes it off the lists.
+ */
 export async function documentRole(db: D1Database, tenantId: string, caller: Caller, type: ResourceType, id: string): Promise<{ role: DocumentRole; ownerId: string } | null> {
   const row = await db.prepare(`SELECT x.owner_user_id, ${sharedRoleColumn(type, 'x')} AS shared_role FROM ${TABLE[type]} x WHERE x.id = ? AND x.tenant_id = ?`)
     .bind(shareKey(caller), id, tenantId).first<{ owner_user_id: string; shared_role: string | null }>();

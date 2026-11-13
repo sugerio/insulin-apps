@@ -54,7 +54,7 @@ export function mountMemberRoutes(app: Hono<Env>) {
     if (!orgOwner(context.get('caller'))) return context.json({ error: 'forbidden' }, 403);
     const tenantId = context.get('tenantId');
     const { results } = await context.env.DB.prepare(`SELECT o.owner_user_id, sum(o.templates) AS templates, sum(o.envelopes) AS envelopes, m.kind, m.email, m.name, m.last_seen_at
-        FROM (SELECT owner_user_id, count(*) AS templates, 0 AS envelopes FROM templates WHERE tenant_id = ?1 GROUP BY owner_user_id
+        FROM (SELECT owner_user_id, count(*) AS templates, 0 AS envelopes FROM templates WHERE tenant_id = ?1 AND archived_at IS NULL GROUP BY owner_user_id
               UNION ALL SELECT owner_user_id, 0, count(*) FROM envelopes WHERE tenant_id = ?1 GROUP BY owner_user_id) o
         LEFT JOIN members m ON m.tenant_id = ?1 AND m.user_id = o.owner_user_id
         GROUP BY o.owner_user_id ORDER BY m.name IS NULL, lower(m.name), o.owner_user_id`)

@@ -257,7 +257,7 @@ tables:
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
 | `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |
-| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template; who opened it (its owner) and the shares and tags it gets, since the save carries no identity |
+| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template; who opened it (its owner) and the shares and tags it gets, since the save carries no identity; whether it saves a new version that replaces its source (`replaces_source`: the source's owner, shares and tags carry over, and the source is archived like a deleted one) |
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
@@ -501,6 +501,7 @@ is enabled.
 | `GET /api/templates`, `GET /api/envelopes` | The templates and envelopes the caller sees, newest first (`limit`, `before`, `scope`, `tag`; envelopes also `status`), each with its owner, the caller's role and tags |
 | `POST /api/process-due` † | Expires envelopes past a deadline, finishes envelopes the signing request did not, and retries completion notices, for the caller's organization, at once (the platform's tick does it for every organization every five minutes) |
 | `POST /api/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`), optionally `name`, `metadata` and `defaultSigners`; returns `{id, roles, defaultSigners, ...}` |
+| `POST /api/templates/:id`, `POST /api/templates/:id/delete` | Rename (editor); delete (admin): `archived_at`, which only takes it off the lists; everything by its id works as before |
 | `POST /api/templates/:id/default-signers` | Replaces the template's default signers; a recipient of a new envelope that leaves out its name or email gets its role's |
 | `GET /api/templates/:id` | Roles, the placed fields (type, role, page, normalized box) and whether they can be signed (`positionedFieldsSupported`) |
 | `POST /api/envelopes` | Creates and prepares an envelope (lifecycle step 2); `Idempotency-Key` required |

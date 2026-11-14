@@ -1,6 +1,6 @@
 ---
 title: How Cap Table works
-description: The append-only ledger behind Cap Table, how the cap table is replayed for any date, how corrections work, and how data stays separate.
+description: The append-only ledger behind Cap Table, how the cap table is replayed for any date, how corrections work, how data stays separate, and the usage counts sent to Insulin Apps.
 order: 7
 ---
 
@@ -134,7 +134,7 @@ Vesting, exercise deadlines and expiries are worked out during the replay, not s
 - **The ISO/NSO split** applies the $100,000-a-year limit to a holder's ISO grants in the order they were granted.
 - **409A status** (presumptively valid, expiring soon, review required, superseded, expired) is worked out from each
   valuation's dates and any material event flagged.
-- **Due items.** Cap Table has no background jobs. Scheduled terminations and expiries are recorded when someone who
+- **Due items.** Nothing is recorded on a timer. Scheduled terminations and expiries are recorded when someone who
   records changes opens the dashboard or chooses **Process due items**. Each due item has a fixed key, so running it
   twice never records it twice.
 
@@ -165,6 +165,23 @@ One copy of Cap Table serves every organization on Insulin Apps, and each organi
 - **Identity comes from the platform.** Cap Table has no passwords or sessions of its own. Insulin Apps signs people
   in and tells Cap Table who is calling, in which organization and with which permissions. Those permissions can only
   narrow a role, never widen it.
+
+## Usage counts sent to Insulin Apps
+
+Insulin Apps can't read Cap Table's database, so Cap Table tells it, once an hour, how much it is used: a few counts for
+each organization, so that Insulin Apps can watch usage and plan capacity.
+
+- **What is sent.** For each organization: `companies` (1 once its company is set up), `stakeholders`,
+  `share_classes`, `equity_plans`, `securities` (every lot: shares, options, warrants and SAFEs), `transactions` (ledger
+  entries), `documents` (every version), `storage_bytes` (the size of its documents), `valuations` and
+  `exercise_requests`. For the whole app: `database_bytes` (the database's size) and `organizations` (how many have a
+  company). Each is a total as it stands that hour, not a count of what happened in it.
+- **What is never sent.** Names, e-mail addresses, share numbers, prices or other amounts, and documents. Only counts and
+  sizes leave the app.
+- **How.** The platform calls Cap Table every five minutes (`POST /api/scheduled`), with no identity. The first call of
+  each hour sends the report to the platform; if the platform doesn't accept it, the next call tries again. A report
+  sent twice replaces the first, so nothing is counted twice. In the console's preview and on your own computer nothing
+  is sent.
 
 ## The audit log and verification
 

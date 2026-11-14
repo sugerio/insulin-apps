@@ -59,8 +59,9 @@ Cap Table is a record, not a full equity platform. Knowing its limits up front s
 - **No e-mail.** Cap Table doesn't send messages. Tell people yourself when something changes for them.
 - **No signatures or payments.** Agreements are signed elsewhere and uploaded. Payments happen outside the app and are
   recorded in it.
-- **No background jobs.** Scheduled terminations and option expiries take effect when an owner, admin or editor opens
-  the dashboard, or chooses **Process due items** there.
+- **No background jobs for the cap table.** Scheduled terminations and option expiries take effect when an owner, admin
+  or editor opens the dashboard, or chooses **Process due items** there. The only thing done on a timer is an hourly
+  count of usage for Insulin Apps; see [How it works](/docs/captable/how-it-works#usage-counts-sent-to-insulin-apps).
 - **Not a valuation, tax or legal service.** Cap Table records 409A valuations but doesn't perform them. It doesn't file
   tax forms or give advice.
 - **One company per organization.** Each Insulin Apps organization has one company in Cap Table. Switching

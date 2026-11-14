@@ -223,3 +223,9 @@ jobs:
           EMAIL_FROM: ${{ vars.EMAIL_FROM }}
           SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}
           ORG_REQUEST_EMAIL: ${{ vars.ORG_REQUEST_EMAIL }}
+          SUPER_SAML_IDP_ENTITY_ID: ${{ vars.SUPER_SAML_IDP_ENTITY_ID }}
+          SUPER_SAML_IDP_SSO_URL: ${{ vars.SUPER_SAML_IDP_SSO_URL }}
+          SUPER_SAML_IDP_CERT: ${{ vars.SUPER_SAML_IDP_CERT }}
+          SUPER_GOOGLE_GROUP: ${{ vars.SUPER_GOOGLE_GROUP }}
+          SUPER_ADMIN_EMAILS: ${{ vars.SUPER_ADMIN_EMAILS }}
+          SUPER_CLOUDFLARE_API_TOKEN: ${{ secrets.SUPER_CLOUDFLARE_API_TOKEN }}

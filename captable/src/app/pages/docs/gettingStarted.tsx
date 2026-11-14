@@ -1,7 +1,7 @@
 import { DocLink, DocTable, type DocTopic } from "./parts.tsx";
 
-// Docs › Getting started: what the app does, the roles and custom roles, AI agents, preview mode and the first-run
-// setup. It follows README.md ("What it does", "Good to know", "Who can do what") and docs/importing.md ("Where to find
+// Docs › Getting started: what the app does (and the usage counts it sends Insulin Apps), the roles and custom roles, AI
+// agents, preview mode and the first-run setup. It follows README.md ("What it does", "Good to know", "Who can do what") and docs/importing.md ("Where to find
 // the import"). The permissions' names and texts are package.json's `insulin.permissions`.
 
 export const gettingStarted: DocTopic = {
@@ -36,6 +36,18 @@ export const gettingStarted: DocTopic = {
             <li><b>Not a valuation, tax or legal service.</b> Cap Table records 409A valuations but doesn't perform them, and it doesn't file tax forms or give advice.</li>
             <li><b>Instruments it doesn't handle:</b> RSUs, SARs, phantom stock, convertible notes and profits interests.</li>
           </ul>
+          <h3 id="usage-counts" tabIndex={-1}>Usage counts for Insulin Apps</h3>
+          <p>
+            On insulinapps.com, Cap Table sends Insulin Apps a few counts every hour, so that Insulin Apps can watch how the app
+            is used and plan its capacity. For each organization: whether its company is set up, and how many stakeholders,
+            share classes, equity plans, securities, ledger transactions, documents, valuations and exercise requests it has,
+            with how much space its documents take. Cap Table also sends the size of its database and how many organizations
+            have a company in it.
+          </p>
+          <p>
+            These are counts and sizes only. Cap Table never sends names, e-mail addresses, share numbers, prices or other
+            amounts, or documents.
+          </p>
         </>
       ),
     },

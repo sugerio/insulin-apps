@@ -25,7 +25,8 @@ export interface PlatformGrant {
 }
 
 /**
- * What the hosting platform sends beyond `getCurrentUser`: the only place that reads identity headers directly.
+ * What the hosting platform sends beyond `getCurrentUser`: with `isScheduleTick` below, the only place that reads
+ * identity headers directly.
  *
  * `x-suger-app-permissions` (space-separated keys) can only take permissions away: the result is the role's own set
  * intersected with the header, unknown keys ignored. A request that forged the header therefore gains nothing its
@@ -44,11 +45,32 @@ export function readPlatformGrant(request: Request, role: AppRole): PlatformGran
   return { permissions, accessVia: raw === null ? 'browser' : via.success ? via.data : 'api' }
 }
 
+/** The headers that carry a person, an organization, a role or permissions: the platform's tick carries none of them. */
+const IDENTITY_HEADERS = [
+  'x-suger-user-id', 'x-suger-organization-id', 'x-suger-app-role', 'x-suger-app-permissions', 'x-suger-user-email',
+  'x-suger-user-name',
+]
+
+const markedSchedule = (request: Request) => request.headers.get('x-suger-access-via')?.trim().toLowerCase() === 'schedule'
+
+/**
+ * Whether a request is the platform's five-minute tick (package.json `insulin.scheduled`): `x-suger-access-via` exactly
+ * `schedule`, and no identity at all. The gateway removes every incoming `x-suger-*` header, so only its own tick can
+ * send one; a member, an API client or an AI agent never passes, whatever it sends. The tick reaches
+ * `POST /api/scheduled` only: on every other route a request marked `schedule` is nobody (`resolveCurrentIdentity`).
+ */
+export function isScheduleTick(request: Request): boolean {
+  if (request.headers.get('x-suger-access-via') !== 'schedule') return false
+  return IDENTITY_HEADERS.every((name) => !request.headers.has(name)) && getCurrentUser(request) === null
+}
+
 export async function resolveCurrentIdentity(
   request: Request,
   db: D1Database,
   now: number,
 ): Promise<AuthContext | null> {
+  // The platform's tick is nobody here, whatever else it carries, and never the preview's stand-in either.
+  if (markedSchedule(request)) return null
   const consoleUser = getCurrentUser(request)
   const preview = consoleUser === null
     && import.meta.env.DEV

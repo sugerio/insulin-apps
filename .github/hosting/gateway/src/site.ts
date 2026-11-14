@@ -3,7 +3,7 @@
 import type { Context } from './context.ts'
 import { listUserGrants } from './db/grants.ts'
 import { listInvitationGrants, listInvitationsFor } from './db/invitations.ts'
-import { listMemberships } from './db/orgs.ts'
+import { listMemberships, listUnavailableOrgs } from './db/orgs.ts'
 import { htmlResponse } from './http/response.ts'
 import { homePage, landingPage } from './pages/home.tsx'
 import { privacyPage, termsPage } from './pages/legal.tsx'
@@ -26,14 +26,15 @@ export function terms(ctx: Context): Response {
 
 async function home(ctx: Context, session: Session): Promise<Response> {
   const db = ctx.config.db
-  const [memberships, invitations, active] = await Promise.all([
+  const [memberships, invitations, active, unavailable] = await Promise.all([
     listMemberships(db, session.user.id),
     listInvitationsFor(db, session.user.email, ctx.now),
     activeOrg(ctx, session),
+    listUnavailableOrgs(db, session.user.id),
   ])
   const grants = await listInvitationGrants(db, invitations.map((invitation) => invitation.id))
   // A specific-apps member sees only their apps; an organization role reaches every app.
   const mine = active?.role === 'APPS' ? new Set((await listUserGrants(db, active.id, session.user.id)).map((grant) => grant.app)) : null
   const apps = ctx.config.apps.filter((app) => !mine || mine.has(app.name))
-  return htmlResponse(homePage(ctx, session, memberships, invitations, grants, active, apps))
+  return htmlResponse(homePage(ctx, session, memberships, invitations, grants, active, apps, unavailable))
 }

@@ -56,7 +56,10 @@ export function requestIdFrom(redirectUrl) {
 
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z')
 
-/** A Response with one Assertion, unsigned. Every field can be overridden to make it wrong in one way. */
+/**
+ * A Response with one Assertion, unsigned. Every field can be overridden to make it wrong in one way; `attributes` adds
+ * attributes ({ name: [values] }), such as the group membership Google Workspace sends.
+ */
 export function samlResponse(options) {
   const now = Date.now()
   const o = {
@@ -79,7 +82,9 @@ export function samlResponse(options) {
     + '</saml:Subject>'
     + `<saml:Conditions NotBefore="${iso(o.notBefore)}" NotOnOrAfter="${iso(o.notOnOrAfter)}"><saml:AudienceRestriction><saml:Audience>${o.audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions>`
     + `<saml:AuthnStatement AuthnInstant="${iso(now)}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement>`
-    + `<saml:AttributeStatement><saml:Attribute Name="displayName"><saml:AttributeValue>${o.displayName}</saml:AttributeValue></saml:Attribute></saml:AttributeStatement>`
+    + `<saml:AttributeStatement><saml:Attribute Name="displayName"><saml:AttributeValue>${o.displayName}</saml:AttributeValue></saml:Attribute>`
+    + Object.entries(o.attributes ?? {}).map(([attribute, values]) => `<saml:Attribute Name="${attribute}">${values.map((value) => `<saml:AttributeValue>${value}</saml:AttributeValue>`).join('')}</saml:Attribute>`).join('')
+    + '</saml:AttributeStatement>'
     + '</saml:Assertion></samlp:Response>'
 }
 

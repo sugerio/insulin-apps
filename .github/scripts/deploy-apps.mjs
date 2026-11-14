@@ -28,7 +28,10 @@ const COMPATIBILITY_DATE = '2026-10-13'
 const GATEWAY_REQUIRED_SETTINGS = ['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'EMAIL_FROM']
 // The whole GitHub environment, as JSON, from which an app's declared secrets are picked (appSecretValues).
 const ENVIRONMENT_JSON_SETTINGS = ['APP_SECRETS_JSON', 'APP_VARS_JSON']
-const SECRET_SETTINGS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY', 'GATEWAY_SECRET_KEY', ...ENVIRONMENT_JSON_SETTINGS]
+const SECRET_SETTINGS = [
+  'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GOOGLE_CLIENT_SECRET', 'TURNSTILE_SECRET_KEY', 'GATEWAY_SECRET_KEY', 'SUPER_CLOUDFLARE_API_TOKEN',
+  ...ENVIRONMENT_JSON_SETTINGS,
+]
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4'
 const APP_CONFIG_KEYS = new Set(['compatibility_date', 'compatibility_flags', 'rules', 'no_bundle', 'assets'])
 const APP_ASSET_KEYS = new Set(['binding', 'html_handling', 'not_found_handling', 'run_worker_first'])
@@ -81,6 +84,15 @@ export function readSettings(environment = process.env, { gateway = true } = {})
     supportEmail: environment.SUPPORT_EMAIL?.trim() ?? '',
     // Where requests for more organizations go (DESIGN.md §3.1); optional, like SUPPORT_EMAIL.
     orgRequestEmail: environment.ORG_REQUEST_EMAIL?.trim() ?? '',
+    // The operator console (DESIGN.md §11): its Google Workspace SAML app, the operators' group and the admins, all
+    // GitHub variables (the gateway turns the console off unless the first four are set), and a read-only Cloudflare
+    // API token, a secret, for its resource snapshot. All optional.
+    superSamlIdpEntityId: environment.SUPER_SAML_IDP_ENTITY_ID?.trim() ?? '',
+    superSamlIdpSsoUrl: environment.SUPER_SAML_IDP_SSO_URL?.trim() ?? '',
+    superSamlIdpCert: environment.SUPER_SAML_IDP_CERT?.trim() ?? '',
+    superGoogleGroup: environment.SUPER_GOOGLE_GROUP?.trim() ?? '',
+    superAdminEmails: environment.SUPER_ADMIN_EMAILS?.trim() ?? '',
+    superCloudflareApiToken: environment.SUPER_CLOUDFLARE_API_TOKEN?.trim() ?? '',
   })
   settings.senderAddress = emailAddress(settings.emailFrom)
   return settings
@@ -132,7 +144,7 @@ export function appSecretValues(app, environment) {
   return { values, missing }
 }
 
-export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null, mailUrl = null }) {
+export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null, mailUrl = null, metricsUrl = null }) {
   const outputDirectory = join(appDirectory, '.output')
   const { config: generatedConfig, ignoredKeys } = sanitizeAppBaseConfig(baseConfig)
   if (ignoredKeys.length) {
@@ -158,10 +170,12 @@ export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {},
       SUGER_ACCESS_MODE: 'console',
       ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}),
       ...(mailUrl ? { SUGER_MAIL_URL: mailUrl } : {}),
+      // Where the app reports its usage every hour (DESIGN.md §8.6).
+      ...(metricsUrl ? { SUGER_METRICS_URL: metricsUrl } : {}),
     },
     // With the gateway's URLs, the binding to call them through: the app keeps the URL (the gateway routes by it) and
     // sends the request over the binding instead of the internet.
-    ...(integrationsUrl || mailUrl ? { services: [{ binding: GATEWAY_BINDING, service: GATEWAY_NAME }] } : {}),
+    ...(integrationsUrl || mailUrl || metricsUrl ? { services: [{ binding: GATEWAY_BINDING, service: GATEWAY_NAME }] } : {}),
     workers_dev: false,
     preview_urls: false,
   }
@@ -291,6 +305,13 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
       EMAIL_FROM: settings.emailFrom,
       SUPPORT_EMAIL: settings.supportEmail,
       ORG_REQUEST_EMAIL: settings.orgRequestEmail,
+      SUPER_SAML_IDP_ENTITY_ID: settings.superSamlIdpEntityId,
+      SUPER_SAML_IDP_SSO_URL: settings.superSamlIdpSsoUrl,
+      SUPER_SAML_IDP_CERT: settings.superSamlIdpCert,
+      SUPER_GOOGLE_GROUP: settings.superGoogleGroup,
+      SUPER_ADMIN_EMAILS: settings.superAdminEmails,
+      // The account the console's token reads: the one the platform deploys to.
+      ...(settings.superCloudflareApiToken ? { SUPER_CLOUDFLARE_ACCOUNT_ID: settings.cloudflareAccountId } : {}),
     },
   }
 }
@@ -341,6 +362,7 @@ export async function deployApps({
   delete childEnvironment.GOOGLE_CLIENT_SECRET
   delete childEnvironment.TURNSTILE_SECRET_KEY
   delete childEnvironment.GATEWAY_SECRET_KEY
+  delete childEnvironment.SUPER_CLOUDFLARE_API_TOKEN
   for (const name of ENVIRONMENT_JSON_SETTINGS) delete childEnvironment[name]
 
   const appTokens = new Map(settings.gatewaySecretKey ? apps.map(({ name }) => [name, appToken(settings.gatewaySecretKey, name)]) : [])
@@ -352,7 +374,8 @@ export async function deployApps({
     dryRun,
     spawn,
     secrets: [
-      settings.cloudflareApiToken, settings.googleClientSecret, settings.turnstileSecretKey, settings.gatewaySecretKey, ...appTokens.values(),
+      settings.cloudflareApiToken, settings.googleClientSecret, settings.turnstileSecretKey, settings.gatewaySecretKey, settings.superCloudflareApiToken,
+      ...appTokens.values(),
       ...[...appSecrets.values()].flatMap(({ values }) => Object.values(values)),
     ].filter(Boolean),
   })
@@ -395,7 +418,8 @@ export async function deployApps({
 
     const integrationsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/integrations` : null
     const mailUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/mail` : null
-    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl, mailUrl }))
+    const metricsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/metrics` : null
+    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl, mailUrl, metricsUrl }))
     runner.run(wrangler, ['d1', 'migrations', 'apply', workerName(app.name), '--remote', '--config', configPath], {
       cwd: root,
       env: childEnvironment,
@@ -444,6 +468,7 @@ export async function deployApps({
       ...(settings.googleClientId ? { GOOGLE_CLIENT_SECRET: settings.googleClientSecret } : {}),
       TURNSTILE_SECRET_KEY: settings.turnstileSecretKey,
       ...(settings.gatewaySecretKey ? { GATEWAY_SECRET_KEY: settings.gatewaySecretKey } : {}),
+      ...(settings.superCloudflareApiToken ? { SUPER_CLOUDFLARE_API_TOKEN: settings.superCloudflareApiToken } : {}),
     }
     deployWithSecrets(runner, wrangler, gatewayConfigPath, secretValues, { cwd: root, env: childEnvironment, dryRun, release })
     const secretList = runner.run(wrangler, ['secret', 'list', '--config', gatewayConfigPath], {
@@ -865,7 +890,10 @@ async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => {
-    const secrets = [process.env.CLOUDFLARE_API_TOKEN, process.env.GOOGLE_CLIENT_SECRET, process.env.TURNSTILE_SECRET_KEY, process.env.GATEWAY_SECRET_KEY]
+    const secrets = [
+      process.env.CLOUDFLARE_API_TOKEN, process.env.GOOGLE_CLIENT_SECRET, process.env.TURNSTILE_SECRET_KEY, process.env.GATEWAY_SECRET_KEY,
+      process.env.SUPER_CLOUDFLARE_API_TOKEN,
+    ]
     process.stderr.write(`deploy-apps: ${redact(error.message, secrets.filter(Boolean))}\n`)
     process.exitCode = 1
   })

@@ -48,6 +48,7 @@ import {
 import { oidcCallback, samlAcs, samlMetadata, ssoForm, ssoStart } from './sso/flow.ts'
 import { MAX_RESPONSE_BYTES } from './sso/saml.ts'
 import { SCIM_BASE, scimRoutes } from './sso/scim.ts'
+import { isSuperCrossSite, isSuperPath, superRoutes } from './super/routes.ts'
 import {
   claimSsoDomain, createScimToken, deleteSsoConnection, removeSsoDomain, revokeScimToken, saveSsoConnection, ssoSettings,
   verifySsoDomain,
@@ -311,6 +312,8 @@ async function dispatch(ctx: Context): Promise<Response> {
   }
   // SCIM speaks JSON with a bearer token, not forms: it has its own dispatch and checks (sso/scim.ts).
   if (path === SCIM_BASE || path.startsWith(`${SCIM_BASE}/`)) return scimRoutes(ctx)
+  // The operator console (super/routes.ts, DESIGN.md §11): its own sign-in and session; absent unless configured.
+  if (isSuperPath(path)) return superDispatch(ctx, path)
   return apexMachine(ctx, path) ?? runRoutes(ctx, path.startsWith('/apps/') ? APP_SETTINGS_ROUTES : APEX_ROUTES)
 }
 
@@ -320,6 +323,16 @@ async function dispatch(ctx: Context): Promise<Response> {
  */
 function authRedirect(ctx: Context): Response {
   return redirect(apexUrl(ctx, `${ctx.url.pathname}${ctx.url.search}`), 308)
+}
+
+/** The console's forms pass the same checks as the apex's; Google's SAML response is its one cross-site form. */
+async function superDispatch(ctx: Context, path: string): Promise<Response> {
+  if (!ctx.config.super) return notFoundPage(ctx)
+  if (ctx.request.method === 'POST') {
+    const rejected = await readPostForm(ctx, isSuperCrossSite(path))
+    if (rejected) return rejected
+  }
+  return superRoutes(ctx)
 }
 
 async function runRoutes(ctx: Context, routes: Route[]): Promise<Response> {

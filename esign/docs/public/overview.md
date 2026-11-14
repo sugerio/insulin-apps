@@ -88,6 +88,9 @@ Esign is an open-source Insulin app. On insulinapps.com it runs at `https://esig
   in the top bar to see another one's templates and envelopes.
 - **Due work runs every five minutes.** The platform calls Esign every five minutes so it can expire envelopes past
   their deadline, finish envelopes a request left unfinished and retry signed-copy emails, for every organization.
+- **Usage is reported every hour.** Esign sends Insulin Apps counts of each organization's envelopes, templates and
+  signatures and the storage its documents take, never names, email addresses or documents. See
+  [What Esign reports to Insulin Apps](/docs/esign/how-it-works#what-esign-reports-to-insulin-apps-every-hour).
 - **Mail goes through the platform.** Esign has no mail service of its own. It sends a signer two kinds of email only:
   their verification code and, at the end, the link to their signed copy. It doesn't email signers an invitation to
   sign.

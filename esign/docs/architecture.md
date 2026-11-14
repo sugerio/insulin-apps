@@ -39,13 +39,27 @@ seals the finished envelope and emails each signer a link to their copy.
   identity included, and works for every organization; a request marked `schedule` is nobody to
   every other route (`readCaller`). It is neither a public path nor in the catalog.
   `POST /api/process-due` (manage permission) does the same work at once, for the caller's
-  organization only.
+  organization only. After the due work, whatever its outcome, the tick sends the hour's usage
+  report (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the
   `SUGER_GATEWAY` service binding when the deploy gave one (`gateway-fetch.ts`). Only a 202
   counts as sent; a refusal (502 `send_failed`, 503, 429, anything else) is retried later and never
   marked sent. Notices carry a link, not an attachment: the signer's copy downloads once, within 30
   days, from the public `/copy` page (`signed-copies.ts`).
+- **Usage reports.** The platform can't read the app's database, so once an hour Esign sends it
+  aggregate numbers (`usage-metrics.ts`): `POST $SUGER_METRICS_URL` with `SUGER_APP_TOKEN`, over the
+  `SUGER_GATEWAY` binding, `{hour, app, organizations: [{id, metrics}]}`. Per organization (by tenant
+  id, one `GROUP BY` query per table, in one batch): `envelopes` and `envelopes_<status>` for each
+  status, `templates`, `signatures` and `storage_bytes` (the recorded sizes of its objects: template
+  sources, everything under `envelopes/<id>/`, editing sessions' staged PDFs); for the app,
+  `database_bytes` (D1's `meta.size_after`, when it gives one) and `organizations` (those with
+  data). Gauges only: totals as measured, never names, emails, titles or contents. At most 500
+  organizations a request, the `app` gauges in the first. The tick claims the hour with one
+  conditional upsert into `metrics_reports` (a new hour, or an unsent claim over ten minutes old),
+  marks it sent once every request got 202, and on anything else deletes its own claim so the next
+  tick sends the report again (each request replaces that hour's values). Sent hours are kept three
+  days. Without the URL or the token nothing is reported; it isn't in `prodProblems`.
 
 ## dev and prod
 
@@ -74,7 +88,8 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | `ESIGN_OTP_KEY` | The pepper of the emailed codes (at least 32 characters) |
 | `ESIGN_FRAME_ANCESTORS` | Space-separated host origins that may embed the signing page and the editor (the app's own origin always may) |
 
-The platform provides `SUGER_MAIL_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY` service binding they are used over.
+The platform provides `SUGER_MAIL_URL`, `SUGER_METRICS_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY` service binding
+they are used over. Without `SUGER_METRICS_URL` Esign works as before and only reports no usage.
 
 **The seal key** is not one of those secrets. `ESIGN_SEAL_KEY` is a Cloudflare `secret_key` binding on the Worker: the
 private half of the managed seal's ECDSA P-256 key, which the Worker gets as a `CryptoKey` that can sign and can't be
@@ -222,9 +237,9 @@ rendering and every later re-verification fail closed if the running renderer di
 ## Data model
 
 `src/app/db/schema.ts` declares the tables; `src/app/db/migrations/` holds the generated
-`0000_init.sql` and `0003_labels.sql`, the custom `0001_triggers.sql` (the triggers Drizzle can't declare), and
+`0000_init.sql`, `0003_labels.sql` and `0004_metrics_reports.sql`, the custom `0001_triggers.sql` (the triggers Drizzle can't declare), and
 `0002_seal_key.sql`, a rebuild of `seals` written by hand in drizzle-kit's form (it changes a CHECK constraint). Every record
-of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 16
+of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 17
 tables:
 
 | Table | Holds |
@@ -244,6 +259,7 @@ tables:
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
 | `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
+| `metrics_reports` | One per UTC hour (epoch ms of its start): when a tick claimed its usage report and when it was sent; kept three days |
 
 JSON columns. A new optional fact about an envelope or task needs no new table or column: readers
 of `details_json` keep only known keys of the expected types. A fact that queries filter on is a
@@ -511,7 +527,7 @@ by the same live session with the same input and values, and returns the same si
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `POST /api/scheduled` † | `x-suger-access-via: schedule` and no identity (403 otherwise) | Every organization's due work, every five minutes (`insulin.scheduled`); answers `{expired, completed, waiting, failed}`. Not public, not in the catalog |
+| `POST /api/scheduled` † | `x-suger-access-via: schedule` and no identity (403 otherwise) | Every organization's due work, every five minutes (`insulin.scheduled`), then the hour's usage report if no tick has sent it; answers `{expired, completed, waiting, failed}`. Not public, not in the catalog |
 
 **Pages** (the React app, `src/app/App.tsx`): `/sign` (the signing page), `/editor/page/:id` (the
 editor), `/copy` (a signer's copy) and, at every other path, the members' app (see "The members'

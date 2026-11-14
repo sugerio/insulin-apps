@@ -59,8 +59,10 @@ export async function appMailRelay(ctx: Context): Promise<Response> {
   const orgId = ctx.request.headers.get('x-suger-organization-id')
   if (!isId(orgId)) return problem('invalid_request', 400)
   if (!(await allowAppMail(ctx, app.name, orgId))) return problem('rate_limited', 429, { 'Retry-After': '60' })
-  const org = await ctx.config.db.prepare('SELECT 1 AS found FROM orgs WHERE id = ?1').bind(orgId).first<{ found: number }>()
+  const org = await ctx.config.db.prepare('SELECT status FROM orgs WHERE id = ?1').bind(orgId).first<{ status: string }>()
   if (!org) return problem('unknown_organization', 404)
+  // Nobody acts in an organization the operators suspended or disabled (DESIGN.md §11.3), the app's tick included.
+  if (org.status !== 'active') return problem('organization_unavailable', 403)
   if (!isJsonBody(ctx.request)) return problem('invalid_request', 400)
   let mail: AppMail | null
   try {

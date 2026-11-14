@@ -50,7 +50,8 @@ src/app/server/app.ts      createApp()                     middleware, then the 
    routes and passes the rest to `handleAppRequest`.
 3. `handleAppRequest` opens the database with `openAppD1()` from `#platform` (the Worker's `DB` binding, or the local
    file) and hands the request to the Hono app.
-4. The middleware, in order: security headers; `GET /api/health`, the one route that needs no identity; outside the dev
+4. The middleware, in order: security headers; `GET /api/health`, which needs no identity, and `POST /api/scheduled`, the
+   platform's tick, which must carry none (see [The hourly usage report](#the-hourly-usage-report)); outside the dev
    server, a same-origin check on state-changing requests (the AppBuilder preview relays requests from another origin,
    so the dev server skips it); the identity (below), which answers 401 without one and refuses changes from someone
    who records changes but whose profile has no e-mail address; then the access each route family needs.
@@ -77,8 +78,9 @@ hash they were reviewed against (see [Commands](#commands)).
   `{ userId, organizationId, appId, role, email, name }` (e-mail and name may be null), or `null`. The app has no login
   of its own: no sessions, cookies or passwords. Console user ids are opaque strings of 3–80 characters; a request with
   an id outside that bound has no identity.
-- **What the hosting platform adds** is read by `readPlatformGrant` in `src/app/server/lib/identity.ts`, the only code
-  that reads identity headers directly. `x-suger-app-permissions` (space-separated permission keys) narrows the role:
+- **What the hosting platform adds** is read by `readPlatformGrant` in `src/app/server/lib/identity.ts`, which with
+  `isScheduleTick` there is the only code that reads identity headers directly. A request marked
+  `x-suger-access-via: schedule` (the platform's tick) has no identity on any route, not even the preview's. `x-suger-app-permissions` (space-separated permission keys) narrows the role:
   the effective permissions are the role's own intersected with the header, so a forged header can only take access
   away. `x-suger-access-via` is `browser`, `mcp` (an AI agent) or `api` (an API client with its own credentials). The
   Insulin console sends neither: the role's full set, in the browser. Behind insulinapps.com, org owners arrive as
@@ -356,7 +358,7 @@ A new company is set up by importing Pulley's standard reports or the app's own 
 
 | Missing on the platform | What Cap Table does instead |
 |---|---|
-| Cron triggers | Due work runs on demand: when someone with write access loads the dashboard (a check against the engine's own expiry candidates first, and at most 10 automatic expiries per load), and with `POST /api/orgs/:orgId/process-due`, which has no cap. Deterministic idempotency keys (`system:terminate:<id>`, `system:expire:<company>:<date>:<security>`) make repeated runs harmless. While expiry is report-only, processing records an `expiry_runs` row for an admin to confirm instead of expiring. |
+| Cron triggers | The platform's five-minute tick (`POST /api/scheduled`) sends only the hourly usage report. Due work runs on demand: when someone with write access loads the dashboard (a check against the engine's own expiry candidates first, and at most 10 automatic expiries per load), and with `POST /api/orgs/:orgId/process-due`, which has no cap. Deterministic idempotency keys (`system:terminate:<id>`, `system:expire:<company>:<date>:<security>`) make repeated runs harmless. While expiry is report-only, processing records an `expiry_runs` row for an admin to confirm instead of expiring. |
 | Object storage (R2) | Document bytes in D1, in chunks. |
 | E-mail | No notifications; the UI reminds admins to tell people. |
 | Durable Objects | Per-company write serialization from the ledger's triggers in D1. |
@@ -428,6 +430,33 @@ A new company is set up by importing Pulley's standard reports or the app's own 
   SQLite can't, such as D1's limits on compound queries. CI runs it after the app job: `node smoke.mjs` there
   (`--skip-build` reuses the last build).
 
+## The hourly usage report
+
+The platform can't read the app's database, so Cap Table reports its usage itself (`src/app/server/lib/usage-metrics.ts`):
+aggregate numbers only, never a name, an e-mail address, an amount or a document.
+
+- **The trigger** is the platform's tick: `package.json` declares `insulin.scheduled: "/api/scheduled"`, and the gateway
+  POSTs there every five minutes with only `x-suger-app-id` and `x-suger-access-via: schedule`. The route is registered
+  before the same-origin check and the identity, answers 403 unless `isScheduleTick` (the marker exactly, and no
+  identity header), and isn't in the route table, so `GET /api/catalog` never lists it.
+- **Once an hour.** Each tick tries to claim the current UTC hour in `metrics_reports` with one statement
+  (`INSERT ... ON CONFLICT(hour) DO UPDATE ... WHERE sent_at IS NULL AND started_at < now - 10 minutes RETURNING hour`):
+  a new hour, or an unsent claim whose tick must have died. A tick that gets no row back does nothing. After every
+  request of the report is answered 202 the row gets `sent_at` and hours older than three days are deleted; on any
+  other answer or a network error the tick deletes its own claim, so the next tick retries.
+- **What is measured.** One D1 batch of nine GROUP BY queries over whole tables, by `orgs.console_organization_id`:
+  `companies` (the active one), `stakeholders`, `share_classes`, `equity_plans`, `securities`, `transactions`,
+  `documents`, `storage_bytes` (the sum of `documents.byte_size`), `valuations` and `exercise_requests`, each 0 when the
+  organization has none. Records of archived and importing companies count, since they are stored; companies without a
+  console organization count only in the app-wide `database_bytes` (the claim's `meta.size_after`, left out when D1
+  gives none) beside `organizations`.
+- **Sending.** `POST <SUGER_METRICS_URL>` with `authorization: Bearer <SUGER_APP_TOKEN>`, at most 500 organizations per
+  request (`app` in the first), all for the same `hour`. Every value is a gauge, and the platform replaces the values a
+  request carries for its hour, so a resent report is harmless. The deploy also binds the gateway Worker as
+  `SUGER_GATEWAY` (a Worker can't fetch another Worker of its zone by its public URL), and the request goes over it
+  (`src/app/server/gateway-fetch.ts`, from `request.runtime.cloudflare.env`). Without the URL or the token (the local
+  preview, tests) nothing is claimed or sent.
+
 ## Source layout
 
 ```
@@ -447,6 +476,7 @@ src/
       lib/documents/           uploads, storage in D1, visibility
       lib/import/              the import's form parsing, preview, database checks and writer
       lib/reports/             CSV and XLSX exports
+      lib/usage-metrics.ts     the hourly usage report (POST /api/scheduled); gateway-fetch.ts, its gateway binding
     db/
       schema.ts, client.ts     the Drizzle schema and client
       migrations/              generated migrations, the custom trigger migration, meta/

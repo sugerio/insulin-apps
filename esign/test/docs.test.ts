@@ -176,6 +176,14 @@ test('the Docs cover the main tasks, what each role sees, signers, statuses, evi
  assert.match(textOf(render('roles')),/Every role can read these Docs/);
 });
 
+test('the Docs say which counts Esign reports to Insulin Apps every hour, and what it never sends',()=>{
+ const text=textOf(render('getting-started'));
+ assert.match(text,/Once an hour, Esign sends Insulin Apps a few numbers for each organization, so that Insulin Apps can watch usage and plan capacity/);
+ for(const words of [/how many envelopes it has, in all and in each status \(out for signature, finishing, completed, declined, expired and voided\)/,/how many templates and signatures/,/how much storage its documents take/,/the size of its database and how many organizations have data in it/])
+  assert.match(text,words);
+ assert.match(text,/Esign never sends names, email addresses, document titles or contents/);
+});
+
 // The first column of the table labelled `label` in a rendered topic.
 const tableRows=(html:string,label:string)=>{
  const table=new RegExp(`<table aria-label="${label}"[\\s\\S]*?</table>`).exec(html)?.[0];

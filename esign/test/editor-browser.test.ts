@@ -166,7 +166,10 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await attempt();assert.equal(await evaluate("document.querySelectorAll('[data-page] [data-editor-field]').length",context),2);assert.equal(await evaluate("[...document.querySelectorAll('input[type=radio]')].some(o=>o.value==='Intruder')",context),false);
   await evaluate("document.querySelector('#check').click()");
   await wait(()=>evaluate("document.querySelector('#status').textContent.includes('Saved template:')"),'backend confirms save despite missing response');
+  // The released response makes the editor report its save, and the host checks again: wait for that check's answer, not the one above.
+  const checks=()=>records.filter(r=>r.path.startsWith('/host/template-editing-sessions/')).length,checked=checks();
   releaseSave();
+  await wait(async()=>checks()>checked,'host checks again once the editor reports its save');
   const status=await wait(()=>evaluate("document.querySelector('#status').textContent.match(/Saved template: ([a-f0-9-]+)/)?.[1]"),'confirmed save');
   assert.equal(await locked(),true,'all editing controls remain locked after saving');await attempt();assert.equal(await evaluate("document.querySelectorAll('[data-page] [data-editor-field]').length",context),2);assert.match(await evaluate('document.body.innerText',context),/new session/i);
   assert.ok(records.some(r=>r.path==='/api/public/editor/exchange'&&r.requestOrigin==='http://127.0.0.1:8787'&&r.status===200));

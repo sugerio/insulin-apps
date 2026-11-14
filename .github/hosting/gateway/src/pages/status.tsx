@@ -2,6 +2,7 @@
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import { ContactLink } from "@/components/contact"
 import { AuthCard, Container, proseLinks } from "@/components/layout"
 import type { HeaderAccount } from "@/components/site-header"
 import type { ActiveOrg, Session } from "../auth/session.ts"
@@ -89,6 +90,30 @@ export function confirmEmailFirstPage(ctx: Context, session: Session): Response 
       <a href={apexUrl(ctx, "/resend-verification")}>ask for a new one</a>.
     </p>
   ), { user: accountOf(session) })
+}
+
+/**
+ * An account the operators suspended or disabled (DESIGN.md §11.3), at every sign-in. Their note stays theirs: the page
+ * says only what happened and whom to ask.
+ */
+export function accountUnavailablePage(ctx: Context, status: "suspended" | "disabled"): Response {
+  return messagePage(ctx, 403, status === "suspended" ? "This account is suspended" : "This account is disabled", (
+    <p>
+      Insulin Apps has {status} this account, so it can&apos;t sign in. If you think this is a mistake, contact <ContactLink ctx={ctx} />.
+    </p>
+  ))
+}
+
+/** An organization the operators suspended or disabled, where something tries to act in it. */
+export function orgUnavailablePage(ctx: Context, status: "suspended" | "disabled"): Response {
+  return messagePage(ctx, 403, status === "suspended" ? "This organization is suspended" : "This organization is disabled", (
+    <>
+      <p>
+        Insulin Apps has {status} this organization, so nobody can use it for now. Its owners can contact <ContactLink ctx={ctx} />.
+      </p>
+      <ButtonLink href={apexUrl(ctx)}>See your apps and organizations</ButtonLink>
+    </>
+  ))
 }
 
 /** The credentials changed between verifying who someone is and creating their session: no session, sign in again. */

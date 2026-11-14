@@ -16,15 +16,17 @@ import { sweepEnvelopes } from './envelope-completion.ts';
 import type { BlobStore } from './blob-store.ts';
 import { can, isScheduleTick, PERMISSIONS, readCaller, type Caller } from './identity.ts';
 import type { MailEnv } from './mail.ts';
+import { reportUsage, type MetricsEnv } from './usage-metrics.ts';
 import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
  * What the app runs with. src/app/server/router.ts builds it from the platform (the D1 binding, the
- * ESIGN_* secrets, the mail relay's address and token); tests build it directly.
+ * ESIGN_* secrets, the addresses of the mail relay and the usage reports, and the app's token); tests
+ * build it directly.
  */
-export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & {
+export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & MetricsEnv & {
   DB: D1Database;
   /** PDFs, field images, seals and delivery PDFs, in D1 (blob-store.ts). */
   ARTIFACTS: BlobStore;
@@ -75,15 +77,23 @@ const app = new Hono<Env>();
 // No configuration is disclosed: only whether the app answers.
 app.get('/api/health', (context) => context.json({ status: 'ok', service: 'esign' }));
 // The platform's tick, every five minutes (package.json `insulin.scheduled`): the due work of every
-// organization, the same work as POST /api/process-due. Only the tick passes: a request with a
-// member's, a service account's or an agent's identity, or without `x-suger-access-via: schedule`,
-// is refused. Never public and never in the catalog.
+// organization, the same work as POST /api/process-due, then the hour's usage report. Only the tick
+// passes: a request with a member's, a service account's or an agent's identity, or without
+// `x-suger-access-via: schedule`, is refused. Never public and never in the catalog.
 app.post('/api/scheduled', async (context) => {
   if (!isScheduleTick(context.req.raw)) return context.json({ error: 'forbidden' }, 403);
-  if (!signingEnabled(context.env)) return context.json({ error: 'signing_disabled' }, 404);
-  const expired = await expireDueEnvelopes(context.env.DB, Date.now(), null);
-  const counts = await sweepEnvelopes(context.env, null);
-  return context.json({ expired, ...counts });
+  try {
+    if (!signingEnabled(context.env)) return context.json({ error: 'signing_disabled' }, 404);
+    const expired = await expireDueEnvelopes(context.env.DB, Date.now(), null);
+    const counts = await sweepEnvelopes(context.env, null);
+    return context.json({ expired, ...counts });
+  } finally {
+    // After the due work, whatever its outcome: this hour's usage report, unless a tick sent it already
+    // (usage-metrics.ts). It never throws, and with the request's waitUntil it runs after the response.
+    const report = reportUsage(context.env);
+    if (context.env.WAIT_UNTIL) context.env.WAIT_UNTIL(report);
+    else await report;
+  }
 });
 // The placed fields a document can be signed with: Signature, Date signed and Title.
 const supportedFields=(raw:string,roles:string[],pages:number)=>validateFields(JSON.parse(raw),roles,pages);

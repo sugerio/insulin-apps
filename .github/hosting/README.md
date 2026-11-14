@@ -173,6 +173,33 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    without such a policy from December 2, 2026. The workflow runs the default branch's code, reads the pull request's
    commits as data, and has a read-only token.
 
+9. **The operator console** (optional; DESIGN.md §11), at `https://insulinapps.com/super` for Insulin Apps staff.
+   In the company's Google Workspace Admin console, under **Apps → Web and mobile apps → Add app → Add custom SAML
+   app**, create a SAML app for it alone (named, say, "Insulin Apps operator console"):
+
+   - From **Google Identity Provider details**, copy the SSO URL, the entity ID and the certificate into the
+     `production` environment's variables `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_ENTITY_ID` and
+     `SUPER_SAML_IDP_CERT` (the whole PEM, `-----BEGIN CERTIFICATE-----` lines included).
+   - **Service provider details:** ACS URL `https://insulinapps.com/super/saml/acs`, entity ID
+     `https://insulinapps.com/super`, name ID format `EMAIL`, name ID **Basic Information › Primary email**. Leave
+     "Signed response" as it is: the console accepts a signed response or a signed assertion.
+   - **Attribute mapping:** First name to `firstName`, Last name to `lastName`; under **Group membership**, pick the
+     operators' Google group and name the app attribute `groups` (exactly). Google sends the group's name; members of
+     a group nested in it count too.
+   - **User access:** turn the app on for that group only, off for everyone else. The console also refuses anyone whose
+     assertion doesn't list the group, so either lock alone keeps others out.
+   - Set the variable `SUPER_GOOGLE_GROUP` to the group's **name**, exactly as Google shows it (not its address; check
+     with the app's **Test SAML login** that the assertion's `groups` holds it), and `SUPER_ADMIN_EMAILS` to the admins' addresses
+     (commas or spaces between them): they may also suspend, disable and reinstate organizations and accounts, and
+     create organizations past an owner domain's limit. Keep these addresses in GitHub only, never in the repository.
+
+   Without all of the first four variables the console isn't there (every `/super` path is a 404). For its Cloudflare
+   page, create a second, read-only account API token with **Account · Account Analytics · Read** and **Account ·
+   Workers Scripts · Read** only, and add it as the environment secret `SUPER_CLOUDFLARE_API_TOKEN`; the deploy gives the
+   gateway its own `CLOUDFLARE_ACCOUNT_ID` with it. Never give it a D1 permission: even D1 Read can query the apps'
+   databases, which the console must not reach. Signing in to the console also needs no change to Google's OAuth
+   client of step 3: the console never uses it.
+
 Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and
 the gateway (the next green merge to `main` releases and deploys too). Step summaries link the affected public
 addresses. On a new Cloudflare account, leave `GATEWAY_SECRET_KEY` out of the environment for that first deploy, then
@@ -217,6 +244,20 @@ again replaces the number. Without `--remote` it changes the local development d
 anything but a plain domain or address and a short plain note, and runs the gateway's wrangler with Node, without a
 shell (`node node_modules/wrangler/bin/wrangler.js d1 execute insulin-apps-gateway`), so it works the same on Windows.
 The person then creates the organization themselves at `/orgs/new`. To go back to the default, set `--max 2`.
+
+### Suspend, disable or reinstate an organization or account
+
+In the operator console (`https://insulinapps.com/super`, owner setup step 9), an admin opens the organization or
+the person, chooses **Suspend** (pause while you look into it), **Disable** (end it for abuse or fraud, which also ends
+an account's sessions and AI agents, or an organization's AI agents, API clients, invitations and SCIM tokens, for
+good) or **Reinstate**, and gives a reason, which the audit log keeps and the people concerned never see. It applies at
+once (DESIGN.md §11.3). For someone at their
+owner domain's organization limit who asked for one more, an admin can create it for them under **Organizations ›
+Create an organization for someone**, or raise the domain's limit with `allow-orgs.mjs` (above) so they create it
+themselves.
+
+To add or remove an operator, change the Google group's members; an admin, the `SUPER_ADMIN_EMAILS` variable, then
+deploy the gateway.
 
 ### Add an app
 

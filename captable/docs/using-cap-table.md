@@ -71,7 +71,7 @@ the cap table has to.
 
 ## Processing due items
 
-Cap Table has no background scheduler. Two kinds of work fall due on a date:
+Nothing is recorded on a timer. Two kinds of work fall due on a date:
 
 - **scheduled terminations** whose date has arrived;
 - **expiries:** options past their last exercise day, and warrants past their expiration date.

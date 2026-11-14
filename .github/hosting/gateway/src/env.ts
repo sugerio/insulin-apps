@@ -44,6 +44,20 @@ export interface Env {
   /** Local development and tests only (`test`); the deploy never sets it. */
   SITE_ENV?: string
 
+  /**
+   * The operator console at /super (DESIGN.md §11): the platform's Google Workspace SAML app (its entity id, its
+   * sign-in URL and its signing certificate, PEM), the Google group whose members may sign in, and the admins among
+   * them (addresses separated by commas or whitespace). GitHub variables, never written in the repository.
+   */
+  SUPER_SAML_IDP_ENTITY_ID?: string
+  SUPER_SAML_IDP_SSO_URL?: string
+  SUPER_SAML_IDP_CERT?: string
+  SUPER_GOOGLE_GROUP?: string
+  SUPER_ADMIN_EMAILS?: string
+  /** The console's read-only Cloudflare API token (a secret) and the account it reads (DESIGN.md §11.5). */
+  SUPER_CLOUDFLARE_API_TOKEN?: string
+  SUPER_CLOUDFLARE_ACCOUNT_ID?: string
+
   /** One service binding per app: APP_<NAME>. */
   [binding: `APP_${string}`]: Fetcher | undefined
 }

@@ -1,4 +1,4 @@
-import { api, engine } from "#shared";
+import { api, compareDisplayIds, engine } from "#shared";
 import { notFound } from "../http.ts";
 import { loadEdges, REVERSIBLE_COMMAND_TYPES } from "../ledger/commands/reverse.ts";
 import { dec, echo, ratio, type ReadContext } from "./context.ts";
@@ -207,14 +207,7 @@ export function securityList(ctx: ReadContext, state: engine.LedgerState, lookup
     const numbers = byId.get(security.identity.id);
     if (numbers) items.push(securityJson(ctx, state, security, numbers, lookups));
   }
-  return items.sort((a, b) => naturalCompare(a.displayId, b.displayId));
-}
-
-export function naturalCompare(a: string, b: string): number {
-  const pa = /^(.*?)(\d+)$/.exec(a);
-  const pb = /^(.*?)(\d+)$/.exec(b);
-  if (pa && pb && pa[1] === pb[1]) return Number(pa[2]) - Number(pb[2]);
-  return a < b ? -1 : a > b ? 1 : 0;
+  return items.sort((a, b) => compareDisplayIds(a.displayId, b.displayId));
 }
 
 export function issuedSecurityOr404(state: engine.LedgerState, securityId: string): engine.SecurityState {

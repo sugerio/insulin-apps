@@ -140,6 +140,16 @@ One row per certificate or share lot.
 | Shares | yes | |
 | Issue date | yes | |
 | Price per share | yes | |
+| Vesting start date | for shares that vest | Restricted shares that vest fill in this column and the next three, or none of them. |
+| Vesting months | for shares that vest | The whole term, from 1 to 240 months. |
+| Cliff months | for shares that vest | `0` for no cliff; never more than the vesting months. |
+| Vest every (months) | for shares that vest | `1` (monthly), `3` (quarterly) or `12` (annually), as for options. |
+| Repurchase price per share | no | For shares that vest: what the company pays per share to buy back unvested shares after the holder leaves. |
+| Repurchase window (days) | no | For shares that vest: whole days after the termination to buy them back, from 0 to 1,200. Blank means the plan's default window. |
+| No repurchase deadline | no | `Yes` only if the agreement sets no deadline for the buyback; then leave the window blank. |
+
+A workbook downloaded before the Shares sheet had its vesting and repurchase columns still imports: its shares don't
+vest. The repurchase columns need the vesting columns, because the right covers unvested shares.
 
 ### Options
 
@@ -217,7 +227,7 @@ A fictional company, Acme Robotics, Inc., might fill in one row on each of a few
 | Stakeholders | `holder_1` · `Jordan Park` · `Individual` · `Employee` · `jordan@example.test` |
 | Share classes | `common` · `Common Stock` · `Common` · `10000000` · (blank) · `0.001` |
 | Equity plans | `plan_2024` · `2024 Equity Plan` · `common` · `1000000` · `2024-01-15` · `90` |
-| Shares | `CS-1` · `holder_1` · `common` · (blank) · `100000` · `2024-01-15` · `0.001` |
+| Shares | `CS-1` · `holder_1` · `common` · (blank) · `100000` · `2024-01-15` · `0.001` · `2024-01-15` · `48` · `12` · `1` · `0.001` · `90` · `No` |
 | Options | `OPT-1` · `holder_1` · `plan_2024` · `ISO` · `48000` · `0.25` · `2024-02-01` · `2034-02-01` · `2024-02-01` · `48` · `12` · `1` · `No` · `0.25` · `0` |
 
 The Instructions sheet in the template carries the same examples.
@@ -337,6 +347,17 @@ is set up, the import page says "Import isn't available for this company" and wh
 5. **Give holders access.** Make sure each holder's stakeholder record has, as their own address, the e-mail address of
    their Insulin Apps account. Then give them the Viewer role, or a custom role with **See own holdings**. See
    [Roles and access](/docs/captable/roles-and-access).
+
+## Vesting schedules become templates
+
+Each regular vesting schedule in your files (a number of months, monthly, quarterly or annual vesting, and a cliff)
+becomes one template on the **Vesting** page, named after its terms, such as "48 months, monthly, 12-month cliff".
+Every imported grant and share lot on that schedule uses it, and you can choose it for new grants. Pulley's reports list
+each vesting date and amount rather than the schedule, so a Pulley grant's tranches become a template only when they are
+exactly what the schedule gives, date by date and share by share, from the grant's vesting start. A grant with tranches
+forfeited at a termination, milestones, or any other tranches keeps them as its own. Either way, the grant vests exactly
+as your files say. Each imported template shows "Not confirmed yet" until an admin confirms that it matches the plan's
+schedule, with `POST /api/orgs/{orgId}/vesting-terms/{id}/confirm`.
 
 ## What isn't imported
 

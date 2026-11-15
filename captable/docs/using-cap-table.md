@@ -163,8 +163,10 @@ Then **Record grant**. The grant is outstanding at once, and the plan's availabi
 - Vesting is calculated from each grant's schedule. Tranches fall on the same day of the month as the vesting start (or
   the month's last day), and the running total is rounded down to the company's share unit (whole shares unless you set
   otherwise), so the last tranche takes any remainder.
-- Grants imported from Pulley keep Pulley's exact vesting dates and amounts; grants from the spreadsheet template vest
-  monthly, quarterly or annually from their vesting start date.
+- Grants imported from Pulley keep Pulley's exact vesting dates and amounts; grants and vesting shares from the
+  spreadsheet template vest monthly, quarterly or annually from their vesting start date. Each regular schedule an
+  import finds becomes a template on **Vesting**, which new grants can use (see
+  [Importing](importing.md#vesting-schedules-become-templates)).
 - Vesting stops when someone leaves (see [Terminations](#terminations)). An acceleration is recorded during the
   termination, with the document that grants it.
 
@@ -224,7 +226,8 @@ repurchase** on the share's page, or next to the lot under **Securities Status**
 holders**, and give the repurchase date (on or after the termination, not in the future), the quantity (every share
 still unvested on that date), the price per share paid, the payment (method, date paid, reference) and the repurchase
 notice sent to the holder. After the repurchase deadline, or when no deadline is recorded, it also needs counsel's
-written authority, as a document of its own. The vested shares stay with the holder as a new share lot, and the
+written authority, as a document of its own; a share whose agreement sets no deadline (shown as "No deadline (per
+agreement)") needs none. The vested shares stay with the holder as a new share lot, and the
 repurchased ones go back to the pool if the plan's rules say so. Cap Table doesn't tell the holder.
 
 ## Cancellations and expiry

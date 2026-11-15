@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "#shared";
 import { optionsForPercent } from "../../src/app/components/SharesCalculatorDialog.tsx";
 import { capTable, IDS, SEED_CLASS, stockClass, stockPlan, TODAY, uuid } from "./support/acme.ts";
-import { mock } from "./support/mockApi.ts";
+import { apiError, mock, type MockRequest } from "./support/mockApi.ts";
 import { renderPage } from "./support/render.tsx";
 
 // The % shares calculator on the Equity plans page: read-only, exact decimals, an estimate.
@@ -68,6 +68,56 @@ describe("% shares calculator", () => {
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(button));
+  });
+
+  it("prices the exercise at the common class chosen when the company has two", async () => {
+    const classB = stockClass({ id: uuid(4, 10), name: "Class B Common Stock", defaultIdPrefix: "CB" });
+    const { callsTo } = renderPage("equity-plans", [
+      ...handlers().filter((handler) => handler.route !== api.routes.listStockClasses && handler.route !== api.routes.getFmv),
+      mock(api.routes.listStockClasses, { ...ECHO, items: [stockClass(), classB, SERIES_A] }),
+      mock(api.routes.getFmv, (request: MockRequest) => ({ ...FMV, stockClassId: request.query.get("stockClassId")!, fmv: { ...FMV.fmv, pricePerShare: request.query.get("stockClassId") === classB.id ? "0.4" : "0.95" } })),
+    ]);
+    const dialog = await open();
+    fireEvent.change(within(dialog).getByLabelText("Target % of fully diluted"), { target: { value: "0.25" } });
+    const estimate = await within(dialog).findByLabelText("Estimate");
+    const value = (term: RegExp) => within(estimate).getByText(term).nextElementSibling?.textContent;
+    await waitFor(() => expect(value(/^Cost to exercise at the 409A FMV \(\$0\.95\)/)).toBe("$57,741.00"));
+    expect(callsTo(api.routes.getFmv).map((call) => call.query.get("stockClassId"))).toEqual([IDS.common]);
+    const common = within(dialog).getByRole("combobox", { name: "Exercise at the 409A price of" });
+    fireEvent.keyDown(common, { key: "Enter" });
+    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual(["Common Stock", "Class B Common Stock"]);
+    fireEvent.click(screen.getByRole("option", { name: "Class B Common Stock" }));
+    await waitFor(() => expect(value(/^Cost to exercise at the 409A FMV \(\$0\.40\)/)).toBe("$24,312.00"));
+    expect(callsTo(api.routes.getFmv).at(-1)?.query.get("stockClassId")).toBe(classB.id);
+  });
+
+  it("still estimates when the company has no common class, without asking for a 409A price", async () => {
+    const { callsTo } = renderPage("equity-plans", [
+      ...handlers().filter((handler) => handler.route !== api.routes.listStockClasses),
+      mock(api.routes.listStockClasses, { ...ECHO, items: [SEED_CLASS] }),
+    ]);
+    const dialog = await open();
+    fireEvent.change(within(dialog).getByLabelText("Target % of fully diluted"), { target: { value: "0.25" } });
+    const estimate = await within(dialog).findByLabelText("Estimate");
+    expect(within(estimate).getByText("Options needed").nextElementSibling?.textContent).toBe("60,780");
+    expect(within(estimate).getByText("No common stock class to price an exercise")).toBeTruthy();
+    expect(within(dialog).queryByText(/Couldn't load/)).toBeNull();
+    expect(callsTo(api.routes.getFmv)).toHaveLength(0);
+  });
+
+  it("keeps the estimate when the 409A price can't be loaded, and lets it be retried", async () => {
+    let calls = 0;
+    renderPage("equity-plans", [
+      ...handlers().filter((handler) => handler.route !== api.routes.getFmv),
+      mock(api.routes.getFmv, () => (++calls === 1 ? apiError(500, "internal", "The read model is rebuilding.") : FMV)),
+    ]);
+    const dialog = await open();
+    fireEvent.change(within(dialog).getByLabelText("Target % of fully diluted"), { target: { value: "0.25" } });
+    const estimate = await within(dialog).findByLabelText("Estimate");
+    expect(within(estimate).getByText("Options needed").nextElementSibling?.textContent).toBe("60,780");
+    expect(await within(estimate).findByText(/Couldn't load the 409A price/)).toBeTruthy();
+    fireEvent.click(within(estimate).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(estimate).getByText(/^Cost to exercise at the 409A FMV \(\$0\.95\)/)).toBeTruthy());
   });
 
   it("refuses a percentage it can't use and says when no 409A is in effect", async () => {

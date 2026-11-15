@@ -721,6 +721,24 @@ describe("reverse", () => {
     expect(real[1]!.body).toEqual({ commandId: EXERCISE, note: "Recorded on the wrong grant", expectedLedgerSeq: 412, expectedDiffSha256: DIFF_A, confirmation: "OPT-1" });
   }, 60_000);
 
+  it("gives focus to the Actions button again once a reversal is recorded and the page is read again", async () => {
+    const preview = mock(api.routes.getReversalPreview, reversal());
+    const reverse = commandRoute(api.routes.reverseCommand, { commit: [result({ commandId: uuid(30, 7), dryRun: false }, true)] });
+    renderPage(`securities/${IDS.opt1}`, handlers(reversible(EXERCISE), commands, preview, reverse));
+    await openReverse();
+    // The dialog hides the page from the accessibility tree while it is open.
+    const opener = screen.getByRole("button", { name: "Actions", hidden: true });
+    type(/Reason/, "Recorded on the wrong grant");
+    fireEvent.change(screen.getByLabelText(/to confirm/), { target: { value: "OPT-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reverse" }));
+    expect(await screen.findByText("Reversed — record exercise (OPT-1)")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // The page body is mounted again with the security read again: the button that opened the dialog is gone, and its
+    // successor takes the focus rather than the document.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Actions" })));
+    expect(opener.isConnected).toBe(false);
+  }, 60_000);
+
   it("refreshes the reversal preview on a stale ledger and names the commands to reverse first", async () => {
     let previews = 0;
     const preview = mock(api.routes.getReversalPreview, () => (++previews === 1 ? reversal() : reversal({ diffSha256: DIFF_B, ledgerSeq: 425 })));

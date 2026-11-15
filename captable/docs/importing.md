@@ -132,6 +132,16 @@ sheet, which explains every column with an example, and eight data sheets that e
 | Shares | yes | |
 | Issue date | yes | |
 | Price per share | yes | |
+| Vesting start date | for shares that vest | Restricted shares that vest fill in this column and the next three, or none of them. |
+| Vesting months | for shares that vest | The whole term, from 1 to 240 months. |
+| Cliff months | for shares that vest | 0 for no cliff; never more than the vesting months. |
+| Vest every (months) | for shares that vest | 1 (monthly), 3 (quarterly) or 12 (annually), as for options. |
+| Repurchase price per share | no | For shares that vest: what the company pays per share to buy back unvested shares after the holder leaves. |
+| Repurchase window (days) | no | For shares that vest: whole days after the termination to buy them back, from 0 to 1,200. Blank means the plan's default window. |
+| No repurchase deadline | no | Yes only if the agreement sets no deadline for the buyback; then leave the window blank. |
+
+A workbook downloaded before the Shares sheet had its vesting and repurchase columns still imports: its shares don't
+vest. The repurchase columns need the vesting columns, because the right covers unvested shares.
 
 **Options** (one row per grant)
 
@@ -313,6 +323,17 @@ that already has stakeholders or records.
 5. **Give holders access.** Make sure each holder's stakeholder record has, as their own address, the e-mail address of
    their Insulin account, then give them the Viewer role (User or Viewer in the Insulin console), or a custom role with
    **See own holdings**.
+
+## Vesting schedules become templates
+
+Each regular vesting schedule in your files (a number of months, monthly, quarterly or annual vesting, and a cliff)
+becomes one template on the **Vesting** page, named after its terms, such as "48 months, monthly, 12-month cliff".
+Every imported grant and share lot on that schedule uses it, and you can choose it for new grants. Pulley's reports list
+each vesting date and amount rather than the schedule, so a Pulley grant's tranches become a template only when they are
+exactly what the schedule gives, date by date and share by share, from the grant's vesting start. A grant with tranches
+forfeited at a termination, milestones, or any other tranches keeps them as its own. Either way, the grant vests exactly
+as your files say. Each imported template shows "Not confirmed yet" until an admin confirms, through the API, that it
+matches the plan's schedule.
 
 ## What isn't imported
 

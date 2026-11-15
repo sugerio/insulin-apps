@@ -11,13 +11,13 @@ import { apiRequest } from "../api/request.ts";
 import { useReturnFocus } from "./Dialog.tsx";
 import { compareDecimals, formatFractionPercent, fractionOf, fromUnits, isPositive, multiplyDecimals, toUnits } from "../lib/decimal.ts";
 import { describeError } from "../lib/errors.ts";
-import { allOf, useResource } from "../lib/useResource.ts";
+import { useResource } from "../lib/useResource.ts";
 import { useWorkspace } from "./OrgWorkspace.tsx";
 
 // The % shares calculator: what a target share of the company comes to, read-only and for admins (fully diluted figures
 // never reach the holder view). Options needed = floor(fully diluted × target %), with no gross-up:
 // fully diluted already counts the unissued pool a grant comes from. The value uses a preferred class's original issue
-// price, the cost the common FMV of the 409A in effect today. Exact decimals throughout; nothing is recorded.
+// price, the cost the FMV of a common class in the 409A in effect today. Exact decimals throughout; nothing is recorded.
 
 const ONE = toUnits("1");
 /** A percentage as typed: up to 6 decimals, above 0 and at most 100. */
@@ -37,17 +37,25 @@ function percentError(value: string): string | null {
 
 export function SharesCalculatorDialog({ fullyDiluted, onClose }: { fullyDiluted: string; onClose: () => void }) {
   const { orgId, format, today } = useWorkspace();
-  const ids = { percent: useId(), price: useId() };
+  const ids = { percent: useId(), price: useId(), common: useId() };
   const classes = useResource((signal) => apiRequest(api.routes.listStockClasses, { params: { orgId }, signal }), [orgId]);
-  const fmv = useResource((signal) => apiRequest(api.routes.getFmv, { params: { orgId }, query: { date: today }, signal }), [orgId, today]);
   const [percent, setPercent] = useState("");
   const [classId, setClassId] = useState<string | null>(null);
-  const loaded = allOf(classes, fmv);
+  const [commonId, setCommonId] = useState<string | null>(null);
   const error = percentError(percent);
   const preferred = (classes.data?.items ?? []).filter((item) => item.classType === "PREFERRED" && item.originalIssuePrice !== null);
   // The latest round is the usual yardstick: the highest original issue price, until another class is chosen.
   const chosen = preferred.find((item) => item.id === classId)
     ?? [...preferred].sort((a, b) => compareDecimals(b.originalIssuePrice, a.originalIssuePrice))[0] ?? null;
+  // The 409A prices one common class at a time: the first one listed, until another is chosen. With none, there is no
+  // price to ask for, and the rest of the estimate stands without it.
+  const commons = (classes.data?.items ?? []).filter((item) => item.classType === "COMMON");
+  const common = commons.find((item) => item.id === commonId) ?? commons[0] ?? null;
+  const fmv = useResource(
+    (signal) => apiRequest(api.routes.getFmv, { params: { orgId }, query: { date: today, stockClassId: common!.id }, signal }),
+    [orgId, today, common?.id],
+    common !== null,
+  );
   const options = error ? null : optionsForPercent(fullyDiluted, percent.trim());
   const commonFmv = fmv.data?.fmv ?? null;
 
@@ -83,15 +91,26 @@ export function SharesCalculatorDialog({ fullyDiluted, onClose }: { fullyDiluted
               </Select>
             </Field>
           ) : null}
+          {commons.length > 1 ? (
+            <Field>
+              <FieldLabel htmlFor={ids.common}>Exercise at the 409A price of</FieldLabel>
+              <Select value={common?.id ?? ""} onValueChange={setCommonId}>
+                <SelectTrigger id={ids.common} className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {commons.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+          ) : null}
         </FieldGroup>
-        {loaded.data === undefined ? (
-          loaded.error !== undefined ? (
+        {classes.data === undefined ? (
+          classes.error !== undefined ? (
             <Alert variant="destructive">
               <TriangleAlertIcon />
               <AlertTitle>Couldn't load the prices</AlertTitle>
               <AlertDescription className="flex flex-col items-start gap-2">
-                {describeError(loaded.error)}
-                <Button variant="outline" size="sm" onClick={loaded.reload}>Try again</Button>
+                {describeError(classes.error)}
+                <Button variant="outline" size="sm" onClick={classes.reload}>Try again</Button>
               </AlertDescription>
             </Alert>
           ) : (
@@ -106,7 +125,18 @@ export function SharesCalculatorDialog({ fullyDiluted, onClose }: { fullyDiluted
             ) : (
               <Line term="Value at a preferred price">No preferred class has an original issue price</Line>
             )}
-            {commonFmv ? (
+            {common === null ? (
+              <Line term="Cost to exercise">No common stock class to price an exercise</Line>
+            ) : fmv.error !== undefined ? (
+              <Line term="Cost to exercise">
+                <span className="flex flex-col items-end gap-1">
+                  Couldn't load the 409A price: {describeError(fmv.error)}
+                  <Button variant="outline" size="sm" onClick={fmv.reload}>Try again</Button>
+                </span>
+              </Line>
+            ) : fmv.data === undefined ? (
+              <Line term="Cost to exercise">Loading the 409A price…</Line>
+            ) : commonFmv ? (
               <Line term={`Cost to exercise at the 409A FMV (${format.price(commonFmv.pricePerShare)})`}>{format.money(multiplyDecimals(options, commonFmv.pricePerShare))}</Line>
             ) : (
               <Line term="Cost to exercise">No 409A is in effect today</Line>

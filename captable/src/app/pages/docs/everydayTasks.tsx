@@ -137,7 +137,7 @@ export const everydayTasks: DocTopic = {
             <li><b>The price per share</b> the company paid, and the total.</li>
             <li><b>The payment:</b> the method (cash, check, wire, ACH or other), the date it was paid and a reference.</li>
             <li><b>The repurchase notice</b> sent to the holder, uploaded here.</li>
-            <li><b>Counsel's authority</b>, when the repurchase is after the repurchase deadline or no deadline is recorded: a written authority from counsel, as a document of its own.</li>
+            <li><b>Counsel's authority</b>, when the repurchase is after the repurchase deadline or no deadline is recorded: a written authority from counsel, as a document of its own. A share whose agreement sets no deadline (recorded with the share, for example from the spreadsheet template) needs none: <b>Securities Status</b> shows it as "No deadline (per agreement)".</li>
           </ol>
           <p>
             Review the change, type the share's ID to confirm, and record it. The repurchased shares go back to the plan's pool if

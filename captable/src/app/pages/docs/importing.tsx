@@ -103,7 +103,7 @@ export const importing: DocTopic = {
               ["Stakeholders", "One row per person or organization, with your own ID for each, their type, relationship and e-mail, and a termination date and type for anyone who has left."],
               ["Share classes", "Each class: common or preferred, the authorized shares, and optionally the original issue price and, for preferred, a conversion ratio."],
               ["Equity plans", "Each plan: the share class it delivers, the pool size, the effective date and the exercise window after termination."],
-              ["Shares", "One row per certificate or share lot: holder, class, shares, issue date and price per share."],
+              ["Shares", "One row per certificate or share lot: holder, class, shares, issue date and price per share. For restricted shares that vest, also the vesting schedule and the company's right to buy back unvested shares: its price per share, and its window in days after termination, or that the agreement sets no deadline."],
               ["Options", "One row per grant: holder, plan, ISO or NSO, options granted, exercise price, dates, the vesting schedule, and what has been exercised or cancelled."],
               ["Warrants", "Each warrant: holder, class, shares, exercise price, issue and expiration dates."],
               ["SAFEs", "Each SAFE: holder, principal, issue date, valuation cap, discount, and post-money or pre-money."],
@@ -118,8 +118,10 @@ export const importing: DocTopic = {
           </ul>
           <p>
             Where the template is silent, Cap Table uses a stated default and lists it in the preview: for example a conversion
-            ratio of 1, a 90-day exercise window, and unused plan shares returning to the pool. Option grants from the template vest
-            monthly, quarterly or annually from their vesting start date.
+            ratio of 1, a 90-day exercise window, and unused plan shares returning to the pool. Option grants and vesting shares from
+            the template vest monthly, quarterly or annually from their vesting start date. A vesting share lot with no repurchase
+            window of its own takes its plan's default window. A workbook downloaded before the Shares sheet had its vesting and
+            repurchase columns still imports: its shares don't vest.
           </p>
         </>
       ),
@@ -218,6 +220,15 @@ export const importing: DocTopic = {
             <li><b>If the connection drops</b> before the answer arrives, the page says "The import's outcome isn't known yet". Choose <b>Check the import</b> to find out what happened, or <b>Try again</b>: repeating the same import is safe.</li>
             <li><b>The import happens once.</b> It can't be taken back, because the cap table keeps a permanent history. To start again from scratch, create a new app from Cap Table in the Insulin console, which comes with a new, empty database.</li>
           </ul>
+          <h3 id="vesting-templates" tabIndex={-1}>Vesting schedules become templates</h3>
+          <p>
+            Each regular vesting schedule in your files (a number of months, monthly, quarterly or annual vesting, and a cliff)
+            becomes one template on the <b>Vesting</b> page, named after its terms, such as "48 months, monthly, 12-month cliff".
+            Every imported grant on that schedule uses it, and you can choose it for new grants. From Pulley, whose reports list
+            each vesting date and amount, a grant's tranches become a template only when they are exactly what the schedule
+            gives, date by date and share by share; a grant with tranches forfeited at a termination, milestones or any other
+            tranches keeps them as its own. Either way, the grant vests exactly as your files say.
+          </p>
           <h3>What isn't imported</h3>
           <ul>
             <li><b>Documents and files</b>: upload agreements, board consents, certificates, plan documents and valuation reports afterwards. Each imported share lot does get a certificate record with its number.</li>

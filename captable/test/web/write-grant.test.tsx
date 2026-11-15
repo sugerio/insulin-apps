@@ -401,7 +401,10 @@ describe("record options", () => {
     const { router } = renderPage("captable", [...handlers(commandRoute(api.routes.grantEquityCompensation, {})), mock(api.routes.getCapTable, capTable()), mock(api.routes.getDashboard, dashboard())], { role: "admin_rw" });
     fireEvent.click(await screen.findByRole("button", { name: /New/ }));
     const panel = await screen.findByRole("dialog", { name: "Add contracts" });
-    expect(within(panel).getByText("Add a signed agreement to the cap table")).toBeTruthy();
+    expect(within(panel).getByText("Add an option grant to the cap table")).toBeTruthy();
+    // A grant can be recorded before anyone signs: the panel doesn't claim the agreement is signed.
+    expect(within(panel).getByText(/approved by the board, whether its agreement is signed or still awaits a signature/)).toBeTruthy();
+    expect(within(panel).queryByText(/signed by the holder and the company signatory/)).toBeNull();
     fireEvent.click(within(panel).getByRole("link", { name: /Options/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/issue/options`));
     expect(router.state.location.search).toBe("?mode=existing");

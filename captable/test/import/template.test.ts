@@ -24,6 +24,73 @@ describe("Cap Table spreadsheet template", () => {
     expect(preview.draft.assumptions).toEqual(expect.arrayContaining([expect.stringContaining("purchase price"), expect.stringContaining("90-day exercise window"), expect.stringContaining("USD")]));
   });
 
+  it("registers each regular schedule once as a template that every grant on it uses", () => {
+    const preview = buildTemplateImportPreview(filledTemplate((data) => {
+      const first = data.Options[0]!;
+      data.Options.push({ ...first, "Grant ID": "OPT-2" }, { ...first, "Grant ID": "OPT-3", "Vest every (months)": "3", "Cliff months": "0" });
+      data["Equity plans"][0]!["Pool size"] = { number: "1000" };
+    }));
+    expect(preview.problems.filter((item) => item.severity === "error")).toEqual([]);
+    const terms = preview.plan!.referenceRows.filter((row) => row.entity === "vesting_terms");
+    expect(terms.map((row) => ({ name: row.name, isTemplate: row.isTemplate }))).toEqual([
+      { name: "48 months, annually, 12-month cliff", isTemplate: true },
+      { name: "48 months, quarterly, no cliff", isTemplate: true },
+    ]);
+    const issuances = preview.plan!.commands.flatMap((command) => command.transactions).filter((tx) => tx.type === "TX_EQUITY_COMPENSATION_ISSUANCE");
+    const used = Object.fromEntries(issuances.map((tx) => [tx.payload.custom_id, tx.payload.vesting_terms_id]));
+    expect(used).toEqual({ "OPT-1": terms[0]!.id, "OPT-2": terms[0]!.id, "OPT-3": terms[1]!.id });
+    // 11 whole quarters of 16 by the as-of date, with no cliff.
+    expect(replayPlan(preview.plan!).metrics.securities.find((item) => item.displayId === "OPT-3")?.vested.toCanonical()).toBe("68");
+  });
+
+  it("records a lot's vesting and its repurchase right, with or without a deadline", () => {
+    const lot = (id: string, right: Record<string, WorkbookCell>) => ({
+      "Certificate ID": id, "Stakeholder ID": "holder_1", "Share class ID": "common", "Plan ID": "", Shares: { number: "480" }, "Issue date": { date: "2025-01-15" }, "Price per share": { number: "0.01" },
+      "Vesting start date": { date: "2025-01-15" }, "Vesting months": "48", "Cliff months": "12", "Vest every (months)": "1", ...right,
+    });
+    const preview = buildTemplateImportPreview(filledTemplate((data) => {
+      data.Shares.push(
+        lot("RS-1", { "Repurchase price per share": { number: "0.01" }, "No repurchase deadline": "Yes" }),
+        lot("RS-2", { "Repurchase price per share": { number: "0.01" }, "Repurchase window (days)": "90", "No repurchase deadline": "No" }),
+        lot("RS-3", {}),
+      );
+      data["Share classes"][0]!["Authorized shares"] = { number: "10000" };
+    }, SHARE_COLUMNS));
+    expect(preview.problems.filter((item) => item.severity === "error")).toEqual([]);
+    const payload = (id: string) => preview.plan!.commands.flatMap((command) => command.transactions).find((tx) => tx.type === "TX_STOCK_ISSUANCE" && tx.payload.custom_id === id)!.payload;
+    expect(payload("RS-1").x_repurchase_right).toEqual({ price_per_share: { amount: "0.01", currency: "USD" }, window: null, x_no_deadline: true });
+    expect(payload("RS-2").x_repurchase_right).toEqual({ price_per_share: { amount: "0.01", currency: "USD" }, window: { period: 90, period_type: "DAYS" } });
+    // A lot that vests with no repurchase terms takes its plan's default window, as before; a lot that doesn't vest has neither.
+    expect(payload("RS-3").x_repurchase_right).toBeUndefined();
+    expect(payload("CS-1").vesting_terms_id).toBeUndefined();
+    const { state, metrics } = replayPlan(preview.plan!);
+    expect(payload("RS-1").vesting_terms_id).toBe(payload("RS-3").vesting_terms_id);
+    expect(metrics.securities.find((item) => item.displayId === "RS-1")?.vested.toCanonical()).toBe("210");
+    const right = (id: string) => [...state.securities.values()].find((security) => security.identity.displayId === id)?.repurchaseRight;
+    expect(right("RS-1")).toMatchObject({ window: null, noDeadline: true });
+    expect(right("RS-2")).toMatchObject({ window: { period: 90, period_type: "DAYS" }, noDeadline: false });
+  });
+
+  it("names the cell for a lot's incomplete vesting or repurchase terms it can't use", () => {
+    const base = { "Certificate ID": "RS-1", "Stakeholder ID": "holder_1", "Share class ID": "common", "Plan ID": "", Shares: { number: "480" }, "Issue date": { date: "2025-01-15" }, "Price per share": { number: "0.01" } };
+    const preview = buildTemplateImportPreview(filledTemplate((data) => {
+      data.Shares.push(
+        { ...base, "Certificate ID": "RS-1", "Vesting start date": { date: "2025-01-15" }, "Vesting months": "48" },
+        { ...base, "Certificate ID": "RS-2", "Repurchase price per share": { number: "0.01" } },
+        { ...base, "Certificate ID": "RS-3", "Vesting start date": { date: "2025-01-15" }, "Vesting months": "48", "Cliff months": "12", "Vest every (months)": "2", "Repurchase window (days)": "90", "No repurchase deadline": "Yes" },
+        { ...base, "Certificate ID": "RS-4", "Vesting start date": { date: "2025-01-15" }, "Vesting months": "48", "Cliff months": "12", "Vest every (months)": "1", "No repurchase deadline": "Maybe" },
+      );
+    }, SHARE_COLUMNS));
+    const at = (code: string) => preview.problems.filter((item) => item.code === code).map((item) => `${item.source?.row} ${item.source?.column}`);
+    expect(at("TEMPLATE_VALUE_MISSING")).toEqual(["3 Cliff months", "3 Vest every (months)"]);
+    expect(at("TEMPLATE_REPURCHASE_WITHOUT_VESTING")).toEqual(["4 Repurchase price per share"]);
+    expect(at("TEMPLATE_REPURCHASE_CONFLICT")).toEqual(["5 Repurchase window (days)"]);
+    expect(at("TEMPLATE_VESTING_FREQUENCY_UNSUPPORTED")).toEqual(["5 Vest every (months)"]);
+    expect(at("TEMPLATE_VALUE_UNSUPPORTED")).toEqual(["6 No repurchase deadline"]);
+    expect(preview.problems.find((item) => item.code === "TEMPLATE_REPURCHASE_WITHOUT_VESTING")?.message).toBe("Shares row 4, a repurchase right covers unvested shares: enter the lot's vesting columns too.");
+    expect(preview.canImport).toBe(false);
+  });
+
   it("names sheet, row, and column for bad template values and blocks missing references", () => {
     const bad = buildTemplateImportPreview(filledTemplate((data) => {
       data.Stakeholders[0]!.Relationship = "Customer";
@@ -190,7 +257,9 @@ interface Data {
   Warrants: Array<Record<string, WorkbookCell>>;
   SAFEs: Array<Record<string, WorkbookCell>>;
 }
-function filledTemplate(change?: (data: Data) => void) {
+/** The Shares sheet with a lot's vesting and repurchase-right columns, added after the template first shipped. */
+const SHARE_COLUMNS = ["Certificate ID", "Stakeholder ID", "Share class ID", "Plan ID", "Shares", "Issue date", "Price per share", "Vesting start date", "Vesting months", "Cliff months", "Vest every (months)", "Repurchase price per share", "Repurchase window (days)", "No repurchase deadline"];
+function filledTemplate(change?: (data: Data) => void, shareColumns?: string[]) {
   const data: Data = {
     Company: [{ "Company name": "Acme Robotics, Inc.", "As-of date": { date: "2026-10-27" }, Currency: "" }],
     Stakeholders: [{ "Stakeholder ID": "holder_1", Name: "Jordan Park", Type: "Individual", Relationship: "Employee", Email: "jordan@example.test", "Termination date": "", "Termination type": "" }],
@@ -205,7 +274,7 @@ function filledTemplate(change?: (data: Data) => void) {
   const headers: Record<string, string[]> = {
     Company: ["Company name", "As-of date", "Currency"], Stakeholders: ["Stakeholder ID", "Name", "Type", "Relationship", "Email", "Termination date", "Termination type"],
     "Share classes": ["Class ID", "Name", "Type", "Authorized shares", "Conversion ratio", "Original issue price"], "Equity plans": ["Plan ID", "Name", "Share class ID", "Pool size", "Effective date", "Exercise window after termination (days)"],
-    Shares: ["Certificate ID", "Stakeholder ID", "Share class ID", "Plan ID", "Shares", "Issue date", "Price per share"], Options: ["Grant ID", "Stakeholder ID", "Plan ID", "Type", "Options granted", "Exercise price", "Grant date", "Expiration date", "Vesting start date", "Vesting months", "Cliff months", "Vest every (months)", "Early exercise", "FMV at grant", "Exercised", "Vested", "Vested outstanding", "Cancelled", "Cancellation date", "Cancellation reason"],
+    Shares: shareColumns ?? ["Certificate ID", "Stakeholder ID", "Share class ID", "Plan ID", "Shares", "Issue date", "Price per share"], Options: ["Grant ID", "Stakeholder ID", "Plan ID", "Type", "Options granted", "Exercise price", "Grant date", "Expiration date", "Vesting start date", "Vesting months", "Cliff months", "Vest every (months)", "Early exercise", "FMV at grant", "Exercised", "Vested", "Vested outstanding", "Cancelled", "Cancellation date", "Cancellation reason"],
     Warrants: ["Warrant ID", "Stakeholder ID", "Share class ID", "Shares", "Exercise price", "Issue date", "Expiration date"], SAFEs: ["SAFE ID", "Stakeholder ID", "Principal", "Issue date", "Valuation cap", "Discount %", "Type"],
   };
   return { name: "Acme Cap Table.xlsx", bytes: buildWorkbook([{ name: "Instructions", rows: [["Instructions"]] }, ...Object.entries(headers).map(([name, columns]) => ({ name, rows: table(columns, data[name as keyof Data] ?? []) }))]) };

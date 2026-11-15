@@ -5,6 +5,7 @@ import type {
   ImportDraft,
   ImportProblem,
   ImportReferenceRow,
+  ImportVestingDefinition,
   ImportWritePlan,
   OpeningBalancePreview,
   PlannedLedgerCommand,
@@ -12,6 +13,7 @@ import type {
   PlannedTransaction,
   SecurityDraft,
   SourceLocation,
+  VestingDraft,
 } from "./types.ts";
 
 export interface MapOptions {
@@ -119,7 +121,10 @@ export function mapDraftToLedger(draft: ImportDraft, options: MapOptions): MapRe
     commands.push(command);
   }
 
+  // A regular schedule (months, frequency, cliff) is a template, one per distinct definition, that every grant on it uses,
+  // as a grant recorded in the app uses the template it was given; tranches from an agreement stay with their grant.
   const vestingTerms = new Map<string, { id: string; sha: string }>();
+  const templates = new Map<string, string>();
   for (const schedule of draft.vesting) {
     const security = securityBySource.get(schedule.securitySourceId);
     if (!security || security.issued === null) continue;
@@ -132,12 +137,24 @@ export function mapDraftToLedger(draft: ImportDraft, options: MapOptions): MapRe
       if (schedule.events.length === 0 || schedule.events.some((event) => !engine.isIsoDate(event.date) || event.quantity === null || !engine.Dec.isCanonical(event.quantity) || event.quantity === "0")) continue;
       const sum = addDecimals(schedule.events.map((event) => event.quantity!));
       if (sum === null || !decimalsEqual(sum, security.issued)) continue;
-      definition = { type: "EXPLICIT", events: schedule.events.map((event) => ({ date: event.date, quantity: event.quantity!, sourceId: event.sourceId.slice(0, 100), kind: event.milestone ? "EXPLICIT" : "SCHEDULED" })) };
+      definition = regularSchedule(schedule, security.issued, options.shareUnit)
+        ?? { type: "EXPLICIT", events: schedule.events.map((event) => ({ date: event.date, quantity: event.quantity!, sourceId: event.sourceId.slice(0, 100), kind: event.milestone ? "EXPLICIT" : "SCHEDULED" })) };
+    }
+    const sha = engine.definitionSha256(toEngineVestingDefinition(definition));
+    if (definition.type === "SCHEDULE") {
+      let id = templates.get(sha);
+      if (id === undefined) {
+        id = stableId(`vesting-template:${sha}`, options.orgId);
+        templates.set(sha, id);
+        // Its source is the first grant found on it, so it reads as imported, to be confirmed against the plan.
+        references.push({ entity: "vesting_terms", id, name: templateName(definition), isTemplate: true, definition, definitionSha256: sha, sourceId: security.sourceId });
+      }
+      vestingTerms.set(security.sourceId, { id, sha });
+      continue;
     }
     const id = stableId(`vesting:${security.sourceId}`, options.orgId);
-    const sha = engine.definitionSha256(toEngineVestingDefinition(definition));
     vestingTerms.set(security.sourceId, { id, sha });
-    references.push({ entity: "vesting_terms", id, name: `${security.displayId} vesting`, definition, definitionSha256: sha, sourceId: security.sourceId });
+    references.push({ entity: "vesting_terms", id, name: `${security.displayId} vesting`, isTemplate: false, definition, definitionSha256: sha, sourceId: security.sourceId });
   }
 
   // A dated exercise is historical only when the export names one resulting stock certificate and one tax portion.
@@ -446,6 +463,7 @@ function issuancePayload(
         origin: "PURCHASE",
         evidence: sourceEvidence,
         vesting,
+        repurchaseRight: vesting ? security.repurchaseRight : undefined,
       });
     case "option":
       if (!security.optionType || security.price === null) return null;
@@ -517,8 +535,10 @@ function stockIssuancePayload(
     portion?: "ISO" | "NSO";
     evidence: engine.Evidence[];
     vesting?: { id: string; sha: string };
+    repurchaseRight?: SecurityDraft["repurchaseRight"];
   },
 ): Record<string, unknown> {
+  const right = options.repurchaseRight;
   return {
     security_id: id,
     custom_id: security.displayId,
@@ -528,6 +548,13 @@ function stockIssuancePayload(
     share_price: money(options.amount, security.currency),
     quantity: security.issued,
     ...(options.vesting ? { vesting_terms_id: options.vesting.id, x_definition_sha256: options.vesting.sha } : {}),
+    ...(right ? {
+      x_repurchase_right: {
+        price_per_share: right.pricePerShare === null ? null : money(right.pricePerShare, security.currency),
+        window: right.windowDays === null || right.noDeadline ? null : { period: right.windowDays, period_type: "DAYS" },
+        ...(right.noDeadline ? { x_no_deadline: true } : {}),
+      },
+    } : {}),
     x_origin: options.origin,
     ...(options.sourceSecurityId ? { x_source_security_id: options.sourceSecurityId } : {}),
     ...(options.portion ? { x_portion: options.portion } : {}),
@@ -777,6 +804,44 @@ export function replayPlan(plan: ImportWritePlan): { state: engine.LedgerState; 
   const reference: engine.EngineReference = { orgId: plan.orgId, shareUnit: plan.shareUnit, securities, stockClasses, stockPlans, stakeholders, vestingTerms, commands };
   const state = engine.replay(reference, transactions, { asOf: plan.asOfDate });
   return { state, metrics: engine.computeMetrics(state) };
+}
+
+type ScheduleDefinition = Extract<ImportVestingDefinition, { type: "SCHEDULE" }>;
+
+/**
+ * The regular schedule an export's tranches follow, when the engine's own tranches for it (every date and quantity)
+ * are exactly the export's, so the grant vests the same either way. Tranches with a forfeited or a milestone event stay
+ * explicit: the termination and the milestones name them.
+ */
+function regularSchedule(schedule: VestingDraft, quantity: string, shareUnit: string): ScheduleDefinition | null {
+  const start = schedule.startDate;
+  if (!start || !engine.isIsoDate(start) || schedule.events.length < 2 || schedule.events.some((event) => event.cancelled || event.milestone !== null)) return null;
+  const events = [...schedule.events].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const monthsTo = (date: string): number | null => {
+    const months = (Number(date.slice(0, 4)) - Number(start.slice(0, 4))) * 12 + Number(date.slice(5, 7)) - Number(start.slice(5, 7));
+    return months > 0 && months <= 240 && engine.addMonths(start, months) === date ? months : null;
+  };
+  const first = monthsTo(events[0]!.date);
+  const before = monthsTo(events.at(-2)!.date);
+  const last = monthsTo(events.at(-1)!.date);
+  if (first === null || before === null || last === null) return null;
+  const every = last - before;
+  const frequency: ScheduleDefinition["frequency"] | null = every === 1 ? "MONTHLY" : every === 3 ? "QUARTERLY" : every === 12 ? "ANNUALLY" : null;
+  if (frequency === null || last % every !== 0 || first % every !== 0) return null;
+  const candidates: ScheduleDefinition[] = [
+    ...(first > every ? [{ type: "SCHEDULE" as const, totalMonths: last, frequency, cliff: { months: first, quantityRule: "RATABLE" as const }, dayRule: "SAME_DAY_CLAMPED" as const }] : []),
+    { type: "SCHEDULE", totalMonths: last, frequency, cliff: null, dayRule: "SAME_DAY_CLAMPED" },
+  ];
+  return candidates.find((definition) => {
+    const generated = engine.generateSchedule(definition, quantity, start, shareUnit);
+    return generated.length === events.length && generated.every((event, index) => event.date === events[index]!.date && event.quantity.toCanonical() === events[index]!.quantity);
+  }) ?? null;
+}
+
+/** "48 months, monthly, 12-month cliff": the name the Vesting page's normalized template column gives a schedule. */
+function templateName(definition: ScheduleDefinition): string {
+  const frequency = { MONTHLY: "monthly", QUARTERLY: "quarterly", ANNUALLY: "annually" }[definition.frequency];
+  return `${definition.totalMonths} months, ${frequency}${definition.cliff ? `, ${definition.cliff.months}-month cliff` : ", no cliff"}`;
 }
 
 export function toEngineVestingDefinition(definition: Extract<ImportReferenceRow, { entity: "vesting_terms" }>["definition"]): engine.VestingDefinition {

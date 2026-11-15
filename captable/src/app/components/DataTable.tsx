@@ -1,5 +1,6 @@
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsUpDownIcon, Columns3Icon, FilterIcon, Rows3Icon, SearchIcon, XIcon } from "lucide-react";
+import { compareDisplayIds } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
@@ -76,13 +77,8 @@ export const byText = <T,>(get: (row: T) => string | null | undefined) => (a: T,
 export const byDecimal = <T,>(get: (row: T) => string | null | undefined) => (a: T, b: T) => compareDecimals(get(a) ?? "0", get(b) ?? "0");
 export const byRatio = <T,>(get: (row: T) => string | null | undefined) => (a: T, b: T) => compareRatios(get(a) ?? "0", get(b) ?? "0");
 export const byNumber = <T,>(get: (row: T) => number | null | undefined) => (a: T, b: T) => (get(a) ?? -Infinity) - (get(b) ?? -Infinity);
-/** Display ids in their natural order: CS-2 before CS-10, then by prefix. */
-export const byDisplayId = <T,>(get: (row: T) => string) => (a: T, b: T) => {
-  const split = (id: string) => /^(.*?)(\d*)$/.exec(id) ?? ["", id, ""];
-  const [, pa = "", na = ""] = split(get(a));
-  const [, pb = "", nb = ""] = split(get(b));
-  return pa === pb ? Number(na || 0) - Number(nb || 0) : pa.localeCompare(pb);
-};
+/** Display ids in their natural order: CS-2 before CS-10, PA2-1 before PA10-1. */
+export const byDisplayId = <T,>(get: (row: T) => string) => (a: T, b: T) => compareDisplayIds(get(a), get(b));
 
 interface Prefs {
   columns: Record<string, boolean>;

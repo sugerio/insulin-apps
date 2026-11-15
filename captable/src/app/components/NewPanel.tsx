@@ -11,8 +11,8 @@ export function NewPanel({ companyBase, onClose }: { companyBase: string; onClos
     <Modal title="Add contracts" onClose={onClose}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h3 className="text-sm font-semibold">Add a signed agreement to the cap table</h3>
-          <p className="text-xs text-muted-foreground">Record an option grant that is already approved by the board and signed by the holder and the company signatory.</p>
+          <h3 className="text-sm font-semibold">Add an option grant to the cap table</h3>
+          <p className="text-xs text-muted-foreground">Record an option grant approved by the board, whether its agreement is signed or still awaits a signature.</p>
         </div>
         <Item asChild variant="outline">
           <Link to={`${companyBase}/issue/options?mode=existing`} onClick={onClose}>

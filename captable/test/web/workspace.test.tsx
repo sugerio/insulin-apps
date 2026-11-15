@@ -104,8 +104,10 @@ describe("keyboard and focus", () => {
     expect(ownership.getAttribute("tabindex")).toBe("0");
     fireEvent.keyDown(ownership, { key: "ArrowRight" });
     await waitFor(() => expect(router.state.location.search).toBe("?tab=shares"));
+    await waitFor(() => expect(document.activeElement).toBe(within(tabs).getByRole("tab", { name: /^Shares/ })));
     fireEvent.keyDown(within(tabs).getByRole("tab", { name: /^Shares/ }), { key: "End" });
     await waitFor(() => expect(router.state.location.search).toBe("?tab=warrants"));
+    await waitFor(() => expect(document.activeElement).toBe(within(tabs).getByRole("tab", { name: /^Warrants/ })));
   });
 
   it("opens an audit row with Enter and gives focus back when the drawer closes", async () => {

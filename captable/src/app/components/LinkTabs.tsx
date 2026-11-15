@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { cn } from "@/lib/utils.ts";
 
@@ -12,9 +12,18 @@ export interface LinkTab {
   to: string;
 }
 
+// The tab a key press moved to. Tabs that are separate routes (Compliance & Tax) mount a new LinkTabs with the page, so
+// the one that renders this tab as selected takes the focus, whichever instance that is.
+let pendingFocus: { label: string; id: string } | null = null;
+
 export function LinkTabs({ tabs, selected, label }: { tabs: readonly LinkTab[]; selected: string; label: string }) {
   const navigate = useNavigate();
   const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (pendingFocus?.label !== label || pendingFocus.id !== selected) return;
+    pendingFocus = null;
+    list.current?.querySelector<HTMLElement>(`[data-tab="${selected}"]`)?.focus();
+  }, [label, selected]);
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>, index: number) => {
     let next: number | null = null;
     if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
@@ -24,8 +33,8 @@ export function LinkTabs({ tabs, selected, label }: { tabs: readonly LinkTab[]; 
     const tab = next === null ? undefined : tabs[next];
     if (!tab) return;
     event.preventDefault();
+    pendingFocus = { label, id: tab.id };
     navigate(tab.to);
-    requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-tab="${tab.id}"]`)?.focus());
   };
   return (
     <div

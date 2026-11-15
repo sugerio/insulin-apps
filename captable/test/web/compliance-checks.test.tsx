@@ -1,5 +1,5 @@
 import "./setup.ts";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { api } from "#shared";
 import { IDS, SECURITIES, security, securityList, uuid, valuation, VALUATIONS } from "./support/acme.ts";
@@ -59,6 +59,23 @@ describe("Compliance & Tax › 83(b) elections", () => {
     expect(within(tabs).getAllByRole("tab").map((tab) => [tab.textContent, tab.getAttribute("href")])).toEqual([
       ["409A Valuations", `${base}/compliance/409a`], ["83(b) elections", `${base}/compliance/83b`], ["Checks", `${base}/compliance/checks`],
     ]);
+  });
+
+  it("keeps the keyboard focus on the selected tab when the arrow keys move to another tab's page", async () => {
+    const { router } = renderPage("compliance/409a", [
+      mock(api.routes.listValuations, { items: VALUATIONS }),
+      mock(api.routes.listStockClasses, { asOf: "2026-10-21", asKnownAt: 412, ledgerSeq: 412, ledgerHeadHash: "ab".repeat(32), engineVersion: "1.0.0", items: [] }),
+      mock(api.routes.listElections83b, { items: [] }),
+      mock(api.routes.listSecurities, SECURITY_LIST),
+    ]);
+    const valuations = await screen.findByRole("tab", { name: "409A Valuations" });
+    valuations.focus();
+    fireEvent.keyDown(valuations, { key: "ArrowRight" });
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/compliance/83b`));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("tab", { name: "83(b) elections" })));
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/compliance/409a`));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("tab", { name: "409A Valuations" })));
   });
 
   it("says when no election is recorded, and lets a failed read be retried", async () => {

@@ -143,7 +143,8 @@ function ToolbarPopover({ label, count, icon, children }: { label: string; count
           {count ? <Badge variant="secondary">{count}</Badge> : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" aria-label={label} className="w-72">
+      {/* A long list of filters scrolls inside the room the window has, so Done stays reachable on a short screen. */}
+      <PopoverContent align="end" aria-label={label} className="max-h-(--radix-popover-content-available-height) w-72 overflow-y-auto">
         <PopoverHeader>
           <PopoverTitle>{label}</PopoverTitle>
         </PopoverHeader>

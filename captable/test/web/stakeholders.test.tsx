@@ -60,6 +60,16 @@ describe("stakeholders list", () => {
     expect(within(table).getByText("Marcus Oyelaran")).toBeTruthy();
   });
 
+  it("keeps the Filters panel within the window, scrolling when its filters are taller", async () => {
+    renderPage("stakeholders", [list]);
+    await screen.findByRole("table", { name: "Stakeholders" });
+    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
+    // jsdom has no layout: the panel must carry Radix's available-height limit and scroll, as the menus and selects do.
+    const panel = screen.getByRole("dialog", { name: "Filters" });
+    expect(panel.className.split(" ")).toEqual(expect.arrayContaining(["max-h-(--radix-popover-content-available-height)", "overflow-y-auto"]));
+    expect(within(panel).getByRole("button", { name: "Done" })).toBeTruthy();
+  });
+
   it("masks e-mails for editors without personal data, won't search them, and offers only Download", async () => {
     renderPage("stakeholders", [list], { role: "admin_ro" });
     const table = await screen.findByRole("table", { name: "Stakeholders" });

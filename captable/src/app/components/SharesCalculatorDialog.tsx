@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field.tsx";
 import { Input } from "@/components/ui/input.tsx";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { apiRequest } from "../api/request.ts";
 import { useReturnFocus } from "./Dialog.tsx";
 import { compareDecimals, formatFractionPercent, fractionOf, fromUnits, isPositive, multiplyDecimals, toUnits } from "../lib/decimal.ts";
@@ -81,25 +81,19 @@ export function SharesCalculatorDialog({ fullyDiluted, onClose }: { fullyDiluted
           {preferred.length ? (
             <Field>
               <FieldLabel htmlFor={ids.price}>Value at the price of</FieldLabel>
-              <Select value={chosen?.id ?? ""} onValueChange={setClassId}>
-                <SelectTrigger id={ids.price} className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {preferred.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>{item.name} ({format.price(item.originalIssuePrice)})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <NativeSelect id={ids.price} className="w-full" value={chosen?.id ?? ""} onChange={(event) => setClassId(event.target.value)}>
+                {preferred.map((item) => (
+                  <NativeSelectOption key={item.id} value={item.id}>{item.name} ({format.price(item.originalIssuePrice)})</NativeSelectOption>
+                ))}
+              </NativeSelect>
             </Field>
           ) : null}
           {commons.length > 1 ? (
             <Field>
               <FieldLabel htmlFor={ids.common}>Exercise at the 409A price of</FieldLabel>
-              <Select value={common?.id ?? ""} onValueChange={setCommonId}>
-                <SelectTrigger id={ids.common} className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {commons.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <NativeSelect id={ids.common} className="w-full" value={common?.id ?? ""} onChange={(event) => setCommonId(event.target.value)}>
+                {commons.map((item) => <NativeSelectOption key={item.id} value={item.id}>{item.name}</NativeSelectOption>)}
+              </NativeSelect>
             </Field>
           ) : null}
         </FieldGroup>

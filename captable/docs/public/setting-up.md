@@ -145,7 +145,7 @@ One row per certificate or share lot.
 | Cliff months | for shares that vest | `0` for no cliff; never more than the vesting months. |
 | Vest every (months) | for shares that vest | `1` (monthly), `3` (quarterly) or `12` (annually), as for options. |
 | Repurchase price per share | no | For shares that vest: what the company pays per share to buy back unvested shares after the holder leaves. |
-| Repurchase window (days) | no | For shares that vest: whole days after the termination to buy them back, from 0 to 1,200. Blank means the plan's default window. |
+| Repurchase window (days) | no | For shares that vest: whole days after the termination to buy them back, from 0 to 1,200. Blank gives the lot no window of its own, and an import records no plan default: for a holder the workbook lists as terminated, no deadline is recorded, so a repurchase needs counsel's authority; terminating a holder later in Cap Table asks for the lot's last repurchase date. |
 | No repurchase deadline | no | `Yes` only if the agreement sets no deadline for the buyback; then leave the window blank. |
 
 A workbook downloaded before the Shares sheet had its vesting and repurchase columns still imports: its shares don't

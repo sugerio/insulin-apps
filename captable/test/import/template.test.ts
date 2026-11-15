@@ -71,6 +71,15 @@ describe("Cap Table spreadsheet template", () => {
     expect(right("RS-2")).toMatchObject({ window: { period: 90, period_type: "DAYS" }, noDeadline: false });
   });
 
+  it("reads No in No repurchase deadline on a lot that doesn't vest as no repurchase term", () => {
+    const preview = buildTemplateImportPreview(filledTemplate((data) => {
+      data.Shares[0]!["No repurchase deadline"] = "No";
+    }, SHARE_COLUMNS));
+    expect(preview.problems.filter((item) => item.severity === "error")).toEqual([]);
+    const issuance = preview.plan!.commands.flatMap((command) => command.transactions).find((tx) => tx.type === "TX_STOCK_ISSUANCE" && tx.payload.custom_id === "CS-1")!;
+    expect(issuance.payload.x_repurchase_right).toBeUndefined();
+  });
+
   it("names the cell for a lot's incomplete vesting or repurchase terms it can't use", () => {
     const base = { "Certificate ID": "RS-1", "Stakeholder ID": "holder_1", "Share class ID": "common", "Plan ID": "", Shares: { number: "480" }, "Issue date": { date: "2025-01-15" }, "Price per share": { number: "0.01" } };
     const preview = buildTemplateImportPreview(filledTemplate((data) => {
@@ -88,6 +97,17 @@ describe("Cap Table spreadsheet template", () => {
     expect(at("TEMPLATE_VESTING_FREQUENCY_UNSUPPORTED")).toEqual(["5 Vest every (months)"]);
     expect(at("TEMPLATE_VALUE_UNSUPPORTED")).toEqual(["6 No repurchase deadline"]);
     expect(preview.problems.find((item) => item.code === "TEMPLATE_REPURCHASE_WITHOUT_VESTING")?.message).toBe("Shares row 4, a repurchase right covers unvested shares: enter the lot's vesting columns too.");
+    expect(preview.canImport).toBe(false);
+  });
+
+  it("refuses a whole number too long to be exact rather than import the lot without its vesting", () => {
+    const preview = buildTemplateImportPreview(filledTemplate((data) => {
+      data.Shares.push({
+        "Certificate ID": "RS-1", "Stakeholder ID": "holder_1", "Share class ID": "common", "Plan ID": "", Shares: { number: "480" }, "Issue date": { date: "2025-01-15" }, "Price per share": { number: "0.01" },
+        "Vesting start date": { date: "2025-01-15" }, "Vesting months": "48", "Cliff months": "12", "Vest every (months)": "9".repeat(400), "No repurchase deadline": "Yes",
+      });
+    }, SHARE_COLUMNS));
+    expect(preview.problems.filter((item) => item.code === "TEMPLATE_INTEGER_INVALID").map((item) => `${item.source?.row} ${item.source?.column}`)).toEqual(["3 Vest every (months)"]);
     expect(preview.canImport).toBe(false);
   });
 

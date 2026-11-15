@@ -137,7 +137,10 @@ export function mapDraftToLedger(draft: ImportDraft, options: MapOptions): MapRe
       if (schedule.events.length === 0 || schedule.events.some((event) => !engine.isIsoDate(event.date) || event.quantity === null || !engine.Dec.isCanonical(event.quantity) || event.quantity === "0")) continue;
       const sum = addDecimals(schedule.events.map((event) => event.quantity!));
       if (sum === null || !decimalsEqual(sum, security.issued)) continue;
-      definition = regularSchedule(schedule, security.issued, options.shareUnit)
+      // A schedule runs from the vesting start the issuance records; a security with no issue date comes in as an opening
+      // balance, which records none, so its tranches stay its own.
+      const issued = security.issueDate !== null && engine.isIsoDate(security.issueDate);
+      definition = (issued ? regularSchedule(schedule, security.issued, options.shareUnit) : null)
         ?? { type: "EXPLICIT", events: schedule.events.map((event) => ({ date: event.date, quantity: event.quantity!, sourceId: event.sourceId.slice(0, 100), kind: event.milestone ? "EXPLICIT" : "SCHEDULED" })) };
     }
     const sha = engine.definitionSha256(toEngineVestingDefinition(definition));

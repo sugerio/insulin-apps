@@ -87,6 +87,18 @@ describe("source-neutral spreadsheet import", () => {
     expect(replayPlan(uneven.plan!).metrics.securities.find((item) => item.displayId === "OPT-14")?.vested.toCanonical()).toBe("240");
   });
 
+  it("keeps the tranches of a grant with no issue date, whose opening balance records no vesting start", () => {
+    const preview = buildImportPreview(acmeExportFiles((data: any) => {
+      data.raw.Securities.find((row: any) => row.CertificateId === "OPT-PREF").IssueDate = "";
+      data.detailed["2025 Preferred Equity Plan"][0]["Grant Date"] = "";
+      data.vestingSubjects.find((row: any) => row["Security ID"] === "OPT-PREF")["Grant Date"] = "";
+    }), OPTIONS);
+    expect(errors(preview)).toEqual([]);
+    const terms = preview.plan!.referenceRows.filter((row) => row.entity === "vesting_terms");
+    expect(terms.find((row) => row.name === "OPT-PREF vesting")).toMatchObject({ isTemplate: false, definition: { type: "EXPLICIT" } });
+    expect(replayPlan(preview.plan!).metrics.securities.find((item) => item.displayId === "OPT-PREF")?.vested.toCanonical()).toBe("25");
+  });
+
   it("blocks changed, missing, and zero vesting events instead of dropping vesting", () => {
     for (const mutate of [
       (data: any) => { data.vestingEvents.find((row: any) => row["Security ID"] === "OPT-14")["Quantity Vested"] = "119"; },

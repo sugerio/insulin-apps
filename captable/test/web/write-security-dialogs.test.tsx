@@ -848,10 +848,14 @@ describe("record repurchase", () => {
     await waitFor(() => expect(document.activeElement).toBe(button));
   });
 
-  /** "Paid by" is a shadcn/ui (Radix) Select: open it from the keyboard, then pick the option. */
+  /** "Paid by" is a native <select> (the app's form-control rule), starting on its placeholder. */
   async function payBy(method: "CHECK" | "WIRE" | "ACH") {
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "Paid by" }), { key: "Enter" });
-    fireEvent.click(await screen.findByRole("option", { name: REPURCHASE_METHOD_LABELS[method] }));
+    const select = screen.getByRole("combobox", { name: "Paid by" }) as HTMLSelectElement;
+    expect(select.tagName).toBe("SELECT");
+    expect(select.options[0]!.textContent).toBe("Choose how the company paid");
+    expect([...select.options].map((option) => option.value)).toContain(method);
+    fireEvent.change(select, { target: { value: method } });
+    expect(select.selectedOptions[0]!.textContent).toBe(REPURCHASE_METHOD_LABELS[method]);
   }
 
   it("records it from Securities Status: every unvested share, the price, how it was paid and the notice, then the typed ID", async () => {

@@ -48,15 +48,12 @@ describe("% shares calculator", () => {
     expect(value(/^Cost to exercise at the 409A FMV \(\$0\.95\)/)).toBe("$57,741.00");
     expect(callsTo(api.routes.getFmv)[0]?.query.get("date")).toBe(TODAY);
 
-    const price = within(dialog).getByRole("combobox", { name: "Value at the price of" });
-    // A shadcn/ui (Radix) Select: open it from the keyboard, then pick the option.
-    fireEvent.keyDown(price, { key: "Enter" });
-    fireEvent.click(await screen.findByRole("option", { name: /Series Seed Preferred/ }));
+    // A native <select> (the app's form-control rule) offering only preferred classes with an original issue price.
+    const price = within(dialog).getByRole("combobox", { name: "Value at the price of" }) as HTMLSelectElement;
+    expect(price.tagName).toBe("SELECT");
+    expect([...price.options].map((option) => option.textContent)).toEqual(["Series Seed Preferred ($0.80)", "Series A-1 Preferred ($1.25)"]);
+    fireEvent.change(price, { target: { value: SEED_CLASS.id } });
     await waitFor(() => expect(value(/^Value at Series Seed Preferred price/)).toBe("$48,624.00"));
-    // Only preferred classes with an original issue price are offered.
-    fireEvent.keyDown(price, { key: "Enter" });
-    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual(["Series Seed Preferred ($0.80)", "Series A-1 Preferred ($1.25)"]);
-    expect(screen.queryByRole("option", { name: /Common Stock/ })).toBeNull();
   });
 
   it("gives focus back to its button when it closes", async () => {
@@ -83,10 +80,11 @@ describe("% shares calculator", () => {
     const value = (term: RegExp) => within(estimate).getByText(term).nextElementSibling?.textContent;
     await waitFor(() => expect(value(/^Cost to exercise at the 409A FMV \(\$0\.95\)/)).toBe("$57,741.00"));
     expect(callsTo(api.routes.getFmv).map((call) => call.query.get("stockClassId"))).toEqual([IDS.common]);
-    const common = within(dialog).getByRole("combobox", { name: "Exercise at the 409A price of" });
-    fireEvent.keyDown(common, { key: "Enter" });
-    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual(["Common Stock", "Class B Common Stock"]);
-    fireEvent.click(screen.getByRole("option", { name: "Class B Common Stock" }));
+    // A choice from a list is a native <select> (the app's form-control rule).
+    const common = within(dialog).getByRole("combobox", { name: "Exercise at the 409A price of" }) as HTMLSelectElement;
+    expect(common.tagName).toBe("SELECT");
+    expect([...common.options].map((option) => option.textContent)).toEqual(["Common Stock", "Class B Common Stock"]);
+    fireEvent.change(common, { target: { value: classB.id } });
     await waitFor(() => expect(value(/^Cost to exercise at the 409A FMV \(\$0\.40\)/)).toBe("$24,312.00"));
     expect(callsTo(api.routes.getFmv).at(-1)?.query.get("stockClassId")).toBe(classB.id);
   });

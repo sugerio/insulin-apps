@@ -14,9 +14,9 @@ everything described here but can't change anything. Holders see only their own 
 
 - **Review, then confirm.** Before anything is saved, Cap Table shows exactly what will change, including any problem
   that stops it. Some changes ask you to type the record's ID (such as `OPT-33`) to confirm.
-- **Start from the record.** **+ New** at the top of the navigation records a signed option grant. Most other changes start
-  on the page of the thing they concern: record an exercise from the option, terminate someone from their stakeholder
-  page, and so on.
+- **Start from the record.** **+ New** at the top of the navigation records an approved option grant, signed or
+  awaiting signatures. Most other changes start on the page of the thing they concern: record an exercise from the
+  option, terminate someone from their stakeholder page, and so on.
 - **Not your own holdings.** If you hold equity, someone else who manages the cap table records changes to it, so nobody
   approves their own transactions.
 - **Exact numbers.** Quantities and amounts are never rounded behind your back. Percentages and money are rounded only
@@ -149,7 +149,7 @@ Use this for a grant the board has already approved, signed or not yet. Choose *
 
 Then choose **Record grant**. The grant is outstanding at once, and the plan's availability goes down.
 
-![The record option grant form for a fictional company, with plan, stakeholder, quantity and vesting fields](/docs/assets/screenshots/captable-record-grant.png "Recording a signed option grant")
+![The record option grant form for a fictional company, with plan, stakeholder, quantity and vesting fields](/docs/assets/screenshots/captable-record-grant.png "Recording an option grant")
 
 ### Grants waiting for signatures
 

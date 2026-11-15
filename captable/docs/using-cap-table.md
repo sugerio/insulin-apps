@@ -63,8 +63,9 @@ Each column collapses to its icons (the names show as tooltips), remembered in y
 menu button in the top bar opens both. Each section also has an address on Cap Table's host that leads to the page in
 your organization's company, such as `/vesting` or `/portfolio/documents`.
 
-**+ New** at the top of the navigation records a signed option grant. Most other changes are made from the page of the
-thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.
+**+ New** at the top of the navigation records an approved option grant, signed or awaiting signatures. Most other
+changes are made from the page of the thing they concern: record an exercise from the option, terminate someone from
+their stakeholder page, and so on.
 Before anything is saved, Cap Table shows a review of exactly what will change, including any problem that stops it.
 
 If you also hold equity, you can't record changes to your own stakeholder record or holdings: someone else who manages
@@ -129,8 +130,8 @@ A stakeholder is anyone who holds, or held, equity: a person or an institution.
 
 ## Recording an option grant
 
-Use this for a grant the board has already approved, signed or not yet: **+ New**, then **Options** under "Add a
-signed agreement to the cap table" (or **Add options** in the cap table's Actions). You'll need:
+Use this for a grant the board has already approved, signed or not yet: **+ New**, then **Options** under "Add an
+option grant to the cap table" (or **Add options** in the cap table's Actions). You'll need:
 
 1. **The equity plan.** The form shows what's available; a grant can't exceed it.
 2. **The stakeholder**, or add a new one on the spot.

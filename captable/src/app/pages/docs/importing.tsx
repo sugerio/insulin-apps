@@ -120,7 +120,9 @@ export const importing: DocTopic = {
             Where the template is silent, Cap Table uses a stated default and lists it in the preview: for example a conversion
             ratio of 1, a 90-day exercise window, and unused plan shares returning to the pool. Option grants and vesting shares from
             the template vest monthly, quarterly or annually from their vesting start date. A vesting share lot with no repurchase
-            window of its own takes its plan's default window. A workbook downloaded before the Shares sheet had its vesting and
+            window of its own gets no plan default either (an import records none): for a holder the workbook lists as
+            terminated, no deadline is recorded, so a repurchase needs counsel's authority, and terminating a holder later in
+            Cap Table asks for the lot's last repurchase date. A workbook downloaded before the Shares sheet had its vesting and
             repurchase columns still imports: its shares don't vest.
           </p>
         </>

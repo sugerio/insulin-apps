@@ -13,7 +13,7 @@ const AT = Date.UTC(2026, 9, 21, 16, 40);
 export const OTHER_ORG_ID = uuid(1, 2);
 
 export function portalDocument(overrides: Partial<api.PortalDocument> & { id: string; filename: string }): api.PortalDocument {
-  return api.portalDocumentSchema.parse({ kind: "GRANT_AGREEMENT", createdAt: Date.UTC(2026, 9, 1), scope: "mine", ...overrides });
+  return api.portalDocumentSchema.parse({ kind: "GRANT_AGREEMENT", createdAt: Date.UTC(2026, 9, 1), sourceCreatedAt: null, scope: "mine", ...overrides });
 }
 
 const numbers = (overrides: Partial<api.PortalSecurityNumbers> = {}): api.PortalSecurityNumbers => ({
@@ -23,7 +23,8 @@ const numbers = (overrides: Partial<api.PortalSecurityNumbers> = {}): api.Portal
 export function portalSecurity(overrides: Partial<api.PortalSecurity> & { id: string; displayId: string }): api.PortalSecurity {
   return api.portalSecuritySchema.parse({
     orgId: ORG_ID, family: "STOCK", optionType: null, className: "Common Stock", planName: null, issueDate: "2023-03-31", status: "OUTSTANDING",
-    executionPending: false, exercisePrice: null, expirationDate: null, contractualDeadline: null, isoDeadline: null, numbers: numbers(), vesting: [], documents: [],
+    executionPending: null, exercisePrice: null, expirationDate: null, contractualDeadline: null, isoDeadline: null, numbers: numbers(), vestingStartDate: null,
+    vesting: [], documents: [],
     ...overrides,
   });
 }
@@ -43,8 +44,10 @@ type DetailOverrides = Partial<api.PortalOptionDetail> | Partial<api.PortalShare
 /** A security's holding detail (`getPortalSecurity`): the family's defaults, then the given facts. */
 export function securityDetail(security: api.PortalSecurity, overrides: DetailOverrides = {}): api.PortalSecurityDetail {
   const defaults = {
-    EQUITY_COMPENSATION: { family: "EQUITY_COMPENSATION", earlyExerciseAllowed: false, isoSplit: [], postTerminationPeriods: PLAN_WINDOWS, exercises: [] },
-    STOCK: { family: "STOCK", pricePerShare: null, form: "book_entry", legends: [], election83b: null, repurchase: null, origin: null },
+    EQUITY_COMPENSATION: {
+      family: "EQUITY_COMPENSATION", earlyExerciseAllowed: false, isoSplit: [], postTerminationPeriods: PLAN_WINDOWS, boardApprovalDate: null, acceleration: null, exercises: [],
+    },
+    STOCK: { family: "STOCK", pricePerShare: null, form: "book_entry", legends: [], holdingStartDate: null, election83b: null, repurchase: null, origin: null },
     WARRANT: { family: "WARRANT" },
     CONVERTIBLE: { family: "CONVERTIBLE", principal: "50000", terms: { form: null, valuationCap: null, discountRate: null }, conversion: null },
   }[security.family];
@@ -65,6 +68,7 @@ export const NADIA_OPTION = portalSecurity({
   id: uuid(6, 120), displayId: "OPT-20", family: "EQUITY_COMPENSATION", optionType: "ISO", className: "Common Stock", planName: "2023 Equity Incentive Plan",
   issueDate: "2024-08-15", exercisePrice: "0.31", expirationDate: "2034-08-15", contractualDeadline: "2027-02-28", isoDeadline: "2026-11-30",
   numbers: numbers({ granted: "120000", outstanding: "60000", vested: "60000", unvested: "0", exercised: "0", exercisable: "60000", cancelled: "60000" }),
+  vestingStartDate: "2024-08-01",
   // 4 years monthly from Aug 1, 2024 with a 1-year cliff; vesting stopped on the Aug 31, 2026 termination.
   vesting: [{ date: "2025-08-01", quantity: "30000", cumulative: "30000", status: "VESTED" }, ...monthly("2025-09-01", 36, 2500, "2026-08-31").map((event, index) => ({ ...event, cumulative: String(30000 + 2500 * (index + 1)) }))],
   documents: [
@@ -89,6 +93,8 @@ export const DANIEL_OPTION = portalSecurity({
   id: IDS.opt1, displayId: "OPT-1", family: "EQUITY_COMPENSATION", optionType: "ISO", planName: "2023 Equity Incentive Plan", issueDate: "2023-04-14",
   exercisePrice: "0.1", expirationDate: "2033-04-14",
   numbers: numbers({ granted: "300000", outstanding: "250000", vested: "268750", unvested: "31250", exercised: "50000", exercisable: "218750", cancelled: "0" }),
+  // 4 years monthly from Mar 1, 2023 with a 1-year cliff.
+  vestingStartDate: "2023-03-01",
   vesting: [{ date: "2024-03-01", quantity: "75000", cumulative: "75000", status: "VESTED" }, ...monthly("2024-04-01", 36, 6250).map((event, index) => ({ ...event, cumulative: String(75000 + 6250 * (index + 1)) }))],
 });
 export const DANIEL_SHARES = portalSecurity({ id: IDS.cs7, displayId: "CS-7", issueDate: "2026-03-20", numbers: numbers({ granted: "50000", outstanding: "50000", vested: "50000" }) });

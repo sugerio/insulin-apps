@@ -82,6 +82,17 @@ describe("exercise requests", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("says a migrated exercise's payment method wasn't recorded in Pulley, rather than leaving it blank", async () => {
+    const unpaid = exercise({ transactionId: uuid(17, 4), exerciseDate: "2024-09-01", paymentMethod: null, paymentReference: null, source: { kind: "migrated", requestNumber: null } });
+    renderPage("exercise-requests", [mock(api.routes.listExercises, { items: [...EXERCISES, unpaid] }), ...handlers.slice(1)]);
+    const table = await screen.findByRole("table", { name: "Exercises" });
+    expect(within(rowOf(table, "Sep 1, 2024")).getByText("Not recorded in Pulley")).toBeTruthy();
+    // A migrated exercise whose Pulley request named the method shows it.
+    expect(within(rowOf(table, "Aug 20, 2025")).getByText("Wire")).toBeTruthy();
+    fireEvent.click(within(rowOf(table, "Sep 1, 2024")).getByRole("button", { name: /View/ }));
+    expect(within(screen.getByRole("dialog")).getByText("Not recorded in Pulley")).toBeTruthy();
+  });
+
   it("filters exercises by payment method", async () => {
     renderPage("exercise-requests", handlers);
     const table = await screen.findByRole("table", { name: "Exercises" });

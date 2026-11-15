@@ -41,11 +41,12 @@ interface RequestLink {
   id: string;
   request_number: number;
   completed_command_id: string | null;
+  payment_method: api.ExerciseRequest["paymentMethod"];
 }
 
 export async function exerciseRecords(ctx: ReadContext, state: engine.LedgerState, filter: { year?: number | undefined; stakeholderId?: string } = {}): Promise<api.ExerciseRecord[]> {
   const { results: requests } = await ctx.db.prepare(
-    "SELECT id, request_number, completed_command_id FROM exercise_requests WHERE org_id = ? AND completed_command_id IS NOT NULL",
+    "SELECT id, request_number, completed_command_id, payment_method FROM exercise_requests WHERE org_id = ? AND completed_command_id IS NOT NULL",
   ).bind(ctx.org.id).all<RequestLink>();
   const byCommand = new Map(requests.map((request) => [request.completed_command_id!, request]));
   const { results: names } = await ctx.db.prepare("SELECT id, display_name FROM stakeholders WHERE org_id = ?").bind(ctx.org.id).all<{ id: string; display_name: string }>();
@@ -85,7 +86,9 @@ export async function exerciseRecords(ctx: ReadContext, state: engine.LedgerStat
       nsoQuantity: dec(nso),
       exercisePrice: price,
       cost,
-      paymentMethod: p.x_payment?.method ?? null,
+      // A recorded payment, else the method of the request it completed (an imported exercise's request); an
+      // imported exercise with neither has none ("Not recorded").
+      paymentMethod: p.x_payment?.method ?? request?.payment_method ?? null,
       paymentReference: p.x_payment?.reference ?? null,
       fmvPerShare: p.x_fmv?.price_per_share.amount ?? null,
       taxTreatment: p.x_tax?.treatment ?? null,

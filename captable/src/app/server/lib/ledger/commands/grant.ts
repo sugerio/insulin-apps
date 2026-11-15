@@ -32,12 +32,35 @@ interface PlanRow {
 /** Relationships that can hold an ISO: the holder must be an employee at grant (the product rules). */
 const ISO_ELIGIBLE: ReadonlySet<string> = new Set(["employee", "officer", "founder"]);
 
+/** The execution status of a grant recorded before every signature is in. */
+const PENDING_STATUS: Record<api.GrantMissingSignatures, engine.ExecutionStatus> = {
+  holder: "pending_holder",
+  company: "pending_company",
+  both: "pending_both",
+};
+
+/** How the grant is executed: the agreement signed by both parties, or awaiting signatures with what is signed so far. */
+type GrantExecution =
+  | { kind: "executed"; agreementId: string }
+  | { kind: "awaiting"; status: engine.ExecutionStatus; agreementId: string | null };
+
+function executionOf(body: GrantFields): GrantExecution {
+  if (body.executedAgreement !== undefined) return { kind: "executed", agreementId: body.executedAgreement.documentId };
+  if (body.awaitingSignatures !== undefined) {
+    return { kind: "awaiting", status: PENDING_STATUS[body.awaitingSignatures.missing], agreementId: body.awaitingSignatures.agreementDocumentId ?? null };
+  }
+  throw new ApiError("validation_failed", "Attach the executed agreement, or say whose signature is still missing", [{ path: "executedAgreement", message: "Required" }]);
+}
+
 /**
- * grant-equity-compensation (the API contract; the product rules): records an option grant that is already approved
- * and signed. Blocks without the board consent, the executed agreement or a presumptively valid 409A (an administrator
- * may override the 409A with a counsel memo), beyond plan availability, and on the ISO rules.
+ * grant-equity-compensation (the API contract; the product rules): records an approved option grant. Blocks without
+ * the board consent or a presumptively valid 409A (an administrator may override the 409A with a counsel memo), beyond
+ * plan availability, and on the ISO rules. The grant is executed with the agreement signed by both parties, or
+ * recorded at board approval before every signature is in: then it is execution pending from the grant date until
+ * Mark executed, and the agreement as signed so far is evidence, never the grant's agreement.
  */
 export async function planGrant(ctx: CommandContext, body: GrantFields): Promise<{ plan: CommandPlan; documents: CommandDocuments }> {
+  const execution = executionOf(body);
   await assertNotSelfDealing(ctx, [body.stakeholderId]);
   const stakeholder = await stakeholderOr404(ctx, body.stakeholderId);
   const stockPlan = await ctx.db.prepare(
@@ -54,13 +77,13 @@ export async function planGrant(ctx: CommandContext, body: GrantFields): Promise
   const currency = ctx.org.currency;
 
   await documents.require(body.board.consentDocumentId);
-  await documents.require(body.executedAgreement.documentId);
+  if (execution.agreementId !== null) await documents.require(execution.agreementId);
   if (body.counselMemoDocumentId !== undefined) await documents.require(body.counselMemoDocumentId);
   await documents.requireAll(body.documentIds);
   if (documents.row(body.board.consentDocumentId)?.archived_at !== null) {
     plan.violations.push(violation("MISSING_BOARD_CONSENT", "The signed board consent is archived; use the current document"));
   }
-  if (documents.row(body.executedAgreement.documentId)?.archived_at !== null) {
+  if (execution.kind === "executed" && documents.row(execution.agreementId)?.archived_at !== null) {
     plan.violations.push(violation("MISSING_EXECUTED_AGREEMENT", "The executed agreement is archived; use the current document"));
   }
 
@@ -114,6 +137,15 @@ export async function planGrant(ctx: CommandContext, body: GrantFields): Promise
       plan.violations.push(violation("NSO_PRICE_BELOW_FMV", "An NSO priced below FMV needs counsel's memo", { override: { role: "admin_rw", requires: ["counselMemoDocumentId"] } }));
     }
   }
+  // A grant dated before the company existed is for the admin to check against the charter, not a block.
+  const incorporated = ctx.org.incorporation_date;
+  if (incorporated !== null && grantDate < incorporated) {
+    plan.warnings.push({
+      code: "GRANT_BEFORE_INCORPORATION",
+      message: `The grant date ${grantDate} is before the company's incorporation on ${incorporated}`,
+      details: { incorporationDate: incorporated },
+    });
+  }
   if (stockPlan.expiration_date !== null && grantDate > stockPlan.expiration_date) {
     plan.violations.push(violation("PLAN_EXPIRED", `The plan expired on ${stockPlan.expiration_date}`));
   }
@@ -165,9 +197,10 @@ export async function planGrant(ctx: CommandContext, body: GrantFields): Promise
     parentSecurityId: null,
   });
   plan.created.securityIds.push(securityId);
+  // A partly signed agreement is not the grant's agreement: it rides on the execution status below.
   const xDocuments = [
     { ...documents.ref(body.board.consentDocumentId), role: "CONSENT" },
-    { ...documents.ref(body.executedAgreement.documentId), role: "AGREEMENT" },
+    ...(execution.kind === "executed" ? [{ ...documents.ref(execution.agreementId), role: "AGREEMENT" }] : []),
     ...(body.counselMemoDocumentId !== undefined ? [{ ...documents.ref(body.counselMemoDocumentId), role: "COUNSEL_MEMO" }] : []),
   ];
   plan.transactions.push({
@@ -213,18 +246,31 @@ export async function planGrant(ctx: CommandContext, body: GrantFields): Promise
     effectiveDate: grantDate,
     payload: { security_id: securityId, x_vesting_start_date: body.vesting.vestingStartDate },
   });
-  plan.documents.push(
-    { documentId: body.board.consentDocumentId, role: "CONSENT", target: { type: "security", id: securityId } },
-    { documentId: body.executedAgreement.documentId, role: "AGREEMENT", target: { type: "security", id: securityId } },
-  );
+  if (execution.kind === "awaiting") {
+    // Execution pending from the grant date; Mark executed records the missing signatures.
+    plan.transactions.push({
+      type: "X_EXECUTION_STATUS",
+      effectiveDate: grantDate,
+      payload: {
+        security_id: securityId,
+        status: execution.status,
+        attestation: "Recorded before all signatures",
+        ...(execution.agreementId !== null ? { document: documents.ref(execution.agreementId) } : {}),
+      },
+    });
+  }
+  plan.documents.push({ documentId: body.board.consentDocumentId, role: "CONSENT", target: { type: "security", id: securityId } });
+  if (execution.agreementId !== null) {
+    plan.documents.push({ documentId: execution.agreementId, role: execution.kind === "executed" ? "AGREEMENT" : "EVIDENCE", target: { type: "security", id: securityId } });
+  }
   if (body.counselMemoDocumentId !== undefined) plan.documents.push({ documentId: body.counselMemoDocumentId, role: "EVIDENCE", target: { type: "security", id: securityId } });
   for (const documentId of body.documentIds) plan.documents.push({ documentId, role: "EVIDENCE", target: { type: "transaction_index", index: 0 } });
   plan.violations.push(...await documents.check(plan.documents, holderOfTarget(state, plan.securities)));
   plan.audit = {
-    summary: `${displayId} recorded`,
+    summary: execution.kind === "executed" ? `${displayId} recorded` : `${displayId} recorded, awaiting signatures`,
     targetType: "security",
     targetId: securityId,
-    details: { securityId, stockPlanId: stockPlan.id, optionType: body.optionType },
+    details: { securityId, stockPlanId: stockPlan.id, optionType: body.optionType, executionStatus: execution.kind === "executed" ? "executed" : execution.status },
   };
   return { plan, documents };
 }

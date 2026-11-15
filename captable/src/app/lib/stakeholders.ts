@@ -17,7 +17,10 @@ export function emailKindLabel(email: Pick<api.StakeholderEmail, "kind">): strin
   return email.kind === "representative" ? "Representative" : email.kind === "contact" ? "Authorized contact" : "Own address";
 }
 
-/** Addresses that appear on more than one stakeholder (the Duplicate badge; compared only when they're unmasked). */
+/**
+ * Addresses that appear on more than one stakeholder (the "Shared sign-in address" badge; compared only when they're
+ * unmasked). A shared address isn't proof of a duplicate: related funds or a rehire can rightly share one.
+ */
 export function duplicateEmails(stakeholders: readonly api.Stakeholder[]): Set<string> {
   const counts = new Map<string, number>();
   for (const stakeholder of stakeholders) {

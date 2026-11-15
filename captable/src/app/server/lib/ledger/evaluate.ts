@@ -98,6 +98,7 @@ export function commandAction(command: engine.LedgerCommand | undefined, transac
     "extend-exercise-deadline": "exercise-window extension",
     "grant-equity-compensation": "grant",
     "record-leave-of-absence": "leave of absence",
+    "record-repurchase": "repurchase",
     "reverse-command": "reversal",
     "terminate-stakeholder": "termination",
   };

@@ -31,14 +31,6 @@ const collectionPatchBody = z.strictObject({
   version: z.number().int().positive(), name: z.string().trim().min(1).max(200).optional(),
   parentId: uuid.nullable().optional(), archived: z.boolean().optional(),
 });
-const portalDocument = z.strictObject({
-  id: uuid, filename: z.string(), kind: z.enum([
-    "GRANT_AGREEMENT", "STOCK_PURCHASE_AGREEMENT", "SAFE_AGREEMENT", "WARRANT_AGREEMENT",
-    "NOTICE_OF_EXERCISE", "ELECTION_83B", "BOARD_CONSENT", "STOCKHOLDER_CONSENT", "PLAN_DOCUMENT", "CHARTER",
-    "VALUATION_REPORT", "VALUATION_SUPPORT", "COUNSEL_MEMO", "SEPARATION_AGREEMENT", "PAYMENT_RECORD", "CERTIFICATE",
-    "TEMPLATE", "STATEMENT", "FORM_3921", "RECONCILIATION_REPORT", "IMPORT_ARCHIVE", "OTHER",
-  ]), createdAt: z.number(), scope: z.enum(["mine", "company"]),
-});
 const DEFAULT_VISIBLE_KINDS = new Set<DocumentKind>([
   "GRANT_AGREEMENT", "STOCK_PURCHASE_AGREEMENT", "NOTICE_OF_EXERCISE", "CERTIFICATE",
 ]);
@@ -666,7 +658,8 @@ export function portalDocumentRoutes(deps: AppDeps) {
     const orgId = c.req.param("orgId")!;
     const ownIds = holderIds(c, orgId);
     if (!ownIds) throw notFound();
-    return c.json(z.array(portalDocument).parse(await listHolderDocuments(c.env.DB, orgId, ownIds)));
+    // Parsed with the strict portal allowlist schema, as every portal answer is.
+    return c.json(api.portalDocumentListSchema.parse(await listHolderDocuments(c.env.DB, orgId, ownIds)));
   });
 
   routes.get("/documents/:id/download", async (c) => {

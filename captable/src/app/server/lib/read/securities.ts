@@ -68,16 +68,55 @@ export function securityTermsOf(ctx: ReadContext, state: engine.LedgerState, sec
   return securityTerms(security, { names: new Map(), certificates: new Map(), txById, laterTerms: laterTerms(state) });
 }
 
-/** The legends on a lot: migrated snapshots, then those a new lot names by id in its payload (`x_legend_ids`). */
-export async function legendsOf(ctx: ReadContext, security: engine.SecurityState, terms: Record<string, unknown>): Promise<{ id: string; name: string }[]> {
-  const legends: { id: string; name: string }[] = security.legends.map((legend) => ({ id: legend.legendId, name: legend.name }));
-  const legendIds = (terms.x_legend_ids as string[] | undefined) ?? [];
+/**
+ * The lot a descriptive term is read from: the lot itself when it records it (`has`), else, for a balance lot an app
+ * command made (origin BALANCE, not imported), the lot it was split from, up the chain. Such a lot made from an
+ * imported one can't carry the import-only fields (the import's legend snapshot, "board approval not recorded in the
+ * import"), so it shows its parent's; the ledger itself is unchanged. An imported balance lot shows what the import
+ * recorded for it.
+ */
+function balanceSource(ctx: ReadContext, state: engine.LedgerState, security: engine.SecurityState, has: (lot: engine.SecurityState) => boolean): engine.SecurityState {
+  let lot = security;
+  while (!has(lot) && lot.origin === "BALANCE" && lot.identity.parentSecurityId !== null && !importedFromPulley(ctx, lot)) {
+    const parent = state.securities.get(lot.identity.parentSecurityId);
+    if (parent === undefined) break;
+    lot = parent;
+  }
+  return lot;
+}
+
+/** A lot's board approval as admins see it: its own date or "not recorded in the import", else its balance source's. */
+export function boardApprovalOf(ctx: ReadContext, state: engine.LedgerState, security: engine.SecurityState): { date: string | null; notRecordedInPulley: boolean } {
+  const lot = balanceSource(ctx, state, security, (item) => item.boardApprovalDate !== null || item.boardApprovalNotRecordedInPulley);
+  return { date: lot.boardApprovalDate, notRecordedInPulley: lot.boardApprovalNotRecordedInPulley };
+}
+
+/**
+ * The legends on a lot: migrated snapshots, then those a new lot names by id in its payload (`x_legend_ids`); a
+ * balance lot with none shows its balance source's.
+ */
+export async function legendsOf(ctx: ReadContext, state: engine.LedgerState, security: engine.SecurityState, terms: Record<string, unknown>): Promise<{ id: string; name: string }[]> {
+  const idsOf = (lot: engine.SecurityState) => ((lot === security ? terms : securityTermsOf(ctx, state, lot)).x_legend_ids as string[] | undefined) ?? [];
+  const source = balanceSource(ctx, state, security, (lot) => lot.legends.length > 0 || idsOf(lot).length > 0);
+  const legends: { id: string; name: string }[] = source.legends.map((legend) => ({ id: legend.legendId, name: legend.name }));
+  const legendIds = idsOf(source);
   if (legendIds.length > 0) {
     const { results } = await ctx.db.prepare("SELECT id, name FROM legends WHERE org_id = ? AND id IN (SELECT value FROM json_each(?))")
       .bind(ctx.org.id, JSON.stringify(legendIds)).all<{ id: string; name: string }>();
     legends.push(...results);
   }
   return legends;
+}
+
+/**
+ * A terminated holder's unvested shares: the last day the company may repurchase them and the window's status on
+ * `today`, one rule for Securities Status and the holder's share detail. A lot whose agreement sets no deadline
+ * (`x_repurchase_right.x_no_deadline`) is `no_deadline`, a recorded term; with no deadline known, `not_recorded`.
+ */
+export function repurchaseWindow(state: engine.LedgerState, security: engine.SecurityState, today: string): { lastDate: string | null; status: (typeof api.REPURCHASE_WINDOW_STATUSES)[number] } {
+  const { date, noDeadline } = engine.repurchaseDeadlineSource(state, security);
+  if (date === null) return { lastDate: null, status: noDeadline ? "no_deadline" : "not_recorded" };
+  return { lastDate: date, status: today > date ? "lapsed" : engine.daysBetween(today, date) <= 30 ? "closing_soon" : "open" };
 }
 
 /** Imported, by the legacy `provenance.importedFromPulley` rule: a source id or imported issuance. */
@@ -132,6 +171,7 @@ export function securityJson(
   const exemption = terms.x_exemption as { federal?: api.Security["exemption"]["federal"]; country?: string; state?: string } | undefined;
   const contractual = numbers.contractualDeadline;
   const iso = numbers.isoDeadline;
+  const approval = boardApprovalOf(ctx, state, security);
   return {
     id: security.identity.id,
     family: security.identity.family,
@@ -149,8 +189,8 @@ export function securityJson(
     terms,
     deadlines: contractual === null && iso === null ? null : { contractual, iso, reason: numbers.deadlineReason },
     exemption: { federal: exemption?.federal ?? null, country: exemption?.country ?? null, state: exemption?.state ?? null },
-    boardApprovalDate: numbers.boardApprovalDate,
-    boardApprovalNotRecordedInPulley: numbers.boardApprovalNotRecordedInPulley,
+    boardApprovalDate: approval.date,
+    boardApprovalNotRecordedInPulley: approval.notRecordedInPulley,
     numbers: numbersJson(numbers, state),
     certificate: lookups.certificates.get(security.identity.id) ?? null,
     provenance: provenance(ctx, security, lookups),
@@ -196,7 +236,7 @@ export async function securityDetail(ctx: ReadContext, state: engine.LedgerState
       const acting = ctx.ledger.transactions.find((tx) => tx.commandId === child.originCommandId && tx.securityId === securityId);
       return { id: child.id, displayId: child.displayId, transactionType: acting?.type ?? "TX_STOCK_ISSUANCE" };
     });
-  const legends = await legendsOf(ctx, security, base.terms);
+  const legends = await legendsOf(ctx, state, security, base.terms);
   // "Reverse last transaction": the newest command on the lot (its issuance or any later actor) that reverse-command
   // would accept now, by the reversal's own rules (a current-release reversible type, not migrated, not a reversal or reversed,
   // nothing standing on it). Edges are read only for the candidates, so a migrated lot costs no query.
@@ -251,6 +291,7 @@ export function securityVesting(ctx: ReadContext, state: engine.LedgerState, sec
 
 const DESCRIBE: Partial<Record<engine.TransactionTypeCode, string>> = {
   TX_STOCK_ISSUANCE: "Shares issued",
+  TX_STOCK_REPURCHASE: "Shares repurchased",
   TX_EQUITY_COMPENSATION_ISSUANCE: "Granted",
   TX_EQUITY_COMPENSATION_EXERCISE: "Exercised",
   TX_EQUITY_COMPENSATION_CANCELLATION: "Cancelled",

@@ -137,14 +137,9 @@ async function capTableReport(ctx: ReadContext, query: ReportParameters): Promis
   ]);
   const classNames = new Map(ownership.classes.map((item) => [item.stockClassId, item.name]));
   const planNames = new Map(ownership.plans.map((item) => [item.stockPlanId, item.name]));
-  const classTypes = new Map(ctx.ledger.reference.stockClasses.map((item) => [item.id, item.classType]));
   const vestingNames = new Map(vestingTerms.items.map((item) => [item.id, item.name]));
-  // The product rules fixes common before preferred; preserve the engine order within each type.
-  const orderedClasses = [...ownership.classes].sort((left, right) => {
-    const leftCommon = classTypes.get(left.stockClassId) === "COMMON" ? 0 : 1;
-    const rightCommon = classTypes.get(right.stockClassId) === "COMMON" ? 0 : 1;
-    return leftCommon - rightCommon;
-  });
+  // The cap table read already orders the classes as every read does (Common first, then preferred by name).
+  const orderedClasses = ownership.classes;
   const ownershipColumns = [
     ...OWNERSHIP_FIXED,
     ...orderedClasses.map((item) => item.name),
@@ -285,6 +280,21 @@ function windowValue(terms: Record<string, unknown>, reason: string): string {
   return `${text(field(window, "period"))} ${text(field(window, "period_type"))}`.trim();
 }
 
+/**
+ * Each share's 83(b) record in force, as the portal reads it: the latest record no other record supersedes. A
+ * correction is a new record that supersedes the old one, so the order records were written in decides nothing.
+ */
+function electionsInForce(items: readonly api.Election83b[]): Map<string, api.Election83b> {
+  const superseded = new Set(items.map((item) => item.supersedesId).filter((id): id is string => id !== null));
+  const inForce = new Map<string, api.Election83b>();
+  for (const item of items) {
+    if (superseded.has(item.id)) continue;
+    const other = inForce.get(item.securityId);
+    if (!other || item.createdAt > other.createdAt || (item.createdAt === other.createdAt && item.id > other.id)) inForce.set(item.securityId, item);
+  }
+  return inForce;
+}
+
 async function rawCapTableReport(ctx: ReadContext, query: ReportParameters): Promise<BuiltReport> {
   const q = { asOf: query.asOf, asKnownAt: query.asKnownAt };
   const [securities, classes, plans, vestingTerms, elections] = await Promise.all([
@@ -297,7 +307,7 @@ async function rawCapTableReport(ctx: ReadContext, query: ReportParameters): Pro
   const classNames = new Map(classes.items.map((item) => [item.id, item.name]));
   const planNames = new Map(plans.items.map((item) => [item.id, item.name]));
   const termNames = new Map(vestingTerms.items.map((item) => [item.id, item]));
-  const election = new Map(elections.items.map((item) => [item.securityId, item.status]));
+  const election = new Map([...electionsInForce(elections.items)].map(([securityId, item]) => [securityId, item.status]));
   const txBySecurity = new Map<string, engine.LedgerTransaction[]>();
   const visibleTransactions = ctx.ledger.transactions.filter((tx) => tx.effectiveDate <= securities.asOf && tx.seq <= securities.asKnownAt);
   for (const tx of visibleTransactions) {

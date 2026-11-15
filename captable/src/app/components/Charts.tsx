@@ -1,10 +1,15 @@
 import { useId, useState, type PointerEvent } from "react";
+import { cn } from "@/lib/utils.ts";
 import { compareDecimals, formatCompact, formatFractionPercent, fractionOf, multiplyDecimals, sumDecimals, type Fraction } from "../lib/decimal.ts";
 import { addDays, daysBetween, formatDate } from "../lib/format.ts";
 import { useDisplay } from "./Display.tsx";
 
-// The charts. Every number shown is formatted from exact decimals; only the SVG geometry (arc lengths, x
-// and y positions) uses floating point, which never reaches a displayed figure.
+// The charts, drawn in shadcn/ui's theme colours (--chart-1 … --chart-5, --muted, --border, --destructive). Every number
+// shown is formatted from exact decimals; only the SVG geometry (arc lengths, x and y positions) uses floating point,
+// which never reaches a displayed figure.
+
+/** The cancelled part of a bar or swatch: the unvested colour, hatched. */
+const HATCHED = "bg-[repeating-linear-gradient(135deg,var(--muted)_0_6px,var(--muted-foreground)_6px_7px)]";
 
 /** A fraction as a 0–1 number, for drawing only. */
 function geometry(fraction: Fraction): number {
@@ -26,11 +31,11 @@ export function DonutChart({ segments, center, centerLabel = "Fully diluted", la
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
   return (
-    <svg viewBox="0 0 180 180" width="180" height="180" className="donut" role="group" aria-label={label}>
+    <svg viewBox="0 0 180 180" width="180" height="180" className="shrink-0 [&_circle]:outline-none [&_circle:focus-visible]:[stroke-width:28]" role="group" aria-label={label}>
       <defs>
         <pattern id={patternId} patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
-          <rect width="6" height="6" style={{ fill: "var(--s-pool)" }} />
-          <line x1="0" y1="0" x2="0" y2="6" style={{ stroke: "var(--hatch)" }} strokeWidth="2" />
+          <rect width="6" height="6" style={{ fill: "var(--muted)" }} />
+          <line x1="0" y1="0" x2="0" y2="6" style={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.5 }} strokeWidth="2" />
         </pattern>
       </defs>
       {segments.filter((segment) => compareDecimals(segment.value, "0") > 0).map((segment) => {
@@ -59,8 +64,8 @@ export function DonutChart({ segments, center, centerLabel = "Fully diluted", la
         offset += length;
         return circle;
       })}
-      <text x="90" y="86" textAnchor="middle" style={{ fill: "var(--muted)", fontSize: 10 }}>{centerLabel}</text>
-      <text x="90" y="103" textAnchor="middle" style={{ fill: "var(--text)", fontSize: 14, fontWeight: 650 }}>{center}</text>
+      <text x="90" y="86" textAnchor="middle" style={{ fill: "var(--muted-foreground)", fontSize: 10 }}>{centerLabel}</text>
+      <text x="90" y="103" textAnchor="middle" style={{ fill: "var(--foreground)", fontSize: 14, fontWeight: 600 }}>{center}</text>
     </svg>
   );
 }
@@ -69,11 +74,26 @@ export function DonutChart({ segments, center, centerLabel = "Fully diluted", la
 export function Meter({ used, size, label }: { used: string; size: string; label: string }) {
   const share = fractionOf(used, size);
   const ratio = geometry(share);
-  const tone = ratio > 1 ? " over" : ratio > 0.9 ? " warn" : "";
+  const tone = ratio > 1 ? "over" : ratio > 0.9 ? "warn" : "ok";
   const percent = formatFractionPercent(share);
   return (
-    <div className={`meter${tone}`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 10_000) / 100} aria-valuetext={percent} aria-label={`${label} ${percent}`}>
-      <div className="fill" style={{ width: `${Math.min(100, ratio * 100).toFixed(2)}%` }} />
+    <div
+      className={cn(
+        "relative flex h-2 w-full overflow-hidden rounded-full",
+        tone === "over" ? "bg-destructive/20" : tone === "warn" ? "bg-amber-500/20" : "bg-primary/15",
+      )}
+      role="meter"
+      data-tone={tone}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(ratio * 10_000) / 100}
+      aria-valuetext={percent}
+      aria-label={`${label} ${percent}`}
+    >
+      <div
+        className={cn("h-full rounded-full forced-colors:bg-[Highlight] forced-colors:forced-color-adjust-none", tone === "over" ? "bg-destructive" : tone === "warn" ? "bg-amber-500" : "bg-primary")}
+        style={{ width: `${Math.min(100, ratio * 100).toFixed(2)}%` }}
+      />
     </div>
   );
 }
@@ -82,23 +102,24 @@ export function Meter({ used, size, label }: { used: string; size: string; label
 export function ProgressBar({ vested, unvested, cancelled, unit, vestedLabel = "Vested" }: { vested: string; unvested: string; cancelled: string | null; unit: string; vestedLabel?: string }) {
   const { format } = useDisplay();
   const total = sumDecimals([vested, unvested, cancelled]);
+  // Each part's key, value, legend and colour: vested in the theme's second chart colour, unvested muted, cancelled hatched.
   const parts = [
-    ["pv", vested, vestedLabel],
-    ["pu", unvested, "Unvested"],
-    ["pc", cancelled, "Cancelled"],
+    ["vested", vested, vestedLabel, "bg-chart-2 forced-colors:bg-[Highlight] forced-colors:forced-color-adjust-none"],
+    ["unvested", unvested, "Unvested", "bg-muted ring-1 ring-border ring-inset"],
+    ["cancelled", cancelled, "Cancelled", HATCHED],
   ] as const;
   return (
     <>
-      <div className="pbar" role="img" aria-label={`${format.shares(vested)} ${vestedLabel.toLowerCase()}, ${format.shares(unvested)} unvested${cancelled === null ? "" : `, ${format.shares(cancelled)} cancelled`}`}>
-        {parts.filter(([, value]) => compareDecimals(value, "0") > 0).map(([className, value, text]) => (
-          <span key={className} className={className} style={{ width: `${(geometry(fractionOf(value, total)) * 100).toFixed(3)}%` }} title={`${text}: ${format.shares(value)} ${unit}`} />
+      <div className="flex h-6 gap-0.5 overflow-hidden rounded-md" role="img" aria-label={`${format.shares(vested)} ${vestedLabel.toLowerCase()}, ${format.shares(unvested)} unvested${cancelled === null ? "" : `, ${format.shares(cancelled)} cancelled`}`}>
+        {parts.filter(([, value]) => compareDecimals(value, "0") > 0).map(([key, value, text, colour]) => (
+          <span key={key} className={cn("block h-full", colour)} style={{ width: `${(geometry(fractionOf(value, total)) * 100).toFixed(3)}%` }} title={`${text}: ${format.shares(value)} ${unit}`} />
         ))}
       </div>
-      <div className="pbar-legend">
-        {parts.map(([className, value, text]) => (
-          <div className="pl" key={className}>
-            <span className={`sw sw-${className.slice(1)}`} aria-hidden="true" />
-            <span><b>{text}</b>{value === null ? "—" : `${format.shares(value)} ${unit}`}</span>
+      <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-2">
+        {parts.map(([key, value, text, colour]) => (
+          <div className="flex items-start gap-2 text-xs" key={key}>
+            <span className={cn("mt-0.5 size-2.5 flex-none rounded-sm", colour)} aria-hidden="true" />
+            <span><b className="block font-medium">{text}</b>{value === null ? "—" : `${format.shares(value)} ${unit}`}</span>
           </div>
         ))}
       </div>
@@ -154,12 +175,12 @@ export function VestingChart({ events, total, start, stopDate, label }: VestingC
     setHover({ x: (x(date) / width) * 100, y: (y(value) / height) * 100, date, value });
   };
   return (
-    <div className="chart-box">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label}>
-        <g className="axis">
+    <div className="relative mt-3">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full overflow-visible">
+        <g className="text-[11px] [&_text]:fill-muted-foreground">
           {ticks.map((tick, index) => (
             <g key={index}>
-              <line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} style={{ stroke: "var(--grid)" }} strokeWidth="1" />
+              <line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} style={{ stroke: "var(--border)" }} strokeWidth="1" />
               <text x={left - 8} y={y(tick) + 4} textAnchor="end">{formatCompact(tick)}</text>
             </g>
           ))}
@@ -167,27 +188,27 @@ export function VestingChart({ events, total, start, stopDate, label }: VestingC
             const date = `${year}-01-01`;
             return (
               <g key={year}>
-                <line x1={x(date)} x2={x(date)} y1={height - bottom} y2={height - bottom + 4} style={{ stroke: "var(--border-strong)" }} />
+                <line x1={x(date)} x2={x(date)} y1={height - bottom} y2={height - bottom + 4} style={{ stroke: "var(--muted-foreground)" }} />
                 <text x={x(date)} y={height - 8} textAnchor="middle">{year}</text>
               </g>
             );
           })}
         </g>
-        <path d={area} style={{ fill: "var(--vest-wash)" }} />
-        <path d={path} fill="none" style={{ stroke: "var(--vest)" }} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={area} style={{ fill: "var(--chart-2)", fillOpacity: 0.12 }} />
+        <path d={path} fill="none" style={{ stroke: "var(--chart-2)" }} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {cliff && (!stopDate || cliff.date <= stopDate) ? (
-          <circle cx={x(cliff.date)} cy={y(cliff.cumulative)} r="4.5" style={{ fill: "var(--vest)", stroke: "var(--surface)" }} strokeWidth="2" />
+          <circle cx={x(cliff.date)} cy={y(cliff.cumulative)} r="4.5" style={{ fill: "var(--chart-2)", stroke: "var(--background)" }} strokeWidth="2" />
         ) : null}
         {today >= start && today <= end ? (
           <>
-            <line x1={x(today)} x2={x(today)} y1={top} y2={height - bottom} style={{ stroke: "var(--text-2)" }} strokeWidth="1" />
-            <text x={x(today) + 4} y={top + 10} style={{ fill: "var(--text-2)", fontSize: 10.5 }}>Today</text>
+            <line x1={x(today)} x2={x(today)} y1={top} y2={height - bottom} style={{ stroke: "var(--foreground)", strokeOpacity: 0.6 }} strokeWidth="1" />
+            <text x={x(today) + 4} y={top + 10} style={{ fill: "var(--foreground)", fontSize: 10.5 }}>Today</text>
           </>
         ) : null}
         {stopDate && stopDate <= end ? (
           <>
-            <line x1={x(stopDate)} x2={x(stopDate)} y1={top} y2={height - bottom} style={{ stroke: "var(--danger)" }} strokeWidth="1" />
-            <text x={x(stopDate) - 4} y={top + 22} textAnchor="end" style={{ fill: "var(--danger-text)", fontSize: 10.5 }}>
+            <line x1={x(stopDate)} x2={x(stopDate)} y1={top} y2={height - bottom} style={{ stroke: "var(--destructive)" }} strokeWidth="1" />
+            <text x={x(stopDate) - 4} y={top + 22} textAnchor="end" style={{ fill: "var(--destructive)", fontSize: 10.5 }}>
               {stopDate > today ? "Vesting stops" : "Vesting stopped"}
             </text>
           </>
@@ -195,10 +216,14 @@ export function VestingChart({ events, total, start, stopDate, label }: VestingC
         <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="transparent" onPointerMove={onMove} onPointerLeave={() => setHover(null)} />
       </svg>
       {hover ? (
-        <div className="chart-tip" style={{ left: `${hover.x}%`, top: `${hover.y}%` }} aria-hidden="true">
-          <b>{format.shares(hover.value)}</b>
-          <span className="tk" />vested · {formatFractionPercent(fractionOf(hover.value, total), 1)}
-          <div className="muted">{formatDate(hover.date)}</div>
+        <div
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+8px)] rounded-lg border bg-popover px-2.5 py-2 text-xs whitespace-nowrap text-popover-foreground shadow-md"
+          style={{ left: `${hover.x}%`, top: `${hover.y}%` }}
+          aria-hidden="true"
+        >
+          <b className="block text-sm font-semibold">{format.shares(hover.value)}</b>
+          <span className="mr-1.5 inline-block h-0.5 w-3 bg-chart-2 align-middle" />vested · {formatFractionPercent(fractionOf(hover.value, total), 1)}
+          <div className="text-muted-foreground">{formatDate(hover.date)}</div>
         </div>
       ) : null}
     </div>

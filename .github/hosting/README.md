@@ -287,7 +287,8 @@ keeps Worker versions, each tagged with its release. With the same account crede
 gateway package's pinned CLI to inspect deployments and run `wrangler rollback --name insulin-apps-<app>` for only the
 affected app. Roll back `insulin-apps-gateway` separately only when the gateway itself changed. When both need
 rollback, roll back the app Worker before the gateway. D1 migrations are forward-only and are not rolled back; confirm that the older Worker
-remains compatible with the migrated schema.
+remains compatible with the migrated schema, and with the data the newer one wrote: Cap Table can't go back before its
+engine 1.1.0 once any company has recorded a repurchase (`captable/AGENTS.md`, "The ledger"), so roll it forward.
 
 After a rollback, revert or fix the change on `main` before anything else merges: every release deploys every app
 whose latest check passed, so the next one, whatever it changes, would put the broken version back.

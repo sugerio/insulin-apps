@@ -1,11 +1,30 @@
+import type { ReactNode } from "react";
 import { Link, isRouteErrorResponse, useRouteError } from "react-router";
+import { Button } from "@/components/ui/button.tsx";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty.tsx";
 import { useAuth } from "../auth/AuthProvider.tsx";
 import { hasAdminAccess } from "../auth/access.ts";
 import { BrandMark } from "../components/BrandMark.tsx";
 
+/** A page that only says something: a heading, its explanation and the way on. */
+function MessagePage({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <Empty className="min-h-[60vh]">
+      <EmptyHeader className="max-w-lg">
+        <EmptyTitle><h1 className="text-2xl font-semibold tracking-tight">{title}</h1></EmptyTitle>
+        <EmptyDescription className="flex flex-col gap-2">{children}</EmptyDescription>
+      </EmptyHeader>
+      {action ? <EmptyContent>{action}</EmptyContent> : null}
+    </Empty>
+  );
+}
+
+const homeLink = <Button asChild variant="outline"><Link to="/">Go home</Link></Button>;
+
 /** An address the app has no page for, in the workspace or anywhere else outside the holder's portal. */
 export function NotFoundPage() {
-  return <section className="empty"><h1>Page not found</h1><p>There is nothing at this address.</p><Link to="/">Go home</Link></section>;
+  return <MessagePage title="Page not found" action={homeLink}><p>There is nothing at this address.</p></MessagePage>;
 }
 export function NoAccessPage() {
   const { me } = useAuth();
@@ -13,8 +32,7 @@ export function NoAccessPage() {
   // account the app sees, the one thing an equity team needs to connect it to a stakeholder record.
   const hasAccess = me !== null && (hasAdminAccess(me) || me.portal.matches.length > 0);
   return (
-    <section className="empty">
-      <h1>No access</h1>
+    <MessagePage title="No access" action={hasAccess ? <Button asChild variant="outline"><Link to="/">Go to your home page</Link></Button> : undefined}>
       <p>You don't have access to this page.</p>
       {me && !hasAccess ? (
         <p>
@@ -24,8 +42,7 @@ export function NoAccessPage() {
       ) : (
         <p>If you hold equity and think you should have access, contact your company's equity team.</p>
       )}
-      {hasAccess ? <p><Link to="/">Go to your home page</Link></p> : null}
-    </section>
+    </MessagePage>
   );
 }
 /**
@@ -34,20 +51,29 @@ export function NoAccessPage() {
  */
 export function OpenFromConsolePage({ onRetry }: { onRetry?: () => void }) {
   return (
-    <div className="center-page">
-      <div className="card console-card" role="alert">
-        <BrandMark size={40} />
-        <h1>Open this app from the Insulin console</h1>
-        <p>Cap Table learns who you are from the Insulin console. Open the console and choose this app there to see the cap table or your holdings.</p>
-        <p className="small">Already in the console? Your session may have ended: reload the console, then open the app again.</p>
-        {onRetry ? <button type="button" className="btn btn-compact" onClick={onRetry}>Try again</button> : null}
-      </div>
+    <div className="grid min-h-svh place-items-center p-6">
+      <Card className="w-full max-w-md" role="alert">
+        <CardHeader>
+          <BrandMark size={40} />
+          <CardTitle><h1 className="text-xl font-semibold tracking-tight">Open this app from the Insulin console</h1></CardTitle>
+          <CardDescription>
+            Cap Table learns who you are from the Insulin console. Open the console and choose this app there to see the cap table or your holdings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground">Already in the console? Your session may have ended: reload the console, then open the app again.</p>
+        </CardContent>
+        {onRetry ? <CardFooter><Button type="button" variant="outline" onClick={onRetry}>Try again</Button></CardFooter> : null}
+      </Card>
     </div>
   );
 }
 export function RouteErrorPage() {
   const error = useRouteError();
   const notFound = isRouteErrorResponse(error) && error.status === 404;
-  return <section className="empty"><h1>{notFound ? "Page not found" : "Something went wrong"}</h1>
-    <p>{notFound ? "There is nothing at this address." : "Reload the page and try again."}</p><Link to="/">Go home</Link></section>;
+  return (
+    <MessagePage title={notFound ? "Page not found" : "Something went wrong"} action={homeLink}>
+      <p>{notFound ? "There is nothing at this address." : "Reload the page and try again."}</p>
+    </MessagePage>
+  );
 }

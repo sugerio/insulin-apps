@@ -403,13 +403,15 @@ export const equityBasics: DocTopic = {
             sells shares to someone else.
           </p>
           <p>
-            A repurchase right usually has to be used within its window; if the company doesn't act in time, the right lapses. The
-            agreement for the shares says what applies.
+            A repurchase right usually has to be used within its window; if the company doesn't act in time, the right lapses.
+            Some agreements set no deadline at all. The agreement for the shares says what applies.
           </p>
           <InApp>
             When someone leaves holding unvested shares, Securities Status and the dashboard show the repurchase window and its last
-            date, and the holder's share page says until when the company may buy them back. Cap Table doesn't record the
-            repurchase itself: that is done outside the app, with counsel.
+            date, and the holder's share page says until when the company may buy them back.
+            The repurchase itself, the notice to the holder and the payment happen outside the app, with counsel; once it is
+            done and paid, record it with <b>Record repurchase</b>, attaching the notice. The vested shares stay with the holder
+            as a new share lot. A repurchase after the deadline, or with none recorded, needs counsel's written authority.
           </InApp>
         </>
       ),

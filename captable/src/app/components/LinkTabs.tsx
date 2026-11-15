@@ -1,8 +1,10 @@
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
+import { cn } from "@/lib/utils.ts";
 
 // Tabs whose selection lives in the URL (`?tab=…`), so a view can be linked and survives a reload. Arrow keys, Home and
 // End move between tabs as in the WAI-ARIA tabs pattern; each tab is a link, so it also opens in a new browser tab.
+// Drawn as shadcn/ui's TabsList and TabsTrigger (default variant), which are Radix's in-page tabs; these are links.
 
 export interface LinkTab {
   id: string;
@@ -10,9 +12,18 @@ export interface LinkTab {
   to: string;
 }
 
+// The tab a key press moved to. Tabs that are separate routes (Compliance & Tax) mount a new LinkTabs with the page, so
+// the one that renders this tab as selected takes the focus, whichever instance that is.
+let pendingFocus: { label: string; id: string } | null = null;
+
 export function LinkTabs({ tabs, selected, label }: { tabs: readonly LinkTab[]; selected: string; label: string }) {
   const navigate = useNavigate();
   const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (pendingFocus?.label !== label || pendingFocus.id !== selected) return;
+    pendingFocus = null;
+    list.current?.querySelector<HTMLElement>(`[data-tab="${selected}"]`)?.focus();
+  }, [label, selected]);
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>, index: number) => {
     let next: number | null = null;
     if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
@@ -22,11 +33,16 @@ export function LinkTabs({ tabs, selected, label }: { tabs: readonly LinkTab[]; 
     const tab = next === null ? undefined : tabs[next];
     if (!tab) return;
     event.preventDefault();
+    pendingFocus = { label, id: tab.id };
     navigate(tab.to);
-    requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-tab="${tab.id}"]`)?.focus());
   };
   return (
-    <div className="tabs" role="tablist" aria-label={label} ref={list}>
+    <div
+      className="no-scrollbar mb-4 inline-flex h-9 w-fit max-w-full items-center overflow-x-auto rounded-lg bg-muted p-[3px] text-muted-foreground"
+      role="tablist"
+      aria-label={label}
+      ref={list}
+    >
       {tabs.map((tab, index) => {
         const active = tab.id === selected;
         return (
@@ -37,7 +53,11 @@ export function LinkTabs({ tabs, selected, label }: { tabs: readonly LinkTab[]; 
             data-tab={tab.id}
             aria-selected={active}
             tabIndex={active ? 0 : -1}
-            className={active ? "tab active" : "tab"}
+            data-active={active || undefined}
+            className={cn(
+              "inline-flex h-full items-center justify-center rounded-md border border-transparent px-3 text-sm font-medium whitespace-nowrap text-foreground/60 transition-all outline-none hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:text-muted-foreground dark:hover:text-foreground",
+              active && "bg-background text-foreground shadow-sm dark:border-input dark:bg-input/30 dark:text-foreground",
+            )}
             onKeyDown={(event) => onKeyDown(event, index)}
           >
             {tab.label}

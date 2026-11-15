@@ -45,7 +45,7 @@ export function CancelSecurityDialog({ securityId, defaultReason, onClose, onDon
   if (!security.data) {
     return (
       <Modal title="Cancel security" onClose={onClose}>
-        {security.error !== undefined ? <InlineError what="the security" error={security.error} onRetry={security.reload} /> : <p className="muted" role="status">Loading the security…</p>}
+        {security.error !== undefined ? <InlineError what="the security" error={security.error} onRetry={security.reload} /> : <p className="text-sm text-muted-foreground" role="status">Loading the security…</p>}
       </Modal>
     );
   }
@@ -125,7 +125,7 @@ function CancelForm({ security, defaultReason, onClose, onDone }: { security: ap
       <SelectField label="Reason" required value={reason} onChange={(value) => setReason(value as api.CancelSecurity["reason"])} options={Object.entries(CANCEL_REASON_LABELS)} error={errorOf("reason")} />
       <DocumentUpload label="Supporting document" kind="OTHER" required value={document} onChange={(next) => { setDocument(next); setErrors((current) => ({ ...current, document: undefined })); }}
         hint="Waiver, agreement, or evidence that the grant will not be executed." error={errorOf("document")} disabled={flow.phase !== "edit"} />
-      <p className="small muted">A data error is not a cancellation — an admin uses Reverse instead.</p>
+      <p className="text-xs text-muted-foreground">A data error is not a cancellation — an admin uses Reverse instead.</p>
     </FlowDialog>
   );
 }

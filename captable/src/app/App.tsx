@@ -1,8 +1,7 @@
 import "./app.css";
-import "./components/workspace.css";
-import "./components/portal.css";
 import { StrictMode } from "react";
 import { RouterProvider } from "react-router/dom";
+import { TooltipProvider } from "@/components/ui/tooltip.tsx";
 import { AuthProvider } from "./auth/AuthProvider.tsx";
 import { createAppRouter } from "./router.tsx";
 
@@ -10,14 +9,18 @@ import { createAppRouter } from "./router.tsx";
 // development, and a second browser router would also listen to the history).
 let router: ReturnType<typeof createAppRouter> | undefined;
 
-// The React root (src/main.tsx mounts it inside the AppBuilder's preview bridge): who is using the app, then the pages.
+// The React root (src/main.tsx mounts it inside the AppBuilder's preview bridge): who is using the app, then the pages,
+// with one TooltipProvider for every shadcn/ui tooltip (the shell adds its own for the pages it frames, which tests
+// render without this root).
 export default function App() {
   router ??= createAppRouter();
   return (
     <StrictMode>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
+      <TooltipProvider>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </TooltipProvider>
     </StrictMode>
   );
 }

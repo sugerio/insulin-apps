@@ -1,7 +1,12 @@
-import "./import.css";
 import { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link, useBlocker } from "react-router";
+import { DownloadIcon, FileIcon, UploadIcon, XIcon } from "lucide-react";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Item, ItemActions, ItemContent, ItemDescription } from "@/components/ui/item.tsx";
+import { Progress } from "@/components/ui/progress.tsx";
+import { Spinner } from "@/components/ui/spinner.tsx";
+import { cn } from "@/lib/utils.ts";
 import { ApiRequestError, apiRequest, isAbortError, newIdempotencyKey, saveFile } from "../api/request.ts";
 import { useAuth } from "../auth/AuthProvider.tsx";
 import { describeError, isApiError } from "../lib/errors.ts";
@@ -15,9 +20,7 @@ import { useImportFiles } from "../lib/useImportFiles.ts";
 import { ErrorFocus } from "./ErrorFocus.tsx";
 import { Banner } from "./Feedback.tsx";
 import { BlockList, DateField, TextField } from "./Form.tsx";
-import { Icon } from "./Icon.tsx";
-import { Assumptions, DetectedFiles, ImportCounts, ImportTotals, OpeningBalances, ProblemSections } from "./ImportPreview.tsx";
-import { Card } from "./Page.tsx";
+import { Assumptions, DetectedFiles, ImportCard, ImportCounts, ImportTotals, OpeningBalances, ProblemSections } from "./ImportPreview.tsx";
 
 // The import wizard: choose the source (Pulley's exports or the Cap Table spreadsheet) → upload → review the server's
 // preview → import → done. It sets up an empty company in one step, at first-run setup or later from Import.
@@ -110,27 +113,34 @@ export function TemplateDownloadButton() {
     }
   };
   return (
-    <span className="template-download">
-      <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void download()}>
-        <Icon name="download" /> {busy ? "Downloading…" : "Download the template"}
-      </button>
-      {problem ? <span className="err-inline" role="alert">{problem}</span> : null}
+    <span className="inline-flex flex-col items-start gap-1">
+      <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void download()}>
+        <DownloadIcon aria-hidden="true" data-icon="inline-start" /> {busy ? "Downloading…" : "Download the template"}
+      </Button>
+      {problem ? <span className="text-sm font-medium text-destructive" role="alert">{problem}</span> : null}
     </span>
   );
 }
 
-/** One way to start, as a card with its actions: the setup page's three and the wizard's two sources. */
+/** One way to start, as an item with its actions: the setup page's three and the wizard's two sources. */
 export function ChoiceCard({ title, level = 3, children, actions }: { title: string; level?: 2 | 3; children: ReactNode; actions: ReactNode }) {
   const Heading = level === 2 ? "h2" : "h3";
   return (
-    <li className="choice">
-      <div className="choice-text">
-        <Heading className="choice-t">{title}</Heading>
-        <p className="choice-s">{children}</p>
-      </div>
-      <div className="choice-a">{actions}</div>
-    </li>
+    <Item asChild variant="outline" className="items-start gap-4 p-4 sm:items-center">
+      <li>
+        <ItemContent className="min-w-48 gap-1.5">
+          <Heading className="text-base leading-snug font-semibold">{title}</Heading>
+          <ItemDescription className="line-clamp-none">{children}</ItemDescription>
+        </ItemContent>
+        <ItemActions className="flex-wrap">{actions}</ItemActions>
+      </li>
+    </Item>
   );
+}
+
+/** A list of ChoiceCards. */
+export function ChoiceList({ label, children }: { label: string; children: ReactNode }) {
+  return <ul className="flex w-full flex-col gap-3" aria-label={label}>{children}</ul>;
 }
 
 function DropZone({ source, disabled, onFiles }: { source: ImportSource; disabled: boolean; onFiles: (files: File[]) => void }) {
@@ -144,7 +154,10 @@ function DropZone({ source, disabled, onFiles }: { source: ImportSource; disable
   };
   return (
     <div
-      className={depth > 0 && !disabled ? "dropzone over" : "dropzone"}
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-muted/40 px-4 py-7 text-center text-sm",
+        depth > 0 && !disabled && "border-primary bg-primary/5",
+      )}
       role="group"
       aria-label="Upload area"
       onDragEnter={(event) => {
@@ -155,43 +168,50 @@ function DropZone({ source, disabled, onFiles }: { source: ImportSource; disable
       onDragLeave={() => setDepth((count) => Math.max(0, count - 1))}
       onDrop={drop}
     >
-      <Icon name="upload" />
+      <UploadIcon aria-hidden="true" className="size-6 text-muted-foreground" />
       <span>{multiple ? "Drag and drop the exported files here, or" : "Drag and drop the spreadsheet here, or"}</span>
-      <label className="btn btn-ghost btn-sm" aria-disabled={disabled || undefined}>
-        {multiple ? "Choose files" : "Choose a file"}
-        <input
-          type="file"
-          className="sr-only"
-          multiple={multiple}
-          accept={acceptedExtensions(source).join(",")}
-          disabled={disabled}
-          onChange={(event) => {
-            const chosen = Array.from(event.target.files ?? []);
-            event.target.value = "";
-            if (chosen.length) onFiles(chosen);
-          }}
-        />
-      </label>
-      <span className="small muted">{multiple ? `Excel or CSV, up to ${FILE_LIMIT_LABEL} each and ${FILES_TOTAL_LABEL} together` : `An Excel workbook (.xlsx), up to ${FILE_LIMIT_LABEL}`}</span>
+      {/* A label that looks like a button, around an input that is hidden but keyboard-focusable: the label shows the
+          input's focus (focus-within). */}
+      <Button asChild variant="outline" size="sm">
+        <label
+          className="cursor-pointer focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+          aria-disabled={disabled || undefined}
+        >
+          {multiple ? "Choose files" : "Choose a file"}
+          <input
+            type="file"
+            className="sr-only"
+            multiple={multiple}
+            accept={acceptedExtensions(source).join(",")}
+            disabled={disabled}
+            onChange={(event) => {
+              const chosen = Array.from(event.target.files ?? []);
+              event.target.value = "";
+              if (chosen.length) onFiles(chosen);
+            }}
+          />
+        </label>
+      </Button>
+      <span className="text-xs text-muted-foreground">{multiple ? `Excel or CSV, up to ${FILE_LIMIT_LABEL} each and ${FILES_TOTAL_LABEL} together` : `An Excel workbook (.xlsx), up to ${FILE_LIMIT_LABEL}`}</span>
     </div>
   );
 }
 
 function FileList({ files, detected, disabled, onRemove }: { files: readonly File[]; detected: ReadonlyMap<File, api.ImportDetectedFile["kind"]>; disabled: boolean; onRemove: (file: File) => void }) {
   return (
-    <ul className="file-list" aria-label="Chosen files">
+    <ul className="flex flex-col gap-1.5" aria-label="Chosen files">
       {files.map((file) => {
         // What the last preview recognized this very file as (a replaced file has no label until it is checked).
         const kind = detected.get(file);
         return (
-          <li key={file.name}>
-            <Icon name="file" />
-            <span className="fl-name">{file.name}</span>
-            <span className="small muted">{formatBytes(file.size)}</span>
-            {kind !== undefined ? <span className={kind === null ? "small fl-bad" : "small muted"}>{fileKindLabel(kind)}</span> : null}
-            <button type="button" className="pill-x" aria-label={`Remove ${file.name}`} disabled={disabled} onClick={() => onRemove(file)}>
-              <Icon name="x" />
-            </button>
+          <li key={file.name} className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-sm">
+            <FileIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+            <span className="font-medium wrap-anywhere" data-file-name="">{file.name}</span>
+            <span className="text-xs text-muted-foreground">{formatBytes(file.size)}</span>
+            {kind !== undefined ? <span className={kind === null ? "text-xs font-semibold text-destructive" : "text-xs text-muted-foreground"}>{fileKindLabel(kind)}</span> : null}
+            <Button type="button" variant="ghost" size="icon-xs" className="ml-auto" aria-label={`Remove ${file.name}`} disabled={disabled} onClick={() => onRemove(file)}>
+              <XIcon aria-hidden="true" />
+            </Button>
           </li>
         );
       })}
@@ -438,44 +458,44 @@ export function ImportWizard({ initialSource, onExit, exitLabel = "Back", onImpo
 
   if (step === "source" || !source) {
     body = (
-      <Card title="Where is the cap table now?">
-        <p className="muted">The import sets up the company in one step: its stakeholders, share classes, equity plans and every holding.</p>
-        <ul className="choice-list" aria-label="Sources">
-          <ChoiceCard title="In Pulley" actions={<button type="button" className="btn btn-primary btn-sm" onClick={() => chooseSource("pulley")}>Import from Pulley</button>}>
+      <ImportCard title="Where is the cap table now?">
+        <p className="text-sm text-muted-foreground">The import sets up the company in one step: its stakeholders, share classes, equity plans and every holding.</p>
+        <ChoiceList label="Sources">
+          <ChoiceCard title="In Pulley" actions={<Button type="button" size="sm" onClick={() => chooseSource("pulley")}>Import from Pulley</Button>}>
             Export Pulley's standard reports as Excel files and upload them together.
           </ChoiceCard>
           <ChoiceCard
             title="In a spreadsheet"
-            actions={<><button type="button" className="btn btn-primary btn-sm" onClick={() => chooseSource("template")}>Import from a spreadsheet</button><TemplateDownloadButton /></>}
+            actions={<><Button type="button" size="sm" onClick={() => chooseSource("template")}>Import from a spreadsheet</Button><TemplateDownloadButton /></>}
           >
             Fill in the Cap Table spreadsheet template, then upload it.
           </ChoiceCard>
-        </ul>
-        {onExit ? <div className="wiz-foot"><button type="button" className="btn btn-ghost" onClick={onExit}>{exitLabel}</button></div> : null}
-      </Card>
+        </ChoiceList>
+        {onExit ? <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="ghost" onClick={onExit}>{exitLabel}</Button></div> : null}
+      </ImportCard>
     );
   } else if (step === "upload") {
     const back = initialSource ? onExit : () => setStep("source");
     body = (
-      <Card title={source === "pulley" ? "Upload Pulley's exports" : "Upload the Cap Table spreadsheet"}>
+      <ImportCard title={source === "pulley" ? "Upload Pulley's exports" : "Upload the Cap Table spreadsheet"}>
         <ErrorFocus>
           {source === "pulley" ? (
-            <>
-              <p>In Pulley, export these reports as Excel files, without renaming their columns, and add them all here:</p>
-              <ul className="report-list" aria-label="Pulley reports">
-                {PULLEY_REPORTS.map((report) => <li key={report.kind}>{report.label}{report.optional ? <span className="muted"> (optional)</span> : null}</li>)}
+            <div className="flex flex-col gap-2">
+              <p className="text-sm">In Pulley, export these reports as Excel files, without renaming their columns, and add them all here:</p>
+              <ul className="list-disc pl-5 text-sm sm:columns-2 sm:gap-8" aria-label="Pulley reports">
+                {PULLEY_REPORTS.map((report) => <li key={report.kind}>{report.label}{report.optional ? <span className="text-muted-foreground"> (optional)</span> : null}</li>)}
               </ul>
-            </>
+            </div>
           ) : (
-            <>
-              <p>Fill in the Cap Table spreadsheet: a row for each stakeholder, share class, equity plan and holding, linked by the IDs you give them. Then upload the workbook.</p>
-              <div className="mb-8"><TemplateDownloadButton /></div>
-            </>
+            <div className="flex flex-col items-start gap-2">
+              <p className="text-sm">Fill in the Cap Table spreadsheet: a row for each stakeholder, share class, equity plan and holding, linked by the IDs you give them. Then upload the workbook.</p>
+              <TemplateDownloadButton />
+            </div>
           )}
           <DropZone source={source} disabled={checking} onFiles={add} />
-          {refused.length ? <div className="mt-8"><BlockList items={refused} /></div> : null}
+          {refused.length ? <BlockList items={refused} /> : null}
           {files.length ? <FileList files={files} detected={detected} disabled={checking} onRemove={remove} /> : null}
-          <div className="import-date">
+          <div className="flex max-w-md flex-col items-start gap-1.5 [&>*:first-child]:w-full">
             <DateField
               label="As-of date"
               value={asOfDate}
@@ -490,11 +510,11 @@ export function ImportWizard({ initialSource, onExit, exitLabel = "Back", onImpo
                 : "Leave it empty to use the as-of date on the spreadsheet's Company sheet."}
             />
             {!asOfDate && suggestion ? (
-              <button type="button" className="btn-link small" onClick={() => setAsOfDate(suggestion)}>Use {formatDate(suggestion)}, the date your files suggest</button>
+              <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setAsOfDate(suggestion)}>Use {formatDate(suggestion)}, the date your files suggest</Button>
             ) : null}
           </div>
           {!me?.company ? (
-            <div className="form-grid mt-8">
+            <div className="grid gap-4 sm:grid-cols-2">
               <TextField label="Company timezone" required value={timezone} disabled={checking} onChange={setTimezone}
                 hint="The time zone used for vesting, expirations and scheduled changes." />
               <TextField label="Jurisdiction" required value={jurisdiction} disabled={checking} onChange={setJurisdiction}
@@ -504,16 +524,17 @@ export function ImportWizard({ initialSource, onExit, exitLabel = "Back", onImpo
             </div>
           ) : null}
           {uploadProblem ? <Banner kind="danger" title="The files couldn't be checked">{uploadProblem}</Banner> : null}
-          <p className="small muted">Checking reads the files on the server to build a preview; nothing is added to the cap table until you import. Until then the files stay in this browser tab.</p>
-          <div className="wiz-foot">
-            {back ? <button type="button" className="btn btn-ghost" disabled={checking} onClick={back}>{initialSource ? exitLabel : "Back"}</button> : null}
-            <button type="button" className="btn btn-primary" disabled={checking || files.length === 0} onClick={() => void check()}>
+          <p className="text-xs text-muted-foreground">Checking reads the files on the server to build a preview; nothing is added to the cap table until you import. Until then the files stay in this browser tab.</p>
+          <div className="flex flex-wrap justify-end gap-2">
+            {back ? <Button type="button" variant="ghost" disabled={checking} onClick={back}>{initialSource ? exitLabel : "Back"}</Button> : null}
+            <Button type="button" disabled={checking || files.length === 0} onClick={() => void check()}>
+              {checking ? <Spinner aria-hidden="true" role={undefined} aria-label={undefined} data-icon="inline-start" /> : null}
               {checking ? "Checking the files…" : "Check the files"}
-            </button>
+            </Button>
           </div>
-          {checking ? <p className="small muted right" role="status">Checking the files…</p> : null}
+          {checking ? <p className="text-right text-xs text-muted-foreground" role="status">Checking the files…</p> : null}
         </ErrorFocus>
-      </Card>
+      </ImportCard>
     );
   } else if (step === "preview" && checked) {
     const { preview } = checked;
@@ -526,26 +547,26 @@ export function ImportWizard({ initialSource, onExit, exitLabel = "Back", onImpo
       : checked.date === null ? "No as-of date yet" : `As of ${formatDate(checked.date)}${checked.sentDate ? "" : ", from your files"}`;
     body = (
       <>
-        <Card title="Review the import">
-          <p className="import-summary">
+        <ImportCard title="Review the import">
+          <p className="text-sm">
             From {checked.source === "pulley" ? "Pulley's exports" : "the Cap Table spreadsheet"} · {plural(checked.files.length, "file")} · {date} · Currency {preview.currency}{" "}
-            <button type="button" className="btn-link" onClick={toUpload}>Change the date</button>
+            <Button type="button" variant="link" className="h-auto p-0 align-baseline" onClick={toUpload}>Change the date</Button>
           </p>
           <DetectedFiles files={preview.detectedFiles} />
           {commitProblem ? <Banner kind="danger" title="Nothing was imported">{commitProblem}</Banner> : null}
           <ProblemSections problems={problems} canImport={preview.canImport} />
-        </Card>
+        </ImportCard>
         <OpeningBalances balances={preview.openingBalances} />
         <Assumptions assumptions={preview.assumptions} />
         <ImportTotals totals={preview.totals} counts={preview.counts} source={checked.source} />
-        <div className="wiz-foot">
-          <button type="button" className="btn btn-ghost" onClick={toUpload}>Upload corrected files</button>
-          <button type="button" className="btn btn-primary" disabled={!importable} aria-describedby={importable ? undefined : "import-blocked"} onClick={() => void commit()}>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={toUpload}>Upload corrected files</Button>
+          <Button type="button" disabled={!importable} aria-describedby={importable ? undefined : "import-blocked"} onClick={() => void commit()}>
             Import
-          </button>
+          </Button>
         </div>
         {importable ? null : (
-          <p className="small muted right" id="import-blocked">
+          <p className="text-right text-xs text-muted-foreground" id="import-blocked">
             {errors.length ? `Import is off until the ${plural(errors.length, "problem")} above ${errors.length === 1 ? "is" : "are"} fixed.` : "This preview can't be imported. Upload corrected files."}
           </p>
         )}
@@ -554,64 +575,80 @@ export function ImportWizard({ initialSource, onExit, exitLabel = "Back", onImpo
   } else if (step === "importing" && checked) {
     const { counts } = checked.preview;
     body = (
-      <Card title="Importing the cap table">
+      <ImportCard title="Importing the cap table">
         {sending?.kind === "unresolved" ? (
           <Banner
             kind="danger"
             title="The import's outcome isn't known yet"
             action={
-              <span className="row nowrap">
-                <button type="button" className="btn btn-ghost btn-sm" onClick={retry}>Try again</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void checkRun()}>Check the import</button>
+              <span className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={retry}>Try again</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void checkRun()}>Check the import</Button>
               </span>
             }
           >
             {sending.message} The import may have finished anyway. Check it, or try again: if it finished, the server answers with that result instead of importing twice.
           </Banner>
         ) : (
-          <div className="import-progress">
-            <progress aria-label="Import progress" />
-            <p role="status">
+          <div className="flex flex-col gap-1.5">
+            {/* No measure of how far it is: an indeterminate bar that pulses. */}
+            <Progress aria-label="Import progress" className="h-2 animate-pulse [&>[data-slot=progress-indicator]]:transform-none!" />
+            <p role="status" className="flex items-center gap-2 text-sm">
+              <Spinner aria-hidden="true" role={undefined} aria-label={undefined} />
               {sending?.kind === "checking" ? "Checking the import…" : `Importing ${plural(counts.stakeholders, "stakeholder")}, ${plural(counts.securities, "security", "securities")} and ${plural(counts.transactions, "transaction")}…`}
             </p>
-            {sending?.kind === "sending" ? <p className="small muted">This can take a few minutes for a large company. Running for {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}.</p> : null}
+            {sending?.kind === "sending" ? <p className="text-xs text-muted-foreground">This can take a few minutes for a large company. Running for {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}.</p> : null}
           </div>
         )}
-        <p className="small">Keep this page open until the import finishes.</p>
-        {blockedNotice ? <p className="err-inline" role="alert">The import is still running. Stay on this page until it finishes.</p> : null}
-      </Card>
+        <p className="text-xs">Keep this page open until the import finishes.</p>
+        {blockedNotice ? <p className="text-sm font-medium text-destructive" role="alert">The import is still running. Stay on this page until it finishes.</p> : null}
+      </ImportCard>
     );
   } else if (step === "done" && result) {
     const company = me?.company?.id === result.orgId ? me.company : null;
     body = (
-      <Card title="Import complete">
+      <ImportCard title="Import complete">
         <Banner kind="ok" title="The cap table is imported">{company ? `${company.displayName} is set up with the records below.` : "The company is set up with the records below."}</Banner>
         <ImportCounts counts={result.counts} label="Imported" />
-        <div className="wiz-foot">
+        <div className="flex flex-wrap justify-end gap-2">
           {switching ? (
-            <span className="small muted" role="status">Opening the company…</span>
+            <span className="text-xs text-muted-foreground" role="status">Opening the company…</span>
           ) : (
             <>
-              <Link className="btn btn-ghost" to={company ? `/companies/${company.id}/dashboard` : "/"}>Go to the dashboard</Link>
-              <Link className="btn btn-primary" to={company ? `/companies/${company.id}/captable` : "/"}>Open the cap table</Link>
+              <Button asChild variant="ghost"><Link to={company ? `/companies/${company.id}/dashboard` : "/"}>Go to the dashboard</Link></Button>
+              <Button asChild><Link to={company ? `/companies/${company.id}/captable` : "/"}>Open the cap table</Link></Button>
             </>
           )}
         </div>
-      </Card>
+      </ImportCard>
     );
   }
 
   return (
-    <div className="wiz-body rail import-wizard">
-      <ol className="steps-rail" aria-label="Import steps">
+    <div className="grid items-start gap-8 lg:grid-cols-[210px_minmax(0,880px)]">
+      <ol className="flex flex-col lg:sticky lg:top-4" aria-label="Import steps">
         {STEPS.map(([key, label], index) => (
-          <li key={key} className={index < current ? "st done" : index === current ? "st cur" : "st"} aria-current={index === current ? "step" : undefined}>
-            <span className="o" aria-hidden="true" />
+          <li
+            key={key}
+            className={cn(
+              "relative flex items-start gap-2.5 pb-4.5 text-sm text-muted-foreground last:pb-0",
+              "before:absolute before:top-4 before:bottom-0 before:left-1.5 before:w-px before:bg-border last:before:hidden",
+              index === current && "font-semibold text-foreground",
+            )}
+            aria-current={index === current ? "step" : undefined}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "relative z-10 mt-0.75 size-3.25 shrink-0 rounded-full border-2 bg-background",
+                index < current ? "border-primary bg-primary" : index === current ? "border-primary" : "border-input",
+              )}
+            />
             <span>{label}</span>
           </li>
         ))}
       </ol>
-      <div className="import-step" ref={stepBox}>{body}</div>
+      <div className="flex min-w-0 flex-col gap-4" ref={stepBox}>{body}</div>
     </div>
   );
 }

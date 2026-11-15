@@ -11,6 +11,8 @@ export default defineConfig({
     alias: { '#platform': resolve(import.meta.dirname, 'src/platform.local.ts') },
   },
   test: {
+    // Dates without a company time zone format in the machine's; CI runs in UTC, so every machine does.
+    env: { TZ: 'UTC' },
     projects: [
       {
         extends: true,

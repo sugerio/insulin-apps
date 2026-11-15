@@ -16,6 +16,8 @@ export const portalDocumentSchema = z.strictObject({
   filename: z.string(),
   kind: documentKindSchema,
   createdAt: epochMsSchema,
+  // An imported document: when it was uploaded where it came from (`documents.source_created_at`). Never a signing date.
+  sourceCreatedAt: epochMsSchema.nullable(),
   scope: z.enum(["mine", "company"]),
 });
 export type PortalDocument = z.infer<typeof portalDocumentSchema>;
@@ -41,6 +43,9 @@ export const portalVestingEventSchema = z.strictObject({
 });
 export type PortalVestingEvent = z.infer<typeof portalVestingEventSchema>;
 
+/** Whose signature a security still awaits (`X_EXECUTION_STATUS`, the product rules). */
+export const PORTAL_EXECUTION_PENDING = ["pending_holder", "pending_company", "pending_both"] as const;
+
 export const portalSecuritySchema = z.strictObject({
   id: uuidSchema,
   orgId: uuidSchema,
@@ -52,13 +57,16 @@ export const portalSecuritySchema = z.strictObject({
   issueDate: isoDateSchema,
   // A holder never sees a retracted security: it never legally existed.
   status: z.enum(["OUTSTANDING", "EXERCISED", "CANCELLED", "EXPIRED", "REPURCHASED", "TRANSFERRED", "CONVERTED"]),
-  // Awaiting signatures (the product rules): nothing is exercisable until the holder and the company have both signed.
-  executionPending: z.boolean(),
+  // Awaiting signatures (the product rules): whose signature is still missing; null once executed (or none is needed).
+  // Only the holder's own missing signature (pending_holder, pending_both) blocks exercise; a grant awaiting only the
+  // company's countersignature is exercisable. `numbers.exercisable` already follows the rule.
+  executionPending: z.enum(PORTAL_EXECUTION_PENDING).nullable(),
   exercisePrice: decimalSchema.nullable(),
   expirationDate: isoDateSchema.nullable(),
   contractualDeadline: isoDateSchema.nullable(), // shown for terminated holders
   isoDeadline: isoDateSchema.nullable(),
   numbers: portalSecurityNumbersSchema,
+  vestingStartDate: isoDateSchema.nullable(), // as recorded (TX_VESTING_START); null without one
   vesting: z.array(portalVestingEventSchema),
   documents: z.array(portalDocumentSchema),
   convertedInto: z.array(z.strictObject({ displayId: displayIdSchema })).optional(), // a SAFE's converted history: the caller's own lots
@@ -68,7 +76,13 @@ export type PortalSecurity = z.infer<typeof portalSecuritySchema>;
 // A holding's detail page (the product rules): what the overview's PortalSecurity carries, plus the family's own facts.
 // `GET /api/portal/orgs/:orgId/securities/:id` answers with it, and so does the admin's preview of that page.
 
-/** An option grant: early exercise, the ISO/NSO split, the post-termination periods and the holder's exercises. */
+/** Acceleration terms (`x_acceleration_terms.kind`). */
+export const PORTAL_ACCELERATION_KINDS = ["NONE", "SINGLE_TRIGGER", "DOUBLE_TRIGGER"] as const;
+
+/**
+ * An option grant: early exercise, the ISO/NSO split, the post-termination periods, board approval, acceleration and
+ * the holder's exercises.
+ */
 export const portalOptionDetailSchema = z.strictObject({
   family: z.literal("EQUITY_COMPENSATION"),
   earlyExerciseAllowed: z.boolean(), // by the grant agreement; holder requests remain vested-only
@@ -84,6 +98,9 @@ export const portalOptionDetailSchema = z.strictObject({
   ),
   // One window per termination reason: the grant's override, else the plan default (the product rules).
   postTerminationPeriods: z.array(terminationWindowSchema),
+  boardApprovalDate: isoDateSchema.nullable(), // null: not recorded
+  // The grant's acceleration terms as recorded (kind and the agreement's own words); null: not recorded.
+  acceleration: z.strictObject({ kind: z.enum(PORTAL_ACCELERATION_KINDS), text: z.string().nullable() }).nullable(),
   // The holder's own exercises of this grant, oldest first. Resulting shares are the holder's own lots, in the overview.
   exercises: z.array(
     z.strictObject({
@@ -100,14 +117,18 @@ export type PortalOptionDetail = z.infer<typeof portalOptionDetailSchema>;
 /** How a share lot is held (the product rulesshare detail). */
 export const PORTAL_SHARE_FORMS = ["book_entry", "migrated_unsigned_certificate", "uncertificated"] as const;
 
-/** A share lot: price, form, legends, 83(b), the company's repurchase right and where the lot came from. */
+/** The 83(b) election in force on a lot, or NOT_RECORDED: the lot vests (restricted stock) and no election is on record. */
+export const PORTAL_ELECTION_83B_STATUSES = [...ELECTION_83B_STATUSES, "NOT_RECORDED"] as const;
+
+/** A share lot: price, form, legends, holding start, 83(b), the company's repurchase right and the lot's origin. */
 export const portalShareDetailSchema = z.strictObject({
   family: z.literal("STOCK"),
   pricePerShare: decimalSchema.nullable(),
   form: z.enum(PORTAL_SHARE_FORMS),
   legends: z.array(z.string()), // legend names
-  // null: no 83(b) election applies to this lot.
-  election83b: z.strictObject({ status: z.enum(ELECTION_83B_STATUSES), filedOn: isoDateSchema.nullable() }).nullable(),
+  holdingStartDate: isoDateSchema.nullable(), // as recorded (`x_holding_start_date`); null: not recorded
+  // null: no 83(b) election applies (the lot never vested over time) and none is recorded.
+  election83b: z.strictObject({ status: z.enum(PORTAL_ELECTION_83B_STATUSES), filedOn: isoDateSchema.nullable() }).nullable(),
   // Restricted stock: the company's right to buy back unvested shares; null when the lot carries none.
   repurchase: z
     .strictObject({

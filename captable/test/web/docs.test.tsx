@@ -163,7 +163,7 @@ describe("the topics", () => {
   it("puts the general-information note on the equity topics", async () => {
     renderPage("docs/equity-basics", []);
     await title("Equity basics");
-    const note = screen.getByText("General information, not advice").closest(".banner") as HTMLElement;
+    const note = screen.getByText("General information, not advice").closest("[role='note']") as HTMLElement;
     expect(note.getAttribute("role")).toBe("note");
     expect(note.textContent).toContain("It isn't legal, tax or financial advice.");
     expect(note.textContent).toContain("Rules differ from country to country and change over time");
@@ -360,7 +360,8 @@ describe("the content", () => {
       }
       // Plain language: no codes from the API, no addresses of other sites.
       expect(article.textContent).not.toMatch(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/);
-      expect(article.innerHTML).not.toMatch(/https?:/);
+      // An icon's SVG namespace is the one web address allowed in the markup.
+      expect(article.innerHTML.replaceAll('xmlns="http://www.w3.org/2000/svg"', "")).not.toMatch(/https?:/);
       cleanup();
     }
     expect(links.length).toBeGreaterThan(50);

@@ -8,6 +8,7 @@ import { SelectField, TextAreaField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
 import { FlowDialog } from "./FlowDialog.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // Stakeholder portal settings writes, owners and admins. The portal section of
 // the org settings replaces whole and only an explicit null clears a key, so every write sends all three keys: the
@@ -99,11 +100,11 @@ export function PortalDocumentsDialog({ org, resources, onClose, onDone }: Porta
   return (
     <FlowDialog title="Portal documents" flow={flow as never} onClose={onClose} onReview={review} confirmLabel="Save"
       review={reviewed ? (
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>Notice of exercise form: <b>{nameOf(reviewed.noticeFormDocumentId)}</b>. Privacy notice: <b>{nameOf(reviewed.privacyNoticeDocumentId)}</b>. Holders reach them from How to exercise and the portal footer.</p>
-        </div>
+        </ReviewPanel>
       ) : null}>
-      <p className="small">Each one is a company resource every holder sees. Publish a document first if it isn't listed.</p>
+      <p className="text-xs text-muted-foreground">Each one is a company resource every holder sees. Publish a document first if it isn't listed.</p>
       <SelectField label="Notice of exercise form (counsel's)" value={notice} onChange={(value) => { setNotice(value); setErrors((current) => ({ ...current, noticeFormDocumentId: undefined })); }}
         options={options(notice)} error={errors.noticeFormDocumentId ?? fieldProblem(flow.problem, "noticeFormDocumentId")} />
       <SelectField label="Privacy notice (counsel's)" value={privacy} onChange={(value) => { setPrivacy(value); setErrors((current) => ({ ...current, privacyNoticeDocumentId: undefined })); }}
@@ -143,9 +144,9 @@ export function HowToExerciseDialog({ org, resources, onClose, onDone }: PortalD
   return (
     <FlowDialog title="How to exercise — text" flow={flow as never} onClose={onClose} onReview={review} confirmLabel="Save text"
       review={
-        <div className="review-panel" aria-label="Review">
-          {reviewed ? <><p>Holders see this on How to exercise, above the payment instructions and their reference:</p><pre className="small" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{reviewed}</pre></> : <p>Holders see the default text again.</p>}
-        </div>
+        <ReviewPanel>
+          {reviewed ? <><p>Holders see this on How to exercise, above the payment instructions and their reference:</p><pre className="font-sans text-xs whitespace-pre-wrap">{reviewed}</pre></> : <p>Holders see the default text again.</p>}
+        </ReviewPanel>
       }>
       <TextAreaField label="Text holders see on How to exercise" value={text} rows={8} onChange={(value) => { setText(value); setError(undefined); }}
         hint="Leave empty for the default text. The payment instructions and each holder's reference are added below it." error={error ?? fieldProblem(flow.problem, "text")} />
@@ -184,8 +185,8 @@ export function PublishResourceDialog({ documents, preselect, onClose, onDone }:
   };
   return (
     <FlowDialog title="Publish a company resource" flow={flow as never} onClose={onClose} onReview={review} confirmLabel="Publish"
-      review={<div className="review-panel" aria-label="Review"><p>Every holder sees <b>{chosen?.filename}</b> under Company resources in their portal. No e-mail is sent.</p></div>}>
-      <p className="small">Documents with no holder link can be company resources (a plan document, the exercise FAQ, counsel's notice of exercise form, the privacy notice).</p>
+      review={<ReviewPanel><p>Every holder sees <b>{chosen?.filename}</b> under Company resources in their portal. No e-mail is sent.</p></ReviewPanel>}>
+      <p className="text-xs text-muted-foreground">Documents with no holder link can be company resources (a plan document, the exercise FAQ, counsel's notice of exercise form, the privacy notice).</p>
       <SelectField label="Document" required value={documentId} onChange={(value) => { setDocumentId(value); setVersion(null); setError(undefined); }}
         placeholder={documents === null ? "Loading…" : candidates.length ? "Choose…" : "No document can be published"} options={candidates.map((document) => [document.id, document.filename] as const)}
         error={error ?? fieldProblem(flow.problem, "document")} />

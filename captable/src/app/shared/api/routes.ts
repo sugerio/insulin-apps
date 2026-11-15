@@ -886,6 +886,7 @@ export const routes = {
   exerciseOption: commandRoute("exerciseOption", COMMANDS["exercise-option"]),
   grantEquityCompensation: commandRoute("grantEquityCompensation", COMMANDS["grant-equity-compensation"]),
   cancelSecurity: commandRoute("cancelSecurity", COMMANDS["cancel-security"]),
+  recordRepurchase: commandRoute("recordRepurchase", COMMANDS["record-repurchase"]),
   markExecuted: commandRoute("markExecuted", COMMANDS["mark-executed"]),
   recordLeaveOfAbsence: commandRoute("recordLeaveOfAbsence", COMMANDS["record-leave-of-absence"]),
   extendExerciseDeadline: commandRoute("extendExerciseDeadline", COMMANDS["extend-exercise-deadline"]),

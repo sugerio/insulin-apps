@@ -2,19 +2,20 @@ import "./setup.ts";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { api } from "#shared";
-import { IDS, capTable, securitiesStatus, securityList, stakeholderList, uuid } from "./support/acme.ts";
-import { DIFF_A, DIFF_B, EFFECT_B, asReviewed, attach, choose, commandRoute, dryRuns, errorOf, expectNotDismissible, keysOf, realCalls, refused, result, stale, type, unavailable, uploads, waitForCalls, LOST, expectSentAsPreviewed } from "./support/flows.ts";
+import { IDS, SECURITIES, TODAY, capTable, numbers, securitiesStatus, security, securityList, stakeholder, stakeholderList, uuid } from "./support/acme.ts";
+import { DIFF_A, DIFF_B, EFFECT_B, asReviewed, attach, choose, commandRoute, dryRuns, errorOf, expectNotDismissible, keysOf, realCalls, refused, result, stage, stale, type, unavailable, uploads, waitForCalls, LOST, expectSentAsPreviewed } from "./support/flows.ts";
 import { apiError, mock, type MockHandler, type MockRequest } from "./support/mockApi.ts";
-import { DETAILS, securityHandlers } from "./support/securities.ts";
+import { DETAILS, ECHO, STAKEHOLDER_DETAILS, detailOf, securityHandlers } from "./support/securities.ts";
 import { base, renderPage } from "./support/render.tsx";
+import { REPURCHASE_METHOD_LABELS } from "../../src/app/components/flows/RecordRepurchaseDialog.tsx";
 
-// The security dialogs: Cancel, the cap table's bulk cancel,
-// Mark executed, Extend exercise deadline and Reverse. Each runs its dry run (or the reversal preview), shows the
-// server's figures, asks for the typed ID, and records with one key per intent.
+// The security dialogs: Cancel, the cap table's bulk cancel, Mark executed, Extend exercise deadline, Reverse and Record
+// repurchase. Each runs its dry run (or the reversal preview), shows the server's figures, asks for the typed ID, and
+// records with one key per intent.
 
 function handlers(...extra: MockHandler[]): MockHandler[] {
   const routes = new Set(extra.map((handler) => handler.route));
-  return [...securityHandlers.filter((handler) => !routes.has(handler.route)), uploads(), ...extra];
+  return [...securityHandlers.filter((handler) => !routes.has(handler.route)), ...(routes.has(api.routes.uploadDocument) ? [] : [uploads()]), ...extra];
 }
 
 async function openAction(securityId: string, heading: string, item: RegExp) {
@@ -541,6 +542,59 @@ describe("mark executed", () => {
     expect(realCalls(callsTo(api.routes.markExecuted)).map((call) => (call.body as { expectedLedgerSeq: number }).expectedLedgerSeq)).toEqual([412, 430]);
   }, 60_000);
 
+  it("records the holder's signature alone on a grant awaiting both, with its own attestation and date", async () => {
+    const holderSigned = executedPreview({
+      changes: [{ entity: "security", id: IDS.opt49, before: { displayId: "OPT-49", executionStatus: "pending_both" }, after: { displayId: "OPT-49", executionStatus: "pending_company" } }],
+    });
+    const executed = commandRoute(api.routes.markExecuted, { preview: holderSigned, commit: result({ ...holderSigned, commandId: uuid(30, 5), dryRun: false }, true) });
+    const { callsTo } = renderPage(`securities/${IDS.opt49}`, handlers(executed), { role: "admin_rw" });
+    await openAction(IDS.opt49, "OPT-49 Options", /Mark executed/);
+    await screen.findByRole("dialog", { name: "Mark OPT-49 executed" });
+    fireEvent.click(screen.getByRole("radio", { name: /^The holder/ }));
+    // Only the holder's date, and the attestation of what the PDF bears.
+    expect(screen.queryByLabelText("Company signature date")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(errorOf(/Agreement signed by the holder/)).toBe("Upload the agreement the holder signed.");
+    expect(errorOf("Holder signature date")).toBe("Enter the holder's signature date.");
+    expect(screen.getByText("Confirm: This PDF bears the holder's signature.")).toBeTruthy();
+    await attach(/Agreement signed by the holder/, "OPT-49 Option Agreement - holder signed.pdf");
+    type("Holder signature date", "2026-10-19");
+    fireEvent.click(screen.getByLabelText("This PDF bears the holder's signature"));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    const panel = await screen.findByRole("region", { name: "Server preview" });
+    expect(within(panel).getByRole("region", { name: "OPT-49" }).textContent).toContain("Execution statusPending — holder + company→Pending — company signatory");
+    expect(dryRuns(callsTo(api.routes.markExecuted))[0]!.body).toEqual({
+      securityId: IDS.opt49, signed: "holder", executedAgreementDocumentId: uuid(40, 1), signatureDates: { holder: "2026-10-19" }, attestation: "This PDF bears the holder's signature",
+    });
+    fireEvent.change(screen.getByLabelText(/to confirm/), { target: { value: "OPT-49" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(await screen.findByText("OPT-49: the holder's signature recorded — awaiting the company signatory")).toBeTruthy();
+  }, 60_000);
+
+  it("asks who signed only on a grant awaiting both signatures, and puts the server's refusal on the answer", async () => {
+    const refusal = refused([{ code: "SIGNATURE_NOT_PENDING", message: "OPT-49 isn't awaiting the company signatory's signature" }]);
+    const executed = commandRoute(api.routes.markExecuted, { preview: refusal });
+    renderPage(`securities/${IDS.opt49}`, handlers(executed), { role: "admin_rw" });
+    await openAction(IDS.opt49, "OPT-49 Options", /Mark executed/);
+    await screen.findByRole("dialog", { name: "Mark OPT-49 executed" });
+    fireEvent.click(screen.getByRole("radio", { name: /^The company signatory/ }));
+    await attach(/Agreement signed by the company signatory/, "OPT-49 Option Agreement - company signed.pdf");
+    type("Company signature date", "2026-10-19");
+    fireEvent.click(screen.getByLabelText("This PDF bears the company signatory's signature"));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    await waitFor(() => expect(errorOf(/^The company signatory/)).toBe("OPT-49 isn't awaiting the company signatory's signature"));
+  }, 60_000);
+
+  it("asks nothing on a grant awaiting one party: that signature completes it", async () => {
+    const executed = commandRoute(api.routes.markExecuted, { preview: executedPreview() });
+    const holderPending = { ...DETAILS[IDS.opt49]!, executionStatus: "pending_holder" as const };
+    renderPage(`securities/${IDS.opt49}`, handlers(mock(api.routes.getSecurity, (request: MockRequest) => (request.params.id === IDS.opt49 ? holderPending : DETAILS[request.params.id!])), executed), { role: "admin_rw" });
+    await openAction(IDS.opt49, "OPT-49 Options", /Mark executed/);
+    await screen.findByRole("dialog", { name: "Mark OPT-49 executed" });
+    expect(screen.queryByRole("radiogroup", { name: "Who signed?" })).toBeNull();
+    expect(screen.getByLabelText(/Fully signed agreement/)).toBeTruthy();
+  }, 60_000);
+
   it("isn't offered to read-only admins", async () => {
     renderPage(`securities/${IDS.opt49}`, handlers(), { role: "admin_ro" });
     await screen.findByRole("heading", { name: "OPT-49 Options", level: 1 });
@@ -708,5 +762,313 @@ describe("reverse", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: /Reverse/ })).toBeTruthy();
     expect(DETAILS[IDS.opt1]).toBeTruthy();
+  }, 60_000);
+});
+
+describe("record repurchase", () => {
+  const money = (amount: string) => ({ amount, currency: "USD" });
+  const BALANCE = uuid(6, 9);
+  const REPURCHASE = uuid(9, 40);
+  // CS-4: Desmond Okafor's early-exercised shares; he left on 2026-09-15 with 34,500 unvested (synthetic Acme data).
+  const cs4 = security({
+    id: IDS.cs4, displayId: "CS-4", stakeholderId: IDS.desmond, stakeholderName: "Desmond Okafor", stockPlanId: IDS.plan, issueDate: "2024-09-01", boardApprovalDate: null,
+    terms: { share_price: money("0.31"), x_origin: "EXERCISE", vesting_terms_id: IDS.vs1, x_repurchase_right: { price_per_share: money("0.31"), window: { period: 90, period_type: "DAYS" } } },
+    numbers: numbers({ issued: "72000", outstanding: "72000", fullyDiluted: "72000", vested: "37500", unvested: "34500", vestedOutstanding: "37500", repurchaseable: "34500" }),
+  });
+  const desmond = api.stakeholderDetailSchema.parse({
+    ...stakeholder({ id: IDS.desmond, displayName: "Desmond Okafor", relationship: "ex_employee", termination: { date: "2026-09-15", type: "voluntary", vestingStopDate: "2026-09-15", commandId: uuid(9, 24) } }),
+    ...ECHO, exercises: [],
+  });
+  const row = { securityId: IDS.cs4, stakeholderId: IDS.desmond, unvested: "34500", repurchasePrice: "0.31", lastRepurchaseDate: "2026-12-14", status: "open" as const };
+  const lookups = (statusRow: api.SecuritiesStatus["unvestedSharesFromTerminated"][number] = row) => [
+    mock(api.routes.getSecurity, (request: MockRequest) => (request.params.id === IDS.cs4 ? detailOf(cs4) : DETAILS[request.params.id!] ?? apiError(404, "not_found", "Not found"))),
+    mock(api.routes.getStakeholder, (request: MockRequest) => (request.params.id === IDS.desmond ? desmond : STAKEHOLDER_DETAILS[request.params.id!] ?? apiError(404, "not_found", "Not found"))),
+    mock(api.routes.getSecuritiesStatus, securitiesStatus({ unvestedSharesFromTerminated: [statusRow] })),
+    mock(api.routes.listSecurities, securityList([...Object.values(SECURITIES), cs4])),
+    mock(api.routes.listStakeholders, stakeholderList()),
+  ];
+  const repurchasePreview = (overrides: Partial<api.CommandResult> = {}) => result({
+    transactions: [
+      { id: null, seq: null, type: "TX_STOCK_REPURCHASE", effectiveDate: TODAY, securityId: IDS.cs4, quantity: "34500" },
+      { id: null, seq: null, type: "TX_STOCK_ISSUANCE", effectiveDate: TODAY, securityId: BALANCE, quantity: "37500" },
+    ],
+    created: { securityIds: [BALANCE], scheduledTerminationIds: [], vestingTermsIds: [] },
+    changes: [
+      { entity: "security", id: IDS.cs4, before: { displayId: "CS-4", status: "OUTSTANDING", outstanding: "72000", unvested: "34500" }, after: { displayId: "CS-4", status: "REPURCHASED", outstanding: "0", unvested: "0" } },
+      { entity: "security", id: BALANCE, before: null, after: { displayId: "CS-9", status: "OUTSTANDING", outstanding: "37500" } },
+    ],
+    ...overrides,
+  });
+  const committed = (preview: api.CommandResult) => result({ ...preview, commandId: REPURCHASE, dryRun: false, ledgerSeq: 414 }, true);
+
+  async function openFromStatus() {
+    fireEvent.click(await screen.findByRole("button", { name: "Record a repurchase of CS-4" }));
+    return screen.findByRole("dialog", { name: "Record repurchase of CS-4" });
+  }
+
+  it("announces its field errors once, through the form's summary, not each as an alert", async () => {
+    renderPage("securities-status", handlers(...lookups()), { role: "admin_rw" });
+    const dialog = await openFromStatus();
+    const price = await within(dialog).findByLabelText("Price paid per share");
+    fireEvent.change(price, { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    await waitFor(() => expect(price.getAttribute("aria-invalid")).toBe("true"));
+    const error = document.getElementById(price.getAttribute("aria-describedby")!.split(" ")[0]!)!;
+    expect(error.dataset.slot).toBe("field-error");
+    expect(error.getAttribute("role")).toBeNull();
+  });
+
+  it("gives focus back to the row's Record repurchase button when the dialog closes", async () => {
+    renderPage("securities-status", handlers(...lookups()), { role: "admin_rw" });
+    const button = await screen.findByRole("button", { name: "Record a repurchase of CS-4" });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "Record repurchase of CS-4" });
+    await within(dialog).findByLabelText("Price paid per share");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(button));
+  });
+
+  /** "Paid by" is a shadcn/ui (Radix) Select: open it from the keyboard, then pick the option. */
+  async function payBy(method: "CHECK" | "WIRE" | "ACH") {
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Paid by" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: REPURCHASE_METHOD_LABELS[method] }));
+  }
+
+  it("records it from Securities Status: every unvested share, the price, how it was paid and the notice, then the typed ID", async () => {
+    const repurchase = commandRoute(api.routes.recordRepurchase, { preview: repurchasePreview(), commit: committed(repurchasePreview()) });
+    const { callsTo } = renderPage("securities-status", handlers(...lookups(), repurchase), { role: "admin_rw" });
+    const dialog = await openFromStatus();
+    expect(within(dialog).getByText("Desmond Okafor (left Sep 15, 2026)")).toBeTruthy();
+    expect((within(dialog).getByLabelText("Price paid per share") as HTMLInputElement).value).toBe("0.31");
+    expect(within(dialog).getByText("Total paid: $10,695.00")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    expect(within(dialog).getByText("Choose how the company paid.")).toBeTruthy();
+    expect(within(dialog).getByText("Upload the repurchase notice sent to the holder.")).toBeTruthy();
+    expect(callsTo(api.routes.recordRepurchase)).toHaveLength(0);
+    // Within the window, it is recorded without counsel's authority.
+    expect(within(dialog).queryByLabelText(/Counsel's authority/)).toBeNull();
+
+    await payBy("CHECK");
+    type("Payment reference", "Check 1042");
+    await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
+    expect(within(dialog).getByRole("button", { name: "Remove CS-4 repurchase notice.pdf" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    await waitForCalls(() => dryRuns(callsTo(api.routes.recordRepurchase)), 1);
+    expect(dryRuns(callsTo(api.routes.recordRepurchase))[0]!.body).toEqual({
+      securityId: IDS.cs4, effectiveDate: TODAY, quantity: "34500", pricePerShare: "0.31",
+      consideration: { method: "CHECK", paidDate: TODAY, reference: "Check 1042" }, noticeDocumentId: uuid(40, 1),
+    });
+    const panel = await screen.findByRole("region", { name: "Server preview" });
+    expect(within(within(panel).getByRole("table", { name: "Transactions" })).getAllByRole("row").slice(1).map((item) => item.textContent)).toEqual([
+      "Share repurchaseOct 21, 2026CS-434,500", "Share issuance (book entry)Oct 21, 2026CS-937,500",
+    ]);
+    expect(within(panel).getByRole("region", { name: "CS-4" }).textContent).toContain("StatusOutstanding→Repurchased");
+    const confirm = screen.getByRole("button", { name: "Record repurchase" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/to confirm/), { target: { value: "CS-4" } });
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    expect(await screen.findByText("CS-4 repurchase recorded — 34,500 shares")).toBeTruthy();
+    const real = realCalls(callsTo(api.routes.recordRepurchase))[0]!;
+    expect(real.body).toMatchObject({ confirmation: "CS-4", expectedLedgerSeq: 412, expectedDiffSha256: DIFF_A, acknowledge: [] });
+    expect(real.headers.get("Idempotency-Key")).toBeTruthy();
+    expectSentAsPreviewed(dryRuns(callsTo(api.routes.recordRepurchase))[0]!, real);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // The queues are read again.
+    await waitFor(() => expect(callsTo(api.routes.getSecuritiesStatus).length).toBeGreaterThanOrEqual(3));
+  }, 60_000);
+
+  it("after the deadline, asks for counsel's authority and sends it with the acknowledged warning", async () => {
+    const lapsed = { ...row, lastRepurchaseDate: "2026-10-01", status: "lapsed" as const };
+    const late = repurchasePreview({ warnings: [{ code: "REPURCHASE_AFTER_DEADLINE", message: "The repurchase right ended on 2026-10-01" }] });
+    const repurchase = commandRoute(api.routes.recordRepurchase, { preview: late, commit: committed(late) });
+    const { callsTo } = renderPage("securities-status", handlers(...lookups(lapsed), repurchase), { role: "admin_rw" });
+    const dialog = await openFromStatus();
+    expect(within(dialog).getByText("The repurchase right ended on Oct 1, 2026.")).toBeTruthy();
+    expect(within(dialog).getByLabelText(/Counsel's authority/)).toBeTruthy();
+    await payBy("WIRE");
+    await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    expect(within(dialog).getByText("Upload counsel's authority for this repurchase.")).toBeTruthy();
+    await attach(/Counsel's authority/, "Counsel memo CS-4.pdf");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    await waitForCalls(() => dryRuns(callsTo(api.routes.recordRepurchase)), 1);
+    expect(dryRuns(callsTo(api.routes.recordRepurchase))[0]!.body).toMatchObject({ noticeDocumentId: uuid(40, 1), authorityDocumentId: uuid(40, 2) });
+    await screen.findByRole("region", { name: "Server preview" });
+    fireEvent.change(screen.getByLabelText(/to confirm/), { target: { value: "CS-4" } });
+    const confirm = screen.getByRole("button", { name: "Record repurchase" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /The repurchase right ended on 2026-10-01/ }));
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    await waitForCalls(() => realCalls(callsTo(api.routes.recordRepurchase)), 1);
+    expect(realCalls(callsTo(api.routes.recordRepurchase))[0]!.body).toMatchObject({ acknowledge: ["REPURCHASE_AFTER_DEADLINE"], authorityDocumentId: uuid(40, 2) });
+  }, 60_000);
+
+  it("records a lot whose agreement sets no deadline without counsel's authority; one with none recorded needs it", async () => {
+    const noDeadline = { ...row, lastRepurchaseDate: null, status: "no_deadline" as const };
+    renderPage("securities-status", handlers(...lookups(noDeadline)), { role: "admin_rw" });
+    const dialog = await openFromStatus();
+    expect(within(dialog).getByText("None (per agreement)")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    expect(within(dialog).queryByText(/counsel's authority/i)).toBeNull();
+    cleanup();
+
+    renderPage("securities-status", handlers(...lookups({ ...noDeadline, status: "not_recorded" })), { role: "admin_rw" });
+    const unrecorded = await openFromStatus();
+    expect(within(unrecorded).getByText("No repurchase deadline is recorded for CS-4.")).toBeTruthy();
+    fireEvent.click(within(unrecorded).getByRole("button", { name: "Review" }));
+    expect(within(unrecorded).getByText("Upload counsel's authority for this repurchase.")).toBeTruthy();
+  }, 60_000);
+
+  it("shows the violation the server places on a field, and can't be closed while the answer is unknown", async () => {
+    const repurchase = commandRoute(api.routes.recordRepurchase, {
+      preview: [refused([{ code: "REPURCHASE_NOT_ALL_UNVESTED", message: "A repurchase takes all 34500 shares unvested on 2026-10-21, not 34499" }]), repurchasePreview()],
+      commit: [unavailable(), committed(repurchasePreview())],
+    });
+    const { callsTo } = renderPage("securities-status", handlers(...lookups(), repurchase), { role: "admin_rw" });
+    const dialog = await openFromStatus();
+    await payBy("ACH");
+    await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    expect(await within(dialog).findByText("A repurchase takes all 34500 shares unvested on 2026-10-21, not 34499")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    await screen.findByRole("region", { name: "Server preview" });
+    fireEvent.change(screen.getByLabelText(/to confirm/), { target: { value: "CS-4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record repurchase" }));
+    expect(await screen.findByText(LOST)).toBeTruthy();
+    expectNotDismissible("Record repurchase of CS-4");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(/CS-4 repurchase recorded/)).toBeTruthy();
+    const real = realCalls(callsTo(api.routes.recordRepurchase));
+    expect(real).toHaveLength(2);
+    expect(real[1]!.body).toEqual(real[0]!.body);
+    expect(keysOf(real)[1]).toBe(keysOf(real)[0]);
+  }, 60_000);
+
+  it("can't be closed while the notice's upload awaits its answer", async () => {
+    const pending = mock(api.routes.uploadDocument, () => new Promise<never>(() => {}));
+    const { callsTo } = renderPage("securities-status", handlers(...lookups(), pending), { role: "admin_rw" });
+    const dialog = await openFromStatus();
+    stage(/Repurchase notice/, "CS-4 repurchase notice.pdf");
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Upload CS-4 repurchase notice.pdf" }));
+    expect(await within(dialog).findByText("Uploading…")).toBeTruthy();
+    // Escape, a click outside, the ✕ and Cancel all leave it open: closing would drop the upload's key.
+    const stillOpen = () => expect(screen.getByRole("dialog", { name: "Record repurchase of CS-4" })).toBe(dialog);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    stillOpen();
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+    stillOpen();
+    const close = within(dialog).getByRole("button", { name: "Close" }) as HTMLButtonElement;
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" }) as HTMLButtonElement;
+    expect([close.disabled, cancel.disabled]).toEqual([true, true]);
+    fireEvent.click(close);
+    fireEvent.click(cancel);
+    stillOpen();
+    expect(callsTo(api.routes.uploadDocument)).toHaveLength(1);
+  }, 60_000);
+
+  it("keeps the date that needs counsel's authority while the authority's upload awaits its answer", async () => {
+    const lapsed = { ...row, lastRepurchaseDate: "2026-10-01", status: "lapsed" as const };
+    const pending = mock(api.routes.uploadDocument, () => new Promise<never>(() => {}));
+    renderPage("securities-status", handlers(...lookups(lapsed), pending));
+    const dialog = await openFromStatus();
+    stage(/Counsel's authority/, "Counsel memo CS-4.pdf");
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Upload Counsel memo CS-4.pdf" }));
+    expect(await within(dialog).findByText("Uploading…")).toBeTruthy();
+    // Moving the date inside the window would unmount the upload and drop its key while its outcome is unknown.
+    expect((within(dialog).getByLabelText("Repurchase date") as HTMLInputElement).disabled).toBe(true);
+    expect(within(dialog).getByText("Uploading…")).toBeTruthy();
+    expect((within(dialog).getByRole("button", { name: "Close" }) as HTMLButtonElement).disabled).toBe(true);
+  }, 60_000);
+
+  it("waits for the authority's upload before Review recomputes what the repurchase needs", async () => {
+    const lapsed = { ...row, lastRepurchaseDate: "2026-10-01", status: "lapsed" as const };
+    const pending = mock(api.routes.uploadDocument, () => new Promise<never>(() => {}));
+    renderPage("securities-status", handlers(...lookups(lapsed), pending));
+    const dialog = await openFromStatus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    expect(within(dialog).getByText("Upload counsel's authority for this repurchase.")).toBeTruthy();
+    // Inside the window the authority isn't needed, but its field stays while it shows the error.
+    fireEvent.change(within(dialog).getByLabelText("Repurchase date"), { target: { value: "2026-09-30" } });
+    stage(/Counsel's authority/, "Counsel memo CS-4.pdf");
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Upload Counsel memo CS-4.pdf" }));
+    expect(await within(dialog).findByText("Uploading…")).toBeTruthy();
+    // Review would clear that error and unmount the upload, dropping its key while its outcome is unknown.
+    const review = within(dialog).getByRole("button", { name: "Review" }) as HTMLButtonElement;
+    expect(review.disabled).toBe(true);
+    fireEvent.click(review);
+    expect(within(dialog).getByText("Uploading…")).toBeTruthy();
+  }, 60_000);
+
+  it("keeps counsel's authority once asked for, and sends it, after the date moves inside the window", async () => {
+    const lapsed = { ...row, lastRepurchaseDate: "2026-10-01", status: "lapsed" as const };
+    const repurchase = commandRoute(api.routes.recordRepurchase, { preview: repurchasePreview(), commit: committed(repurchasePreview()) });
+    const { callsTo } = renderPage("securities-status", handlers(...lookups(lapsed), repurchase));
+    const dialog = await openFromStatus();
+    await attach(/Counsel's authority/, "Counsel memo CS-4.pdf");
+    fireEvent.change(within(dialog).getByLabelText("Repurchase date"), { target: { value: "2026-09-30" } });
+    // No longer late, so no warning; the field and its document stay, so no upload is ever dropped mid-answer.
+    expect(within(dialog).queryByText(/The repurchase right ended on/)).toBeNull();
+    expect(within(dialog).getByText("Counsel memo CS-4.pdf")).toBeTruthy();
+    await payBy("WIRE");
+    await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    await waitForCalls(() => dryRuns(callsTo(api.routes.recordRepurchase)), 1);
+    expect(dryRuns(callsTo(api.routes.recordRepurchase))[0]!.body).toMatchObject({ effectiveDate: "2026-09-30", authorityDocumentId: uuid(40, 1) });
+  }, 60_000);
+
+  it("is in the Actions menu of a terminated holder's unvested restricted shares only", async () => {
+    renderPage(`securities/${IDS.cs4}`, handlers(...lookups()), { role: "admin_rw" });
+    await openAction(IDS.cs4, "CS-4 Shares", /Record repurchase/);
+    expect(await screen.findByRole("dialog", { name: "Record repurchase of CS-4" })).toBeTruthy();
+    expect(screen.queryByText(/available starting Jan 15, 2027/)).toBeNull();
+    cleanup();
+    // Exercise shares under no vesting, and a founder lot whose holder hasn't left.
+    for (const [id, heading] of [[IDS.cs7, "CS-7 Shares"], [IDS.cs1, "CS-1 Shares"]] as const) {
+      renderPage(`securities/${id}`, handlers(), { role: "admin_rw" });
+      await screen.findByRole("heading", { name: heading, level: 1 });
+      fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+      expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: /Record repurchase/ }), heading).toBeNull();
+      cleanup();
+    }
+  }, 60_000);
+
+  it("reverses from a balance lot the command the server names, confirmed with the repurchased lot's ID", async () => {
+    const balance = detailOf(security({
+      id: BALANCE, displayId: "CS-9", stakeholderId: IDS.desmond, stakeholderName: "Desmond Okafor", stockPlanId: IDS.plan, issueDate: TODAY, parentSecurityId: IDS.cs4, originCommandId: REPURCHASE,
+      provenance: { importedFromPulley: false, sourceFile: null, sourceSha256: null, pulleyId: null },
+      terms: { share_price: money("0.31"), quantity: "37500", x_origin: "BALANCE", x_source_security_id: IDS.cs4, x_holding_start_date: "2024-09-01" },
+      numbers: numbers({ issued: "37500", outstanding: "37500", fullyDiluted: "37500", vested: "37500", vestedOutstanding: "37500" }),
+    }), { lineage: { parent: { id: IDS.cs4, displayId: "CS-4" }, children: [] }, lastReversibleCommandId: REPURCHASE });
+    const detail = mock(api.routes.getSecurity, (request: MockRequest) => (request.params.id === BALANCE ? balance : DETAILS[request.params.id!] ?? apiError(404, "not_found", "Not found")));
+    const holder = mock(api.routes.getStakeholder, desmond);
+    const command = mock(api.routes.getCommand, {
+      id: REPURCHASE, type: "record-repurchase", actorKind: "user", actor: "Morgan Ellis", authMethod: "console", note: null, createdAt: Date.UTC(2026, 9, 21, 17),
+      firstSeq: 413, lastSeq: 414, reversesCommandId: null, reversedByCommandId: null, importedFromPulley: false, transactions: [], dependencies: [], dependents: [],
+    });
+    const preview = mock(api.routes.getReversalPreview, {
+      commandId: REPURCHASE, commandType: "record-repurchase", importedFromPulley: false,
+      inverse: [{ reversesTransactionId: uuid(19, 9), type: "TX_STOCK_ISSUANCE", effectiveDate: TODAY }, { reversesTransactionId: uuid(19, 8), type: "TX_STOCK_REPURCHASE", effectiveDate: TODAY }],
+      dependents: [], changes: [], workflowEffects: [], violations: [], blocked: false, diffSha256: DIFF_A, ledgerSeq: 414,
+    });
+    const reverse = commandRoute(api.routes.reverseCommand, { commit: result({ commandId: uuid(30, 8), dryRun: false }, true) });
+    const { callsTo } = renderPage(`securities/${BALANCE}`, handlers(detail, holder, command, preview, reverse));
+    await screen.findByRole("heading", { name: "CS-9 Shares", level: 1 });
+    expect(screen.getByText("Remainder of")).toBeTruthy();
+    expect(screen.getByText("Remainder of CS-4")).toBeTruthy();
+    expect(screen.getByText(/^Counted on/)).toBeTruthy();
+    await openAction(BALANCE, "CS-9 Shares", /Reverse last transaction/);
+    const panel = await screen.findByRole("region", { name: "Reversal preview" });
+    expect(within(panel).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Reverses: Share issuance (book entry) (Oct 21, 2026)", "Reverses: Share repurchase (Oct 21, 2026)"]);
+    expect(screen.getByText("Record repurchase · CS-4")).toBeTruthy();
+    type(/Reason/, "Recorded against the wrong lot");
+    fireEvent.change(screen.getByLabelText(/to confirm/), { target: { value: "CS-4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reverse" }));
+    await waitForCalls(() => callsTo(api.routes.reverseCommand), 1);
+    expect(callsTo(api.routes.reverseCommand)[0]!.body).toEqual({ commandId: REPURCHASE, note: "Recorded against the wrong lot", expectedLedgerSeq: 414, expectedDiffSha256: DIFF_A, confirmation: "CS-4" });
   }, 60_000);
 });

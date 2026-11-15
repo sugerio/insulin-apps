@@ -235,7 +235,7 @@ describe("stock", () => {
     expect(state.securities.get(purchase)!.capitalContribution.toString()).toBe("260");
     expect(state.securities.get(conversion)!.capitalContribution.toString()).toBe("1");
     expect(state.securities.get(uuid("CS-2"))!.capitalContribution.toString()).toBe("29.99");
-    expect(state.securities.get(uuid("CS-2"))!.repurchaseRight).toEqual({ pricePerShare: null, window: { period: 30, period_type: "DAYS" } });
+    expect(state.securities.get(uuid("CS-2"))!.repurchaseRight).toEqual({ pricePerShare: null, window: { period: 30, period_type: "DAYS" }, noDeadline: false });
   });
 
   it("keeps a migrated lot's board approval flag, debt cancelled and legend snapshots for the views and the export", () => {
@@ -394,6 +394,54 @@ describe("stock", () => {
     expect(codes(m.b.replay(D))).toEqual(expect.arrayContaining(["REPURCHASE_EXCEEDS_UNVESTED", "REPURCHASE_EXCEEDS_VESTED", "NEGATIVE_POSITION"]));
   });
 
+  // record-repurchase: the unvested shares bought back, paid off-platform, with the notice on the chain and the
+  // vested remainder in a balance lot. The plan's 90-day window from the 2026-01-15 termination ends on 2026-04-15.
+  function recordedRepurchase(date: string, extra: Record<string, unknown> = {}) {
+    const m = miniOrg();
+    const lot = issueStock(m, "RS-1", m.alice, "4800", "2025-01-01", { planId: m.plan, origin: "RSA", vestingMonths: { start: "2025-01-01", months: 48, cliff: 12 }, txSource: "app" });
+    terminate(m, "alice", m.alice, "2026-01-15");
+    let balance = "";
+    m.b.command("record-repurchase", (c) => {
+      c.tx("TX_STOCK_REPURCHASE", date, {
+        security_id: lot, quantity: "3600", price: usd("1"), x_kind: "UNVESTED", x_consideration: usd("3600"),
+        x_payment: { method: "WIRE", paid_date: date, reference: "W-1" },
+        x_notice: { id: uuid("doc:notice"), sha256: e.sha256Hex("notice") },
+        ...extra,
+        balance_security_id: uuid("RS-2"),
+      });
+      balance = addStock(m, c, "RS-2", m.alice, "1200", date, { origin: "BALANCE", source: lot, planId: m.plan });
+    }, { source: "app", type: "record-repurchase" });
+    return { m, lot, balance };
+  }
+
+  it("records a completed repurchase with its payment, notice and balance lot, leaving the capital contribution gross", () => {
+    const { m, lot, balance } = recordedRepurchase("2026-03-01");
+    const state = m.b.replay(D);
+    expect(state.violations).toEqual([]);
+    expect(state.securities.get(lot)).toMatchObject({ status: "REPURCHASED" });
+    expect([state.securities.get(lot)!.repurchasedUnvested, state.securities.get(lot)!.movedToBalance].map(String)).toEqual(["3600", "1200"]);
+    const remainder = e.positionAt(state, state.securities.get(balance)!, D);
+    expect([remainder.outstanding, remainder.unvestedOutstanding].map(String)).toEqual(["1200", "0"]);
+    // The source keeps its capital contribution and the balance lot adds none: the gross figure doesn't move.
+    expect(e.computeMetrics(state).capitalContribution.toString()).toBe("4800");
+    expect(state.plans.get(m.plan)!.returned.toString()).toBe("3600");
+    const payload = m.b.transactions.find((tx) => tx.type === "TX_STOCK_REPURCHASE")!.payload as Record<string, unknown>;
+    expect(payload.x_payment).toEqual({ method: "WIRE", paid_date: "2026-03-01", reference: "W-1" });
+    expect(() => e.parsePayload("TX_STOCK_REPURCHASE", { ...payload, x_payment: { method: "WIRE", paid_date: "2026-03-01", paid_by: "x" } })).toThrow(e.EngineError);
+    expect(() => e.parsePayload("TX_STOCK_REPURCHASE", { ...payload, x_notice: { id: uuid("doc:notice") } })).toThrow(e.EngineError);
+  });
+
+  it("refuses an app repurchase after the deadline unless it carries counsel's authority, which makes it a warning", () => {
+    const late = recordedRepurchase("2026-06-01");
+    expect(codes(late.m.b.replay(D), "error")).toEqual(["REPURCHASE_AFTER_DEADLINE"]);
+    const authorized = recordedRepurchase("2026-06-01", { x_authority_document: { id: uuid("doc:authority"), sha256: e.sha256Hex("authority") } });
+    const state = authorized.m.b.replay(D);
+    expect(codes(state, "error")).toEqual([]);
+    expect(codes(state, "warning")).toEqual(["REPURCHASE_AFTER_DEADLINE"]);
+    // Within the window the authority changes nothing.
+    expect(codes(recordedRepurchase("2026-03-01", { x_authority_document: { id: uuid("doc:authority"), sha256: e.sha256Hex("authority") } }).m.b.replay(D))).toEqual([]);
+  });
+
   it("converts shares at the class ratio or a stated one, and reissues lots", () => {
     const m = miniOrg();
     const preferred = issueStock(m, "PS-1", m.bob, "100", "2025-01-01", { classId: m.preferred });
@@ -544,15 +592,31 @@ describe("awards", () => {
     expect(m2.b.replay(D).violations).toEqual([]);
   });
 
-  it("gates exercise on execution status (an error for app commands, a warning on imported history)", () => {
+  it("gates exercise on a missing holder-side signature (an error for app commands, a warning on imported history)", () => {
+    for (const execution of ["pending_holder", "pending_both"] as const) {
+      const m = miniOrg();
+      const option = grant(m, "OPT-1", m.alice, "100", "2025-01-01", { vesting: null, execution });
+      exercise(m, "CS-1", option, m.alice, "10", "2025-02-01", { source: "app" });
+      exercise(m, "CS-2", option, m.alice, "10", "2025-02-02", { source: "import" });
+      expect(m.b.replay(D).violations.map((v) => [v.code, v.severity]), execution).toEqual([
+        ["EXECUTION_PENDING", "error"],
+        ["EXECUTION_PENDING", "warning"],
+      ]);
+    }
+  });
+
+  it("lets a grant awaiting only the company signatory be exercised, with a warning on an app exercise", () => {
     const m = miniOrg();
     const option = grant(m, "OPT-1", m.alice, "100", "2025-01-01", { vesting: null, execution: "pending_company" });
     exercise(m, "CS-1", option, m.alice, "10", "2025-02-01", { source: "app" });
     exercise(m, "CS-2", option, m.alice, "10", "2025-02-02", { source: "import" });
-    expect(m.b.replay(D).violations.map((v) => [v.code, v.severity])).toEqual([
-      ["EXECUTION_PENDING", "error"],
-      ["EXECUTION_PENDING", "warning"],
-    ]);
+    const state = m.b.replay(D);
+    // Imported history says nothing: the gate never applied to it.
+    expect(state.violations.map((v) => [v.code, v.severity, v.securityId])).toEqual([["EXECUTION_PENDING_COMPANY", "warning", option]]);
+    expect(state.securities.get(option)!.exercised.toString()).toBe("20");
+    expect(state.securities.get(option)!.executionStatus).toBe("pending_company");
+    expect(["executed", "pending_company", "pending_holder", "pending_both", "not_required"].filter((status) => e.blocksExercise(status as e.ExecutionStatus)))
+      .toEqual(["pending_holder", "pending_both"]);
   });
 
   it("checks ISO portions, lots and the ISO deadline", () => {
@@ -752,6 +816,28 @@ describe("warrants and convertibles", () => {
       c.tx("TX_WARRANT_EXERCISE", "2025-07-01", { security_id: w, resulting_security_ids: [lot], x_quantity: "20" });
     });
     expect(codes(m.b.replay(D))).toEqual(["EXCEEDS_VESTED_UNEXERCISED", "AFTER_EXPIRATION", "EXECUTION_PENDING"]);
+  });
+
+  it("lets a warrant awaiting only the company signatory be exercised, with a warning on an app exercise", () => {
+    const m = miniOrg();
+    const w = warrant(m, "WAR-1", "100");
+    m.b.command("pending", (c) => {
+      c.tx("X_EXECUTION_STATUS", "2025-01-02", { security_id: w, status: "pending_company" });
+    });
+    m.b.command("app", (c) => {
+      const lot = addStock(m, c, "CS-1", m.bob, "10", "2025-02-01", { origin: "EXERCISE", source: w });
+      c.tx("TX_WARRANT_EXERCISE", "2025-02-01", { security_id: w, resulting_security_ids: [lot], x_quantity: "10" });
+    }, { source: "app" });
+    m.b.command("imported", (c) => {
+      const lot = addStock(m, c, "CS-2", m.bob, "10", "2025-02-02", { origin: "EXERCISE", source: w });
+      c.tx("TX_WARRANT_EXERCISE", "2025-02-02", { security_id: w, resulting_security_ids: [lot], x_quantity: "10" });
+    });
+    const state = m.b.replay(D);
+    // Imported history says nothing: the gate never applied to it.
+    expect(state.violations.map((v) => [v.code, v.severity, v.securityId])).toEqual([["EXECUTION_PENDING_COMPANY", "warning", w]]);
+    expect(state.securities.get(w)!.exercised.toString()).toBe("20");
+    expect(e.exercisability(state, state.securities.get(w)!)).toMatchObject({ blockedBy: null });
+    expect(e.exercisability(state, state.securities.get(w)!).exercisable.toString()).toBe("80");
   });
 
   it("converts the whole convertible (I8), or moves the rest to a balance lot; cancels and transfers principal", () => {

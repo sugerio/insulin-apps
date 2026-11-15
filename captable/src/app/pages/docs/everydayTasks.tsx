@@ -16,7 +16,7 @@ export const everydayTasks: DocTopic = {
       body: (
         <ul>
           <li><b>Review, then confirm.</b> Before anything is saved, Cap Table shows exactly what will change, including any problem that stops it.</li>
-          <li><b>Start from the record.</b> <b>+ New</b> records a signed option grant. Most other changes start on the page of the thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.</li>
+          <li><b>Start from the record.</b> <b>+ New</b> records an approved option grant. Most other changes start on the page of the thing they concern: record an exercise from the option, terminate someone from their stakeholder page, and so on.</li>
           <li><b>Not your own holdings.</b> If you hold equity, someone else who manages the cap table records changes to it, so nobody approves their own transactions.</li>
           <li><b>Exact numbers.</b> Quantities and amounts are never rounded behind your back; percentages and money are rounded only for display. Dates are calendar dates in the company's time zone.</li>
           <li><b>Tell people yourself.</b> Cap Table sends no e-mail, collects no signatures and takes no payments: use your usual tools, and record the outcome here.</li>
@@ -33,9 +33,10 @@ export const everydayTasks: DocTopic = {
           <ul>
             <li><b>Add stakeholder</b> (on <b>Stakeholders</b>): individual or institution, the legal name, the name to show, one or more relationships (founder, employee, officer, board member, advisor, consultant, investor, other), and optional details such as e-mail addresses, hire date, phone, address and country of tax residence.</li>
             <li><b>E-mail addresses.</b> On a stakeholder's page, <b>Add e-mail</b> adds the person's own address, an authorized contact for an institution, or a representative (for example for an estate). The person's own address is what connects them to their holder view: it must be the e-mail address of their Insulin console account. If the address is already on another stakeholder, Cap Table warns you and asks you to confirm.</li>
-            <li><b>Edit stakeholder</b> changes the details; a new name shows everywhere at once. A change of owner isn't an edit but a transfer, which Cap Table doesn't record.</li>
+            <li><b>Edit stakeholder</b> changes the details; a new name shows everywhere at once. A change of owner isn't an edit but a transfer, which Cap Table doesn't record. "Ex-employee" is set by a termination: it can be changed here only when no termination is recorded or scheduled, for example on an imported record.</li>
+            <li><b>Shared sign-in address:</b> a badge, and a filter on <b>Stakeholders</b>, mark an address that is on more than one record. Related funds and rehires rightly share one.</li>
             <li><b>Leave of absence</b> is recorded from <b>Edit stakeholder</b>. A long leave without a guaranteed return can move an ISO deadline.</li>
-            <li><b>Duplicates:</b> if the same person or institution appears twice, combine the records with <b>Merge into another stakeholder…</b> on one of them. A merge never changes a number, and <b>Undo stakeholder merge</b> reverses it.</li>
+            <li><b>Duplicates:</b> if the same person or institution appears twice, combine the records with <b>Merge into another stakeholder…</b> on one of them. A merge never changes a number, and <b>Undo stakeholder merge</b> reverses it. A rehire keeps two records: the merge is refused when one record was terminated and the other was hired, or received equity, after that termination.</li>
           </ul>
         </>
       ),
@@ -46,25 +47,28 @@ export const everydayTasks: DocTopic = {
       body: (
         <>
           <p>
-            Use this for a grant the board has already approved and both sides have signed: choose <b>+ New</b>, then{" "}
+            Use this for a grant the board has already approved, signed or not yet: choose <b>+ New</b>, then{" "}
             <b>Options</b>. You'll need:
           </p>
           <ol>
             <li><b>The equity plan.</b> The form shows what's available; a grant can't exceed it.</li>
-            <li><b>The stakeholder</b>, or add a new one on the spot, and <b>how many options</b>.</li>
-            <li><b>Board approval:</b> the approval date and the signed board consent. The grant date is the approval date unless you give another one, with a reason.</li>
+            <li><b>The stakeholder</b>, or add a new one on the spot, and <b>how many options</b>. To size a grant, enter a target percentage of the plan's pool or of the company's fully diluted shares on the grant date: the form works out the options (rounded down to whole options) and shows the cost to exercise them.</li>
+            <li><b>Board approval:</b> the approval date and the signed board consent. The grant date is the approval date unless you give another one, with a reason. A grant dated before the company's incorporation date gets a warning to check.</li>
             <li><b>ISO or NSO.</b> An ISO needs the holder to be an employee on the grant date, and you confirm whether they own more than 10% of the voting power (of the company or its parent or a subsidiary, counting shares attributed to them). For such a holder, an ISO needs an exercise price of at least 110% of fair market value and a term of at most five years.</li>
             <li><b>Vesting:</b> a schedule or explicit tranches, the vesting start date, whether early exercise is allowed, and any acceleration terms. Tick that the table shown matches the signed agreement.</li>
             <li><b>Exercise price:</b> filled in from the 409A valuation valid on the grant date. Without a valid valuation, attach counsel's memo to go ahead. An ISO can't be priced below fair market value; an NSO priced below it also needs counsel's memo.</li>
             <li><b>Expiration:</b> ten years unless the agreement says otherwise (five for a 10% holder's ISO), and the exercise windows after leaving, from the plan or as the agreement says.</li>
-            <li><b>The agreement</b>, signed by both the holder and the company.</li>
+            <li><b>Signatures:</b> if the holder and the company signatory have both signed, upload the fully signed agreement. To record the grant at board approval before everyone has signed, say who still has to sign (the holder, the company signatory or both) and upload the agreement as signed so far: it is kept as evidence, and it is required when only the company signatory has yet to sign.</li>
           </ol>
           <p>
             Then choose <b>Record grant</b>. The grant is outstanding at once, and the plan's availability goes down.
           </p>
           <p>
-            <b>Grants waiting for signatures.</b> A grant that isn't signed by both sides can't be exercised. Such grants are listed
-            under <b>Securities Status</b>. Once both sides have signed, choose <b>Mark executed</b> and upload the signed agreement.
+            <b>Grants waiting for signatures.</b> A grant can't be exercised while the holder's signature is missing; one that waits
+            only for the company signatory's can, and the exercise review says so. Such grants are listed under{" "}
+            <b>Securities Status</b>, with who they are waiting on. Once both sides have signed, choose <b>Mark executed</b> and
+            upload the fully signed agreement. On a grant waiting for both, <b>Mark executed</b> can also record one party's
+            signature first (<b>Who signed?</b>), with the agreement as signed so far; the grant then waits for the other.
             Imported grants count as signed.
           </p>
         </>
@@ -117,6 +121,32 @@ export const everydayTasks: DocTopic = {
       ),
     },
     {
+      id: "repurchases",
+      title: "Recording a repurchase",
+      body: (
+        <>
+          <p>
+            When a holder leaves with unvested restricted shares, the company may buy them back under the share's agreement. The
+            repurchase, the notice to the holder and the payment happen outside the app. Once it is done and paid, choose{" "}
+            <b>Record repurchase</b> on the share's page, or next to the lot under <b>Securities Status</b> › <b>Unvested shares
+            from terminated holders</b>:
+          </p>
+          <ol>
+            <li><b>The repurchase date:</b> on or after the termination date, and not in the future.</li>
+            <li><b>The quantity:</b> every share still unvested on that date. The vested shares stay with the holder as a new share lot.</li>
+            <li><b>The price per share</b> the company paid, and the total.</li>
+            <li><b>The payment:</b> the method (cash, check, wire, ACH or other), the date it was paid and a reference.</li>
+            <li><b>The repurchase notice</b> sent to the holder, uploaded here.</li>
+            <li><b>Counsel's authority</b>, when the repurchase is after the repurchase deadline or no deadline is recorded: a written authority from counsel, as a document of its own.</li>
+          </ol>
+          <p>
+            Review the change, type the share's ID to confirm, and record it. The repurchased shares go back to the plan's pool if
+            its rules say so. Cap Table doesn't tell the holder. If it was recorded wrongly, reverse it from the share's page.
+          </p>
+        </>
+      ),
+    },
+    {
       id: "cancellations",
       title: "Cancellations and expiry",
       body: (
@@ -151,7 +181,8 @@ export const everydayTasks: DocTopic = {
       title: "409A valuations",
       body: (
         <ul>
-          <li><b>Record FMV</b> (on <b>Compliance &amp; Tax</b>) records a valuation: the provider, the effective date, the expiration date (twelve months later unless you change it), the fair market value per share class, and the report.</li>
+          <li><b>Compliance &amp; Tax</b> has three tabs: <b>409A Valuations</b>, <b>83(b) elections</b> (the elections on record, with each lot's status) and <b>Checks</b> (gaps worth closing, often with counsel: the company's EIN and address, securities imported without a board approval date, a 409A in effect without the board's adoption, and restricted shares with no 83(b) record).</li>
+          <li><b>Record FMV</b> (on <b>409A Valuations</b>) records a valuation: the provider, the effective date, the expiration date (twelve months later unless you change it), the fair market value per share class, and the report.</li>
           <li>Each valuation shows a status: <b>presumptively valid</b>, <b>expiring soon</b> (60 days or less left), <b>review required</b>, <b>superseded</b> (a later valuation took effect) or <b>expired</b>.</li>
           <li><b>Flag a material event</b>, such as a new financing, with its date and a description. The valuation then needs review, and new grants are blocked until you record a new valuation or record the provider's or counsel's written confirmation that the old one still holds.</li>
           <li>A recorded valuation is never edited. If one is wrong, record a corrected valuation, or void it.</li>
@@ -187,7 +218,11 @@ export const everydayTasks: DocTopic = {
       body: (
         <>
           <p>
-            On <b>Cap Table</b>, pick any date under <b>As of</b> to see the cap table as it stood that day, and download it.{" "}
+            On <b>Cap Table</b>, pick any date under <b>As of</b> to see the cap table as it stood that day, and download it.
+            Stakeholders who hold nothing on that date are hidden until you show them; the download lists every stakeholder,
+            with zeros. On <b>Equity Plans</b>, the <b>% shares calculator</b> shows how many options a percentage of the
+            company's fully diluted shares comes to, what they are worth at a preferred class's issue price, and what they
+            cost to exercise at today's 409A value. It records nothing.{" "}
             <b>Reports</b> offers:
           </p>
           <DocTable
@@ -220,7 +255,7 @@ export const everydayTasks: DocTopic = {
           </p>
           <ul>
             <li>A reversal undoes the whole change: reversing an exercise removes the exercise and the shares it created together.</li>
-            <li>You can reverse a grant, an exercise, a termination, a cancellation, a Mark executed or a merge: look for <b>Reverse last transaction</b> on a security's page, and <b>Reverse termination</b> or <b>Undo stakeholder merge</b> on a stakeholder's page.</li>
+            <li>You can reverse a grant, an exercise, a termination, a cancellation, a recorded repurchase, a Mark executed or a merge: look for <b>Reverse last transaction</b> on a security's page, and <b>Reverse termination</b> or <b>Undo stakeholder merge</b> on a stakeholder's page. Reversing a cancellation or a repurchase takes back the pool capacity it returned, so it is refused once a later grant has used that capacity.</li>
             <li>If something later depends on it (an exercise from a grant, say), reverse that first. The preview shows what depends on what.</li>
             <li>The original stays visible in the history, marked as reversed, with who reversed it, when and why.</li>
             <li>A 409A valuation isn't reversed: record a corrected one, or void it. Imported history can't be reversed in the app.</li>

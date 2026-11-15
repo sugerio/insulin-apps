@@ -13,7 +13,7 @@ import {
   sumDecimals,
   toUnits,
 } from "../../src/app/lib/decimal.ts";
-import { addDays, addYears, createFormatter, daysBetween, formatBytes, formatDate, formatDaysLeft } from "../../src/app/lib/format.ts";
+import { addDays, addYears, createFormatter, daysBetween, formatBytes, formatDate, formatDaysLeft, formatDaysRelative } from "../../src/app/lib/format.ts";
 
 describe("exact decimals for display", () => {
   it("sums and compares without floating point", () => {
@@ -77,6 +77,15 @@ describe("dates and the org formatter", () => {
     expect(addYears("2024-02-29", 1)).toBe("2025-02-28");
     expect(formatDaysLeft("2026-10-21", "2026-10-22")).toBe("1 day");
     expect(formatDaysLeft("2026-10-21", "2026-10-01")).toBe("passed");
+  });
+
+  it("says how far a date is from today, in words, on either side of it", () => {
+    expect(formatDaysRelative("2026-10-21", "2026-11-05")).toBe("in 15 days");
+    expect(formatDaysRelative("2026-10-21", "2026-10-22")).toBe("in 1 day");
+    expect(formatDaysRelative("2026-10-21", "2026-10-21")).toBe("today");
+    expect(formatDaysRelative("2026-10-21", "2026-10-20")).toBe("1 day ago");
+    // A date that has passed is "N days ago", never "0 days left" or "-3 days".
+    expect(formatDaysRelative("2026-10-21", "2026-10-18")).toBe("3 days ago");
   });
 
   it("formats shares, prices, money and instants with the org's settings", () => {

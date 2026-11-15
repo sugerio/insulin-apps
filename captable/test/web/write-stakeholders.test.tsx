@@ -224,6 +224,26 @@ describe("edit stakeholder", () => {
     expect(keysOf(calls)[1]).not.toBe(keysOf(calls)[0]);
   }, 60_000);
 
+  it("corrects an ex-employee with no termination recorded or scheduled, and keeps a scheduled one's lock", async () => {
+    const imported = { ...STAKEHOLDER_DETAILS[IDS.daniel]!, relationship: "ex_employee" as const, termination: null, scheduledTermination: null };
+    const patch = commandRoute(api.routes.patchStakeholder, { commit: { ...STAKEHOLDERS.daniel, relationship: "employee", version: 2 } });
+    const { callsTo, router } = renderPage(`stakeholders/${IDS.daniel}/edit`, pageHandlers(mock(api.routes.getStakeholder, imported), patch), { role: "admin_rw" });
+    await screen.findByRole("heading", { name: "Edit Daniel Achterberg", level: 1 });
+    expect((screen.getByLabelText(/Relationship/) as HTMLSelectElement).disabled).toBe(false);
+    expect(screen.getByText("No termination is recorded for this ex-employee: choose the relationship the record should have.")).toBeTruthy();
+    choose(/Relationship/, "employee");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/stakeholders/${IDS.daniel}`));
+    expect(callsTo(api.routes.patchStakeholder)[0]!.body).toEqual({ version: 1, relationship: "employee" });
+    cleanup();
+    const scheduled = { ...imported, scheduledTermination: { id: uuid(17, 1), terminationDate: "2026-12-31", type: "voluntary" as const } };
+    renderPage(`stakeholders/${IDS.daniel}/edit`, pageHandlers(mock(api.routes.getStakeholder, scheduled)), { role: "admin_rw" });
+    await screen.findByRole("heading", { name: "Edit Daniel Achterberg", level: 1 });
+    expect((screen.getByLabelText("Relationship") as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByText("A termination is scheduled; it must be cancelled to change the relationship.")).toBeTruthy();
+  }, 60_000);
+
   it("keeps a termination's relationship and refuses the admin's own record", async () => {
     renderPage(`stakeholders/${IDS.nadia}/edit`, pageHandlers(), { role: "admin_rw" });
     await screen.findByRole("heading", { name: "Edit Nadia Pereira-Stone", level: 1 });

@@ -4,6 +4,9 @@ import {
   dryRunEnvelopeSchema,
   exerciseOptionSchema,
   grantEquityCompensationSchema,
+  recordRepurchaseDryRunSchema,
+  recordRepurchaseSchema,
+  markExecutedSchema,
   reverseCommandSchema,
   scheduleTerminationSchema,
   terminateStakeholderDryRunSchema,
@@ -87,11 +90,66 @@ describe("grant-equity-compensation", () => {
     expect(grantEquityCompensationSchema.safeParse({ ...body, grantDate: "2026-12-11", grantDateOverrideReason: "Signed the next day" }).success).toBe(true);
   });
 
+  it("is executed with the agreement signed by both, or recorded awaiting signatures, exactly one of the two", () => {
+    const { executedAgreement: _executed, ...awaiting } = body;
+    const paths = (value: unknown) => grantEquityCompensationSchema.safeParse(value).error?.issues.map((issue) => issue.path.join(".")) ?? [];
+    expect(paths(awaiting)).toEqual(["executedAgreement"]);
+    expect(paths({ ...body, awaitingSignatures: { missing: "holder" } })).toEqual(["awaitingSignatures"]);
+    for (const missing of ["holder", "both"]) expect(paths({ ...awaiting, awaitingSignatures: { missing } }), missing).toEqual([]);
+    // Awaiting only the company signatory, the grant can be exercised: the holder-signed agreement is required.
+    expect(paths({ ...awaiting, awaitingSignatures: { missing: "company" } })).toEqual(["awaitingSignatures.agreementDocumentId"]);
+    expect(paths({ ...awaiting, awaitingSignatures: { missing: "company", agreementDocumentId: COMMAND_ID } })).toEqual([]);
+    expect(paths({ ...awaiting, awaitingSignatures: { missing: "nobody" } })).toEqual(["awaitingSignatures.missing"]);
+  });
+
   it("takes vesting from a template or from explicit tranches, not both", () => {
     const vesting = body.vesting as Record<string, unknown>;
     const explicit = { explicit: [{ date: "2027-12-10", quantity: "48000" }] };
     expect(grantEquityCompensationSchema.safeParse({ ...body, vesting: { ...vesting, terms: explicit } }).success).toBe(true);
     expect(grantEquityCompensationSchema.safeParse({ ...body, vesting: { ...vesting, terms: { ...explicit, templateId: COMMAND_ID } } }).success).toBe(false);
+  });
+});
+
+describe("record-repurchase", () => {
+  const body = ENDPOINT_EXAMPLES.recordRepurchase.body as Record<string, unknown> & { consideration: Record<string, unknown> };
+
+  it("takes the notice, how it was paid and an optional authority, and refuses what isn't a completed payment", () => {
+    expect(recordRepurchaseSchema.parse(body)).toMatchObject({ documentIds: [], acknowledge: [], consideration: { method: "CHECK", paidDate: "2026-11-20" } });
+    expect(recordRepurchaseSchema.safeParse({ ...body, authorityDocumentId: COMMAND_ID }).success).toBe(true);
+    for (const method of ["CASH", "CHECK", "WIRE", "ACH", "OTHER"]) {
+      expect(recordRepurchaseSchema.safeParse({ ...body, consideration: { method, paidDate: "2026-11-20" } }).success, method).toBe(true);
+    }
+    expect(recordRepurchaseSchema.safeParse({ ...body, consideration: { ...body.consideration, method: "MANUAL_UNSPECIFIED" } }).success).toBe(false);
+    expect(recordRepurchaseSchema.safeParse({ ...body, consideration: { method: "WIRE" } }).success).toBe(false);
+    expect(recordRepurchaseSchema.safeParse({ ...body, pricePerShare: "0" }).success).toBe(false);
+    const { noticeDocumentId: _notice, ...withoutNotice } = body;
+    expect(recordRepurchaseSchema.safeParse(withoutNotice).success).toBe(false);
+  });
+
+  it("needs the typed display ID on the real call only", () => {
+    const { confirmation: _typed, expectedLedgerSeq: _seq, expectedDiffSha256: _diff, ...dryRun } = body;
+    expect(recordRepurchaseDryRunSchema.safeParse(dryRun).success).toBe(true);
+    expect(recordRepurchaseSchema.safeParse({ ...dryRun, expectedLedgerSeq: 412, expectedDiffSha256: guard.expectedDiffSha256 }).success).toBe(false);
+  });
+});
+
+describe("mark-executed", () => {
+  const body = ENDPOINT_EXAMPLES.markExecuted.body as Record<string, unknown>;
+  const paths = (value: unknown) => markExecutedSchema.safeParse(value).error?.issues.map((issue) => issue.path.join(".")) ?? [];
+
+  it("records both signatures by default, as before", () => {
+    expect(markExecutedSchema.parse(body).signed).toBe("both");
+  });
+
+  it("records one party's signature with that party's attestation and date only", () => {
+    const holder = { ...body, signed: "holder", signatureDates: { holder: "2026-12-08" }, attestation: "This PDF bears the holder's signature" };
+    expect(paths(holder)).toEqual([]);
+    expect(paths({ ...holder, attestation: "This PDF bears both signatures" })).toEqual(["attestation"]);
+    expect(paths({ ...holder, signatureDates: { company: "2026-12-08" } })).toEqual(["signatureDates.company"]);
+    const company = { ...body, signed: "company", signatureDates: { company: "2026-12-08" }, attestation: "This PDF bears the company signatory's signature" };
+    expect(paths(company)).toEqual([]);
+    expect(paths({ ...company, signatureDates: { holder: "2026-12-08" } })).toEqual(["signatureDates.holder"]);
+    expect(paths({ ...body, signed: "nobody" })).toEqual(["signed"]);
   });
 });
 

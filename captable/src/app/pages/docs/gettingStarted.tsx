@@ -22,15 +22,15 @@ export const gettingStarted: DocTopic = {
           <ul>
             <li><b>The cap table, as of any date.</b> Issued and outstanding shares, fully diluted ownership, every share class and equity plan, and every holder's position, worked out from the full history for whichever date you pick.</li>
             <li><b>Stakeholders.</b> Founders, employees, advisors, investors and institutions, with their details and e-mail addresses.</li>
-            <li><b>Option grants and vesting.</b> Record a signed grant from an equity plan. Cap Table works out the vesting, what can be exercised, and every deadline.</li>
-            <li><b>Exercises, terminations and cancellations.</b> Before anything is saved, a review shows exactly what will change.</li>
+            <li><b>Option grants and vesting.</b> Record an approved grant from an equity plan, signed or still awaiting signatures. Cap Table works out the vesting, what can be exercised, and every deadline.</li>
+            <li><b>Exercises, terminations, repurchases and cancellations.</b> Before anything is saved, a review shows exactly what will change.</li>
             <li><b>409A valuations, documents and reports.</b> Keep valuations and agreements with the records they belong to, and download the cap table and its records.</li>
             <li><b>A view for every holder.</b> Employees, advisors and investors see their own holdings, and nobody else's.</li>
             <li><b>A permanent history.</b> Every change is recorded with who made it and when. A mistake is corrected by reversing the change, never by rewriting history.</li>
           </ul>
           <h3>Good to know</h3>
           <ul>
-            <li><b>Holdings come in when the company is set up.</b> Share classes, equity plans, issued shares, option grants, warrants and SAFEs are imported. After that, Cap Table records new option grants, exercises, terminations and cancellations; it has no forms to add share classes or plans, or to issue shares.</li>
+            <li><b>Holdings come in when the company is set up.</b> Share classes, equity plans, issued shares, option grants, warrants and SAFEs are imported. After that, Cap Table records new option grants, exercises, terminations, repurchases and cancellations; it has no forms to add share classes or plans, or to issue shares.</li>
             <li><b>No e-mail.</b> Cap Table doesn't send messages. Tell people yourself when something changes for them.</li>
             <li><b>No signatures or payments.</b> Agreements are signed elsewhere and uploaded. Payments happen outside the app and are recorded in it.</li>
             <li><b>Not a valuation, tax or legal service.</b> Cap Table records 409A valuations but doesn't perform them, and it doesn't file tax forms or give advice.</li>
@@ -64,7 +64,7 @@ export const gettingStarted: DocTopic = {
             label="Roles and what they allow"
             columns={["Role", "In Cap Table"]}
             rows={[
-              ["Owner, Admin, Editor", "Manage the cap table: set up the company, import, add and edit stakeholders, record grants, exercises, terminations and cancellations, record valuations, upload documents, change the settings and download reports."],
+              ["Owner, Admin, Editor", "Manage the cap table: set up the company, import, add and edit stakeholders, record grants, exercises, terminations, repurchases and cancellations, record valuations, upload documents, change the settings and download reports."],
               ["Viewer (and User, in the Insulin console)", "See only their own holdings: the stakeholder records that carry the e-mail address of their account."],
             ]}
           />
@@ -164,7 +164,7 @@ export const gettingStarted: DocTopic = {
           <ul>
             <li><b>Dashboard:</b> company totals, how much of each equity plan is granted, ownership by group, the largest stakeholders, recent activity, and <b>Needs attention</b>.</li>
             <li><b>Cap Table:</b> ownership by stakeholder and a tab for each kind of security, as of any date. Beside it: <b>Share Classes</b>, <b>Equity Plans</b>, <b>Securities Status</b> (lists that need attention) and <b>Vesting</b>.</li>
-            <li><b>Compliance &amp; Tax:</b> your 409A valuations.</li>
+            <li><b>Compliance &amp; Tax:</b> your 409A valuations, the 83(b) elections on record, and checks of records that may need counsel's attention.</li>
             <li><b>Hire and Retain:</b> <b>Exercise Requests</b>, <b>Equity Plans</b> and <b>Stakeholder Portal</b> (what holders see).</li>
             <li><b>Stakeholders</b>, <b>Company</b> (<b>Profile &amp; Settings</b>, <b>Documents</b>, <b>Reports</b> and <b>Recent Activity</b>) and <b>Certificates</b> (with <b>Legends</b> and <b>Terms</b>).</li>
           </ul>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { ActionsMenu, WriteButton } from "../components/Actions.tsx";
 import { DataTable, byDecimal, byDisplayId, byText } from "../components/DataTable.tsx";
@@ -9,12 +11,12 @@ import { Attachments, useDownload } from "../components/Documents.tsx";
 import { valuationLinkIntent } from "../components/flows/DocumentDialogs.tsx";
 import { Badge, Banner, Pending, ResourceView } from "../components/Feedback.tsx";
 import { Icon } from "../components/Icon.tsx";
-import { LinkTabs } from "../components/LinkTabs.tsx";
 import { HolderLink, SecurityLink } from "../components/Links.tsx";
 import { useWorkspace } from "../components/OrgWorkspace.tsx";
 import { Card, Page, PageHead, SectionTitle } from "../components/Page.tsx";
 import { Timeline } from "../components/Timeline.tsx";
 import { ClearReviewDialog, FlagMaterialEventDialog, ReverseValuationEventDialog, VoidValuationDialog } from "../components/flows/ValuationDialogs.tsx";
+import { ComplianceTabs } from "./CompliancePage.tsx";
 import { compareDecimals } from "../lib/decimal.ts";
 import { DASH, daysBetween, formatDate } from "../lib/format.ts";
 import { VALUATION_STATUS_LABELS, VALUATION_STATUS_TONES } from "../lib/labels.ts";
@@ -98,8 +100,8 @@ function CommonPrice({ valuation, classes }: { valuation: api.Valuation; classes
         const price = classPrice(valuation, data.items);
         return (
           <>
-            {price ? format.price(price) : <span className="muted">Not valued</span>}
-            {valuation.prices.length > 1 ? <div className="small muted">+{valuation.prices.length - 1} more class{valuation.prices.length > 2 ? "es" : ""}</div> : null}
+            {price ? format.price(price) : <span className="text-muted-foreground">Not valued</span>}
+            {valuation.prices.length > 1 ? <div className="text-xs text-muted-foreground">+{valuation.prices.length - 1} more class{valuation.prices.length > 2 ? "es" : ""}</div> : null}
           </>
         );
       }}
@@ -111,10 +113,10 @@ function ReportButton({ documentId, name }: { documentId: string; name: string }
   const { download, error } = useDownload();
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-xs btn-icon" aria-label={`Download the report of ${name}`} title="Download report" onClick={() => void download(documentId, `${name}.pdf`)}>
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={`Download the report of ${name}`} title="Download report" onClick={() => void download(documentId, `${name}.pdf`)}>
         <Icon name="file" />
-      </button>
-      {error ? <div className="err-inline" role="alert">{error}</div> : null}
+      </Button>
+      {error ? <div className="text-xs font-medium text-destructive" role="alert">{error}</div> : null}
     </>
   );
 }
@@ -142,14 +144,14 @@ export function ValuationsPage() {
             </>
           }
         />
-        <LinkTabs label="Compliance and tax" selected="409a" tabs={[{ id: "409a", label: "409A Valuations", to: href("compliance/409a") }]} />
+        <ComplianceTabs selected="409a" />
         <ResourceView resource={valuations}>
           {(data) => {
             const events = data.items.flatMap((valuation) => materialEvents(valuation, data.items, today).map((state) => ({ ...state, valuation })));
             return (
               <>
                 <ValuationBanner valuations={data.items} />
-                <p className="muted">
+                <p className="text-sm text-muted-foreground">
                   Record the independent provider's report here. A valuation is presumptively valid from its effective date until its expiration date, unless a material event is flagged after it. In-app reminders show at 60, 30, 7 and 0 days.
                 </p>
                 <DataTable
@@ -166,7 +168,7 @@ export function ValuationsPage() {
                       key: "name", label: "Valuation", compare: byText((valuation) => valuation.name),
                       render: (valuation) => (
                         <>
-                          <Link className="cell-link" to={href(`compliance/409a/${valuation.id}`)}>{valuation.name}</Link>
+                          <Link className="font-medium underline-offset-4 hover:underline" to={href(`compliance/409a/${valuation.id}`)}>{valuation.name}</Link>
                           {valuation.valuationType !== "409A" ? <> <Badge>Other valuation</Badge></> : valuation.reportVersion !== "FINAL" ? <> <Badge>Draft</Badge></> : null}
                         </>
                       ),
@@ -186,24 +188,22 @@ export function ValuationsPage() {
                 {events.length ? (
                   <>
                     <SectionTitle>Material events</SectionTitle>
-                    <div className="tbl-scroll">
-                      <table className="tbl" aria-label="Material events">
-                        <thead><tr><th scope="col">Date</th><th scope="col">Event</th><th scope="col">Flagged by</th><th scope="col">Resolved</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-                        <tbody>
+                    <Table aria-label="Material events">
+                        <TableHeader><TableRow><TableHead scope="col">Date</TableHead><TableHead scope="col">Event</TableHead><TableHead scope="col">Flagged by</TableHead><TableHead scope="col">Resolved</TableHead><TableHead scope="col"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+                        <TableBody>
                           {events.map(({ event, resolution, valuation }) => (
-                            <tr key={event.id}>
-                              <td>{formatDate(event.eventDate)}</td>
-                              <td>{event.description}</td>
-                              <td>{event.createdBy} · {format.dateTime(event.createdAt)}</td>
-                              <td>{resolution ? resolutionLabel(resolution) : <Badge tone="red">Open — review required</Badge>}</td>
-                              <td className="right">
+                            <TableRow key={event.id}>
+                              <TableCell>{formatDate(event.eventDate)}</TableCell>
+                              <TableCell>{event.description}</TableCell>
+                              <TableCell>{event.createdBy} · {format.dateTime(event.createdAt)}</TableCell>
+                              <TableCell>{resolution ? resolutionLabel(resolution) : <Badge tone="red">Open — review required</Badge>}</TableCell>
+                              <TableCell className="text-right">
                                 <WriteButton label="Reverse" size="xs" ariaLabel={`Reverse the material event “${event.description}”`} onClick={() => setDialog({ kind: "reverseEvent", valuation, event })} />
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        </TableBody>
+                      </Table>
                   </>
                 ) : null}
               </>
@@ -274,16 +274,20 @@ function ValuationBody({ valuation, onChanged }: { valuation: api.ValuationDetai
         </Banner>
       ) : null}
       <SectionTitle>FMV</SectionTitle>
+      {/* The classes the report prices, then one line for the rest: a report that values common only isn't a list of
+          "Not valued" preferred classes. */}
       <Pending resource={classes} what="the share classes">
-        {(data) => (
-          <DescriptionList
-            label="FMV per class"
-            rows={data.items.map((item) => {
-              const price = classPrice(valuation, data.items, item.id);
-              return [item.name, price ? format.price(price) : <span className="muted">Not valued</span>] as const;
-            })}
-          />
-        )}
+        {(data) => {
+          const priced = data.items.map((item) => ({ item, price: classPrice(valuation, data.items, item.id) }));
+          const valued = priced.flatMap(({ item, price }) => (price ? [[item.name, format.price(price)] as const] : []));
+          const unvalued = priced.filter(({ price }) => !price).map(({ item }) => item.name);
+          return (
+            <>
+              {valued.length ? <DescriptionList label="FMV per class" rows={valued} /> : <p className="text-sm text-muted-foreground">This report values no share class.</p>}
+              {unvalued.length ? <p className="text-xs text-muted-foreground">Not valued in this report: {unvalued.join(", ")}</p> : null}
+            </>
+          );
+        }}
       </Pending>
       <SectionTitle>Summary</SectionTitle>
       <DescriptionList
@@ -302,9 +306,9 @@ function ValuationBody({ valuation, onChanged }: { valuation: api.ValuationDetai
       <SectionTitle>Documents</SectionTitle>
       <Attachments documents={valuation.documents} link={valuationLinkIntent(valuation)} onUploaded={onChanged} />
       <SectionTitle>{counting ? "Grants priced with this valuation" : "Grants that name this valuation"} ({valuation.grants.length})</SectionTitle>
-      {!counting && valuation.grants.length ? <p className="small muted">It never priced them: only a final 409A prices a grant. They name it in the imported records.</p> : null}
+      {!counting && valuation.grants.length ? <p className="text-xs text-muted-foreground">It never priced them: only a final 409A prices a grant. They name it in the imported records.</p> : null}
       {valuation.grants.length === 0 ? (
-        <p className="muted">{counting ? "No grants were priced with this valuation." : "No grants name this valuation."}</p>
+        <p className="text-sm text-muted-foreground">{counting ? "No grants were priced with this valuation." : "No grants name this valuation."}</p>
       ) : (
         // The strike is compared with the FMV of the grant's own class (common unless the grant says otherwise), so
         // the comparison waits for the class lookup instead of guessing which price is common.
@@ -327,7 +331,7 @@ function ValuationBody({ valuation, onChanged }: { valuation: api.ValuationDetai
                   { key: "strike", label: "Strike", numeric: true, render: (grant) => format.price(grant.exercisePrice), compare: byDecimal((grant) => grant.exercisePrice) },
                   // A strike is checked against a final 409A's FMV only: another valuation's price is no FMV for grants.
                   ...(counting ? [
-                    { key: "fmv", label: "FMV", numeric: true, render: (grant: api.ValuationDetail["grants"][number]) => { const fmv = classPrice(valuation, classList.items, grant.stockClassId); return fmv ? format.price(fmv) : <span className="muted">Not valued</span>; } },
+                    { key: "fmv", label: "FMV", numeric: true, render: (grant: api.ValuationDetail["grants"][number]) => { const fmv = classPrice(valuation, classList.items, grant.stockClassId); return fmv ? format.price(fmv) : <span className="text-muted-foreground">Not valued</span>; } },
                     {
                       key: "ok", label: "Strike ≥ FMV",
                       render: (grant: api.ValuationDetail["grants"][number]) => {

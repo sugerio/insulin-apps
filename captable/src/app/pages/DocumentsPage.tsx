@@ -1,6 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { apiRequest } from "../api/request.ts";
 import { WriteButton } from "../components/Actions.tsx";
 import { DataTable, byNumber, byText, type Column } from "../components/DataTable.tsx";
@@ -33,6 +37,9 @@ function importedFolderDescription(source: api.ImportSource | null | undefined):
   return "imported";
 }
 
+/** A heading inside the folder list. */
+const MENU_LABEL = "px-2.5 pt-3 pb-1 text-xs font-medium text-muted-foreground";
+
 export function DocumentsPage() {
   const { orgId, href, org } = useWorkspace();
   const navigate = useNavigate();
@@ -63,9 +70,11 @@ export function DocumentsPage() {
   const groups = folders.filter((item) => item.kind === "TEMPLATE_GROUP");
   const editable = folder !== null && folder.kind === "FOLDER" && folder.source === "app";
   const folderLink = (id: string, label: ReactNode, icon: "folder" | "users" = "folder") => (
-    <Link key={id} to={`${href("documents")}?folder=${encodeURIComponent(id)}${archived ? "&archived=1" : ""}`} className={view === id ? "active" : undefined} aria-current={view === id ? "page" : undefined}>
-      <Icon name={icon} /> {label}
-    </Link>
+    <Button key={id} asChild variant={view === id ? "secondary" : "ghost"} size="sm" className="w-full justify-start font-normal data-[current=true]:font-medium">
+      <Link to={`${href("documents")}?folder=${encodeURIComponent(id)}${archived ? "&archived=1" : ""}`} data-current={view === id} aria-current={view === id ? "page" : undefined}>
+        <Icon name={icon} /> <span className="truncate">{label}</span>
+      </Link>
+    </Button>
   );
   const heading = view === RESOURCES ? "Company resources" : view === ALL ? "All documents" : folder?.name ?? "Folder";
   return (
@@ -81,51 +90,54 @@ export function DocumentsPage() {
             </>
           }
         />
-        <div className="split-pane">
-          <nav className="folder-list" aria-label="Folders">
+        <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+          <nav className="flex flex-col gap-0.5" aria-label="Folders">
             {folderLink(ALL, "All documents")}
-            <div className="menu-label">Portal</div>
+            <div className={MENU_LABEL}>Portal</div>
             {folderLink(RESOURCES, "Company resources", "users")}
-            <div className="menu-label">Your documents</div>
+            <div className={MENU_LABEL}>Your documents</div>
             {collections.error !== undefined ? <InlineError what="the folders" error={collections.error} onRetry={collections.reload} inline />
-              : !collections.data ? <p className="muted small" role="status" style={{ padding: "0 10px" }}>Loading the folders…</p> : null}
+              : !collections.data ? <p className="px-2.5 text-xs text-muted-foreground" role="status">Loading the folders…</p> : null}
             {own.map((item) => folderLink(item.id, <>{item.name}{item.archivedAt !== null ? <> <Badge>Archived</Badge></> : null}</>))}
-            {collections.data && !own.length ? <p className="small muted" style={{ padding: "0 10px" }}>No folders yet.</p> : null}
-            {groups.length ? <div className="menu-label">Migrated templates</div> : null}
+            {collections.data && !own.length ? <p className="px-2.5 text-xs text-muted-foreground">No folders yet.</p> : null}
+            {groups.length ? <div className={MENU_LABEL}>Migrated templates</div> : null}
             {groups.map((item) => folderLink(item.id, item.name))}
           </nav>
-          <div>
-            <div className="card-h">
-              <h2>{heading}</h2>
+          <div className="flex min-w-0 flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-semibold">{heading}</h2>
               {editable ? (
-                <div className="row">
+                <div className="flex flex-wrap items-center gap-2">
                   <WriteButton label="Rename" size="sm" ariaLabel={`Rename the folder ${folder.name}`} onClick={() => setDialog({ kind: "rename", folder })} />
                   <WriteButton label={folder.archivedAt === null ? "Archive" : "Restore"} size="sm" ariaLabel={`${folder.archivedAt === null ? "Archive" : "Restore"} the folder ${folder.name}`} onClick={() => setDialog({ kind: "archiveFolder", folder })} />
                 </div>
               ) : null}
             </div>
             <TargetLabelsState labels={labels} />
-            {folder && !editable ? <p className="small muted">{folder.kind === "TEMPLATE_GROUP"
+            {folder && !editable ? <p className="text-xs text-muted-foreground">{folder.kind === "TEMPLATE_GROUP"
               ? `A template group ${importedFolderDescription(org.importSource)}: read-only.`
               : `${importedFolderDescription(org.importSource).replace(/^./, (letter) => letter.toUpperCase())}: read-only.`}</p> : null}
             {view === RESOURCES ? (
               <ResourcesView key={generation} labels={labels} />
             ) : (
               <>
-                <div className="row mb-8">
-                  <label className="row small nowrap">
-                    Type{" "}
-                    <select className="inp" style={{ height: 32 }} aria-label="Filter by type" value={kind} onChange={(event) => go({ kind: event.target.value })}>
-                      <option value="">All types</option>
-                      {kindOptions().map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs whitespace-nowrap">
+                    Type
+                    <NativeSelect size="sm" aria-label="Filter by type" value={kind} onChange={(event) => go({ kind: event.target.value })}>
+                      <NativeSelectOption value="">All types</NativeSelectOption>
+                      {kindOptions().map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
+                    </NativeSelect>
                   </label>
-                  <label className="row small nowrap"><input type="checkbox" className="cb" checked={archived} onChange={(event) => go({ archived: event.target.checked ? "1" : null })} /> Show archived</label>
+                  <div className="flex items-center gap-2">
+                    <Checkbox id="documents-show-archived" checked={archived} onCheckedChange={(checked) => go({ archived: checked === true ? "1" : null })} />
+                    <Label htmlFor="documents-show-archived" className="text-xs font-normal whitespace-nowrap">Show archived</Label>
+                  </div>
                 </div>
                 <DocumentList key={`${view}|${kind}|${archived}|${generation}`} collectionId={view === ALL ? undefined : view} kind={kind || undefined} includeArchived={archived} labels={labels} />
               </>
             )}
-            <p className="small muted mt-8">
+            <p className="text-xs text-muted-foreground">
               Holder visibility is set per document, on its page: on for the holder's own agreements, notices of exercise and certificates; off for everything else. A document linked to two or more holders is never shown in the portal.
             </p>
           </div>
@@ -152,17 +164,17 @@ function DocumentTable({ id, label, rows, labels, empty }: { id: string; label: 
   const { download, error, busy } = useDownload();
   const columns: Column<api.Document>[] = [
     {
-      key: "name", label: "Name", className: "wrap", compare: byText((row) => row.filename),
+      key: "name", label: "Name", className: "whitespace-normal", compare: byText((row) => row.filename),
       render: (row) => (
         <>
-          <Icon name="file" /> <Link className="cell-link" to={href(`documents/${row.id}`)}>{row.filename}</Link>
+          <Icon name="file" /> <Link className="font-medium underline-offset-4 hover:underline" to={href(`documents/${row.id}`)}>{row.filename}</Link>
           {row.archivedAt !== null ? <> <Badge>Archived</Badge></> : null}
-          {row.description ? <div className="small muted">{row.description}</div> : null}
+          {row.description ? <div className="text-xs text-muted-foreground">{row.description}</div> : null}
         </>
       ),
     },
     {
-      key: "linked", label: "Linked to", className: "wrap",
+      key: "linked", label: "Linked to", className: "whitespace-normal",
       render: (row) => {
         const links = activeLinks(row);
         if (!links.length) return DASH;
@@ -170,19 +182,19 @@ function DocumentTable({ id, label, rows, labels, empty }: { id: string; label: 
           const to = labels.to(link.targetType, link.targetId);
           const text = labels.label(link.targetType, link.targetId);
           return <span key={link.id}>{index ? ", " : ""}{to ? <Link to={to}>{text}</Link> : text}</span>;
-        }).concat(links.length > 2 ? [<span key="more" className="small muted"> +{links.length - 2} more</span>] : []);
+        }).concat(links.length > 2 ? [<span key="more" className="text-xs text-muted-foreground"> +{links.length - 2} more</span>] : []);
       },
     },
-    { key: "type", label: "Type", render: (row) => <>{documentKindLabel(row.kind)} <span className="small muted">{fileTypeLabel(row)}</span></>, compare: byText((row) => documentKindLabel(row.kind)) },
+    { key: "type", label: "Type", render: (row) => <>{documentKindLabel(row.kind)} <span className="text-xs text-muted-foreground">{fileTypeLabel(row)}</span></>, compare: byText((row) => documentKindLabel(row.kind)) },
     { key: "by", label: "Uploaded by", render: (row) => (row.importedFromPulley ? api.importSourceLabel(org.importSource) : row.uploadedBy ?? DASH) },
     { key: "on", label: "Uploaded on", render: (row) => format.date(format.localDate(row.createdAt)), compare: byNumber((row) => row.createdAt) },
     { key: "visible", label: "Visible to", render: (row) => visibilityLabel(row) },
     ...(canDownload ? [{
       key: "download", label: "", locked: true,
       render: (row: api.Document) => (
-        <button type="button" className="btn btn-ghost btn-xs" disabled={busy === row.id} onClick={() => void download(row.id, row.filename)}>
+        <Button type="button" variant="ghost" size="xs" disabled={busy === row.id} onClick={() => void download(row.id, row.filename)}>
           Download <span className="sr-only">{row.filename}</span>
-        </button>
+        </Button>
       ),
     }] : []),
   ];
@@ -208,13 +220,13 @@ function DocumentList({ collectionId, kind, includeArchived, labels }: { collect
     (item) => item.id,
   );
   if (!pages.loaded && pages.error !== undefined) return <InlineError what="the documents" error={pages.error} onRetry={pages.reload} />;
-  if (!pages.loaded) return <p className="muted small" role="status">Loading documents…</p>;
+  if (!pages.loaded) return <p className="text-xs text-muted-foreground" role="status">Loading documents…</p>;
   return (
     <>
       <DocumentTable id="documents" label="Documents" rows={pages.items} labels={labels} empty={kind ? "No documents of this type here." : "No documents here yet."} />
       {pages.nextCursor !== null ? (
-        <div className="row mt-8">
-          <button type="button" className="btn btn-ghost btn-sm" disabled={pages.loadingMore} onClick={() => void pages.loadMore()}>{pages.loadingMore ? "Loading…" : "Load more documents"}</button>
+        <div className="flex">
+          <Button type="button" variant="ghost" size="sm" disabled={pages.loadingMore} onClick={() => void pages.loadMore()}>{pages.loadingMore ? "Loading…" : "Load more documents"}</Button>
         </div>
       ) : null}
       {pages.moreError !== undefined ? <InlineError what="the next documents" error={pages.moreError} onRetry={() => void pages.loadMore()} /> : null}
@@ -227,7 +239,7 @@ function ResourcesView({ labels }: { labels: TargetLabels }) {
   const { href } = useWorkspace();
   const all = useAllDocuments();
   if (all.data === undefined && all.error !== undefined) return <InlineError what="the documents" error={all.error} onRetry={all.reload} />;
-  if (all.data === undefined) return <p className="muted small" role="status">Loading the company resources…</p>;
+  if (all.data === undefined) return <p className="text-xs text-muted-foreground" role="status">Loading the company resources…</p>;
   return (
     <>
       <Banner kind="info" title="Every holder sees these in their portal">

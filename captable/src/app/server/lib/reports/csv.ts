@@ -1,3 +1,4 @@
+import { csvTextField } from "#shared";
 import type { XlsxCell } from "./xlsx.ts";
 
 function valueOf(cell: XlsxCell): string {
@@ -11,12 +12,9 @@ function valueOf(cell: XlsxCell): string {
   return cell;
 }
 
-/** RFC 4180 rows with spreadsheet formula prefixes neutralized by an apostrophe. */
+/** RFC 4180 rows with spreadsheet formula prefixes neutralized by an apostrophe; a number (-12) is written as it is. */
 export function csvCell(cell: XlsxCell): string {
-  let value = valueOf(cell);
-  if (typeof cell !== "number" && (/^[\t\r]/.test(value) || /^\s*[=+\-@]/.test(value))) value = `'${value}`;
-  // Quote every field: locale-specific separators (notably `;`) cannot split a safe value into a formula cell.
-  return `"${value.replace(/"/g, '""')}"`;
+  return typeof cell === "number" ? `"${valueOf(cell)}"` : csvTextField(valueOf(cell));
 }
 
 export function writeCsv(rows: readonly (readonly XlsxCell[])[]): string {

@@ -9,6 +9,7 @@ import { DateField, TextAreaField, TextField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
 import { FlowDialog } from "./FlowDialog.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // The 409A events: flag a material event
 // (review required, new grants blocked), clear a review with the provider's or counsel's written confirmation, void a
@@ -80,16 +81,16 @@ export function FlagMaterialEventDialog({ onClose, onDone }: { onClose: () => vo
       confirmLabel="Flag event"
       danger
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>Flag <b>“{form.state.description.trim()}”</b> on {formatDate(form.state.date)}.</p>
-          <p className="small">The 409A presumptively valid on that date becomes <b>Review required</b>: new grants are blocked and the dashboard shows a reminder until a new valuation is recorded or an admin records the written confirmation. Other valuations and draft 409A reports never take a flag.</p>
-        </div>
+          <p className="text-xs">The 409A presumptively valid on that date becomes <b>Review required</b>: new grants are blocked and the dashboard shows a reminder until a new valuation is recorded or an admin records the written confirmation. Other valuations and draft 409A reports never take a flag.</p>
+        </ReviewPanel>
       }
     >
       <DateField label="Date of the event" required max={today} value={form.state.date} onChange={(value) => form.set("date", value)} error={errorOf("date")} />
       <TextField label="Description" required value={form.state.description} onChange={(value) => form.set("description", value)} placeholder="e.g. Series B term sheet signed, secondary sale, new preferred class" error={errorOf("description")} />
       <DocumentUpload label="Document" kind="VALUATION_SUPPORT" value={form.state.document} onChange={(document) => form.set("document", document)} error={errorOf("document")} disabled={flow.phase !== "edit"} />
-      <p className="small muted">Sets <b>Review required</b> on the 409A in effect, raises a dashboard reminder and blocks new grants until a new valuation (or written confirmation) is recorded.</p>
+      <p className="text-xs text-muted-foreground">Sets <b>Review required</b> on the 409A in effect, raises a dashboard reminder and blocks new grants until a new valuation (or written confirmation) is recorded.</p>
     </FlowDialog>
   );
 }
@@ -120,13 +121,13 @@ export function ClearReviewDialog({ valuation, onClose, onDone }: { valuation: a
       onReview={() => { if (form.validate(true)) void flow.review(); }}
       confirmLabel="Record confirmation"
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>Record the written confirmation that <b>{valuation.name}</b> still holds after the material event: “{form.state.description.trim()}” ({formatDate(form.state.date)}), with {form.state.document?.filename}.</p>
-          <p className="small muted">It clears the material events recorded before it; one flagged later needs review again.</p>
-        </div>
+          <p className="text-xs text-muted-foreground">It clears the material events recorded before it; one flagged later needs review again.</p>
+        </ReviewPanel>
       }
     >
-      <p className="small">Record the provider's or counsel's written confirmation that {valuation.name} still holds after the material event.</p>
+      <p className="text-xs">Record the provider's or counsel's written confirmation that {valuation.name} still holds after the material event.</p>
       <DateField label="Date of the confirmation" required max={today} value={form.state.date} onChange={(value) => form.set("date", value)} error={errorOf("date")} />
       <TextField label="Description" required value={form.state.description} onChange={(value) => form.set("description", value)} placeholder="e.g. Provider's bring-down letter" error={errorOf("description")} />
       <DocumentUpload label="Confirmation letter" kind="VALUATION_SUPPORT" required value={form.state.document} onChange={(document) => form.set("document", document)} error={errorOf("document")} disabled={flow.phase !== "edit"} />
@@ -161,10 +162,10 @@ export function VoidValuationDialog({ valuation, onClose, onDone }: { valuation:
       confirmLabel="Void valuation"
       danger
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>Void <b>{valuation.name}</b> ({valuation.provider ?? "provider not recorded"}, effective {formatDate(valuation.effectiveDate)}) as of {formatDate(form.state.date)}: “{form.state.description.trim()}”.</p>
-          <p className="small">A voided valuation prices no new grant or exercise. A recorded 409A is never edited: record the corrected valuation next.</p>
-        </div>
+          <p className="text-xs">A voided valuation prices no new grant or exercise. A recorded 409A is never edited: record the corrected valuation next.</p>
+        </ReviewPanel>
       }
     >
       <DateField label="Date" required max={today} value={form.state.date} onChange={(value) => form.set("date", value)} error={errorOf("date")} />
@@ -207,14 +208,14 @@ export function ReverseValuationEventDialog({ valuation, event, onClose, onDone 
       danger
       review={
         <>
-          <div className="review-panel" aria-label="Review">
+          <ReviewPanel>
             <p>Reverse the material event <b>“{event.description}”</b> ({formatDate(event.eventDate)}) on {valuation.name}. It then counts for nothing; the status is computed again. A flag is reversed once.</p>
-          </div>
+          </ReviewPanel>
           <TypedConfirmation expected={valuation.name} value={typed} onChange={setTyped} disabled={flow.busy || flow.locked} />
         </>
       }
     >
-      <p className="small">{valuation.name} · flagged {formatDate(event.eventDate)} by {event.createdBy}: “{event.description}”</p>
+      <p className="text-xs">{valuation.name} · flagged {formatDate(event.eventDate)} by {event.createdBy}: “{event.description}”</p>
       <TextAreaField label="Reason" required value={note} onChange={(value) => { setNote(value); setNoteError(undefined); }} placeholder="e.g. Flagged on the wrong company" error={noteError ?? fieldProblem(flow.problem, "note")} />
     </FlowDialog>
   );

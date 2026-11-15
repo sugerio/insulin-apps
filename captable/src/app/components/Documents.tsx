@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
+import { DownloadIcon, FileIcon } from "lucide-react";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { api } from "#shared";
 import { saveFile } from "../api/request.ts";
 import { describeError } from "../lib/errors.ts";
@@ -9,7 +12,6 @@ import { useResource } from "../lib/useResource.ts";
 import { apiRequest } from "../api/request.ts";
 import { WriteButton } from "./Actions.tsx";
 import { InlineError } from "./Feedback.tsx";
-import { Icon } from "./Icon.tsx";
 import { useWorkspace } from "./OrgWorkspace.tsx";
 import { UploadDocumentDialog, type LinkIntent } from "./flows/DocumentDialogs.tsx";
 
@@ -43,7 +45,7 @@ export function useDownload() {
 }
 
 export function DownloadError({ error }: { error: string | null }) {
-  return error ? <p className="err-inline" role="alert">{error}</p> : null;
+  return error ? <p className="mt-1.5 text-sm font-medium text-destructive" role="alert">{error}</p> : null;
 }
 
 /** Every document, 200 at a time, for what the list can't filter on the server: company resources and their pickers. */
@@ -136,7 +138,7 @@ export function useTargetLabels(enabled = true): TargetLabels {
 
 /** Says when the names behind links are still loading, or couldn't all be read (those links show their type). */
 export function TargetLabelsState({ labels }: { labels: TargetLabels }) {
-  if (labels.loading) return <p className="muted small" role="status">Loading the names of the linked records…</p>;
+  if (labels.loading) return <p className="text-xs text-muted-foreground" role="status">Loading the names of the linked records…</p>;
   if (labels.failure !== undefined) return <InlineError what="the names of some linked records (they show their type)" error={labels.failure} onRetry={labels.reload} />;
   return null;
 }
@@ -162,40 +164,45 @@ export function LinkedDocuments({ targetType, targetId, showVisibility = false, 
   );
   const { download, error, busy } = useDownload();
   if (!resource.data && resource.error !== undefined) return <InlineError what="the documents" error={resource.error} onRetry={resource.reload} />;
-  if (!resource.data) return <p className="muted small" role="status">Loading documents…</p>;
+  if (!resource.data) return <p className="text-xs text-muted-foreground" role="status">Loading documents…</p>;
   const documents = resource.data.items.filter((document) => document.archivedAt === null);
-  if (documents.length === 0) return <p className="muted small">No documents.</p>;
+  if (documents.length === 0) return <p className="text-xs text-muted-foreground">No documents.</p>;
   return (
     <>
-      <div className="tbl-scroll">
-        <table className="tbl" aria-label="Documents">
-          <thead>
-            <tr>
-              <th scope="col">Document</th>
-              <th scope="col">Uploaded on</th>
-              <th scope="col">Uploaded by</th>
-              {showVisibility ? <th scope="col">Visible to holder</th> : null}
-              {canDownload ? <th scope="col"><span className="sr-only">Download</span></th> : null}
-            </tr>
-          </thead>
-          <tbody>
+      <div className="overflow-hidden rounded-lg border">
+        <Table aria-label="Documents">
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead scope="col">Document</TableHead>
+              <TableHead scope="col">Uploaded on</TableHead>
+              <TableHead scope="col">Uploaded by</TableHead>
+              {showVisibility ? <TableHead scope="col">Visible to holder</TableHead> : null}
+              {canDownload ? <TableHead scope="col"><span className="sr-only">Download</span></TableHead> : null}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {documents.map((document) => (
-              <tr key={document.id}>
-                <td><Icon name="file" /> <Link to={href(`documents/${document.id}`)}>{document.filename}</Link></td>
-                <td>{format.date(format.localDate(document.createdAt))}</td>
-                <td>{document.importedFromPulley ? api.importSourceLabel(org.importSource) : document.uploadedBy ?? "—"}</td>
-                {showVisibility ? <td>{document.holderVisible ? "Yes" : "No"}</td> : null}
+              <TableRow key={document.id}>
+                <TableCell>
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileIcon className="size-4 text-muted-foreground" />
+                    <Link className="font-medium underline-offset-4 hover:underline" to={href(`documents/${document.id}`)}>{document.filename}</Link>
+                  </span>
+                </TableCell>
+                <TableCell>{format.date(format.localDate(document.createdAt))}</TableCell>
+                <TableCell>{document.importedFromPulley ? api.importSourceLabel(org.importSource) : document.uploadedBy ?? "—"}</TableCell>
+                {showVisibility ? <TableCell>{document.holderVisible ? "Yes" : "No"}</TableCell> : null}
                 {canDownload ? (
-                  <td className="right">
-                    <button type="button" className="btn btn-ghost btn-xs" disabled={busy === document.id} onClick={() => void download(document.id, document.filename)}>
-                      Download <span className="sr-only">{document.filename}</span>
-                    </button>
-                  </td>
+                  <TableCell className="text-right">
+                    <Button type="button" variant="ghost" size="xs" disabled={busy === document.id} onClick={() => void download(document.id, document.filename)}>
+                      <DownloadIcon /> Download <span className="sr-only">{document.filename}</span>
+                    </Button>
+                  </TableCell>
                 ) : null}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <DownloadError error={error} />
     </>
@@ -215,25 +222,35 @@ export function Attachments({ documents, upload = true, link, onUploaded }: { do
   return (
     <>
       {documents.length ? (
-        documents.map((document) => (
-          <div className="attach" key={document.id}>
-            <div className="a-n">
-              <Icon name="file" />
-              {canDownload ? (
-                <button type="button" className="btn-link" disabled={busy === document.id} onClick={() => void download(document.id, document.filename)}>
-                  {document.filename}
-                </button>
-              ) : <span>{document.filename}</span>}
+        <div className="flex flex-col gap-2">
+          {documents.map((document) => (
+            <div className="flex flex-col gap-1 rounded-lg border px-3.5 py-3 text-sm" data-slot="attachment" key={document.id}>
+              <div className="flex items-start gap-2 font-medium" data-slot="attachment-name">
+                <FileIcon className="mt-0.5 size-4 flex-none text-muted-foreground" />
+                {canDownload ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-left whitespace-normal wrap-anywhere"
+                    disabled={busy === document.id}
+                    onClick={() => void download(document.id, document.filename)}
+                  >
+                    {document.filename}
+                  </Button>
+                ) : <span className="wrap-anywhere">{document.filename}</span>}
+              </div>
+              <div className="text-xs text-muted-foreground" data-slot="attachment-meta">
+                {documentKindLabel(document.kind)} · <Link className="underline-offset-4 hover:underline" to={href(`documents/${document.id}`)}>Details<span className="sr-only"> of {document.filename}</span></Link>
+              </div>
             </div>
-            <div className="a-m">{documentKindLabel(document.kind)} · <Link to={href(`documents/${document.id}`)}>Details<span className="sr-only"> of {document.filename}</span></Link></div>
-          </div>
-        ))
+          ))}
+        </div>
       ) : (
-        <p className="muted small">No attachments.</p>
+        <p className="text-xs text-muted-foreground">No attachments.</p>
       )}
       <DownloadError error={error} />
       {upload && link ? (
-        <div className="row mt-8">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <WriteButton label="Upload" icon="upload" size="sm" ariaLabel={`Upload a document for ${link.label}`} onClick={() => setOpen(true)} />
         </div>
       ) : null}

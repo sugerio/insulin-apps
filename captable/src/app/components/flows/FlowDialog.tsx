@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button.tsx";
+import { FieldSet } from "@/components/ui/field.tsx";
 import type { WriteFlow } from "../../lib/flow.ts";
 import { DismissButton, Modal } from "../Dialog.tsx";
 import { ErrorFocus } from "../ErrorFocus.tsx";
@@ -32,28 +34,28 @@ export function FlowDialog({ title, flow, onClose, onReview, children, review, c
   const footer = editing ? (
     <>
       <DismissButton onClick={onClose}>Cancel</DismissButton>
-      <button type="button" className="btn btn-primary" onClick={onReview} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : reviewLabel}</button>
+      <Button type="button" onClick={onReview} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : reviewLabel}</Button>
     </>
   ) : (
     <>
-      <button type="button" className="btn btn-ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back</button>
-      <button
+      <Button type="button" variant="outline" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back</Button>
+      <Button
         type="button"
-        className={danger ? "btn btn-danger" : "btn btn-primary"}
+        variant={danger ? "destructive" : "default"}
         onClick={() => void flow.commit()}
         disabled={flow.busy || flow.locked || !confirmReady || !flow.acknowledgedAll}
       >
         {flow.phase === "committing" ? "Recording…" : confirmLabel}
-      </button>
+      </Button>
     </>
   );
   return (
     <Modal title={title} onClose={onClose} footer={footer} dismissible={!flow.unsettled}>
       <ErrorFocus>
         <FlowProblemBanner problem={flow.problem} onRetry={editing ? onReview : () => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-        <fieldset className="flow-fields form" disabled={!editing}>{children}</fieldset>
+        <FieldSet className="min-w-0" disabled={!editing}>{children}</FieldSet>
         {!editing ? (
-          <div className="mt-12">
+          <div className="flex flex-col gap-4">
             {review}
             <WarningsToAcknowledge flow={flow} />
           </div>

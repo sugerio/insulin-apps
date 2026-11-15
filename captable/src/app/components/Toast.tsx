@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Icon } from "./Icon.tsx";
+import { CircleCheck, TriangleAlert, XIcon } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert.tsx";
+import { Button } from "@/components/ui/button.tsx";
 
-// The success toast every write ends with ("a success toast links to the result"). The provider
-// sits in the org workspace, so a toast outlives the navigation to the record it links to.
+// The success toast every write ends with ("a success toast links to the result"), a shadcn/ui Alert in the corner. The
+// provider sits in the org workspace, so a toast outlives the navigation to the record it links to.
 
 export interface ToastMessage {
   message: string;
@@ -47,15 +49,29 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {/* A live region present before any toast arrives, so each one is announced; no role="status", which pages use
           for their loading lines. */}
-      <div className="toasts" aria-live="polite">
-        {toasts.map((toast) => (
-          <div className={toast.tone === "warn" ? "toast-item warn" : "toast-item"} key={toast.id}>
-            <Icon name={toast.tone === "warn" ? "alert" : "check"} />
-            <span>{toast.message}</span>
-            {toast.to ? <Link to={toast.to} onClick={() => dismiss(toast.id)}>{toast.linkLabel ?? "Open"}</Link> : null}
-            <button type="button" aria-label="Dismiss" onClick={() => dismiss(toast.id)}><Icon name="x" /></button>
-          </div>
-        ))}
+      <div className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2" aria-live="polite">
+        {toasts.map((toast) => {
+          const Drawn = toast.tone === "warn" ? TriangleAlert : CircleCheck;
+          return (
+            <Alert
+              key={toast.id}
+              role={undefined}
+              data-tone={toast.tone ?? "ok"}
+              className={toast.tone === "warn"
+                ? "pointer-events-auto border-amber-300 bg-amber-50 pr-10 text-amber-950 shadow-lg dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+                : "pointer-events-auto pr-10 shadow-lg"}
+            >
+              <Drawn aria-hidden="true" />
+              <AlertDescription className="text-current">
+                <span>{toast.message}</span>
+                {toast.to ? <> <Link className="font-medium underline underline-offset-4" to={toast.to} onClick={() => dismiss(toast.id)}>{toast.linkLabel ?? "Open"}</Link></> : null}
+              </AlertDescription>
+              <Button type="button" variant="ghost" size="icon-xs" className="absolute top-2 right-2" aria-label="Dismiss" onClick={() => dismiss(toast.id)}>
+                <XIcon aria-hidden="true" />
+              </Button>
+            </Alert>
+          );
+        })}
       </div>
     </ToastContext>
   );

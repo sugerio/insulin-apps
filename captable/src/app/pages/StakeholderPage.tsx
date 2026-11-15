@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { ActionsMenu, OwnRecordScope, WriteButton } from "../components/Actions.tsx";
 import { RecordActivity } from "../components/Activity.tsx";
@@ -20,12 +22,12 @@ import { usePii } from "../components/Pii.tsx";
 import { isPositive, sumDecimals } from "../lib/decimal.ts";
 import { DASH, formatDate } from "../lib/format.ts";
 import {
-  PAYMENT_METHOD_LABELS,
   PORTAL_STATE_LABELS,
   RELATIONSHIP_LABELS,
   SECURITY_STATUS_LABELS,
   SECURITY_STATUS_TONES,
   TERMINATION_TYPE_LABELS,
+  exercisePaymentLabel,
   isExecutionPending,
 } from "../lib/labels.ts";
 import { addressLine, emailKindLabel, leaveLabel } from "../lib/stakeholders.ts";
@@ -117,9 +119,11 @@ function StakeholderBody({ stakeholder, holdings, vesting, onChanged }: BodyProp
           title={stakeholder.displayName}
           after={
             <>
-              <Link className="icon-link" to={href(`stakeholders/${stakeholder.id}/preview`)} title="Preview as stakeholder" aria-label="Preview as stakeholder">
-                <Icon name="eye" />
-              </Link>
+              <Button asChild variant="ghost" size="xs">
+                <Link to={href(`stakeholders/${stakeholder.id}/preview`)} title="The holder view as it shows this stakeholder record">
+                  <Icon name="eye" /> Preview as stakeholder
+                </Link>
+              </Button>
               <TerminationBadge state={state} />
             </>
           }
@@ -134,8 +138,8 @@ function StakeholderBody({ stakeholder, holdings, vesting, onChanged }: BodyProp
           </Banner>
         ) : null}
         {stakeholder.mergedRecords.length ? (
-          <p className="small muted">
-            Merged into this record: {stakeholder.mergedRecords.map((record, index) => <span key={record.id}>{index ? ", " : ""}<Link to={href(`stakeholders/${record.id}`)}>{record.displayName}</Link></span>)}.
+          <p className="text-xs text-muted-foreground">
+            Merged into this record: {stakeholder.mergedRecords.map((record, index) => <span key={record.id}>{index ? ", " : ""}<Link className="underline underline-offset-4" to={href(`stakeholders/${record.id}`)}>{record.displayName}</Link></span>)}.
           </p>
         ) : null}
         <SectionTitle>Overview</SectionTitle>
@@ -173,7 +177,7 @@ function StakeholderBody({ stakeholder, holdings, vesting, onChanged }: BodyProp
       </Card>
       {scheduled ? <ScheduledTermination stakeholder={stakeholder} scheduled={scheduled} holdings={holdings} /> : null}
       <Card>
-        <h3 className="section-title" style={{ marginTop: 0 }}>Holdings</h3>
+        <h3 className="text-base font-semibold">Holdings</h3>
         {/* The schedule names come from the vesting terms; a missing name must not read as "explicit tranches". */}
         <Pending resource={allOf(holdings, vesting)} what="the holdings">
           {([held, vestingList]) => <Holdings holdings={held.items} vestingNames={new Map(vestingList.items.map((item) => [item.id, item.name]))} />}
@@ -194,7 +198,7 @@ function StakeholderBody({ stakeholder, holdings, vesting, onChanged }: BodyProp
                 { key: "grant", label: "Grant", render: (row) => <SecurityLink id={row.securityId} family="EQUITY_COMPENSATION" displayId={row.grantDisplayId} /> },
                 { key: "qty", label: "Quantity", numeric: true, render: (row) => format.shares(row.quantity), compare: byDecimal((row) => row.quantity) },
                 { key: "type", label: "ISO/NSO", render: (row) => (isPositive(row.isoQuantity) && isPositive(row.nsoQuantity) ? "ISO + NSO" : isPositive(row.isoQuantity) ? "ISO" : "NSO") },
-                { key: "pay", label: "Payment", render: (row) => (row.paymentMethod ? PAYMENT_METHOD_LABELS[row.paymentMethod] : DASH) },
+                { key: "pay", label: "Payment", render: (row) => exercisePaymentLabel(row, workspace.org.importSource) },
                 { key: "src", label: "Source", render: (row) => exerciseSource(row, workspace.org.importSource) },
               ]}
             />
@@ -242,36 +246,34 @@ function EmailList({ stakeholder, readOnly, onAdd, onRemove }: { stakeholder: ap
   const { format } = useWorkspace();
   const pii = usePii();
   const emails = stakeholder.emails.filter((email) => email.removedAt === null);
-  const add = readOnly ? null : <div className="row mt-8"><WriteButton label="Add e-mail" size="sm" icon="plus" ariaLabel={`Add an e-mail to ${stakeholder.displayName}`} onClick={onAdd} /></div>;
+  const add = readOnly ? null : <div className="flex flex-wrap items-center gap-2"><WriteButton label="Add e-mail" size="sm" icon="plus" ariaLabel={`Add an e-mail to ${stakeholder.displayName}`} onClick={onAdd} /></div>;
   if (!emails.length) {
     return (
       <>
-        <p className="small muted">No e-mail address yet. Without one, this stakeholder can't see their holdings in the holder view.</p>
+        <p className="text-xs text-muted-foreground">No e-mail address yet. Without one, this stakeholder can't see their holdings in the holder view.</p>
         {add}
       </>
     );
   }
   return (
     <>
-      <div className="tbl-scroll">
-        <table className="tbl" aria-label={stakeholder.kind === "institution" ? "Authorized contacts" : "E-mails"}>
-          <thead><tr><th scope="col">E-mail</th><th scope="col">Whose</th><th scope="col">Added</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-          <tbody>
-            {emails.map((email) => (
-              <tr key={email.id}>
-                <td>
-                  {pii.email(email.email)}
-                  {email.contactName ? <div className="small muted">{email.contactName}{email.contactRole ? ` · ${email.contactRole}` : ""}</div> : null}
-                </td>
-                <td>{emailKindLabel(email)}</td>
-                <td>{formatDate(format.localDate(email.createdAt))}{email.addedBy ? <div className="small muted">{email.addedBy}</div> : null}</td>
-                <td className="right">{readOnly ? null : <WriteButton label="Remove" size="xs" ariaLabel={`Remove ${pii.email(email.email)}`} onClick={() => onRemove(email)} />}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="small muted mt-8">A console account whose e-mail matches one of these sees this stakeholder's holdings.</p>
+      <Table aria-label={stakeholder.kind === "institution" ? "Authorized contacts" : "E-mails"}>
+        <TableHeader><TableRow><TableHead scope="col">E-mail</TableHead><TableHead scope="col">Whose</TableHead><TableHead scope="col">Added</TableHead><TableHead scope="col"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+        <TableBody>
+          {emails.map((email) => (
+            <TableRow key={email.id}>
+              <TableCell>
+                {pii.email(email.email)}
+                {email.contactName ? <div className="text-xs text-muted-foreground">{email.contactName}{email.contactRole ? ` · ${email.contactRole}` : ""}</div> : null}
+              </TableCell>
+              <TableCell>{emailKindLabel(email)}</TableCell>
+              <TableCell>{formatDate(format.localDate(email.createdAt))}{email.addedBy ? <div className="text-xs text-muted-foreground">{email.addedBy}</div> : null}</TableCell>
+              <TableCell className="text-right">{readOnly ? null : <WriteButton label="Remove" size="xs" ariaLabel={`Remove ${pii.email(email.email)}`} onClick={() => onRemove(email)} />}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <p className="text-xs text-muted-foreground">A console account whose e-mail matches one of these sees this stakeholder's holdings.</p>
       {add}
     </>
   );
@@ -293,53 +295,53 @@ function ScheduledTermination({ stakeholder, scheduled, holdings }: { stakeholde
   );
   const byId = new Map(affected.map((security) => [security.id, security]));
   return (
-    <Card className="tight sched-card">
-      <div className="row">
-        <h3>On {formatDate(scheduled.terminationDate)}</h3>
-        <span className="spacer" />
-        <span className="small muted">Vesting continues until then; fully diluted is unchanged.</span>
+    <Card>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-base font-semibold">On {formatDate(scheduled.terminationDate)}</h3>
+        <span className="flex-1" />
+        <span className="text-xs text-muted-foreground">Vesting continues until then; fully diluted is unchanged.</span>
       </div>
       {previews.data ? (
-        <div className="tbl-scroll mt-8">
-          <table className="tbl" aria-label={`Effects of ${stakeholder.displayName}'s scheduled termination`}>
-            <thead>
-              <tr>
-                <th scope="col">Security</th>
-                <th scope="col" className="num">Vested at stop</th>
-                <th scope="col" className="num">Cancelled on that date</th>
-                <th scope="col">Contractual deadline</th>
-                <th scope="col">ISO deadline</th>
-              </tr>
-            </thead>
-            <tbody>
-              {previews.data.map((preview) => {
-                const security = byId.get(preview.securityId);
-                return (
-                  <tr key={preview.securityId}>
-                    <td>{security ? <SecurityLink id={security.id} family={security.family} displayId={security.displayId} /> : DASH}</td>
-                    <td className="num">{format.shares(preview.vested)}</td>
-                    <td className="num">{format.shares(preview.unvested)}</td>
-                    <td>{formatDate(preview.contractualDeadline)}</td>
-                    <td>{formatDate(preview.isoDeadline)}</td>
-                  </tr>
-                );
-              })}
-              <tr className="totals">
-                <td>Back to the pool</td>
-                <td />
-                <td className="num">{format.shares(sumDecimals(previews.data.map((preview) => preview.unvested)))}</td>
-                <td />
-                <td />
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <Table aria-label={`Effects of ${stakeholder.displayName}'s scheduled termination`}>
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Security</TableHead>
+              <TableHead scope="col" className="text-right">Vested at stop</TableHead>
+              <TableHead scope="col" className="text-right">Cancelled on that date</TableHead>
+              <TableHead scope="col">Contractual deadline</TableHead>
+              <TableHead scope="col">ISO deadline</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {previews.data.map((preview) => {
+              const security = byId.get(preview.securityId);
+              return (
+                <TableRow key={preview.securityId}>
+                  <TableCell>{security ? <SecurityLink id={security.id} family={security.family} displayId={security.displayId} /> : DASH}</TableCell>
+                  <TableCell className="text-right tabular-nums">{format.shares(preview.vested)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{format.shares(preview.unvested)}</TableCell>
+                  <TableCell>{formatDate(preview.contractualDeadline)}</TableCell>
+                  <TableCell>{formatDate(preview.isoDeadline)}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+          <TableFooter>
+            <TableRow>
+              <TableCell>Back to the pool</TableCell>
+              <TableCell />
+              <TableCell className="text-right tabular-nums">{format.shares(sumDecimals(previews.data.map((preview) => preview.unvested)))}</TableCell>
+              <TableCell />
+              <TableCell />
+            </TableRow>
+          </TableFooter>
+        </Table>
       ) : held === undefined && holdings.error !== undefined ? (
         <InlineError what="the holdings, so the effects couldn't be computed" error={holdings.error} onRetry={holdings.reload} />
       ) : previews.error !== undefined ? (
         <InlineError what="the effects of this termination" error={previews.error} onRetry={previews.reload} />
       ) : (
-        <p className="muted small mt-8" role="status">Computing the effects…</p>
+        <p className="text-xs text-muted-foreground" role="status">Computing the effects…</p>
       )}
     </Card>
   );
@@ -366,7 +368,7 @@ function Holdings({ holdings, vestingNames }: { holdings: readonly api.Security[
       date, statusColumn, { key: "v", label: "Vesting schedule", render: schedule },
       { key: "vested", label: "Vested", numeric: true, render: (security) => format.shares(number(security, "exercisable")) },
       { key: "unvested", label: "Unvested", numeric: true, render: (security) => format.shares(number(security, "unvested")) },
-      { key: "dl", label: "Deadlines", render: (security) => (security.deadlines?.contractual ? <span className="small">{formatDate(security.deadlines.contractual)}{security.deadlines.iso ? ` · ISO ${formatDate(security.deadlines.iso)}` : ""}</span> : DASH) },
+      { key: "dl", label: "Deadlines", render: (security) => (security.deadlines?.contractual ? <span className="text-xs">{formatDate(security.deadlines.contractual)}{security.deadlines.iso ? ` · ISO ${formatDate(security.deadlines.iso)}` : ""}</span> : DASH) },
       fd, pct,
     ]],
     ["Warrants", of("WARRANT"), [certificate, date, statusColumn, fd]],
@@ -383,12 +385,12 @@ function Holdings({ holdings, vestingNames }: { holdings: readonly api.Security[
     ]],
   ];
   const present = groups.filter(([, rows]) => rows.length > 0);
-  if (!present.length) return <p className="muted">No holdings.</p>;
+  if (!present.length) return <p className="text-sm text-muted-foreground">No holdings.</p>;
   return (
     <>
       {present.map(([title, rows, columns]) => (
-        <div key={title}>
-          <h4 className="mt-16">{title}</h4>
+        <div key={title} className="flex flex-col gap-2">
+          <h4 className="text-sm font-semibold">{title}</h4>
           <DataTable id={`holdings-${title}`} label={title} rows={rows} rowKey={(security) => security.id} columns={columns} toolbar={false} paginate={false} defaultSort={["date", "asc"]} />
         </div>
       ))}

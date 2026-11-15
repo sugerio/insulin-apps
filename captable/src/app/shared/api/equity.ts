@@ -117,8 +117,17 @@ export const stockPlanSchema = z.object({
   defaultRepurchaseWindow: periodSchema.nullable(),
   status: planStatusSchema,
   pourOverPlanId: uuidSchema.nullable(),
+  // In ledger order: each change of the share reserve (a pool adjustment, its size after) and each recording of the
+  // plan's terms (no size), told apart by `kind`. `initial` is the pool set with the plan, when it had one; `reserve`
+  // is a later amendment of it.
   amendments: z.array(
-    z.object({ effectiveDate: isoDateSchema, transactionId: uuidSchema, type: transactionTypeSchema, poolSize: decimalSchema.nullable() }),
+    z.object({
+      effectiveDate: isoDateSchema,
+      transactionId: uuidSchema,
+      type: transactionTypeSchema,
+      kind: z.enum(["initial", "reserve", "terms"]),
+      poolSize: decimalSchema.nullable(),
+    }),
   ),
   version: versionSchema,
 });

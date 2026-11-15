@@ -16,7 +16,7 @@ export function RecordActivity({ targetId, limit = 12 }: { targetId: string; lim
     [orgId, targetId, limit],
   );
   if (!resource.data && resource.error !== undefined) return <InlineError what="the activity" error={resource.error} onRetry={resource.reload} />;
-  if (!resource.data) return <p className="muted small" role="status">Loading activity…</p>;
+  if (!resource.data) return <p className="text-xs text-muted-foreground" role="status">Loading activity…</p>;
   return (
     <Timeline
       label="Activity"

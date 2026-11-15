@@ -50,6 +50,27 @@ async function stakeholderWriteJson(c: Context<AppEnv>, deps: AppDeps, row: Stak
   return api.stakeholderSchema.parse(readStakeholderJson(ctx, row, rows, state, state, holder))
 }
 
+/**
+ * Whether a termination of the stakeholder is recorded on the ledger or scheduled, and the guards that hold a write to
+ * what was read: the same ledger head (a termination that leaves the relationship as it was bumps no version) and still
+ * no scheduled termination.
+ */
+async function terminationFacts(c: Context<AppEnv>, deps: AppDeps, row: StakeholderRow): Promise<{ terminated: boolean, guards: D1PreparedStatement[] }> {
+  const db = c.env.DB
+  const ctx = await loadReadContext(db, c.get('config'), row.org_id, viewerOf(c), deps.now())
+  const holder = replayed(ctx, { asOf: ctx.today, asKnownAt: null }).stakeholders.get(row.id)
+  const recorded = (holder?.terminations.length ?? 0) + (holder?.laterTerminations.length ?? 0) > 0
+  const scheduled = "SELECT 1 FROM scheduled_terminations WHERE org_id = ? AND stakeholder_id = ? AND status = 'SCHEDULED'"
+  const pending = await db.prepare(`${scheduled} LIMIT 1`).bind(row.org_id, row.id).first()
+  return {
+    terminated: recorded || pending !== null,
+    guards: [
+      db.prepare('INSERT INTO batch_assertions (ok) SELECT (SELECT seq FROM ledger_heads WHERE org_id = ?) IS ?').bind(row.org_id, ctx.ledger.seq),
+      db.prepare(`INSERT INTO batch_assertions (ok) SELECT NOT EXISTS (${scheduled})`).bind(row.org_id, row.id),
+    ],
+  }
+}
+
 function emailJson(row: EmailRow, addedBy: string | null): api.StakeholderEmail {
   return api.stakeholderEmailSchema.parse({
     id: row.id,
@@ -208,8 +229,16 @@ export function stakeholderRoutes(deps: AppDeps) {
     const current = await getStakeholder(c.env.DB, orgId, id)
     if (!current) throw notFound('Stakeholder not found')
     if (current.version !== input.version) throw new ApiError('conflict', 'The stakeholder changed; refresh and try again', undefined, { reason: 'stale_version' })
+    // ex_employee is set by a termination, and locked while one is recorded or scheduled: reversing or cancelling it
+    // changes the relationship. A record that is an ex-employee without one (imported so) is corrected here, in a batch
+    // that holds only while the ledger and the stakeholder's scheduled terminations are as they were read.
+    const relationshipGuards: D1PreparedStatement[] = []
     if (current.relationship === 'ex_employee' && input.relationship !== undefined) {
-      throw new ApiError('conflict', 'Reverse the termination before changing this relationship', undefined, { reason: 'state_changed' })
+      const facts = await terminationFacts(c, deps, current)
+      if (facts.terminated) {
+        throw new ApiError('conflict', 'Reverse the termination before changing this relationship', undefined, { reason: 'state_changed' })
+      }
+      relationshipGuards.push(...facts.guards)
     }
     await assertIssuerAssignedIdAvailable(c.env.DB, orgId, input.issuerAssignedId, id)
     const now = deps.now()
@@ -233,14 +262,17 @@ export function stakeholderRoutes(deps: AppDeps) {
     const body = await stakeholderWriteJson(c, deps, updated)
     try {
       const replay = await commitIdempotent(c.env.DB, mutation, [
+        ...relationshipGuards,
+        // By id, without a version predicate: the stakeholders version trigger raises `stale version` for an edit made
+        // since the read, which tells it apart from the relationship guards' assertions.
         c.env.DB.prepare(
           `UPDATE stakeholders SET kind = ?, display_name = ?, legal_name = ?, relationship = ?, issuer_assigned_id = ?,
            address = ?, phone = ?, country_of_residence = ?, tax_status = ?, hire_date = ?, comments = ?,
            portal_access = ?, outside_counsel = ?, version = ?, updated_at = ?
-           WHERE org_id = ? AND id = ? AND version = ?`,
+           WHERE org_id = ? AND id = ?`,
         ).bind(updated.kind, updated.display_name, updated.legal_name, updated.relationship, updated.issuer_assigned_id,
           updated.address, updated.phone, updated.country_of_residence, updated.tax_status, updated.hire_date,
-          updated.comments, updated.portal_access, updated.outside_counsel, updated.version, now, orgId, id, input.version),
+          updated.comments, updated.portal_access, updated.outside_counsel, updated.version, now, orgId, id),
         c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
         audit(c, now, 'stakeholder.updated', orgId, 'stakeholder', id, {
           fields: Object.keys(input).filter((key) => key !== 'version'),
@@ -251,6 +283,12 @@ export function stakeholderRoutes(deps: AppDeps) {
       const message = databaseMessage(error)
       if (message.includes('unique constraint failed')) {
         throw new ApiError('conflict', 'That issuer-assigned ID is already in use', undefined, { reason: 'state_changed' })
+      }
+      if (message.includes('stale version')) {
+        throw new ApiError('conflict', 'The stakeholder changed; refresh and try again', undefined, { reason: 'stale_version' })
+      }
+      if (relationshipGuards.length > 0 && message.includes('batch assertion failed')) {
+        throw new ApiError('conflict', 'The ledger or a scheduled termination changed; refresh and try again', undefined, { reason: 'state_changed' })
       }
       if (message.includes('stale version') || message.includes('batch assertion failed')) {
         throw new ApiError('conflict', 'The stakeholder changed; refresh and try again', undefined, { reason: 'stale_version' })

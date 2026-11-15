@@ -35,7 +35,8 @@ README's "Database changes".
 |---|---|
 | `src/app/App.tsx`, `src/app/router.tsx` | React root and routes: the admin workspace (`/companies/:orgId/...`), the holder view (`/portfolio/:orgId/...`), first-run setup (`/setup`) |
 | `src/app/pages/`, `components/`, `lib/` | The React app; `components/flows/` holds the review-and-confirm dialogs |
-| `src/app/components/AppLayout.tsx`, `shell.css`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation from `insulin.navigation` in package.json, Docs and Settings, the organization switcher and the person (from the gateway's `/__insulin/*`) |
+| `src/app/components/ui/`, `hooks/`, `lib/utils.ts`, `app.css`, `shadcn.css`, `components.json`, `postcss.config.mjs` | shadcn/ui: its components (radix-nova style), Tailwind CSS v4 through PostCSS and the theme (see "UI") |
+| `src/app/components/AppLayout.tsx`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation from `insulin.navigation` in package.json, Docs and Settings, the organization switcher and the person (from the gateway's `/__insulin/*`) |
 | `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic, shown by one component in the workspace, the portfolio and before setup |
 | `src/app/api/`, `src/app/auth/` | The typed API client; the console identity (`/api/me`), access helpers and route guards |
 | `src/app/server/router.ts` | `handleAppRequest(request)`: every app `/api/**` request, handed to `createApp()` in `server/app.ts` with the bindings (D1, and the usage report's address, token and gateway binding) |
@@ -118,6 +119,13 @@ particular:
    app-specific types are `X_*`.
 7. **The engine is pure and deterministic:** no I/O, no clock (pass dates in), no randomness. Bump `ENGINE_VERSION`
    (`engine/version.ts`) with any change that can move a number for some ledger: it keys the replay cache.
+   **Payload fields are forward-only, like migrations:** an engine reads only the fields it knows (the version-1
+   schemas are strict), and the database is shared. From engine 1.1.0 a recorded repurchase carries `x_payment`,
+   `x_notice` and `x_authority_document`, which a release before 1.1.0 can't decode: once any company has recorded a
+   repurchase, Cap Table rolls forward only (fix a regression in a new release, never by going back past 1.1.0), and
+   while 1.1.0's release goes out, a company that records a repurchase can briefly get errors from a request the
+   previous Worker still serves. A new field that an older release must survive goes out first in a release that only
+   reads it.
 8. **Don't change hashing or canonical JSON** (`engine/hashing.ts`, `engine/canonical.ts`): existing chains would stop
    verifying.
 
@@ -224,6 +232,26 @@ web sources for these, and for links or assets from other sites.
 - `npm test` and `npm run typecheck` must pass before you finish. CI also checks the migrations against the schema and
   builds for Cloudflare.
 
+## UI
+
+Every screen is built from [shadcn/ui](https://ui.shadcn.com) components and Tailwind CSS utilities, with shadcn/ui's
+default theme (neutral, light and dark), as the repository's AGENTS.md asks.
+
+- **Components** are in `src/app/components/ui/`, the radix-nova style as shadcn's registry has it (internal-apps' Cap
+  Table uses the same files). Compose them rather than edit them. To add one, take it from
+  `https://ui.shadcn.com/r/styles/radix-nova/<name>.json` (`components.json` describes the setup), with lucide-react
+  icons and `@/components/ui/` imports. A change a component needs for Cap Table is marked in it with a
+  `// Cap Table:` comment (`sidebar.tsx` has a few: no keyboard shortcut or cookie, focus back to the menu button, and
+  internal-apps' tooltip fix). Import them with the `@/` alias (`@/components/ui/button.tsx`); `cn` is in
+  `@/lib/utils.ts`. Icons come from `lucide-react`.
+- **Styles** are Tailwind utilities in the markup. `src/app/app.css` holds the theme (the CSS variables, dark mode on
+  the system's setting or `html[data-theme]` from the theme switch) and Tailwind's preflight; `shadcn.css` has the state
+  variants the components use. There is no other stylesheet: don't add one, and don't add class names of your own.
+- **Tailwind runs through PostCSS** (`postcss.config.mjs`), so `vite.config.ts` stays the template's.
+- **Form controls:** a choice from a list is a `NativeSelect` (a real `<select>`); a checkbox, a radio group and a dialog
+  are Radix underneath (in tests: a checkbox or radio is a button with `aria-checked`, a dialog renders into
+  `document.body`, a menu opens on Enter or a pointer press).
+
 ## Navigation
 
 Every app in this repository has the two-level, collapsible navigation of the repository's
@@ -234,7 +262,7 @@ pages), and the person at the bottom; each level collapses to icons. In Cap Tabl
 - **The manifest is level 1.** `insulin.navigation` is what the shell (`components/AppLayout.tsx`) and the gateway both
   render. A page that belongs in the navigation is an item or a child there: `key` (`[a-z0-9-]+`, unique), `label` (1 to
   40 characters), `icon` (one of `NAV_ICONS` in `lib/navigation.ts`, the Lucide names the gateway bundles, each drawn
-  in `components/Icon.tsx`), `path` (an app-root path such as `/vesting`, never `/__insulin/*`, `/settings/*`, `/mcp` or
+  by `components/Icon.tsx` with lucide-react), `path` (an app-root path such as `/vesting`, never `/__insulin/*`, `/settings/*`, `/mcp` or
   `/.well-known/*`), and optionally `group` (a heading, shared by consecutive items with the same group, so every item
   names its own), `role` (the least app role that sees it: `EDITOR` for the company's pages, `VIEWER` for the holder's
   `/portfolio` ones) and `maxRole` (the most: `VIEWER` for the holder's, since editors and admins never hold equity

@@ -8,6 +8,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
 import { apiRequest } from "../api/request.ts";
+import { useReturnFocus } from "./Dialog.tsx";
 import { compareDecimals, formatFractionPercent, fractionOf, fromUnits, isPositive, multiplyDecimals, toUnits } from "../lib/decimal.ts";
 import { describeError } from "../lib/errors.ts";
 import { allOf, useResource } from "../lib/useResource.ts";
@@ -50,9 +51,10 @@ export function SharesCalculatorDialog({ fullyDiluted, onClose }: { fullyDiluted
   const options = error ? null : optionsForPercent(fullyDiluted, percent.trim());
   const commonFmv = fmv.data?.fmv ?? null;
 
+  const returnFocus = useReturnFocus();
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent onCloseAutoFocus={returnFocus} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>% shares calculator</DialogTitle>
           <DialogDescription>

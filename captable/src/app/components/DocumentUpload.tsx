@@ -202,7 +202,7 @@ export function DocumentUpload({ label, kind, value, onChange, required, hint, e
         {reading ? <span className="text-xs text-muted-foreground" role="status">Reading the file…</span> : null}
         <FieldDescription className="w-full text-xs">{hint ?? `PDF, DOCX, XLSX, CSV, TXT, PNG or JPG · max ${UPLOAD_LIMIT_LABEL} · stored with a SHA-256 checksum`}</FieldDescription>
       </div>
-      {errorText ? <FieldError id={`${id}-err`}>{errorText}</FieldError> : null}
+      {errorText ? <FieldError id={`${id}-err`} role={undefined}>{errorText}</FieldError> : null}
     </Field>
   );
 }

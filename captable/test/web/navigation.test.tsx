@@ -543,6 +543,78 @@ describe("narrow screens", () => {
   });
 });
 
+/** A screen this wide: `innerWidth`, and media queries on width answered for it (16px to the rem). */
+function screenWidth(px: number) {
+  vi.stubGlobal("innerWidth", px);
+  vi.stubGlobal("matchMedia", (query: string) => {
+    const px16 = (value: string, unit: string) => Number(value) * (unit === "rem" ? 16 : 1);
+    const max = /max-width:\s*([\d.]+)(px|rem)/.exec(query);
+    const below = /width\s*<\s*([\d.]+)(px|rem)/.exec(query);
+    const min = /min-width:\s*([\d.]+)(px|rem)/.exec(query);
+    const matches = max ? px <= px16(max[1]!, max[2]!) : below ? px < px16(below[1]!, below[2]!) : min ? px >= px16(min[1]!, min[2]!) : false;
+    return { matches, media: query, onchange: null, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false } as MediaQueryList;
+  });
+}
+
+describe("the navigation's keyboard and storage", () => {
+  it("leaves Ctrl+B and Cmd+B to the browser, and writes no cookie: the choice lives in insulin-nav", async () => {
+    renderPage("share-classes", []);
+    await screen.findByRole("button", { name: "Collapse navigation" });
+    const before = shell().dataset.l1;
+    for (const key of [{ ctrlKey: true }, { metaKey: true }]) {
+      const event = new KeyboardEvent("keydown", { key: "b", bubbles: true, cancelable: true, ...key });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(shell().dataset.l1).toBe(before);
+    expect(document.cookie).not.toContain("sidebar_state");
+  });
+});
+
+describe("the narrow-screen layout (DESIGN.md §3.2)", () => {
+  it("below 768px, puts the organization switcher and the menu button in a top bar, and a Close button in the menu", async () => {
+    screenWidth(500);
+    renderPage("share-classes", []);
+    const button = await screen.findByRole("button", { name: "Open navigation" });
+    const bar = button.closest("header")!;
+    expect(bar.querySelector("[data-org-switcher]")).not.toBeNull();
+    fireEvent.click(button);
+    const menu = await screen.findByRole("dialog");
+    expect(menu.querySelector("[data-org-switcher]")).toBeNull();
+    fireEvent.click(within(menu).getByRole("button", { name: "Close navigation" }));
+    await waitFor(() => expect(shell().dataset.menu).toBe("closed"));
+  });
+
+  it.each([
+    ["its Close button", (menu: HTMLElement) => {
+      const close = within(menu).getByRole("button", { name: "Close navigation" });
+      close.focus();
+      fireEvent.click(close);
+    }],
+    ["Escape, from a link inside it", (menu: HTMLElement) => {
+      const link = within(menu).getAllByRole("link")[0]!;
+      link.focus();
+      fireEvent.keyDown(link, { key: "Escape" });
+    }],
+  ])("below 768px, gives focus back to the menu button when the menu closes by %s", async (_how, close) => {
+    screenWidth(500);
+    renderPage("share-classes", []);
+    const button = await screen.findByRole("button", { name: "Open navigation" });
+    button.focus();
+    fireEvent.click(button);
+    close(await screen.findByRole("dialog"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(button));
+  });
+
+  it("from 768px, keeps the navigation beside the page", async () => {
+    screenWidth(800);
+    renderPage("share-classes", []);
+    expect(await screen.findByRole("button", { name: "Collapse navigation" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Primary" }).closest("[role=dialog]")).toBeNull();
+  });
+});
+
 describe("the navigation's app-root paths", () => {
   it.each(navigationPaths().filter((path) => !isPortfolioPath(path)))("send an admin from %s to the company's page", async (path) => {
     const { router } = renderAt(path, me("owner"));

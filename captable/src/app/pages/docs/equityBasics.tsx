@@ -408,7 +408,7 @@ export const equityBasics: DocTopic = {
           </p>
           <InApp>
             When someone leaves holding unvested shares, Securities Status and the dashboard show the repurchase window and its last
-            date (or "No deadline (per agreement)"), and the holder's share page says until when the company may buy them back.
+            date, and the holder's share page says until when the company may buy them back.
             The repurchase itself, the notice to the holder and the payment happen outside the app, with counsel; once it is
             done and paid, record it with <b>Record repurchase</b>, attaching the notice. The vested shares stay with the holder
             as a new share lot. A repurchase after the deadline, or with none recorded, needs counsel's written authority.

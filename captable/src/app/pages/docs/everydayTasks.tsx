@@ -134,10 +134,10 @@ export const everydayTasks: DocTopic = {
           <ol>
             <li><b>The repurchase date:</b> on or after the termination date, and not in the future.</li>
             <li><b>The quantity:</b> every share still unvested on that date. The vested shares stay with the holder as a new share lot.</li>
-            <li><b>The price per share</b> the company paid, and the total. A price different from the agreement's gets a warning to check.</li>
+            <li><b>The price per share</b> the company paid, and the total.</li>
             <li><b>The payment:</b> the method (cash, check, wire, ACH or other), the date it was paid and a reference.</li>
             <li><b>The repurchase notice</b> sent to the holder, uploaded here.</li>
-            <li><b>Counsel's authority</b>, when the repurchase is after the repurchase deadline or no deadline is recorded (an agreement that sets no deadline needs none): a written authority from counsel, as a document of its own.</li>
+            <li><b>Counsel's authority</b>, when the repurchase is after the repurchase deadline or no deadline is recorded: a written authority from counsel, as a document of its own.</li>
           </ol>
           <p>
             Review the change, type the share's ID to confirm, and record it. The repurchased shares go back to the plan's pool if

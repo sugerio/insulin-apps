@@ -315,6 +315,32 @@ describe('ledger race suite', () => {
     expect(await l.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE type = 'merge-stakeholders'").first('n')).toBe(0)
   })
 
+  it('refuses a merge when a termination of the merged record is scheduled between its read and its commit', async () => {
+    const l = await ledgerHarness()
+    // Two records of one person, neither terminated: a genuine duplicate the merge reads as mergeable.
+    await addStakeholder(l.db, l.orgId, 'S70', 'employee')
+    await addStakeholder(l.db, l.orgId, 'S71', 'employee')
+    const race = batchRaceInjector(l.db)
+    const ctx = await loadCommandContext(contextInput(l, ownerActor, race.binding))
+    // Scheduling a termination appends nothing to the ledger and bumps no stakeholder version.
+    let scheduled: Response | undefined
+    race.arm(async () => {
+      const body = { stakeholderId: l.id('S71'), terminationDate: '2026-12-04', terminationType: 'voluntary' }
+      const dry = await l.api('POST', l.path('/commands/schedule-termination?dryRun=true'), l.rw, body)
+      const shown = await dry.json() as api.ScheduleTerminationResponse
+      scheduled = await l.api('POST', l.path('/commands/schedule-termination'), l.rw, { ...body, expectedDiffSha256: shown.preview.diffSha256, acknowledge: [] })
+    }, (statements) => batchIncludesSql(statements, 'INSERT INTO commands'))
+    const body = { mergedStakeholderId: l.id('S71'), survivingStakeholderId: l.id('S70'), reason: 'Synthetic duplicate record', confirmation: holderName('S71') }
+    await expect(runCommand(ctx, {
+      route: 'POST /api/orgs/:orgId/commands/merge-stakeholders', path: '/race/merge-scheduled', body, dryRun: false,
+      idempotencyKey: 'scheduled-race-merge', expectedLedgerSeq: null, expectedDiffSha256: null, acknowledge: [],
+    }, async (current) => ({ plan: await planStakeholderMerge(current, body as never, { dryRun: false }), documents: null }))).rejects.toMatchObject({ code: 'conflict', extra: { reason: 'state_changed' } })
+    expect(race.injections()).toBe(1)
+    expect(scheduled?.status).toBe(200)
+    expect(await l.db.prepare('SELECT merged_into_id FROM stakeholders WHERE id = ?').bind(l.id('S71')).first('merged_into_id')).toBeNull()
+    expect(await l.db.prepare("SELECT COUNT(*) AS n FROM scheduled_terminations WHERE stakeholder_id = ? AND status = 'SCHEDULED'").bind(l.id('S71')).first('n')).toBe(1)
+  })
+
   it('runs due processing with the cancellation winning and rolls the apply back whole', async () => {
     const l = await ledgerHarness()
     const scheduledTerminationId = await scheduleS14(l)

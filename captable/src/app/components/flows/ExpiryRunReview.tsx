@@ -401,7 +401,7 @@ export function ExpiryRunReview({ run, onClose, onChanged }: {
                       <SecurityLink id={proposal.securityId} family={proposal.family} displayId={proposal.displayId} />
                       {checked?.changed.has(proposal.securityId) && reviewing ? <> <Badge tone="amber">Changed since your last check</Badge></> : null}
                       {mine ? <div className="text-xs text-muted-foreground">Your own holding: another admin confirms it.</div> : null}
-                      {error ? <FieldError id={`exp-err-${proposal.securityId}`} className="mt-1 whitespace-normal">{error}</FieldError> : null}
+                      {error ? <FieldError id={`exp-err-${proposal.securityId}`} role={undefined} className="mt-1 whitespace-normal">{error}</FieldError> : null}
                     </TableCell>
                     <TableCell>
                       <HolderLink id={proposal.holder.stakeholderId} name={proposal.holder.name} />

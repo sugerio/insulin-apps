@@ -52,7 +52,7 @@ export const forStakeholders: DocTopic = {
             Shares show the price paid, the <b>holding start date</b>, how they are held (most are book entries on the company's
             records), their legends and the <b>83(b) election</b>: shares that vest over time show <b>Not recorded</b> when the
             company has no election on record. Restricted shares show how many have vested, and whether the company may buy back
-            the unvested ones and until when; when your agreement sets no deadline for that, the page says so. To learn what these
+            the unvested ones and until when. To learn what these
             terms mean, see <DocLink to="equity-basics" section="vesting">Vesting</DocLink> and the <DocLink to="glossary">Glossary</DocLink>.
           </p>
         </>

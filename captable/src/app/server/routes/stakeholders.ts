@@ -263,14 +263,16 @@ export function stakeholderRoutes(deps: AppDeps) {
     try {
       const replay = await commitIdempotent(c.env.DB, mutation, [
         ...relationshipGuards,
+        // By id, without a version predicate: the stakeholders version trigger raises `stale version` for an edit made
+        // since the read, which tells it apart from the relationship guards' assertions.
         c.env.DB.prepare(
           `UPDATE stakeholders SET kind = ?, display_name = ?, legal_name = ?, relationship = ?, issuer_assigned_id = ?,
            address = ?, phone = ?, country_of_residence = ?, tax_status = ?, hire_date = ?, comments = ?,
            portal_access = ?, outside_counsel = ?, version = ?, updated_at = ?
-           WHERE org_id = ? AND id = ? AND version = ?`,
+           WHERE org_id = ? AND id = ?`,
         ).bind(updated.kind, updated.display_name, updated.legal_name, updated.relationship, updated.issuer_assigned_id,
           updated.address, updated.phone, updated.country_of_residence, updated.tax_status, updated.hire_date,
-          updated.comments, updated.portal_access, updated.outside_counsel, updated.version, now, orgId, id, input.version),
+          updated.comments, updated.portal_access, updated.outside_counsel, updated.version, now, orgId, id),
         c.env.DB.prepare('INSERT INTO batch_assertions (ok) VALUES (changes() = 1)'),
         audit(c, now, 'stakeholder.updated', orgId, 'stakeholder', id, {
           fields: Object.keys(input).filter((key) => key !== 'version'),
@@ -282,8 +284,11 @@ export function stakeholderRoutes(deps: AppDeps) {
       if (message.includes('unique constraint failed')) {
         throw new ApiError('conflict', 'That issuer-assigned ID is already in use', undefined, { reason: 'state_changed' })
       }
+      if (message.includes('stale version')) {
+        throw new ApiError('conflict', 'The stakeholder changed; refresh and try again', undefined, { reason: 'stale_version' })
+      }
       if (relationshipGuards.length > 0 && message.includes('batch assertion failed')) {
-        throw new ApiError('conflict', 'The stakeholder, the ledger or a scheduled termination changed; refresh and try again', undefined, { reason: 'state_changed' })
+        throw new ApiError('conflict', 'The ledger or a scheduled termination changed; refresh and try again', undefined, { reason: 'state_changed' })
       }
       if (message.includes('stale version') || message.includes('batch assertion failed')) {
         throw new ApiError('conflict', 'The stakeholder changed; refresh and try again', undefined, { reason: 'stale_version' })

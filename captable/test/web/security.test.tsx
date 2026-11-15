@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { api, engine } from "#shared";
 import { blocksExercise } from "../../src/app/lib/labels.ts";
 import { IDS, uuid } from "./support/acme.ts";
+import { uploads } from "./support/flows.ts";
 import { mock, type MockRequest } from "./support/mockApi.ts";
 import { DETAILS, securityHandlers as handlers } from "./support/securities.ts";
 import { base, renderPage } from "./support/render.tsx";
@@ -215,5 +216,23 @@ describe("share, warrant and SAFE detail", () => {
     renderPage(`securities/${uuid(6, 999)}`, handlers);
     expect(await screen.findByText("This security does not exist.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to dashboard" })).toBeTruthy();
+  });
+});
+
+describe("focus after a dialog the Actions menu opened", () => {
+  it("goes back to the Actions button when the dialog closes", async () => {
+    renderPage(`securities/${IDS.opt1}`, [...handlers, uploads()], { role: "admin_rw" });
+    await screen.findByRole("heading", { name: "OPT-1 Options", level: 1 });
+    const actions = screen.getByRole("button", { name: "Actions" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "ArrowDown" });
+    const item = within(await screen.findByRole("menu")).getByRole("menuitem", { name: /^Cancel/ });
+    item.focus();
+    fireEvent.keyDown(item, { key: "Enter" });
+    const dialog = await screen.findByRole("dialog", { name: "Cancel OPT-1" });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(actions));
   });
 });

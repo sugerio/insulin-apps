@@ -14,7 +14,7 @@ import { fieldProblem, ledgerUnmoved, useWriteFlow, type FieldMap, type WriteFlo
 import { DASH, formatDate } from "../../lib/format.ts";
 import { UnsettledScope } from "../../lib/unsettled.ts";
 import { allOf, useResource } from "../../lib/useResource.ts";
-import { NOT_DISMISSIBLE } from "../Dialog.tsx";
+import { NOT_DISMISSIBLE, useReturnFocus } from "../Dialog.tsx";
 import { DocumentUpload, type UploadedDocument } from "../DocumentUpload.tsx";
 import { ErrorFocus } from "../ErrorFocus.tsx";
 import { CommandPreview, confirmationMatches, FlowProblemBanner, TypedConfirmation, WarningsToAcknowledge } from "../FlowParts.tsx";
@@ -47,7 +47,7 @@ const FIELDS: FieldMap = {
   } as Record<string, string>)[path] ?? null,
   violation: (violation) => ({
     EFFECTIVE_DATE_IN_FUTURE: "date", REPURCHASE_BEFORE_TERMINATION: "date", REPURCHASE_AFTER_DEADLINE: "date", PAID_DATE_IN_FUTURE: "paidDate",
-    REPURCHASE_NOT_ALL_UNVESTED: "quantity", NO_UNVESTED_SHARES: "quantity", REPURCHASE_AUTHORITY_REQUIRED: "authority",
+    REPURCHASE_NOT_ALL_UNVESTED: "quantity", REPURCHASE_TOTAL_TOO_PRECISE: "price", NO_UNVESTED_SHARES: "quantity", REPURCHASE_AUTHORITY_REQUIRED: "authority",
     DOCUMENT_ARCHIVED: "notice", DOCUMENT_IS_COMPANY_RESOURCE: "notice", DOCUMENT_VISIBLE_TO_ANOTHER_HOLDER: "notice",
   } as Record<string, string>)[violation.code] ?? null,
 };
@@ -105,11 +105,12 @@ function Shell({ title, description, onClose, unsettled = false, footer, childre
   const [nested, setNested] = useState(0);
   const change = useCallback((delta: number) => setNested((count) => Math.max(0, count + delta)), []);
   const held = unsettled || nested > 0;
+  const returnFocus = useReturnFocus();
   return (
     <UnsettledScope value={change}>
       <Held value={held}>
         <Dialog open onOpenChange={(open) => { if (!open && !held) onClose(); }}>
-          <DialogContent showCloseButton={false} {...(description ? {} : { "aria-describedby": undefined })} className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <DialogContent showCloseButton={false} {...(description ? {} : { "aria-describedby": undefined })} onCloseAutoFocus={returnFocus} className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
             <Button type="button" variant="ghost" size="icon-sm" className="absolute top-2 right-2" aria-label="Close" disabled={held} title={held ? NOT_DISMISSIBLE : undefined} onClick={onClose}>
               <XIcon />
             </Button>
@@ -258,7 +259,7 @@ function RepurchaseForm({ security, row, termination, onClose, onDone }: { secur
             <FieldLabel htmlFor={ids.date}>Repurchase date</FieldLabel>
             <HeldInput id={ids.date} type="date" min={termination.date} max={today} value={date} aria-invalid={errorOf("date") ? true : undefined}
               aria-describedby={errorOf("date") ? `${ids.date}-err` : undefined} onChange={(event) => { setDate(event.target.value); clear("date"); }} />
-            {errorOf("date") ? <FieldError id={`${ids.date}-err`}>{errorOf("date")}</FieldError> : null}
+            {errorOf("date") ? <FieldError id={`${ids.date}-err`} role={undefined}>{errorOf("date")}</FieldError> : null}
           </Field>
           <Field data-invalid={errorOf("quantity") ? true : undefined}>
             <FieldTitle>Shares repurchased</FieldTitle>
@@ -269,7 +270,7 @@ function RepurchaseForm({ security, row, termination, onClose, onDone }: { secur
             <FieldLabel htmlFor={ids.price}>Price paid per share</FieldLabel>
             <Input id={ids.price} inputMode="decimal" value={price} aria-invalid={errorOf("price") ? true : undefined}
               aria-describedby={errorOf("price") ? `${ids.price}-err` : `${ids.price}-hint`} onChange={(event) => { setPrice(event.target.value); clear("price"); }} />
-            {errorOf("price") ? <FieldError id={`${ids.price}-err`}>{errorOf("price")}</FieldError> : <FieldDescription id={`${ids.price}-hint`}>Total paid: {total === null ? DASH : format.money(total)}</FieldDescription>}
+            {errorOf("price") ? <FieldError id={`${ids.price}-err`} role={undefined}>{errorOf("price")}</FieldError> : <FieldDescription id={`${ids.price}-hint`}>Total paid: {total === null ? DASH : format.money(total)}</FieldDescription>}
           </Field>
           <Field data-invalid={errorOf("method") ? true : undefined}>
             <FieldLabel htmlFor={ids.method}>Paid by</FieldLabel>
@@ -281,19 +282,19 @@ function RepurchaseForm({ security, row, termination, onClose, onDone }: { secur
                 {Object.entries(REPURCHASE_METHOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
               </SelectContent>
             </Select>
-            {errorOf("method") ? <FieldError id={`${ids.method}-err`}>{errorOf("method")}</FieldError> : null}
+            {errorOf("method") ? <FieldError id={`${ids.method}-err`} role={undefined}>{errorOf("method")}</FieldError> : null}
           </Field>
           <Field data-invalid={errorOf("paidDate") ? true : undefined}>
             <FieldLabel htmlFor={ids.paidDate}>Paid on</FieldLabel>
             <Input id={ids.paidDate} type="date" max={today} value={paidDate} aria-invalid={errorOf("paidDate") ? true : undefined}
               aria-describedby={errorOf("paidDate") ? `${ids.paidDate}-err` : undefined} onChange={(event) => { setPaidDate(event.target.value); clear("paidDate"); }} />
-            {errorOf("paidDate") ? <FieldError id={`${ids.paidDate}-err`}>{errorOf("paidDate")}</FieldError> : null}
+            {errorOf("paidDate") ? <FieldError id={`${ids.paidDate}-err`} role={undefined}>{errorOf("paidDate")}</FieldError> : null}
           </Field>
           <Field data-invalid={errorOf("reference") ? true : undefined}>
             <FieldLabel htmlFor={ids.reference}>Payment reference</FieldLabel>
             <Input id={ids.reference} maxLength={200} value={reference} placeholder="Check number, wire or ACH reference" aria-describedby={errorOf("reference") ? `${ids.reference}-err` : `${ids.reference}-hint`}
               onChange={(event) => { setReference(event.target.value); clear("reference"); }} />
-            {errorOf("reference") ? <FieldError id={`${ids.reference}-err`}>{errorOf("reference")}</FieldError> : <FieldDescription id={`${ids.reference}-hint`}>Optional.</FieldDescription>}
+            {errorOf("reference") ? <FieldError id={`${ids.reference}-err`} role={undefined}>{errorOf("reference")}</FieldError> : <FieldDescription id={`${ids.reference}-hint`}>Optional.</FieldDescription>}
           </Field>
           <DocumentUpload label="Repurchase notice" kind="OTHER" required value={notice} onChange={(next) => { setNotice(next); clear("notice"); }}
             hint="The notice of repurchase sent to the holder." error={errorOf("notice")} disabled={!editing} />

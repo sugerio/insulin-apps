@@ -119,6 +119,13 @@ particular:
    app-specific types are `X_*`.
 7. **The engine is pure and deterministic:** no I/O, no clock (pass dates in), no randomness. Bump `ENGINE_VERSION`
    (`engine/version.ts`) with any change that can move a number for some ledger: it keys the replay cache.
+   **Payload fields are forward-only, like migrations:** an engine reads only the fields it knows (the version-1
+   schemas are strict), and the database is shared. From engine 1.1.0 a recorded repurchase carries `x_payment`,
+   `x_notice` and `x_authority_document`, which a release before 1.1.0 can't decode: once any company has recorded a
+   repurchase, Cap Table rolls forward only (fix a regression in a new release, never by going back past 1.1.0), and
+   while 1.1.0's release goes out, a company that records a repurchase can briefly get errors from a request the
+   previous Worker still serves. A new field that an older release must survive goes out first in a release that only
+   reads it.
 8. **Don't change hashing or canonical JSON** (`engine/hashing.ts`, `engine/canonical.ts`): existing chains would stop
    verifying.
 
@@ -231,9 +238,11 @@ Every screen is built from [shadcn/ui](https://ui.shadcn.com) components and Tai
 default theme (neutral, light and dark), as the repository's AGENTS.md asks.
 
 - **Components** are in `src/app/components/ui/`, the radix-nova style as shadcn's registry has it (internal-apps' Cap
-  Table uses the same files). Compose them; don't edit them. To add one, take it from
+  Table uses the same files). Compose them rather than edit them. To add one, take it from
   `https://ui.shadcn.com/r/styles/radix-nova/<name>.json` (`components.json` describes the setup), with lucide-react
-  icons and `@/components/ui/` imports. Import them with the `@/` alias (`@/components/ui/button.tsx`); `cn` is in
+  icons and `@/components/ui/` imports. A change a component needs for Cap Table is marked in it with a
+  `// Cap Table:` comment (`sidebar.tsx` has a few: no keyboard shortcut or cookie, focus back to the menu button, and
+  internal-apps' tooltip fix). Import them with the `@/` alias (`@/components/ui/button.tsx`); `cn` is in
   `@/lib/utils.ts`. Icons come from `lucide-react`.
 - **Styles** are Tailwind utilities in the markup. `src/app/app.css` holds the theme (the CSS variables, dark mode on
   the system's setting or `html[data-theme]` from the theme switch) and Tailwind's preflight; `shadcn.css` has the state

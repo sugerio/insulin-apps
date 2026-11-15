@@ -340,12 +340,11 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
                     style={column.minWidth ? { minWidth: column.minWidth } : undefined}
                   >
                     {column.compare ? (
-                      <button
+                      <Button
                         type="button"
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-sm font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
-                          column.numeric && "flex-row-reverse",
-                        )}
+                        variant="ghost"
+                        size="xs"
+                        className={cn("-mx-2 font-medium text-inherit hover:text-foreground", column.numeric && "flex-row-reverse")}
                         onClick={() => {
                           setSort(active && sort?.[1] === "asc" ? [column.key, "desc"] : active ? [column.key, "asc"] : [column.key, column.numeric ? "desc" : "asc"]);
                           setPage(0);
@@ -357,7 +356,7 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
                         ) : (
                           <ChevronsUpDownIcon className="size-3.5 text-muted-foreground/60" />
                         )}
-                      </button>
+                      </Button>
                     ) : (
                       column.label || <span className="sr-only">Actions</span>
                     )}

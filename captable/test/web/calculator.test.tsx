@@ -59,6 +59,17 @@ describe("% shares calculator", () => {
     expect(screen.queryByRole("option", { name: /Common Stock/ })).toBeNull();
   });
 
+  it("gives focus back to its button when it closes", async () => {
+    renderPage("equity-plans", handlers());
+    const button = await screen.findByRole("button", { name: "% shares calculator" });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "% shares calculator" });
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(button));
+  });
+
   it("refuses a percentage it can't use and says when no 409A is in effect", async () => {
     renderPage("equity-plans", handlers({ ...FMV, fmv: null }));
     const dialog = await open();

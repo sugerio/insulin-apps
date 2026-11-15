@@ -56,6 +56,15 @@ describe("publishable web sources", () => {
     expect(sources.flatMap(([name, text]) => findings(name, text))).toEqual([]);
   });
 
+  it("builds every button, field and table of the app's own markup from shadcn/ui (components/ui)", () => {
+    // A hidden file input inside a Button label is shadcn/ui's file picker; NativeSelect is its <select>.
+    const raw = /(?<!`)<(button|input|select|textarea|table)\b(?![^>]*type="file")/g;
+    const offenders = sources
+      .filter(([name]) => name.startsWith("src/app/") && name.endsWith(".tsx") && !name.startsWith("src/app/components/ui/"))
+      .flatMap(([name, text]) => [...text.matchAll(raw)].map((match) => `${name}: <${match[1]}`));
+    expect(offenders).toEqual([]);
+  });
+
   it.each([
     ["an unfinished-work marker", ["// TO", "DO: total the SAFEs as well."]],
     ["another unfinished-work marker", ["/* FIX", "ME: off by one at the cliff. */"]],

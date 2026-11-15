@@ -806,6 +806,30 @@ describe("record repurchase", () => {
     return screen.findByRole("dialog", { name: "Record repurchase of CS-4" });
   }
 
+  it("announces its field errors once, through the form's summary, not each as an alert", async () => {
+    renderPage("securities-status", handlers(...lookups()), { role: "admin_rw" });
+    const dialog = await openFromStatus();
+    const price = await within(dialog).findByLabelText("Price paid per share");
+    fireEvent.change(price, { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
+    await waitFor(() => expect(price.getAttribute("aria-invalid")).toBe("true"));
+    const error = document.getElementById(price.getAttribute("aria-describedby")!.split(" ")[0]!)!;
+    expect(error.dataset.slot).toBe("field-error");
+    expect(error.getAttribute("role")).toBeNull();
+  });
+
+  it("gives focus back to the row's Record repurchase button when the dialog closes", async () => {
+    renderPage("securities-status", handlers(...lookups()), { role: "admin_rw" });
+    const button = await screen.findByRole("button", { name: "Record a repurchase of CS-4" });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "Record repurchase of CS-4" });
+    await within(dialog).findByLabelText("Price paid per share");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(button));
+  });
+
   /** "Paid by" is a shadcn/ui (Radix) Select: open it from the keyboard, then pick the option. */
   async function payBy(method: "CHECK" | "WIRE" | "ACH") {
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Paid by" }), { key: "Enter" });

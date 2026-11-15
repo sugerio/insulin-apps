@@ -75,11 +75,13 @@ export function ActionsMenu({ items, label = "Actions" }: { items: readonly Acti
   // Radix opens the menu on a primary pointerdown (and on Enter, Space or ArrowDown); a click that follows a pointerdown
   // it already handled is ignored, and a click with no pointerdown before it (assistive technology) toggles it.
   const pointerHandled = useRef(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   if (visible.length === 0) return null;
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
+          ref={trigger}
           type="button"
           onPointerDown={(event) => {
             pointerHandled.current = event.button === 0 && !event.ctrlKey;
@@ -123,7 +125,12 @@ export function ActionsMenu({ items, label = "Actions" }: { items: readonly Acti
               disabled={item.disabled}
               title={item.reason}
               className="items-start"
-              onSelect={() => item.onSelect?.()}
+              onSelect={() => {
+                // The dialog an item opens takes what has focus as the place to return to when it closes: the menu
+                // button, not the item, which is gone once the menu closes.
+                trigger.current?.focus();
+                item.onSelect?.();
+              }}
             >
               {content}
             </DropdownMenuItem>

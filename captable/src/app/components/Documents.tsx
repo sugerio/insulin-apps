@@ -228,14 +228,15 @@ export function Attachments({ documents, upload = true, link, onUploaded }: { do
               <div className="flex items-start gap-2 font-medium" data-slot="attachment-name">
                 <FileIcon className="mt-0.5 size-4 flex-none text-muted-foreground" />
                 {canDownload ? (
-                  <button
+                  <Button
                     type="button"
-                    className="text-left wrap-anywhere text-primary underline-offset-4 hover:underline disabled:opacity-50"
+                    variant="link"
+                    className="h-auto p-0 text-left whitespace-normal wrap-anywhere"
                     disabled={busy === document.id}
                     onClick={() => void download(document.id, document.filename)}
                   >
                     {document.filename}
-                  </button>
+                  </Button>
                 ) : <span className="wrap-anywhere">{document.filename}</span>}
               </div>
               <div className="text-xs text-muted-foreground" data-slot="attachment-meta">

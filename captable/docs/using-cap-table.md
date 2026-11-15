@@ -222,11 +222,10 @@ When a holder leaves with unvested restricted shares, the company may buy them b
 repurchase, the notice to the holder and the payment happen outside the app. Once it is done and paid, choose **Record
 repurchase** on the share's page, or next to the lot under **Securities Status** › **Unvested shares from terminated
 holders**, and give the repurchase date (on or after the termination, not in the future), the quantity (every share
-still unvested on that date), the price per share paid (a warning if it differs from the agreement's), the payment
-(method, date paid, reference) and the repurchase notice sent to the holder. After the repurchase deadline, or when no
-deadline is recorded, it also needs counsel's written authority, as a document of its own; a lot whose agreement sets
-no deadline ("No deadline (per agreement)") needs none. The vested shares stay with the holder as a new share lot, and
-the repurchased ones go back to the pool if the plan's rules say so. Cap Table doesn't tell the holder.
+still unvested on that date), the price per share paid, the payment (method, date paid, reference) and the repurchase
+notice sent to the holder. After the repurchase deadline, or when no deadline is recorded, it also needs counsel's
+written authority, as a document of its own. The vested shares stay with the holder as a new share lot, and the
+repurchased ones go back to the pool if the plan's rules say so. Cap Table doesn't tell the holder.
 
 ## Cancellations and expiry
 

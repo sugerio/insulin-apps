@@ -9,6 +9,8 @@ import {
   addDocument,
   addEmail,
   addStakeholder,
+  batchIncludesSql,
+  batchRaceInjector,
   commit,
   count,
   errorOf,
@@ -23,6 +25,7 @@ import {
   withRsuAndSar,
   type LedgerHarness,
 } from '../support/ledger-helpers.ts'
+import { appRequestWithDatabase } from '../support/server-harness.ts'
 
 /** The command routes that refuse an administrator's own holdings (403 self_dealing), each proven live below. */
 const LEDGER_SELF_DEALING_ROUTE_IDS = [
@@ -275,6 +278,26 @@ describe("correcting an ex-employee's relationship", () => {
     expect(errorOf(await locked.json())).toMatchObject({ code: 'conflict', reason: 'state_changed' })
     // Other fields of such a record still change.
     expect((await l.api('PATCH', l.path(`/stakeholders/${l.id('S14')}`), l.rw, { version: s14, displayName: 'Synthetic Holder S14 (leaving)' })).status).toBe(200)
+  })
+
+  it('answers stale_version, as any stale edit, when the record is edited between the correction\'s read and its commit', async () => {
+    const l = await ledgerHarness()
+    await l.db.prepare("UPDATE stakeholders SET relationship = 'ex_employee', version = version + 1 WHERE id = ?").bind(l.id('S10')).run()
+    const version = (await l.db.prepare('SELECT version FROM stakeholders WHERE id = ?').bind(l.id('S10')).first<number>('version'))!
+    const path = l.path(`/stakeholders/${l.id('S10')}`)
+    const race = batchRaceInjector(l.db)
+    let edited: Response | undefined
+    race.arm(async () => {
+      edited = await l.api('PATCH', path, l.sa, { version, displayName: 'Synthetic Holder S10 (renamed)' })
+    }, (statements) => batchIncludesSql(statements, 'UPDATE stakeholders SET kind'))
+    const corrected = await appRequestWithDatabase(race.binding, path, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ version, relationship: 'employee' }),
+    }, l.rw)
+    expect(race.injections()).toBe(1)
+    expect(edited?.status).toBe(200)
+    expect(corrected.status).toBe(409)
+    expect(errorOf(await corrected.json())).toMatchObject({ code: 'conflict', reason: 'stale_version' })
+    expect(await l.db.prepare('SELECT relationship FROM stakeholders WHERE id = ?').bind(l.id('S10')).first('relationship')).toBe('ex_employee')
   })
 })
 
@@ -692,6 +715,33 @@ describe('record-repurchase', () => {
     expect(rs2.transactions.map((tx) => tx.type)).toEqual(['TX_STOCK_REPURCHASE'])
     expect(rs2.created.securityIds).toEqual([])
     expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('RS-2')}`))).toMatchObject({ status: 'REPURCHASED', numbers: { outstanding: '0' } })
+  })
+
+  it('refuses a price whose total for the unvested shares needs more than 12 decimal places, saying so', async () => {
+    // A company counting tenths of a share: RS-6 leaves 500.5 shares unvested when S49 leaves on 2026-08-01.
+    const l = await ledgerHarness({ shareUnit: '0.1', extend: (acme) => {
+      const { b, id, cls } = acme
+      b.stakeholder('S49', 'employee', { countryOfResidence: 'US' })
+      const vt = b.vestingTerms('vt:RS-6', { type: 'EXPLICIT', events: [{ date: '2026-03-01', quantity: '500' }, { date: '2027-03-01', quantity: '500.5' }] })
+      b.command('issue:RS-6', (c) => {
+        const lot = c.security('RS-6', { family: 'STOCK', subtype: 'COMMON', stakeholderId: id('S49'), stockClassId: cls.CS, stockPlanId: null, parentSecurityId: null })
+        c.tx('TX_STOCK_ISSUANCE', '2025-03-01', {
+          security_id: lot, custom_id: 'RS-6', stakeholder_id: id('S49'), stock_class_id: cls.CS, share_price: { amount: '0.01', currency: 'USD' }, quantity: '1000.5',
+          x_origin: 'RSA', vesting_terms_id: vt.id, x_definition_sha256: vt.sha,
+        })
+      })
+      b.command('terminate:S49', (c) => {
+        c.tx('X_STAKEHOLDER_TERMINATION', '2026-08-01', {
+          stakeholder_id: id('S49'), termination_date: '2026-08-01', termination_type: 'voluntary', vesting_stop_date: '2026-08-01',
+          relationship_before: 'employee', relationship_after: 'ex_employee',
+        })
+      }, { type: 'terminate-stakeholder' })
+    } })
+    expect(await unvestedOf(l, 'RS-6')).toBe('500.5')
+    // 500.5 × 0.123456789013 has 13 decimal places; one fewer in the price fits.
+    const body = await repurchaseBody(l, 'RS-6', { quantity: '500.5', pricePerShare: '0.123456789013', authorityDocumentId: await addDocument(l.db, l.orgId, 'COUNSEL_MEMO') })
+    expect(await violations(l, l.sa, 'record-repurchase', body)).toContain('REPURCHASE_TOTAL_TOO_PRECISE')
+    expect((await dryRun(l, l.sa, 'record-repurchase', { ...body, pricePerShare: '0.12345678901' })).status).toBe(200)
   })
 
   it("refuses a partial or excess quantity, a holder not terminated by the date, and a lot that isn't restricted shares", async () => {

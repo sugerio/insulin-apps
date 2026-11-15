@@ -115,8 +115,10 @@ function Shell({ collapse, setLevel }: {
     setOpenMobile(false);
     setSettingsOpen(false);
   }, [location.key, setOpenMobile]);
+  // Below the breakpoint the sheet closes itself on Escape and gives focus back through onMobileCloseAutoFocus; focusing
+  // the button here, while its focus trap still holds, would lose focus.
   useEffect(() => {
-    if (!openMobile) return;
+    if (!openMobile || isMobile) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpenMobile(false);
@@ -124,7 +126,7 @@ function Shell({ collapse, setLevel }: {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [openMobile, setOpenMobile]);
+  }, [openMobile, isMobile, setOpenMobile]);
 
   const chose = (key: string | null) => () => {
     setPreferred(key);
@@ -159,9 +161,14 @@ function Shell({ collapse, setLevel }: {
         href="#main">Skip to content</a>
       {/* Both levels: beside the page on a wide screen, stacked in the sheet on a narrow one. */}
       <div id={PANELS_ID} className="contents">
-        <Sidebar collapsible="icon" id={L1_ID}>
+        <Sidebar collapsible="icon" id={L1_ID} onMobileCloseAutoFocus={(event) => { event.preventDefault(); menuButton.current?.focus(); }}>
           <SidebarHeader>
-            <OrgSwitcher me={me} platform={platform} collapsed={l1Collapsed} />
+            {/* On a narrow screen the switcher is in the top bar, and the menu has its own Close button. */}
+            {isMobile ? (
+              <Button type="button" variant="ghost" size="sm" className="self-end" onClick={() => setOpenMobile(false)}>
+                <X aria-hidden="true" /> Close navigation
+              </Button>
+            ) : <OrgSwitcher me={me} platform={platform} collapsed={l1Collapsed} />}
             {canWrite && !portal ? (
               <SidebarMenu>
                 <SidebarMenuItem>
@@ -250,12 +257,13 @@ function Shell({ collapse, setLevel }: {
       </div>
       <div data-slot="sidebar-inset" className="relative flex min-w-0 flex-1 flex-col bg-background">
         {me.preview ? <PreviewStrip /> : null}
-        <header className="flex min-h-14 shrink-0 items-center gap-2 border-b px-4 lg:px-8">
-          <Button ref={menuButton} type="button" variant="ghost" size="icon-sm" className="lg:hidden" aria-expanded={openMobile} aria-controls={PANELS_ID}
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 md:px-8">
+          {isMobile ? <div className="min-w-0 flex-1"><OrgSwitcher me={me} platform={platform} collapsed={false} /></div> : null}
+          <Button ref={menuButton} type="button" variant="ghost" size="icon-sm" className="md:hidden" aria-expanded={openMobile} aria-controls={PANELS_ID}
             aria-label={openMobile ? "Close navigation" : "Open navigation"} onClick={() => setOpenMobile(!openMobile)}>
             {openMobile ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
           </Button>
-          <div className="min-w-0 flex-1 py-3" ref={setCrumbSlot} />
+          <div className={cn("min-w-0 flex-1 py-3", isMobile && "basis-full py-2")} ref={setCrumbSlot} />
         </header>
         <main id="main" className="min-w-0 flex-1 outline-none" tabIndex={-1}>
           <PlatformAccountContext value={platform}>

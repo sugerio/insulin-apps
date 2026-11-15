@@ -92,7 +92,7 @@ With the Viewer role (or a custom role with **See own holdings**), they see:
   the ISO/NSO split, the exercise windows after leaving, the exercise history and the grant's documents.
 - **A share lot's page:** the price paid, the holding start date, how the shares are held (most are book entries),
   legends, the 83(b) election ("Not recorded" for shares that vest over time without one on record) and any repurchase
-  right, with its deadline or a note that the agreement sets none.
+  right, with its deadline.
 - **How to exercise:** the company's instructions, the notice of exercise form, who to send it to, a calculator of the
   exact cost for a number of options (or the most they can exercise), and how to pay once the equity team has confirmed
   the amount due.

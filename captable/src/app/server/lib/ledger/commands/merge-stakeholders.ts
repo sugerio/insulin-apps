@@ -220,6 +220,12 @@ export async function planStakeholderMerge(
       ctx.org.id, row.id, row.version,
     ));
   }
+  // Nor a termination scheduled for the merged record since it was read: scheduling one moves neither the ledger nor a
+  // version, and an archived record's scheduled termination could never be applied.
+  plan.workflow.push(stmt(
+    "INSERT INTO batch_assertions (ok) SELECT NOT EXISTS (SELECT 1 FROM scheduled_terminations WHERE org_id = ? AND stakeholder_id = ? AND status = 'SCHEDULED')",
+    ctx.org.id, merged.id,
+  ));
   plan.workflow.push(stmt(
     `UPDATE stakeholders SET archived_at = ?, merged_into_id = ?, merged_at = ?, merged_by_command_id = ?, version = version + 1, updated_at = ?
      WHERE org_id = ? AND id = ? AND archived_at IS NULL AND merged_into_id IS NULL`,

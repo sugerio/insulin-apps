@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
@@ -36,15 +36,29 @@ export function DismissButton({ onClick, children, className, disabled }: { onCl
   );
 }
 
+/** The opener a dialog that just unmounted gives back, unless the dialog that replaces it takes it over first. */
+let handoff: { opener: HTMLElement | null; timer: ReturnType<typeof setTimeout> } | null = null;
+
 /**
  * Gives focus back to what had it when the dialog opened. Radix returns it to a DialogTrigger; these dialogs have none
- * (the caller mounts them), so they keep the opener and focus it when they unmount.
+ * (the caller mounts them), so they note the opener and focus it once they have unmounted, after Radix's focus trap has
+ * let go. A dialog that replaces another in the same flow (its form after its loading state) takes over that opener.
  */
-function useReturnFocus(): (event: Event) => void {
-  const opener = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement | null);
-  useEffect(() => () => {
-    const element = opener.current;
-    if (element?.isConnected) element.focus();
+export function useReturnFocus(): (event: Event) => void {
+  useLayoutEffect(() => {
+    let opener = document.activeElement as HTMLElement | null;
+    if (handoff) {
+      clearTimeout(handoff.timer);
+      opener = handoff.opener;
+      handoff = null;
+    }
+    return () => {
+      const timer = setTimeout(() => {
+        if (handoff?.timer === timer) handoff = null;
+        if (opener?.isConnected) opener.focus();
+      }, 0);
+      handoff = { opener, timer };
+    };
   }, []);
   return (event: Event) => event.preventDefault();
 }

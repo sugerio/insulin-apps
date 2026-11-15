@@ -115,6 +115,17 @@ export async function planRepurchase(ctx: CommandContext, body: RepurchaseFields
     });
   }
 
+  // The total paid is recorded exactly (price × quantity); a ledger amount has at most 12 decimal places.
+  const total = price.mul(quantity);
+  if (!engine.CANONICAL_DECIMAL.test(total.toString())) {
+    plan.violations.push(violation(
+      "REPURCHASE_TOTAL_TOO_PRECISE",
+      `The total paid, ${quantity} × ${price}, needs more than ${engine.MAX_FRACTION_DIGITS} decimal places: enter the price per share with fewer decimals`,
+      { securityId: id },
+    ));
+    return { plan, documents };
+  }
+
   const currency = lot.currency ?? ctx.org.currency;
   const stockClassId = lot.identity.stockClassId;
   if (stockClassId === null) throw new ApiError("internal", "The share lot names no stock class");
@@ -147,7 +158,7 @@ export async function planRepurchase(ctx: CommandContext, body: RepurchaseFields
       price: money(body.pricePerShare, currency),
       ...(balance !== null ? { balance_security_id: balance.id } : {}),
       x_kind: "UNVESTED",
-      x_consideration: money(price.mul(quantity).toString(), currency),
+      x_consideration: money(total.toString(), currency),
       x_payment: {
         method: body.consideration.method,
         paid_date: body.consideration.paidDate,

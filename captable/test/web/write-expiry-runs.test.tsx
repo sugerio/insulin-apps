@@ -231,6 +231,8 @@ describe("expiry runs: confirming a run", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check what confirming does" }));
     expect(await screen.findByText("The server refused the securities marked below. Leave them out and check again.")).toBeTruthy();
     expect(rowOf(table, "OPT-21").textContent).toContain("OPT-21 is not past its last exercise day, or has nothing outstanding");
+    // The row's own error isn't an alert: the form announces every field that needs attention once.
+    expect(rowOf(table, "OPT-21").querySelector("[data-slot=field-error]")!.getAttribute("role")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Leave the refused ones out and check again" }));
     expect(await screen.findByRole("button", { name: "Confirm 1 expiry" })).toBeTruthy();
     expect(dryRuns(callsTo(api.routes.confirmExpiryRun)).map((call) => bodyOf(call).securityIds)).toEqual([[IDS.opt21, IDS.war1], [IDS.war1]]);

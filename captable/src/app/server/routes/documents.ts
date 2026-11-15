@@ -31,7 +31,6 @@ const collectionPatchBody = z.strictObject({
   version: z.number().int().positive(), name: z.string().trim().min(1).max(200).optional(),
   parentId: uuid.nullable().optional(), archived: z.boolean().optional(),
 });
-const MIGRATION_KINDS = new Set<DocumentKind>(["RECONCILIATION_REPORT", "IMPORT_ARCHIVE"]);
 const DEFAULT_VISIBLE_KINDS = new Set<DocumentKind>([
   "GRANT_AGREEMENT", "STOCK_PURCHASE_AGREEMENT", "NOTICE_OF_EXERCISE", "CERTIFICATE",
 ]);

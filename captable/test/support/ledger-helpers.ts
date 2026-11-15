@@ -292,14 +292,17 @@ export interface AcmeSeed {
  */
 export async function seedAcme(
   db: D1Database,
-  options: { extend?: (acme: Acme) => void; emails?: Record<string, string>; settings?: Record<string, unknown>; edges?: boolean } = {},
+  options: { extend?: (acme: Acme) => void; emails?: Record<string, string>; settings?: Record<string, unknown>; edges?: boolean; shareUnit?: string } = {},
 ): Promise<AcmeSeed> {
   ledgerCache().clear()
   const acme = buildAcme()
+  if (options.shareUnit) acme.b.reference.shareUnit = options.shareUnit
   options.extend?.(acme)
   const { b } = acme
   const orgId = b.orgId
   const { created } = await seedReferences(db, b)
+  // The share unit is frozen once the company has transactions, so it is set before any.
+  if (options.shareUnit) await db.prepare('UPDATE orgs SET share_unit = ?, version = version + 1 WHERE id = ?').bind(options.shareUnit, orgId).run()
   if (options.settings) {
     await db.prepare('UPDATE orgs SET settings = json_patch(settings, ?), version = version + 1 WHERE id = ?').bind(JSON.stringify(options.settings), orgId).run()
   }

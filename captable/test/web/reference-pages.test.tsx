@@ -100,6 +100,24 @@ describe("equity plans", () => {
     const amendments = screen.getByRole("table", { name: "Plan amendments" });
     expect(within(amendments).getByText("Oct 15, 2025")).toBeTruthy();
     expect(within(amendments).getByText("4,500,000")).toBeTruthy();
+    // Only reserve changes are numbered, the first as the initial reserve; terms recordings are listed apart.
+    expect(within(amendments).getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell").map((cell) => cell.textContent))).toEqual([
+      ["Initial reserve", "2,000,000", "Jan 20, 2023"],
+      ["#1", "3,000,000", "Jun 12, 2024"],
+      ["#2", "4,500,000", "Oct 15, 2025"],
+    ]);
+    expect(within(amendments).queryByText("—")).toBeNull();
+    expect(within(screen.getByRole("list", { name: "Plan terms recorded" })).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("numbers every reserve change of a plan set up without a pool, calling none the initial reserve", async () => {
+    const amendments = stockPlan().amendments.filter((amendment) => amendment.kind !== "initial");
+    renderPage(`equity-plans/${IDS.plan}`, [mock(api.routes.getStockPlan, stockPlan({ amendments })), mock(api.routes.getStockClass, stockClass()), ...common]);
+    const table = await screen.findByRole("table", { name: "Plan amendments" });
+    expect(within(table).getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell").map((cell) => cell.textContent))).toEqual([
+      ["#1", "3,000,000", "Jun 12, 2024"],
+      ["#2", "4,500,000", "Oct 15, 2025"],
+    ]);
   });
 
   it("answers an unknown plan with the not-found state", async () => {
@@ -149,10 +167,15 @@ describe("securities status", () => {
 
   it("shows each queue with its explainer, rows and counts", async () => {
     renderPage("securities-status", handlers);
-    const exec = await screen.findByRole("table", { name: "Execution pending (migrated)" });
+    const exec = await screen.findByRole("table", { name: "Execution pending" });
     expect(within(exec).getByText("OPT-49")).toBeTruthy();
     expect(within(exec).getByText("Holder + company")).toBeTruthy();
+    expect(within(exec).getByRole("columnheader", { name: "Waiting on" })).toBeTruthy();
+    expect(within(exec).getByText("Company signatory — Freya Lindqvist")).toBeTruthy();
+    expect(within(exec).getByText("Holder")).toBeTruthy();
     expect(screen.getByText(/They count in fully diluted and plan usage/)).toBeTruthy();
+    expect(screen.getByText(/Only a missing holder signature blocks exercise/)).toBeTruthy();
+    expect(screen.queryByText(/\(migrated\)/)).toBeNull();
     const scheduled = screen.getByRole("table", { name: "Scheduled terminations" });
     expect(within(scheduled).getByText("Dec 4, 2026")).toBeTruthy();
     expect(within(scheduled).getByText("(in 44 days)")).toBeTruthy();
@@ -160,33 +183,73 @@ describe("securities status", () => {
     expect(within(scheduled).getByRole("link", { name: "Open" }).getAttribute("href")).toBe(`${base}/stakeholders/${IDS.mateo}`);
     const repurchase = screen.getByRole("table", { name: "Unvested shares from terminated holders" });
     expect(within(repurchase).getByText("Window open")).toBeTruthy();
-    expect(within(repurchase).getByText("Repurchase offline, with counsel")).toBeTruthy();
-    expect(screen.getByText(/Cap Table doesn't record repurchases: counsel papers the repurchase offline/)).toBeTruthy();
+    expect(within(repurchase).getByText("(in 54 days)")).toBeTruthy();
+    expect(within(repurchase).getByRole("button", { name: /^Record a repurchase of/ })).toBeTruthy();
+    expect(screen.queryByText(/available starting Jan 15, 2027|available Jan 15, 2027/)).toBeNull();
     const options = screen.getByRole("table", { name: "Options from terminated holders" });
     expect(within(options).getByText("OPT-21")).toBeTruthy();
+    expect(within(options).getByText("(in 40 days)")).toBeTruthy();
     expect(within(options).getByText("(NSO)")).toBeTruthy();
+    expect(within(options).queryByText(/Awaiting/)).toBeNull();
     expect(screen.getByText("Nothing expires in the next 90 days.")).toBeTruthy();
     expect(document.getElementById("exp")?.className).toContain("collapsed");
   });
 
+  it("labels a lot whose agreement sets no repurchase deadline apart from one with none recorded", async () => {
+    renderPage("securities-status", [mock(api.routes.getSecuritiesStatus, securitiesStatus({
+      unvestedSharesFromTerminated: [
+        { securityId: IDS.cs4, stakeholderId: IDS.desmond, unvested: "34500", repurchasePrice: "0.31", lastRepurchaseDate: null, status: "no_deadline" },
+        { securityId: IDS.cs7, stakeholderId: IDS.nadia, unvested: "1000", repurchasePrice: null, lastRepurchaseDate: null, status: "not_recorded" },
+      ],
+    })), ...handlers.slice(1)]);
+    const repurchase = await screen.findByRole("table", { name: "Unvested shares from terminated holders" });
+    const [agreed, unknown] = within(repurchase).getAllByRole("row").slice(1);
+    expect(within(agreed!).getByText("No deadline (per agreement)")).toBeTruthy();
+    expect(within(agreed!).getByText("none — the agreement sets no deadline")).toBeTruthy();
+    expect(within(unknown!).getByText("Not recorded")).toBeTruthy();
+    expect(within(unknown!).getByText("not recorded — see agreement")).toBeTruthy();
+  });
+
+  it("says how long ago a deadline passed, and whose signature a terminated holder's grant awaits", async () => {
+    renderPage("securities-status", [mock(api.routes.getSecuritiesStatus, securitiesStatus({
+      unvestedSharesFromTerminated: [{ securityId: IDS.cs4, stakeholderId: IDS.desmond, unvested: "34500", repurchasePrice: "0.31", lastRepurchaseDate: "2026-10-18", status: "lapsed" }],
+      optionsFromTerminated: [
+        { securityId: IDS.opt21, stakeholderId: IDS.nadia, vestedUnexercised: "60000", contractualDeadline: "2026-10-21", contractualDaysLeft: 0, isoDeadline: "2026-10-20", isoDaysLeft: -1, executionStatus: "pending_holder" },
+        { securityId: IDS.opt18, stakeholderId: IDS.mateo, vestedUnexercised: "61250", contractualDeadline: "2027-01-19", contractualDaysLeft: 90, isoDeadline: null, isoDaysLeft: null, executionStatus: "pending_company" },
+      ],
+    })), ...handlers.slice(1)]);
+    const repurchase = await screen.findByRole("table", { name: "Unvested shares from terminated holders" });
+    expect(within(repurchase).getByText("(3 days ago)")).toBeTruthy();
+    expect(within(repurchase).queryByText(/days left/)).toBeNull();
+    const options = screen.getByRole("table", { name: "Options from terminated holders" });
+    const opt21 = rowOf(options, "OPT-21");
+    expect(within(opt21).getByText("(today)")).toBeTruthy();
+    expect(within(opt21).getByText("(1 day ago)")).toBeTruthy();
+    expect(within(opt21).getByText("Awaiting holder signature")).toBeTruthy();
+    expect(within(rowOf(options, "OPT-18")).getByText("Awaiting company signature")).toBeTruthy();
+    expect(within(options).queryByText(/-\d+ days/)).toBeNull();
+  });
+
   it("gives every admin the queue actions, Reverse included", async () => {
     renderPage("securities-status", handlers, { role: "admin_rw" });
-    const exec = await screen.findByRole("table", { name: "Execution pending (migrated)" });
+    const exec = await screen.findByRole("table", { name: "Execution pending" });
     expect((within(exec).getByRole("button", { name: "Mark OPT-49 executed" }) as HTMLButtonElement).disabled).toBe(false);
     expect(within(screen.getByRole("table", { name: "Scheduled terminations" })).getByRole("button", { name: /Reverse/ })).toBeTruthy();
+    expect((within(screen.getByRole("table", { name: "Unvested shares from terminated holders" })).getByRole("button", { name: /^Record a repurchase of/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("shows read-only admins no write buttons", async () => {
     renderPage("securities-status", handlers, { role: "admin_ro" });
-    await screen.findByRole("table", { name: "Execution pending (migrated)" });
+    await screen.findByRole("table", { name: "Execution pending" });
     expect(screen.queryByRole("button", { name: /Mark .* executed/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Cancel .* now/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Record a repurchase/ })).toBeNull();
     expect(screen.getByText("Read-only")).toBeTruthy();
   });
 
   it("collapses every empty queue to one line", async () => {
     renderPage("securities-status", [mock(api.routes.getSecuritiesStatus, securitiesStatus({ executionPending: [], scheduledTerminations: [], unvestedSharesFromTerminated: [], optionsFromTerminated: [] })), ...handlers.slice(1)]);
-    expect(await screen.findByText("No grants are awaiting signatures.")).toBeTruthy();
+    expect(await screen.findByText("No securities are awaiting signatures.")).toBeTruthy();
     expect(screen.getByText("No scheduled terminations.")).toBeTruthy();
     expect(screen.getByText("No open repurchase windows.")).toBeTruthy();
     expect(screen.getByText("No open exit windows.")).toBeTruthy();

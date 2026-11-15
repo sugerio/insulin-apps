@@ -41,7 +41,8 @@ const EXTENSION_TYPES: Record<string, (typeof api.UPLOAD_CONTENT_TYPES)[number]>
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
-const ACCEPT = Object.keys(EXTENSION_TYPES).map((extension) => `.${extension}`).join(",");
+/** The file types an upload field offers (`accept`). */
+export const UPLOAD_ACCEPT = Object.keys(EXTENSION_TYPES).map((extension) => `.${extension}`).join(",");
 
 /** The upload's content type: the browser's, else the extension's; null when the type isn't one the app accepts. */
 export function uploadContentType(file: { name: string; type: string }): (typeof api.UPLOAD_CONTENT_TYPES)[number] | null {
@@ -124,8 +125,98 @@ interface DocumentUploadProps {
 }
 
 export function DocumentUpload({ label, kind, value, onChange, required, hint, error, disabled, collectionId, versionOf, link, onStored, onStagedChange }: DocumentUploadProps) {
-  const { orgId } = useWorkspace();
   const id = useId();
+  const { input, staged, reading, refusal, flow, choose, discard } = useStagedUpload({ kind, onChange, collectionId, versionOf, link, onStored, onStagedChange });
+  const reviewed = flow.request;
+  const unsettled = flow.unsettled;
+  const errorText = refusal ?? error;
+  return (
+    <div className="fld">
+      <label htmlFor={id}>
+        {label}
+        {required ? <span className="req" aria-hidden="true">*</span> : null}
+      </label>
+      <div className="upload">
+        {value && !staged ? (
+          <div className="files">
+            <span className="file-pill">
+              <Icon name="file" /> {value.filename} <span className="faint">{formatBytes(value.byteSize)} · SHA-256 {value.sha256.slice(0, 10)}…</span>
+              {disabled ? null : (
+                <button type="button" className="pill-x" aria-label={`Remove ${value.filename}`} onClick={() => onChange(null)}>
+                  <Icon name="x" />
+                </button>
+              )}
+            </span>
+          </div>
+        ) : null}
+        {staged ? (
+          <div className="upload-review" aria-label={`Upload of ${staged.filename}`}>
+            <FlowProblemBanner problem={flow.problem} onRetry={flow.phase === "edit" ? () => void flow.review() : () => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
+            <p className="small" style={{ margin: "4px 0" }}>
+              <Icon name="file" /> Upload <b>{staged.filename}</b> ({formatBytes(staged.bytes.byteLength)}, SHA-256 <span className="mono">{staged.sha256.slice(0, 10)}…</span>)
+              {reviewed ? <> as <b>{documentKindLabel(reviewed.kind)}</b>{reviewed.collectionId ? " into the chosen folder" : ""}{reviewed.versionOf ? ", as a new version" : ""}{reviewed.link ? <>, linked to <b>{reviewed.link.label}</b></> : null}</> : null}.
+              {value ? <> It replaces {value.filename} here.</> : null}
+            </p>
+            <div className="row">
+              {/* The field's label names its current action, so errors placed on the field still reach it. */}
+              {flow.phase === "edit" ? (
+                <button type="button" id={id} className="btn btn-ghost btn-sm" aria-label="Review the upload" onClick={() => void flow.review()} disabled={disabled}
+                  aria-invalid={errorText ? true : undefined} aria-describedby={errorText ? `${id}-err` : undefined}>Review the upload</button>
+              ) : flow.phase === "review" ? (
+                <button type="button" id={id} className="btn btn-primary btn-sm" aria-label={`Upload ${staged.filename}`} onClick={() => void flow.commit()} disabled={disabled}
+                  aria-invalid={errorText ? true : undefined} aria-describedby={errorText ? `${id}-err` : undefined}>Upload</button>
+              ) : flow.phase === "committing" ? (
+                <span className="small muted" role="status">Uploading…</span>
+              ) : null}
+              {!unsettled ? <button type="button" className="btn btn-ghost btn-sm" aria-label={`Don't upload ${staged.filename}`} onClick={discard} disabled={disabled && flow.phase !== "edit"}>Choose another file</button> : null}
+            </div>
+          </div>
+        ) : (
+          <label className="btn btn-ghost btn-sm" aria-disabled={disabled || reading || undefined}>
+            <Icon name="upload" /> {value ? "Replace file" : "Choose file"}
+            <input
+              ref={input}
+              id={id}
+              type="file"
+              className="sr-only"
+              accept={UPLOAD_ACCEPT}
+              disabled={disabled || reading}
+              aria-required={required || undefined}
+              aria-invalid={errorText ? true : undefined}
+              aria-describedby={errorText ? `${id}-err` : undefined}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void choose(file);
+              }}
+            />
+          </label>
+        )}
+        {reading ? <span className="small muted" role="status">Reading the file…</span> : null}
+        <div className="hint">{hint ?? `PDF, DOCX, XLSX, CSV, TXT, PNG or JPG · max ${UPLOAD_LIMIT_LABEL} · stored with a SHA-256 checksum`}</div>
+      </div>
+      {errorText ? <div className="err" id={`${id}-err`} role="alert">{errorText}</div> : null}
+    </div>
+  );
+}
+
+/** What an upload field needs besides its look: the document it stores, and where and how it is filed. */
+export interface StagedUploadOptions {
+  kind: api.DocumentKind;
+  onChange: (document: UploadedDocument | null) => void;
+  collectionId?: string | null | undefined;
+  versionOf?: string | undefined;
+  link?: UploadLink | undefined;
+  onStored?: ((document: api.Document) => void) | undefined;
+  onStagedChange?: ((staged: boolean) => void) | undefined;
+}
+
+/**
+ * The upload cycle behind a document field, whatever draws it: a chosen file is read and checksummed, its upload is
+ * reviewed as exactly what will be sent, and "Upload" sends that frozen request with one key (see the top of this file).
+ * `input` is the file input to reset once a file has been read.
+ */
+export function useStagedUpload({ kind, onChange, collectionId, versionOf, link, onStored, onStagedChange }: StagedUploadOptions) {
+  const { orgId } = useWorkspace();
   const input = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<Staged | null>(null);
   const [reading, setReading] = useState(false);
@@ -214,74 +305,5 @@ export function DocumentUpload({ label, kind, value, onChange, required, hint, e
     setStaged(null);
   };
 
-  const reviewed = flow.request;
-  const unsettled = flow.unsettled;
-  const errorText = refusal ?? error;
-  return (
-    <div className="fld">
-      <label htmlFor={id}>
-        {label}
-        {required ? <span className="req" aria-hidden="true">*</span> : null}
-      </label>
-      <div className="upload">
-        {value && !staged ? (
-          <div className="files">
-            <span className="file-pill">
-              <Icon name="file" /> {value.filename} <span className="faint">{formatBytes(value.byteSize)} · SHA-256 {value.sha256.slice(0, 10)}…</span>
-              {disabled ? null : (
-                <button type="button" className="pill-x" aria-label={`Remove ${value.filename}`} onClick={() => onChange(null)}>
-                  <Icon name="x" />
-                </button>
-              )}
-            </span>
-          </div>
-        ) : null}
-        {staged ? (
-          <div className="upload-review" aria-label={`Upload of ${staged.filename}`}>
-            <FlowProblemBanner problem={flow.problem} onRetry={flow.phase === "edit" ? () => void flow.review() : () => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-            <p className="small" style={{ margin: "4px 0" }}>
-              <Icon name="file" /> Upload <b>{staged.filename}</b> ({formatBytes(staged.bytes.byteLength)}, SHA-256 <span className="mono">{staged.sha256.slice(0, 10)}…</span>)
-              {reviewed ? <> as <b>{documentKindLabel(reviewed.kind)}</b>{reviewed.collectionId ? " into the chosen folder" : ""}{reviewed.versionOf ? ", as a new version" : ""}{reviewed.link ? <>, linked to <b>{reviewed.link.label}</b></> : null}</> : null}.
-              {value ? <> It replaces {value.filename} here.</> : null}
-            </p>
-            <div className="row">
-              {/* The field's label names its current action, so errors placed on the field still reach it. */}
-              {flow.phase === "edit" ? (
-                <button type="button" id={id} className="btn btn-ghost btn-sm" aria-label="Review the upload" onClick={() => void flow.review()} disabled={disabled}
-                  aria-invalid={errorText ? true : undefined} aria-describedby={errorText ? `${id}-err` : undefined}>Review the upload</button>
-              ) : flow.phase === "review" ? (
-                <button type="button" id={id} className="btn btn-primary btn-sm" aria-label={`Upload ${staged.filename}`} onClick={() => void flow.commit()} disabled={disabled}
-                  aria-invalid={errorText ? true : undefined} aria-describedby={errorText ? `${id}-err` : undefined}>Upload</button>
-              ) : flow.phase === "committing" ? (
-                <span className="small muted" role="status">Uploading…</span>
-              ) : null}
-              {!unsettled ? <button type="button" className="btn btn-ghost btn-sm" aria-label={`Don't upload ${staged.filename}`} onClick={discard} disabled={disabled && flow.phase !== "edit"}>Choose another file</button> : null}
-            </div>
-          </div>
-        ) : (
-          <label className="btn btn-ghost btn-sm" aria-disabled={disabled || reading || undefined}>
-            <Icon name="upload" /> {value ? "Replace file" : "Choose file"}
-            <input
-              ref={input}
-              id={id}
-              type="file"
-              className="sr-only"
-              accept={ACCEPT}
-              disabled={disabled || reading}
-              aria-required={required || undefined}
-              aria-invalid={errorText ? true : undefined}
-              aria-describedby={errorText ? `${id}-err` : undefined}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void choose(file);
-              }}
-            />
-          </label>
-        )}
-        {reading ? <span className="small muted" role="status">Reading the file…</span> : null}
-        <div className="hint">{hint ?? `PDF, DOCX, XLSX, CSV, TXT, PNG or JPG · max ${UPLOAD_LIMIT_LABEL} · stored with a SHA-256 checksum`}</div>
-      </div>
-      {errorText ? <div className="err" id={`${id}-err`} role="alert">{errorText}</div> : null}
-    </div>
-  );
+  return { input, staged, reading, refusal, flow, choose, discard };
 }

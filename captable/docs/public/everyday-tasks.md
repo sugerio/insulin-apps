@@ -32,11 +32,13 @@ the section you open has pages of its own, the second column lists them, and the
 you are (for example **Cap Table › Share Classes**). The company workspace's sections, under **Essentials**:
 
 - **Dashboard:** company totals, how much of each equity plan is granted, ownership by group, the largest
-  stakeholders, recent activity, and **Needs attention** (grants waiting for signatures, scheduled terminations, ISO
-  deadlines within 30 days, open repurchase windows, the state of your 409A valuation, and expiry runs to confirm).
+  stakeholders, recent activity, and **Needs attention** (securities awaiting signatures, by kind, scheduled
+  terminations, ISO deadlines within 30 days, repurchase windows closing within 30 days, repurchase windows lapsed or
+  not recorded, the state of your 409A valuation, and expiry runs to confirm).
 - **Cap Table:** ownership by stakeholder and a tab for each kind of security. Beside it: **Share Classes**, **Equity
   Plans**, **Securities Status** (lists that need attention) and **Vesting** (the vesting schedules in use).
-- **Compliance & Tax:** your 409A valuations.
+- **Compliance & Tax:** your 409A valuations, the 83(b) elections on record, and checks of records that may need
+  counsel's attention.
 - **Hire and Retain:** **Exercise Requests**, **Equity Plans** and **Stakeholder Portal** (what holders see).
 - **Stakeholders.**
 - **Company:** **Profile & Settings**, **Documents**, **Reports** and **Recent Activity**.
@@ -64,14 +66,18 @@ company: `https://captable.insulinapps.com/vesting` opens **Vesting**, and `/por
 
 1. Open **Cap Table**.
 2. Pick a date under **As of**. Cap Table replays the full history up to that day and shows the cap table as it stood.
-3. Switch tabs for ownership by stakeholder, or for shares, options, SAFEs and warrants.
+3. Switch tabs for ownership by stakeholder, or for shares, options, SAFEs and warrants. Stakeholders who hold nothing
+   on that date are hidden until you show them; the download always lists every stakeholder, with zeros.
 4. Choose **Download** to save it as a spreadsheet.
 
 ![The Cap Table page of a fictional company, showing ownership by stakeholder with issued and fully diluted columns](/docs/assets/screenshots/captable-cap-table.png "The cap table, as of a chosen date")
 
 **Share Classes** shows authorized and outstanding shares and each class's terms. **Equity Plans** shows plan size,
-what is available to grant, outstanding and retired, the default exercise windows after someone leaves, and the
-return-to-pool rules. Both are view only: classes and plans come in with the import.
+what is available to grant, outstanding and retired, the default exercise windows after someone leaves, the
+return-to-pool rules, and the plan's amendments (the initial reserve, each later change of the reserve, and each
+recording of its terms). Its **% shares calculator** shows how many options a percentage of the company's fully diluted
+shares comes to, what they are worth at a preferred class's issue price, and what they cost to exercise at today's 409A
+value; it records nothing. Both are view only: classes and plans come in with the import.
 
 ## Stakeholders
 
@@ -102,22 +108,28 @@ confirm.
 ### Edit, leave of absence and duplicates
 
 - **Edit stakeholder** changes the details; a new name shows everywhere at once. A change of owner isn't an edit but a
-  transfer, which Cap Table doesn't record.
+  transfer, which Cap Table doesn't record. "Ex-employee" is set by a termination: it can be changed here only when no
+  termination is recorded or scheduled, for example on an imported record.
+- **Shared sign-in address:** a badge, and a filter on **Stakeholders**, mark an address that is on more than one
+  record. Related funds and rehires rightly share one.
 - **Leave of absence** is recorded from **Edit stakeholder** (start, end, whether return is guaranteed). A long leave
   without a guaranteed return can move an ISO deadline.
 - **Duplicates:** if the same person or institution appears twice, use **Merge into another stakeholder…**. The preview
   shows both records and the combined result. A merge never changes a number, and **Undo stakeholder merge** reverses
-  it.
+  it. A rehire keeps two records: the merge is refused when one record was terminated and the other was hired, or
+  received equity, after that termination.
 
 ## Record an option grant
 
-Use this for a grant the board has already approved and both sides have signed. Choose **+ New**, then **Options** (or
+Use this for a grant the board has already approved, signed or not yet. Choose **+ New**, then **Options** (or
 **Add options** in the cap table's actions). You'll need:
 
 1. **The equity plan.** The form shows what's available; a grant can't exceed it.
 2. **The stakeholder**, or add a new one on the spot.
-3. **How many options.**
-4. **Board approval:** the approval date and the signed board consent (PDF).
+3. **How many options.** To size a grant, enter a target percentage of the plan's pool or of the company's fully
+   diluted shares on the grant date: the form works out the options (rounded down) and shows the cost to exercise them.
+4. **Board approval:** the approval date and the signed board consent (PDF). A grant dated before the company's
+   incorporation date gets a warning to check.
 5. **Grant date:** the board approval date unless you give another one, with a reason.
 6. **ISO or NSO.** An ISO needs the holder to be an employee on the grant date. You confirm whether they own more than
    10% of the voting power; if so, an ISO needs an exercise price of at least 110% of fair market value and a term of at
@@ -130,7 +142,10 @@ Use this for a grant the board has already approved and both sides have signed. 
 9. **Expiration:** ten years unless the agreement says otherwise (five for a 10% holder's ISO).
 10. **Terms:** exercise windows after leaving (from the plan, or as the agreement says), securities-law exemptions,
     legends and the grant's ID.
-11. **The agreement**, signed by both the holder and the company.
+11. **Signatures:** the agreement signed by both the holder and the company signatory, or, to record the grant at board
+    approval before everyone has signed, who still has to sign (the holder, the company signatory or both) and the
+    agreement as signed so far. It is kept as evidence, and it is required when only the company signatory has yet to
+    sign.
 
 Then choose **Record grant**. The grant is outstanding at once, and the plan's availability goes down.
 
@@ -138,9 +153,12 @@ Then choose **Record grant**. The grant is outstanding at once, and the plan's a
 
 ### Grants waiting for signatures
 
-A grant that isn't fully signed can't be exercised. Such grants are listed under **Securities Status** (Execution
-pending). Once both sides have signed, choose **Mark executed**, upload the signed agreement with the signature dates,
-and confirm. If it will never be signed, cancel it with the reason "not executed". Imported grants count as signed.
+A grant can't be exercised while the holder's signature is missing; one that waits only for the company signatory's
+can, and the exercise review says so. Such grants are listed under **Securities Status** (Execution pending), with who
+they are waiting on. Once both sides have signed, choose **Mark executed**, upload the fully signed agreement with the
+signature dates, and confirm. On a grant waiting for both, **Mark executed** can record one party's signature first
+(**Who signed?**); the grant then waits for the other. If it will never be signed, cancel it with the reason "not
+executed". Imported grants count as signed.
 
 ## How vesting is worked out
 
@@ -199,6 +217,24 @@ A **scheduled** termination shows the person as terminating until the date, and 
 is applied when due items are processed on or after the date. Until then you can cancel it, from the stakeholder's page
 or from **Securities Status**. To undo a termination that has been applied, use **Reverse termination**.
 
+## Record a repurchase
+
+When a holder leaves with unvested restricted shares, the company may buy them back under the share's agreement. The
+repurchase, the notice to the holder and the payment happen outside the app. Once it is done and paid, choose **Record
+repurchase** on the share's page, or next to the lot under **Securities Status** › **Unvested shares from terminated
+holders**:
+
+1. **The repurchase date:** on or after the termination date, and not in the future.
+2. **The quantity:** every share still unvested on that date. The vested shares stay with the holder as a new share lot.
+3. **The price per share** the company paid. A price different from the agreement's gets a warning to check.
+4. **The payment:** the method (cash, check, wire, ACH or other), the date it was paid and a reference.
+5. **The repurchase notice** sent to the holder (uploaded here).
+6. **Counsel's authority**, when the repurchase is after the repurchase deadline or no deadline is recorded (an
+   agreement that sets no deadline needs none): a written authority from counsel, as a document of its own.
+
+Review the change, type the share's ID to confirm, and record it. Repurchased shares go back to the plan's pool if its
+rules say so. Cap Table doesn't tell the holder. If it was recorded wrongly, reverse it from the share's page.
+
 ## Cancel options or warrants
 
 - **Cancel** from the security's page, from the cap table's actions (**Cancel options**, **Cancel warrants**, several at
@@ -231,7 +267,10 @@ and warrants itself.
 
 ## Record a 409A valuation
 
-On **Compliance & Tax**:
+**Compliance & Tax** has three tabs: **409A Valuations**, **83(b) elections** (the elections on record, with each lot's
+status) and **Checks** (gaps worth closing, often with counsel: the company's EIN and address, securities imported
+without a board approval date, a 409A in effect without the board's adoption, and restricted shares with no 83(b)
+record). On **409A Valuations**:
 
 1. Choose **Record FMV**.
 2. Enter the provider, the effective date, the expiration date (twelve months later unless you change it), the fair
@@ -302,9 +341,10 @@ Cap Table never edits history. To correct something, someone who records changes
 it, giving a reason, and then records it again correctly if needed.
 
 - A reversal undoes the whole change: reversing an exercise removes the exercise and the shares it created together.
-- You can reverse a grant, an exercise, a termination, a cancellation, a **Mark executed**, or a merge. The buttons are
-  on the security's page (**Reverse last transaction**, **Reverse the exercise**) and on the stakeholder's page
-  (**Reverse termination**, **Undo stakeholder merge**).
+- You can reverse a grant, an exercise, a termination, a cancellation, a recorded repurchase, a **Mark executed**, or a
+  merge. The buttons are on the security's page (**Reverse last transaction**, **Reverse the exercise**) and on the
+  stakeholder's page (**Reverse termination**, **Undo stakeholder merge**). Reversing a cancellation or a repurchase
+  takes back the pool capacity it returned, so it is refused once a later grant has used that capacity.
 - If something later depends on it (an exercise from a grant, say), reverse that first. The reversal preview shows what
   depends on what.
 - The original stays visible in the history, marked as reversed, with who reversed it, when and why.

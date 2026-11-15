@@ -9,12 +9,12 @@ import { Attachments, useDownload } from "../components/Documents.tsx";
 import { valuationLinkIntent } from "../components/flows/DocumentDialogs.tsx";
 import { Badge, Banner, Pending, ResourceView } from "../components/Feedback.tsx";
 import { Icon } from "../components/Icon.tsx";
-import { LinkTabs } from "../components/LinkTabs.tsx";
 import { HolderLink, SecurityLink } from "../components/Links.tsx";
 import { useWorkspace } from "../components/OrgWorkspace.tsx";
 import { Card, Page, PageHead, SectionTitle } from "../components/Page.tsx";
 import { Timeline } from "../components/Timeline.tsx";
 import { ClearReviewDialog, FlagMaterialEventDialog, ReverseValuationEventDialog, VoidValuationDialog } from "../components/flows/ValuationDialogs.tsx";
+import { ComplianceTabs } from "./CompliancePage.tsx";
 import { compareDecimals } from "../lib/decimal.ts";
 import { DASH, daysBetween, formatDate } from "../lib/format.ts";
 import { VALUATION_STATUS_LABELS, VALUATION_STATUS_TONES } from "../lib/labels.ts";
@@ -142,7 +142,7 @@ export function ValuationsPage() {
             </>
           }
         />
-        <LinkTabs label="Compliance and tax" selected="409a" tabs={[{ id: "409a", label: "409A Valuations", to: href("compliance/409a") }]} />
+        <ComplianceTabs selected="409a" />
         <ResourceView resource={valuations}>
           {(data) => {
             const events = data.items.flatMap((valuation) => materialEvents(valuation, data.items, today).map((state) => ({ ...state, valuation })));
@@ -274,16 +274,20 @@ function ValuationBody({ valuation, onChanged }: { valuation: api.ValuationDetai
         </Banner>
       ) : null}
       <SectionTitle>FMV</SectionTitle>
+      {/* The classes the report prices, then one line for the rest: a report that values common only isn't a list of
+          "Not valued" preferred classes. */}
       <Pending resource={classes} what="the share classes">
-        {(data) => (
-          <DescriptionList
-            label="FMV per class"
-            rows={data.items.map((item) => {
-              const price = classPrice(valuation, data.items, item.id);
-              return [item.name, price ? format.price(price) : <span className="muted">Not valued</span>] as const;
-            })}
-          />
-        )}
+        {(data) => {
+          const priced = data.items.map((item) => ({ item, price: classPrice(valuation, data.items, item.id) }));
+          const valued = priced.flatMap(({ item, price }) => (price ? [[item.name, format.price(price)] as const] : []));
+          const unvalued = priced.filter(({ price }) => !price).map(({ item }) => item.name);
+          return (
+            <>
+              {valued.length ? <DescriptionList label="FMV per class" rows={valued} /> : <p className="muted">This report values no share class.</p>}
+              {unvalued.length ? <p className="small muted">Not valued in this report: {unvalued.join(", ")}</p> : null}
+            </>
+          );
+        }}
       </Pending>
       <SectionTitle>Summary</SectionTitle>
       <DescriptionList

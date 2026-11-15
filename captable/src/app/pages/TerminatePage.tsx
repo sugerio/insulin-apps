@@ -409,7 +409,7 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
                         {item.deadline ? <div className="mt-4"><DocumentUpload label={`Repurchase agreement (${row.security.displayId})`} kind="STOCK_PURCHASE_AGREEMENT" value={item.document} onChange={(document) => update({ document })} /></div> : null}
                         {errorOf(`repurchase:${id}`) ? <div className="err-inline">{errorOf(`repurchase:${id}`)}</div> : null}
                       </td>
-                      <td className="small muted">Cap Table doesn't record the repurchase itself: counsel papers it offline</td>
+                      <td className="small muted">Once the company has repurchased and paid, record it on Securities Status</td>
                     </tr>
                   );
                 })}

@@ -387,7 +387,7 @@ export function dashboard(overrides: Partial<api.DashboardResponse> = {}): api.D
       { stakeholderId: IDS.northgate, name: "Northgate Ventures Fund II, L.P.", fullyDiluted: "3858173", pct: ratio(3858173, 24312120) },
     ],
     needsAttention: [
-      { kind: "EXECUTION_PENDING", count: 6, dueDate: null, href: "/securities-status#exec" },
+      { kind: "EXECUTION_PENDING", count: 6, dueDate: null, href: "/securities-status#exec", byFamily: [{ family: "EQUITY_COMPENSATION", count: 6 }] },
       { kind: "SCHEDULED_TERMINATION", count: 1, dueDate: "2026-12-04", href: "/securities-status#sched" },
       { kind: "ISO_DEADLINE_SOON", count: 0, dueDate: null, href: "/securities-status#term" },
       { kind: "REPURCHASE_WINDOW_CLOSING", count: 1, dueDate: "2026-12-14", href: "/securities-status#rep" },
@@ -404,10 +404,13 @@ export function dashboard(overrides: Partial<api.DashboardResponse> = {}): api.D
 
 export function securitiesStatus(overrides: Partial<api.SecuritiesStatus> = {}): api.SecuritiesStatus {
   return api.securitiesStatusSchema.parse({
-    executionPending: [{ securityId: IDS.opt49, displayId: "OPT-49", stakeholderId: IDS.daniel, issueDate: "2026-09-04", missing: "both", signatureRequestIds: [uuid(14, 1)] }],
+    executionPending: [{
+      securityId: IDS.opt49, displayId: "OPT-49", stakeholderId: IDS.daniel, family: "EQUITY_COMPENSATION", issueDate: "2026-09-04", missing: "both", signatureRequestIds: [uuid(14, 1)],
+      pendingSigners: [{ role: "company", name: "Freya Lindqvist" }, { role: "holder", name: null }],
+    }],
     scheduledTerminations: [{ id: uuid(12, 1), stakeholderId: IDS.mateo, terminationDate: "2026-12-04", type: "voluntary", securitiesAffected: 1, unvestedToCancel: "89375", version: 1 }],
     unvestedSharesFromTerminated: [{ securityId: IDS.cs4, stakeholderId: IDS.desmond, unvested: "34500", repurchasePrice: "0.31", lastRepurchaseDate: "2026-12-14", status: "open" }],
-    optionsFromTerminated: [{ securityId: IDS.opt21, stakeholderId: IDS.nadia, vestedUnexercised: "60000", contractualDeadline: "2026-11-30", contractualDaysLeft: 40, isoDeadline: null, isoDaysLeft: null }],
+    optionsFromTerminated: [{ securityId: IDS.opt21, stakeholderId: IDS.nadia, vestedUnexercised: "60000", contractualDeadline: "2026-11-30", contractualDaysLeft: 40, isoDeadline: null, isoDaysLeft: null, executionStatus: "executed" }],
     expiringWithin90Days: [],
     ...overrides,
   });
@@ -447,8 +450,11 @@ export function stockPlan(overrides: Partial<api.StockPlanDetail> = {}): api.Sto
     ],
     defaultRepurchaseWindow: { period: "90", unit: "DAYS" }, status: "active", pourOverPlanId: null,
     amendments: [
-      { effectiveDate: "2024-06-12", transactionId: uuid(15, 3), type: "TX_STOCK_PLAN_POOL_ADJUSTMENT", poolSize: "3000000" },
-      { effectiveDate: "2025-10-15", transactionId: uuid(15, 4), type: "TX_STOCK_PLAN_POOL_ADJUSTMENT", poolSize: "4500000" },
+      { effectiveDate: "2023-01-20", transactionId: uuid(15, 1), type: "TX_STOCK_PLAN_POOL_ADJUSTMENT", kind: "initial", poolSize: "2000000" },
+      { effectiveDate: "2023-01-20", transactionId: uuid(15, 5), type: "X_STOCK_PLAN_TERMS", kind: "terms", poolSize: null },
+      { effectiveDate: "2024-06-12", transactionId: uuid(15, 3), type: "TX_STOCK_PLAN_POOL_ADJUSTMENT", kind: "reserve", poolSize: "3000000" },
+      { effectiveDate: "2025-10-15", transactionId: uuid(15, 4), type: "TX_STOCK_PLAN_POOL_ADJUSTMENT", kind: "reserve", poolSize: "4500000" },
+      { effectiveDate: "2026-09-30", transactionId: uuid(15, 2), type: "X_STOCK_PLAN_TERMS", kind: "terms", poolSize: null },
     ],
     version: 1,
     ...overrides,

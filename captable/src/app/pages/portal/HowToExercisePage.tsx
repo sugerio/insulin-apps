@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useSearchParams } from "react-router";
 import type { api } from "#shared";
 import { DescriptionList, type DlRow } from "../../components/DescriptionList.tsx";
@@ -7,11 +8,14 @@ import { Card, PageHead, SectionTitle } from "../../components/Page.tsx";
 import { DocumentLink, PortalPage, PortalResourceView } from "../../components/PortalParts.tsx";
 import { usePortal } from "../../components/PortalWorkspace.tsx";
 import { formatDate } from "../../lib/format.ts";
-import { exerciseCost, formatComputedMoney, isPositive, isoDeadlineState, paymentReference } from "../../lib/portal.ts";
+import {
+  awaitingHolderSignature, exerciseCost, exerciseQuantity, formatComputedMoney, isPositive, isoDeadlineState, maxWholeOptions, paymentReference,
+} from "../../lib/portal.ts";
 
-// How to exercise: the offline process — check what's exercisable, sign counsel's notice, send it to
-// the company contact, pay by bank transfer or check quoting a reference — with the company's own instructions and its
-// current payment instructions, which are shown only here. There are no self-service exercise requests.
+// How to exercise: the offline process — check what's exercisable, sign counsel's notice, send it to the company
+// contact, wait for the equity team to confirm the amount due, then pay by bank transfer or check quoting a reference —
+// with the company's own instructions and its current payment instructions, which are shown only here. The cost of a
+// chosen number of options is shown exactly, with no tax estimate. There are no self-service exercise requests.
 
 export const NEVER_BANK = "We never send bank details by e-mail. If you receive bank details by e-mail, don't pay — contact us.";
 
@@ -46,8 +50,6 @@ function Process({ info }: { info: api.HowToExercise }) {
     ?? grants[0];
   const grant = selected?.security;
   const exercisable = grant?.numbers.exercisable ?? null;
-  // strike × quantity, exact; shown HALF_EVEN to the cent, the named rounding for computed money.
-  const cost = grant && exercisable && isPositive(exercisable) && grant.exercisePrice ? formatComputedMoney(exerciseCost(exercisable, grant.exercisePrice)) : null;
   const iso = grant ? isoDeadlineState(grant, today) : null;
   const pay = info.paymentInstructions;
   const contact = info.companyContact;
@@ -92,7 +94,7 @@ function Process({ info }: { info: api.HowToExercise }) {
                   {iso?.kind === "passed" ? <> · ISO deadline {formatDate(iso.date)} (passed: exercises from now on are taxed as NSOs)</> : null}
                 </>
               ) : <> · expires {formatDate(grant.expirationDate)}</>}
-              .{grant.executionPending ? " (Awaiting signatures — not exercisable yet.)" : null}
+              .{awaitingHolderSignature(grant) ? " (Awaiting your signature — you can exercise once you have signed the grant agreement.)" : null}
             </>
           ) : null}
         </li>
@@ -105,18 +107,13 @@ function Process({ info }: { info: api.HowToExercise }) {
           {contact ? <> {contact.name}, <span className="email">{contact.email}</span>.</> : null}
         </li>
         <li>
-          <b>The equity team confirms the total due.</b> Exercise cost = strike × quantity
-          {cost && grant && exercisable ? (
-            <>
-              {" "}(all {format.shares(exercisable)} exercisable options: {format.shares(exercisable)} × {format.price(grant.exercisePrice)} = <b>{cost.text}</b>
-              {cost.rounded ? ", rounded to the cent" : ""})
-            </>
-          ) : null}
-          . For employees and former employees, payroll confirms any tax withholding.
+          <b>The equity team confirms the total due.</b> Exercise cost = strike × quantity.
+          {grant && grant.exercisePrice && isPositive(maxWholeOptions(exercisable)) ? <CostCalculator key={grant.id} exercisable={exercisable} strike={grant.exercisePrice} /> : null}
+          {" "}For employees and former employees, payroll confirms any tax withholding.
         </li>
         <li>
-          <b>Pay by ACH credit or wire</b> to the account below (international payments: use the SWIFT and intermediary details)
-          {pay?.checkPayee ? <>, <b>or by check</b></> : null}, quoting your reference.
+          <b>Pay only after the equity team confirms the amount due</b>: by ACH credit or wire to the account below (international
+          payments: use the SWIFT and intermediary details){pay?.checkPayee ? <>, <b>or by check</b></> : null}, quoting your reference.
         </li>
         <li>
           <b>The company records the exercise</b> — the new shares then show in your Portfolio.
@@ -139,6 +136,50 @@ function Process({ info }: { info: api.HowToExercise }) {
       )}
       <p className="small mt-12">Exercises are requested offline, with the steps above.</p>
     </>
+  );
+}
+
+/**
+ * The cost of exercising a chosen number of options: whole options, at most the exercisable amount (Max fills that
+ * in), all of them to start with; strike × quantity exactly, shown HALF_EVEN to the cent, the named rounding for
+ * computed money.
+ * No tax estimate and no ISO/NSO split per quantity: the equity team confirms the total due.
+ */
+function CostCalculator({ exercisable, strike }: { exercisable: string | null; strike: string }) {
+  const { format } = useDisplay();
+  const max = maxWholeOptions(exercisable);
+  const [input, setInput] = useState(max);
+  const chosen = exerciseQuantity(input, exercisable);
+  const cost = "quantity" in chosen ? formatComputedMoney(exerciseCost(chosen.quantity, strike)) : null;
+  const problem = "problem" in chosen
+    ? chosen.problem === "too_many" ? `You can exercise at most ${format.shares(max)} options of this grant.`
+      : chosen.problem === "none" ? "Enter at least 1 option." : "Enter a whole number of options."
+    : null;
+  return (
+    <div className="mt-8">
+      <div className="exercise-quantity">
+        <label className="select-line">
+          Options to exercise
+          <input
+            className="inp"
+            inputMode="numeric"
+            autoComplete="off"
+            value={input}
+            aria-invalid={problem !== null}
+            aria-describedby={problem ? "exercise-quantity-problem" : undefined}
+            onChange={(event) => setInput(event.target.value)}
+          />
+        </label>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setInput(max)}>Max</button>
+      </div>
+      {cost && "quantity" in chosen ? (
+        <output aria-label="Exercise cost">
+          {format.shares(chosen.quantity)} × {format.price(strike)} = <b>{cost.text}</b>{cost.rounded ? ", rounded to the cent" : ""}
+        </output>
+      ) : (
+        <span className="err-inline" id="exercise-quantity-problem" role="alert">{problem}</span>
+      )}
+    </div>
   );
 }
 

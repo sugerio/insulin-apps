@@ -8,7 +8,7 @@ import {
 import { notFound } from "../http.ts";
 import { maskPaymentInstructionDetails, parsePaymentInstructionDetails } from "../payment-instructions.ts";
 import { dec, decOrNull, exactDecimal, holdingsView, loadReadContext, replayed, type ReadContext, type Viewer } from "./context.ts";
-import { importedFromPulley, legendsOf, securityTermsOf } from "./securities.ts";
+import { boardApprovalOf, importedFromPulley, legendsOf, repurchaseWindow, securityTermsOf } from "./securities.ts";
 import { windowJson } from "./structure.ts";
 
 /**
@@ -19,14 +19,23 @@ import { windowJson } from "./structure.ts";
  */
 
 const HOLDER_VIEWER: Viewer = { access: "admin_ro", fullAccess: false, pii: false, userId: null, email: null };
-/** Awaiting signatures (the product rules): nothing is exercisable until both sides have signed. */
-const PENDING_EXECUTION = new Set<engine.ExecutionStatus>(["pending_company", "pending_holder", "pending_both"]);
+/**
+ * Awaiting signatures (the product rules): the holder sees whose signature is missing. Only their own blocks exercise;
+ * the engine's exercisability says so, and `numbers.exercisable` is read from it.
+ */
+const PENDING_EXECUTION = new Set<string>(api.PORTAL_EXECUTION_PENDING);
 const ORIGIN_KINDS: Partial<Record<string, "exercise" | "conversion" | "transfer">> = { EXERCISE: "exercise", CONVERSION: "conversion", TRANSFER: "transfer" };
+const ACCELERATION_KINDS = new Set<string>(api.PORTAL_ACCELERATION_KINDS);
 
 export const DEFAULT_HOW_TO_EXERCISE =
   "To exercise vested options, download the notice of exercise, complete and sign it, and send it to the company contact. "
-  + "Then pay the exercise price using the payment instructions on this page, quoting your reference. Your exercise is "
-  + "recorded once the company has received both the signed notice and the full payment. We never send bank details by e-mail.";
+  + "The equity team then confirms the amount due. Pay only after that confirmation, using the payment instructions on "
+  + "this page and quoting your reference. Your exercise is recorded once the company has received both the signed "
+  + "notice and the full payment. We never send bank details by e-mail.";
+
+function executionPending(status: engine.ExecutionStatus): api.PortalSecurity["executionPending"] {
+  return PENDING_EXECUTION.has(status) ? (status as NonNullable<api.PortalSecurity["executionPending"]>) : null;
+}
 
 function portalStatus(status: engine.SecurityStatus): api.PortalSecurity["status"] | null {
   return status === "RETRACTED" ? null : status;
@@ -65,7 +74,9 @@ async function holderDocuments(ctx: ReadContext, ownIds: ReadonlySet<string>, se
     if (evaluateHolderDocumentAccess(row, holders.get(row.id)!, ownIds) !== "mine") continue;
     const list = bySecurity.get(row.linked_security_id) ?? [];
     if (!list.some((document) => document.id === row.id)) {
-      list.push(api.portalDocumentSchema.parse({ id: row.id, filename: row.filename, kind: row.kind, createdAt: row.created_at, scope: "mine" }));
+      list.push(api.portalDocumentSchema.parse({
+        id: row.id, filename: row.filename, kind: row.kind, createdAt: row.created_at, sourceCreatedAt: row.source_created_at, scope: "mine",
+      }));
     }
     bySecurity.set(row.linked_security_id, list);
   }
@@ -98,7 +109,7 @@ export function portalSecurityJson(
     planName: plan?.ref.name ?? null,
     issueDate: security.issueDate!,
     status,
-    executionPending: PENDING_EXECUTION.has(security.executionStatus),
+    executionPending: executionPending(security.executionStatus),
     exercisePrice: awardLike ? exactDecimal(security.exercisePrice) : null,
     expirationDate: awardLike ? security.expirationDate : null,
     contractualDeadline: awardLike ? (engine.contractualDeadline(security)?.date ?? null) : null,
@@ -113,6 +124,7 @@ export function portalSecurityJson(
       exercisable: awardLike ? dec(engine.exercisability(state, security).exercisable) : null,
       cancelled: stock ? null : dec(security.cancelled),
     },
+    vestingStartDate: convertible ? null : security.vestingStartDate,
     vesting: convertible ? [] : engine.securityVestingTimeline(state, security).map((event) => ({
       date: event.date,
       quantity: dec(event.quantity),
@@ -149,7 +161,15 @@ function postTerminationPeriods(state: engine.LedgerState, security: engine.Secu
   return windows;
 }
 
-function optionDetail(state: engine.LedgerState, security: engine.SecurityState, ownIds: ReadonlySet<string>): api.PortalOptionDetail {
+/** The grant's acceleration terms as recorded (`x_acceleration_terms`): the kind and the agreement's words; null if none. */
+function accelerationJson(terms: Record<string, unknown>): api.PortalOptionDetail["acceleration"] {
+  const recorded = terms.x_acceleration_terms as { kind?: unknown; text?: unknown } | undefined;
+  if (typeof recorded?.kind !== "string" || !ACCELERATION_KINDS.has(recorded.kind)) return null;
+  const text = typeof recorded.text === "string" && recorded.text.trim() !== "" ? recorded.text : null;
+  return { kind: recorded.kind as NonNullable<api.PortalOptionDetail["acceleration"]>["kind"], text };
+}
+
+function optionDetail(ctx: ReadContext, state: engine.LedgerState, security: engine.SecurityState, ownIds: ReadonlySet<string>): api.PortalOptionDetail {
   const subtype = security.identity.subtype;
   const exercisable = subtype !== "RSU";
   const split = subtype === "OPTION_ISO" ? engine.isoSplit(state, security.identity.stakeholderId).find((grant) => grant.securityId === security.identity.id) : undefined;
@@ -167,6 +187,8 @@ function optionDetail(state: engine.LedgerState, security: engine.SecurityState,
       nso: dec(year.nso),
     })),
     postTerminationPeriods: exercisable ? postTerminationPeriods(state, security) : [],
+    boardApprovalDate: boardApprovalOf(ctx, state, security).date, // null also for an imported grant whose source had no date
+    acceleration: accelerationJson(securityTermsOf(ctx, state, security)),
     // The portions name the tax treatment: an ISO-designated option exercised after the ISO deadline is an NSO portion.
     exercises: [...security.exercises]
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
@@ -189,18 +211,17 @@ function periodJson(period: engine.Period): api.Period {
 
 /**
  * The company's right to buy back unvested shares (restricted stock): null when the lot carries none or has nothing
- * unvested left. The window is the lot's own, else the plan default; once the holder has left, the last day and its
- * status follow the Securities Status queue's rule, as of the view's date.
+ * unvested left. The window is the lot's own, else the plan default, and none when its agreement sets no deadline;
+ * once the holder has left, the last day and its status follow the Securities Status queue's rule, as of the view's date.
  */
 function repurchaseJson(state: engine.LedgerState, security: engine.SecurityState): api.PortalShareDetail["repurchase"] {
   const right = security.repurchaseRight;
   if (!engine.hasVestingSchedule(security) && right === null) return null;
   if (!engine.positionAt(state, security, state.asOf).unvestedOutstanding.isPositive()) return null;
   const at = security.termination?.date ?? state.asOf;
-  const window = right?.window ?? engine.planTermsOn(state, security.identity.stockPlanId, at)?.defaultRepurchaseWindow ?? null;
+  const window = right?.noDeadline ? null : (right?.window ?? engine.planTermsOn(state, security.identity.stockPlanId, at)?.defaultRepurchaseWindow ?? null);
   if (security.termination === null) return { price: decOrNull(right?.pricePerShare ?? null), window: window ? periodJson(window) : null, lastDate: null, status: null };
-  const lastDate = engine.repurchaseDeadline(state, security);
-  const status = lastDate === null ? "not_recorded" : state.asOf > lastDate ? "lapsed" : engine.daysBetween(state.asOf, lastDate) <= 30 ? "closing_soon" : "open";
+  const { lastDate, status } = repurchaseWindow(state, security, state.asOf);
   return { price: decOrNull(right?.pricePerShare ?? null), window: window ? periodJson(window) : null, lastDate, status };
 }
 
@@ -226,8 +247,13 @@ async function shareDetail(ctx: ReadContext, state: engine.LedgerState, security
     // Certificates are imported, unsigned records. Imported lots without one are
     // uncertificated; lots recorded in the app are book entries (the product rules).
     form: certificated ? "migrated_unsigned_certificate" : importedFromPulley(ctx, security) ? "uncertificated" : "book_entry",
-    legends: (await legendsOf(ctx, security, terms)).map((legend) => legend.name),
-    election83b: election ? { status: election.status, filedOn: election.filed_date } : null,
+    legends: (await legendsOf(ctx, state, security, terms)).map((legend) => legend.name),
+    holdingStartDate: typeof terms.x_holding_start_date === "string" ? terms.x_holding_start_date : null,
+    // Shares that vest over time are where an 83(b) election applies: without a record, that is "not recorded", never
+    // "not required". A lot that never vested over time needs none.
+    election83b: election
+      ? { status: election.status, filedOn: election.filed_date }
+      : engine.hasVestingSchedule(security) ? { status: "NOT_RECORDED", filedOn: null } : null,
     repurchase: repurchaseJson(state, security),
     origin: kind ? { kind, from: source?.identity.displayId ?? null } : null,
   };
@@ -260,7 +286,7 @@ function safeDetail(ctx: ReadContext, state: engine.LedgerState, security: engin
 async function holdingDetail(ctx: ReadContext, state: engine.LedgerState, security: engine.SecurityState, ownIds: ReadonlySet<string>): Promise<api.PortalSecurityDetail["detail"]> {
   switch (security.identity.family) {
     case "EQUITY_COMPENSATION":
-      return optionDetail(state, security, ownIds);
+      return optionDetail(ctx, state, security, ownIds);
     case "STOCK":
       return shareDetail(ctx, state, security, ownIds);
     case "WARRANT":

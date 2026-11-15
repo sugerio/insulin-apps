@@ -351,7 +351,7 @@ Cap Table works with exact numbers and never rounds behind your back. If a value
 totals don't add up, the preview asks you to fix it rather than guess.
 
 **Can I add more holdings after the import?**
-Cap Table records new option grants, exercises, terminations and cancellations. It has no forms to add share classes or
+Cap Table records new option grants, exercises, terminations, repurchases and cancellations. It has no forms to add share classes or
 plans, or to issue shares, so put everything you have into the import.
 
 **The import in the published app went wrong. Can I undo it?**

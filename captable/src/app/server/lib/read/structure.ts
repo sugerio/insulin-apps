@@ -22,6 +22,37 @@ interface ClassRow {
   version: number;
 }
 
+/** A name's runs of digits and of everything else, so "Series A-10" compares as ["series a-", 10]. */
+function nameParts(name: string): (string | number)[] {
+  return (name.toLowerCase().match(/\d+|\D+/g) ?? []).map((part) => (/^\d/.test(part) ? Number(part) : part));
+}
+
+/**
+ * The one order of share classes in every read and export (the product rules): Common first, then preferred in natural
+ * name order (Series A-1, A-2, …, A-10, then B), the id breaking a tie. Plain code-point comparison: no locale decides
+ * a cap table's column order.
+ */
+export function compareStockClasses(
+  a: { id: string; name: string; classType: "COMMON" | "PREFERRED" },
+  b: { id: string; name: string; classType: "COMMON" | "PREFERRED" },
+): number {
+  if (a.classType !== b.classType) return a.classType === "COMMON" ? -1 : 1;
+  const left = nameParts(a.name);
+  const right = nameParts(b.name);
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    const x = left[index]!;
+    const y = right[index]!;
+    if (x === y) continue;
+    if (typeof x === "number" && typeof y === "number") return x - y;
+    if (typeof x === "number") return -1;
+    if (typeof y === "number") return 1;
+    return x < y ? -1 : 1;
+  }
+  if (left.length !== right.length) return left.length - right.length;
+  if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 const CLASS_HISTORY = new Set(["TX_STOCK_CLASS_AUTHORIZED_SHARES_ADJUSTMENT", "TX_STOCK_CLASS_CONVERSION_RATIO_ADJUSTMENT", "X_STOCK_CLASS_TERMS", "TX_STOCK_CLASS_SPLIT"]);
 
 function classSummary(tx: engine.LedgerTransaction): string {
@@ -84,9 +115,9 @@ function stockClassJson(ctx: ReadContext, state: engine.LedgerState, row: ClassR
 }
 
 async function classRows(ctx: ReadContext, stockClassId?: string): Promise<ClassRow[]> {
-  const { results } = await ctx.db.prepare("SELECT * FROM stock_classes WHERE org_id = ?1 AND (?2 IS NULL OR id = ?2) ORDER BY name, id")
+  const { results } = await ctx.db.prepare("SELECT * FROM stock_classes WHERE org_id = ?1 AND (?2 IS NULL OR id = ?2)")
     .bind(ctx.org.id, stockClassId ?? null).all<ClassRow>();
-  return results;
+  return results.sort((a, b) => compareStockClasses({ id: a.id, name: a.name, classType: a.class_type }, { id: b.id, name: b.name, classType: b.class_type }));
 }
 
 export async function stockClassList(ctx: ReadContext, state: engine.LedgerState): Promise<api.StockClassList> {
@@ -146,6 +177,10 @@ async function stockPlanJson(ctx: ReadContext, state: engine.LedgerState, row: P
   const termsTx = terms ? state.applied.find((tx) => tx.id === terms.transactionId) : undefined;
   const documentId = termsTx?.type === "X_STOCK_PLAN_TERMS" ? (termsTx.payload.document_id ?? null) : null;
   const meta = ctx.ledger.txMeta.get(anchor.transactionId);
+  const history = state.applied.filter((tx) => (tx.type === "TX_STOCK_PLAN_POOL_ADJUSTMENT" || tx.type === "X_STOCK_PLAN_TERMS") && (tx.payload as { stock_plan_id?: string }).stock_plan_id === row.id);
+  // The command that set the plan up records its first terms and, only when the plan started with one, its initial
+  // pool; every later change of the reserve is a command of its own.
+  const setupCommandId = history.find((tx) => tx.type === "X_STOCK_PLAN_TERMS")?.commandId;
   return {
     id: row.id,
     name: row.name,
@@ -171,14 +206,14 @@ async function stockPlanJson(ctx: ReadContext, state: engine.LedgerState, row: P
     defaultRepurchaseWindow: terms?.defaultRepurchaseWindow ? { period: String(terms.defaultRepurchaseWindow.period), unit: terms.defaultRepurchaseWindow.period_type } : null,
     status: terms?.status ?? "active",
     pourOverPlanId: terms?.pourOverPlanId ?? null,
-    amendments: state.applied
-      .filter((tx) => (tx.type === "TX_STOCK_PLAN_POOL_ADJUSTMENT" || tx.type === "X_STOCK_PLAN_TERMS") && (tx.payload as { stock_plan_id?: string }).stock_plan_id === row.id)
-      .map((tx) => ({
-        effectiveDate: tx.effectiveDate,
-        transactionId: tx.id,
-        type: tx.type,
-        poolSize: tx.type === "TX_STOCK_PLAN_POOL_ADJUSTMENT" ? tx.payload.shares_reserved : null,
-      })),
+    amendments: history.map((tx) => ({
+      effectiveDate: tx.effectiveDate,
+      transactionId: tx.id,
+      type: tx.type,
+      // A terms record changes no reserve: it isn't an amendment of the plan's size.
+      kind: tx.type === "X_STOCK_PLAN_TERMS" ? "terms" as const : tx.commandId === setupCommandId ? "initial" as const : "reserve" as const,
+      poolSize: tx.type === "TX_STOCK_PLAN_POOL_ADJUSTMENT" ? tx.payload.shares_reserved : null,
+    })),
     version: row.version,
   };
 }

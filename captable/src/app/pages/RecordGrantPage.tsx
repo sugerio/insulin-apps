@@ -15,15 +15,17 @@ import { NewStakeholderCard } from "./StakeholderFormPage.tsx";
 import { amountOf, parseAmount } from "../lib/amounts.ts";
 import { addYears, DASH, formatDate } from "../lib/format.ts";
 import { fieldProblem, ledgerUnmoved, useWriteFlow, type FieldMap } from "../lib/flow.ts";
-import { periodLabel, RELATIONSHIP_LABELS, TERMINATION_WINDOW_LABELS, VALUATION_STATUS_LABELS } from "../lib/labels.ts";
+import { EXECUTION_LABELS, periodLabel, RELATIONSHIP_LABELS, TERMINATION_WINDOW_LABELS, VALUATION_STATUS_LABELS } from "../lib/labels.ts";
+import { exerciseCost, formatComputedMoney } from "../lib/portal.ts";
 import { counts409A } from "../lib/valuations.ts";
 import { usePii } from "../components/Pii.tsx";
 import { activeEmails } from "../lib/stakeholders.ts";
 import { allOf, useResource, type Resource } from "../lib/useResource.ts";
 
-// Record options: put a grant that is already approved and
-// signed on the ledger. Pulley's Issue Options layout: question cards on the left, a sticky summary on the right. The
-// summary's checks are early hints; the server's dry run is the authority, and its preview is what the admin confirms.
+// Record options: put a grant that is already approved on the ledger, signed by both parties or awaiting signatures
+// (execution pending until Mark executed). Pulley's Issue Options layout: question cards on the left, a sticky summary
+// on the right. The summary's checks are early hints; the server's dry run is the authority, and its preview is what
+// the admin confirms.
 
 type GrantResult = api.CommandResult;
 type GrantBody = Omit<api.GrantEquityCompensationInput, "expectedLedgerSeq" | "expectedDiffSha256">;
@@ -39,6 +41,10 @@ interface GrantValues {
   stakeholder: string;
   quantity: string;
   percent: string;
+  /** The target %'s base: the plan's pool, or the company's fully diluted shares on the grant date. */
+  percentOf: "plan" | "company";
+  /** The answer typed last: the other one follows it when its base changes. */
+  sizedBy: "quantity" | "percent";
   boardDate: string;
   consent: UploadedDocument | null;
   dateMode: "board" | "override";
@@ -65,9 +71,24 @@ interface GrantValues {
   state: string;
   issueReason: string;
   displayId: string;
+  /** "all": signed by both parties; otherwise whose signature is still missing. */
+  signatures: "all" | api.GrantMissingSignatures;
+  /** The executed agreement, or the agreement as signed so far. */
   agreement: UploadedDocument | null;
   signedByBoth: boolean;
 }
+
+/** The grant's execution status once recorded, for the review text. */
+const SIGNATURE_STATUS: Record<GrantValues["signatures"], api.ExecutionStatus> = {
+  all: "executed", holder: "pending_holder", company: "pending_company", both: "pending_both",
+};
+
+/** What a grant recorded before every signature is in still awaits, for the toast. */
+const AWAITING_TEXT: Partial<Record<api.ExecutionStatus, string>> = {
+  pending_holder: "awaiting the holder's signature",
+  pending_company: "awaiting the company signatory's signature",
+  pending_both: "awaiting both signatures",
+};
 
 /** Fields the admin typed into, so a later default (FMV, expiration, start date) no longer overwrites them. */
 type Touched = Partial<Record<"strike" | "expiration" | "vestingStart", boolean>>;
@@ -96,7 +117,8 @@ function issueField(path: string): keyof GrantValues | null {
   const head = path.split(".")[0] ?? "";
   if (path.startsWith("board.consent")) return "consent";
   if (path.startsWith("board.")) return "boardDate";
-  if (path.startsWith("executedAgreement")) return "agreement";
+  if (path.startsWith("executedAgreement") || path.startsWith("awaitingSignatures.agreementDocumentId")) return "agreement";
+  if (path.startsWith("awaitingSignatures")) return "signatures";
   if (path.startsWith("vesting.terms")) return "schedule";
   if (path.startsWith("vesting.vestingStartDate")) return "vestingStart";
   if (path.startsWith("vesting.accelerationTerms")) return "accelKind";
@@ -116,6 +138,27 @@ const GRANT_FIELDS: FieldMap = {
   issue: issueField,
   violation: (violation) => (violation.code === "NO_PRESUMPTIVELY_VALID_409A" ? "counselMemo" : VIOLATION_FIELDS[violation.code] ?? null),
 };
+
+/**
+ * What the agreement upload still lacks: the executed agreement, or the one the holder signed when only the company
+ * signs later (such a grant can be exercised meanwhile). Awaiting the holder, the agreement is optional.
+ */
+function agreementBlock(values: Pick<GrantValues, "signatures" | "agreement">): string | null {
+  if (values.agreement) return null;
+  if (values.signatures === "all") return "A new grant needs the executed agreement signed by both parties.";
+  if (values.signatures === "company") return "A grant awaiting only the company signatory needs the agreement the holder signed.";
+  return null;
+}
+
+/** The % of a base a number of options is, to 4 decimals (the target % field). */
+function percentOfBase(quantity: string, base: string): string {
+  return engine.Dec.parse(quantity).mul(100).divideTo(base, 4, "HALF_UP").toString();
+}
+
+/** Whole options for a target % of a base, rounded down. */
+function optionsForPercent(percent: string, base: string): string {
+  return engine.Dec.parse(percent).mul(base).divideTo(100, 0, "FLOOR").toString();
+}
 
 /** "OPT-57": the next free OPT number, as a hint; the server assigns the real one. */
 function nextOptionId(securities: readonly api.Security[]): string {
@@ -163,12 +206,13 @@ function definitionOf(values: GrantValues, templates: readonly api.VestingTerms[
 
 function initialValues(plans: readonly api.StockPlan[], templates: readonly api.VestingTerms[]): GrantValues {
   return {
-    plan: plans[0]?.id ?? "", stakeholder: "", quantity: "", percent: "", boardDate: "", consent: null, dateMode: "board", grantDate: "",
+    plan: plans[0]?.id ?? "", stakeholder: "", quantity: "", percent: "", percentOf: "plan", sizedBy: "quantity", boardDate: "", consent: null, dateMode: "board", grantDate: "",
     overrideReason: "", optionType: "ISO", employeeAtGrant: false, tenPercent: false, schedule: templates[0]?.id ?? EXPLICIT, explicit: "",
     vestingStart: "", early: "no", accelKind: "NONE", accelPercent: "100", accelMonths: "12", matches: false, strike: "", counselMemo: null,
     expiration: "", windowsMode: "inherit",
     windows: Object.fromEntries(WINDOW_REASONS.map((reason) => [reason, { period: "3", unit: "MONTHS" }])) as GrantValues["windows"],
-    federal: "RULE_701", country: "", state: "California 25102(o)", issueReason: "New-hire grant", displayId: "", agreement: null, signedByBoth: false,
+    federal: "RULE_701", country: "", state: "California 25102(o)", issueReason: "New-hire grant", displayId: "", signatures: "all", agreement: null,
+    signedByBoth: false,
   };
 }
 
@@ -234,6 +278,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
   const grantDate = values.dateMode === "board" ? values.boardDate : values.grantDate;
   const dateReady = DATE.test(grantDate);
   const iso = values.optionType === "ISO";
+  const signedAll = values.signatures === "all";
   const quantity = amountOf(values.quantity, { positive: true, unit: org.shareUnit, unitName: "options" });
   const definition = definitionOf(values, templates);
   // The admin's own record is never offered: no admin records a grant on their own holdings.
@@ -280,18 +325,43 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
     setValues((current) => ({ ...current, strike }));
   }, [fmvPrice, iso, values.tenPercent, touched.strike]);
 
+  // Grant sizing: a target % of the plan's pool, or of the company's fully diluted shares on the grant date.
+  // The fully diluted count already includes the unissued pool the grant comes from, so the grant doesn't change it
+  // and needs no gross-up. Whole options, rounded down; the % achieved is shown.
+  const fullyDiluted = useResource(
+    (signal) => apiRequest(api.routes.getCapTable, { params: { orgId }, query: { asOf: grantDate, tab: "safes" }, signal }), // every tab carries the metrics
+    [orgId, grantDate],
+    dateReady && values.percentOf === "company",
+  );
+  const baseValue = values.percentOf === "plan" ? plan?.poolSize ?? null : dateReady ? fullyDiluted.data?.metrics.fullyDiluted ?? null : null;
+  const base = baseValue !== null && engine.Dec.parse(baseValue).isPositive() ? baseValue : null;
+  // A new base (another plan, the other choice, the grant date's fully diluted count) keeps the answer typed last.
+  useEffect(() => {
+    if (base === null) return;
+    setValues((current) => {
+      if (current.sizedBy === "percent") {
+        const typed = amountOf(current.percent);
+        return typed ? { ...current, quantity: optionsForPercent(typed, base) } : current;
+      }
+      const typed = amountOf(current.quantity);
+      return typed ? { ...current, percent: percentOfBase(typed, base) } : current;
+    });
+  }, [base]);
   const setQuantity = (text: string) => {
     set("quantity", text);
+    set("sizedBy", "quantity");
     const typed = amountOf(text);
-    if (typed && plan && engine.Dec.parse(plan.poolSize).isPositive()) {
-      set("percent", engine.Dec.parse(typed).mul(100).divideTo(plan.poolSize, 4, "HALF_UP").toString());
-    } else if (!text.trim()) set("percent", "");
+    if (typed && base) set("percent", percentOfBase(typed, base));
+    else if (!text.trim()) set("percent", "");
   };
   const setPercent = (text: string) => {
     set("percent", text);
+    set("sizedBy", "percent");
     const typed = amountOf(text);
-    if (typed && plan) set("quantity", engine.Dec.parse(typed).mul(plan.poolSize).divideTo(100, 0, "FLOOR").toString());
+    if (typed && base) set("quantity", optionsForPercent(typed, base));
   };
+  // Rounded down, so it never shows more than the grant gives.
+  const achieved = quantity && base ? engine.Dec.parse(quantity).mul(100).divideTo(base, 4, "FLOOR").toString() : null;
 
   const dryRun = (frozen: GrantBody, signal?: AbortSignal) => apiRequest(api.routes.grantEquityCompensation, { params: { orgId }, dryRun: true, body: frozen, signal });
   const flow = useWriteFlow({
@@ -303,9 +373,14 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
     fields: GRANT_FIELDS,
     onCommitted: (result: GrantResult) => {
       const id = result.created.securityIds[0];
-      const created = result.changes.find((change) => change.entity === "security" && change.id === id)?.after?.displayId;
-      const name = typeof created === "string" ? created : "The grant";
-      toast({ message: `${name} recorded — outstanding (executed); no e-mail sent`, to: id ? href(`securities/${id}`) : undefined, linkLabel: "Open grant" });
+      const after = result.changes.find((change) => change.entity === "security" && change.id === id)?.after;
+      const name = typeof after?.displayId === "string" ? after.displayId : "The grant";
+      const awaiting = AWAITING_TEXT[after?.executionStatus as api.ExecutionStatus];
+      toast({
+        message: awaiting ? `${name} recorded — outstanding, ${awaiting}; no e-mail sent` : `${name} recorded — outstanding (executed); no e-mail sent`,
+        to: id ? href(`securities/${id}`) : undefined,
+        linkLabel: "Open grant",
+      });
       navigate(id ? href(`securities/${id}`) : back);
     },
   });
@@ -351,7 +426,9 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
       legendIds: [],
       ...(values.issueReason.trim() ? { issueReason: values.issueReason.trim() } : {}),
       ...(values.displayId.trim() ? { displayId: values.displayId.trim() } : {}),
-      executedAgreement: { documentId: values.agreement?.id ?? "", signedByHolderAndSignatory: true },
+      ...(values.signatures === "all"
+        ? { executedAgreement: { documentId: values.agreement?.id ?? "", signedByHolderAndSignatory: true as const } }
+        : { awaitingSignatures: { missing: values.signatures, ...(values.agreement ? { agreementDocumentId: values.agreement.id } : {}) } }),
     };
   }
 
@@ -375,7 +452,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
       if (parsed.error) found.schedule = parsed.error;
     } else if (!values.schedule) found.schedule = "Choose a vesting schedule.";
     if (!DATE.test(values.vestingStart)) found.vestingStart = "Enter the vesting start date.";
-    if (!values.matches) found.matches = "Confirm that the generated table matches the signed agreement.";
+    if (!values.matches) found.matches = `Confirm that the generated table matches the ${signedAll ? "signed" : "grant"} agreement.`;
     const strike = parseAmount(values.strike, { positive: true });
     if (!strike) found.strike = "Enter the exercise price.";
     else if (!strike.ok) found.strike = strike.error;
@@ -390,8 +467,9 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
         if (!period?.ok) found.windowsMode = `Enter the ${TERMINATION_WINDOW_LABELS[reason]!.toLowerCase()} window (0 is allowed).`;
       }
     }
-    if (!values.agreement) found.agreement = "A new grant needs the executed agreement signed by both parties.";
-    else if (!values.signedByBoth) found.signedByBoth = "Confirm that the PDF is signed by both the holder and the company signatory.";
+    const agreementProblem = agreementBlock(values);
+    if (agreementProblem) found.agreement = agreementProblem;
+    else if (signedAll && !values.signedByBoth) found.signedByBoth = "Confirm that the PDF is signed by both the holder and the company signatory.";
     return found;
   }
 
@@ -419,8 +497,12 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
   }
   if (iso && values.tenPercent && dateReady && DATE.test(values.expiration) && values.expiration > addYears(grantDate, 5)) blocks.push("A 10%-holder's ISO needs a term of at most 5 years.");
   if (iso && holder && !ISO_ELIGIBLE.has(holder.relationship)) blocks.push(`An ISO can be granted only to an employee (${holder.displayName} is recorded as ${RELATIONSHIP_LABELS[holder.relationship]}).`);
-  if (!values.agreement) blocks.push("A new grant needs the executed agreement signed by both parties.");
+  const agreementProblem = agreementBlock(values);
+  if (agreementProblem) blocks.push(agreementProblem);
   const memoOffered = noValid409a || (!iso && fmvPrice !== null && strike !== null && engine.Dec.parse(strike).lt(engine.Dec.parse(fmvPrice))) || errorOf("counselMemo") !== undefined;
+  // The holder's cost to exercise every option: quantity × strike, exactly, shown to the cent.
+  const cost = quantity && strike ? formatComputedMoney(exerciseCost(quantity, strike)) : null;
+  const costText = cost ? `${cost.text}${cost.rounded ? ", rounded to the cent" : ""}` : DASH;
 
   const editing = flow.phase === "edit" || flow.phase === "previewing";
   const optionId = securities.data ? nextOptionId(securities.data.items) : null;
@@ -464,7 +546,10 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
             <Question n={3} title="How many?" required>
               <div className="form-grid">
                 <AmountField label="Number of options" value={values.quantity} onChange={setQuantity} suffix="Options" hint="Whole options only." error={errorOf("quantity")} />
-                <AmountField label="or target % of plan" value={values.percent} onChange={setPercent} suffix="% of plan" />
+                <AmountField label="or target %" value={values.percent} onChange={setPercent} suffix={values.percentOf === "plan" ? "% of plan" : "% of company"} hint="Rounded down to whole options." />
+                <SelectField label="Target % of" value={values.percentOf} onChange={(value) => set("percentOf", value as GrantValues["percentOf"])}
+                  options={[["plan", "The plan's pool"], ["company", "The company, fully diluted"]]} />
+                <SizingBase choice={values.percentOf} plan={plan} grantDate={dateReady ? grantDate : null} fullyDiluted={fullyDiluted} base={base} achieved={achieved} />
               </div>
             </Question>
             <Question n={4} title="Board approval" required>
@@ -520,7 +605,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
               </div>
               <VestingTable preview={preview} ready={definition !== null && quantity !== null && vestingStartReady} />
               <div className="mt-8">
-                <CheckLine checked={values.matches} onChange={(checked) => set("matches", checked)} error={errorOf("matches")}><b>Matches the signed agreement</b> <span className="req">*</span></CheckLine>
+                <CheckLine checked={values.matches} onChange={(checked) => set("matches", checked)} error={errorOf("matches")}><b>Matches the {signedAll ? "signed" : "grant"} agreement</b> <span className="req">*</span></CheckLine>
               </div>
             </Question>
             <Question n={8} title="Exercise price" required>
@@ -561,11 +646,28 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                 <div className="fld"><span className="lbl">Legends</span><div className="small muted">Defaults: none on options (set on exercise shares)</div></div>
               </div>
             </Question>
-            <Question n={11} title="Executed agreement" required>
-              <DocumentUpload label="Executed agreement (PDF)" kind="GRANT_AGREEMENT" required value={values.agreement} onChange={(document) => set("agreement", document)} error={errorOf("agreement")} disabled={!editing}
-                hint="The PDF signed by both the holder and the company signatory." />
+            <Question n={11} title="Signatures" required>
+              <RadioCards label="Signatures" value={values.signatures} onChange={(value) => set("signatures", value as GrantValues["signatures"])} error={errorOf("signatures")} options={[
+                { value: "all", label: "Signed by both", sub: "The holder and the company signatory have signed" },
+                { value: "holder", label: "Awaiting the holder", sub: "Can't be exercised until the holder signs" },
+                { value: "company", label: "Awaiting the company", sub: "The holder has signed; this doesn't block exercise" },
+                { value: "both", label: "Awaiting both", sub: "Recorded at board approval, before anyone signs" },
+              ]} />
               <div className="mt-8">
-                <CheckLine checked={values.signedByBoth} onChange={(checked) => set("signedByBoth", checked)} error={errorOf("signedByBoth")}>This PDF is signed by both the holder and the company signatory</CheckLine>
+                {signedAll ? (
+                  <>
+                    <DocumentUpload label="Executed agreement (PDF)" kind="GRANT_AGREEMENT" required value={values.agreement} onChange={(document) => set("agreement", document)} error={errorOf("agreement")} disabled={!editing}
+                      hint="The PDF signed by both the holder and the company signatory." />
+                    <div className="mt-8">
+                      <CheckLine checked={values.signedByBoth} onChange={(checked) => set("signedByBoth", checked)} error={errorOf("signedByBoth")}>This PDF is signed by both the holder and the company signatory</CheckLine>
+                    </div>
+                  </>
+                ) : (
+                  <DocumentUpload
+                    label={values.signatures === "company" ? "Agreement signed by the holder (PDF)" : "Agreement as signed so far (PDF, optional)"}
+                    kind="GRANT_AGREEMENT" required={values.signatures === "company"} value={values.agreement} onChange={(document) => set("agreement", document)} error={errorOf("agreement")} disabled={!editing}
+                    hint="Kept as evidence. The grant stays execution pending until Mark executed records the missing signatures with the fully signed agreement." />
+                )}
               </div>
             </Question>
           </fieldset>
@@ -573,7 +675,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
             <h2 className="q">12. Review &amp; record</h2>
             {flow.phase === "edit" || flow.phase === "previewing" ? (
               <>
-                <p className="small muted">The server checks the grant against the ledger and shows what it will record. The grant is recorded OUTSTANDING with execution status Executed. The holder sees the grant in their holder view.</p>
+                <p className="small muted">The server checks the grant against the ledger and shows what it will record. The grant is recorded OUTSTANDING with execution status {EXECUTION_LABELS[SIGNATURE_STATUS[values.signatures]]}. The holder sees the grant in their holder view.</p>
                 <div className="row mt-8">
                   <button type="button" className="btn btn-primary" onClick={review} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : "Review"}</button>
                   <Link className="btn btn-ghost" to={back}>Cancel</Link>
@@ -604,7 +706,9 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
               ["Available after this grant", plan ? `${format.shares(plan.availableToGrant)} → ${availableAfter(plan.availableToGrant, quantity, format.shares)}` : DASH],
               ["Grant size", quantity ? `${format.shares(quantity)} options` : DASH],
               ["Type", values.optionType],
+              ["Execution status", EXECUTION_LABELS[SIGNATURE_STATUS[values.signatures]]],
               ["Exercise price", strike ? format.price(strike) : DASH],
+              ["Cost to exercise", costText],
               ["FMV (409A)", fmv.data?.fmv ? `${format.price(fmv.data.fmv.pricePerShare)} · ${fmv.data.fmv.valuationName}, ${VALUATION_STATUS_LABELS[fmv.data.fmv.status].toLowerCase()}` : noValid409a ? <Badge tone="red">No presumptively valid 409A</Badge> : DASH],
               ["Vesting", templates.find((template) => template.id === values.schedule)?.name ?? (values.schedule === EXPLICIT ? "Explicit tranches" : DASH)],
               ["Vesting start", formatDate(values.vestingStart || null)],
@@ -637,6 +741,33 @@ function Question({ n, title, required, children }: { n: number; title: string; 
       {children}
     </section>
   );
+}
+
+/** What the target % is of, and the % the whole options give. */
+function SizingBase({ choice, plan, grantDate, fullyDiluted, base, achieved }: {
+  choice: GrantValues["percentOf"];
+  plan: api.StockPlan | null;
+  grantDate: string | null;
+  fullyDiluted: Resource<api.CapTableResponse>;
+  base: string | null;
+  achieved: string | null;
+}) {
+  const { format } = useWorkspace();
+  let text: ReactNode;
+  if (choice === "company" && grantDate === null) text = <span className="muted">Read as of the grant date: enter it first.</span>;
+  else if (choice === "company" && fullyDiluted.error !== undefined) {
+    text = <span className="err-inline">Couldn't load the fully diluted shares. <button type="button" className="btn-link small" onClick={fullyDiluted.reload}>Try again</button></span>;
+  } else if (choice === "company" && !fullyDiluted.data) text = <span className="muted" role="status">Loading the fully diluted shares…</span>;
+  else if (base === null) text = <span className="muted">{choice === "plan" && plan === null ? "Choose the equity plan first." : "No shares to size against."}</span>;
+  else {
+    text = (
+      <>
+        {choice === "plan" ? `${plan?.name ?? "The plan"}'s pool: ${format.shares(base)}` : `Fully diluted on ${formatDate(grantDate)}: ${format.shares(base)}`}
+        {achieved !== null ? <> · achieved <b>{achieved}%</b></> : null}
+      </>
+    );
+  }
+  return <div className="fld"><span className="lbl">Sized against</span><div className="small">{text}</div></div>;
 }
 
 /** The generated tranche table (the vesting preview the server computes from the definition). */

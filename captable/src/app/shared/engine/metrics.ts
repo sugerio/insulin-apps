@@ -330,6 +330,7 @@ export function computeMetrics(state: LedgerState): CapTableMetrics {
           const position = positionAt(state, security, state.asOf);
           row.vestedOptions = row.vestedOptions.add(position.vestedOutstanding);
           row.unvestedOptions = row.unvestedOptions.add(position.unvestedOutstanding);
+          // Every pending status: a workflow count of grants awaiting a signature, exercisable or not.
           if (security.executionStatus.startsWith("pending")) {
             executionPending = executionPending.add(outstanding);
             executionPendingCount += 1;

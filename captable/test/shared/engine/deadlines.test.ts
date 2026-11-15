@@ -155,6 +155,9 @@ describe("exercisability and expiry", () => {
     const m = miniOrg();
     const vesting = grant(m, "OPT-1", m.alice, "4800", "2025-01-01");
     const pending = grant(m, "OPT-2", m.alice, "100", "2025-01-01", { vesting: null, execution: "pending_both" });
+    const holderPending = grant(m, "OPT-7", m.alice, "100", "2025-01-01", { vesting: null, execution: "pending_holder" });
+    // Only the company signatory's signature is missing, which doesn't block exercise.
+    const companyPending = grant(m, "OPT-8", m.alice, "100", "2025-01-01", { vesting: null, execution: "pending_company" });
     const expired = grant(m, "OPT-3", m.alice, "100", "2025-01-01", { vesting: null, expiration: "2026-01-01" });
     const early = grant(m, "OPT-4", m.alice, "4800", "2026-01-01", { early: true });
     const done = grant(m, "OPT-5", m.carol, "100", "2025-01-01", { vesting: null, type: "OPTION_NSO" });
@@ -170,6 +173,8 @@ describe("exercisability and expiry", () => {
     expect(of(vesting)).toMatchObject({ exercisable: e.Dec.from(1700), blockedBy: null });
     expect(of(vesting, "2025-06-01").blockedBy).toBe("nothing_vested");
     expect(of(pending).blockedBy).toBe("execution_pending");
+    expect(of(holderPending)).toMatchObject({ exercisable: e.Dec.ZERO, blockedBy: "execution_pending" });
+    expect(of(companyPending)).toMatchObject({ exercisable: e.Dec.from(100), blockedBy: null });
     expect(of(expired).blockedBy).toBe("past_expiration");
     expect(of(done).blockedBy).toBe("not_outstanding");
     expect(of(rsu).blockedBy).toBe("not_exercisable_type");
@@ -224,6 +229,27 @@ describe("exercisability and expiry", () => {
     terminate(n, "alice", n.alice, "2025-03-01");
     state = n.b.replay(D);
     expect(e.repurchaseDeadline(state, state.securities.get(lot)!)).toBeNull();
+  });
+
+  it("gives a lot whose agreement sets no repurchase deadline no date, never the plan's default", () => {
+    const m = miniOrg(); // the plan's default repurchase window is 90 days
+    const vesting = { start: "2025-01-01", months: 10, cliff: 0 };
+    const none = issueStock(m, "CS-1", m.alice, "100", "2025-01-01", { planId: m.plan, origin: "RSA", vestingMonths: vesting, repurchaseRight: { price_per_share: usd("0.01"), window: null, x_no_deadline: true } });
+    const inherits = issueStock(m, "CS-2", m.alice, "100", "2025-01-01", { planId: m.plan, origin: "RSA", vestingMonths: vesting, repurchaseRight: { price_per_share: usd("0.01"), window: null } });
+    terminate(m, "alice", m.alice, "2025-03-01");
+    let state = m.b.replay(D);
+    expect(state.securities.get(none)!.repurchaseRight).toMatchObject({ window: null, noDeadline: true });
+    expect(e.repurchaseDeadlineSource(state, state.securities.get(none)!)).toEqual({ date: null, terms: null, noDeadline: true });
+    expect(e.repurchaseDeadline(state, state.securities.get(inherits)!)).toBe("2025-05-30");
+    expect(e.repurchaseDeadlineSource(state, state.securities.get(inherits)!).noDeadline).toBe(false);
+    // Unvested shares stay repurchaseable without a time limit (not "not recorded").
+    expect(e.securityNumbers(state, state.securities.get(none)!).repurchaseable.isPositive()).toBe(true);
+    // A deadline recorded later (an amended agreement) still wins.
+    m.b.command("deadline", (c) => {
+      c.tx("X_SECURITY_MODIFICATION", "2025-03-02", { kind: "REPURCHASE_DEADLINE", security_id: none, last_repurchase_date: "2025-04-01" });
+    });
+    state = m.b.replay(D);
+    expect(e.repurchaseDeadlineSource(state, state.securities.get(none)!)).toEqual({ date: "2025-04-01", terms: null, noDeadline: false });
   });
 });
 

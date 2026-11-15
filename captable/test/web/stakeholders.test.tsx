@@ -40,11 +40,12 @@ describe("stakeholders list", () => {
     expect(screen.getAllByRole("link", { name: "Leila Farahani" })).toHaveLength(1);
   });
 
-  it("flags duplicate e-mails for admins who see personal data", async () => {
+  it("flags a sign-in address shared by two records for admins who see personal data, without calling it a duplicate", async () => {
     const twin = stakeholder({ id: uuid(3, 91), displayName: "Daniel Achterberg (duplicate)", emails: STAKEHOLDERS.daniel.emails });
     renderPage("stakeholders", [mock(api.routes.listStakeholders, stakeholderList([STAKEHOLDERS.daniel, twin]))]);
     const table = await screen.findByRole("table", { name: "Stakeholders" });
-    expect(within(table).getAllByText("Duplicate")).toHaveLength(2);
+    expect(within(table).getAllByText("Shared sign-in address")).toHaveLength(2);
+    expect(within(table).queryByText("Duplicate")).toBeNull();
   });
 
   it("filters by status and searches by e-mail", async () => {
@@ -137,6 +138,13 @@ describe("stakeholder detail", () => {
     expect(within(documents).getByRole("button", { name: "Download OPT-1 Option Agreement.pdf" })).toBeTruthy();
     expect(within(documents).getByText("Yes")).toBeTruthy();
     expect(await screen.findByText("Daniel Achterberg updated")).toBeTruthy();
+  });
+
+  it("offers a labelled Preview as stakeholder for this record, read-only roles included", async () => {
+    renderPage(`stakeholders/${IDS.daniel}`, handlers(), { role: "admin_ro" });
+    const preview = await screen.findByRole("link", { name: "Preview as stakeholder" });
+    expect(preview.textContent?.trim()).toBe("Preview as stakeholder");
+    expect(preview.getAttribute("href")).toBe(`${base}/stakeholders/${IDS.daniel}/preview`);
   });
 
   it("masks personal data for editors without personal data", async () => {

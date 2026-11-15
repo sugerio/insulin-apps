@@ -9,6 +9,7 @@ import { parsePayload, type IssuanceOrigin } from "./payloads.ts";
 import { DEFAULT_PLAN_RETURN_RULES, ruleFor, rulesFromPayload, type PoolEvent } from "./plan-rules.ts";
 import { hasVestingSchedule, positionAt, vestingInputsFor } from "./positions.ts";
 import { Rational } from "./rational.ts";
+import { blocksExercise } from "./schemas.ts";
 import type {
   ClassState,
   EngineReference,
@@ -567,6 +568,20 @@ class Replayer {
     return tx.source === "import" ? "warning" : "error";
   }
 
+  /**
+   * The execution gate of an exercise (the ledger rules): a missing holder-side signature blocks it. A grant awaiting
+   * only the company signatory's signature can be exercised; an exercise recorded in the app says so, as a warning the
+   * admin acknowledges.
+   */
+  private executionGate(tx: LedgerTransaction, security: SecurityState, what: "grant" | "warrant"): void {
+    const id = security.identity.id;
+    if (blocksExercise(security.executionStatus)) {
+      this.violation("EXECUTION_PENDING", this.importTolerant(tx), `A ${what} awaiting the holder's signature can't be exercised until it is marked executed`, tx, id);
+    } else if (security.executionStatus === "pending_company" && tx.source !== "import") {
+      this.violation("EXECUTION_PENDING_COMPANY", "warning", `The ${what} still awaits the company signatory's signature; it can be exercised meanwhile`, tx, id);
+    }
+  }
+
   private ref(tx: LedgerTransaction): TxRef {
     return { transactionId: tx.id, commandId: tx.commandId, date: tx.effectiveDate };
   }
@@ -1100,6 +1115,7 @@ class Replayer {
       security.repurchaseRight = {
         pricePerShare: p.x_repurchase_right.price_per_share === null ? null : Dec.parse(p.x_repurchase_right.price_per_share.amount),
         window: p.x_repurchase_right.window,
+        noDeadline: p.x_repurchase_right.x_no_deadline === true,
       };
     }
     this.setVesting(tx, security, p.vesting_terms_id, p.x_definition_sha256, quantity);
@@ -1246,11 +1262,13 @@ class Replayer {
       this.violation("REPURCHASE_EXCEEDS_VESTED", "error", `Buys back ${quantity} vested of ${position.vestedOutstanding}`, tx, security.identity.id);
     }
     if (p.x_kind === "UNVESTED") {
-      // The company's right lasts until its deadline (the product rules: an expired right blocks).
+      // The company's right lasts until its deadline (the product rules: an expired right blocks, unless counsel's
+      // authority for the late repurchase is on the transaction).
       const deadline = repurchaseDeadlineSource(this.state, security);
       this.read("relies_on_terms", deadline.terms?.commandId);
       if (deadline.date !== null && tx.effectiveDate > deadline.date) {
-        this.violation("REPURCHASE_AFTER_DEADLINE", this.importTolerant(tx), `The repurchase right ended on ${deadline.date}`, tx, security.identity.id);
+        const severity = p.x_authority_document !== undefined ? "warning" : this.importTolerant(tx);
+        this.violation("REPURCHASE_AFTER_DEADLINE", severity, `The repurchase right ended on ${deadline.date}`, tx, security.identity.id);
       }
       this.actOn(tx, security, true);
     }
@@ -1358,9 +1376,7 @@ class Replayer {
     if (deadline !== null && date > deadline.date) {
       this.violation("AFTER_CONTRACTUAL_DEADLINE", "error", `Exercised after the contractual deadline ${deadline.date}`, tx, id);
     }
-    if (security.executionStatus.startsWith("pending")) {
-      this.violation("EXECUTION_PENDING", this.importTolerant(tx), "An execution-pending grant can't be exercised until it is marked executed", tx, id);
-    }
+    this.executionGate(tx, security, "grant");
     // Portions and lots are part of every exercise (the ledger rules): each resulting lot's tax portion, which Form 3921
     // reads, and the ISO and NSO lots consumed, frozen here. The schema requires both; these are the totals and their
     // consistency (I4).
@@ -1548,9 +1564,7 @@ class Replayer {
     if (security.expirationDate !== null && tx.effectiveDate > security.expirationDate) {
       this.violation("AFTER_EXPIRATION", "error", `Exercised after the expiration date ${security.expirationDate}`, tx, id);
     }
-    if (security.executionStatus.startsWith("pending")) {
-      this.violation("EXECUTION_PENDING", this.importTolerant(tx), "An execution-pending warrant can't be exercised", tx, id);
-    }
+    this.executionGate(tx, security, "warrant");
     security.exercised = security.exercised.add(quantity);
     security.resultingSecurityIds.push(...p.resulting_security_ids);
     this.changeOutstanding(security, quantity.neg());

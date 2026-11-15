@@ -21,8 +21,8 @@ import { useToast } from "../Toast.tsx";
 // the commands that depend on it (they are reversed first, each with its own reason), the effects and whether it is
 // blocked; the main object's label is typed to confirm. Imported history isn't reversible in the app.
 
-/** What can be reversed: an exercise with its shares, a grant, termination, cancellation, Mark executed or identity merge. */
-export const REVERSIBLE_COMMAND_TYPES = new Set(["exercise-option", "grant-equity-compensation", "terminate-stakeholder", "cancel-security", "mark-executed", "merge-stakeholders"]);
+/** What can be reversed: an exercise with its shares, a grant, termination, cancellation, a repurchase with its balance lot, Mark executed or identity merge. */
+export const REVERSIBLE_COMMAND_TYPES = new Set(["exercise-option", "grant-equity-compensation", "terminate-stakeholder", "cancel-security", "record-repurchase", "mark-executed", "merge-stakeholders"]);
 
 export interface ReverseTarget {
   /**

@@ -1,4 +1,4 @@
-import type { api } from "#shared";
+import { api } from "#shared";
 
 type FederalExemption = (typeof api.FEDERAL_EXEMPTIONS)[number];
 type PaymentMethod = (typeof api.PAYMENT_METHODS)[number];
@@ -97,6 +97,14 @@ export function isExecutionPending(status: api.ExecutionStatus): boolean {
   return status.startsWith("pending");
 }
 
+/**
+ * Whether the status blocks exercise, the engine's `blocksExercise`: only a missing holder-side signature does.
+ * A grant awaiting only the company signatory's signature is still execution pending, and exercisable.
+ */
+export function blocksExercise(status: api.ExecutionStatus): boolean {
+  return status === "pending_holder" || status === "pending_both";
+}
+
 export const MISSING_LABELS: Record<"company_signatory" | "holder" | "both", string> = {
   company_signatory: "Company signatory",
   holder: "Holder",
@@ -155,6 +163,12 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   MANUAL_UNSPECIFIED: "Manual (method not recorded)",
   OTHER: "Other",
 };
+
+/** How an exercise was paid: an imported exercise whose source named no method says so, not a blank. */
+export function exercisePaymentLabel(exercise: Pick<api.ExerciseRecord, "paymentMethod" | "source">, source: api.ImportSource | null | undefined = null): string {
+  if (exercise.paymentMethod) return PAYMENT_METHOD_LABELS[exercise.paymentMethod];
+  return exercise.source.kind === "migrated" ? `Not recorded in ${api.importSourceName(source)}` : "—";
+}
 
 export const TAX_TREATMENT_LABELS: Record<TaxTreatment, string> = {
   W2: "W-2",

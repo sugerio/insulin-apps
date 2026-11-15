@@ -56,6 +56,8 @@ export interface HolderDocument {
   filename: string;
   kind: DocumentKind;
   createdAt: number;
+  /** An imported document: when it was uploaded where it came from. */
+  sourceCreatedAt: number | null;
   scope: "mine" | "company";
 }
 
@@ -86,7 +88,7 @@ export async function listHolderDocuments(
   const visible: HolderDocument[] = [];
   for (const row of results) {
     const scope = evaluateHolderDocumentAccess(row, holders.get(row.id)!, ownIds);
-    if (scope) visible.push({ id: row.id, filename: row.filename, kind: row.kind, createdAt: row.created_at, scope });
+    if (scope) visible.push({ id: row.id, filename: row.filename, kind: row.kind, createdAt: row.created_at, sourceCreatedAt: row.source_created_at, scope });
   }
   return visible;
 }

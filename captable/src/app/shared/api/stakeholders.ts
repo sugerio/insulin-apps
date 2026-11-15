@@ -175,7 +175,9 @@ export const patchStakeholderRequestSchema = z
     taxStatus: stakeholderProfileShape.taxStatus.optional(),
     hireDate: stakeholderProfileShape.hireDate.nullable().optional(),
     comments: stakeholderProfileShape.comments.nullable().optional(),
-    relationship: relationshipSchema.exclude(["ex_employee"]).optional(), // ex_employee is set by a termination
+    // ex_employee is set by a termination, never here. An ex-employee's relationship changes here only when no
+    // termination is recorded or scheduled (a record imported so); otherwise 409 state_changed: reverse it instead.
+    relationship: relationshipSchema.exclude(["ex_employee"]).optional(),
     portalAccess: portalAccessSchema.optional(),
   })
   .refine(({ version: _version, ...fields }) => Object.values(fields).some((value) => value !== undefined), "Nothing to update");

@@ -120,7 +120,8 @@ export function PreviewWorkspace() {
               <div className="preview-banner" role="note">
                 <Icon name="eye" />
                 <div>
-                  You are previewing the portal as <b>{name}</b>. Every portal action is disabled.{" "}
+                  You are previewing the portal as <b>{name}</b>. It shows this one stakeholder record: a holder whose sign-in address is on
+                  other records too sees their holdings as well. Every portal action is disabled.{" "}
                   <Link to={base}>Portfolio</Link> · <Link to={`${base}/how-to-exercise`}>How to exercise</Link> · <Link to={`${base}/documents`}>Documents</Link>
                 </div>
               </div>

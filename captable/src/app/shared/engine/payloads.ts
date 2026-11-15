@@ -144,6 +144,11 @@ const RepurchaseRight = z.strictObject({
   price_per_share: Monetary.nullable(),
   window: PeriodSchema.nullable(),
   terms_text: z.string().max(2000).optional(),
+  /**
+   * The agreement sets no deadline for the right (a recorded term): the lot has no last
+   * repurchase date and never takes its plan's default window; a window beside it is ignored.
+   */
+  x_no_deadline: z.literal(true).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -224,6 +229,21 @@ export const StockRepurchasePayload = z
     /** UNVESTED: the company's repurchase right after termination; VESTED: a buyback (the product rules). */
     x_kind: z.enum(["UNVESTED", "VESTED"]),
     x_consideration: Monetary.optional(),
+    /** A repurchase completed and paid off-platform (record-repurchase): how and when the company paid. */
+    x_payment: z
+      .strictObject({
+        method: PaymentMethod,
+        paid_date: IsoDateString,
+        reference: z.string().min(1).max(200).optional(),
+      })
+      .optional(),
+    /** The repurchase notice to the holder; its hash puts the evidence on the chain. */
+    x_notice: DocumentRef.optional(),
+    /**
+     * Counsel's authority for a repurchase after the deadline, or with none recorded (the product rules): with it, a
+     * late repurchase is a reviewed exception (REPURCHASE_AFTER_DEADLINE is a warning).
+     */
+    x_authority_document: DocumentRef.optional(),
     x_evidence,
   })
   .refine(balanceApart, BALANCE_APART);

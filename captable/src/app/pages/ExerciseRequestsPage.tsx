@@ -18,7 +18,7 @@ import { Timeline } from "../components/Timeline.tsx";
 import { isPositive, multiplyDecimals, subtractDecimals, sumDecimals, compareDecimals } from "../lib/decimal.ts";
 import { describeError } from "../lib/errors.ts";
 import { DASH, formatDate } from "../lib/format.ts";
-import { EXERCISE_REQUEST_STATUS_LABELS, PAYMENT_METHOD_LABELS, TAX_TREATMENT_LABELS } from "../lib/labels.ts";
+import { EXERCISE_REQUEST_STATUS_LABELS, PAYMENT_METHOD_LABELS, TAX_TREATMENT_LABELS, exercisePaymentLabel } from "../lib/labels.ts";
 import { allOf, notFoundAsNull, useResource, type Resource } from "../lib/useResource.ts";
 import { exerciseSource } from "./StakeholderPage.tsx";
 
@@ -111,7 +111,7 @@ function ExercisesTab({ exercises, lookups }: { exercises: readonly api.Exercise
     { key: "iso", label: "ISO qty", numeric: true, render: (row) => (isPositive(row.isoQuantity) ? format.shares(row.isoQuantity) : DASH), compare: byDecimal((row) => row.isoQuantity) },
     { key: "nso", label: "NSO qty", numeric: true, render: (row) => (isPositive(row.nsoQuantity) ? format.shares(row.nsoQuantity) : DASH), compare: byDecimal((row) => row.nsoQuantity) },
     { key: "cost", label: "Cost", numeric: true, render: (row) => format.money(row.cost), compare: byDecimal((row) => row.cost) },
-    { key: "method", label: "Payment method", render: (row) => (row.paymentMethod ? PAYMENT_METHOD_LABELS[row.paymentMethod] : DASH) },
+    { key: "method", label: "Payment method", render: (row) => exercisePaymentLabel(row, workspace.org.importSource) },
     { key: "tax", label: "Tax treatment", render: (row) => (row.taxTreatment ? TAX_TREATMENT_LABELS[row.taxTreatment] : DASH) },
     { key: "wh", label: "Withholding entered", numeric: true, render: (row) => (isPositive(withholdingTotal(row.withholding)) ? format.money(withholdingTotal(row.withholding)) : DASH), compare: byDecimal((row) => withholdingTotal(row.withholding)) },
     { key: "result", label: "Resulting share", render: (row) => row.resultingShares.map((share, index) => <span key={share.securityId}>{index ? ", " : ""}<SecurityLink id={share.securityId} family="STOCK" displayId={share.displayId} /></span>) },
@@ -168,7 +168,7 @@ function ExerciseDrawer({ exercise, stakeholder, onClose }: { exercise: api.Exer
           ["FMV at exercise", format.price(exercise.fmvPerShare)],
           ["Cost", format.money(exercise.cost)],
           ["Spread (NSO)", spread ? format.money(spread) : DASH],
-          ["Payment", `${exercise.paymentMethod ? PAYMENT_METHOD_LABELS[exercise.paymentMethod] : DASH}${exercise.paymentReference ? ` · ref ${exercise.paymentReference}` : ""}`],
+          ["Payment", `${exercisePaymentLabel(exercise, org.importSource)}${exercise.paymentReference ? ` · ref ${exercise.paymentReference}` : ""}`],
           ["Tax treatment", exercise.taxTreatment ? TAX_TREATMENT_LABELS[exercise.taxTreatment] : DASH],
           ["Withholding entered", withholding
             ? `Federal ${format.money(withholding.federalIncome)} · Social Security ${format.money(withholding.socialSecurity)} · Medicare ${format.money(withholding.medicare)}${withholding.state.map((line) => ` · State ${format.money(line.amount)} (${line.code})`).join("")}`

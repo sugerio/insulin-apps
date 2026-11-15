@@ -16,9 +16,11 @@ import { Timeline } from "../components/Timeline.tsx";
 import { CancelSecurityDialog } from "../components/flows/CancelSecurityDialog.tsx";
 import { ExtendDeadlineDialog } from "../components/flows/ExtendDeadlineDialog.tsx";
 import { MarkExecutedDialog } from "../components/flows/MarkExecutedDialog.tsx";
+import { RecordRepurchaseDialog } from "../components/flows/RecordRepurchaseDialog.tsx";
 import { ReverseDialog, type ReverseTarget } from "../components/flows/ReverseDialog.tsx";
 import { securityLinkIntent, UploadDocumentDialog } from "../components/flows/DocumentDialogs.tsx";
 import { compareDecimals, formatFractionPercent, fractionOf, isPositive, multiplyDecimals, sumDecimals } from "../lib/decimal.ts";
+import { electionsInForce } from "../lib/elections.ts";
 import { DASH, addYears, formatDate, formatDaysLeft } from "../lib/format.ts";
 import {
   ELECTION_83B_LABELS,
@@ -31,6 +33,7 @@ import {
   SECURITY_STATUS_TONES,
   TERMINATION_WINDOW_LABELS,
   VALUATION_STATUS_LABELS,
+  blocksExercise,
   isExecutionPending,
   optionType,
   periodLabel,
@@ -51,7 +54,7 @@ const WINDOW_ORDER = ["VOLUNTARY", "INVOLUNTARY", "WITH_CAUSE", "DEATH", "DISABI
 type TimelineList = api.RouteResult<typeof api.routes.getSecurityTimeline>;
 type ElectionList = api.RouteResult<typeof api.routes.listElections83b>;
 
-type SecurityDialog = "cancel" | "markExecuted" | "extend" | "reverse" | "upload";
+type SecurityDialog = "cancel" | "markExecuted" | "extend" | "reverse" | "upload" | "repurchase";
 
 /** `dialog` opens a flow with the page (`securities/:id/cancel`). */
 export function SecurityPage({ dialog }: { dialog?: "cancel" } = {}) {
@@ -134,13 +137,15 @@ function SecurityBody({ security, initialDialog, onChanged, onDialogClosed }: { 
   const pending = isExecutionPending(security.executionStatus) && isPositive(outstanding);
   const origin = terms.origin(security.terms);
   const sourceBadge = security.lineage.parent && origin
-    ? `${origin === "EXERCISE" ? "Exercised from" : origin === "CONVERSION" ? "Converted from" : origin === "TRANSFER" ? "Transferred from" : "From"} ${security.lineage.parent.displayId}`
+    ? `${origin === "EXERCISE" ? "Exercised from" : origin === "CONVERSION" ? "Converted from" : origin === "TRANSFER" ? "Transferred from" : origin === "BALANCE" ? "Remainder of" : "From"} ${security.lineage.parent.displayId}`
     : null;
   const extendable = Boolean(security.deadlines?.contractual) && isPositive(outstanding);
+  const repurchaseable = security.family === "STOCK" && terms.vestingTermsId(security.terms) !== null && isPositive(security.numbers?.unvested) && Boolean(stakeholder.data?.termination);
   const reverseLast = { label: "Reverse last transaction", icon: "refresh" as const, onSelect: () => setDialog("reverse") };
   const actions: ActionEntry[] = option
     ? [
-        isPositive(security.numbers?.exercisable) && !pending ? { label: "Record exercise", icon: "check", to: href(`securities/${security.id}/exercise`) } : null,
+        // A grant awaiting only the company signatory's signature can be exercised.
+        isPositive(security.numbers?.exercisable) && !blocksExercise(security.executionStatus) ? { label: "Record exercise", icon: "check", to: href(`securities/${security.id}/exercise`) } : null,
         isPositive(outstanding) ? { label: "Cancel", icon: "x", onSelect: () => setDialog("cancel") } : null,
         pending ? { label: "Mark executed", icon: "checkCircle", onSelect: () => setDialog("markExecuted") } : null,
         extendable ? { label: "Extend exercise deadline", icon: "clock", onSelect: () => setDialog("extend") } : null,
@@ -157,15 +162,21 @@ function SecurityBody({ security, initialDialog, onChanged, onDialogClosed }: { 
           reverseLast,
         ]
       : [
+          // A terminated holder's unvested restricted shares, once the company has repurchased and paid for them.
+          repurchaseable ? { label: "Record repurchase", icon: "check", onSelect: () => setDialog("repurchase") } : null,
           { label: "Upload document", icon: "upload", onSelect: () => setDialog("upload") },
-          origin === "EXERCISE" && !security.provenance.importedFromPulley ? "separator" : null,
-          origin === "EXERCISE" && !security.provenance.importedFromPulley ? { label: "Reverse (exercise shares)", icon: "refresh", onSelect: () => setDialog("reverse") } : null,
+          "separator",
+          reverseLast,
         ];
-  // The exercise behind a share is its origin command; the server accepts the exercised option's ID as its label. On an
-  // option or a warrant, the server names the newest command it would reverse now (lastReversibleCommandId).
-  const reverseTarget: ReverseTarget = security.family === "STOCK"
-    ? { commandId: security.originCommandId, securityLabel: security.lineage.parent?.displayId ?? security.displayId, stakeholderName: security.stakeholderName, title: "Reverse the exercise" }
-    : { commandId: security.lastReversibleCommandId ?? null, securityLabel: security.displayId, stakeholderName: security.stakeholderName };
+  // The server names the newest command it would reverse now (lastReversibleCommandId). The label it accepts is the
+  // security of that command's first transaction: the exercised option for exercise shares, the repurchased lot for a
+  // balance lot (both the share's parent, when the command made the share), the share itself otherwise.
+  const lastReversible = security.lastReversibleCommandId ?? null;
+  const reverseTarget: ReverseTarget = {
+    commandId: lastReversible,
+    securityLabel: security.family === "STOCK" && lastReversible === security.originCommandId && security.lineage.parent ? security.lineage.parent.displayId : security.displayId,
+    stakeholderName: security.stakeholderName,
+  };
 
   const definition = vestingTermsId !== null ? vestingDefinition : null;
   const left = option ? (
@@ -192,6 +203,7 @@ function SecurityBody({ security, initialDialog, onChanged, onDialogClosed }: { 
       {dialog === "cancel" ? <CancelSecurityDialog securityId={security.id} onClose={closeDialog} onDone={dialogDone} /> : null}
       {dialog === "markExecuted" ? <MarkExecutedDialog securityId={security.id} onClose={closeDialog} onDone={dialogDone} /> : null}
       {dialog === "extend" ? <ExtendDeadlineDialog security={security} onClose={closeDialog} onDone={dialogDone} /> : null}
+      {dialog === "repurchase" ? <RecordRepurchaseDialog securityId={security.id} onClose={closeDialog} onDone={dialogDone} /> : null}
       {dialog === "reverse" ? <ReverseDialog target={reverseTarget} onClose={closeDialog} onDone={dialogDone} /> : null}
       {dialog === "upload" ? <UploadDocumentDialog link={securityLinkIntent(security)} title={`Upload a document for ${security.displayId}`} onClose={closeDialog} onDone={dialogDone} /> : null}
     </OwnRecordScope>
@@ -563,10 +575,13 @@ interface ShareProps {
   elections: Resource<ElectionList>;
 }
 
-/** The 83(b) line from the share's election record; no record means none was required. */
-function electionLabel(security: api.SecurityDetail, elections: ElectionList): string {
-  const election = elections.items.filter((item) => item.securityId === security.id).at(-1);
-  if (!election) return "Not required";
+/**
+ * The 83(b) line from the share's election record in force (by supersession). With no record, a restricted share's
+ * election is "Not recorded" (one may have been required); only a share without vesting needs none.
+ */
+function electionLabel(security: api.SecurityDetail, elections: ElectionList, restricted: boolean): string {
+  const election = electionsInForce(elections.items).get(security.id);
+  if (!election) return restricted ? "Not recorded" : "Not required";
   return election.status === "FILED" && election.filedDate ? `Filed on ${formatDate(election.filedDate)}${election.proofDocumentId ? " (proof on file)" : ""}` : ELECTION_83B_LABELS[election.status] ?? election.status;
 }
 
@@ -591,7 +606,8 @@ function ShareLeft({ security, vesting, definition, stockClass, plan, elections 
           ["Issued", quantity(format, numbers?.issued, "shares")],
           ["Price per share", format.price(price)],
           ["Par value", stockClass === null ? DASH : <Pending resource={stockClass} what="the share class" inline>{(data) => format.price(data.parValue)}</Pending>],
-          ["Capital contribution", format.money(capital)],
+          // A balance lot adds no contribution: the lot it came from keeps what was paid for these shares.
+          ["Capital contribution", origin === "BALANCE" && terms.capitalContribution(security.terms) === null && security.lineage.parent ? <>Counted on <SecurityLink id={security.lineage.parent.id} family="STOCK" displayId={security.lineage.parent.displayId} /></> : format.money(capital)],
           ["Issue date", formatDate(security.issueDate)],
           ["Status", <Badge tone={SECURITY_STATUS_TONES[security.status]}>{SECURITY_STATUS_LABELS[security.status]}</Badge>],
           ["Certificate", security.certificate?.documentId ? <>{certificate} <CertificateDownload documentId={security.certificate.documentId} number={security.certificate.number} /></> : certificate],
@@ -605,11 +621,10 @@ function ShareLeft({ security, vesting, definition, stockClass, plan, elections 
             rows={[[
               "Repurchase right",
               repurchase
-                ? <>If the holder leaves before vesting, the company may buy back unvested shares at {repurchase.pricePerShare ? format.price(repurchase.pricePerShare) : "the price paid"}{repurchase.window ? ` within ${periodLabel(repurchase.window)} after termination` : ""}{repurchase.termsText ? <span className="muted small"> ({repurchase.termsText})</span> : null}</>
+                ? <>If the holder leaves before vesting, the company may buy back unvested shares at {repurchase.pricePerShare ? format.price(repurchase.pricePerShare) : "the price paid"}{repurchase.noDeadline ? " — no deadline (per agreement)" : repurchase.window ? ` within ${periodLabel(repurchase.window)} after termination` : ""}{repurchase.termsText ? <span className="muted small"> ({repurchase.termsText})</span> : null}</>
                 : `not recorded in ${api.importSourceName(org.importSource)} — enter from the stock purchase agreement`,
             ]]}
           />
-          {isPositive(numbers?.unvested) ? <p className="small muted">Cap Table doesn't record repurchases: counsel papers a repurchase offline and the share gets a dated note and document.</p> : null}
         </>
       ) : null}
       <SectionTitle>Details</SectionTitle>
@@ -626,7 +641,7 @@ function ShareLeft({ security, vesting, definition, stockClass, plan, elections 
           ["Issue reason", terms.issueReason(security.terms) ?? DASH],
           ["Legends", security.legends.length ? security.legends.map((legend) => legend.name).join(", ") : DASH],
           ["Rule 144 date", holdingStart ? formatDate(addYears(holdingStart, 1)) : DASH],
-          ["83(b)", <Pending resource={elections} what="the 83(b) record" inline>{(data) => electionLabel(security, data)}</Pending>],
+          ["83(b)", <Pending resource={elections} what="the 83(b) record" inline>{(data) => electionLabel(security, data, restricted)}</Pending>],
           ["Execution status", EXECUTION_LABELS[security.executionStatus]],
         ]}
       />

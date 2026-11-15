@@ -13,7 +13,7 @@ import {
 import * as portal from "../../../src/app/shared/api/portal/schemas.ts";
 import { ROUTE_TABLE, routes } from "../../../src/app/shared/api/routes.ts";
 import { DANA_VISIBLE_IDS } from "./endpoint-examples.ts";
-import { OTHER_STAKEHOLDER_ID, portalOverview, portalSecurity, portalSecurityDetail } from "./fixtures.ts";
+import { OTHER_STAKEHOLDER_ID, portalOverview, portalSecurity, portalSecurityDetail, portalShareDetail } from "./fixtures.ts";
 
 // The portal allowlist contract test: every schema in src/api/portal is a
 // strict object all the way down, carries no key naming percentages, ownership, fully diluted figures or org totals,
@@ -65,6 +65,36 @@ describe("portal allowlist schemas", () => {
     // The overview's copy carries no detail; the detail route always does.
     expect(portal.portalSecuritySchema.safeParse(portalSecurityDetail).success).toBe(false);
     expect(portal.portalSecurityDetailSchema.safeParse(portalSecurity).success).toBe(false);
+  });
+
+  it("say whose signature a grant awaits, keeping pending_both, and nothing else about execution", () => {
+    for (const pending of ["pending_holder", "pending_company", "pending_both", null]) {
+      expect(portal.portalSecuritySchema.safeParse({ ...portalSecurity, executionPending: pending }).success, String(pending)).toBe(true);
+    }
+    for (const pending of [true, false, "executed", "not_required", "holder"]) {
+      expect(portal.portalSecuritySchema.safeParse({ ...portalSecurity, executionPending: pending }).success, String(pending)).toBe(false);
+    }
+  });
+
+  it("carry the holding facts holders read (vesting start, board approval, acceleration, holding start, Pulley upload date) and refuse more", () => {
+    expect(portal.portalSecurityDetailSchema.safeParse(portalShareDetail).success).toBe(true);
+    const option = portalSecurityDetail.detail;
+    const share = portalShareDetail.detail;
+    const leaks = [
+      { ...portalSecurityDetail, detail: { ...option, acceleration: { ...option.acceleration, percent: "100" } } },
+      { ...portalSecurityDetail, detail: { ...option, acceleration: { ...option.acceleration, kind: "FULL" } } },
+      { ...portalSecurityDetail, detail: { ...option, boardApprovalNotRecordedInPulley: true } },
+      { ...portalShareDetail, detail: { ...share, election83b: { status: "NOT_RECORDED", filedOn: null, dueDate: "2026-12-02" } } },
+      { ...portalShareDetail, detail: { ...share, rule144Date: "2027-11-02" } },
+      { ...portalSecurityDetail, documents: [{ ...portalSecurityDetail.documents[0], signedAt: 1 }] },
+    ];
+    for (const leak of leaks) expect(portal.portalSecurityDetailSchema.safeParse(leak).success).toBe(false);
+    // Each is required: null says "not recorded", so an answer can't silently leave one out.
+    const { vestingStartDate: _start, ...withoutStart } = portalSecurity;
+    expect(portal.portalSecuritySchema.safeParse(withoutStart).success).toBe(false);
+    const { sourceCreatedAt: _uploaded, ...withoutUpload } = portalSecurity.documents[0]!;
+    expect(portal.portalDocumentSchema.safeParse(withoutUpload).success).toBe(false);
+    expect(portal.portalDocumentSchema.safeParse({ ...withoutUpload, sourceCreatedAt: Date.UTC(2023, 4, 2) }).success).toBe(true);
   });
 
   it("never show a retracted security", () => {

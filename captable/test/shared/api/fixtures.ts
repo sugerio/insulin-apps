@@ -294,7 +294,7 @@ export const paymentDetails = {
   referenceFormat: "EX-<grant>-<holder initials>",
 };
 
-export const portalDocument = { id: DOCUMENT_ID, filename: "OPT-7 grant agreement.pdf", kind: "GRANT_AGREEMENT", createdAt: T, scope: "mine" };
+export const portalDocument = { id: DOCUMENT_ID, filename: "OPT-7 grant agreement.pdf", kind: "GRANT_AGREEMENT", createdAt: T, sourceCreatedAt: null, scope: "mine" };
 
 export const portalSecurity = {
   id: OPTION_ID,
@@ -306,7 +306,7 @@ export const portalSecurity = {
   planName: "2023 Example Equity Plan",
   issueDate: "2024-12-10",
   status: "OUTSTANDING",
-  executionPending: false,
+  executionPending: null,
   exercisePrice: "0.95",
   expirationDate: "2034-12-09",
   contractualDeadline: null,
@@ -321,6 +321,7 @@ export const portalSecurity = {
     exercisable: "18000",
     cancelled: "0",
   },
+  vestingStartDate: "2024-12-10",
   vesting: [{ date: "2025-12-10", quantity: "12000", cumulative: "12000", status: "VESTED" }],
   documents: [portalDocument],
 };
@@ -340,7 +341,32 @@ export const portalSecurityDetail = {
       { reason: "WITH_CAUSE", period: "0", unit: "DAYS" },
       { reason: "DEATH", period: "12", unit: "MONTHS" },
     ],
+    boardApprovalDate: "2024-12-10",
+    acceleration: { kind: "DOUBLE_TRIGGER", text: "Full acceleration on a change of control followed by a termination without cause." },
     exercises: [{ date: "2026-11-02", quantity: "6000", iso: "6000", nso: "0", resultingShares: [{ displayId: "CS-12" }] }],
+  },
+};
+
+/** A restricted share lot's holding detail: book entry, its holding start, no 83(b) on record. */
+export const portalShareDetail = {
+  ...portalSecurity,
+  id: SHARES_ID,
+  displayId: "CS-4",
+  family: "STOCK",
+  optionType: null,
+  planName: null,
+  exercisePrice: null,
+  expirationDate: null,
+  documents: [],
+  detail: {
+    family: "STOCK",
+    pricePerShare: "0.95",
+    form: "book_entry",
+    legends: [],
+    holdingStartDate: "2026-11-02",
+    election83b: { status: "NOT_RECORDED", filedOn: null },
+    repurchase: null,
+    origin: { kind: "exercise", from: "OPT-7" },
   },
 };
 

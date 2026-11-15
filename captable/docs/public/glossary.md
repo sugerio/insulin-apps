@@ -81,8 +81,9 @@ organizations and sign-in, see the [platform glossary](/docs/platform/glossary).
   restricted stock. Cap Table records only exercises of vested options.
 - **Equity plan:** the document under which a company grants options and other equity awards, and reserves shares for
   them: the option pool.
-- **Execution pending:** a grant that hasn't been signed by both the holder and the company. It can't be exercised until
-  someone who records changes marks it executed.
+- **Execution pending:** a grant that hasn't been signed by both the holder and the company. While the holder's
+  signature is missing it can't be exercised; one that waits only for the company's countersignature can. Someone who
+  records changes marks it executed once both have signed.
 - **Exercise:** buying the shares an option or a warrant entitles its holder to, by paying the exercise price. Cap Table
   records exercises of vested options.
 - **Exercise deadline:** the last day an option can be exercised: the end of its exercise window after the holder

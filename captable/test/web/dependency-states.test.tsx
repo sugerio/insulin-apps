@@ -237,7 +237,7 @@ describe("no self-dealing affordance on an admin's own holdings", () => {
 
   it("offers no queue action on the admin's own securities in Securities Status", async () => {
     renderPage("securities-status", [mock(api.routes.getSecuritiesStatus, securitiesStatus()), mock(api.routes.listSecurities, securityList()), mock(api.routes.listStakeholders, stakeholderList())], { ownStakeholderId: IDS.daniel });
-    const pending = await screen.findByRole("table", { name: "Execution pending (migrated)" });
+    const pending = await screen.findByRole("table", { name: "Execution pending" });
     expect(within(rowOf(pending, "OPT-49")).queryByRole("button", { name: /Mark .*executed|Cancel/ })).toBeNull();
     const terminated = screen.getByRole("table", { name: "Options from terminated holders" });
     expect(within(rowOf(terminated, "OPT-21")).getByRole("button", { name: "Cancel OPT-21 now" })).toBeTruthy();
@@ -290,10 +290,10 @@ describe("figures from a successful answer that lacks them", () => {
     const partial = dashboard({ needsAttention: dashboard().needsAttention.filter((item) => item.kind !== "EXECUTION_PENDING"), inProgress: { unvestedSharesFromTerminated: 1, optionsFromTerminated: 2, scheduledTerminations: 1 } });
     renderPage("dashboard", [mock(api.routes.getDashboard, partial), mock(api.routes.listValuations, { items: VALUATIONS })]);
     const attention = await screen.findByRole("list", { name: "Needs attention" });
-    const line = within(attention).getByText("Execution pending (migrated)").closest("a")!;
+    const line = within(attention).getByText("Execution pending").closest("a")!;
     expect(within(line).getByText("Not reported")).toBeTruthy();
     expect(within(line).queryByText("0")).toBeNull();
-    const pending = screen.getByRole("link", { name: /Execution pending \(migrated\)—/ });
+    const pending = screen.getByRole("link", { name: /^Execution pending—/ });
     expect(within(pending).getByTitle("Not reported").textContent).toBe("—");
   });
 

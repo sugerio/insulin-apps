@@ -16,6 +16,9 @@ ol.howto li { line-height: 1.5; }
 .preview-banner { display: flex; gap: 12px; align-items: flex-start; padding: 16px 20px; border-radius: 8px; background: var(--info-soft); color: var(--info-text); border: 1px solid var(--info-border); margin-bottom: 18px; }
 .preview-frame { border: 1px dashed var(--border-strong); border-radius: 10px; padding: 16px; background: var(--bg); }
 .select-line { display: flex; flex-direction: column; gap: 4px; max-width: 260px; font-size: 13px; }
+/* How to exercise: the number of options beside its Max button, and the cost on its own line below. */
+.exercise-quantity { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.exercise-quantity + output { display: block; margin-top: 6px; }
 @media (max-width: 720px) {
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
   .port-hero { align-items: flex-start; }

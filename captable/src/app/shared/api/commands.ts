@@ -15,6 +15,7 @@ import {
   type OrgAccess,
   planStatusSchema,
   relationshipSchema,
+  repurchasePaymentMethodSchema,
   SCHEDULED_TERMINATION_STATUSES,
   taxTreatmentSchema,
   terminationTypeSchema,
@@ -290,7 +291,11 @@ export type ExerciseOption = z.output<typeof exerciseOptionSchema>;
 export type ExerciseOptionInput = z.input<typeof exerciseOptionSchema>;
 
 // ---------------------------------------------------------------------------
-// grant-equity-compensation — RW+: record a signed option grant (the product rules)
+// grant-equity-compensation — RW+: record an approved option grant, signed or awaiting signatures (the product rules)
+
+/** Whose signature a grant recorded before it is executed still needs: its execution status pending_<missing>. */
+export const GRANT_MISSING_SIGNATURES = ["holder", "company", "both"] as const;
+export type GrantMissingSignatures = (typeof GRANT_MISSING_SIGNATURES)[number];
 
 const grantEquityCompensationShape = {
   stockPlanId: uuidSchema,
@@ -329,7 +334,12 @@ const grantEquityCompensationShape = {
   legendIds: z.array(uuidSchema).default([]),
   issueReason: z.string().max(200).optional(),
   displayId: z.string().min(1).max(40).optional(), // default OPT-<next>; unique per org, never reused
-  executedAgreement: z.strictObject({ documentId: uuidSchema, signedByHolderAndSignatory: z.literal(true) }), // block if missing
+  // Exactly one of the two. The agreement signed by both parties: the grant is executed.
+  executedAgreement: z.strictObject({ documentId: uuidSchema, signedByHolderAndSignatory: z.literal(true) }).optional(),
+  // Recorded at board approval before every signature is in: the grant is execution pending (pending_holder,
+  // pending_company or pending_both) until Mark executed. The agreement as signed so far is linked as evidence; it is
+  // required when only the company signs later, since such a grant can be exercised meanwhile.
+  awaitingSignatures: z.strictObject({ missing: z.enum(GRANT_MISSING_SIGNATURES), agreementDocumentId: uuidSchema.optional() }).optional(),
 };
 function checkGrant(
   body: {
@@ -339,9 +349,18 @@ function checkGrant(
     grantDateOverrideReason?: string | undefined;
     board: { approvalDate: string };
     vesting: { terms: { templateId: string } | { explicit: { date: string }[] } };
+    executedAgreement?: unknown;
+    awaitingSignatures?: { missing: GrantMissingSignatures; agreementDocumentId?: string | undefined } | undefined;
   },
   ctx: IssueSink,
 ): void {
+  if (body.executedAgreement === undefined && body.awaitingSignatures === undefined) {
+    ctx.addIssue({ code: "custom", path: ["executedAgreement"], message: "Attach the executed agreement, or say whose signature is still missing" });
+  } else if (body.executedAgreement !== undefined && body.awaitingSignatures !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["awaitingSignatures"], message: "A grant is either executed or awaiting signatures, not both" });
+  } else if (body.awaitingSignatures?.missing === "company" && body.awaitingSignatures.agreementDocumentId === undefined) {
+    ctx.addIssue({ code: "custom", path: ["awaitingSignatures", "agreementDocumentId"], message: "Attach the agreement the holder signed" });
+  }
   if ("explicit" in body.vesting.terms) checkTrancheOrder(body.vesting.terms.explicit, ctx, ["vesting", "terms", "explicit"]);
   if (body.optionType === "ISO" && body.isoAttestations === undefined) {
     ctx.addIssue({ code: "custom", path: ["isoAttestations"], message: "An ISO needs the employee and 10% holder attestations" });
@@ -374,17 +393,71 @@ export type CancelSecurity = z.output<typeof cancelSecuritySchema>;
 export type CancelSecurityInput = z.input<typeof cancelSecuritySchema>;
 
 // ---------------------------------------------------------------------------
+// record-repurchase — RW+ (a repurchase completed and paid off-platform; the product rules)
+
+const recordRepurchaseShape = {
+  securityId: uuidSchema, // a terminated holder's restricted share lot
+  effectiveDate: isoDateSchema, // the repurchase date: on or after the termination date, ≤ the org's today
+  quantity: positiveDecimalSchema, // every share unvested on the effective date: a repurchase takes all of them
+  pricePerShare: positiveDecimalSchema, // what the company paid per share (a warning when it differs from the lot's)
+  consideration: z.strictObject({
+    method: repurchasePaymentMethodSchema,
+    paidDate: isoDateSchema, // ≤ the org's today
+    reference: z.string().min(1).max(200).optional(), // the check number, wire or ACH reference
+  }),
+  noticeDocumentId: uuidSchema, // the repurchase notice to the holder; frozen and linked (NOTICE)
+  // Counsel's authority: required, with full access, after the repurchase deadline or when none is recorded.
+  authorityDocumentId: uuidSchema.optional(),
+  confirmation: confirmationSchema, // the share's display ID, e.g. "CS-4"
+};
+export const recordRepurchaseSchema = commandEnvelopeSchema.extend(recordRepurchaseShape);
+// A dry run previews before the person types the confirmation: it may leave it out (the real call checks it).
+export const recordRepurchaseDryRunSchema = dryRunEnvelopeSchema.extend({ ...recordRepurchaseShape, confirmation: confirmationSchema.optional() });
+export type RecordRepurchase = z.output<typeof recordRepurchaseSchema>;
+export type RecordRepurchaseInput = z.input<typeof recordRepurchaseSchema>;
+
+// ---------------------------------------------------------------------------
 // mark-executed — RW+
+
+/** Whose signature Mark executed records: both (the grant is executed), or one party's on a grant awaiting both. */
+export const MARK_EXECUTED_SIGNED = ["both", "holder", "company"] as const;
+export type MarkExecutedSigned = (typeof MARK_EXECUTED_SIGNED)[number];
+/** What the person attests the uploaded agreement bears, for each answer. */
+export const MARK_EXECUTED_ATTESTATIONS = {
+  both: "This PDF bears both signatures",
+  holder: "This PDF bears the holder's signature",
+  company: "This PDF bears the company signatory's signature",
+} as const satisfies Record<MarkExecutedSigned, string>;
 
 const markExecutedShape = {
   securityId: uuidSchema,
-  executedAgreementDocumentId: uuidSchema, // signed by both parties and linked (AGREEMENT) in the same batch
+  // "both" (the default): the grant becomes executed. One party: a grant awaiting both signatures then awaits only the
+  // other party's (refused unless both are pending); the last missing signature is always recorded as "both".
+  signed: z.enum(MARK_EXECUTED_SIGNED).default("both"),
+  // The agreement bearing the signatures so far: for "both", signed by both parties and linked as AGREEMENT; for one
+  // party, linked as EVIDENCE. Frozen and linked in the same batch.
+  executedAgreementDocumentId: uuidSchema,
+  // The command takes effect on the later date given (or today); one party's signature takes only that party's date.
   signatureDates: z.strictObject({ company: isoDateSchema.optional(), holder: isoDateSchema.optional() }),
-  attestation: z.literal("This PDF bears both signatures"),
+  attestation: z.enum([MARK_EXECUTED_ATTESTATIONS.both, MARK_EXECUTED_ATTESTATIONS.holder, MARK_EXECUTED_ATTESTATIONS.company]),
   confirmation: confirmationSchema, // the typed display ID
 };
-export const markExecutedSchema = commandEnvelopeSchema.extend(markExecutedShape);
-export const markExecutedDryRunSchema = dryRunEnvelopeSchema.extend({ ...markExecutedShape, confirmation: confirmationSchema.optional() });
+function checkMarkExecuted(
+  body: { signed: MarkExecutedSigned; attestation: string; signatureDates: { company?: string | undefined; holder?: string | undefined } },
+  ctx: IssueSink,
+): void {
+  if (body.attestation !== MARK_EXECUTED_ATTESTATIONS[body.signed]) {
+    ctx.addIssue({ code: "custom", path: ["attestation"], message: `Attest "${MARK_EXECUTED_ATTESTATIONS[body.signed]}"` });
+  }
+  if (body.signed === "holder" && body.signatureDates.company !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["signatureDates", "company"], message: "Only the holder signed: leave the company signature date out" });
+  }
+  if (body.signed === "company" && body.signatureDates.holder !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["signatureDates", "holder"], message: "Only the company signatory signed: leave the holder signature date out" });
+  }
+}
+export const markExecutedSchema = commandEnvelopeSchema.extend(markExecutedShape).superRefine(checkMarkExecuted);
+export const markExecutedDryRunSchema = dryRunEnvelopeSchema.extend({ ...markExecutedShape, confirmation: confirmationSchema.optional() }).superRefine(checkMarkExecuted);
 export type MarkExecuted = z.output<typeof markExecutedSchema>;
 export type MarkExecutedInput = z.input<typeof markExecutedSchema>;
 
@@ -703,19 +776,21 @@ export const COMMANDS = {
       "ORPHAN_DERIVED_LOT",
       ...DOCUMENT_USE_VIOLATIONS,
     ],
-    warnings: ["PAYMENT_EXCEEDS_COST", "PAYER_NOT_HOLDER", "ISO_PORTION_AFTER_ISO_DEADLINE"],
+    // EXECUTION_PENDING_COMPANY: the grant awaits only the company signatory's signature, which doesn't block.
+    warnings: ["PAYMENT_EXCEEDS_COST", "PAYER_NOT_HOLDER", "ISO_PORTION_AFTER_ISO_DEADLINE", "EXECUTION_PENDING_COMPANY"],
     ledgerGuard: true,
     confirmation: false,
   },
   "grant-equity-compensation": {
     name: "grant-equity-compensation",
-    summary: "Record a signed option grant",
+    summary: "Record an approved option grant, executed or awaiting signatures",
     section: "Ledger commands",
     access: RW_PLUS,
     schema: grantEquityCompensationSchema,
     dryRunSchema: grantEquityCompensationDryRunSchema,
     response: commandResultSchema,
-    transactions: ["TX_EQUITY_COMPENSATION_ISSUANCE", "TX_VESTING_START"],
+    // X_EXECUTION_STATUS only for a grant awaiting signatures.
+    transactions: ["TX_EQUITY_COMPENSATION_ISSUANCE", "TX_VESTING_START", "X_EXECUTION_STATUS"],
     violations: [
       "EXCEEDS_PLAN_AVAILABLE",
       "MISSING_BOARD_CONSENT",
@@ -732,7 +807,7 @@ export const COMMANDS = {
       "NSO_PRICE_BELOW_FMV",
       ...DOCUMENT_USE_VIOLATIONS,
     ],
-    warnings: ["NSO_PRICE_BELOW_FMV"],
+    warnings: ["NSO_PRICE_BELOW_FMV", "GRANT_BEFORE_INCORPORATION"],
     ledgerGuard: true,
     confirmation: false,
   },
@@ -753,16 +828,38 @@ export const COMMANDS = {
     ledgerGuard: true,
     confirmation: true,
   },
+  "record-repurchase": {
+    name: "record-repurchase",
+    summary: "Record a completed repurchase of a terminated holder's unvested shares, paid off-platform",
+    section: "Ledger commands",
+    access: RW_PLUS,
+    schema: recordRepurchaseSchema,
+    dryRunSchema: recordRepurchaseDryRunSchema,
+    response: commandResultSchema,
+    transactions: ["TX_STOCK_REPURCHASE", "TX_STOCK_ISSUANCE"],
+    violations: [
+      "NOT_RESTRICTED_STOCK", "SECURITY_NOT_OUTSTANDING", "HOLDER_NOT_TERMINATED", "REPURCHASE_BEFORE_TERMINATION",
+      "EFFECTIVE_DATE_IN_FUTURE", "PAID_DATE_IN_FUTURE", "NO_UNVESTED_SHARES", "REPURCHASE_NOT_ALL_UNVESTED",
+      "REPURCHASE_AUTHORITY_REQUIRED", "REPURCHASE_AFTER_DEADLINE", ...DOCUMENT_USE_VIOLATIONS,
+    ],
+    // REPURCHASE_AFTER_DEADLINE is a warning once someone with full access records counsel's authority for it.
+    warnings: ["REPURCHASE_PRICE_DIFFERS", "REPURCHASE_AFTER_DEADLINE", "REPURCHASE_WITHOUT_DEADLINE"],
+    ledgerGuard: true,
+    confirmation: true,
+  },
   "mark-executed": {
     name: "mark-executed",
-    summary: "Mark a grant executed: freeze and link the agreement signed by both parties",
+    summary: "Mark a grant executed, or record one party's signature: freeze and link the agreement as signed",
     section: "Ledger commands",
     access: RW_PLUS,
     schema: markExecutedSchema,
     dryRunSchema: markExecutedDryRunSchema,
     response: commandResultSchema,
     transactions: ["X_EXECUTION_STATUS"],
-    violations: ["NOT_EXECUTION_PENDING", "SECURITY_NOT_OUTSTANDING", ...DOCUMENT_USE_VIOLATIONS],
+    violations: [
+      "NOT_EXECUTION_PENDING", "SIGNATURE_NOT_PENDING", "SIGNATURE_COMPLETES_EXECUTION", "SIGNATURE_DATE_IN_FUTURE", "SIGNATURE_DATE_BEFORE_ISSUE",
+      "SIGNATURE_DATE_BEFORE_STATUS", "SECURITY_NOT_OUTSTANDING", ...DOCUMENT_USE_VIOLATIONS,
+    ],
     warnings: [],
     ledgerGuard: true,
     confirmation: true,
@@ -825,7 +922,7 @@ export const COMMANDS = {
     transactions: ["X_STAKEHOLDER_MERGE"],
     violations: [
       "STAKEHOLDER_MERGE_SAME_RECORD", "STAKEHOLDER_ALREADY_MERGED", "STAKEHOLDER_ARCHIVED",
-      "STAKEHOLDER_KIND_MISMATCH", "STAKEHOLDER_TERMINATION_CONFLICT", "STAKEHOLDER_MERGE_BLOCKED",
+      "STAKEHOLDER_KIND_MISMATCH", "STAKEHOLDER_TERMINATION_CONFLICT", "STAKEHOLDER_MERGE_REHIRE", "STAKEHOLDER_MERGE_BLOCKED",
       "STAKEHOLDER_MERGE_NOT_NEUTRAL", "DEPENDENCY_EDGE_MISSING",
     ],
     warnings: [],
@@ -841,8 +938,9 @@ export const COMMANDS = {
     dryRunSchema: null,
     response: commandResultSchema,
     transactions: ["X_REVERSAL"],
-    // Only the command types in the reversal allowlist can be reversed.
-    violations: ["COMMAND_NOT_REVERSIBLE", "STAKEHOLDER_UNMERGE_BLOCKED"],
+    // Only the command types in the reversal allowlist can be reversed. Undoing a cancellation or a repurchase takes
+    // back the pool capacity it returned: refused when a later grant has used it.
+    violations: ["COMMAND_NOT_REVERSIBLE", "STAKEHOLDER_UNMERGE_BLOCKED", "EXCEEDS_PLAN_AVAILABLE"],
     warnings: [],
     ledgerGuard: true,
     confirmation: true,

@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { api } from '../../src/app/shared/index.ts'
+import { newPlan } from '../../src/app/server/lib/ledger/commands/common.ts'
+import { loadCommandContext, runCommand as runLedgerCommand } from '../../src/app/server/lib/ledger/run.ts'
 import { uuid } from '../shared/engine/fixtures/builder.ts'
 import {
+  ADMIN_EMAIL,
+  ADMIN_USER_ID,
   addDocument,
   addEmail,
   addStakeholder,
   commit,
+  consoleActor,
   count,
   demoRow,
   errorOf,
   getJson,
   ledgerHarness,
   VS1_TEMPLATE_ID,
+  withRestrictedShares,
   type LedgerHarness,
 } from '../support/ledger-helpers.ts'
 
@@ -21,8 +27,12 @@ import {
  */
 
 async function grantS41(l: LedgerHarness) {
+  return commit(l, l.rw, 'grant-equity-compensation', await grantS41Body(l))
+}
+
+async function grantS41Body(l: LedgerHarness): Promise<Record<string, unknown>> {
   await addStakeholder(l.db, l.orgId, 'S41', 'employee')
-  return commit(l, l.rw, 'grant-equity-compensation', {
+  return {
     stockPlanId: l.id('plan:P1'),
     stakeholderId: l.id('S41'),
     quantity: '40000',
@@ -36,7 +46,7 @@ async function grantS41(l: LedgerHarness) {
     exemption: { federal: 'RULE_701' },
     displayId: 'OPT-57',
     executedAgreement: { documentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'), signedByHolderAndSignatory: true },
-  })
+  }
 }
 
 async function preview(l: LedgerHarness, commandId: string) {
@@ -96,6 +106,55 @@ describe('reverse-command', () => {
     expect(errorOf(ofReversal.body).reason).toBe('state_changed')
     const detail = await getJson<api.CommandDetail>(l, l.sa, `/commands/${cancel.commandId}`)
     expect(detail.reversedByCommandId).toBe((undoCancel.body as api.CommandResult).commandId)
+  })
+
+  it('reverses a grant recorded awaiting signatures as a whole, its execution status with it, and blocks it while Mark executed stands', async () => {
+    const l = await ledgerHarness()
+    const start = await demoRow(l)
+    const { executedAgreement: _executed, ...body } = await grantS41Body(l)
+    const holderSigned = await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT')
+    const grant = await commit(l, l.rw, 'grant-equity-compensation', { ...body, awaitingSignatures: { missing: 'company', agreementDocumentId: holderSigned } })
+    const optionId = grant.created.securityIds[0]!
+    const marked = await commit(l, l.rw, 'mark-executed', {
+      securityId: optionId, executedAgreementDocumentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'), signatureDates: { company: '2026-10-21' },
+      attestation: 'This PDF bears both signatures', confirmation: 'OPT-57',
+    })
+    expect(marked.dependencies.map((edge) => edge.commandId)).toContain(grant.commandId)
+    expect((await preview(l, grant.commandId!)).blocked).toBe(true)
+    const unmark = await reverse(l, marked.commandId!, 'OPT-57')
+    expect(unmark.response.status, JSON.stringify(unmark.body)).toBe(200)
+    expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${optionId}`)).executionStatus).toBe('pending_company')
+
+    const shown = await preview(l, grant.commandId!)
+    expect(shown.inverse.map((tx) => tx.type)).toEqual(['X_EXECUTION_STATUS', 'TX_VESTING_START', 'TX_EQUITY_COMPENSATION_ISSUANCE'])
+    const undo = await reverse(l, grant.commandId!, 'OPT-57')
+    expect(undo.response.status, JSON.stringify(undo.body)).toBe(200)
+    expect(await demoRow(l)).toEqual(start)
+    expect((await l.api('GET', l.path(`/securities/${optionId}`), l.sa)).status).toBe(404)
+  })
+
+  it("reverses one party's signature back to awaiting both, only once the signature that completed it is reversed", async () => {
+    const l = await ledgerHarness()
+    const { executedAgreement: _executed, ...body } = await grantS41Body(l)
+    const grant = await commit(l, l.rw, 'grant-equity-compensation', { ...body, awaitingSignatures: { missing: 'both' } })
+    const optionId = grant.created.securityIds[0]!
+    const status = async () => (await getJson<api.SecurityDetail>(l, l.sa, `/securities/${optionId}`)).executionStatus
+    const holder = await commit(l, l.rw, 'mark-executed', {
+      securityId: optionId, signed: 'holder', executedAgreementDocumentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'),
+      signatureDates: { holder: '2026-10-20' }, attestation: "This PDF bears the holder's signature", confirmation: 'OPT-57',
+    })
+    const both = await commit(l, l.rw, 'mark-executed', {
+      securityId: optionId, executedAgreementDocumentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'),
+      signatureDates: { company: '2026-10-21' }, attestation: 'This PDF bears both signatures', confirmation: 'OPT-57',
+    })
+    expect(await status()).toBe('executed')
+    const blocked = await preview(l, holder.commandId!)
+    expect(blocked.blocked).toBe(true)
+    expect(blocked.dependents.map((dependent) => dependent.commandId)).toEqual([both.commandId])
+    expect((await reverse(l, both.commandId!, 'OPT-57')).response.status).toBe(200)
+    expect(await status()).toBe('pending_company')
+    expect((await reverse(l, holder.commandId!, 'OPT-57')).response.status).toBe(200)
+    expect(await status()).toBe('pending_both')
   })
 
   it('refuses migrated history (409 migrated_history) and says so in the preview', async () => {
@@ -187,5 +246,109 @@ describe('reverse-command', () => {
       expect(errorOf(refused.body).violations?.map((violation) => violation.code), type).toEqual(['COMMAND_NOT_REVERSIBLE'])
     }
     expect(await count(l.db, "SELECT COUNT(*) AS n FROM commands WHERE type = 'reverse-command'")).toBe(0)
+  })
+})
+
+/**
+ * A recorded repurchase is reversed whole, its balance lot with it. It stands on the termination that opened the window,
+ * a later command on its balance lot stands on it, and the engine refuses a reversal that would take back pool capacity
+ * a later grant has used.
+ */
+describe('reversing a recorded repurchase', () => {
+  async function repurchaseCs4(l: LedgerHarness, effectiveDate = '2026-10-20') {
+    return commit(l, l.rw, 'record-repurchase', {
+      securityId: l.id('CS-4'), effectiveDate, quantity: '34500', pricePerShare: '0.31',
+      consideration: { method: 'WIRE', paidDate: effectiveDate, reference: 'W-CS-4' },
+      noticeDocumentId: await addDocument(l.db, l.orgId, 'OTHER'), confirmation: 'CS-4',
+    })
+  }
+
+  it('restores the lot, removes the balance lot and returns every figure', async () => {
+    const l = await ledgerHarness()
+    const start = await demoRow(l)
+    const recorded = await repurchaseCs4(l)
+    const balanceId = recorded.created.securityIds[0]!
+    expect(await demoRow(l)).not.toEqual(start)
+    // The share pages offer the repurchase as the command to reverse, on the lot and on its balance lot.
+    for (const id of [l.id('CS-4'), balanceId]) {
+      expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${id}`)).lastReversibleCommandId).toBe(recorded.commandId)
+    }
+    const shown = await preview(l, recorded.commandId!)
+    expect(shown).toMatchObject({ commandType: 'record-repurchase', importedFromPulley: false, blocked: false, dependents: [] })
+    expect(shown.inverse.map((tx) => tx.type)).toEqual(['TX_STOCK_ISSUANCE', 'TX_STOCK_REPURCHASE'])
+    // The lot's label confirms it (the security of the command's first transaction).
+    expect((await reverse(l, recorded.commandId!, 'CS-9')).response.status).toBe(400)
+    const reversed = await reverse(l, recorded.commandId!, 'CS-4')
+    expect(reversed.response.status, JSON.stringify(reversed.body)).toBe(200)
+    expect(await demoRow(l)).toEqual(start)
+    expect(await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('CS-4')}`)).toMatchObject({ status: 'OUTSTANDING', numbers: { outstanding: '72000', unvested: '34500', repurchased: '0' } })
+    expect((await l.api('GET', l.path(`/securities/${balanceId}`), l.sa)).status).toBe(404)
+    expect((await getJson<api.SecuritiesStatus>(l, l.sa, '/securities-status')).unvestedSharesFromTerminated).toContainEqual(expect.objectContaining({ securityId: l.id('CS-4'), unvested: '34500' }))
+  })
+
+  it('is refused while a later command on the balance lot stands', async () => {
+    const l = await ledgerHarness()
+    const recorded = await repurchaseCs4(l)
+    const balanceId = recorded.created.securityIds[0]!
+    // The app has no command on a plain share lot yet; a later one acts on the balance lot here.
+    const ctx = await loadCommandContext({ db: l.db, now: l.clock.time, config: l.config, orgId: l.orgId, actor: consoleActor(ADMIN_USER_ID, ADMIN_EMAIL), source: 'app' })
+    const later = await runLedgerCommand(ctx, {
+      route: 'POST /api/orgs/:orgId/commands/later-share-command', path: '/later', body: { balanceId }, dryRun: false,
+      idempotencyKey: 'later-share-command', expectedLedgerSeq: null, expectedDiffSha256: null, acknowledge: [],
+    }, async (current) => {
+      const plan = newPlan(current, 'later-share-command')
+      plan.transactions.push({ type: 'TX_STOCK_CANCELLATION', effectiveDate: current.today, payload: { security_id: balanceId, quantity: '1000', reason_text: 'A later act on the balance lot' } })
+      return { plan, documents: null }
+    })
+    expect(later.result.dependencies).toContainEqual({ commandId: recorded.commandId, kind: 'consumes_security' })
+    const shown = await preview(l, recorded.commandId!)
+    expect(shown).toMatchObject({ blocked: true, dependents: [expect.objectContaining({ commandId: later.result.commandId, kind: 'consumes_security' })] })
+    const refused = await reverse(l, recorded.commandId!, 'CS-4')
+    expect(refused.response.status).toBe(409)
+    expect(errorOf(refused.body)).toMatchObject({ code: 'conflict', reason: 'dependents_exist', dependents: [{ commandId: later.result.commandId }] })
+  })
+
+  it('blocks reversing the termination it stands on until the repurchase is reversed first', async () => {
+    const l = await ledgerHarness({ extend: withRestrictedShares })
+    const termination = await commit(l, l.rw, 'terminate-stakeholder', { stakeholderId: l.id('S41'), terminationDate: '2026-08-01', terminationType: 'voluntary' })
+    const recorded = await commit(l, l.rw, 'record-repurchase', {
+      securityId: l.id('RS-1'), effectiveDate: '2026-09-15', quantity: '2900', pricePerShare: '1',
+      consideration: { method: 'CHECK', paidDate: '2026-09-15' }, noticeDocumentId: await addDocument(l.db, l.orgId, 'OTHER'), confirmation: 'RS-1',
+    })
+    expect(recorded.dependencies).toContainEqual({ commandId: termination.commandId, kind: 'relies_on_deadline' })
+    const shown = await preview(l, termination.commandId!)
+    expect(shown).toMatchObject({ blocked: true, dependents: [expect.objectContaining({ commandId: recorded.commandId, kind: 'relies_on_deadline' })] })
+    const refused = await reverse(l, termination.commandId!, 'Synthetic Holder S41')
+    expect(refused.response.status).toBe(409)
+    expect(errorOf(refused.body)).toMatchObject({ reason: 'dependents_exist', dependents: [{ commandId: recorded.commandId }] })
+    // Newest first: the repurchase, then the termination.
+    expect((await reverse(l, recorded.commandId!, 'RS-1')).response.status).toBe(200)
+    const undone = await reverse(l, termination.commandId!, 'Synthetic Holder S41')
+    expect(undone.response.status, JSON.stringify(undone.body)).toBe(200)
+    expect((await getJson<api.StakeholderDetail>(l, l.sa, `/stakeholders/${l.id('S41')}`)).termination).toBeNull()
+  })
+
+  it("can't take back pool capacity a later grant has used", async () => {
+    const l = await ledgerHarness()
+    const available = BigInt((await getJson<api.CapTableResponse>(l, l.sa, '/cap-table')).metrics.planAvailable)
+    // The repurchase returns CS-4's 34,500 unvested plan shares; a grant five days later uses all of the pool.
+    const recorded = await repurchaseCs4(l, '2026-10-15')
+    const grant = await commit(l, l.rw, 'grant-equity-compensation', {
+      stockPlanId: l.id('plan:P1'), stakeholderId: l.id('S13'), quantity: String(available + 34500n),
+      board: { approvalDate: '2026-10-20', consentDocumentId: await addDocument(l.db, l.orgId, 'BOARD_CONSENT') }, optionType: 'NSO',
+      vesting: { terms: { templateId: VS1_TEMPLATE_ID }, vestingStartDate: '2026-10-20', earlyExercisable: false, accelerationTerms: { kind: 'NONE' }, matchesSignedAgreement: true },
+      exercisePrice: '0.95', valuationId: l.id('V5'), expirationDate: '2036-10-20', exemption: { federal: 'RULE_701' },
+      executedAgreement: { documentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'), signedByHolderAndSignatory: true },
+    })
+    expect((await getJson<api.CapTableResponse>(l, l.sa, '/cap-table')).metrics.planAvailable).toBe('0')
+    // Nothing links the grant to the repurchase, so the engine's replay without it is what refuses.
+    const shown = await preview(l, recorded.commandId!)
+    expect(shown).toMatchObject({ blocked: true, dependents: [] })
+    expect(shown.violations.map((violation) => violation.code)).toContain('EXCEEDS_PLAN_AVAILABLE')
+    const refused = await reverse(l, recorded.commandId!, 'CS-4')
+    expect(refused.response.status).toBe(422)
+    expect(errorOf(refused.body).violations?.map((violation) => violation.code)).toContain('EXCEEDS_PLAN_AVAILABLE')
+    expect(grant.commandId).toBeTruthy()
+    expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('CS-4')}`)).status).toBe('REPURCHASED')
   })
 })

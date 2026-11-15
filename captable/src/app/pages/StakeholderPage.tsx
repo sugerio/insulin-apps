@@ -20,12 +20,12 @@ import { usePii } from "../components/Pii.tsx";
 import { isPositive, sumDecimals } from "../lib/decimal.ts";
 import { DASH, formatDate } from "../lib/format.ts";
 import {
-  PAYMENT_METHOD_LABELS,
   PORTAL_STATE_LABELS,
   RELATIONSHIP_LABELS,
   SECURITY_STATUS_LABELS,
   SECURITY_STATUS_TONES,
   TERMINATION_TYPE_LABELS,
+  exercisePaymentLabel,
   isExecutionPending,
 } from "../lib/labels.ts";
 import { addressLine, emailKindLabel, leaveLabel } from "../lib/stakeholders.ts";
@@ -117,8 +117,8 @@ function StakeholderBody({ stakeholder, holdings, vesting, onChanged }: BodyProp
           title={stakeholder.displayName}
           after={
             <>
-              <Link className="icon-link" to={href(`stakeholders/${stakeholder.id}/preview`)} title="Preview as stakeholder" aria-label="Preview as stakeholder">
-                <Icon name="eye" />
+              <Link className="btn btn-ghost btn-xs" to={href(`stakeholders/${stakeholder.id}/preview`)} title="The holder view as it shows this stakeholder record">
+                <Icon name="eye" /> Preview as stakeholder
               </Link>
               <TerminationBadge state={state} />
             </>
@@ -194,7 +194,7 @@ function StakeholderBody({ stakeholder, holdings, vesting, onChanged }: BodyProp
                 { key: "grant", label: "Grant", render: (row) => <SecurityLink id={row.securityId} family="EQUITY_COMPENSATION" displayId={row.grantDisplayId} /> },
                 { key: "qty", label: "Quantity", numeric: true, render: (row) => format.shares(row.quantity), compare: byDecimal((row) => row.quantity) },
                 { key: "type", label: "ISO/NSO", render: (row) => (isPositive(row.isoQuantity) && isPositive(row.nsoQuantity) ? "ISO + NSO" : isPositive(row.isoQuantity) ? "ISO" : "NSO") },
-                { key: "pay", label: "Payment", render: (row) => (row.paymentMethod ? PAYMENT_METHOD_LABELS[row.paymentMethod] : DASH) },
+                { key: "pay", label: "Payment", render: (row) => exercisePaymentLabel(row, workspace.org.importSource) },
                 { key: "src", label: "Source", render: (row) => exerciseSource(row, workspace.org.importSource) },
               ]}
             />

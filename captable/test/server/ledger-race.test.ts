@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { api } from '../../src/app/shared/index.ts'
 import { planLeave } from '../../src/app/server/lib/ledger/commands/leave.ts'
 import { planMarkExecuted, type MarkExecutedFields } from '../../src/app/server/lib/ledger/commands/mark-executed.ts'
+import { planStakeholderMerge } from '../../src/app/server/lib/ledger/commands/merge-stakeholders.ts'
 import { planTermination } from '../../src/app/server/lib/ledger/commands/terminate.ts'
 import { processDue } from '../../src/app/server/lib/ledger/daily.ts'
 import { loadCommandContext, runCommand } from '../../src/app/server/lib/ledger/run.ts'
@@ -13,11 +14,14 @@ import {
   OWNER_EMAIL,
   OWNER_USER_ID,
   addDocument,
+  addStakeholder,
   batchIncludesSql,
   batchRaceInjector,
   concurrently,
   consoleActor,
+  commit,
   errorOf,
+  holderName,
   ledgerHarness,
   type LedgerHarness,
 } from '../support/ledger-helpers.ts'
@@ -201,13 +205,37 @@ describe('ledger race suite', () => {
     expect(after.receipts).toBe(before.receipts + 1)
   })
 
+  it('records one repurchase of a lot when two administrators confirm it at the same head: one balance lot, the loser leaves nothing', async () => {
+    const l = await ledgerHarness()
+    const notices = [await addDocument(l.db, l.orgId, 'OTHER'), await addDocument(l.db, l.orgId, 'OTHER')]
+    const body = (noticeDocumentId: string) => ({
+      securityId: l.id('CS-4'), effectiveDate: '2026-10-20', quantity: '34500', pricePerShare: '0.31',
+      consideration: { method: 'WIRE', paidDate: '2026-10-20' }, noticeDocumentId, confirmation: 'CS-4',
+    })
+    const [first, second] = [await reviewed(l, 'record-repurchase', body(notices[0]!)), await reviewed(l, 'record-repurchase', body(notices[1]!))]
+    const before = await counts(l)
+    const responses = await concurrently([
+      post(l, '/commands/record-repurchase', first, 'race-repurchase-a'),
+      post(l, '/commands/record-repurchase', second, 'race-repurchase-b'),
+    ])
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409])
+    expect(errorOf(await responses.find((response) => response.status === 409)!.json())).toMatchObject({ code: 'conflict', reason: 'stale_ledger' })
+    const after = await counts(l)
+    expect(after.seq).toBe(before.seq + 2)
+    expect(after.commands).toBe(before.commands + 1)
+    expect(after.receipts).toBe(before.receipts + 1)
+    expect(await l.db.prepare('SELECT COUNT(*) AS n FROM securities WHERE parent_security_id = ?').bind(l.id('CS-4')).first('n')).toBe(1)
+    // Only the winner's notice was linked.
+    expect(await l.db.prepare("SELECT COUNT(*) AS n FROM document_links WHERE role = 'NOTICE' AND document_id IN (?, ?)").bind(...notices).first('n')).toBe(1)
+  })
+
   it('forces both Mark executed batches to the commit boundary and rolls the loser back whole', async () => {
     const l = await ledgerHarness()
     const race = batchRaceInjector(l.db)
     const context = (actor: typeof adminActor) => loadCommandContext(contextInput(l, actor, race.binding))
     const [firstContext, secondContext] = await Promise.all([context(adminActor), context(ownerActor)])
     const body = async (): Promise<MarkExecutedFields> => ({
-      securityId: l.id('OPT-51'), executedAgreementDocumentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'),
+      securityId: l.id('OPT-51'), signed: 'both', executedAgreementDocumentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'),
       signatureDates: { company: '2026-10-20' }, attestation: 'This PDF bears both signatures', confirmation: 'OPT-51',
       documentIds: [], acknowledge: [],
     })
@@ -231,6 +259,60 @@ describe('ledger race suite', () => {
       .bind(a.executedAgreementDocumentId, b.executedAgreementDocumentId).first('n')).toBe(1)
     expect(await l.db.prepare('SELECT document_id FROM document_links WHERE document_id IN (?, ?)')
       .bind(a.executedAgreementDocumentId, b.executedAgreementDocumentId).first('document_id')).toBe(b.executedAgreementDocumentId)
+  })
+
+  it("refuses a termination when the record's relationship is corrected between its read and its commit", async () => {
+    const l = await ledgerHarness()
+    // Imported as an ex-employee without a termination: the termination leaves the relationship as it is.
+    await l.db.prepare("UPDATE stakeholders SET relationship = 'ex_employee', version = version + 1 WHERE id = ?").bind(l.id('S10')).run()
+    const version = await l.db.prepare('SELECT version FROM stakeholders WHERE id = ?').bind(l.id('S10')).first<number>('version')
+    const race = batchRaceInjector(l.db)
+    const ctx = await loadCommandContext(contextInput(l, adminActor, race.binding))
+    const before = await counts(l)
+    // The profile edit appends nothing to the ledger, so the termination's head check still passes.
+    let corrected: Response | undefined
+    race.arm(async () => {
+      corrected = await l.api('PATCH', l.path(`/stakeholders/${l.id('S10')}`), l.sa, { version, relationship: 'employee' })
+    }, (statements) => batchIncludesSql(statements, 'INSERT INTO commands'))
+    await expect(runCommand(ctx, {
+      route: 'POST /api/orgs/:orgId/commands/terminate-stakeholder', path: '/race/terminate', body: { n: 1 }, dryRun: false,
+      idempotencyKey: 'relationship-race-terminate', expectedLedgerSeq: null, expectedDiffSha256: null, acknowledge: [], autoAcknowledge: true,
+    }, (current) => planTermination(current, {
+      stakeholderId: l.id('S10'), terminationDate: '2026-10-21', terminationType: 'voluntary', relationshipAfter: 'ex_employee',
+      accelerations: [], deadlineExtensions: [], repurchaseDeadlines: [], documentIds: [],
+    }, { kind: 'immediate' }))).rejects.toMatchObject({ code: 'conflict', extra: { reason: 'stale_version' } })
+    expect(race.injections()).toBe(1)
+    expect(corrected?.status).toBe(200)
+    expect(await l.db.prepare('SELECT relationship FROM stakeholders WHERE id = ?').bind(l.id('S10')).first('relationship')).toBe('employee')
+    const after = await counts(l)
+    expect(after.seq).toBe(before.seq)
+    expect(after.commands).toBe(before.commands)
+  })
+
+  it("refuses a merge when a record's hire date is corrected between its read and its commit", async () => {
+    const l = await ledgerHarness()
+    // A former employee and a second record of the same employment, hired before the termination: a genuine duplicate.
+    await addStakeholder(l.db, l.orgId, 'S68', 'employee')
+    await addStakeholder(l.db, l.orgId, 'S69', 'employee')
+    await l.db.prepare("UPDATE stakeholders SET hire_date = '2025-01-06', version = version + 1 WHERE id = ?").bind(l.id('S69')).run()
+    await commit(l, l.rw, 'terminate-stakeholder', { stakeholderId: l.id('S68'), terminationDate: '2026-03-31', terminationType: 'voluntary' })
+    const version = await l.db.prepare('SELECT version FROM stakeholders WHERE id = ?').bind(l.id('S69')).first<number>('version')
+    const race = batchRaceInjector(l.db)
+    const ctx = await loadCommandContext(contextInput(l, ownerActor, race.binding))
+    // The correction makes the other record a rehire; it appends nothing to the ledger, so the head check still passes.
+    let corrected: Response | undefined
+    race.arm(async () => {
+      corrected = await l.api('PATCH', l.path(`/stakeholders/${l.id('S69')}`), l.sa, { version, hireDate: '2026-09-01' })
+    }, (statements) => batchIncludesSql(statements, 'INSERT INTO commands'))
+    const body = { mergedStakeholderId: l.id('S69'), survivingStakeholderId: l.id('S68'), reason: 'Synthetic duplicate record', confirmation: holderName('S69') }
+    await expect(runCommand(ctx, {
+      route: 'POST /api/orgs/:orgId/commands/merge-stakeholders', path: '/race/merge', body, dryRun: false,
+      idempotencyKey: 'hire-date-race-merge', expectedLedgerSeq: null, expectedDiffSha256: null, acknowledge: [],
+    }, async (current) => ({ plan: await planStakeholderMerge(current, body as never, { dryRun: false }), documents: null }))).rejects.toMatchObject({ code: 'conflict', extra: { reason: 'state_changed' } })
+    expect(race.injections()).toBe(1)
+    expect(corrected?.status).toBe(200)
+    expect(await l.db.prepare('SELECT merged_into_id FROM stakeholders WHERE id = ?').bind(l.id('S69')).first('merged_into_id')).toBeNull()
+    expect(await l.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE type = 'merge-stakeholders'").first('n')).toBe(0)
   })
 
   it('runs due processing with the cancellation winning and rolls the apply back whole', async () => {

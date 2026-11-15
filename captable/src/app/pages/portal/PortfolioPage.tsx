@@ -2,15 +2,15 @@ import { useSearchParams } from "react-router";
 import type { api } from "#shared";
 import { ProgressBar } from "../../components/Charts.tsx";
 import { useDisplay } from "../../components/Display.tsx";
-import { Badge, Banner, NotFoundState, Pending } from "../../components/Feedback.tsx";
+import { Banner, NotFoundState, Pending } from "../../components/Feedback.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { Card } from "../../components/Page.tsx";
-import { DocumentCards, PortalLink, PortalPage, StatusBadge } from "../../components/PortalParts.tsx";
+import { DocumentCards, ExecutionBadge, PortalLink, PortalPage, StatusBadge } from "../../components/PortalParts.tsx";
 import { usePortal } from "../../components/PortalWorkspace.tsx";
 import { Tiles, type Tile } from "../../components/Tiles.tsx";
 import { DASH, formatDate, formatDaysLeft, plural } from "../../lib/format.ts";
 import { SECURITY_STATUS_LABELS } from "../../lib/labels.ts";
-import { exitWindows, isPositive, securityPath, summarize, typeLabel, upcomingVests, type ExitWindow } from "../../lib/portal.ts";
+import { awaitingHolderSignature, exitWindows, isPositive, securityPath, summarize, typeLabel, upcomingVests, type ExitWindow } from "../../lib/portal.ts";
 import { useResource } from "../../lib/useResource.ts";
 
 // Portfolio: the exit-window banner for former employees, tiles,
@@ -70,7 +70,11 @@ function Overview({ record }: { record: api.PortalHolding }) {
       {hasVesting ? (
         <div className="grid-2">
           <Card title="Vesting status">
-            <p className="small muted">Equity vests over time; you can exercise options only once they have vested.</p>
+            <p className="small muted">
+              Your equity vests over time, on the schedule in your grant agreement. Exercising an option means buying its shares at
+              the exercise price: you can exercise vested options until they expire or, if you leave, until your exercise
+              deadline. <PortalLink to="how-to-exercise">How to exercise</PortalLink> explains the steps.
+            </p>
             {summary.options ? (
               <>
                 <div className="small muted mb-8">Options</div>
@@ -125,7 +129,8 @@ function Overview({ record }: { record: api.PortalHolding }) {
  * The exit-window banner: "You can exercise 60,000 vested options until Feb 28, 2027. Exercises after
  * Nov 30, 2026 are taxed as NSOs." One statement per set of grants sharing both deadlines, so a quantity is never
  * labelled with another grant's date; the grants are named whenever more than one is open. A passed ISO deadline stays
- * visible while the contractual window is open: from then on every exercise is taxed as an NSO.
+ * visible while the contractual window is open: from then on every exercise is taxed as an NSO. A grant awaiting the
+ * holder's own signature is never called exercisable: its statement says the signature comes first, and gives its date.
  */
 function ExitWindowBanner({ windows }: { windows: readonly ExitWindow[] }) {
   const { format, today } = useDisplay();
@@ -137,12 +142,17 @@ function ExitWindowBanner({ windows }: { windows: readonly ExitWindow[] }) {
       : window.iso.kind === "passed"
         ? ` The ISO deadline passed on ${formatDate(window.iso.date)}: exercises from now on are taxed as NSOs.`
         : "";
-    return `You can exercise ${format.shares(window.exercisable)} vested options${grants} until ${formatDate(window.deadline)} (${formatDaysLeft(today, window.deadline)}).${iso}`;
+    const until = `${formatDate(window.deadline)} (${formatDaysLeft(today, window.deadline)})`;
+    if (window.awaitingSignature) {
+      return `Your signature is still needed on ${window.grants[0]!.displayId} before you can exercise its ${format.shares(window.quantity)} vested options. Its exercise window closes on ${until}.${iso}`;
+    }
+    return `You can exercise ${format.shares(window.quantity)} vested options${grants} until ${until}.${iso}`;
   };
   const how = <>Read <PortalLink to="how-to-exercise">How to exercise</PortalLink> — exercising is an offline process.</>;
   if (windows.length === 1) return <Banner kind="warn" title={statement(windows[0]!)}>{how}</Banner>;
+  const title = windows.some((window) => window.awaitingSignature) ? "Your exercise deadlines:" : "You can exercise vested options before these deadlines:";
   return (
-    <Banner kind="warn" title="You can exercise vested options before these deadlines:">
+    <Banner kind="warn" title={title}>
       <ul className="exit-windows">
         {windows.map((window) => <li key={window.grants.map((grant) => grant.id).join()}>{statement(window)}</li>)}
       </ul>
@@ -187,6 +197,27 @@ function RecordSwitcher({ current }: { current: string }) {
   );
 }
 
+/**
+ * The Exercisable column: options and warrants exercisable now, or that the holder's own signature
+ * comes first; a dash for shares and SAFEs. An option grant with options to exercise links to How to exercise.
+ */
+function ExercisableCell({ security }: { security: api.PortalSecurity }) {
+  const { format } = useDisplay();
+  if (security.family !== "EQUITY_COMPENSATION" && security.family !== "WARRANT") return <td className="num">{DASH}</td>;
+  if (awaitingHolderSignature(security)) return <td className="num muted">Awaiting your signature</td>;
+  const exercisable = security.numbers.exercisable;
+  return (
+    <td className="num">
+      {format.shares(exercisable)}
+      {security.family === "EQUITY_COMPENSATION" && security.status === "OUTSTANDING" && isPositive(exercisable) ? (
+        <div className="small">
+          <PortalLink to={`how-to-exercise?grant=${security.id}`}>How to exercise <span className="sr-only">for {security.displayId}</span></PortalLink>
+        </div>
+      ) : null}
+    </td>
+  );
+}
+
 function GrantsTable({ securities }: { securities: readonly api.PortalSecurity[] }) {
   const { format } = useDisplay();
   if (securities.length === 0) return <p className="muted">No grants or shares.</p>;
@@ -208,6 +239,7 @@ function GrantsTable({ securities }: { securities: readonly api.PortalSecurity[]
             <th scope="col">Expiration</th>
             <th scope="col" className="num">Quantity</th>
             <th scope="col" className="num">Vested</th>
+            <th scope="col" className="num">Exercisable</th>
             <th scope="col" className="num">Exercise price</th>
           </tr>
         </thead>
@@ -218,12 +250,13 @@ function GrantsTable({ securities }: { securities: readonly api.PortalSecurity[]
               <td>{typeLabel(security)}</td>
               <td>
                 <StatusBadge status={security.status} />
-                {security.executionPending ? <> <Badge tone="amber">Execution pending</Badge></> : null}
+                {security.executionPending ? <> <ExecutionBadge security={security} /></> : null}
               </td>
               <td>{formatDate(security.issueDate)}</td>
               <td>{formatDate(security.expirationDate)}</td>
               <td className="num">{security.family === "CONVERTIBLE" ? DASH : format.shares(security.numbers.granted ?? security.numbers.outstanding)}</td>
               <td className="num">{format.shares(vestedOf(security))}</td>
+              <ExercisableCell security={security} />
               <td className="num">{security.family === "EQUITY_COMPENSATION" || security.family === "WARRANT" ? format.price(security.exercisePrice) : DASH}</td>
             </tr>
           ))}

@@ -8,6 +8,7 @@ import { ActivityPage } from "./pages/ActivityPage.tsx";
 import { CapTablePage } from "./pages/CapTablePage.tsx";
 import { CertificatesPage, CertificateTermsPage, LegendsPage } from "./pages/CertificatesPage.tsx";
 import { CompanyPage } from "./pages/CompanyPage.tsx";
+import { ComplianceChecksPage, ElectionsPage } from "./pages/CompliancePage.tsx";
 import { DashboardPage } from "./pages/DashboardPage.tsx";
 import { DocumentPage } from "./pages/DocumentPage.tsx";
 import { DocumentsPage } from "./pages/DocumentsPage.tsx";
@@ -96,6 +97,8 @@ const companyPages: [path: string, element: ReactNode][] = [
   ["exercise-requests/:requestId", <ExerciseRequestPage />],
   ["compliance/409a", <ValuationsPage />],
   ["compliance/409a/:valuationId", <ValuationPage />],
+  ["compliance/83b", <ElectionsPage />],
+  ["compliance/checks", <ComplianceChecksPage />],
   ["certificates", <CertificatesPage />],
   ["certificates/legends", <LegendsPage />],
   ["certificates/terms", <CertificateTermsPage />],

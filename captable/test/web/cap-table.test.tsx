@@ -2,7 +2,7 @@ import "./setup.ts";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { api } from "#shared";
-import { capTable, IDS, securityList, stakeholderList, TODAY } from "./support/acme.ts";
+import { capTable, IDS, numbers, SECURITIES, security, securityList, stakeholderList, TODAY, uuid } from "./support/acme.ts";
 import { mock, type MockRequest } from "./support/mockApi.ts";
 import { base, renderPage } from "./support/render.tsx";
 
@@ -158,6 +158,74 @@ describe("cap table", () => {
     fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "Execution pending" }), { target: { value: "yes" } });
     expect(within(table).getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("splits outstanding options into Vested and Unvested that add up, and shows Exercisable now apart", async () => {
+    const rows = [
+      SECURITIES.opt1, // 250,000 outstanding: 218,750 vested, all exercisable
+      // Awaiting the holder's signature: vested, but not exercisable.
+      security({ ...SECURITIES.opt49, executionStatus: "pending_holder", numbers: numbers({ issued: "50000", outstanding: "50000", fullyDiluted: "50000", vested: "12500", vestedOutstanding: "12500", unvested: "37500" }) }),
+      // Past its exit-window deadline: vested, but not exercisable.
+      security({ ...SECURITIES.opt21, deadlines: { contractual: "2026-10-01", iso: null, reason: "3 months after involuntary termination" }, numbers: numbers({ ...SECURITIES.opt21.numbers!, exercisable: "0" }) }),
+      // Fully exercised: no longer outstanding, so in none of the three.
+      security({ ...SECURITIES.opt18, status: "EXERCISED", numbers: numbers({ issued: "140000", exercised: "140000", vested: "140000" }) }),
+    ];
+    renderPage(`${base}/captable?tab=options`, [mock(api.routes.getCapTable, capTable("options", { rows })), ...handlers.slice(1)]);
+    await screen.findByRole("table", { name: "Options" });
+    const tiles = screen.getByRole("list", { name: "Options summary" });
+    const tile = (label: string) => within(tiles).getByText(label).closest("li")!.querySelector(".tile-v")!.textContent;
+    expect(tile("Options outstanding")).toBe("360,000");
+    expect(tile("Vested")).toBe("291,250");
+    expect(tile("Unvested")).toBe("68,750");
+    expect(BigInt(tile("Vested")!.replace(/,/g, "")) + BigInt(tile("Unvested")!.replace(/,/g, ""))).toBe(360000n);
+    expect(tile("Exercisable now")).toBe("218,750");
+    expect(within(tiles).queryByText("Vested & unexercised")).toBeNull();
+  });
+
+  it("hides stakeholders with no holdings until asked, without changing the totals", async () => {
+    const zero = (stakeholderId: string, name: string, relationship: api.Relationship) => ({
+      stakeholderId, name, relationship, issuerAssignedId: null, status: "active" as const,
+      byClass: { [IDS.common]: "0" }, issuedAndOutstanding: "0", issuedAndOutstandingPct: "0", planAwards: { [IDS.plan]: "0" }, awardsOutsidePlans: "0", warrants: "0",
+      fullyDiluted: "0", fullyDilutedPct: "0",
+    });
+    const ownership = [...capTable("ownership").ownership!, zero(IDS.rafael, "Rafael Duarte", "ex_employee"), zero(IDS.marcus, "Marcus Oyelaran", "investor")];
+    // Marcus holds an outstanding SAFE, which has no figure on this tab: he still holds something.
+    const safe = security({
+      id: uuid(6, 90), displayId: "SAFE-2", family: "CONVERTIBLE", subtype: "SAFE", stakeholderId: IDS.marcus, stakeholderName: "Marcus Oyelaran", stockClassId: null,
+      issueDate: "2025-01-10", terms: { investment_amount: { amount: "100000", currency: "USD" }, convertible_type: "SAFE" },
+    });
+    renderPage("captable", [
+      mock(api.routes.getCapTable, capTable("ownership", { ownership })),
+      mock(api.routes.listSecurities, securityList([...Object.values(SECURITIES), safe])),
+      ...handlers.slice(2),
+    ]);
+    const table = await screen.findByRole("table", { name: "Ownership" });
+    expect(within(table).queryByText("Rafael Duarte")).toBeNull();
+    expect(within(table).getByText("Marcus Oyelaran")).toBeTruthy();
+    expect(within(rowOf(table, "Totals")).getByText("24,312,120")).toBeTruthy();
+    const toggle = screen.getByRole("checkbox", { name: "Show 1 stakeholder with no holdings" });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(toggle);
+    expect(within(table).getByText("Rafael Duarte")).toBeTruthy();
+    expect(within(rowOf(table, "Totals")).getByText("24,312,120")).toBeTruthy();
+  });
+
+  it("counts a stakeholder who never held a security among those with no holdings", async () => {
+    // As the server sends one: no class or plan figures at all, every total zero.
+    const newcomer = {
+      stakeholderId: uuid(3, 40), name: "Ines Okafor", relationship: "employee" as const, issuerAssignedId: null, status: "active" as const,
+      byClass: {}, issuedAndOutstanding: "0", issuedAndOutstandingPct: "0", planAwards: {}, awardsOutsidePlans: "0", warrants: "0",
+      fullyDiluted: "0", fullyDilutedPct: "0",
+    };
+    renderPage("captable", [
+      mock(api.routes.getCapTable, capTable("ownership", { ownership: [...capTable("ownership").ownership!, newcomer] })),
+      ...handlers.slice(1),
+    ]);
+    const table = await screen.findByRole("table", { name: "Ownership" });
+    expect(within(table).queryByText("Ines Okafor")).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show 1 stakeholder with no holdings" }));
+    expect(within(table).getByText("Ines Okafor")).toBeTruthy();
+    expect(within(rowOf(table, "Totals")).getByText("24,312,120")).toBeTruthy();
   });
 
   it("shows the shares tab with prices and the source of exercise shares", async () => {

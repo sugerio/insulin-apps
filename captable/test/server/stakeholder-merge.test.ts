@@ -7,6 +7,7 @@ import {
   OWNER_EMAIL,
   addDocument,
   addEmail,
+  addStakeholder,
   commit,
   errorOf,
   getJson,
@@ -14,6 +15,7 @@ import {
   ledgerHarness,
   linkAdmin,
   runCommand,
+  VS1_TEMPLATE_ID,
   type LedgerHarness,
 } from '../support/ledger-helpers.ts'
 
@@ -234,5 +236,81 @@ describe('merge-stakeholders', () => {
     })
     expect(survivorActor.status).toBe(403)
     expect(errorOf(await survivorActor.json()).code).toBe('self_dealing')
+  })
+})
+
+describe('rehires keep two records', () => {
+  /** A former employee terminated on 2026-03-31 and another record for the same person. */
+  async function formerAndOther(l: LedgerHarness, former: string, other: string, relationship: 'employee' | 'officer' | 'investor', hireDate: string | null) {
+    await addStakeholder(l.db, l.orgId, former, 'employee')
+    await addStakeholder(l.db, l.orgId, other, relationship)
+    if (hireDate !== null) {
+      await l.db.prepare('UPDATE stakeholders SET hire_date = ?, version = version + 1, updated_at = ? WHERE id = ?').bind(hireDate, ACME_NOW, l.id(other)).run()
+    }
+    await commit(l, l.rw, 'terminate-stakeholder', { stakeholderId: l.id(former), terminationDate: '2026-03-31', terminationType: 'voluntary' })
+  }
+
+  async function mergePreview(l: LedgerHarness, merged: string, survivor: string): Promise<api.CommandResult> {
+    const dry = await l.api('POST', l.path('/commands/merge-stakeholders?dryRun=true'), l.sa, {
+      mergedStakeholderId: l.id(merged), survivingStakeholderId: l.id(survivor), reason: REASON, confirmation: holderName(merged),
+    })
+    expect(dry.status).toBe(200)
+    return await dry.json() as api.CommandResult
+  }
+
+  const rehireCodes = (preview: api.CommandResult) => preview.violations.filter((item) => item.code === 'STAKEHOLDER_MERGE_REHIRE')
+
+  async function scheduleLeaving(l: LedgerHarness, label: string, date: string) {
+    await l.db.prepare(
+      `INSERT INTO scheduled_terminations
+       (id, org_id, stakeholder_id, termination_date, termination_type, vesting_stop_date, request, request_sha256, status, version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'voluntary', ?, '{}', ?, 'SCHEDULED', 1, ?, ?)`,
+    ).bind(crypto.randomUUID(), l.orgId, l.id(label), date, date, 'ab'.repeat(32), ACME_NOW, ACME_NOW).run()
+  }
+
+  it('refuses to merge a rehire holding a grant issued after the termination, in either direction', async () => {
+    const l = await ledgerHarness()
+    await formerAndOther(l, 'S60', 'S61', 'employee', null)
+    await commit(l, l.rw, 'grant-equity-compensation', {
+      stockPlanId: l.id('plan:P1'), stakeholderId: l.id('S61'), quantity: '1000',
+      board: { approvalDate: '2026-10-20', consentDocumentId: await addDocument(l.db, l.orgId, 'BOARD_CONSENT') },
+      optionType: 'NSO', exercisePrice: '0.95', valuationId: l.id('V5'), expirationDate: '2036-10-20', exemption: { federal: 'RULE_701' },
+      vesting: { terms: { templateId: VS1_TEMPLATE_ID }, vestingStartDate: '2026-10-20', earlyExercisable: false, accelerationTerms: { kind: 'NONE' }, matchesSignedAgreement: true },
+      displayId: 'OPT-61', executedAgreement: { documentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'), signedByHolderAndSignatory: true },
+    })
+    for (const [merged, survivor] of [['S61', 'S60'], ['S60', 'S61']] as const) {
+      const preview = await mergePreview(l, merged, survivor)
+      expect(rehireCodes(preview), `${merged} into ${survivor}`).toEqual([expect.objectContaining({ message: expect.stringContaining('holds OPT-61, issued on 2026-10-20') })])
+      expect(preview.stakeholderMerge?.blockingItems).toContainEqual(expect.objectContaining({ type: 'rehire', id: l.id('S61') }))
+    }
+    const refused = await runCommand(l, l.sa, 'merge-stakeholders', { mergedStakeholderId: l.id('S61'), survivingStakeholderId: l.id('S60'), reason: REASON, confirmation: holderName('S61') })
+    expect(refused.response.status).toBe(422)
+    expect(await l.db.prepare('SELECT merged_into_id FROM stakeholders WHERE id = ?').bind(l.id('S61')).first('merged_into_id')).toBeNull()
+  })
+
+  it('refuses a rehire hired after the termination without new equity, also while a new departure is scheduled', async () => {
+    const l = await ledgerHarness()
+    await formerAndOther(l, 'S62', 'S63', 'officer', '2026-09-01')
+    for (const [merged, survivor] of [['S63', 'S62'], ['S62', 'S63']] as const) {
+      expect(rehireCodes(await mergePreview(l, merged, survivor)), `${merged} into ${survivor}`).toEqual([expect.objectContaining({ message: expect.stringContaining('was hired on 2026-09-01') })])
+    }
+    // The rehire is leaving again: a scheduled termination isn't recorded yet, so the old one is still the only one.
+    await scheduleLeaving(l, 'S63', '2026-11-30')
+    expect(rehireCodes(await mergePreview(l, 'S62', 'S63'))).toHaveLength(1)
+  })
+
+  it('still merges a genuine duplicate of a former employee, and never calls a scheduled departure a termination', async () => {
+    const l = await ledgerHarness()
+    // Hired before the termination: the same employment, recorded twice.
+    await formerAndOther(l, 'S64', 'S65', 'employee', '2025-01-06')
+    expect(rehireCodes(await mergePreview(l, 'S65', 'S64'))).toEqual([])
+    await commit(l, l.sa, 'merge-stakeholders', { mergedStakeholderId: l.id('S65'), survivingStakeholderId: l.id('S64'), reason: REASON, confirmation: holderName('S65') })
+    expect(await l.db.prepare('SELECT merged_into_id FROM stakeholders WHERE id = ?').bind(l.id('S65')).first('merged_into_id')).toBe(l.id('S64'))
+    // Neither record terminated: one only scheduled to leave, the other hired later, is no rehire.
+    await addStakeholder(l.db, l.orgId, 'S66', 'employee')
+    await addStakeholder(l.db, l.orgId, 'S67', 'employee')
+    await l.db.prepare("UPDATE stakeholders SET hire_date = '2026-10-01', version = version + 1, updated_at = ? WHERE id = ?").bind(ACME_NOW, l.id('S67')).run()
+    await scheduleLeaving(l, 'S66', '2026-12-31')
+    expect(rehireCodes(await mergePreview(l, 'S67', 'S66'))).toEqual([])
   })
 })

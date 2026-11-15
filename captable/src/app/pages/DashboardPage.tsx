@@ -43,13 +43,28 @@ const DEFAULT_HREFS: Record<NeedsKind, string> = {
   SCHEDULED_TERMINATION: "securities-status#sched",
   ISO_DEADLINE_SOON: "securities-status#term",
   REPURCHASE_WINDOW_CLOSING: "securities-status#rep",
+  REPURCHASE_UNRESOLVED: "securities-status#rep",
   VALUATION_STATUS: "compliance/409a",
   EXPIRY_RUN_TO_CONFIRM: api.EXPIRY_RUNS_HREF,
 };
 
-/** The lines always shown; an expiry run to confirm follows when the server reports one. */
+/** The lines always shown; a lapsed or unrecorded repurchase window and an expiry run to confirm follow when the server reports them. */
 const ALWAYS: readonly NeedsKind[] = ["EXECUTION_PENDING", "SCHEDULED_TERMINATION", "ISO_DEADLINE_SOON", "REPURCHASE_WINDOW_CLOSING", "VALUATION_STATUS"];
-const OPTIONAL: readonly NeedsKind[] = ["EXPIRY_RUN_TO_CONFIRM"];
+const OPTIONAL: readonly NeedsKind[] = ["REPURCHASE_UNRESOLVED", "EXPIRY_RUN_TO_CONFIRM"];
+
+/** How the execution-pending line names each family it counts (singular, plural). */
+const FAMILY_NOUNS: Record<api.SecurityFamily, readonly [string, string]> = {
+  EQUITY_COMPENSATION: ["option grant", "option grants"],
+  STOCK: ["share issuance", "share issuances"],
+  WARRANT: ["warrant", "warrants"],
+  CONVERTIBLE: ["SAFE", "SAFEs"],
+};
+
+/** "8 securities awaiting signatures (6 option grants, 2 share issuances)": securities of every family, never "grants". */
+function awaitingSignatures(item: api.NeedsAttention | undefined, count: number): string {
+  const byFamily = (item?.byFamily ?? []).map((entry) => plural(entry.count, ...FAMILY_NOUNS[entry.family]));
+  return `${plural(count, "security", "securities")} awaiting signatures${byFamily.length ? ` (${byFamily.join(", ")})` : ""}`;
+}
 
 function resolveHref(workspace: Workspace, href: string | undefined, kind: NeedsKind): string {
   if (href?.startsWith("/companies/")) return href;
@@ -122,13 +137,16 @@ function attentionLines(workspace: Workspace, dashboard: api.DashboardResponse, 
     const to = resolveHref(workspace, item?.href, kind);
     switch (kind) {
       case "EXECUTION_PENDING":
-        return { kind, to, count, label: "Execution pending (migrated)", text: `${plural(count, "grant")} awaiting signatures`, tone: count ? "warn" : "ok" };
+        return { kind, to, count, label: "Execution pending", text: awaitingSignatures(item, count), tone: count ? "warn" : "ok" };
       case "SCHEDULED_TERMINATION":
         return { kind, to, count, label: "Scheduled terminations", text: count ? `${plural(count, "termination")} scheduled${due ? ` · next ${due}` : ""}` : "None", tone: count ? "info" : "ok" };
       case "ISO_DEADLINE_SOON":
         return { kind, to, count: null, label: "ISO deadlines within 30 days", text: count ? `${plural(count, "ISO deadline")}${due ? ` · first ${due}` : ""}` : "None", tone: count ? "bad" : "ok" };
       case "REPURCHASE_WINDOW_CLOSING":
-        return { kind, to, count, label: "Repurchase windows open", text: count ? `${plural(count, "window")}${due ? `, closes ${due}` : ""} — follow the offline repurchase procedure` : "None", tone: count ? "warn" : "ok" };
+        return { kind, to, count, label: "Repurchase windows closing within 30 days", text: count ? `${plural(count, "window")}${due ? `, closes ${due}` : ""}` : "None", tone: count ? "warn" : "ok" };
+      case "REPURCHASE_UNRESOLVED":
+        // Present only while there is one: a window that lapsed, or that no agreement or decision recorded.
+        return { kind, to, count, label: "Repurchase windows lapsed or not recorded", text: `${plural(count, "holding")} of unvested shares from terminated holders`, tone: count ? "warn" : "ok" };
       case "VALUATION_STATUS":
         return { kind, to, count: null, label: "409A", text: valuation.text, tone: valuation.tone };
       case "EXPIRY_RUN_TO_CONFIRM":
@@ -140,17 +158,18 @@ function attentionLines(workspace: Workspace, dashboard: api.DashboardResponse, 
 }
 
 const ATTENTION_LABELS: Record<NeedsKind, string> = {
-  EXECUTION_PENDING: "Execution pending (migrated)",
+  EXECUTION_PENDING: "Execution pending",
   SCHEDULED_TERMINATION: "Scheduled terminations",
   ISO_DEADLINE_SOON: "ISO deadlines within 30 days",
-  REPURCHASE_WINDOW_CLOSING: "Repurchase windows open",
+  REPURCHASE_WINDOW_CLOSING: "Repurchase windows closing within 30 days",
+  REPURCHASE_UNRESOLVED: "Repurchase windows lapsed or not recorded",
   VALUATION_STATUS: "409A",
   EXPIRY_RUN_TO_CONFIRM: "Expiry run to confirm",
 };
 
 const IN_PROGRESS = [
-  ["executionPending", "Execution pending (migrated)", "securities-status#exec"],
-  ["unvestedSharesFromTerminated", "Unvested shares — repurchase window", "securities-status#rep"],
+  ["executionPending", "Execution pending", "securities-status#exec"],
+  ["unvestedSharesFromTerminated", "Unvested shares from terminated holders", "securities-status#rep"],
   ["optionsFromTerminated", "Options from terminated holders — open windows", "securities-status#term"],
   ["scheduledTerminations", "Scheduled terminations", "securities-status#sched"],
 ] as const;
@@ -227,7 +246,7 @@ function DashboardBody({ data, valuation, retryValuations, onProcessed }: { data
       ? {
           key: "rep",
           tone: "warn" as const,
-          title: `${plural(repurchase.count, "repurchase window")} closing${repurchase.dueDate ? ` ${formatDate(repurchase.dueDate)}` : ""} — follow the offline repurchase procedure`,
+          title: `${plural(repurchase.count, "repurchase window")} closing${repurchase.dueDate ? ` ${formatDate(repurchase.dueDate)}` : ""}`,
           body: "Unvested shares from terminated holders.",
           to: href("securities-status#rep"),
         }

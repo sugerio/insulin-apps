@@ -91,6 +91,9 @@ describe('holder portal over the synthetic Acme ledger', () => {
       noticeForm: null, privacyNotice: null, paymentInstructions: details,
       companyContact: { name: 'Acme Equity Team', email: 'equity@example.test' },
     })
+    // The default instructions: pay only once the equity team has confirmed the amount due, never before.
+    expect(howTo.text).toContain('The equity team then confirms the amount due. Pay only after that confirmation')
+    expect(howTo.text).not.toMatch(/Then pay the exercise price/)
     expect(await getJson(harness, harness.owner, `/stakeholders/${harness.id('S04')}/preview/how-to-exercise`))
       .toMatchObject({ paymentInstructions: details })
     expect(await getJson(harness, harness.reader, `/stakeholders/${harness.id('S04')}/preview/how-to-exercise`))

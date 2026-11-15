@@ -45,7 +45,7 @@ interface DialogProps {
   footer?: ReactNode;
 }
 
-const NOT_DISMISSIBLE = "Settle the write first: Try again, or Check what was recorded.";
+export const NOT_DISMISSIBLE = "Settle the write first: Try again, or Check what was recorded.";
 
 /** Whether a write inside the open modal (an upload in its form) is unsettled: its own close buttons wait too. */
 const NestedHeld = createContext(false);

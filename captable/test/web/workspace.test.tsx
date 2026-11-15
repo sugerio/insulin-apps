@@ -135,7 +135,7 @@ describe("keyboard and focus", () => {
 describe("the read-only admin experience", () => {
   it("shows the role, no + New, and no write controls anywhere on the queues", async () => {
     renderPage("securities-status", [mock(api.routes.getSecuritiesStatus, securitiesStatus()), mock(api.routes.listSecurities, securityList()), mock(api.routes.listStakeholders, stakeholderList())], { role: "admin_ro" });
-    await screen.findByRole("table", { name: "Execution pending (migrated)" });
+    await screen.findByRole("table", { name: "Execution pending" });
     expect(screen.getAllByText("Custom role").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /New/ })).toBeNull();
     expect(screen.getByText("Read-only")).toBeTruthy();

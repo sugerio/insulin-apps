@@ -52,6 +52,8 @@ export interface StockOptions {
   vestingMonths?: { start: string; months: number; cliff: number };
   parent?: string | null;
   txSource?: e.TransactionSource;
+  /** The lot's own repurchase right (`x_repurchase_right`). */
+  repurchaseRight?: Record<string, unknown>;
 }
 
 /** Adds a stock issuance to a command; returns the lot id. */
@@ -81,6 +83,7 @@ export function addStock(m: Mini, c: CommandBuilder, label: string, holder: stri
     quantity,
     x_origin: options.origin ?? "PURCHASE",
     ...(options.source ? { x_source_security_id: options.source } : {}),
+    ...(options.repurchaseRight ? { x_repurchase_right: options.repurchaseRight } : {}),
     ...vesting,
   });
   return lot;

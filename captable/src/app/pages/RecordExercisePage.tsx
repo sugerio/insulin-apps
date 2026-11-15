@@ -15,7 +15,7 @@ import { ExtendDeadlineDialog } from "../components/flows/ExtendDeadlineDialog.t
 import { amountOf, exactMoney, parseAmount } from "../lib/amounts.ts";
 import { DASH, formatDate } from "../lib/format.ts";
 import { fieldProblem, ledgerUnmoved, useWriteFlow, type FieldMap } from "../lib/flow.ts";
-import { isExecutionPending, optionType, RELATIONSHIP_LABELS, VALUATION_STATUS_LABELS } from "../lib/labels.ts";
+import { blocksExercise, isExecutionPending, optionType, RELATIONSHIP_LABELS, VALUATION_STATUS_LABELS } from "../lib/labels.ts";
 import { exerciseCost, formatComputedMoney, paymentReference } from "../lib/portal.ts";
 import * as terms from "../lib/terms.ts";
 import { notFoundAsNull, useResource } from "../lib/useResource.ts";
@@ -129,8 +129,8 @@ export function RecordExercisePage() {
             <WizardHead title={title} back={back} />
             {data.family !== "EQUITY_COMPENSATION" || optionType(data.subtype) === null ? (
               <Card><Banner kind="info" title="Only options are exercised here">The app doesn't record warrant exercises; shares are never exercised.</Banner></Card>
-            ) : isExecutionPending(data.executionStatus) ? (
-              <Card><Banner kind="warn" title="Execution pending">This grant cannot be exercised until it is marked executed.</Banner></Card>
+            ) : blocksExercise(data.executionStatus) ? (
+              <Card><Banner kind="warn" title="Awaiting the holder's signature">This grant cannot be exercised until it is marked executed.</Banner></Card>
             ) : <ExerciseForm security={data} back={back} />}
           </WriteGate>
         )}
@@ -360,6 +360,11 @@ function ExerciseForm({ security, back }: { security: api.SecurityDetail; back: 
             ]}
           />
         </Card>
+        {isExecutionPending(security.executionStatus) ? (
+          <Banner kind="warn" title="Awaiting the company signatory's signature">
+            The holder has signed; a missing company signature doesn't block the exercise. You acknowledge this when you record it, and Mark executed completes the grant once the company signs.
+          </Banner>
+        ) : null}
         {editing ? <FlowProblemBanner problem={flow.problem} onRetry={review} busy={flow.busy} /> : null}
         {deadlineViolation ? (
           <Banner kind="info" title="An admin can extend the contractual deadline" action={<button type="button" className="btn btn-ghost btn-sm" onClick={() => setExtending(true)}>Extend exercise deadline</button>}>

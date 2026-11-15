@@ -22,6 +22,7 @@ import { LedgerBuilder, monthlyEvents, usd, uuid } from "./fixtures/builder.ts";
 
 const FAR = "2099-12-31";
 const PROPERTY_TIMEOUT = 300_000;
+const PENDING_STATUSES = ["pending_company", "pending_holder", "pending_both"] as const;
 
 interface Step {
   kind: number;
@@ -127,7 +128,8 @@ function buildWorld(steps: Step[]): World {
             x_fmv: { price_per_share: usd("1"), valuation_id: null, source: "IMPORTED" },
           });
           if (events !== null) c.tx("TX_VESTING_START", date, { security_id: lot, x_vesting_start_date: start });
-          if ((step.b >> 4) & 1) c.tx("X_EXECUTION_STATUS", date, { security_id: lot, status: "pending_company" });
+          // Every pending status: a grant awaiting only the company signatory's signature is exercisable.
+          if ((step.b >> 4) & 1) c.tx("X_EXECUTION_STATUS", date, { security_id: lot, status: PENDING_STATUSES[(step.a >> 3) % 3]! });
           w.grants.push(lot);
         }, { source: "app" });
         return;

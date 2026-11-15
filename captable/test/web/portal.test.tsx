@@ -9,7 +9,7 @@ import { IDS, ORG_ID, org, uuid } from "./support/acme.ts";
 import { apiError, mock, mockApi, type MockHandler, type MockRequest } from "./support/mockApi.ts";
 import {
   COMPANY_RESOURCES, DANIEL, DANIEL_OPTION, DANIEL_SHARES, DANIEL_WARRANT, MARCUS, MARCUS_SAFES, MARCUS_SHARES, NADIA, NADIA_OPTION,
-  PRIVACY_NOTICE, detailOf, holderMe, howToExercise, overview, portalSecurity, securityDetail,
+  PRIVACY_NOTICE, detailOf, holderMe, howToExercise, overview, portalDocument, portalSecurity, securityDetail,
 } from "./support/portal.ts";
 import "./support/render.tsx";
 
@@ -105,18 +105,32 @@ describe("portfolio overview", () => {
     renderPortal(PORTFOLIO, [NADIA]);
     const title = await screen.findByRole("heading", { name: "Acme Robotics", level: 1 });
     expect(within(title.closest(".port-hero") as HTMLElement).getByText("Nadia Pereira-Stone")).toBeTruthy();
-    expect(screen.getByText("You can exercise 60,000 vested options until Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.")).toBeTruthy();
-    expect(within(main()).getByRole("link", { name: "How to exercise" }).getAttribute("href")).toBe(`${PORTFOLIO}/how-to-exercise`);
+    const banner = screen.getByText("You can exercise 60,000 vested options until Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.").closest(".banner") as HTMLElement;
+    expect(within(banner).getByRole("link", { name: "How to exercise" }).getAttribute("href")).toBe(`${PORTFOLIO}/how-to-exercise`);
     const tiles = screen.getByRole("list", { name: "Holdings summary" });
     expect(within(tiles).getByText("Options")).toBeTruthy();
     expect(within(tiles).getByText("60,000")).toBeTruthy();
     expect(within(tiles).getByText("60,000 vested and unexercised · 0 unvested")).toBeTruthy();
     expect(screen.getByRole("img", { name: "60,000 vested and unexercised, 0 unvested, 60,000 cancelled" })).toBeTruthy();
+    // The Vesting status card explains vesting and exercising in plain words, with the way to How to exercise.
+    const explainer = screen.getByText(/^Your equity vests over time, on the schedule in your grant agreement\./);
+    expect(explainer.textContent).toBe(
+      "Your equity vests over time, on the schedule in your grant agreement. Exercising an option means buying its shares at the exercise price: "
+      + "you can exercise vested options until they expire or, if you leave, until your exercise deadline. How to exercise explains the steps.",
+    );
+    expect(within(explainer).getByRole("link", { name: "How to exercise" }).getAttribute("href")).toBe(`${PORTFOLIO}/how-to-exercise`);
     expect(screen.getByText("No upcoming vesting events.")).toBeTruthy();
     const grants = screen.getByRole("table", { name: "My grants and shares" });
+    expect(within(grants).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "ID", "Type", "Status", "Grant / issue date", "Expiration", "Quantity", "Vested", "Exercisable", "Exercise price",
+    ]);
     const row = rowOf(grants, "OPT-20");
-    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["OPT-20", "ISO option", "Outstanding", "Aug 15, 2024", "Aug 15, 2034", "120,000", "60,000", "$0.31"]);
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "OPT-20", "ISO option", "Outstanding", "Aug 15, 2024", "Aug 15, 2034", "120,000", "60,000", "60,000How to exercise for OPT-20", "$0.31",
+    ]);
     expect(within(row).getByRole("link", { name: "OPT-20" }).getAttribute("href")).toBe(`${PORTFOLIO}/securities/${NADIA_OPTION.id}`);
+    // Each exercisable grant links to How to exercise, with the grant chosen.
+    expect(within(row).getByRole("link", { name: "How to exercise for OPT-20" }).getAttribute("href")).toBe(`${PORTFOLIO}/how-to-exercise?grant=${NADIA_OPTION.id}`);
     expect(await screen.findByRole("button", { name: "2023 Equity Incentive Plan.pdf" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "How to exercise your options" })).toBeTruthy();
     expectNoForbiddenFigures();
@@ -141,11 +155,39 @@ describe("portfolio overview", () => {
     expect(await screen.findByText("You can exercise 60,000 vested options until Feb 28, 2027 (75 days). The ISO deadline passed on Nov 30, 2026: exercises from now on are taxed as NSOs.")).toBeTruthy();
   });
 
-  it("flags a grant that is still awaiting signatures", async () => {
-    const pending = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 140), displayId: "OPT-40", issueDate: "2026-09-01", executionPending: true, numbers: { ...DANIEL_OPTION.numbers, exercisable: "0" } });
-    renderPortal(PORTFOLIO, [{ ...DANIEL, securities: [pending] }], { me: holderMe([DANIEL], { email: "daniel@acmerobotics.example" }) });
+  it("says whose signature a grant awaits, and that only the holder's own holds up exercising", async () => {
+    const pending = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 140), displayId: "OPT-40", issueDate: "2026-09-01", executionPending: "pending_holder", numbers: { ...DANIEL_OPTION.numbers, exercisable: "0" } });
+    const both = portalSecurity({ ...pending, id: uuid(6, 141), displayId: "OPT-41", executionPending: "pending_both" });
+    const company = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 142), displayId: "OPT-42", issueDate: "2026-09-02", executionPending: "pending_company" });
+    renderPortal(PORTFOLIO, [{ ...DANIEL, securities: [pending, both, company, DANIEL_WARRANT, DANIEL_SHARES] }], { me: holderMe([DANIEL], { email: "daniel@acmerobotics.example" }) });
     const grants = await screen.findByRole("table", { name: "My grants and shares" });
-    expect(within(rowOf(grants, "OPT-40")).getAllByRole("cell")[2]!.textContent).toBe("Outstanding Execution pending");
+    const cells = (id: string) => within(rowOf(grants, id)).getAllByRole("cell").map((cell) => cell.textContent);
+    expect(cells("OPT-40")[2]).toBe("Outstanding Awaiting your signature");
+    expect(cells("OPT-40")[7]).toBe("Awaiting your signature");
+    expect(cells("OPT-41")[2]).toBe("Outstanding Awaiting signatures");
+    expect(cells("OPT-41")[7]).toBe("Awaiting your signature");
+    // Awaiting only the company: exercisable as any other grant, with its link.
+    expect(cells("OPT-42")[2]).toBe("Outstanding Awaiting the company's signature");
+    expect(cells("OPT-42")[7]).toBe("218,750How to exercise for OPT-42");
+    expect(within(rowOf(grants, "OPT-40")).queryByRole("link", { name: /How to exercise/ })).toBeNull();
+    // A warrant shows what is exercisable (exercised through the company, so no link); shares have nothing to exercise.
+    expect(cells("WAR-1")[7]).toBe("60,000");
+    expect(cells("CS-7")[7]).toBe("—");
+  });
+
+  it("keeps a leaver's deadline in view for a grant awaiting their signature, never saying they can exercise it", async () => {
+    const unsigned = portalSecurity({ ...NADIA_OPTION, id: uuid(6, 140), displayId: "OPT-40", executionPending: "pending_holder", numbers: { ...NADIA_OPTION.numbers, exercisable: "0" } });
+    renderPortal(PORTFOLIO, [{ ...NADIA, securities: [unsigned] }]);
+    const statement = "Your signature is still needed on OPT-40 before you can exercise its 60,000 vested options. Its exercise window closes on Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.";
+    expect(await screen.findByText(statement)).toBeTruthy();
+    expect(screen.queryByText(/You can exercise/)).toBeNull();
+    cleanup();
+    renderPortal(PORTFOLIO, [{ ...NADIA, securities: [NADIA_OPTION, unsigned] }]);
+    const banner = (await screen.findByText("Your exercise deadlines:")).closest(".banner") as HTMLElement;
+    expect(within(banner).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "You can exercise 60,000 vested options (OPT-20) until Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.",
+      statement,
+    ]);
   });
 
   it("shows an investor's vested shares, and their SAFEs counted with each one's status", async () => {
@@ -273,7 +315,11 @@ describe("holding detail", () => {
     expect(definitionOf("Contractual deadline").textContent).toBe("Feb 28, 2027 (130 days)");
     expect(definitionOf("ISO deadline").textContent).toBe("Nov 30, 2026 (40 days) — exercises after it are taxed as NSOs");
     expect(definitionOf("Early exercise allowed", screen.getByLabelText("Overview")).textContent).toBe("No");
+    expect(definitionOf("Board approval date").textContent).toBe("Not recorded");
+    expect(definitionOf("Acceleration").textContent).toBe("Not recorded");
     expect(within(main()).getByRole("link", { name: "How to exercise" }).getAttribute("href")).toBe(`${PORTFOLIO}/how-to-exercise?grant=${NADIA_OPTION.id}`);
+    // One line above the chart: the start, the 1-year cliff the events show, and the last vest before the termination.
+    expect(screen.getByText(/^Vesting start /).textContent).toBe("Vesting start Aug 1, 2024 · Cliff: 30,000 options on Aug 1, 2025 · Vesting stopped: last vest on Aug 1, 2026");
     const schedule = screen.getByRole("table", { name: "Vesting schedule" });
     expect(within(rowOf(schedule, "Aug 1, 2025")).getByText("Vested")).toBeTruthy();
     expect(within(rowOf(schedule, "Sep 1, 2026")).getByText("Cancelled")).toBeTruthy();
@@ -301,23 +347,77 @@ describe("holding detail", () => {
     const history = screen.getByLabelText("Exercise history");
     expect(definitionOf("Mar 20, 2026", history).textContent).toBe("50,000 ISO → CS-7");
     expect(within(history).getByRole("link", { name: "CS-7" }).getAttribute("href")).toBe(`${PORTFOLIO}/securities/${DANIEL_SHARES.id}`);
+    expect(screen.getByText(/^Vesting start /).textContent).toBe("Vesting start Mar 1, 2023 · Cliff: 75,000 options on Mar 1, 2024 · Fully vests on Mar 1, 2027");
   });
 
-  it("says a grant awaits signatures, and when early exercise is allowed", async () => {
-    const pending = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 140), displayId: "OPT-40", executionPending: true, numbers: { ...DANIEL_OPTION.numbers, exercisable: "0" } });
+  it("shows the grant's board approval date and acceleration terms as recorded", async () => {
+    const detail = securityDetail(DANIEL_OPTION, {
+      boardApprovalDate: "2023-04-14", acceleration: { kind: "DOUBLE_TRIGGER", text: "Full acceleration on a change of control followed by a termination without cause." },
+    });
+    renderPortal(`${PORTFOLIO}/securities/${DANIEL_OPTION.id}`, [DANIEL], { handlers: portalHandlers([DANIEL], { details: [detail] }) });
+    await screen.findByRole("heading", { name: /^OPT-1 Options/, level: 1 });
+    expect(definitionOf("Board approval date").textContent).toBe("Apr 14, 2023");
+    expect(definitionOf("Acceleration").textContent).toBe("Double trigger: Full acceleration on a change of control followed by a termination without cause.");
+    cleanup();
+    renderPortal(`${PORTFOLIO}/securities/${DANIEL_OPTION.id}`, [DANIEL], {
+      handlers: portalHandlers([DANIEL], { details: [securityDetail(DANIEL_OPTION, { acceleration: { kind: "NONE", text: null } })] }),
+    });
+    await screen.findByRole("heading", { name: /^OPT-1 Options/, level: 1 });
+    expect(definitionOf("Acceleration").textContent).toBe("None");
+  });
+
+  it("never gives irregular vesting events a cliff, and says when a grant vests in full at once", async () => {
+    const irregular = portalSecurity({
+      ...DANIEL_OPTION, id: uuid(6, 150), displayId: "OPT-50", vestingStartDate: "2024-01-15",
+      vesting: [
+        { date: "2025-01-15", quantity: "100000", cumulative: "100000", status: "VESTED" },
+        { date: "2025-06-03", quantity: "100000", cumulative: "200000", status: "VESTED" },
+        { date: "2026-12-20", quantity: "100000", cumulative: "300000", status: "UPCOMING" },
+      ],
+    });
+    const once = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 151), displayId: "OPT-51", vestingStartDate: null, vesting: [{ date: "2023-04-14", quantity: "300000", cumulative: "300000", status: "VESTED" }] });
+    const holding = { ...DANIEL, securities: [irregular, once] };
+    renderPortal(`${PORTFOLIO}/securities/${irregular.id}`, [holding], { handlers: portalHandlers([holding]) });
+    expect((await screen.findByText(/^Vesting start /)).textContent).toBe("Vesting start Jan 15, 2024 · First vest: 100,000 options on Jan 15, 2025 · Fully vests on Dec 20, 2026");
+    cleanup();
+    renderPortal(`${PORTFOLIO}/securities/${once.id}`, [holding], { handlers: portalHandlers([holding]) });
+    expect(await screen.findByText("Vested in full on Apr 14, 2023")).toBeTruthy();
+  });
+
+  it("says the holder's own signature comes first, and when early exercise is allowed", async () => {
+    const pending = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 140), displayId: "OPT-40", executionPending: "pending_holder", numbers: { ...DANIEL_OPTION.numbers, exercisable: "0" } });
     const holding = { ...DANIEL, securities: [pending] };
     renderPortal(`${PORTFOLIO}/securities/${pending.id}`, [holding], {
       me: holderMe([DANIEL], { email: "daniel@acmerobotics.example" }),
       handlers: portalHandlers([holding], { details: [securityDetail(pending, { earlyExerciseAllowed: true })] }),
     });
     await screen.findByRole("heading", { name: /^OPT-40 Options/, level: 1 });
-    expect(screen.getByText("Execution pending")).toBeTruthy();
-    expect(screen.getByText("Awaiting signatures")).toBeTruthy();
-    expect(screen.getByText("This grant can be exercised once the agreement is signed by both you and the company.")).toBeTruthy();
+    expect(screen.getByText("Awaiting your signature", { selector: ".badge" })).toBeTruthy();
+    const banner = screen.getByText("Awaiting your signature", { selector: ".b-title" }).closest(".banner") as HTMLElement;
+    expect(banner.textContent).toBe("Awaiting your signatureYou can exercise this grant once you have signed its agreement.");
     expect(screen.getByText("Early exercise allowed by your grant — contact the company to exercise early.")).toBeTruthy();
     expect(definitionOf("Early exercise allowed").textContent).toBe("Yes — contact the company to exercise early");
     expect(definitionOf("Exercisable now").textContent).toBe("0");
     expect(screen.queryByText(/There is no Exercise button yet/)).toBeNull();
+  });
+
+  it("says when both signatures are missing, and that a company-only countersignature doesn't hold up exercise", async () => {
+    const both = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 141), displayId: "OPT-41", executionPending: "pending_both", numbers: { ...DANIEL_OPTION.numbers, exercisable: "0" } });
+    const company = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 142), displayId: "OPT-42", executionPending: "pending_company" });
+    const holding = { ...DANIEL, securities: [both, company] };
+    renderPortal(`${PORTFOLIO}/securities/${both.id}`, [holding], { handlers: portalHandlers([holding]) });
+    await screen.findByRole("heading", { name: /^OPT-41 Options/, level: 1 });
+    expect(screen.getByText("Awaiting signatures", { selector: ".badge" })).toBeTruthy();
+    expect(screen.getByText(/^You can exercise this grant once you have signed its agreement/).textContent)
+      .toBe("You can exercise this grant once you have signed its agreement; the company's countersignature is still pending too.");
+    cleanup();
+    renderPortal(`${PORTFOLIO}/securities/${company.id}`, [holding], { handlers: portalHandlers([holding]) });
+    await screen.findByRole("heading", { name: /^OPT-42 Options/, level: 1 });
+    expect(screen.getByText("Awaiting the company's signature", { selector: ".badge" })).toBeTruthy();
+    expect(screen.getByText("The company's countersignature is pending — you can still exercise")).toBeTruthy();
+    expect(screen.queryByText("Awaiting your signature")).toBeNull();
+    expect(definitionOf("Exercisable now").textContent).toBe("218,750");
+    expect(screen.getByText(/There is no Exercise button yet/)).toBeTruthy();
   });
 
   it("marks a passed ISO deadline on the grant while the contractual window is open", async () => {
@@ -367,11 +467,23 @@ describe("holding detail", () => {
     expect(definitionOf("Price per share").textContent).toBe("$0.10");
     expect(definitionOf("Form").textContent).toBe("Book entry");
     expect(definitionOf("Legends").textContent).toBe("Rule 144 legend, ISO disqualifying disposition legend");
+    expect(definitionOf("Holding start date").textContent).toBe("Not recorded");
     expect(definitionOf("83(b)").textContent).toBe("Not required");
     expect(definitionOf("Origin").textContent).toBe("Exercise of OPT-1");
     expect(within(definitionOf("Origin")).getByRole("link", { name: "OPT-1" }).getAttribute("href")).toBe(`${PORTFOLIO}/securities/${DANIEL_OPTION.id}`);
+    // A book entry says where the shares are held.
+    expect(screen.getByText("These shares are held in book entry on the company's records.")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Vesting and repurchase" })).toBeNull();
     expect(screen.getByText("No documents.")).toBeTruthy();
+  });
+
+  it("shows a migrated lot's holding start, and no book-entry line for shares that aren't one", async () => {
+    renderPortal(`${PORTFOLIO}/securities/${MARCUS_SHARES[0]!.id}`, [MARCUS], {
+      handlers: portalHandlers([MARCUS], { details: [securityDetail(MARCUS_SHARES[0]!, { pricePerShare: "1.92", form: "uncertificated", holdingStartDate: "2021-06-01" })] }),
+    });
+    await screen.findByRole("heading", { name: /^PS-3 Shares/, level: 1 });
+    expect(definitionOf("Holding start date").textContent).toBe("Jun 1, 2021");
+    expect(screen.queryByText(/held in book entry/)).toBeNull();
   });
 
   it("states the company's repurchase right on restricted shares, before and after the holder leaves", async () => {
@@ -392,6 +504,18 @@ describe("holding detail", () => {
     renderPortal(`${PORTFOLIO}/securities/${restricted.id}`, [holding], { handlers: portalHandlers([holding], { details: [left] }) });
     expect(await screen.findByText("The company may repurchase 2,000 unvested shares at $0.10 per share until Dec 1, 2026.")).toBeTruthy();
     expect(definitionOf("83(b)").textContent).toBe("Proof missing");
+    cleanup();
+    // The holder's agreement sets no deadline: the right stands, undated.
+    const agreed = securityDetail(restricted, { pricePerShare: "0.1", repurchase: { price: "0.1", window: null, lastDate: null, status: "no_deadline" } });
+    renderPortal(`${PORTFOLIO}/securities/${restricted.id}`, [holding], { handlers: portalHandlers([holding], { details: [agreed] }) });
+    expect(await screen.findByText("The company may repurchase 2,000 unvested shares at $0.10 per share; your agreement sets no deadline.")).toBeTruthy();
+    cleanup();
+    // Restricted shares with no 83(b) record: "Not recorded", never "Not required".
+    const unrecorded = securityDetail(restricted, { election83b: { status: "NOT_RECORDED", filedOn: null }, repurchase: { price: "0.1", window: null, lastDate: null, status: null } });
+    renderPortal(`${PORTFOLIO}/securities/${restricted.id}`, [holding], { handlers: portalHandlers([holding], { details: [unrecorded] }) });
+    expect(await screen.findByRole("heading", { name: "Vesting and repurchase" })).toBeTruthy();
+    expect(definitionOf("83(b)").textContent).toBe("Not recorded");
+    expect(screen.getByText(/^Vesting start |^First vest|^Cliff/).textContent).toBe("First vest: 2,000 shares on May 1, 2026 · Fully vests on May 1, 2027");
   });
 
   it("tells a warrant holder whom to contact to exercise", async () => {
@@ -441,8 +565,12 @@ describe("how to exercise", () => {
     expect(items[0]).toBe("Check your exercisable amount and deadline. OPT-20: 60,000 options exercisable now at $0.31 · contractual deadline Feb 28, 2027 · ISO deadline Nov 30, 2026.");
     expect(items[1]).toBe("Download and sign counsel's notice of exercise. Notice of exercise (counsel form).docx");
     expect(items[2]).toBe("Send it to the company contact: Equity team, equity@acmerobotics.example.");
-    expect(items[3]).toBe("The equity team confirms the total due. Exercise cost = strike × quantity (all 60,000 exercisable options: 60,000 × $0.31 = $18,600.00). For employees and former employees, payroll confirms any tax withholding.");
-    expect(items[4]).toBe("Pay by ACH credit or wire to the account below (international payments: use the SWIFT and intermediary details), or by check, quoting your reference.");
+    // All the exercisable options to start with, costed exactly.
+    expect((screen.getByRole("textbox", { name: "Options to exercise" }) as HTMLInputElement).value).toBe("60000");
+    expect(screen.getByRole("status", { name: "Exercise cost" }).textContent).toBe("60,000 × $0.31 = $18,600.00");
+    expect(items[3]).toBe("The equity team confirms the total due. Exercise cost = strike × quantity.Options to exerciseMax60,000 × $0.31 = $18,600.00 For employees and former employees, payroll confirms any tax withholding.");
+    // Pay only once the equity team has confirmed the amount.
+    expect(items[4]).toBe("Pay only after the equity team confirms the amount due: by ACH credit or wire to the account below (international payments: use the SWIFT and intermediary details), or by check, quoting your reference.");
     expect(definitionOf("Your reference").textContent).toBe("EX-OPT-20-NPS");
     expect(definitionOf("Account number").textContent).toBe("000123454321");
     expect(definitionOf("Routing number (ACH and domestic wires)").textContent).toBe("000000000");
@@ -455,27 +583,71 @@ describe("how to exercise", () => {
   it("computes the cost exactly and shows it rounded half-even to the cent, saying so", async () => {
     const odd = portalSecurity({ ...NADIA_OPTION, exercisePrice: "0.185", numbers: { ...NADIA_OPTION.numbers, exercisable: "833" } });
     renderPortal(`${PORTFOLIO}/how-to-exercise`, [{ ...NADIA, securities: [odd] }]);
-    const step = (await screen.findByText(/833 × \$0\.185 = /)).closest("li")!;
     // 833 × 0.185 = 154.105 exactly: half a cent, rounded to the even cent.
-    expect(step.textContent).toContain("833 × $0.185 = $154.10, rounded to the cent)");
+    expect((await screen.findByRole("status", { name: "Exercise cost" })).textContent).toBe("833 × $0.185 = $154.10, rounded to the cent");
     cleanup();
     const up = portalSecurity({ ...NADIA_OPTION, exercisePrice: "0.195", numbers: { ...NADIA_OPTION.numbers, exercisable: "833" } });
     renderPortal(`${PORTFOLIO}/how-to-exercise`, [{ ...NADIA, securities: [up] }]);
-    expect((await screen.findByText(/833 × \$0\.195 = /)).closest("li")!.textContent).toContain("= $162.44, rounded to the cent)");
+    expect((await screen.findByRole("status", { name: "Exercise cost" })).textContent).toBe("833 × $0.195 = $162.44, rounded to the cent");
   });
 
-  it("says an ISO deadline has passed, and that a grant awaiting signatures can't be exercised yet", async () => {
+  it("costs the number of options the holder chooses, whole options up to what is exercisable, with Max", async () => {
+    renderPortal(`${PORTFOLIO}/how-to-exercise`, [NADIA]);
+    const quantity = await screen.findByRole("textbox", { name: "Options to exercise" }) as HTMLInputElement;
+    const cost = () => screen.queryByRole("status", { name: "Exercise cost" })?.textContent ?? null;
+    fireEvent.change(quantity, { target: { value: "1500" } });
+    expect(cost()).toBe("1,500 × $0.31 = $465.00");
+    fireEvent.change(quantity, { target: { value: "12.5" } });
+    expect(cost()).toBeNull();
+    expect(within(quantity.closest("li")!).getByRole("alert").textContent).toBe("Enter a whole number of options.");
+    expect(quantity.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(quantity, { target: { value: "60001" } });
+    expect(within(quantity.closest("li")!).getByRole("alert").textContent).toBe("You can exercise at most 60,000 options of this grant.");
+    fireEvent.change(quantity, { target: { value: "0" } });
+    expect(within(quantity.closest("li")!).getByRole("alert").textContent).toBe("Enter at least 1 option.");
+    fireEvent.click(screen.getByRole("button", { name: "Max" }));
+    expect(quantity.value).toBe("60000");
+    expect(cost()).toBe("60,000 × $0.31 = $18,600.00");
+    // No tax estimate and no per-quantity ISO/NSO split: the equity team and payroll confirm those.
+    expect(main().textContent).not.toMatch(/estimated tax|withholding estimate/i);
+  });
+
+  it("starts each grant from its own exercisable options, and offers no cost for a grant with nothing to exercise", async () => {
+    const second = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 116), displayId: "OPT-16", exercisePrice: "0.18", numbers: { ...DANIEL_OPTION.numbers, exercisable: "64583" } });
+    const unvested = portalSecurity({ ...DANIEL_OPTION, id: uuid(6, 137), displayId: "OPT-37", numbers: { ...DANIEL_OPTION.numbers, vested: "0", unvested: "250000", exercisable: "0" } });
+    const holding = { ...DANIEL, securities: [DANIEL_OPTION, second, unvested] };
+    renderPortal(`${PORTFOLIO}/how-to-exercise`, [holding], { handlers: portalHandlers([holding]), me: holderMe([DANIEL], { email: "daniel@acmerobotics.example" }) });
+    const quantity = await screen.findByRole("textbox", { name: "Options to exercise" }) as HTMLInputElement;
+    fireEvent.change(quantity, { target: { value: "10" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Choose a grant" }), { target: { value: second.id } });
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Options to exercise" }) as HTMLInputElement).value).toBe("64583"));
+    expect(screen.getByRole("status", { name: "Exercise cost" }).textContent).toBe("64,583 × $0.18 = $11,624.94");
+    fireEvent.change(screen.getByRole("combobox", { name: "Choose a grant" }), { target: { value: unvested.id } });
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Options to exercise" })).toBeNull());
+    expect(screen.queryByRole("status", { name: "Exercise cost" })).toBeNull();
+  });
+
+  it("says an ISO deadline has passed, and that a grant awaiting the holder's signature can't be exercised yet", async () => {
     renderPortal(`${PORTFOLIO}/how-to-exercise`, [NADIA], { handlers: portalHandlers([NADIA], { asOf: "2026-12-15" }) });
     const steps = await screen.findByRole("list", { name: "How to exercise, step by step" });
     expect(within(steps).getAllByRole("listitem")[0]!.textContent).toBe(
       "Check your exercisable amount and deadline. OPT-20: 60,000 options exercisable now at $0.31 · contractual deadline Feb 28, 2027 · ISO deadline Nov 30, 2026 (passed: exercises from now on are taxed as NSOs).",
     );
     cleanup();
-    const pending = portalSecurity({ ...DANIEL_OPTION, executionPending: true, numbers: { ...DANIEL_OPTION.numbers, exercisable: "0" } });
+    const pending = portalSecurity({ ...DANIEL_OPTION, executionPending: "pending_holder", numbers: { ...DANIEL_OPTION.numbers, exercisable: "0" } });
     renderPortal(`${PORTFOLIO}/how-to-exercise`, [{ ...DANIEL, securities: [pending] }], { me: holderMe([DANIEL], { email: "daniel@acmerobotics.example" }) });
     const pendingSteps = await screen.findByRole("list", { name: "How to exercise, step by step" });
     expect(within(pendingSteps).getAllByRole("listitem")[0]!.textContent).toBe(
-      "Check your exercisable amount and deadline. OPT-1: 0 options exercisable now at $0.10 · expires Apr 14, 2033. (Awaiting signatures — not exercisable yet.)",
+      "Check your exercisable amount and deadline. OPT-1: 0 options exercisable now at $0.10 · expires Apr 14, 2033. (Awaiting your signature — you can exercise once you have signed the grant agreement.)",
+    );
+    expect(screen.queryByRole("textbox", { name: "Options to exercise" })).toBeNull();
+    cleanup();
+    // Awaiting only the company's countersignature: nothing holds the holder back.
+    const company = portalSecurity({ ...DANIEL_OPTION, executionPending: "pending_company" });
+    renderPortal(`${PORTFOLIO}/how-to-exercise`, [{ ...DANIEL, securities: [company] }], { me: holderMe([DANIEL], { email: "daniel@acmerobotics.example" }) });
+    const companySteps = await screen.findByRole("list", { name: "How to exercise, step by step" });
+    expect(within(companySteps).getAllByRole("listitem")[0]!.textContent).toBe(
+      "Check your exercisable amount and deadline. OPT-1: 218,750 options exercisable now at $0.10 · expires Apr 14, 2033.",
     );
   });
 
@@ -528,6 +700,44 @@ describe("documents", () => {
     renderPortal(`${PORTFOLIO}/documents`, [NADIA], { handlers: portalHandlers([NADIA], { documents: [] }) });
     expect(await screen.findByText("No documents of yours have been shared here yet.")).toBeTruthy();
     expect(screen.getByText("No company resources yet.")).toBeTruthy();
+  });
+
+  it("names the grant each document belongs to and dates an imported one by its original upload, never as signed", async () => {
+    const migrated = portalDocument({ id: uuid(10, 125), filename: "OPT-25 agreement (imported).pdf", createdAt: Date.UTC(2026, 9, 20), sourceCreatedAt: Date.UTC(2025, 1, 3, 18) });
+    const nso = portalSecurity({ ...NADIA_OPTION, id: uuid(6, 125), displayId: "OPT-25", optionType: "NSO", documents: [migrated, NADIA_OPTION.documents[1]!] });
+    const holding = { ...NADIA, securities: [NADIA_OPTION, nso] };
+    renderPortal(`${PORTFOLIO}/documents`, [holding], { handlers: portalHandlers([holding], { documents: [...NADIA_OPTION.documents, migrated, ...COMPANY_RESOURCES] }) });
+    await screen.findByRole("heading", { name: "My documents" });
+    const meta = (filename: string) => screen.getByRole("button", { name: filename }).closest(".attach")!.querySelector(".a-m")!.textContent;
+    expect(meta("OPT-20 Option Agreement.pdf")).toBe("Grant agreement · OPT-20 · Oct 1, 2026");
+    // A document linked to two of the holder's grants names both.
+    expect(meta("Separation agreement.pdf")).toBe("Separation agreement · OPT-20, OPT-25 · Oct 1, 2026");
+    expect(meta("OPT-25 agreement (imported).pdf")).toBe("Grant agreement · OPT-25 · Originally uploaded Feb 3, 2025");
+    expect(document.getElementById("main")!.textContent).not.toMatch(/signed on/i);
+    // Newest first, an imported document by its original upload.
+    const mine = [...document.querySelectorAll(".attach .a-n")].map((card) => card.textContent).filter((name) => !/Notice of exercise|Plan|Privacy/.test(name ?? ""));
+    expect(mine).toEqual(["OPT-20 Option Agreement.pdf", "Separation agreement.pdf", "OPT-25 agreement (imported).pdf"]);
+    // The holding detail dates it the same way.
+    cleanup();
+    renderPortal(`${PORTFOLIO}/securities/${nso.id}`, [holding]);
+    await screen.findByRole("heading", { name: /^OPT-25 Options/ });
+    expect(screen.getByRole("button", { name: "OPT-25 agreement (imported).pdf" }).closest(".attach")!.querySelector(".a-m")!.textContent).toBe("Grant agreement · Originally uploaded Feb 3, 2025");
+  });
+
+  it("searches the documents as the holder types, by name, kind or grant", async () => {
+    renderPortal(`${PORTFOLIO}/documents`, [NADIA]);
+    const search = await screen.findByRole("searchbox", { name: "Search documents" });
+    const names = () => [...document.querySelectorAll(".attach .a-n")].map((card) => card.textContent);
+    fireEvent.change(search, { target: { value: "separation" } });
+    expect(names()).toEqual(["Separation agreement.pdf"]);
+    expect(screen.getByText("No company resources match.")).toBeTruthy();
+    fireEvent.change(search, { target: { value: "opt-20 grant" } });
+    expect(names()).toEqual(["OPT-20 Option Agreement.pdf"]);
+    fireEvent.change(search, { target: { value: "plan" } });
+    expect(names()).toEqual(["2023 Equity Incentive Plan.pdf"]);
+    expect(screen.getByText("None of your documents match.")).toBeTruthy();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(names()).toHaveLength(5);
   });
 });
 
@@ -619,6 +829,7 @@ describe("preview as stakeholder (admin)", () => {
     const { callsTo, router } = renderPreview("");
     expect(await screen.findByText(/You are previewing the portal as/)).toBeTruthy();
     expect(screen.getByText(/Every portal action is disabled\./)).toBeTruthy();
+    expect(screen.getByText(/It shows this one stakeholder record/)).toBeTruthy();
     expect(await screen.findByText(/You can exercise 60,000 vested options/)).toBeTruthy();
     expect(await screen.findByText("2023 Equity Incentive Plan.pdf")).toBeTruthy();
     expect(screen.getByText("2023 Equity Incentive Plan.pdf").tagName).toBe("SPAN");

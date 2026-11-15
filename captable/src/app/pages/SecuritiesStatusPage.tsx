@@ -5,14 +5,14 @@ import { apiRequest } from "../api/request.ts";
 import { OwnRecordScope, WriteButton } from "../components/Actions.tsx";
 import { DataTable, byDecimal, byDisplayId, byNumber, byText, type Column } from "../components/DataTable.tsx";
 import { Badge, ResourceView } from "../components/Feedback.tsx";
-import { Icon } from "../components/Icon.tsx";
 import { HolderLink, SecurityLink, holderState } from "../components/Links.tsx";
 import { useWorkspace } from "../components/OrgWorkspace.tsx";
 import { Card, Page, PageHead } from "../components/Page.tsx";
 import { CancelScheduledTerminationDialog } from "../components/flows/CancelScheduledTerminationDialog.tsx";
 import { CancelSecurityDialog } from "../components/flows/CancelSecurityDialog.tsx";
 import { MarkExecutedDialog } from "../components/flows/MarkExecutedDialog.tsx";
-import { DASH, daysBetween, formatDate } from "../lib/format.ts";
+import { RecordRepurchaseDialog } from "../components/flows/RecordRepurchaseDialog.tsx";
+import { DASH, daysBetween, formatDate, formatDaysRelative } from "../lib/format.ts";
 import { MISSING_LABELS, TERMINATION_TYPE_LABELS } from "../lib/labels.ts";
 import { allOf, useResource } from "../lib/useResource.ts";
 
@@ -24,9 +24,20 @@ import { allOf, useResource } from "../lib/useResource.ts";
 type StatusDialog =
   | { kind: "markExecuted"; securityId: string }
   | { kind: "cancel"; securityId: string; reason: "NOT_EXECUTED" | "HOLDER_WAIVER" }
+  | { kind: "repurchase"; securityId: string }
   | { kind: "cancelScheduled"; id: string; stakeholderName: string };
 
-const REPURCHASE_LABELS = { open: ["Window open", "teal"], closing_soon: ["Closing soon", "amber"], lapsed: ["Lapsed", "red"], not_recorded: ["Not recorded", "grey"] } as const;
+const REPURCHASE_LABELS = { open: ["Window open", "teal"], closing_soon: ["Closing soon", "amber"], lapsed: ["Lapsed", "red"], no_deadline: ["No deadline (per agreement)", "teal"], not_recorded: ["Not recorded", "grey"] } as const;
+
+type PendingSigner = api.SecuritiesStatus["executionPending"][number]["pendingSigners"][number];
+const SIGNER_SIDE_LABELS: Record<PendingSigner["role"], string> = { company: "Company signatory", holder: "Holder" };
+
+/** Beside an exit-window deadline: whose signature a pending grant still awaits (only the holder's blocks exercise). */
+const AWAITING_LABELS: Partial<Record<api.ExecutionStatus, readonly [string, "amber" | "grey"]>> = {
+  pending_holder: ["Awaiting holder signature", "amber"],
+  pending_both: ["Awaiting holder and company signatures", "amber"],
+  pending_company: ["Awaiting company signature", "grey"],
+};
 
 interface Lookups {
   securities: ReadonlyMap<string, api.Security>;
@@ -81,6 +92,7 @@ export function SecuritiesStatusPage() {
         )}
       </ResourceView>
       {dialog?.kind === "markExecuted" ? <MarkExecutedDialog securityId={dialog.securityId} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog?.kind === "repurchase" ? <RecordRepurchaseDialog securityId={dialog.securityId} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === "cancel" ? <CancelSecurityDialog securityId={dialog.securityId} defaultReason={dialog.reason} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === "cancelScheduled" ? <CancelScheduledTerminationDialog scheduledTerminationId={dialog.id} stakeholderName={dialog.stakeholderName} onClose={() => setDialog(null)} onDone={done} /> : null}
     </Page>
@@ -101,21 +113,33 @@ function StatusSections({ data, lookups, onAction }: { data: api.SecuritiesStatu
   };
   const displayIdOf = (securityId: string) => lookups.securities.get(securityId)?.displayId ?? "";
   const days = (date: string) => <span className="muted small"> ({daysBetween(today, date)} days)</span>;
+  const relative = (date: string) => <span className="muted small"> ({formatDaysRelative(today, date)})</span>;
+  const awaiting = (status: api.ExecutionStatus) => {
+    const label = AWAITING_LABELS[status];
+    return label ? <> <Badge tone={label[1]}>{label[0]}</Badge></> : null;
+  };
+  // One line per pending signer.
+  const signerLines = (signers: readonly PendingSigner[], line: (signer: PendingSigner) => string) =>
+    signers.map((signer, index) => <div key={index}>{line(signer)}</div>);
 
   return (
     <>
       <Section
         id="exec"
-        title="Execution pending (migrated)"
-        explainer="Grants migrated with missing signatures. They count in fully diluted and plan usage, and cannot be exercised until marked executed."
+        title="Execution pending"
+        explainer="Securities with signatures still missing. They count in fully diluted and plan usage. Only a missing holder signature blocks exercise: a grant awaiting only the company's signature can be exercised."
         rows={data.executionPending}
         rowKey={(row) => row.securityId}
-        empty="No grants are awaiting signatures."
+        empty="No securities are awaiting signatures."
         columns={[
           { key: "id", label: "Security", render: (row) => security(row.securityId, row.displayId), compare: byDisplayId((row) => row.displayId) },
           { key: "holder", label: "Stakeholder", render: (row) => holder(row.stakeholderId), compare: byText((row) => holderName(row.stakeholderId)) },
           { key: "date", label: "Issue date", render: (row) => formatDate(row.issueDate), compare: byText((row) => row.issueDate) },
           { key: "missing", label: "Missing", render: (row) => <Badge tone="amber">{MISSING_LABELS[row.missing]}</Badge> },
+          {
+            key: "waiting", label: "Waiting on",
+            render: (row) => signerLines(row.pendingSigners, (signer) => `${SIGNER_SIDE_LABELS[signer.role]}${signer.name ? ` — ${signer.name}` : ""}`),
+          },
           {
             key: "actions", label: "",
             render: (row) => (
@@ -162,23 +186,27 @@ function StatusSections({ data, lookups, onAction }: { data: api.SecuritiesStatu
         rows={data.unvestedSharesFromTerminated}
         rowKey={(row) => row.securityId}
         empty="No open repurchase windows."
-        extra={data.unvestedSharesFromTerminated.length ? (
-          <p className="small muted mt-8"><Icon name="info" /> Cap Table doesn't record repurchases: counsel papers the repurchase offline and the share gets a dated note and document.</p>
-        ) : null}
         columns={[
           { key: "id", label: "Security", render: (row) => security(row.securityId), compare: byDisplayId((row) => displayIdOf(row.securityId)) },
           { key: "holder", label: "Stakeholder", render: (row) => holder(row.stakeholderId), compare: byText((row) => holderName(row.stakeholderId)) },
           { key: "unvested", label: "Unvested quantity", numeric: true, render: (row) => format.shares(row.unvested), compare: byDecimal((row) => row.unvested) },
           { key: "price", label: "Repurchase price", numeric: true, render: (row) => format.price(row.repurchasePrice) },
-          { key: "last", label: "Last date to repurchase", render: (row) => (row.lastRepurchaseDate ? <>{formatDate(row.lastRepurchaseDate)} <span className="muted small">({Math.max(0, daysBetween(today, row.lastRepurchaseDate))} days left)</span></> : "not recorded — see agreement"), compare: byText((row) => row.lastRepurchaseDate) },
+          { key: "last", label: "Last date to repurchase", render: (row) => (row.lastRepurchaseDate ? <>{formatDate(row.lastRepurchaseDate)}{relative(row.lastRepurchaseDate)}</> : row.status === "no_deadline" ? "none — the agreement sets no deadline" : "not recorded — see agreement"), compare: byText((row) => row.lastRepurchaseDate) },
           { key: "status", label: "Status", render: (row) => <Badge tone={REPURCHASE_LABELS[row.status][1]}>{REPURCHASE_LABELS[row.status][0]}</Badge> },
-          { key: "action", label: "Action", render: () => <span className="small muted">Repurchase offline, with counsel</span> },
+          {
+            key: "action", label: "Action",
+            render: (row) => (
+              <OwnRecordScope own={workspace.isOwn(row.stakeholderId)}>
+                <WriteButton label="Record repurchase" size="xs" ariaLabel={`Record a repurchase of ${displayIdOf(row.securityId)}`} onClick={() => onAction({ kind: "repurchase", securityId: row.securityId })} />
+              </OwnRecordScope>
+            ),
+          },
         ]}
       />
       <Section
         id="term"
         title="Options from terminated holders"
-        explainer="Vested options that former holders can still exercise. Each shows the contractual deadline and, for ISOs, the ISO deadline."
+        explainer="Vested options that former holders can still exercise. Each shows the contractual deadline and, for ISOs, the ISO deadline; a grant still awaiting the holder's signature can't be exercised until it is signed."
         rows={data.optionsFromTerminated}
         rowKey={(row) => row.securityId}
         empty="No open exit windows."
@@ -186,8 +214,8 @@ function StatusSections({ data, lookups, onAction }: { data: api.SecuritiesStatu
           { key: "id", label: "Security", render: (row) => security(row.securityId), compare: byDisplayId((row) => displayIdOf(row.securityId)) },
           { key: "holder", label: "Stakeholder", render: (row) => holder(row.stakeholderId), compare: byText((row) => holderName(row.stakeholderId)) },
           { key: "vested", label: "Vested and unexercised", numeric: true, render: (row) => format.shares(row.vestedUnexercised), compare: byDecimal((row) => row.vestedUnexercised) },
-          { key: "deadline", label: "Contractual deadline", render: (row) => <>{formatDate(row.contractualDeadline)}<span className="muted small"> ({row.contractualDaysLeft} days)</span></>, compare: byNumber((row) => row.contractualDaysLeft) },
-          { key: "iso", label: "ISO deadline", render: (row) => (row.isoDeadline ? <>{formatDate(row.isoDeadline)}<span className="muted small"> ({row.isoDaysLeft ?? daysBetween(today, row.isoDeadline)} days)</span></> : <>— <span className="muted small">(NSO)</span></>), compare: byNumber((row) => row.isoDaysLeft) },
+          { key: "deadline", label: "Contractual deadline", render: (row) => <>{formatDate(row.contractualDeadline)}{relative(row.contractualDeadline)}{awaiting(row.executionStatus)}</>, compare: byNumber((row) => row.contractualDaysLeft) },
+          { key: "iso", label: "ISO deadline", render: (row) => (row.isoDeadline ? <>{formatDate(row.isoDeadline)}{relative(row.isoDeadline)}</> : <>— <span className="muted small">(NSO)</span></>), compare: byNumber((row) => row.isoDaysLeft) },
           {
             key: "action", label: "",
             render: (row) => (

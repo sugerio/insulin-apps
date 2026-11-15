@@ -31,7 +31,7 @@ const TERMS: readonly (readonly [term: string, definition: ReactNode])[] = [
   ["Discount", "In a SAFE, a percentage off the price new investors pay, used to work out the SAFE's price when it converts."],
   ["Early exercise", "Exercising options before they vest, when the grant allows it. The shares received are usually restricted stock, which may be forfeited or bought back by the company if the holder leaves before they vest. Cap Table records only exercises of vested options."],
   ["Equity plan", "The document under which a company grants options and other equity awards, and reserves shares for them: the option pool."],
-  ["Execution pending", "A grant that hasn't been signed by both the holder and the company. It can't be exercised until someone who records changes marks it executed."],
+  ["Execution pending", "A grant that hasn't been signed by both the holder and the company. While the holder's signature is missing it can't be exercised; one that waits only for the company's countersignature can. Someone who records changes marks it executed once both have signed."],
   ["Exercise", "Buying the shares an option or a warrant entitles its holder to, by paying the exercise price. Cap Table records exercises of vested options."],
   ["Exercise deadline", "The last day an option can be exercised: the end of its exercise window after the holder leaves, and never later than its expiration date. Holders see it as the contractual deadline."],
   ["Exercise price", "The price per share paid to exercise an option or a warrant. Also called the strike price."],

@@ -3,8 +3,8 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { api } from "#shared";
 import { IDS, STAKEHOLDERS, VALUATIONS, VESTING_TERMS, capTable, dashboard, securityList, stakeholder, stakeholderList, stockPlan, TODAY, uuid, valuation } from "./support/acme.ts";
-import { DIFF_A, DIFF_B, attach, click, commandRoute, dryRuns, errorOf, field, keysOf, realCalls, refused, result, stale, type, unavailable, uploads, waitForCalls, LOST, expectSentAsPreviewed } from "./support/flows.ts";
-import { mock, type MockHandler } from "./support/mockApi.ts";
+import { DIFF_A, DIFF_B, attach, choose, click, commandRoute, dryRuns, errorOf, field, keysOf, realCalls, refused, result, stale, type, unavailable, uploads, waitForCalls, LOST, expectSentAsPreviewed } from "./support/flows.ts";
+import { apiError, mock, type MockHandler } from "./support/mockApi.ts";
 import { base, renderPage } from "./support/render.tsx";
 
 // Record options: the wizard's checks, the server's preview figure for figure, the real call with
@@ -52,7 +52,14 @@ function handlers(grant: MockHandler, fmv: api.FmvResponse["fmv"] = { valuationI
   ];
 }
 
-async function fillGrant() {
+/** A description list's value for a term. */
+function definitionIn(scope: HTMLElement, label: string): string {
+  const term = within(scope).getAllByRole("term").find((item) => item.textContent === label);
+  return (term?.nextElementSibling as HTMLElement | null | undefined)?.textContent ?? "";
+}
+
+/** Everything but the signatures. */
+async function fillGrantTerms() {
   await screen.findByRole("heading", { name: "Record options", level: 1 });
   const holder = await screen.findByLabelText(/Stakeholder/);
   await waitFor(() => expect(within(holder).getByRole("option", { name: /Daniel Achterberg/ })).toBeTruthy());
@@ -61,8 +68,12 @@ async function fillGrant() {
   type(/Board approval date/, "2026-10-20");
   await attach(/Signed board consent/, "BA-19 New-hire grant consent.pdf");
   fireEvent.click(screen.getByLabelText(/employee at grant/));
-  fireEvent.click(screen.getByLabelText(/Matches the signed agreement/));
+  fireEvent.click(screen.getByLabelText(/Matches the (signed|grant) agreement/));
   await waitFor(() => expect(field("Exercise price").value).toBe("0.95"));
+}
+
+async function fillGrant() {
+  await fillGrantTerms();
   await attach(/Executed agreement/, "OPT-57 Option Agreement (signed).pdf");
   fireEvent.click(screen.getByLabelText(/signed by both the holder and the company signatory/));
 }
@@ -127,6 +138,79 @@ describe("record options", () => {
     expect(real.body).toMatchObject({ expectedLedgerSeq: 412, expectedDiffSha256: DIFF_A, acknowledge: [], quantity: "40000" });
     expect(real.headers.get("Idempotency-Key")).toMatch(/^[0-9a-f-]{36}$/);
     expect(await screen.findByText("OPT-57 recorded — outstanding (executed); no e-mail sent")).toBeTruthy();
+  }, 60_000);
+
+  it("records a grant awaiting the company signatory, with the holder-signed agreement it needs", async () => {
+    const pendingChange = { entity: "security" as const, id: NEW, before: null, after: { displayId: "OPT-57", status: "OUTSTANDING", executionStatus: "pending_company", outstanding: "40000", vested: "0", unvested: "40000" } };
+    const awaiting = preview({
+      transactions: [...preview().transactions, { id: null, seq: null, type: "X_EXECUTION_STATUS", effectiveDate: "2026-10-20", securityId: NEW, quantity: null }],
+      changes: [pendingChange, ...preview().changes.slice(1)],
+    });
+    const grant = commandRoute(api.routes.grantEquityCompensation, { preview: awaiting, commit: result({ ...awaiting, commandId: uuid(30, 1), dryRun: false, ledgerSeq: 413 }, true) });
+    const { callsTo, router } = renderPage("issue/options", handlers(grant), { role: "admin_rw" });
+    await fillGrantTerms();
+    fireEvent.click(screen.getByRole("radio", { name: /Awaiting the company/ }));
+    expect(screen.queryByLabelText(/signed by both the holder and the company signatory/)).toBeNull();
+    const summary = screen.getByRole("complementary", { name: "Grant summary" });
+    expect(within(summary).getByText("A grant awaiting only the company signatory needs the agreement the holder signed.")).toBeTruthy();
+    expect(within(summary).getByText("Pending — company signatory")).toBeTruthy();
+    click("Review");
+    expect(errorOf(/Agreement signed by the holder/)).toBe("A grant awaiting only the company signatory needs the agreement the holder signed.");
+    expect(dryRuns(callsTo(api.routes.grantEquityCompensation))).toHaveLength(0);
+    await attach(/Agreement signed by the holder/, "OPT-57 Option Agreement (holder signed).pdf");
+    click("Review");
+    await waitForCalls(() => dryRuns(callsTo(api.routes.grantEquityCompensation)), 1);
+    const sent = dryRuns(callsTo(api.routes.grantEquityCompensation))[0]!.body as Record<string, unknown>;
+    expect(sent.executedAgreement).toBeUndefined();
+    expect(sent.awaitingSignatures).toEqual({ missing: "company", agreementDocumentId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    const panel = await screen.findByRole("region", { name: "Server preview" });
+    expect(within(within(panel).getByRole("table", { name: "Transactions" })).getAllByRole("row")[3]!.textContent).toBe("Execution statusOct 20, 2026OPT-57—");
+    click("Record grant");
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/securities/${NEW}`));
+    expect(await screen.findByText("OPT-57 recorded — outstanding, awaiting the company signatory's signature; no e-mail sent")).toBeTruthy();
+  }, 60_000);
+
+  it("records a grant awaiting the holder or both without an agreement, and puts the server's issue on the signatures", async () => {
+    const issue = apiError(400, "validation_failed", "Some fields are invalid", { issues: [{ path: "awaitingSignatures.missing", message: "Invalid option" }] });
+    const grant = commandRoute(api.routes.grantEquityCompensation, { preview: [preview(), issue] });
+    const { callsTo } = renderPage("issue/options", handlers(grant), { role: "admin_rw" });
+    await fillGrantTerms();
+    fireEvent.click(screen.getByRole("radio", { name: /Awaiting the holder/ }));
+    expect(screen.getByLabelText(/Matches the grant agreement/)).toBeTruthy();
+    expect(screen.getByText(/Agreement as signed so far/)).toBeTruthy();
+    click("Review");
+    await waitForCalls(() => dryRuns(callsTo(api.routes.grantEquityCompensation)), 1);
+    expect((dryRuns(callsTo(api.routes.grantEquityCompensation))[0]!.body as Record<string, unknown>).awaitingSignatures).toEqual({ missing: "holder" });
+    click("Change answers");
+    fireEvent.click(screen.getByRole("radio", { name: /Awaiting both/ }));
+    click("Review");
+    await waitForCalls(() => dryRuns(callsTo(api.routes.grantEquityCompensation)), 2);
+    expect((dryRuns(callsTo(api.routes.grantEquityCompensation))[1]!.body as Record<string, unknown>).awaitingSignatures).toEqual({ missing: "both" });
+    await waitFor(() => expect(errorOf(/Awaiting both/)).toBe("Invalid option"));
+  }, 60_000);
+
+  it("sizes the grant as a target % of the plan's pool or of the company fully diluted on the grant date, and shows its cost", async () => {
+    const grant = commandRoute(api.routes.grantEquityCompensation, { preview: preview() });
+    const { callsTo } = renderPage("issue/options", [...handlers(grant), mock(api.routes.getCapTable, capTable("safes"))], { role: "admin_rw" });
+    await screen.findByRole("heading", { name: /1\. Equity plan/ });
+    // Of the plan's 4,500,000 pool: 1% is 45,000 options.
+    type("or target %", "1");
+    expect(field("Number of options").value).toBe("45000");
+    expect(screen.getByText(/2023 Equity Incentive Plan's pool: 4,500,000/).textContent).toContain("achieved 1%");
+    // Of the company, fully diluted: read as of the grant date, never before it is entered.
+    choose("Target % of", "company");
+    expect(screen.getByText("Read as of the grant date: enter it first.")).toBeTruthy();
+    expect(callsTo(api.routes.getCapTable)).toHaveLength(0);
+    type(/Board approval date/, "2026-10-20");
+    // The fully diluted count already includes the pool the grant comes from: no gross-up, and whole options rounded down.
+    await waitFor(() => expect(field("Number of options").value).toBe("243121"));
+    expect(callsTo(api.routes.getCapTable)[0]!.query.get("asOf")).toBe("2026-10-20");
+    expect(screen.getByText(/Fully diluted on Oct 20, 2026: 24,312,120/).textContent).toContain("achieved 0.9999%");
+    type("Number of options", "40,000");
+    expect(field("or target %").value).toBe("0.1645");
+    const summary = screen.getByRole("complementary", { name: "Grant summary" });
+    await waitFor(() => expect(field("Exercise price").value).toBe("0.95"));
+    expect(definitionIn(summary, "Cost to exercise")).toBe("$38,000.00");
   }, 60_000);
 
   it("shows the server's violations next to the fields they name", async () => {

@@ -73,7 +73,7 @@ function StakeholdersBody({ items }: { items: readonly api.Stakeholder[] }) {
           <>
             {pii.email(emails[0]!.email)}
             {emails.length > 1 ? <span className="faint small"> +{emails.length - 1}</span> : null}
-            {isDuplicate(item) ? <div><Badge tone="amber">Duplicate</Badge></div> : null}
+            {isDuplicate(item) ? <div><Badge tone="amber" title="Another stakeholder record has this sign-in address. Records of separate people or entities stay separate; merge only true duplicates.">Shared sign-in address</Badge></div> : null}
           </>
         );
       },
@@ -102,7 +102,7 @@ function StakeholdersBody({ items }: { items: readonly api.Stakeholder[] }) {
     { key: "rel", label: "Relationship", type: "multi", options: REL_OPTIONS, test: (item, values) => values.includes(item.relationship) },
     { key: "type", label: "Type", options: [["individual", "Individual"], ["institution", "Institution"]], test: (item, value) => item.kind === value },
     { key: "status", label: "Status", options: [["active", "Active"], ["terminating", "Terminating"], ["terminated", "Terminated"]], test: (item, value) => statusOf(item) === value },
-    ...(pii.canSeePii ? [{ key: "dup", label: "Duplicate e-mail", options: [["yes", "Only duplicates"]] as const, test: (item: api.Stakeholder) => isDuplicate(item) }] : []),
+    ...(pii.canSeePii ? [{ key: "dup", label: "Shared sign-in address", options: [["yes", "Only shared addresses"]] as const, test: (item: api.Stakeholder) => isDuplicate(item) }] : []),
     // A row without totals is unknown: it matches neither "Yes" nor "No".
     { key: "hold", label: "Has holdings", options: [["yes", "Yes"], ["no", "No"]], test: (item, value) => item.totals !== undefined && (value === "yes") === isPositive(item.totals.fullyDiluted) },
     { key: "open", label: "Portal access open", options: [["yes", "Yes"], ["no", "No"]], test: (item, value) => (value === "yes") === portalOpen(item) },

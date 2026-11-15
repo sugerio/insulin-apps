@@ -209,12 +209,13 @@ export async function planTermination(
     plan.documents.push({ documentId: deadline.documentId, role: "EVIDENCE", target: { type: "security", id: deadline.securityId } });
   }
   // Restricted shares keep their unvested shares, repurchaseable until a date the agreement sets: without one recorded
-  // anywhere the termination blocks until it is entered (the product rules).
+  // anywhere the termination blocks until it is entered (the product rules). A lot whose agreement sets no deadline
+  // (an `x_no_deadline` right) has its terms recorded.
   for (const effect of effects) {
     if (effect.family !== "STOCK" || !effect.unvestedShares.isPositive() || recorded.has(effect.securityId)) continue;
     const security = state.securities.get(effect.securityId)!;
     const plansDefault = engine.planTermsOn(state, security.identity.stockPlanId, input.terminationDate)?.defaultRepurchaseWindow ?? null;
-    if (security.lastRepurchaseDate === null && (security.repurchaseRight?.window ?? null) === null && plansDefault === null) {
+    if (security.lastRepurchaseDate === null && (security.repurchaseRight?.window ?? null) === null && security.repurchaseRight?.noDeadline !== true && plansDefault === null) {
       plan.violations.push(violation("REPURCHASE_DEADLINE_NOT_RECORDED", `Enter the last repurchase date of ${security.identity.displayId} from its agreement`, { securityId: effect.securityId }));
     }
   }
@@ -222,12 +223,12 @@ export async function planTermination(
   plan.violations.push(...await documents.check(plan.documents, holderOfTarget(state, [])));
 
   if (mode.kind !== "schedule") {
-    if (stakeholder.relationship !== input.relationshipAfter) {
-      plan.workflow.push(stmt(
-        "UPDATE stakeholders SET relationship = ?, version = ?, updated_at = ? WHERE org_id = ? AND id = ?",
-        input.relationshipAfter, stakeholder.version + 1, ctx.now, ctx.org.id, stakeholder.id,
-      ));
-    }
+    // Even when the relationship stays: the version read + 1 makes the stakeholders trigger refuse the batch (stale
+    // version) after a profile edit, which appends nothing to the ledger, so the head check can't see it.
+    plan.workflow.push(stmt(
+      "UPDATE stakeholders SET relationship = ?, version = ?, updated_at = ? WHERE org_id = ? AND id = ?",
+      input.relationshipAfter, stakeholder.version + 1, ctx.now, ctx.org.id, stakeholder.id,
+    ));
     if (mode.kind === "apply") {
       plan.workflow.push(stmt(
         "UPDATE scheduled_terminations SET status = 'APPLIED', applied_command_id = ?, version = ?, updated_at = ? WHERE org_id = ? AND id = ?",

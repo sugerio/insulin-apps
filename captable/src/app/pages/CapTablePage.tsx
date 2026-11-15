@@ -15,7 +15,7 @@ import { usePii } from "../components/Pii.tsx";
 import { Tiles, type Tile } from "../components/Tiles.tsx";
 import { BulkCancelDialog } from "../components/flows/BulkCancelDialog.tsx";
 import { formatFractionPercent, fractionOf, isPositive, multiplyDecimals, sumDecimals } from "../lib/decimal.ts";
-import { DASH, formatDate, sharesOrDash } from "../lib/format.ts";
+import { DASH, formatDate, plural, sharesOrDash } from "../lib/format.ts";
 import {
   EXECUTION_LABELS,
   FEDERAL_EXEMPTION_LABELS,
@@ -202,7 +202,17 @@ function OwnershipTab({ context }: { context: Context }) {
   const { format } = workspace;
   const pii = usePii();
   const { capTable } = context;
-  const rows = capTable.ownership ?? [];
+  const all = capTable.ownership ?? [];
+  // A stakeholder who holds nothing on this date (every figure zero, no outstanding security such as a SAFE) is hidden
+  // until asked for; the totals don't change, and the export keeps every row.
+  const [showEmpty, setShowEmpty] = useState(false);
+  const holding = new Set(context.securities
+    .filter((security) => security.status === "OUTSTANDING" && security.issueDate <= context.asOf).map((security) => security.stakeholderId));
+  const holds = (row: OwnershipRow) => holding.has(row.stakeholderId) || [
+    row.issuedAndOutstanding, row.awardsOutsidePlans, row.warrants, row.fullyDiluted, ...Object.values(row.byClass), ...Object.values(row.planAwards),
+  ].some(isPositive);
+  const empty = all.filter((row) => !holds(row));
+  const rows = showEmpty ? all : all.filter(holds);
   const options = context.securities.filter((security) => security.family === "EQUITY_COMPENSATION" && security.status === "OUTSTANDING");
   const optionSums = (stakeholderId: string, pick: (numbers: api.SecurityNumbers, security: api.Security) => string | null) =>
     sumDecimals(options.filter((security) => security.stakeholderId === stakeholderId && security.numbers).map((security) => pick(security.numbers!, security)));
@@ -272,10 +282,10 @@ function OwnershipTab({ context }: { context: Context }) {
     ...classTiles(capTable, format),
     ...capTable.plans.map((plan) => ({
       label: `${plan.name} outstanding`,
-      value: format.shares(sumDecimals(rows.map((row) => row.planAwards[plan.stockPlanId]))),
+      value: format.shares(sumDecimals(all.map((row) => row.planAwards[plan.stockPlanId]))),
       sub: `${format.shares(plan.available)} available`,
     })),
-    { label: "Warrants", value: format.shares(sumDecimals(rows.map((row) => row.warrants))) },
+    { label: "Warrants", value: format.shares(sumDecimals(all.map((row) => row.warrants))) },
     safeTile(context.securities, format),
   ];
 
@@ -293,6 +303,12 @@ function OwnershipTab({ context }: { context: Context }) {
         filters={filters}
         search={(row) => `${row.name} ${row.issuerAssignedId ?? ""} ${pii.canSeePii ? (emailOf(row) ?? "") : ""}`}
         searchPlaceholder="Search stakeholders…"
+        toolbarExtra={empty.length ? (
+          <label className="row small nowrap">
+            <input type="checkbox" className="cb" checked={showEmpty} onChange={(event) => setShowEmpty(event.target.checked)} />
+            Show {plural(empty.length, "stakeholder")} with no holdings
+          </label>
+        ) : null}
         empty="No stakeholders hold securities on this date."
         pinned={({ columns: visible, rows: shown, filtered }) => {
           const pool = filtered ? null : (
@@ -435,10 +451,14 @@ function InstrumentTab({ tab, context }: { tab: "shares" | "options" | "warrants
       { key: "nonus", label: "Non-US", options: [["yes", "Non-US grants only"]], test: (security) => security.exemption.federal === "NON_US" },
       { key: "early", label: "Early exercise allowed", options: [["yes", "Early exercise allowed"]], test: (security) => terms.earlyExercisable(security.terms) === true },
     ];
+    // Vested and Unvested split the same outstanding grants, so they add up to Options outstanding; Exercisable now is
+    // the part of Vested a holder could exercise today.
+    const sumOutstanding = (key: keyof api.SecurityNumbers) => format.shares(sumDecimals(outstandingRows.map((security) => number(security, key))));
     tiles = [
-      { label: "Options outstanding", value: format.shares(sumDecimals(outstandingRows.map((security) => number(security, "outstanding")))) },
-      { label: "Vested & unexercised", value: format.shares(sumDecimals(rows.map((security) => number(security, "exercisable")))) },
-      { label: "Unvested", value: format.shares(sumDecimals(rows.map((security) => number(security, "unvested")))) },
+      { label: "Options outstanding", value: sumOutstanding("outstanding") },
+      { label: "Vested", value: sumOutstanding("vestedOutstanding") },
+      { label: "Unvested", value: sumOutstanding("unvested") },
+      { label: "Exercisable now", value: sumOutstanding("exercisable"), sub: "excludes grants awaiting the holder's signature or past a deadline" },
       { label: "Execution pending", value: String(rows.filter(pendingRow).length), sub: "grants (counted in FD)" },
       ...capTable.plans.map((plan) => ({ label: `${plan.name} available`, value: format.shares(plan.available), sub: `of ${format.shares(plan.poolSize)}` })),
     ];

@@ -1,17 +1,19 @@
 import type { ReactNode } from "react";
 import { useParams } from "react-router";
-import type { api } from "#shared";
+import { engine, type api } from "#shared";
 import { ProgressBar, VestingChart } from "../../components/Charts.tsx";
 import { DescriptionList, type DlRow } from "../../components/DescriptionList.tsx";
 import { useDisplay } from "../../components/Display.tsx";
 import { Badge, Banner, NotFoundState } from "../../components/Feedback.tsx";
 import { Card, PageHead, SectionTitle } from "../../components/Page.tsx";
-import { Deadline, DocumentCards, PortalLink, PortalPage, PortalResourceView, StatusBadge } from "../../components/PortalParts.tsx";
+import { Deadline, DocumentCards, ExecutionBadge, PortalLink, PortalPage, PortalResourceView, StatusBadge } from "../../components/PortalParts.tsx";
 import { usePortal } from "../../components/PortalWorkspace.tsx";
 import { isApiError } from "../../lib/errors.ts";
 import { DASH, formatDate } from "../../lib/format.ts";
 import { ELECTION_83B_LABELS, TERMINATION_WINDOW_LABELS, periodLabel } from "../../lib/labels.ts";
-import { decOf, discountLabel, formatComputedMoney, formatRecordedMoney, isPositive, isoDeadlineState, securityPath, unitOf } from "../../lib/portal.ts";
+import {
+  awaitingHolderSignature, decOf, discountLabel, formatComputedMoney, formatRecordedMoney, isPositive, isoDeadlineState, securityPath, unitOf,
+} from "../../lib/portal.ts";
 import { useResource } from "../../lib/useResource.ts";
 
 // A holding's detail page (option, share, warrant, SAFE): only what the allowlisted
@@ -107,15 +109,26 @@ function OptionView({ security, detail }: { security: api.PortalSecurityDetail; 
     ? <button type="button" className="btn btn-primary" disabled title="Disabled in the preview">How to exercise</button>
     : <PortalLink className="btn btn-primary" to={`how-to-exercise?grant=${security.id}`}>How to exercise</PortalLink>;
   const live = security.status === "OUTSTANDING" && isPositive(numbers.outstanding);
+  const blocked = awaitingHolderSignature(security);
   return (
     <Layout
       security={security}
       title={`${security.displayId} Options`}
-      badges={<><StatusBadge status={security.status} />{security.executionPending ? <> <Badge tone="amber">Execution pending</Badge></> : null}</>}
+      badges={<><StatusBadge status={security.status} />{security.executionPending ? <> <ExecutionBadge security={security} /></> : null}</>}
       actions={action}
       banners={
         <>
-          {security.executionPending ? <Banner kind="info" title="Awaiting signatures">This grant can be exercised once the agreement is signed by both you and the company.</Banner> : null}
+          {blocked ? (
+            <Banner kind="info" title="Awaiting your signature">
+              You can exercise this grant once you have signed its agreement
+              {security.executionPending === "pending_both" ? "; the company's countersignature is still pending too" : ""}.
+            </Banner>
+          ) : null}
+          {security.executionPending === "pending_company" ? (
+            <Banner kind="info" title="The company's countersignature is pending — you can still exercise">
+              Only the company's signature on this grant's agreement is missing; it doesn't hold up exercising your vested options.
+            </Banner>
+          ) : null}
           {detail.earlyExerciseAllowed && live ? <Banner kind="info" title={EARLY_EXERCISE} /> : null}
         </>
       }
@@ -136,6 +149,8 @@ function OptionView({ security, detail }: { security: api.PortalSecurityDetail; 
           ["Expiration date", formatDate(security.expirationDate)],
           ...deadlineRows,
           ["Early exercise allowed", detail.earlyExerciseAllowed ? "Yes — contact the company to exercise early" : "No"],
+          ["Board approval date", detail.boardApprovalDate ? formatDate(detail.boardApprovalDate) : "Not recorded"],
+          ["Acceleration", accelerationLabel(detail.acceleration)],
         ]}
       />
       <SectionTitle>Vesting timeline</SectionTitle>
@@ -166,9 +181,22 @@ function OptionView({ security, detail }: { security: api.PortalSecurityDetail; 
           />
         </>
       ) : null}
-      {live && !security.executionPending ? <p className="small muted mt-12">{SELF_SERVICE_NOTE}</p> : null}
+      {live && !blocked ? <p className="small muted mt-12">{SELF_SERVICE_NOTE}</p> : null}
     </Layout>
   );
+}
+
+const ACCELERATION_KINDS: Record<NonNullable<api.PortalOptionDetail["acceleration"]>["kind"], string> = {
+  NONE: "None",
+  SINGLE_TRIGGER: "Single trigger",
+  DOUBLE_TRIGGER: "Double trigger",
+};
+
+/** The grant's acceleration terms: the kind, then the agreement's own words when recorded. */
+function accelerationLabel(acceleration: api.PortalOptionDetail["acceleration"]): string {
+  if (acceleration === null) return "Not recorded";
+  const kind = ACCELERATION_KINDS[acceleration.kind];
+  return acceleration.text && acceleration.kind !== "NONE" ? `${kind}: ${acceleration.text}` : kind;
 }
 
 /** The $100K test's split of this grant by the year its options first become exercisable. */
@@ -206,8 +234,10 @@ const SHARE_FORMS: Record<api.PortalShareDetail["form"], string> = {
   uncertificated: "Uncertificated",
 };
 
+/** The 83(b) line: a lot that vests over time with no election on record is "Not recorded", never "Not required". */
 function election83bLabel(election: api.PortalShareDetail["election83b"]): string {
   if (election === null) return "Not required";
+  if (election.status === "NOT_RECORDED") return "Not recorded";
   if (election.status === "FILED" && election.filedOn) return `Filed on ${formatDate(election.filedOn)}`;
   return ELECTION_83B_LABELS[election.status] ?? election.status;
 }
@@ -234,10 +264,12 @@ function ShareView({ security, detail }: { security: api.PortalSecurityDetail; d
           ["Price per share", format.price(detail.pricePerShare)],
           ["Form", SHARE_FORMS[detail.form]],
           ["Legends", detail.legends.length ? detail.legends.join(", ") : "None"],
+          ["Holding start date", detail.holdingStartDate ? formatDate(detail.holdingStartDate) : "Not recorded"],
           ["83(b)", election83bLabel(detail.election83b)],
           detail.origin ? ["Origin", <OriginLabel origin={detail.origin} />] : null,
         ]}
       />
+      {detail.form === "book_entry" ? <p className="small muted mt-8">These shares are held in book entry on the company's records.</p> : null}
       {restricted || detail.repurchase ? (
         <>
           <SectionTitle>Vesting and repurchase</SectionTitle>
@@ -264,6 +296,8 @@ function repurchaseSentence(repurchase: NonNullable<api.PortalShareDetail["repur
         : `The company may repurchase ${format.shares(unvested)} unvested shares${price}.`;
     case "lapsed":
       return repurchase.lastDate ? `The company's repurchase window ended on ${formatDate(repurchase.lastDate)}.` : "The company's repurchase window has ended.";
+    case "no_deadline":
+      return `The company may repurchase ${format.shares(unvested)} unvested shares${price}; your agreement sets no deadline.`;
     case "not_recorded":
       return "The repurchase terms aren't recorded here. Contact the company about your unvested shares.";
     case null:
@@ -334,6 +368,31 @@ const STATUS_BADGES: Record<api.PortalVestingEvent["status"], [string, "green" |
   STOPPED: ["Cancelled", "red"],
 };
 
+/**
+ * The schedule in one line: the start, the first vest (a cliff only when the events show one) and when it
+ * is fully vested, or that vesting stopped. Read from the recorded events alone; no cadence is inferred from them.
+ */
+function VestingSummaryLine({ security }: { security: api.PortalSecurity }) {
+  const { format, today } = useDisplay();
+  const summary = engine.vestingSummary(
+    security.vesting.map((event) => ({ date: event.date, quantity: event.quantity, cancelled: event.status === "STOPPED" })),
+    security.vestingStartDate,
+  );
+  if (summary === null) return null;
+  const unit = unitOf(security);
+  const parts: string[] = [];
+  if (summary.start) parts.push(`Vesting start ${formatDate(summary.start)}`);
+  const { first, last } = summary;
+  if (first && !summary.stopped && first.date === last) {
+    parts.push(`${first.date <= today ? "Vested" : "Vests"} in full on ${formatDate(first.date)}`);
+  } else {
+    if (first) parts.push(`${first.cliff ? "Cliff" : "First vest"}: ${format.shares(first.quantity.toString())} ${unit} on ${formatDate(first.date)}`);
+    if (summary.stopped) parts.push(last ? `Vesting stopped: last vest on ${formatDate(last)}` : "Vesting stopped before the first vest");
+    else if (last) parts.push(`${last <= today ? "Fully vested" : "Fully vests"} on ${formatDate(last)}`);
+  }
+  return <p className="small">{parts.join(" · ")}</p>;
+}
+
 /** The vesting chart and the full schedule ("Vesting timeline: chart and full schedule"). */
 function VestingTimeline({ security }: { security: api.PortalSecurity }) {
   const { format, today } = useDisplay();
@@ -344,6 +403,7 @@ function VestingTimeline({ security }: { security: api.PortalSecurity }) {
   const unit = unitOf(security);
   return (
     <>
+      <VestingSummaryLine security={security} />
       <VestingChart
         events={events.map((event) => ({ date: event.date, cumulative: event.cumulative, active: event.status !== "STOPPED" }))}
         total={total}

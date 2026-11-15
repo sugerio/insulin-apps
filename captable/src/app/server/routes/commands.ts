@@ -11,6 +11,7 @@ import { planLeave, type LeaveFields } from "../lib/ledger/commands/leave.ts";
 import { planMarkExecuted, type MarkExecutedFields } from "../lib/ledger/commands/mark-executed.ts";
 import { planStakeholderMerge } from "../lib/ledger/commands/merge-stakeholders.ts";
 import { planSetPlanTerms, type PlanTermsFields } from "../lib/ledger/commands/plan-terms.ts";
+import { planRepurchase, type RepurchaseFields } from "../lib/ledger/commands/repurchase.ts";
 import { planReversal, reversalPreview } from "../lib/ledger/commands/reverse.ts";
 import { planTermination, type TerminationInput } from "../lib/ledger/commands/terminate.ts";
 import type { CommandDocuments } from "../lib/ledger/documents.ts";
@@ -36,6 +37,7 @@ const BUILDERS: Record<LedgerCommandName, Builder> = {
   "grant-equity-compensation": (ctx, body: GrantFields) => planGrant(ctx, body),
   // A dry run previews before the person types the confirmation; the real call checks it.
   "cancel-security": (ctx, body: CancelFields, { dryRun }) => planCancel(ctx, body, { confirm: !dryRun }),
+  "record-repurchase": (ctx, body: RepurchaseFields, { dryRun }) => planRepurchase(ctx, body, { confirm: !dryRun }),
   "mark-executed": (ctx, body: MarkExecutedFields, { dryRun }) => planMarkExecuted(ctx, body, { confirm: !dryRun }),
   "record-leave-of-absence": (ctx, body: LeaveFields) => planLeave(ctx, body),
   "extend-exercise-deadline": (ctx, body: ExtendFields, { dryRun }) => planExtension(ctx, body, { confirm: !dryRun }),

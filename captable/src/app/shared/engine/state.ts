@@ -208,7 +208,8 @@ export interface SecurityState {
   /** A recorded extension: it replaces the computed deadline from its date (the ledger rules). */
   extendedDeadline: (TxRef & { deadline: IsoDate }) | null;
   lastRepurchaseDate: (TxRef & { deadline: IsoDate }) | null;
-  repurchaseRight: { pricePerShare: Dec | null; window: Period | null } | null;
+  /** The lot's own repurchase right; `noDeadline`: its agreement sets no deadline (no plan default applies). */
+  repurchaseRight: { pricePerShare: Dec | null; window: Period | null; noDeadline: boolean } | null;
   exercises: ExerciseRecord[];
   resultingSecurityIds: string[];
   openingBalance: TxRef | null;

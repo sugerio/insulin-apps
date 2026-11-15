@@ -163,7 +163,7 @@ const stockPlan = {
   defaultRepurchaseWindow: { period: "90", unit: "DAYS" },
   status: "active",
   pourOverPlanId: null,
-  amendments: [{ effectiveDate: "2024-06-01", transactionId: OTHER_TX_ID, type: "TX_STOCK_PLAN_POOL_ADJUSTMENT", poolSize: "4000000" }],
+  amendments: [{ effectiveDate: "2024-06-01", transactionId: OTHER_TX_ID, type: "TX_STOCK_PLAN_POOL_ADJUSTMENT", kind: "reserve", poolSize: "4000000" }],
   version: 1,
 };
 
@@ -225,6 +225,17 @@ const grantBody = {
   executedAgreement: { documentId: OTHER_DOCUMENT_ID, signedByHolderAndSignatory: true },
 };
 
+const repurchaseBody = {
+  ...guard,
+  securityId: SHARES_ID,
+  effectiveDate: "2026-11-20",
+  quantity: "34500",
+  pricePerShare: "0.31",
+  consideration: { method: "CHECK", paidDate: "2026-11-20", reference: "Check 1042" },
+  noticeDocumentId: DOCUMENT_ID,
+  confirmation: "CS-4",
+};
+
 const reversalPreview = {
   commandId: COMMAND_ID,
   commandType: "exercise-option",
@@ -281,21 +292,24 @@ const dashboard = {
   employeeEquity: [{ stockPlanId: PLAN_ID, name: "2023 Example Equity Plan", granted: "3700000", available: "250000", usedPct: "15/16" }],
   ownershipByRelationship: [{ relationship: "investor", fullyDiluted: "9000000", pct: "3/8" }],
   topStakeholders: [{ stakeholderId: OTHER_STAKEHOLDER_ID, name: "Robin Sample", fullyDiluted: "3000000", pct: "1/8" }],
-  needsAttention: [{ kind: "EXECUTION_PENDING", count: 2, dueDate: null, href: "/companies/acme/securities-status" }],
+  needsAttention: [{ kind: "EXECUTION_PENDING", count: 2, dueDate: null, href: "/companies/acme/securities-status", byFamily: [{ family: "EQUITY_COMPENSATION", count: 2 }] }],
   inProgress: { executionPending: 2 },
   recentActivity: [{ id: 9001, occurredAt: T, description: "Recorded grant OPT-7", actor: "Morgan Admin" }],
 };
 
 const securitiesStatus = {
   executionPending: [
-    { securityId: OPTION_ID, displayId: "OPT-7", stakeholderId: STAKEHOLDER_ID, issueDate: "2026-10-01", missing: "company_signatory", signatureRequestIds: [SIGNATURE_REQUEST_ID] },
+    {
+      securityId: OPTION_ID, displayId: "OPT-7", stakeholderId: STAKEHOLDER_ID, family: "EQUITY_COMPENSATION", issueDate: "2026-10-01", missing: "company_signatory",
+      signatureRequestIds: [SIGNATURE_REQUEST_ID], pendingSigners: [{ role: "company", name: "Casey Officer", lastReminderAt: T }],
+    },
   ],
   scheduledTerminations: [
     { id: SCHEDULED_TERMINATION_ID, stakeholderId: STAKEHOLDER_ID, terminationDate: "2027-01-15", type: "voluntary", securitiesAffected: 1, unvestedToCancel: "30000", version: 1 },
   ],
   unvestedSharesFromTerminated: [],
   optionsFromTerminated: [
-    { securityId: OPTION_ID, stakeholderId: STAKEHOLDER_ID, vestedUnexercised: "18000", contractualDeadline: "2027-03-04", contractualDaysLeft: 84, isoDeadline: "2027-03-04", isoDaysLeft: 84 },
+    { securityId: OPTION_ID, stakeholderId: STAKEHOLDER_ID, vestedUnexercised: "18000", contractualDeadline: "2027-03-04", contractualDaysLeft: 84, isoDeadline: "2027-03-04", isoDaysLeft: 84, executionStatus: "pending_company" },
   ],
   expiringWithin90Days: [{ securityId: OPTION_ID, displayId: "OPT-7", expirationDate: "2027-02-01" }],
 };
@@ -674,6 +688,9 @@ export const ENDPOINT_EXAMPLES: Record<RouteId, EndpointExample> = {
       { body: { ...grantBody, grantDate: "2026-12-12" } },
       { body: { ...grantBody, vesting: { ...grantBody.vesting, matchesSignedAgreement: false } } },
       { body: { ...grantBody, executedAgreement: { documentId: DOCUMENT_ID, signedByHolderAndSignatory: false } } },
+      // Executed or awaiting signatures, never both; the holder-signed agreement when only the company signs later.
+      { body: { ...grantBody, awaitingSignatures: { missing: "both" } } },
+      { body: { ...grantBody, executedAgreement: undefined, awaitingSignatures: { missing: "company" } } },
       { body: { ...grantBody, optionType: "INTL" } },
     ],
   },
@@ -687,12 +704,30 @@ export const ENDPOINT_EXAMPLES: Record<RouteId, EndpointExample> = {
       { body: { ...guard, securityId: OPTION_ID, effectiveDate: "2026-12-10", reason: "HOLDER_WAIVER", confirmation: "OPT-7" } },
     ],
   },
+  recordRepurchase: {
+    params: orgParams,
+    body: repurchaseBody,
+    dryRunBody: { ...repurchaseBody, expectedLedgerSeq: undefined, expectedDiffSha256: undefined, confirmation: undefined },
+    response: { ...commandResult, commandId: COMMAND_ID, dryRun: false, created: { securityIds: [uid(34)], scheduledTerminationIds: [], vestingTermsIds: [] } },
+    invalid: [
+      { body: { ...repurchaseBody, consideration: { ...repurchaseBody.consideration, method: "MANUAL_UNSPECIFIED" } } },
+      { body: { ...repurchaseBody, noticeDocumentId: undefined } },
+      { body: { ...repurchaseBody, pricePerShare: "0" } },
+      { body: { ...repurchaseBody, confirmation: undefined } },
+      { body: { ...repurchaseBody, balanceDisplayId: "CS-9" } },
+    ],
+  },
   markExecuted: {
     params: orgParams,
     body: { ...guard, securityId: OPTION_ID, executedAgreementDocumentId: DOCUMENT_ID, signatureDates: { company: "2026-12-08" }, attestation: "This PDF bears both signatures", confirmation: "OPT-7" },
     dryRunBody: { securityId: OPTION_ID, executedAgreementDocumentId: DOCUMENT_ID, signatureDates: {}, attestation: "This PDF bears both signatures", confirmation: "OPT-7" },
     response: { ...commandResult, commandId: COMMAND_ID, dryRun: false },
-    invalid: [{ body: { ...guard, securityId: OPTION_ID, executedAgreementDocumentId: DOCUMENT_ID, signatureDates: {}, attestation: "Signed", confirmation: "OPT-7" } }],
+    invalid: [
+      { body: { ...guard, securityId: OPTION_ID, executedAgreementDocumentId: DOCUMENT_ID, signatureDates: {}, attestation: "Signed", confirmation: "OPT-7" } },
+      // One party's signature attests that party's signature, with that party's date only.
+      { body: { ...guard, securityId: OPTION_ID, signed: "holder", executedAgreementDocumentId: DOCUMENT_ID, signatureDates: {}, attestation: "This PDF bears both signatures", confirmation: "OPT-7" } },
+      { body: { ...guard, securityId: OPTION_ID, signed: "company", executedAgreementDocumentId: DOCUMENT_ID, signatureDates: { holder: "2026-12-08" }, attestation: "This PDF bears the company signatory's signature", confirmation: "OPT-7" } },
+    ],
   },
   recordLeaveOfAbsence: {
     params: orgParams,
@@ -819,7 +854,7 @@ export const ENDPOINT_EXAMPLES: Record<RouteId, EndpointExample> = {
     query: { securityId: OPTION_ID },
     response: {
       items: [
-        { id: SIGNATURE_REQUEST_ID, securityId: OPTION_ID, exerciseRequestId: null, documentId: DOCUMENT_ID, signerRole: "COMPANY_SIGNATORY", signerName: "Casey Officer", signerEmail: null, status: "PENDING", method: null, evidence: null, evidenceSha256: null, signedAt: null, resolvedAt: null, resolutionNote: null, importedFromPulley: true, createdAt: T },
+        { id: SIGNATURE_REQUEST_ID, securityId: OPTION_ID, exerciseRequestId: null, documentId: DOCUMENT_ID, signerRole: "COMPANY_SIGNATORY", signerName: "Casey Officer", signerEmail: null, status: "PENDING", lastReminderAt: T, method: null, evidence: null, evidenceSha256: null, signedAt: null, resolvedAt: null, resolutionNote: null, importedFromPulley: true, createdAt: T },
       ],
     },
   },

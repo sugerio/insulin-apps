@@ -6,6 +6,7 @@ import { describeError, isApiError } from "../lib/errors.ts";
 import type { Resource } from "../lib/useResource.ts";
 import { formatDate, formatDaysLeft } from "../lib/format.ts";
 import { SECURITY_STATUS_LABELS, SECURITY_STATUS_TONES, documentKindLabel } from "../lib/labels.ts";
+import { awaitingHolderSignature, EXECUTION_PENDING_LABELS } from "../lib/portal.ts";
 import { useDocumentTitle } from "../lib/useDocumentTitle.ts";
 import { useDisplay } from "./Display.tsx";
 import { Badge, Pending, ResourceView } from "./Feedback.tsx";
@@ -30,6 +31,12 @@ export function PortalPage({ title, crumb, children }: { title: string; crumb?: 
 
 export function StatusBadge({ status }: { status: api.PortalSecurity["status"] }) {
   return <Badge tone={SECURITY_STATUS_TONES[status]}>{SECURITY_STATUS_LABELS[status]}</Badge>;
+}
+
+/** Whose signature a security awaits: amber while the holder's own is missing, since that blocks exercise. */
+export function ExecutionBadge({ security }: { security: Pick<api.PortalSecurity, "executionPending"> }) {
+  if (security.executionPending === null) return null;
+  return <Badge tone={awaitingHolderSignature(security) ? "amber" : "grey"}>{EXECUTION_PENDING_LABELS[security.executionPending]}</Badge>;
 }
 
 /** "Feb 28, 2027 (130 days)", bold, with the time left counted from the org's today. */
@@ -83,27 +90,38 @@ export function usePrivacyNotice(): api.PortalDocument | null {
 }
 
 /**
- * File cards: name, kind and date. The company's designated privacy notice comes first and
- * says so, so a holder looking for it under Documents finds it.
+ * File cards: name, kind and date, and the holdings a document belongs to when `holdingsOf` names them. An imported
+ * document is dated by its original upload, said so: an upload date, never a signing date. The company's designated
+ * privacy notice comes first and says so, so a holder looking for it under Documents finds it.
  */
-export function DocumentCards({ documents, empty = "No documents." }: { documents: readonly api.PortalDocument[]; empty?: string }) {
+export function DocumentCards({ documents, empty = "No documents.", holdingsOf }: {
+  documents: readonly api.PortalDocument[];
+  empty?: string;
+  holdingsOf?: (document: api.PortalDocument) => readonly string[];
+}) {
   const { format } = useDisplay();
   const privacyNotice = usePrivacyNotice();
   if (documents.length === 0) return <p className="muted small">{empty}</p>;
   const isNotice = (document: api.PortalDocument) => document.id === privacyNotice?.id;
   const ordered = [...documents.filter(isNotice), ...documents.filter((document) => !isNotice(document))];
+  const dated = (document: api.PortalDocument) => document.sourceCreatedAt !== null
+    ? `Originally uploaded ${format.date(format.localDate(document.sourceCreatedAt))}`
+    : format.date(format.localDate(document.createdAt));
   return (
     <div className="stack-8">
-      {ordered.map((document) => (
-        <div className="attach" key={document.id}>
-          <div className="a-n">
-            <Icon name="file" />
-            <DocumentLink document={document} />
-            {isNotice(document) ? <Badge tone="teal">Privacy notice</Badge> : null}
+      {ordered.map((document) => {
+        const holdings = holdingsOf?.(document) ?? [];
+        return (
+          <div className="attach" key={document.id}>
+            <div className="a-n">
+              <Icon name="file" />
+              <DocumentLink document={document} />
+              {isNotice(document) ? <Badge tone="teal">Privacy notice</Badge> : null}
+            </div>
+            <div className="a-m">{[documentKindLabel(document.kind), ...(holdings.length ? [holdings.join(", ")] : []), dated(document)].join(" · ")}</div>
           </div>
-          <div className="a-m">{documentKindLabel(document.kind)} · {format.date(format.localDate(document.createdAt))}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

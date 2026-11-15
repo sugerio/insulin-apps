@@ -175,11 +175,15 @@ function StakeholderForm({ mode, original: loaded }: { mode: "create" | "edit"; 
         ) : null}
         <h3>Relationship</h3>
         <div className="form-grid">
-          {base?.relationship === "ex_employee" ? (
-            <SelectField label="Relationship" value="ex_employee" onChange={() => {}} disabled options={RELATIONSHIP_OPTIONS} hint="Set by the termination; reverse the termination to change it." />
+          {/* Ex-employee is set by a termination and locked while one is recorded or scheduled; one imported without
+              a termination can be corrected. */}
+          {base?.relationship === "ex_employee" && (base.termination !== null || base.scheduledTermination !== null) ? (
+            <SelectField label="Relationship" value="ex_employee" onChange={() => {}} disabled options={RELATIONSHIP_OPTIONS}
+              hint={base.termination !== null ? "Set by the termination; reverse the termination to change it." : "A termination is scheduled; it must be cancelled to change the relationship."} />
           ) : (
             <SelectField label="Relationship" required value={values.relationship} onChange={(value) => set("relationship", value as api.Relationship)} error={errorOf("relationship")}
-              options={mode === "create" ? RELATIONSHIP_OPTIONS : EDIT_RELATIONSHIPS} />
+              options={mode === "create" || base?.relationship === "ex_employee" ? RELATIONSHIP_OPTIONS : EDIT_RELATIONSHIPS}
+              hint={base?.relationship === "ex_employee" ? "No termination is recorded for this ex-employee: choose the relationship the record should have." : undefined} />
           )}
           <DateField label="Hire date" value={values.hireDate} onChange={(value) => set("hireDate", value)} error={errorOf("hireDate")} />
           <TextField label="External ID" value={values.issuerAssignedId} onChange={(value) => set("issuerAssignedId", value)} error={errorOf("issuerAssignedId")} />

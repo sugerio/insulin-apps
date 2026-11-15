@@ -129,6 +129,8 @@ export function terminationWindows(terms: Terms): Map<string, { period: string; 
 export interface RepurchaseRight {
   pricePerShare: string | null;
   window: { period: string; unit: string } | null;
+  /** The agreement sets no deadline: any window beside it is ignored, as the engine does. */
+  noDeadline: boolean;
   termsText: string | null;
 }
 
@@ -139,6 +141,7 @@ export function repurchaseRight(terms: Terms): RepurchaseRight | null {
   return {
     pricePerShare: money(value.price_per_share),
     window: window && typeof window.period === "number" ? { period: String(window.period), unit: `${String(window.period_type ?? "DAYS").toUpperCase().replace(/S$/, "")}S` } : null,
+    noDeadline: value.x_no_deadline === true,
     termsText: text(value.terms_text),
   };
 }

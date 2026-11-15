@@ -7,6 +7,7 @@ import { TextAreaField, TextField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
 import { FlowDialog } from "./FlowDialog.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // The payment instructions holders see on How to exercise: set by an owner or admin, one current version, audited by
 // the server. Saving replaces the whole set of details, and carries the `updatedAt` of the version it replaces: if
@@ -157,28 +158,28 @@ export function PaymentInstructionsDialog({ current, onClose, onDone }: { curren
       onReview={review}
       confirmLabel="Save instructions"
       review={reviewed ? (
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>
             Holders see these details on How to exercise
             {base ? `, instead of the ones ${base.updatedBy ?? "an admin"} saved ${format.dateTime(base.updatedAt)}` : ""}:
           </p>
           <DescriptionList rows={(Object.keys(PAYMENT_LABELS) as (keyof PaymentValues)[]).filter((key) => reviewed[key]).map((key) => [PAYMENT_LABELS[key], reviewed[key]!])} />
-        </div>
+        </ReviewPanel>
       ) : null}
     >
-      <div className="form-grid">
+      <div className="grid gap-4 sm:grid-cols-2">
         {field("bankName", { required: true })}
         {field("beneficiaryName", { required: true })}
       </div>
       <TextAreaField label={PAYMENT_LABELS.beneficiaryAddress} required value={values.beneficiaryAddress} onChange={(value) => set("beneficiaryAddress", value)} error={errorOf("beneficiaryAddress")} />
-      <div className="form-grid">
+      <div className="grid gap-4 sm:grid-cols-2">
         {field("accountNumber", { required: true })}
         {field("routingNumber", { hint: "9 digits, for US transfers." })}
         {field("swift", { hint: "8 or 11 characters, for international wires." })}
         {field("iban")}
       </div>
       {field("intermediaryBank")}
-      <div className="form-grid">
+      <div className="grid gap-4 sm:grid-cols-2">
         {field("checkPayee")}
         {field("checkMailingAddress")}
       </div>

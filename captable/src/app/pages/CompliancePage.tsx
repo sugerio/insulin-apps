@@ -1,18 +1,24 @@
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
+import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react";
 import { api } from "#shared";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Card as UiCard, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { DownloadError, useCanDownload, useDownload } from "../components/Documents.tsx";
-import { Badge, EmptyState, Pending } from "../components/Feedback.tsx";
-import { Icon } from "../components/Icon.tsx";
 import { LinkTabs } from "../components/LinkTabs.tsx";
 import { useWorkspace } from "../components/OrgWorkspace.tsx";
 import { Card, Page, PageHead } from "../components/Page.tsx";
 import { electionDueDate, electionsInForce } from "../lib/elections.ts";
+import { describeError } from "../lib/errors.ts";
 import { DASH, formatDate, plural } from "../lib/format.ts";
-import { ELECTION_83B_LABELS, SECURITY_STATUS_LABELS, type Tone } from "../lib/labels.ts";
+import { ELECTION_83B_LABELS, SECURITY_STATUS_LABELS } from "../lib/labels.ts";
 import * as terms from "../lib/terms.ts";
-import { allOf, useResource } from "../lib/useResource.ts";
+import { allOf, useResource, type Resource } from "../lib/useResource.ts";
 import { currentValuation } from "../lib/valuations.ts";
 
 // Compliance & Tax › 83(b) elections and Checks: read-only views of what the existing admin routes already hold. The
@@ -44,31 +50,49 @@ function ComplianceShell({ selected, children }: { selected: ComplianceTab; chil
       <Card>
         <PageHead title="Compliance & Tax" />
         <ComplianceTabs selected={selected} />
-        <div className="form mt-16">{children}</div>
+        <div className="flex flex-col gap-4">{children}</div>
       </Card>
     </Page>
   );
 }
 
+/** A resource's data, or its loading state, or its error with Try again: never a figure from a missing answer. */
+function Loaded<T>({ resource, what, children }: { resource: Resource<T>; what: string; children: (data: T) => ReactNode }) {
+  if (resource.data !== undefined) return <>{children(resource.data)}</>;
+  if (resource.error !== undefined) {
+    return (
+      <Alert variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>Couldn't load {what}</AlertTitle>
+        <AlertDescription className="flex flex-col items-start gap-2">
+          {describeError(resource.error)}
+          <Button variant="outline" size="sm" onClick={resource.reload}>Try again</Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  return <p role="status" className="text-sm text-muted-foreground">Loading {what}…</p>;
+}
+
 function SecurityCell({ security }: { security: Pick<api.Security, "id" | "family" | "displayId"> }) {
   const { href } = useWorkspace();
-  return <Link className="mono" to={href(terms.securityHref(security))}>{security.displayId}</Link>;
+  return <Link className="font-medium text-primary hover:underline" to={href(terms.securityHref(security))}>{security.displayId}</Link>;
 }
 
 function HolderCell({ security }: { security: Pick<api.Security, "stakeholderId" | "stakeholderName"> }) {
   const { href } = useWorkspace();
-  return <Link to={href(`stakeholders/${security.stakeholderId}`)}>{security.stakeholderName}</Link>;
+  return <Link className="text-primary hover:underline" to={href(`stakeholders/${security.stakeholderId}`)}>{security.stakeholderName}</Link>;
 }
 
 // ---------------------------------------------------------------------------
 // 83(b) elections
 
-const ELECTION_TONES: Record<api.Election83b["status"], Tone> = {
-  FILED: "green",
-  NOT_REQUIRED: "grey",
-  PENDING: "amber",
-  UNCONFIRMED_DEADLINE_PASSED: "red",
-  PROOF_MISSING: "red",
+const ELECTION_VARIANTS: Record<api.Election83b["status"], "secondary" | "outline" | "destructive"> = {
+  FILED: "secondary",
+  NOT_REQUIRED: "outline",
+  PENDING: "outline",
+  UNCONFIRMED_DEADLINE_PASSED: "destructive",
+  PROOF_MISSING: "destructive",
 };
 
 export function ElectionsPage() {
@@ -77,13 +101,13 @@ export function ElectionsPage() {
   const securities = useResource((signal) => apiRequest(api.routes.listSecurities, { params: { orgId }, signal }), [orgId]);
   return (
     <ComplianceShell selected="83b">
-      <p className="small muted">
-        Each share's 83(b) election as recorded: the record in force, after any correction. The deadline is 30 days after the transfer, moved to the next business day
-        when it falls on a weekend or legal holiday. Read-only.
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        Each share's 83(b) election as recorded: the record in force, after any correction. The deadline is 30 days after the transfer, moved to the next business day when it
+        falls on a weekend or legal holiday. Read-only.
       </p>
-      <Pending resource={allOf(elections, securities)} what="the 83(b) elections">
+      <Loaded resource={allOf(elections, securities)} what="the 83(b) elections">
         {([list, securityList]) => <ElectionsTable records={list.items} securities={securityList.items} />}
-      </Pending>
+      </Loaded>
     </ComplianceShell>
   );
 }
@@ -98,59 +122,61 @@ function ElectionsTable({ records, securities }: { records: readonly api.Electio
     .sort((a, b) => (b.record.transferDate ?? "").localeCompare(a.record.transferDate ?? "") || (a.security?.displayId ?? "").localeCompare(b.security?.displayId ?? "", "en", { numeric: true }));
   if (rows.length === 0) {
     return (
-      <EmptyState>
-        <p className="b-title">No 83(b) elections recorded</p>
-        <p className="small muted">Restricted shares without a record are listed under Checks.</p>
-      </EmptyState>
+      <Empty className="border border-dashed">
+        <EmptyHeader>
+          <EmptyTitle>No 83(b) elections recorded</EmptyTitle>
+          <EmptyDescription>Restricted shares without a record are listed under Checks.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
   return (
-    <>
-      <div className="tbl-scroll">
-        <table className="tbl" aria-label="83(b) elections">
-          <thead>
-            <tr>
-              <th scope="col">Certificate</th>
-              <th scope="col">Holder</th>
-              <th scope="col" className="num">Quantity</th>
-              <th scope="col">Transfer date</th>
-              <th scope="col">Due date</th>
-              <th scope="col">Status</th>
-              <th scope="col">Proof</th>
-            </tr>
-          </thead>
-          <tbody>
+    <div className="flex flex-col gap-2">
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <Table aria-label="83(b) elections">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Certificate</TableHead>
+              <TableHead>Holder</TableHead>
+              <TableHead className="text-right">Quantity</TableHead>
+              <TableHead>Transfer date</TableHead>
+              <TableHead>Due date</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Proof</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map(({ record, security }) => (
-              <tr key={record.id}>
-                <td>{security ? <SecurityCell security={security} /> : DASH}</td>
-                <td>{security ? <HolderCell security={security} /> : DASH}</td>
-                <td className="num">{format.shares(security?.numbers?.issued ?? null)}</td>
-                <td>{formatDate(record.transferDate)}</td>
-                <td>{formatDate(electionDueDate(record))}</td>
-                <td>
-                  <Badge tone={ELECTION_TONES[record.status]}>
+              <TableRow key={record.id}>
+                <TableCell>{security ? <SecurityCell security={security} /> : DASH}</TableCell>
+                <TableCell>{security ? <HolderCell security={security} /> : DASH}</TableCell>
+                <TableCell className="text-right tabular-nums">{format.shares(security?.numbers?.issued ?? null)}</TableCell>
+                <TableCell>{formatDate(record.transferDate)}</TableCell>
+                <TableCell>{formatDate(electionDueDate(record))}</TableCell>
+                <TableCell>
+                  <Badge variant={ELECTION_VARIANTS[record.status]}>
                     {record.status === "FILED" && record.filedDate ? `Filed ${formatDate(record.filedDate)}` : ELECTION_83B_LABELS[record.status] ?? record.status}
                   </Badge>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
                   {record.proofDocumentId === null ? (
-                    <span className="muted">None</span>
+                    <span className="text-muted-foreground">None</span>
                   ) : canDownload ? (
-                    <button type="button" className="btn-link" disabled={busy === record.proofDocumentId}
+                    <Button variant="link" size="sm" className="h-auto px-0" disabled={busy === record.proofDocumentId}
                       onClick={() => void download(record.proofDocumentId!, `83(b) proof ${security?.displayId ?? record.id}.pdf`)}>
                       Download proof<span className="sr-only"> of {security?.displayId ?? "this election"}</span>
-                    </button>
+                    </Button>
                   ) : (
                     "On file"
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <DownloadError error={error} />
-    </>
+    </div>
   );
 }
 
@@ -161,14 +187,18 @@ function ElectionsTable({ records, securities }: { records: readonly api.Electio
 function Check({ title, count, description, done, children }: { title: string; count: number; description: ReactNode; done: string; children?: ReactNode }) {
   const id = useId();
   return (
-    <section className="review-panel check" aria-labelledby={id}>
-      <div className="card-h">
-        <h3 id={id}>{title}</h3>
-        <Badge tone={count ? "red" : "green"}>{count ? plural(count, "to complete", "to complete") : "Complete"}</Badge>
-      </div>
-      <p className="small muted">{description}</p>
-      {count ? children : <p className="small"><Icon name="check" /> {done}</p>}
-    </section>
+    <UiCard role="region" aria-labelledby={id}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <h2 id={id}>{title}</h2>
+          <Badge variant={count ? "destructive" : "secondary"}>{count ? plural(count, "to complete", "to complete") : "Complete"}</Badge>
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {count ? children : <p className="flex items-center gap-2 text-sm text-muted-foreground"><CircleCheckIcon className="size-4" />{done}</p>}
+      </CardContent>
+    </UiCard>
   );
 }
 
@@ -187,9 +217,11 @@ export function ComplianceChecksPage() {
   const valuations = useResource((signal) => apiRequest(api.routes.listValuations, { params: { orgId }, signal }), [orgId]);
   return (
     <ComplianceShell selected="checks">
-      <p className="small muted">Records the company still has to complete, from what the cap table holds today. Nothing here sends a reminder.</p>
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        Records the company still has to complete, from what the cap table holds today. Nothing here sends a reminder.
+      </p>
       <CompanyCheck />
-      <Pending resource={allOf(securities, elections, valuations)} what="the checks">
+      <Loaded resource={allOf(securities, elections, valuations)} what="the checks">
         {([securityList, electionList, valuationList]) => (
           <>
             <BoardApprovalCheck securities={securityList.items} />
@@ -197,7 +229,7 @@ export function ComplianceChecksPage() {
             <ElectionCheck securities={securityList.items} elections={electionList.items} />
           </>
         )}
-      </Pending>
+      </Loaded>
     </ComplianceShell>
   );
 }
@@ -212,10 +244,10 @@ function CompanyCheck() {
     <Check
       title="Company EIN and address"
       count={missing.length}
-      description={<>An import doesn't bring them over. Anyone who records changes enters them in the <Link to={href("company")}>Company profile</Link>.</>}
+      description={<>An import doesn't bring them over. Anyone who records changes enters them in the <Link className="text-primary hover:underline" to={href("company")}>Company profile</Link>.</>}
       done="The EIN and the company's street address are recorded."
     >
-      <ul className="small" aria-label="Missing company details">
+      <ul className="flex list-disc flex-col gap-1 pl-5 text-sm" aria-label="Missing company details">
         {missing.map((item) => <li key={item}>{item} not recorded</li>)}
       </ul>
     </Check>
@@ -234,28 +266,35 @@ function BoardApprovalCheck({ securities }: { securities: readonly api.Security[
       description={`The securities ${source} held no board approval date for: the list for counsel's ratification consent. A ratification is linked to each security as a document; it never becomes the original approval date.`}
       done="Every security has a board approval date."
     >
-      {groups.map((group) => (
-        <div key={group.family} className="mt-12">
-          <h4>{group.label} ({group.items.length})</h4>
-          <div className="tbl-scroll mt-8">
-            <table className="tbl dense" aria-label={`${group.label} without a recorded board approval`}>
-              <thead>
-                <tr><th scope="col">Security</th><th scope="col">Holder</th><th scope="col">Issue date</th><th scope="col">Status</th></tr>
-              </thead>
-              <tbody>
-                {[...group.items].sort((a, b) => a.displayId.localeCompare(b.displayId, "en", { numeric: true })).map((security) => (
-                  <tr key={security.id}>
-                    <td><SecurityCell security={security} /></td>
-                    <td><HolderCell security={security} /></td>
-                    <td>{formatDate(security.issueDate)}</td>
-                    <td>{SECURITY_STATUS_LABELS[security.status]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="flex flex-col gap-4">
+        {groups.map((group) => (
+          <div key={group.family} className="flex flex-col gap-2">
+            <h3 className="text-sm font-medium">{group.label} ({group.items.length})</h3>
+            <div className="overflow-hidden rounded-lg border">
+              <Table aria-label={`${group.label} without a recorded board approval`}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Security</TableHead>
+                    <TableHead>Holder</TableHead>
+                    <TableHead>Issue date</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...group.items].sort((a, b) => a.displayId.localeCompare(b.displayId, "en", { numeric: true })).map((security) => (
+                    <TableRow key={security.id}>
+                      <TableCell><SecurityCell security={security} /></TableCell>
+                      <TableCell><HolderCell security={security} /></TableCell>
+                      <TableCell>{formatDate(security.issueDate)}</TableCell>
+                      <TableCell>{SECURITY_STATUS_LABELS[security.status]}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </Check>
   );
 }
@@ -271,11 +310,11 @@ function ValuationAdoptionCheck({ valuations }: { valuations: readonly api.Valua
       description="The board adopts each 409A the company relies on for grants. An imported valuation carries no adoption date; a 409A recorded here takes it from the board's consent."
       done={current ? `${current.name} was adopted by the board on ${formatDate(current.boardApprovalDate)}.` : ""}
     >
-      <p className="small">
+      <p className="text-sm">
         {current === null ? (
-          <>No 409A valuation is in effect: see <Link to={href("compliance/409a")}>409A Valuations</Link>.</>
+          <>No 409A valuation is in effect: see <Link className="text-primary hover:underline" to={href("compliance/409a")}>409A Valuations</Link>.</>
         ) : (
-          <><Link to={href(`compliance/409a/${current.id}`)}>{current.name}</Link>, effective {formatDate(current.effectiveDate)}, has no board adoption date.</>
+          <><Link className="text-primary hover:underline" to={href(`compliance/409a/${current.id}`)}>{current.name}</Link>, effective {formatDate(current.effectiveDate)}, has no board adoption date.</>
         )}
       </p>
     </Check>
@@ -295,22 +334,27 @@ function ElectionCheck({ securities, elections }: { securities: readonly api.Sec
       description="Shares subject to vesting, such as founder or early-exercise shares, for which no 83(b) election is recorded. An election may have been required: confirm with the holder or counsel."
       done="Every restricted share has an 83(b) record."
     >
-      <div className="tbl-scroll">
-        <table className="tbl dense" aria-label="Restricted shares without an 83(b) record">
-          <thead>
-            <tr><th scope="col">Security</th><th scope="col">Holder</th><th scope="col">Issue date</th><th scope="col" className="num">Quantity</th></tr>
-          </thead>
-          <tbody>
+      <div className="overflow-hidden rounded-lg border">
+        <Table aria-label="Restricted shares without an 83(b) record">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Security</TableHead>
+              <TableHead>Holder</TableHead>
+              <TableHead>Issue date</TableHead>
+              <TableHead className="text-right">Quantity</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {missing.map((security) => (
-              <tr key={security.id}>
-                <td><SecurityCell security={security} /></td>
-                <td><HolderCell security={security} /></td>
-                <td>{formatDate(security.issueDate)}</td>
-                <td className="num">{format.shares(security.numbers?.issued ?? null)}</td>
-              </tr>
+              <TableRow key={security.id}>
+                <TableCell><SecurityCell security={security} /></TableCell>
+                <TableCell><HolderCell security={security} /></TableCell>
+                <TableCell>{formatDate(security.issueDate)}</TableCell>
+                <TableCell className="text-right tabular-nums">{format.shares(security.numbers?.issued ?? null)}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </Check>
   );

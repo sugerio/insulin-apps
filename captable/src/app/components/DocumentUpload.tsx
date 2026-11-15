@@ -1,11 +1,14 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { FileIcon, UploadIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button.tsx";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field.tsx";
+import { cn } from "@/lib/utils.ts";
 import { api } from "#shared";
 import { apiRequest } from "../api/request.ts";
 import { useWriteFlow } from "../lib/flow.ts";
 import { formatBytes } from "../lib/format.ts";
 import { documentKindLabel } from "../lib/labels.ts";
 import { FlowProblemBanner } from "./FlowParts.tsx";
-import { Icon } from "./Icon.tsx";
 import { useWorkspace } from "./OrgWorkspace.tsx";
 
 // A document a write needs (a board consent, an executed agreement, a notice of exercise, a 409A report…), or one
@@ -130,72 +133,77 @@ export function DocumentUpload({ label, kind, value, onChange, required, hint, e
   const reviewed = flow.request;
   const unsettled = flow.unsettled;
   const errorText = refusal ?? error;
+  const describedBy = errorText ? `${id}-err` : undefined;
   return (
-    <div className="fld">
-      <label htmlFor={id}>
+    <Field data-invalid={errorText ? true : undefined}>
+      <FieldLabel htmlFor={id}>
         {label}
-        {required ? <span className="req" aria-hidden="true">*</span> : null}
-      </label>
-      <div className="upload">
+        {required ? <span className="text-destructive" aria-hidden="true">*</span> : null}
+      </FieldLabel>
+      <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-dashed bg-muted/30 p-3">
         {value && !staged ? (
-          <div className="files">
-            <span className="file-pill">
-              <Icon name="file" /> {value.filename} <span className="faint">{formatBytes(value.byteSize)} · SHA-256 {value.sha256.slice(0, 10)}…</span>
+          <div className="flex w-full flex-col gap-1">
+            <span className="inline-flex max-w-full items-center gap-1.5 self-start rounded-md bg-muted px-2 py-0.5 text-xs wrap-anywhere">
+              <FileIcon className="size-3.5 flex-none text-muted-foreground" /> {value.filename}{" "}
+              <span className="text-muted-foreground">{formatBytes(value.byteSize)} · SHA-256 {value.sha256.slice(0, 10)}…</span>
               {disabled ? null : (
-                <button type="button" className="pill-x" aria-label={`Remove ${value.filename}`} onClick={() => onChange(null)}>
-                  <Icon name="x" />
-                </button>
+                <Button type="button" variant="ghost" size="icon-xs" className="size-5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove ${value.filename}`} onClick={() => onChange(null)}>
+                  <XIcon />
+                </Button>
               )}
             </span>
           </div>
         ) : null}
         {staged ? (
-          <div className="upload-review" aria-label={`Upload of ${staged.filename}`}>
+          <div className="flex w-full flex-col gap-2" aria-label={`Upload of ${staged.filename}`}>
             <FlowProblemBanner problem={flow.problem} onRetry={flow.phase === "edit" ? () => void flow.review() : () => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-            <p className="small" style={{ margin: "4px 0" }}>
-              <Icon name="file" /> Upload <b>{staged.filename}</b> ({formatBytes(staged.bytes.byteLength)}, SHA-256 <span className="mono">{staged.sha256.slice(0, 10)}…</span>)
-              {reviewed ? <> as <b>{documentKindLabel(reviewed.kind)}</b>{reviewed.collectionId ? " into the chosen folder" : ""}{reviewed.versionOf ? ", as a new version" : ""}{reviewed.link ? <>, linked to <b>{reviewed.link.label}</b></> : null}</> : null}.
+            <p className="text-xs">
+              <FileIcon className="mr-1 inline size-3.5 align-text-bottom text-muted-foreground" />Upload <b className="font-medium">{staged.filename}</b> ({formatBytes(staged.bytes.byteLength)}, SHA-256{" "}
+              <span className="font-mono">{staged.sha256.slice(0, 10)}…</span>)
+              {reviewed ? <> as <b className="font-medium">{documentKindLabel(reviewed.kind)}</b>{reviewed.collectionId ? " into the chosen folder" : ""}{reviewed.versionOf ? ", as a new version" : ""}{reviewed.link ? <>, linked to <b className="font-medium">{reviewed.link.label}</b></> : null}</> : null}.
               {value ? <> It replaces {value.filename} here.</> : null}
             </p>
-            <div className="row">
+            <div className="flex flex-wrap items-center gap-2">
               {/* The field's label names its current action, so errors placed on the field still reach it. */}
               {flow.phase === "edit" ? (
-                <button type="button" id={id} className="btn btn-ghost btn-sm" aria-label="Review the upload" onClick={() => void flow.review()} disabled={disabled}
-                  aria-invalid={errorText ? true : undefined} aria-describedby={errorText ? `${id}-err` : undefined}>Review the upload</button>
+                <Button type="button" id={id} variant="outline" size="sm" aria-label="Review the upload" onClick={() => void flow.review()} disabled={disabled}
+                  aria-invalid={errorText ? true : undefined} aria-describedby={describedBy}>Review the upload</Button>
               ) : flow.phase === "review" ? (
-                <button type="button" id={id} className="btn btn-primary btn-sm" aria-label={`Upload ${staged.filename}`} onClick={() => void flow.commit()} disabled={disabled}
-                  aria-invalid={errorText ? true : undefined} aria-describedby={errorText ? `${id}-err` : undefined}>Upload</button>
+                <Button type="button" id={id} size="sm" aria-label={`Upload ${staged.filename}`} onClick={() => void flow.commit()} disabled={disabled}
+                  aria-invalid={errorText ? true : undefined} aria-describedby={describedBy}>Upload</Button>
               ) : flow.phase === "committing" ? (
-                <span className="small muted" role="status">Uploading…</span>
+                <span className="text-xs text-muted-foreground" role="status">Uploading…</span>
               ) : null}
-              {!unsettled ? <button type="button" className="btn btn-ghost btn-sm" aria-label={`Don't upload ${staged.filename}`} onClick={discard} disabled={disabled && flow.phase !== "edit"}>Choose another file</button> : null}
+              {!unsettled ? <Button type="button" variant="ghost" size="sm" aria-label={`Don't upload ${staged.filename}`} onClick={discard} disabled={disabled && flow.phase !== "edit"}>Choose another file</Button> : null}
             </div>
           </div>
         ) : (
-          <label className="btn btn-ghost btn-sm" aria-disabled={disabled || reading || undefined}>
-            <Icon name="upload" /> {value ? "Replace file" : "Choose file"}
-            <input
-              ref={input}
-              id={id}
-              type="file"
-              className="sr-only"
-              accept={UPLOAD_ACCEPT}
-              disabled={disabled || reading}
-              aria-required={required || undefined}
-              aria-invalid={errorText ? true : undefined}
-              aria-describedby={errorText ? `${id}-err` : undefined}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void choose(file);
-              }}
-            />
-          </label>
+          <Button asChild variant="outline" size="sm">
+            <label aria-disabled={disabled || reading || undefined} className={cn("cursor-pointer has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50", (disabled || reading) && "pointer-events-none opacity-50")}>
+              <UploadIcon /> {value ? "Replace file" : "Choose file"}
+              <input
+                ref={input}
+                id={id}
+                type="file"
+                className="sr-only"
+                accept={UPLOAD_ACCEPT}
+                disabled={disabled || reading}
+                aria-required={required || undefined}
+                aria-invalid={errorText ? true : undefined}
+                aria-describedby={describedBy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void choose(file);
+                }}
+              />
+            </label>
+          </Button>
         )}
-        {reading ? <span className="small muted" role="status">Reading the file…</span> : null}
-        <div className="hint">{hint ?? `PDF, DOCX, XLSX, CSV, TXT, PNG or JPG · max ${UPLOAD_LIMIT_LABEL} · stored with a SHA-256 checksum`}</div>
+        {reading ? <span className="text-xs text-muted-foreground" role="status">Reading the file…</span> : null}
+        <FieldDescription className="w-full text-xs">{hint ?? `PDF, DOCX, XLSX, CSV, TXT, PNG or JPG · max ${UPLOAD_LIMIT_LABEL} · stored with a SHA-256 checksum`}</FieldDescription>
       </div>
-      {errorText ? <div className="err" id={`${id}-err`} role="alert">{errorText}</div> : null}
-    </div>
+      {errorText ? <FieldError id={`${id}-err`}>{errorText}</FieldError> : null}
+    </Field>
   );
 }
 

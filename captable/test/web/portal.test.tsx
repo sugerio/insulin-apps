@@ -104,8 +104,8 @@ describe("portfolio overview", () => {
   it("shows a former employee's exit window, tiles, vesting status and grants", async () => {
     renderPortal(PORTFOLIO, [NADIA]);
     const title = await screen.findByRole("heading", { name: "Acme Robotics", level: 1 });
-    expect(within(title.closest(".port-hero") as HTMLElement).getByText("Nadia Pereira-Stone")).toBeTruthy();
-    const banner = screen.getByText("You can exercise 60,000 vested options until Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.").closest(".banner") as HTMLElement;
+    expect(within(title.closest("[data-portfolio-hero]") as HTMLElement).getByText("Nadia Pereira-Stone")).toBeTruthy();
+    const banner = screen.getByText("You can exercise 60,000 vested options until Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.").closest("[data-slot=alert]") as HTMLElement;
     expect(within(banner).getByRole("link", { name: "How to exercise" }).getAttribute("href")).toBe(`${PORTFOLIO}/how-to-exercise`);
     const tiles = screen.getByRole("list", { name: "Holdings summary" });
     expect(within(tiles).getByText("Options")).toBeTruthy();
@@ -142,7 +142,7 @@ describe("portfolio overview", () => {
       numbers: { ...NADIA_OPTION.numbers, granted: "20000", outstanding: "10000", vested: "10000", exercisable: "10000", cancelled: "10000" },
     });
     renderPortal(PORTFOLIO, [{ ...NADIA, securities: [NADIA_OPTION, nso] }]);
-    const banner = (await screen.findByText("You can exercise vested options before these deadlines:")).closest(".banner") as HTMLElement;
+    const banner = (await screen.findByText("You can exercise vested options before these deadlines:")).closest("[data-slot=alert]") as HTMLElement;
     expect(within(banner).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "You can exercise 10,000 vested options (OPT-25) until Jan 8, 2027 (79 days).",
       "You can exercise 60,000 vested options (OPT-20) until Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.",
@@ -183,7 +183,7 @@ describe("portfolio overview", () => {
     expect(screen.queryByText(/You can exercise/)).toBeNull();
     cleanup();
     renderPortal(PORTFOLIO, [{ ...NADIA, securities: [NADIA_OPTION, unsigned] }]);
-    const banner = (await screen.findByText("Your exercise deadlines:")).closest(".banner") as HTMLElement;
+    const banner = (await screen.findByText("Your exercise deadlines:")).closest("[data-slot=alert]") as HTMLElement;
     expect(within(banner).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       "You can exercise 60,000 vested options (OPT-20) until Feb 28, 2027 (130 days). Exercises after Nov 30, 2026 (40 days) are taxed as NSOs.",
       statement,
@@ -320,6 +320,7 @@ describe("holding detail", () => {
     expect(within(main()).getByRole("link", { name: "How to exercise" }).getAttribute("href")).toBe(`${PORTFOLIO}/how-to-exercise?grant=${NADIA_OPTION.id}`);
     // One line above the chart: the start, the 1-year cliff the events show, and the last vest before the termination.
     expect(screen.getByText(/^Vesting start /).textContent).toBe("Vesting start Aug 1, 2024 · Cliff: 30,000 options on Aug 1, 2025 · Vesting stopped: last vest on Aug 1, 2026");
+    fireEvent.click(screen.getByRole("button", { name: /^Full schedule \(\d+ events\)$/ }));
     const schedule = screen.getByRole("table", { name: "Vesting schedule" });
     expect(within(rowOf(schedule, "Aug 1, 2025")).getByText("Vested")).toBeTruthy();
     expect(within(rowOf(schedule, "Sep 1, 2026")).getByText("Cancelled")).toBeTruthy();
@@ -392,8 +393,8 @@ describe("holding detail", () => {
       handlers: portalHandlers([holding], { details: [securityDetail(pending, { earlyExerciseAllowed: true })] }),
     });
     await screen.findByRole("heading", { name: /^OPT-40 Options/, level: 1 });
-    expect(screen.getByText("Awaiting your signature", { selector: ".badge" })).toBeTruthy();
-    const banner = screen.getByText("Awaiting your signature", { selector: ".b-title" }).closest(".banner") as HTMLElement;
+    expect(screen.getByText("Awaiting your signature", { selector: "[data-slot=badge]" })).toBeTruthy();
+    const banner = screen.getByText("Awaiting your signature", { selector: "[data-slot=alert-title]" }).closest("[data-slot=alert]") as HTMLElement;
     expect(banner.textContent).toBe("Awaiting your signatureYou can exercise this grant once you have signed its agreement.");
     expect(screen.getByText("Early exercise allowed by your grant — contact the company to exercise early.")).toBeTruthy();
     expect(definitionOf("Early exercise allowed").textContent).toBe("Yes — contact the company to exercise early");
@@ -407,13 +408,13 @@ describe("holding detail", () => {
     const holding = { ...DANIEL, securities: [both, company] };
     renderPortal(`${PORTFOLIO}/securities/${both.id}`, [holding], { handlers: portalHandlers([holding]) });
     await screen.findByRole("heading", { name: /^OPT-41 Options/, level: 1 });
-    expect(screen.getByText("Awaiting signatures", { selector: ".badge" })).toBeTruthy();
+    expect(screen.getByText("Awaiting signatures", { selector: "[data-slot=badge]" })).toBeTruthy();
     expect(screen.getByText(/^You can exercise this grant once you have signed its agreement/).textContent)
       .toBe("You can exercise this grant once you have signed its agreement; the company's countersignature is still pending too.");
     cleanup();
     renderPortal(`${PORTFOLIO}/securities/${company.id}`, [holding], { handlers: portalHandlers([holding]) });
     await screen.findByRole("heading", { name: /^OPT-42 Options/, level: 1 });
-    expect(screen.getByText("Awaiting the company's signature", { selector: ".badge" })).toBeTruthy();
+    expect(screen.getByText("Awaiting the company's signature", { selector: "[data-slot=badge]" })).toBeTruthy();
     expect(screen.getByText("The company's countersignature is pending — you can still exercise")).toBeTruthy();
     expect(screen.queryByText("Awaiting your signature")).toBeNull();
     expect(definitionOf("Exercisable now").textContent).toBe("218,750");
@@ -529,7 +530,7 @@ describe("holding detail", () => {
   it("shows a converted SAFE's principal, terms as recorded and what it converted into", async () => {
     renderPortal(`${PORTFOLIO}/convertibles/${MARCUS_SAFES[0]!.id}`, [MARCUS]);
     expect(await screen.findByText("Converted to PS-3")).toBeTruthy();
-    const banner = screen.getByText(/^Converted on/).closest(".banner") as HTMLElement;
+    const banner = screen.getByText(/^Converted on/).closest("[data-slot=alert]") as HTMLElement;
     expect(banner.textContent).toBe("Converted on Mar 1, 2023 into PS-3 (52,083 Series Seed Preferred).");
     expect(within(banner).getByRole("link", { name: "PS-3" }).getAttribute("href")).toBe(`${PORTFOLIO}/securities/${MARCUS_SHARES[0]!.id}`);
     expect(definitionOf("Principal").textContent).toBe("$100,000");
@@ -664,7 +665,7 @@ describe("how to exercise", () => {
     expect(screen.getByText(/OPT-16: /)).toBeTruthy();
     expect(definitionOf("Your reference").textContent).toBe("EX-OPT-16-DA");
     expect(screen.getByRole("heading", { name: "Instructions from Acme Robotics" })).toBeTruthy();
-    expect(screen.getByText(/We confirm within two business days\./).className).toBe("howto-text");
+    expect(screen.getByText(/We confirm within two business days\./).hasAttribute("data-howto-text")).toBe(true);
   });
 
   it("says when there's nothing to exercise and no payment instructions yet", async () => {
@@ -690,10 +691,10 @@ describe("documents", () => {
   it("leads the company resources with the designated privacy notice, marked as such", async () => {
     renderPortal(`${PORTFOLIO}/documents`, [NADIA]);
     const resources = await screen.findByRole("heading", { name: "Company resources" });
-    const cards = [...document.querySelectorAll(".attach")].filter((card) => resources.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(cards[0]!.querySelector(".a-n")!.textContent).toBe("Acme Robotics Privacy Notice.pdfPrivacy notice");
-    expect(cards.slice(1).map((card) => card.querySelector(".a-n")!.textContent)).toEqual(["Notice of exercise (counsel form).docx", "2023 Equity Incentive Plan.pdf"]);
-    expect(screen.getAllByText("Privacy notice", { selector: ".badge" })).toHaveLength(1);
+    const cards = [...document.querySelectorAll("[data-slot=item]")].filter((card) => resources.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(cards[0]!.querySelector("[data-slot=item-title]")!.textContent).toBe("Acme Robotics Privacy Notice.pdfPrivacy notice");
+    expect(cards.slice(1).map((card) => card.querySelector("[data-slot=item-title]")!.textContent)).toEqual(["Notice of exercise (counsel form).docx", "2023 Equity Incentive Plan.pdf"]);
+    expect(screen.getAllByText("Privacy notice", { selector: "[data-slot=badge]" })).toHaveLength(1);
   });
 
   it("shows only what the portal lists, with empty states", async () => {
@@ -708,26 +709,26 @@ describe("documents", () => {
     const holding = { ...NADIA, securities: [NADIA_OPTION, nso] };
     renderPortal(`${PORTFOLIO}/documents`, [holding], { handlers: portalHandlers([holding], { documents: [...NADIA_OPTION.documents, migrated, ...COMPANY_RESOURCES] }) });
     await screen.findByRole("heading", { name: "My documents" });
-    const meta = (filename: string) => screen.getByRole("button", { name: filename }).closest(".attach")!.querySelector(".a-m")!.textContent;
+    const meta = (filename: string) => screen.getByRole("button", { name: filename }).closest("[data-slot=item]")!.querySelector("[data-slot=item-description]")!.textContent;
     expect(meta("OPT-20 Option Agreement.pdf")).toBe("Grant agreement · OPT-20 · Oct 1, 2026");
     // A document linked to two of the holder's grants names both.
     expect(meta("Separation agreement.pdf")).toBe("Separation agreement · OPT-20, OPT-25 · Oct 1, 2026");
     expect(meta("OPT-25 agreement (imported).pdf")).toBe("Grant agreement · OPT-25 · Originally uploaded Feb 3, 2025");
     expect(document.getElementById("main")!.textContent).not.toMatch(/signed on/i);
     // Newest first, an imported document by its original upload.
-    const mine = [...document.querySelectorAll(".attach .a-n")].map((card) => card.textContent).filter((name) => !/Notice of exercise|Plan|Privacy/.test(name ?? ""));
+    const mine = [...document.querySelectorAll("[data-slot=item] [data-slot=item-title]")].map((card) => card.textContent).filter((name) => !/Notice of exercise|Plan|Privacy/.test(name ?? ""));
     expect(mine).toEqual(["OPT-20 Option Agreement.pdf", "Separation agreement.pdf", "OPT-25 agreement (imported).pdf"]);
     // The holding detail dates it the same way.
     cleanup();
     renderPortal(`${PORTFOLIO}/securities/${nso.id}`, [holding]);
     await screen.findByRole("heading", { name: /^OPT-25 Options/ });
-    expect(screen.getByRole("button", { name: "OPT-25 agreement (imported).pdf" }).closest(".attach")!.querySelector(".a-m")!.textContent).toBe("Grant agreement · Originally uploaded Feb 3, 2025");
+    expect(screen.getByRole("button", { name: "OPT-25 agreement (imported).pdf" }).closest("[data-slot=item]")!.querySelector("[data-slot=item-description]")!.textContent).toBe("Grant agreement · Originally uploaded Feb 3, 2025");
   });
 
   it("searches the documents as the holder types, by name, kind or grant", async () => {
     renderPortal(`${PORTFOLIO}/documents`, [NADIA]);
     const search = await screen.findByRole("searchbox", { name: "Search documents" });
-    const names = () => [...document.querySelectorAll(".attach .a-n")].map((card) => card.textContent);
+    const names = () => [...document.querySelectorAll("[data-slot=item] [data-slot=item-title]")].map((card) => card.textContent);
     fireEvent.change(search, { target: { value: "separation" } });
     expect(names()).toEqual(["Separation agreement.pdf"]);
     expect(screen.getByText("No company resources match.")).toBeTruthy();
@@ -866,7 +867,7 @@ describe("preview as stakeholder (admin)", () => {
     render_();
     await ready();
     await waitFor(() => expect(document.querySelectorAll('#main [role="status"]')).toHaveLength(0));
-    const section = document.querySelector(preview ? ".preview-frame section.portal-page" : "#main > section.page");
+    const section = document.querySelector(preview ? "[data-preview-frame] [data-portal-page]" : "#main > [data-portal-page]");
     const text = section?.textContent ?? "";
     cleanup();
     return text;

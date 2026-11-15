@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
 import { apiRequest, saveFile } from "../api/request.ts";
 import { fileStem } from "../components/CapTableDownload.tsx";
 import { DataTable, byDecimal, byNumber, byText, type Column } from "../components/DataTable.tsx";
@@ -116,7 +117,7 @@ function ExercisesTab({ exercises, lookups }: { exercises: readonly api.Exercise
     { key: "wh", label: "Withholding entered", numeric: true, render: (row) => (isPositive(withholdingTotal(row.withholding)) ? format.money(withholdingTotal(row.withholding)) : DASH), compare: byDecimal((row) => withholdingTotal(row.withholding)) },
     { key: "result", label: "Resulting share", render: (row) => row.resultingShares.map((share, index) => <span key={share.securityId}>{index ? ", " : ""}<SecurityLink id={share.securityId} family="STOCK" displayId={share.displayId} /></span>) },
     { key: "source", label: "Source", render: (row) => <>{exerciseSource(row, workspace.org.importSource)}{row.reversed ? <> <Badge tone="grey">Reversed</Badge></> : null}</> },
-    { key: "view", label: "", render: (row) => <button type="button" className="btn btn-ghost btn-xs" onClick={() => setOpen(row)}>View <span className="sr-only">exercise of {row.grantDisplayId} on {formatDate(row.exerciseDate)}</span></button> },
+    { key: "view", label: "", render: (row) => <Button type="button" variant="ghost" size="xs" onClick={() => setOpen(row)}>View <span className="sr-only">exercise of {row.grantDisplayId} on {formatDate(row.exerciseDate)}</span></Button> },
   ];
   return (
     <>
@@ -128,7 +129,7 @@ function ExercisesTab({ exercises, lookups }: { exercises: readonly api.Exercise
           { label: "Paid by", value: methods.map(([method, count]) => `${method} ${count}`).join(" · ") || DASH },
         ]}
       />
-      {notice ? <p className="err-inline" role="alert">{notice}</p> : null}
+      {notice ? <p className="text-sm font-medium text-destructive" role="alert">{notice}</p> : null}
       <DataTable
         id="exercises"
         label="Exercises"
@@ -138,7 +139,7 @@ function ExercisesTab({ exercises, lookups }: { exercises: readonly api.Exercise
         defaultSort={["date", "desc"]}
         search={(row) => `${row.grantDisplayId} ${row.stakeholderName} ${row.resultingShares.map((share) => share.displayId).join(" ")}`}
         searchPlaceholder="Search exercises…"
-        toolbarExtra={<button type="button" className="btn btn-ghost btn-sm" onClick={() => void download()}><Icon name="download" /> Download</button>}
+        toolbarExtra={<Button type="button" variant="ghost" size="sm" onClick={() => void download()}><Icon name="download" /> Download</Button>}
         filters={[
           { key: "method", label: "Payment method", options: (["ACH", "WIRE", "CHECK", "CASH"] as const).map((method) => [method, PAYMENT_METHOD_LABELS[method]] as const), test: (row, value) => row.paymentMethod === value },
           { key: "date", label: "Date", type: "daterange", test: (row, range) => (!range.from || row.exerciseDate >= range.from) && (!range.to || row.exerciseDate <= range.to) },
@@ -198,7 +199,7 @@ function RequestsTab({ requests, lookups }: { requests: readonly api.ExerciseReq
     { key: "method", label: "Payment method", render: (row) => PAYMENT_METHOD_LABELS[row.paymentMethod] },
     { key: "status", label: "Status", render: (row) => <Badge tone={REQUEST_TONES[row.status] ?? "amber"}>{EXERCISE_REQUEST_STATUS_LABELS[row.status] ?? row.status}</Badge>, compare: byText((row) => row.status) },
     { key: "docs", label: "Documents", render: (row) => (row.documents[0] ? <NoticeLink document={row.documents[0]} /> : DASH) },
-    { key: "history", label: "", render: (row) => <button type="button" className="btn btn-ghost btn-xs" onClick={() => setOpen(row)}>History <span className="sr-only">of ER-{row.requestNumber}</span></button> },
+    { key: "history", label: "", render: (row) => <Button type="button" variant="ghost" size="xs" onClick={() => setOpen(row)}>History <span className="sr-only">of ER-{row.requestNumber}</span></Button> },
   ];
   return (
     <>
@@ -225,8 +226,8 @@ function NoticeLink({ document }: { document: api.DocumentRef }) {
   const { download, error } = useDownload();
   return (
     <>
-      <button type="button" className="btn-link" onClick={() => void download(document.id, document.filename)}><Icon name="file" /> Notice</button>
-      {error ? <div className="err-inline" role="alert">{error}</div> : null}
+      <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => void download(document.id, document.filename)}><Icon name="file" /> Notice</Button>
+      {error ? <div className="text-sm font-medium text-destructive" role="alert">{error}</div> : null}
     </>
   );
 }
@@ -252,19 +253,19 @@ function RequestDetails({ request, holder, grant }: { request: api.ExerciseReque
           ["Estimated withholding", format.money(request.estimatedWithholding)],
           ["Total cost", format.money(request.totalCost)],
           ["Payment method", PAYMENT_METHOD_LABELS[request.paymentMethod]],
-          ["Status", <>{EXERCISE_REQUEST_STATUS_LABELS[request.status] ?? request.status}{request.pulleyStatus ? <span className="muted small"> (Pulley: {request.pulleyStatus})</span> : null}</>],
+          ["Status", <>{EXERCISE_REQUEST_STATUS_LABELS[request.status] ?? request.status}{request.pulleyStatus ? <span className="text-xs text-muted-foreground"> (Pulley: {request.pulleyStatus})</span> : null}</>],
           ["Payment due", formatDate(request.paymentDueDate)],
         ]}
       />
-      <h4 className="mt-16">Timeline</h4>
+      <h4 className="mt-4 text-sm font-semibold">Timeline</h4>
       <Timeline label="Request timeline" items={events.map((event) => ({ key: event.key, title: event.title, meta: event.at }))} />
       {request.documents.length ? (
         <>
-          <h4 className="mt-16">Documents</h4>
+          <h4 className="mt-4 text-sm font-semibold">Documents</h4>
           <Attachments documents={request.documents} upload={false} />
         </>
       ) : null}
-      <p className="small muted">Migrated history, read-only.</p>
+      <p className="text-xs text-muted-foreground">Migrated history, read-only.</p>
     </>
   );
 }

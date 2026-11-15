@@ -368,13 +368,15 @@ A new company is set up by importing Pulley's standard reports or the app's own 
 
 ## Frontend
 
+- The UI is built from shadcn/ui (`src/app/components/ui/`, the radix-nova style on Radix) and Tailwind CSS v4, compiled
+  through PostCSS; `src/app/app.css` holds shadcn/ui's default theme, light and dark. There are no other stylesheets.
 - React 19 with React Router (`src/app/router.tsx`, one browser router). The admin workspace lives under
   `/companies/:orgId/...`, the holder view under `/portfolio/:orgId/...`, the first-run setup at `/setup` (its three ways
   in as `/setup?start=empty|pulley|spreadsheet`), the import at `/companies/:orgId/import` (beside the workspace, because
   an import replaces the company the address names), and an admin's "Preview as stakeholder" at
   `/companies/:orgId/stakeholders/:stakeholderId/preview`, which renders the portal's pages. `/api/me` decides where a
   user lands; a 401 from any call shows the full-page "Open this app from the Insulin console".
-- The shell (`components/AppLayout.tsx`, `shell.css`) is the two-level navigation of the repository's
+- The shell (`components/AppLayout.tsx`, on shadcn/ui's Sidebar) is the two-level navigation of the repository's
   `.github/hosting/DESIGN.md` §3.2. Level 1 comes from the navigation manifest, `insulin.navigation` in package.json,
   which the gateway renders too (on Cap Table's settings pages): `lib/navigation.ts` validates it, keeps the items the
   person's role and access reach (the company's sections need the workspace, the `/portfolio` items holdings), finds

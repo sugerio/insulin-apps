@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
 import { apiRequest } from "../api/request.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { hasAdminAccess } from "../auth/access.ts";
 import { Banner, ErrorState, Loading } from "../components/Feedback.tsx";
 import { ImportWizard } from "../components/ImportWizard.tsx";
-import { Breadcrumbs, Card, PageHead } from "../components/Page.tsx";
+import { Breadcrumbs, PageHead } from "../components/Page.tsx";
 import { plural } from "../lib/format.ts";
 import { useDocumentTitle } from "../lib/useDocumentTitle.ts";
 import { useResource } from "../lib/useResource.ts";
@@ -30,7 +32,7 @@ export function ImportPage() {
   }
   const company = me.company;
   return (
-    <section className="page">
+    <section className="mx-auto flex w-full max-w-370 flex-col gap-5 px-5 pt-6 pb-14 lg:px-8">
       <Breadcrumbs items={[[company?.displayName ?? "Cap Table", company ? `/companies/${company.id}/dashboard` : "/"], ["Import"]]} />
       <PageHead title="Import the cap table" sub="Set up this company from Pulley's exports or the Cap Table spreadsheet." />
       {me.access === "admin_rw" || imported ? <ImportGate orgId={orgId} onImported={() => setImported(true)} /> : <ReadOnly back={`/companies/${orgId}/dashboard`} />}
@@ -41,10 +43,12 @@ export function ImportPage() {
 function ReadOnly({ back }: { back: string }) {
   return (
     <Card>
-      <Banner kind="info" title="Only those who record changes can import">
-        You can view this company's cap table. Setting it up from Pulley or a spreadsheet takes an owner, admin or editor of your Insulin organization.
-      </Banner>
-      <div className="row mt-12"><Link className="btn btn-ghost" to={back}>Back to the dashboard</Link></div>
+      <CardContent className="flex flex-col items-start gap-3">
+        <Banner kind="info" title="Only those who record changes can import">
+          You can view this company's cap table. Setting it up from Pulley or a spreadsheet takes an owner, admin or editor of your Insulin organization.
+        </Banner>
+        <Button asChild variant="ghost"><Link to={back}>Back to the dashboard</Link></Button>
+      </CardContent>
     </Card>
   );
 }
@@ -62,11 +66,13 @@ function ImportGate({ orgId, onImported }: { orgId: string; onImported: () => vo
     const has = [stakeholders > 0 ? plural(stakeholders, "stakeholder") : null, transactions ? "recorded transactions" : null].filter(Boolean).join(" and ");
     return (
       <Card>
-        <Banner kind="info" title="Import isn't available for this company">
-          An import sets up a company whose cap table is empty. This one already has {has}, and importing on top of them could
-          duplicate or contradict what is recorded. Keep recording changes in the cap table instead.
-        </Banner>
-        <div className="row mt-12"><Link className="btn btn-ghost" to={`/companies/${orgId}/dashboard`}>Back to the dashboard</Link></div>
+        <CardContent className="flex flex-col items-start gap-3">
+          <Banner kind="info" title="Import isn't available for this company">
+            An import sets up a company whose cap table is empty. This one already has {has}, and importing on top of them could
+            duplicate or contradict what is recorded. Keep recording changes in the cap table instead.
+          </Banner>
+          <Button asChild variant="ghost"><Link to={`/companies/${orgId}/dashboard`}>Back to the dashboard</Link></Button>
+        </CardContent>
       </Card>
     );
   }

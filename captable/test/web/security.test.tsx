@@ -29,8 +29,9 @@ describe("option detail", () => {
     expect(definitionOf("Expiration date").textContent).toBe("Apr 14, 2033");
     expect(await screen.findByText(/268,750 of the total 300,000 options \(89\.6%\) have vested\. Next: 6,250 on Nov 1, 2026\./)).toBeTruthy();
     expect(screen.getByRole("img", { name: "Cumulative vested options over time for OPT-1" })).toBeTruthy();
-    expect(screen.getByText("Full vesting schedule (37 events)")).toBeTruthy();
-    const schedule = screen.getByRole("table", { name: "Vesting schedule" });
+    // The full schedule opens on demand.
+    fireEvent.click(screen.getByRole("button", { name: "Full vesting schedule (37 events)" }));
+    const schedule = await screen.findByRole("table", { name: "Vesting schedule" });
     expect(within(schedule).getAllByText("from Pulley")).toHaveLength(37);
     expect(within(schedule).getByText(/Mar 1, 2024 · cliff/)).toBeTruthy();
     expect(definitionOf("Schedule").textContent).toBe("4 years monthly, 1-year cliff (25%)");
@@ -47,7 +48,7 @@ describe("option detail", () => {
     expect(definitionOf("With cause").textContent).toBe("0 days inherited from the plan");
     expect(await screen.findByText("Exercised 50,000 ISO → CS-7 · Check")).toBeTruthy();
     expect(screen.getByRole("button", { name: "OPT-1 Option Agreement.pdf" })).toBeTruthy();
-    expect(screen.getByText("Imported from Pulley", { selector: "summary" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Imported from Pulley" })).toBeTruthy();
   }, 60_000); // the largest page test: give it room on a busy machine
 
   it("shows the deadlines of a terminated holder's option and its non-US exemption", async () => {

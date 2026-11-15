@@ -75,7 +75,7 @@ export function ExtendDeadlineDialog({ security, onClose, onDone }: { security: 
         </>
       }
     >
-      <p className="small muted">
+      <p className="text-xs text-muted-foreground">
         Current contractual deadline: <b>{formatDate(current)}</b> · expiration {expiration ? formatDate(expiration) : DASH}. The ISO deadline never moves{security.deadlines?.iso ? ` (${formatDate(security.deadlines.iso)})` : ""}.
       </p>
       <DateField label="New contractual deadline" required min={current ?? today} max={expiration ?? undefined} value={deadline} onChange={(value) => { setDeadline(value); setErrors((previous) => ({ ...previous, deadline: undefined })); }} error={errorOf("deadline")} />

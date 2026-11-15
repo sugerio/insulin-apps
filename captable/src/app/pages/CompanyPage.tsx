@@ -61,8 +61,8 @@ export function CompanyPage() {
       <PageHead title="Profile & Settings" sub={readOnly ? "View only — owners, admins and editors edit." : "Owners, admins and editors edit; read-only roles view."} />
       <ResourceView resource={org}>
         {(data) => (
-          <div className="settings-layout">
-            <div className="stack">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_12.5rem]">
+            <div className="flex min-w-0 flex-col gap-4">
               <ProfileSection org={data} onEdit={() => setDialog({ kind: "profile" })} />
               <SignatoriesSection />
               <Card id="contact" title="Company contact for holders" right={<WriteButton label="Edit" size="sm" ariaLabel="Edit the company contact" onClick={() => setDialog({ kind: "contact" })} />}>
@@ -83,8 +83,8 @@ export function CompanyPage() {
                 />
               </Card>
             </div>
-            <nav className="anchor-nav" aria-label="Settings sections">
-              {SECTIONS.map(([id, label]) => <a key={id} href={`#${id}`} onClick={(event) => { event.preventDefault(); document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }}>{label}</a>)}
+            <nav className="sticky top-6 hidden flex-col gap-0.5 text-sm lg:flex" aria-label="Settings sections">
+              {SECTIONS.map(([id, label]) => <a key={id} className="rounded-md px-2.5 py-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" href={`#${id}`} onClick={(event) => { event.preventDefault(); document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }}>{label}</a>)}
             </nav>
             {dialog?.kind === "profile" ? <OrgProfileDialog org={data} onClose={close} onDone={() => { close(); orgSaved(); }} /> : null}
             {dialog?.kind === "contact" ? <CompanyContactDialog org={data} onClose={close} onDone={() => { close(); orgSaved(); }} /> : null}
@@ -144,7 +144,7 @@ function SignatoriesSection() {
   const { orgId } = useWorkspace();
   const signatories = useResource((signal) => apiRequest(api.routes.listSignatories, { params: { orgId }, signal }), [orgId]);
   return (
-    <Card id="signatories" title="Signatories" right={<span className="small muted">View only</span>}>
+    <Card id="signatories" title="Signatories" right={<span className="text-xs text-muted-foreground">View only</span>}>
       <Pending resource={signatories} what="the signatories">
         {(data) => (
           <DataTable
@@ -163,7 +163,7 @@ function SignatoriesSection() {
           />
         )}
       </Pending>
-      <p className="small muted mt-8">Signatories come in with the import. The app doesn't collect electronic signatures.</p>
+      <p className="text-xs text-muted-foreground">Signatories come in with the import. The app doesn't collect electronic signatures.</p>
     </Card>
   );
 }
@@ -174,20 +174,20 @@ function PaymentSection({ instructions }: { instructions: Resource<api.PaymentIn
   const current = instructions.data ?? null;
   return (
     <Card id="payment" title="Payment instructions" right={instructions.data !== undefined ? <WriteButton label={current ? "Edit" : "Set up"} size="sm" ariaLabel={current ? "Edit the payment instructions" : "Set up the payment instructions"} onClick={() => setEditing(true)} /> : null}>
-      <p className="small muted">Shown to holders <b>only inside the portal</b> (How to exercise).</p>
+      <p className="text-xs text-muted-foreground">Shown to holders <b>only inside the portal</b> (How to exercise).</p>
       <ResourceView resource={instructions}>
         {(data) => data ? (
           <DescriptionList
             rows={[
               ...(Object.keys(PAYMENT_LABELS) as (keyof api.PaymentInstructionDetails)[]).map((key) => [
                 PAYMENT_LABELS[key],
-                key === "referenceFormat" ? <span className="mono">{data.details.referenceFormat}</span> : data.details[key] ?? DASH,
+                key === "referenceFormat" ? <span className="font-mono text-xs">{data.details.referenceFormat}</span> : data.details[key] ?? DASH,
               ] as [string, ReactNode]),
               ["Last changed", `${format.dateTime(data.updatedAt)}${data.updatedBy ? ` by ${data.updatedBy}` : ""}`],
             ]}
           />
         ) : (
-          <p className="muted small">No payment instructions yet.</p>
+          <p className="text-xs text-muted-foreground">No payment instructions yet.</p>
         )}
       </ResourceView>
       {editing ? <PaymentInstructionsDialog current={current} onClose={() => setEditing(false)} onDone={() => { setEditing(false); instructions.reload(); }} /> : null}

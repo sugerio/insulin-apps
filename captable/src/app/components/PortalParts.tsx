@@ -1,6 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { FileTextIcon, MailIcon } from "lucide-react";
 import { api } from "#shared";
+import { Alert, AlertTitle } from "@/components/ui/alert.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item.tsx";
+import { cn } from "@/lib/utils.ts";
 import { saveFile } from "../api/request.ts";
 import { describeError, isApiError } from "../lib/errors.ts";
 import type { Resource } from "../lib/useResource.ts";
@@ -10,7 +15,6 @@ import { awaitingHolderSignature, EXECUTION_PENDING_LABELS } from "../lib/portal
 import { useDocumentTitle } from "../lib/useDocumentTitle.ts";
 import { useDisplay } from "./Display.tsx";
 import { Badge, Pending, ResourceView } from "./Feedback.tsx";
-import { Icon } from "./Icon.tsx";
 import { Breadcrumbs } from "./Page.tsx";
 import { PortalNotServed, usePortal } from "./PortalWorkspace.tsx";
 
@@ -21,7 +25,7 @@ export function PortalPage({ title, crumb, children }: { title: string; crumb?: 
   useDocumentTitle(portal.preview ? `Preview — ${title}` : title);
   // Inside the admin preview the admin page already frames it: no second page padding.
   return (
-    <section className={portal.preview ? "portal-page" : "page"}>
+    <section data-portal-page="" className={portal.preview ? "flex min-w-0 flex-col gap-4" : "mx-auto flex w-full max-w-[1480px] min-w-0 flex-col gap-4 px-4 pt-6 pb-14 md:px-8"}>
       {crumb ? <Breadcrumbs items={[[portal.orgName, portal.href()], [crumb]]} /> : null}
       {children}
       <PortalFooter />
@@ -44,7 +48,7 @@ export function Deadline({ date, note }: { date: string; note?: ReactNode }) {
   const { today } = useDisplay();
   return (
     <>
-      <b>{formatDate(date)}</b> <span className="muted small">({formatDaysLeft(today, date)}){note ? <> {note}</> : null}</span>
+      <b>{formatDate(date)}</b> <span className="text-xs text-muted-foreground">({formatDaysLeft(today, date)}){note ? <> {note}</> : null}</span>
     </>
   );
 }
@@ -71,15 +75,16 @@ function useDocumentDownload() {
  * A document as a download, named by its filename or by `label` (disabled in the admin preview, where every portal
  * action is).
  */
-export function DocumentLink({ document, label, className = "btn-link" }: { document: api.PortalDocument; label?: string; className?: string }) {
+export function DocumentLink({ document, label, className }: { document: api.PortalDocument; label?: string; className?: string }) {
   const { preview } = usePortal();
   const { download, error, busy } = useDocumentDownload();
   const name = label ?? document.filename;
   if (preview) return <span title="Disabled in the preview">{name}</span>;
   return (
     <>
-      <button type="button" className={className} disabled={busy === document.id} onClick={() => void download(document)}>{name}</button>
-      {error ? <span className="err-inline" role="alert"> {error}</span> : null}
+      <Button type="button" variant="link" className={cn("h-auto p-0 text-left whitespace-normal", className)} disabled={busy === document.id}
+        onClick={() => void download(document)}>{name}</Button>
+      {error ? <span className="text-sm font-medium text-destructive" role="alert"> {error}</span> : null}
     </>
   );
 }
@@ -101,28 +106,32 @@ export function DocumentCards({ documents, empty = "No documents.", holdingsOf }
 }) {
   const { format } = useDisplay();
   const privacyNotice = usePrivacyNotice();
-  if (documents.length === 0) return <p className="muted small">{empty}</p>;
+  if (documents.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>;
   const isNotice = (document: api.PortalDocument) => document.id === privacyNotice?.id;
   const ordered = [...documents.filter(isNotice), ...documents.filter((document) => !isNotice(document))];
   const dated = (document: api.PortalDocument) => document.sourceCreatedAt !== null
     ? `Originally uploaded ${format.date(format.localDate(document.sourceCreatedAt))}`
     : format.date(format.localDate(document.createdAt));
   return (
-    <div className="stack-8">
+    <ItemGroup className="gap-2">
       {ordered.map((document) => {
         const holdings = holdingsOf?.(document) ?? [];
         return (
-          <div className="attach" key={document.id}>
-            <div className="a-n">
-              <Icon name="file" />
-              <DocumentLink document={document} />
-              {isNotice(document) ? <Badge tone="teal">Privacy notice</Badge> : null}
-            </div>
-            <div className="a-m">{[documentKindLabel(document.kind), ...(holdings.length ? [holdings.join(", ")] : []), dated(document)].join(" · ")}</div>
-          </div>
+          <Item variant="outline" size="sm" key={document.id}>
+            <ItemMedia>
+              <FileTextIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+            </ItemMedia>
+            <ItemContent>
+              <ItemTitle className="flex-wrap">
+                <DocumentLink document={document} />
+                {isNotice(document) ? <Badge tone="teal">Privacy notice</Badge> : null}
+              </ItemTitle>
+              <ItemDescription>{[documentKindLabel(document.kind), ...(holdings.length ? [holdings.join(", ")] : []), dated(document)].join(" · ")}</ItemDescription>
+            </ItemContent>
+          </Item>
         );
       })}
-    </div>
+    </ItemGroup>
   );
 }
 
@@ -142,10 +151,12 @@ export function PortalResourceView<T>({ resource, what, children }: { resource: 
   if (resource.data === undefined && isApiError(resource.error, "not_found")) {
     if (!portal.preview) return <PortalNotServed what={what} onRetry={resource.reload} />;
     return (
-      <div className="card error-state" role="alert">
-        <p className="b-title">{what} isn't available in the preview right now</p>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={resource.reload}>Try again</button>
-      </div>
+      <Alert role="alert">
+        <AlertTitle>{what} isn't available in the preview right now</AlertTitle>
+        <div className="col-start-2 mt-2">
+          <Button type="button" variant="outline" size="sm" onClick={resource.reload}>Try again</Button>
+        </div>
+      </Alert>
     );
   }
   return <ResourceView resource={resource}>{children}</ResourceView>;
@@ -155,17 +166,17 @@ export function PortalResourceView<T>({ resource, what, children }: { resource: 
 function PortalFooter() {
   const portal = usePortal();
   return (
-    <footer className="portal-foot">
-      <Icon name="mail" />
+    <footer className="mt-6 flex flex-wrap items-center gap-2 border-t pt-4 text-xs text-muted-foreground">
+      <MailIcon className="size-4" aria-hidden="true" />
       <span>
         Questions about your equity?{" "}
         <Pending resource={portal.howTo} what="the company contact" inline>
           {({ companyContact: contact }) => (contact
-            ? <>{contact.name} · <span className="email">{contact.email}</span></>
+            ? <>{contact.name} · <span className="break-all select-all">{contact.email}</span></>
             : <>Contact {portal.orgName}'s equity team.</>)}
         </Pending>
       </span>
-      <span className="spacer" />
+      <span className="flex-1" />
       <PrivacyNotice />
     </footer>
   );
@@ -181,6 +192,6 @@ function PrivacyNotice() {
   const { data } = portal.howTo;
   // Loading or failed: the company contact beside it already says so, and "not yet published" would be a guess.
   if (data === undefined) return null;
-  if (data.privacyNotice === null) return <span className="muted small">Privacy notice not yet published</span>;
-  return <DocumentLink document={data.privacyNotice} label="Privacy notice" className="btn-link privacy-link" />;
+  if (data.privacyNotice === null) return <span className="text-xs text-muted-foreground">Privacy notice not yet published</span>;
+  return <DocumentLink document={data.privacyNotice} label="Privacy notice" className="text-xs" />;
 }

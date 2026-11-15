@@ -144,15 +144,16 @@ describe("expiry runs: confirming a run", () => {
     }), { ownStakeholderId: IDS.daniel });
     const table = await openRun();
     // OPT-1 is the admin's own (Daniel's); OPT-18 has nothing left to expire.
-    const own = within(rowOf(table, "OPT-1")).getByRole("checkbox", { name: "Expire OPT-1" }) as HTMLInputElement;
+    // A shadcn/ui (Radix) checkbox: a button whose state is in aria-checked.
+    const own = within(rowOf(table, "OPT-1")).getByRole("checkbox", { name: "Expire OPT-1" }) as HTMLButtonElement;
     expect(own.disabled).toBe(true);
-    expect(own.checked).toBe(false);
+    expect(own.getAttribute("aria-checked")).toBe("false");
     expect(rowOf(table, "OPT-1").textContent).toContain("Your own holding");
-    const spent = within(rowOf(table, "OPT-18")).getByRole("checkbox", { name: "Expire OPT-18" }) as HTMLInputElement;
+    const spent = within(rowOf(table, "OPT-18")).getByRole("checkbox", { name: "Expire OPT-18" }) as HTMLButtonElement;
     expect(spent.disabled).toBe(true);
-    expect(spent.checked).toBe(false);
+    expect(spent.getAttribute("aria-checked")).toBe("false");
     expect(rowOf(table, "OPT-18").textContent).toContain("Nothing left to expire");
-    expect((within(rowOf(table, "OPT-21")).getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+    expect(within(rowOf(table, "OPT-21")).getByRole("checkbox").getAttribute("aria-checked")).toBe("true");
     expect(rowOf(table, "OPT-21").textContent).toContain("Exit window ended");
     expect(rowOf(table, "WAR-1").textContent).toContain("Term ended");
     fireEvent.click(screen.getByLabelText(/Then switch to automatic expiry/));
@@ -233,7 +234,7 @@ describe("expiry runs: confirming a run", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leave the refused ones out and check again" }));
     expect(await screen.findByRole("button", { name: "Confirm 1 expiry" })).toBeTruthy();
     expect(dryRuns(callsTo(api.routes.confirmExpiryRun)).map((call) => bodyOf(call).securityIds)).toEqual([[IDS.opt21, IDS.war1], [IDS.war1]]);
-    expect(screen.getByLabelText(/to confirm/).closest(".fld")!.textContent).toContain("EXPIRE 1 SECURITY");
+    expect(screen.getByLabelText(/to confirm/).closest("[data-slot=field]")!.textContent).toContain("EXPIRE 1 SECURITY");
   }, 60_000);
 
   it("finds the security behind a refusal that names none (self-dealing) by checking each on its own", async () => {

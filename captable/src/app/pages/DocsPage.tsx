@@ -64,7 +64,7 @@ export function StandaloneDocsPage() {
 function StandaloneDocs({ topic, home }: { topic: DocTopic; home: Crumb }) {
   useDocumentTitle(docsTitle(topic));
   return (
-    <section className="page">
+    <section className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col gap-4 px-4 pt-6 pb-14 md:px-8">
       <Breadcrumbs items={[home, ["Docs", "/docs"], [topic.title]]} />
       <Docs base="/docs" topic={topic} />
     </section>

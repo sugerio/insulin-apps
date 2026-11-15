@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router";
 import { api } from "#shared";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { RecordActivity } from "../components/Activity.tsx";
 import { DataTable, byDecimal, byDisplayId, byNumber, byText } from "../components/DataTable.tsx";
@@ -54,13 +55,13 @@ export function ShareClassesPage() {
               search={(item) => `${item.name} ${item.defaultIdPrefix}`}
               empty="No share classes yet."
               columns={[
-                { key: "name", label: "Name", render: (item) => <Link className="cell-link" to={href(`share-classes/${item.id}`)}>{item.name} ({item.defaultIdPrefix})</Link>, compare: byText((item) => item.name) },
+                { key: "name", label: "Name", render: (item) => <Link className="font-medium underline-offset-4 hover:underline" to={href(`share-classes/${item.id}`)}>{item.name} ({item.defaultIdPrefix})</Link>, compare: byText((item) => item.name) },
                 { key: "type", label: "Type", render: (item) => (item.classType === "COMMON" ? "Common" : "Preferred"), compare: byText((item) => item.classType) },
                 { key: "par", label: "Par value", numeric: true, render: (item) => format.price(item.parValue), compare: byDecimal((item) => item.parValue) },
                 { key: "oip", label: "Original issue price", numeric: true, render: (item) => (item.originalIssuePrice ? format.price(item.originalIssuePrice) : DASH), compare: byDecimal((item) => item.originalIssuePrice) },
                 {
                   key: "auth", label: "Authorized", numeric: true,
-                  render: (item) => <>{format.shares(item.authorizedShares)}<div className="small muted">{format.shares(item.numbers.issuedAndOutstanding)} outstanding</div></>,
+                  render: (item) => <>{format.shares(item.authorizedShares)}<div className="text-xs text-muted-foreground">{format.shares(item.numbers.issuedAndOutstanding)} outstanding</div></>,
                   compare: byDecimal((item) => item.authorizedShares),
                 },
                 { key: "liq", label: "Liquidation preference", render: liquidationLabel },
@@ -105,7 +106,7 @@ function ShareClassBody({ stockClass, securities }: { stockClass: api.StockClass
           ["Issued and outstanding", format.shares(numbers.issuedAndOutstanding)],
           ["Reserved", format.shares(numbers.reserved)],
           ["Available to issue", available < 0n
-            ? <span style={{ color: "var(--danger-text)", fontWeight: 650 }}>−{format.shares(fromUnits(-available))} — authorized exceeded</span>
+            ? <span className="font-semibold text-destructive">−{format.shares(fromUnits(-available))} — authorized exceeded</span>
             : format.shares(fromUnits(available))],
         ]}
       />
@@ -131,14 +132,12 @@ function ShareClassBody({ stockClass, securities }: { stockClass: api.StockClass
       />
       <SectionTitle>Amendments</SectionTitle>
       {stockClass.history.length ? (
-        <div className="tbl-scroll">
-          <table className="tbl" aria-label="Amendments">
-            <thead><tr><th scope="col">Effective</th><th scope="col">Change</th></tr></thead>
-            <tbody>{stockClass.history.map((entry) => <tr key={entry.transactionId}><td>{formatDate(entry.effectiveDate)}</td><td>{entry.summary}</td></tr>)}</tbody>
-          </table>
-        </div>
+        <Table aria-label="Amendments">
+            <TableHeader><TableRow><TableHead scope="col">Effective</TableHead><TableHead scope="col">Change</TableHead></TableRow></TableHeader>
+            <TableBody>{stockClass.history.map((entry) => <TableRow key={entry.transactionId}><TableCell>{formatDate(entry.effectiveDate)}</TableCell><TableCell>{entry.summary}</TableCell></TableRow>)}</TableBody>
+          </Table>
       ) : (
-        <p className="muted">No amendments.</p>
+        <p className="text-sm text-muted-foreground">No amendments.</p>
       )}
       <SectionTitle>Securities of this class</SectionTitle>
       <Pending resource={securities} what="the securities of this class">

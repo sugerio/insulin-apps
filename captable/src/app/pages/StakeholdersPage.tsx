@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import { ChevronDownIcon } from "lucide-react";
+import { Badge as UiBadge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
 import { api } from "#shared";
 import { apiRequest, saveFile } from "../api/request.ts";
 import { ActionsMenu } from "../components/Actions.tsx";
@@ -72,23 +76,25 @@ function StakeholdersBody({ items }: { items: readonly api.Stakeholder[] }) {
         return (
           <>
             {pii.email(emails[0]!.email)}
-            {emails.length > 1 ? <span className="faint small"> +{emails.length - 1}</span> : null}
+            {emails.length > 1 ? <span className="text-xs text-muted-foreground"> +{emails.length - 1}</span> : null}
             {isDuplicate(item) ? <div><Badge tone="amber" title="Another stakeholder record has this sign-in address. Records of separate people or entities stay separate; merge only true duplicates.">Shared sign-in address</Badge></div> : null}
           </>
         );
       },
       compare: pii.canSeePii ? byText(primary) : undefined,
     },
-    { key: "rel", label: "Relationship", render: (item) => <span className="chip">{relationshipChip(item.relationship)}</span>, compare: byText((item) => relationshipChip(item.relationship)) },
+    { key: "rel", label: "Relationship", render: (item) => <UiBadge variant="secondary">{relationshipChip(item.relationship)}</UiBadge>, compare: byText((item) => relationshipChip(item.relationship)) },
     { key: "type", label: "Type", render: (item) => (item.kind === "institution" ? "Institution" : "Individual"), compare: byText((item) => item.kind) },
-    { key: "fd", label: "Fully diluted shares", numeric: true, headerClassName: "wrap-th", render: (item) => format.shares(item.totals?.fullyDiluted ?? null), compare: byDecimal((item) => item.totals?.fullyDiluted) },
+    { key: "fd", label: "Fully diluted shares", numeric: true, headerClassName: "whitespace-normal", render: (item) => format.shares(item.totals?.fullyDiluted ?? null), compare: byDecimal((item) => item.totals?.fullyDiluted) },
     { key: "own", label: "Ownership", numeric: true, render: (item) => (isPositive(item.totals?.fullyDiluted) ? format.percent(item.totals?.fullyDilutedPct) : DASH), compare: byRatio((item) => item.totals?.fullyDilutedPct) },
     {
       key: "preview", label: "", stickyRight: true,
       render: (item) => (
-        <Link className="icon-link" to={href(`stakeholders/${item.id}/preview`)} title="Preview as stakeholder" aria-label={`Preview ${item.displayName} as stakeholder`}>
-          <Icon name="eye" />
-        </Link>
+        <Button asChild variant="ghost" size="icon-sm">
+          <Link to={href(`stakeholders/${item.id}/preview`)} title="Preview as stakeholder" aria-label={`Preview ${item.displayName} as stakeholder`}>
+            <Icon name="eye" />
+          </Link>
+        </Button>
       ),
     },
     { key: "ext", label: "External ID", defaultHidden: true, render: (item) => item.issuerAssignedId ?? DASH, compare: byText((item) => item.issuerAssignedId) },
@@ -117,17 +123,23 @@ function StakeholdersBody({ items }: { items: readonly api.Stakeholder[] }) {
       ) : null}
       {noHoldings.length ? (
         <Banner kind="warn" title={`${plural(noHoldings.length, "stakeholder")} ${noHoldings.length === 1 ? "has" : "have"} no holdings`}>
-          <details>
-            <summary>Show them</summary>
-            <ul>{noHoldings.map((item) => <li key={item.id}><Link to={href(`stakeholders/${item.id}`)}>{item.displayName}</Link></li>)}</ul>
-          </details>
+          <Collapsible className="group/holdings">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="link" size="sm" className="h-auto p-0">
+                Show them <ChevronDownIcon aria-hidden="true" className="transition-transform group-data-[state=open]/holdings:rotate-180" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ul className="mt-2 list-disc pl-5">{noHoldings.map((item) => <li key={item.id}><Link to={href(`stakeholders/${item.id}`)}>{item.displayName}</Link></li>)}</ul>
+            </CollapsibleContent>
+          </Collapsible>
         </Banner>
       ) : null}
       <PageHead
         title="Stakeholders"
         actions={<ActionsMenu items={[{ label: "Add stakeholder", icon: "plus", to: href("stakeholders/new") }, { label: "Download", icon: "download", write: false, onSelect: () => void download() }]} />}
       />
-      {notice ? <p className="err-inline" role="alert">{notice}</p> : null}
+      {notice ? <p className="text-sm font-medium text-destructive" role="alert">{notice}</p> : null}
       <DataTable
         id="stakeholders"
         label="Stakeholders"

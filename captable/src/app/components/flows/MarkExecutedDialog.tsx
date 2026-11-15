@@ -45,7 +45,7 @@ export function MarkExecutedDialog({ securityId, onClose, onDone }: { securityId
   if (!security.data) {
     return (
       <Modal title="Mark executed" onClose={onClose}>
-        {security.error !== undefined ? <InlineError what="the security" error={security.error} onRetry={security.reload} /> : <p className="muted" role="status">Loading the security…</p>}
+        {security.error !== undefined ? <InlineError what="the security" error={security.error} onRetry={security.reload} /> : <p className="text-sm text-muted-foreground" role="status">Loading the security…</p>}
       </Modal>
     );
   }
@@ -122,7 +122,7 @@ function MarkExecutedForm({ security, onClose, onDone }: { security: api.Securit
         </>
       }
     >
-      <p className="small muted">{security.stakeholderName} · {EXECUTION_LABELS[security.executionStatus]}. {signed === "both" ? "Upload the agreement signed by both the holder and the company signatory." : "Upload the agreement as signed so far; it is kept as evidence."}</p>
+      <p className="text-xs text-muted-foreground">{security.stakeholderName} · {EXECUTION_LABELS[security.executionStatus]}. {signed === "both" ? "Upload the agreement signed by both the holder and the company signatory." : "Upload the agreement as signed so far; it is kept as evidence."}</p>
       {partial ? (
         <RadioCards label="Who signed?" value={signed} onChange={(value) => choose(value as Signed)} error={errorOf("signed")} options={[
           { value: "both", label: "Both", sub: "The holder and the company signatory: the grant is executed" },
@@ -131,7 +131,7 @@ function MarkExecutedForm({ security, onClose, onDone }: { security: api.Securit
         ]} />
       ) : null}
       <DocumentUpload label={copy.document} kind="GRANT_AGREEMENT" required value={document} onChange={(next) => { setDocument(next); setErrors((current) => ({ ...current, document: undefined })); }} error={errorOf("document")} disabled={flow.phase !== "edit"} />
-      <div className="form-grid">
+      <div className="grid gap-4 sm:grid-cols-2">
         {datesOf.company ? <DateField label="Company signature date" max={today} value={company} onChange={(value) => { setCompany(value); setErrors((current) => ({ ...current, company: undefined })); }} error={errorOf("company")} /> : null}
         {datesOf.holder ? <DateField label="Holder signature date" max={today} value={holder} onChange={(value) => { setHolder(value); setErrors((current) => ({ ...current, holder: undefined })); }} error={errorOf("holder")} hint={signed === "both" ? "The later date is when the grant becomes executed." : "The date the new status takes effect."} /> : null}
       </div>

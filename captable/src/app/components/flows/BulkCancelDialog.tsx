@@ -1,5 +1,9 @@
 import { useRef, useState } from "react";
 import { api, engine } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { FieldError } from "@/components/ui/field.tsx";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { ApiError } from "../../api/client.ts";
 import { apiRequest, newIdempotencyKey } from "../../api/request.ts";
 import { canonicalJson, classifyFailure, isAmbiguous, ledgerUnmoved, type FlowProblem } from "../../lib/flow.ts";
@@ -272,14 +276,14 @@ export function BulkCancelDialog({ kind, onClose, onDone }: { kind: Kind; onClos
   const footer = phase === "edit" || phase === "previewing" ? (
     <>
       <DismissButton onClick={onClose}>Close</DismissButton>
-      <button type="button" className="btn btn-primary" onClick={() => void review()} disabled={phase === "previewing"}>{phase === "previewing" ? "Checking…" : "Review…"}</button>
+      <Button type="button" onClick={() => void review()} disabled={phase === "previewing"}>{phase === "previewing" ? "Checking…" : "Review…"}</Button>
     </>
   ) : (
     <>
-      <button type="button" className="btn btn-ghost" onClick={() => { setPhase("edit"); setProblem(null); }} disabled={phase === "committing" || phase === "unresolved" || checking || reviewed.some((item) => item.done)}>Back</button>
-      <button type="button" className="btn btn-danger" onClick={() => void commit()} disabled={phase === "committing" || phase === "unresolved" || checking || !allAcknowledged || !confirmationMatches(typed.toUpperCase(), phrase(reviewed.length))}>
+      <Button type="button" variant="outline" onClick={() => { setPhase("edit"); setProblem(null); }} disabled={phase === "committing" || phase === "unresolved" || checking || reviewed.some((item) => item.done)}>Back</Button>
+      <Button type="button" variant="destructive" onClick={() => void commit()} disabled={phase === "committing" || phase === "unresolved" || checking || !allAcknowledged || !confirmationMatches(typed.toUpperCase(), phrase(reviewed.length))}>
         {phase === "committing" ? "Cancelling…" : `Cancel ${reviewed.length} grant${reviewed.length === 1 ? "" : "s"}`}
-      </button>
+      </Button>
     </>
   );
   return (
@@ -287,76 +291,72 @@ export function BulkCancelDialog({ kind, onClose, onDone }: { kind: Kind; onClos
       <ErrorFocus>
       <FlowProblemBanner problem={problem} onRetry={phase === "edit" || phase === "previewing" ? () => void review() : () => void commit()} onCheck={phase === "unresolved" && !checking ? () => void check() : undefined} busy={checking || phase === "committing"} />
       {phase === "edit" || phase === "previewing" ? (
-        <div className="form">
-          <p className="muted">Select the grants to cancel in full. Options return to the pool under the plan's rules; warrants do not affect the pool. A data error is not a cancellation — use Reverse.</p>
-          <div className="form-grid">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">Select the grants to cancel in full. Options return to the pool under the plan's rules; warrants do not affect the pool. A data error is not a cancellation — use Reverse.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
             <DateField label="Cancellation date" required max={today} value={date} onChange={setDate} error={errors.date} />
             <SelectField label="Reason" required value={reason} onChange={(value) => setReason(value as api.CancelSecurity["reason"])} options={Object.entries(CANCEL_REASON_LABELS)} />
           </div>
           <DocumentUpload label="Supporting document" kind="OTHER" required value={document} onChange={setDocument} error={errors.document} />
-          {list.error !== undefined ? <InlineError what="the grants" error={list.error} onRetry={list.reload} /> : !list.data ? <p className="muted small" role="status">Loading the grants…</p> : (
-            <div className="tbl-scroll" style={{ maxHeight: 300, overflow: "auto" }}>
-              <table className="tbl" aria-label="Grants to cancel">
-                <thead><tr><th scope="col"><span className="sr-only">Select</span></th><th scope="col">ID</th><th scope="col">Stakeholder</th><th scope="col" className="num">Outstanding</th></tr></thead>
-                <tbody>
+          {list.error !== undefined ? <InlineError what="the grants" error={list.error} onRetry={list.reload} /> : !list.data ? <p className="text-xs text-muted-foreground" role="status">Loading the grants…</p> : (
+            <div className="max-h-75 overflow-auto rounded-lg border">
+              <Table aria-label="Grants to cancel">
+                <TableHeader><TableRow><TableHead scope="col" className="w-10"><span className="sr-only">Select</span></TableHead><TableHead scope="col">ID</TableHead><TableHead scope="col">Stakeholder</TableHead><TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Outstanding</TableHead></TableRow></TableHeader>
+                <TableBody>
                   {candidates.map((security) => (
-                    <tr key={security.id}>
-                      <td><input type="checkbox" className="cb" aria-label={`Select ${security.displayId}`} aria-invalid={rowErrors[security.id] ? true : undefined}
-                        aria-describedby={rowErrors[security.id] ? `bulk-err-${security.id}` : undefined} checked={selected.has(security.id)} onChange={(event) => setSelected((current) => {
+                    <TableRow key={security.id}>
+                      <TableCell><Checkbox aria-label={`Select ${security.displayId}`} aria-invalid={rowErrors[security.id] ? true : undefined}
+                        aria-describedby={rowErrors[security.id] ? `bulk-err-${security.id}` : undefined} checked={selected.has(security.id)} onCheckedChange={(checked) => setSelected((current) => {
                         const nextSet = new Set(current);
-                        if (event.target.checked) nextSet.add(security.id);
+                        if (checked === true) nextSet.add(security.id);
                         else nextSet.delete(security.id);
                         return nextSet;
-                      })} /></td>
-                      <td>
+                      })} /></TableCell>
+                      <TableCell>
                         {security.displayId}{isExecutionPending(security.executionStatus) ? <> <Badge tone="amber">Execution pending</Badge></> : null}
-                        {rowErrors[security.id] ? <div className="err-inline" id={`bulk-err-${security.id}`}>{rowErrors[security.id]}</div> : null}
-                      </td>
-                      <td>{security.stakeholderName}</td>
-                      <td className="num">{format.shares(security.numbers?.outstanding)}</td>
-                    </tr>
+                        {rowErrors[security.id] ? <FieldError id={`bulk-err-${security.id}`} className="mt-1 whitespace-normal">{rowErrors[security.id]}</FieldError> : null}
+                      </TableCell>
+                      <TableCell>{security.stakeholderName}</TableCell>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(security.numbers?.outstanding)}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
-          {errors.selection ? <div className="err-inline" role="alert">{errors.selection}</div> : null}
+          {errors.selection ? <p className="text-sm font-medium text-destructive" role="alert">{errors.selection}</p> : null}
         </div>
       ) : (
-        <div className="form">
+        <div className="flex flex-col gap-4">
           <p>Review what will be cancelled on <b>{formatDate(date)}</b> (reason: {CANCEL_REASON_LABELS[reason]}). Each grant is cancelled in full and audited as its own command; an admin can reverse each one.</p>
-          <div className="tbl-scroll">
-            <table className="tbl" aria-label="Cancellation preview">
-              <thead><tr><th scope="col">ID</th><th scope="col">Stakeholder</th><th scope="col" className="num">Cancelled (server preview)</th><th scope="col">Status</th></tr></thead>
-              <tbody>
+          <div className="rounded-lg border">
+            <Table aria-label="Cancellation preview">
+              <TableHeader><TableRow><TableHead scope="col">ID</TableHead><TableHead scope="col">Stakeholder</TableHead><TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Cancelled (server preview)</TableHead><TableHead scope="col">Status</TableHead></TableRow></TableHeader>
+              <TableBody>
                 {reviewed.map((item) => (
-                  <tr key={item.security.id}>
-                    <td>{item.security.displayId}</td>
-                    <td>{item.security.stakeholderName}</td>
-                    <td className="num">{format.shares(item.preview.transactions.find((transaction) => transaction.securityId === item.security.id)?.quantity ?? null)}</td>
-                    <td>{item.done ? <Badge tone="green">Cancelled</Badge> : item.changed ? <Badge tone="amber">Changed — review again</Badge> : <Badge tone="grey">To cancel</Badge>}</td>
-                  </tr>
+                  <TableRow key={item.security.id}>
+                    <TableCell>{item.security.displayId}</TableCell>
+                    <TableCell>{item.security.stakeholderName}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(item.preview.transactions.find((transaction) => transaction.securityId === item.security.id)?.quantity ?? null)}</TableCell>
+                    <TableCell>{item.done ? <Badge tone="green">Cancelled</Badge> : item.changed ? <Badge tone="amber">Changed — review again</Badge> : <Badge tone="grey">To cancel</Badge>}</TableCell>
+                  </TableRow>
                 ))}
-                <tr className="totals"><td colSpan={2}>Total</td><td className="num">{format.shares(totalCancelled.toString())}</td><td /></tr>
-              </tbody>
-            </table>
+              </TableBody>
+              <TableFooter><TableRow><TableCell colSpan={2}>Total</TableCell><TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(totalCancelled.toString())}</TableCell><TableCell /></TableRow></TableFooter>
+            </Table>
           </div>
           {reviewed.filter((item) => !item.done && warningsOf(item).length > 0).map((item) => (
-            <div className="mt-12" key={item.security.id} aria-label={`Warnings for ${item.security.displayId}`}>
-              <h4>Warnings to acknowledge — {item.security.displayId}</h4>
-              <div className="warn-list mt-8">
-                {warningsOf(item).map((warning) => (
-                  <div className="warn-item" key={warning.code}>
-                    <CheckLine checked={item.acknowledged.includes(warning.code)} onChange={(accepted) => acknowledge(item.security.id, warning.code, accepted)} disabled={phase === "committing" || phase === "unresolved" || checking}>
-                      {warning.message} <span className="mono small">({warning.code})</span>
-                    </CheckLine>
-                  </div>
-                ))}
-              </div>
+            <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40" key={item.security.id} aria-label={`Warnings for ${item.security.displayId}`}>
+              <h4 className="text-sm font-medium">Warnings to acknowledge — {item.security.displayId}</h4>
+              {warningsOf(item).map((warning) => (
+                <CheckLine key={warning.code} checked={item.acknowledged.includes(warning.code)} onChange={(accepted) => acknowledge(item.security.id, warning.code, accepted)} disabled={phase === "committing" || phase === "unresolved" || checking}>
+                  {warning.message} <span className="font-mono text-xs">({warning.code})</span>
+                </CheckLine>
+              ))}
             </div>
           ))}
-          {!allAcknowledged ? <p className="small muted">Acknowledge each grant's warnings to continue.</p> : null}
-          {kind === "warrant" ? <p className="small">Warrants do not affect the pool.</p> : null}
+          {!allAcknowledged ? <p className="text-xs text-muted-foreground">Acknowledge each grant's warnings to continue.</p> : null}
+          {kind === "warrant" ? <p className="text-xs text-muted-foreground">Warrants do not affect the pool.</p> : null}
           {reviewed.some((item) => item.done) && reviewed.some((item) => !item.done) ? <Banner kind="warn" title="Some grants are already cancelled">Confirming again cancels only the ones still to cancel; the others keep their recorded commands.</Banner> : null}
           <TypedConfirmation expected={phrase(reviewed.length)} value={typed} onChange={setTyped} disabled={phase === "committing" || phase === "unresolved" || checking} />
         </div>

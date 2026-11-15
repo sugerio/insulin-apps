@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { Outlet, useParams } from "react-router";
+import { TriangleAlertIcon } from "lucide-react";
 import { api, engine } from "#shared";
+import { Alert, AlertDescription } from "@/components/ui/alert.tsx";
 import { apiRequest } from "../api/request.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { createFormatter, type Formatter } from "../lib/format.ts";
@@ -112,7 +114,7 @@ export function OrgWorkspace({ children }: { children?: ReactNode }) {
   // The company record carries the display settings and time zone every page needs: wait for it.
   if (!value || !display) {
     return (
-      <section className="page">
+      <section className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col gap-4 px-4 pt-6 pb-14 md:px-8">
         {orgResource.error !== undefined ? <ErrorState error={orgResource.error} onRetry={orgResource.reload} /> : <Loading label="Loading the company…" />}
       </section>
     );
@@ -120,7 +122,12 @@ export function OrgWorkspace({ children }: { children?: ReactNode }) {
   return (
     <WorkspaceContext value={value}>
       <DisplayContext value={display}>
-        {value.writeRestriction ? <div className="restriction-banner" role="status">{value.writeRestriction.text}</div> : null}
+        {value.writeRestriction ? (
+          <Alert role="status" className="rounded-none border-x-0 border-t-0 px-4 md:px-8">
+            <TriangleAlertIcon aria-hidden="true" />
+            <AlertDescription>{value.writeRestriction.text}</AlertDescription>
+          </Alert>
+        ) : null}
         <ToastProvider>
           <UnsettledGuard />
           {children ?? <Outlet />}

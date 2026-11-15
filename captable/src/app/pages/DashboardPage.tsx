@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { api } from "#shared";
+import { Badge as UiBadge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { cn } from "@/lib/utils.ts";
 import { apiRequest } from "../api/request.ts";
 import { WriteButton } from "../components/Actions.tsx";
 import { CapTableDownloadButton } from "../components/CapTableDownload.tsx";
@@ -10,7 +13,7 @@ import { Banner, InlineError, ResourceView } from "../components/Feedback.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { HolderLink } from "../components/Links.tsx";
 import { useWorkspace, type Workspace } from "../components/OrgWorkspace.tsx";
-import { Card, Page, SeeMore } from "../components/Page.tsx";
+import { Card, Page, SectionTitle, SeeMore } from "../components/Page.tsx";
 import { Timeline } from "../components/Timeline.tsx";
 import { useToast } from "../components/Toast.tsx";
 import { compareDecimals, formatFractionPercent, fractionOf, parseRatio, sumDecimals } from "../lib/decimal.ts";
@@ -174,13 +177,35 @@ const IN_PROGRESS = [
   ["scheduledTerminations", "Scheduled terminations", "securities-status#sched"],
 ] as const;
 
+/** The colour of a Needs attention line's icon, by tone. */
+const TONE_ICON_CLASS: Record<Tone, string> = {
+  ok: "text-emerald-600 dark:text-emerald-400",
+  info: "text-sky-600 dark:text-sky-400",
+  warn: "text-amber-600 dark:text-amber-400",
+  bad: "text-destructive",
+};
+
+/** A reminder's edge, by tone. */
+const REMINDER_BORDER: Record<string, string> = {
+  ok: "border-l-emerald-500",
+  info: "border-l-sky-500",
+  warn: "border-l-amber-500",
+  bad: "border-l-destructive",
+};
+
+/** A queue's count; a zero is muted, and an unreported queue shows a dash. */
+function Count({ value }: { value: number | undefined }) {
+  if (value === undefined) return <UiBadge variant="outline" className="ml-auto text-muted-foreground" title="Not reported">—</UiBadge>;
+  return <UiBadge variant={value ? "default" : "outline"} className={cn("ml-auto tabular-nums", !value && "text-muted-foreground")}>{value}</UiBadge>;
+}
+
 export function DashboardPage() {
   const workspace = useWorkspace();
   const { orgId, today } = workspace;
   const dashboard = useResource((signal) => apiRequest(api.routes.getDashboard, { params: { orgId }, signal }), [orgId]);
   const valuations = useResource((signal) => apiRequest(api.routes.listValuations, { params: { orgId }, signal }), [orgId]);
   return (
-    <Page title="Dashboard">
+    <Page title="Dashboard" crumbs={[["Dashboard"]]}>
       <h1 className="sr-only">Dashboard</h1>
       {workspace.canWrite && workspace.org.ledgerSeq === 0 ? <ImportInvite to={workspace.href("import")} /> : null}
       <ResourceView resource={dashboard}>
@@ -196,7 +221,7 @@ export function DashboardPage() {
  */
 function ImportInvite({ to }: { to: string }) {
   return (
-    <Banner kind="info" title="Nothing is recorded in this cap table yet" action={<Link className="btn btn-primary btn-sm" to={to}>Import the cap table</Link>}>
+    <Banner kind="info" title="Nothing is recorded in this cap table yet" action={<Button asChild size="sm"><Link to={to}>Import the cap table</Link></Button>}>
       Moving from Pulley or a spreadsheet? Import the company's stakeholders, share classes, equity plans and holdings in one step.
     </Banner>
   );
@@ -266,71 +291,75 @@ function DashboardBody({ data, valuation, retryValuations, onProcessed }: { data
   }));
 
   return (
-    <div className="grid-dash">
-      <div className="stack">
+    <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+      <div className="flex min-w-0 flex-col gap-4">
         <Card>
-          <div className="row" style={{ alignItems: "flex-start" }}>
-            <div className="spacer co-card">
-              <h2>{workspace.legalName}</h2>
-              <div className="co-metrics">
-                <div><b>{format.money(data.company.totalCapitalContribution)}</b> Total capital contribution</div>
-                <div><b>{format.shares(fd)}</b> Fully diluted shares</div>
-                <div><b>{data.company.stakeholdersWithSecurities.toLocaleString("en-US")}</b> Stakeholders with securities</div>
-              </div>
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <h2 className="text-lg font-semibold">{workspace.legalName}</h2>
+              <dl className="grid gap-3 sm:grid-cols-3">
+                <div className="flex flex-col-reverse gap-0.5"><dt className="text-xs text-muted-foreground">Total capital contribution</dt><dd className="text-xl font-semibold tabular-nums">{format.money(data.company.totalCapitalContribution)}</dd></div>
+                <div className="flex flex-col-reverse gap-0.5"><dt className="text-xs text-muted-foreground">Fully diluted shares</dt><dd className="text-xl font-semibold tabular-nums">{format.shares(fd)}</dd></div>
+                <div className="flex flex-col-reverse gap-0.5"><dt className="text-xs text-muted-foreground">Stakeholders with securities</dt><dd className="text-xl font-semibold tabular-nums">{data.company.stakeholdersWithSecurities.toLocaleString("en-US")}</dd></div>
+              </dl>
             </div>
             <CapTableDownloadButton />
           </div>
         </Card>
         <Card title="Employee Equity" right={<SeeMore to={href("equity-plans")} />}>
-          <div className="legend-inline">
-            <span><i className="sw" style={{ background: "var(--primary-button)" }} />Granted</span>
-            <span><i className="sw" style={{ background: "var(--primary-soft)", border: "1px solid var(--border)" }} />Available</span>
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm bg-primary" aria-hidden="true" />Granted</span>
+            <span className="flex items-center gap-1.5"><i className="size-2.5 rounded-sm border bg-primary/15" aria-hidden="true" />Available</span>
           </div>
-          {data.employeeEquity.length === 0 ? <p className="muted small">No equity plans yet.</p> : null}
+          {data.employeeEquity.length === 0 ? <p className="text-xs text-muted-foreground">No equity plans yet.</p> : null}
           {data.employeeEquity.map((plan) => {
             const used = parseRatio(plan.usedPct);
             const available = { num: used.den - used.num, den: used.den };
             const size = sumDecimals([plan.granted, plan.available]);
             return (
-              <div className="pool-row" key={plan.stockPlanId}>
-                <div className="pr-h">
-                  <Link to={href(`equity-plans/${plan.stockPlanId}`)}>{plan.name}</Link>
-                  <span className="spacer" />
-                  <span className="muted">
+              <div className="flex flex-col gap-2" key={plan.stockPlanId}>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Link className="font-medium underline-offset-4 hover:underline" to={href(`equity-plans/${plan.stockPlanId}`)}>{plan.name}</Link>
+                  <span className="flex-1" />
+                  <span className="text-muted-foreground tabular-nums">
                     {format.shares(plan.granted)} granted ({formatFractionPercent(used)}) · {format.shares(plan.available)} available ({formatFractionPercent(available)})
                   </span>
                 </div>
                 <Meter used={plan.granted} size={size} label={`${plan.name} used`} />
                 {used.num * 10n > used.den * 9n ? (
-                  <div className="small mt-4" style={{ color: "var(--warning-text)" }}>More than 90% of the plan is used. A grant above the available count is blocked.</div>
+                  <div className="text-xs text-amber-700 dark:text-amber-300">More than 90% of the plan is used. A grant above the available count is blocked.</div>
                 ) : null}
               </div>
             );
           })}
           {workspace.canWrite ? (
-            <div className="hint-box">
-              <Link to={href("issue/options")}>Record a new option grant</Link> from a signed agreement and board consent.
+            <div className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
+              <Link className="font-medium text-foreground underline underline-offset-4" to={href("issue/options")}>Record a new option grant</Link> from a signed agreement and board consent.
             </div>
           ) : null}
         </Card>
         <Card title="Ownership" right={<SeeMore to={href("captable")} />}>
           {segments.length ? (
-            <div className="own-wrap">
+            <div className="flex flex-wrap items-center gap-6">
               <DonutChart segments={segments} center={format.compact(fd)} label="Ownership by category" />
-              <ul className="legend" aria-label="Ownership by category">
+              <ul className="flex min-w-48 flex-1 flex-col gap-2 text-sm" aria-label="Ownership by category">
                 {segments.map((segment) => (
-                  <li className="lg" key={segment.label}>
-                    <i className="sw" aria-hidden="true" style={{ background: segment.hatched ? "repeating-linear-gradient(135deg,var(--s-pool) 0 3px,var(--hatch) 3px 5px)" : segment.color }} />
+                  <li className="flex items-center gap-2" key={segment.label}>
+                    <i
+                      className={cn("size-2.5 shrink-0 rounded-sm", segment.hatched && "bg-[repeating-linear-gradient(135deg,var(--muted)_0_3px,var(--muted-foreground)_3px_4px)]")}
+                      aria-hidden="true"
+                      style={segment.hatched ? undefined : { background: segment.color }}
+                    />
                     <span>{segment.label}</span>
-                    <span className="v">{formatFractionPercent(fractionOf(segment.value, fd))}</span>
+                    <span className="ml-auto tabular-nums text-muted-foreground">{formatFractionPercent(fractionOf(segment.value, fd))}</span>
                   </li>
                 ))}
               </ul>
             </div>
           ) : (
-            <p className="muted small">Nothing is issued yet.</p>
+            <p className="text-xs text-muted-foreground">Nothing is issued yet.</p>
           )}
-          <h3 className="section-title mt-24">Top Stakeholders</h3>
+          <SectionTitle>Top Stakeholders</SectionTitle>
           <DataTable
             id="dash-top"
             label="Top stakeholders"
@@ -348,49 +377,49 @@ function DashboardBody({ data, valuation, retryValuations, onProcessed }: { data
           />
         </Card>
       </div>
-      <div className="stack">
-        <Card title={<><Icon name="clipboard" /> Needs attention</>} right={<ProcessDueButton onDone={onProcessed} />}>
-          <ul className="na-list" aria-label="Needs attention">
+      <div className="flex min-w-0 flex-col gap-4">
+        <Card title={<span className="flex items-center gap-2"><Icon name="clipboard" /> Needs attention</span>} right={<ProcessDueButton onDone={onProcessed} />}>
+          <ul className="flex flex-col gap-1" aria-label="Needs attention">
             {lines.map((line) => (
               <li key={line.kind}>
-                <Link className={`na ${line.tone}`} to={line.to}>
-                  <span className="na-ic"><Icon name={line.tone === "ok" ? "check" : line.tone === "info" ? "info" : "alert"} /></span>
-                  <span className="na-b">
-                    <span className="na-l">{line.label}</span>
-                    <span className="na-t">{line.text}</span>
+                <Link className="flex items-start gap-3 rounded-lg p-2 hover:bg-muted" data-tone={line.tone} to={line.to}>
+                  <span className={cn("mt-0.5 [&_svg]:size-4", TONE_ICON_CLASS[line.tone])}><Icon name={line.tone === "ok" ? "check" : line.tone === "info" ? "info" : "alert"} /></span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-sm font-medium">{line.label}</span>
+                    <span className="text-xs text-muted-foreground">{line.text}</span>
                   </span>
-                  {line.count !== null ? <span className={line.count ? "cnt" : "cnt zero"}>{line.count}</span> : null}
+                  {line.count !== null ? <Count value={line.count} /> : null}
                 </Link>
               </li>
             ))}
           </ul>
         </Card>
         <Card title="In-progress securities">
-          <ul className="list-links">
+          <ul className="flex flex-col gap-1">
             {IN_PROGRESS.map(([key, label, to]) => {
               // A queue the server didn't report is unknown: no count rather than a zero.
               const count = data.inProgress[key];
               return (
                 <li key={key}>
-                  <Link to={href(to)}>{label}{count === undefined ? <span className="cnt zero" title="Not reported">—</span> : <span className={count ? "cnt" : "cnt zero"}>{count}</span>}</Link>
+                  <Link className="flex items-center gap-2 rounded-lg p-2 text-sm hover:bg-muted" to={href(to)}>{label}<Count value={count} /></Link>
                 </li>
               );
             })}
           </ul>
         </Card>
-        <Card title="Reminders" right={<span className="small muted">in-app only</span>}>
+        <Card title="Reminders" right={<span className="text-xs text-muted-foreground">in-app only</span>}>
           {reminders.map((reminder) => (
-            <div className={`reminder ${reminder.tone}`} key={reminder.key}>
-              <Link className="r-t" to={reminder.to}>{reminder.title}</Link>
-              <div className="r-b">{reminder.body}</div>
+            <div className={cn("flex flex-col gap-1 rounded-lg border-l-4 bg-muted/50 p-3", REMINDER_BORDER[reminder.tone])} data-tone={reminder.tone} key={reminder.key}>
+              <Link className="text-sm font-medium underline-offset-4 hover:underline" to={reminder.to}>{reminder.title}</Link>
+              <div className="text-xs text-muted-foreground">{reminder.body}</div>
             </div>
           ))}
           {/* "No reminders" only once every source is known: a 409A reminder may still be on its way. */}
           {valuation.state === "failed" ? <InlineError what="the 409A status" error={valuation.error} onRetry={retryValuations} /> : null}
           {valuation.state === "loading" ? (
-            <p className="muted small" role="status">Checking reminders…</p>
+            <p className="text-xs text-muted-foreground" role="status">Checking reminders…</p>
           ) : reminders.length === 0 && valuation.state === "ready" ? (
-            <p className="muted">No reminders.</p>
+            <p className="text-sm text-muted-foreground">No reminders.</p>
           ) : null}
         </Card>
         <Card title="Recent activity" right={<SeeMore to={href("activity")} />}>

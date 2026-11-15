@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, engine } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Card as UiCard, CardContent } from "@/components/ui/card.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { DescriptionList } from "../components/DescriptionList.tsx";
 import { DocumentUpload, type UploadedDocument } from "../components/DocumentUpload.tsx";
@@ -514,10 +517,11 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
   return (
     <>
       <WizardHead title="Record options" back={back} />
-      <div className="wiz-body">
-        <div className="card">
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,40rem)_minmax(17.5rem,25rem)]">
+        <UiCard>
+          <CardContent className="flex flex-col gap-4">
           {editing ? <FlowProblemBanner problem={flow.problem} onRetry={review} busy={flow.busy} /> : null}
-          <fieldset className="flow-fields form" disabled={!editing} aria-label="Grant details">
+          <fieldset className="flex min-w-0 flex-col" disabled={!editing} aria-label="Grant details">
             <Question n={1} title="Equity plan" required>
               <SelectField label="Equity plan" value={values.plan} onChange={(value) => set("plan", value)} error={errorOf("plan")}
                 options={plans.map((item) => [item.id, `${item.name} — ${format.shares(item.availableToGrant)} available`] as const)} />
@@ -531,7 +535,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                   ...holders.map((item) => [item.id, `${item.displayName} — ${pii.email(activeEmails(item)[0]?.email) || RELATIONSHIP_LABELS[item.relationship]}`] as const),
                   [NEW_STAKEHOLDER, "+ Add a new stakeholder…"] as const,
                 ]} />
-              {stakeholders.error !== undefined ? <button type="button" className="btn-link small" onClick={stakeholders.reload}>Try loading the stakeholders again</button> : null}
+              {stakeholders.error !== undefined ? <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={stakeholders.reload}>Try loading the stakeholders again</Button> : null}
               {values.stakeholder === NEW_STAKEHOLDER ? (
                 <NewStakeholderCard
                   stakeholders={stakeholders.data?.items ?? []}
@@ -544,7 +548,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
               ) : null}
             </Question>
             <Question n={3} title="How many?" required>
-              <div className="form-grid">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <AmountField label="Number of options" value={values.quantity} onChange={setQuantity} suffix="Options" hint="Whole options only." error={errorOf("quantity")} />
                 <AmountField label="or target %" value={values.percent} onChange={setPercent} suffix={values.percentOf === "plan" ? "% of plan" : "% of company"} hint="Rounded down to whole options." />
                 <SelectField label="Target % of" value={values.percentOf} onChange={(value) => set("percentOf", value as GrantValues["percentOf"])}
@@ -553,7 +557,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
               </div>
             </Question>
             <Question n={4} title="Board approval" required>
-              <div className="form-grid">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <DateField label="Board approval date" required value={values.boardDate} max={workspace.today} onChange={(value) => set("boardDate", value)} error={errorOf("boardDate")} />
                 <DocumentUpload label="Signed board consent (PDF)" kind="BOARD_CONSENT" required value={values.consent} onChange={(document) => set("consent", document)} error={errorOf("consent")} disabled={!editing} />
               </div>
@@ -564,7 +568,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                 { value: "override", label: "Override", sub: "A different grant date needs a reason" },
               ]} />
               {values.dateMode === "override" ? (
-                <div className="form-grid mt-8">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <DateField label="Grant date (override)" value={values.grantDate} max={workspace.today} onChange={(value) => set("grantDate", value)} error={errorOf("grantDate")} />
                   <TextField label="Reason for the override" value={values.overrideReason} onChange={(value) => set("overrideReason", value)} error={errorOf("overrideReason")} />
                 </div>
@@ -576,49 +580,49 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                 { value: "NSO", label: "NSO", sub: "Non-qualified stock option" },
               ]} />
               {iso ? (
-                <div className="stack mt-8" style={{ gap: 8 }}>
+                <div className="flex flex-col gap-2">
                   <CheckLine checked={values.employeeAtGrant} onChange={(checked) => set("employeeAtGrant", checked)} error={errorOf("employeeAtGrant")}>The holder is an employee at grant (attested)</CheckLine>
                   <CheckLine checked={values.tenPercent} onChange={(checked) => set("tenPercent", checked)}>10%-plus holder (voting power with Internal Revenue Code section 424(d) attribution; attested): an ISO needs strike ≥ 110% of FMV and a 5-year term</CheckLine>
                 </div>
               ) : null}
             </Question>
             <Question n={7} title="Vesting">
-              <div className="form-grid">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <SelectField label="Vesting schedule" value={values.schedule} onChange={(value) => set("schedule", value)} error={errorOf("schedule")}
                   options={[...templates.map((template) => [template.id, template.name] as const), [EXPLICIT, "Explicit tranches (from the agreement)"] as const]} />
                 <DateField label="Vesting start date" value={values.vestingStart} error={errorOf("vestingStart")} onChange={(value) => { setTouched((current) => ({ ...current, vestingStart: true })); set("vestingStart", value); }} />
               </div>
               {values.schedule === EXPLICIT ? (
-                <div className="mt-8">
+                <div>
                   <TextAreaField label="Tranches" value={values.explicit} onChange={(value) => set("explicit", value)} rows={5} placeholder={"2027-10-19, 10000\n2027-11-19, 834"} hint="One tranche per line: the date and the quantity, as in the signed agreement. They must add up to the number of options." />
                 </div>
               ) : null}
-              <div className="mt-8">
-                <span className="small strong">Early exercise allowed (from the agreement)</span>
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-semibold">Early exercise allowed (from the agreement)</span>
                 <RadioCards label="Early exercise allowed" value={values.early} onChange={(value) => set("early", value as GrantValues["early"])} options={[{ value: "no", label: "No" }, { value: "yes", label: "Yes" }]} />
               </div>
-              <div className="form-grid mt-8">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <SelectField label="Acceleration terms" value={values.accelKind} onChange={(value) => set("accelKind", value as GrantValues["accelKind"])} error={errorOf("accelKind")}
                   options={[["NONE", "None"], ["SINGLE_TRIGGER", "Single trigger"], ["DOUBLE_TRIGGER", "Double trigger"]]} />
                 {values.accelKind !== "NONE" ? <AmountField label="Acceleration %" value={values.accelPercent} onChange={(value) => set("accelPercent", value)} suffix="%" /> : null}
                 {values.accelKind === "DOUBLE_TRIGGER" ? <AmountField label="Months after change of control" value={values.accelMonths} onChange={(value) => set("accelMonths", value)} /> : null}
               </div>
               <VestingTable preview={preview} ready={definition !== null && quantity !== null && vestingStartReady} />
-              <div className="mt-8">
-                <CheckLine checked={values.matches} onChange={(checked) => set("matches", checked)} error={errorOf("matches")}><b>Matches the {signedAll ? "signed" : "grant"} agreement</b> <span className="req">*</span></CheckLine>
+              <div>
+                <CheckLine checked={values.matches} onChange={(checked) => set("matches", checked)} error={errorOf("matches")}><b>Matches the {signedAll ? "signed" : "grant"} agreement</b> <span className="text-destructive">*</span></CheckLine>
               </div>
             </Question>
             <Question n={8} title="Exercise price" required>
               <AmountField label="Exercise price" prefix="$" value={values.strike} error={errorOf("strike")} onChange={(value) => { setTouched((current) => ({ ...current, strike: true })); set("strike", value); }} />
-              <div className="small mt-4">
-                {!dateReady ? <span className="muted">Shown once the grant date is entered.</span>
-                  : fmv.error !== undefined ? <span className="err-inline">Couldn't load the FMV. <button type="button" className="btn-link small" onClick={fmv.reload}>Try again</button></span>
-                    : !fmv.data ? <span className="muted" role="status">Loading the FMV…</span>
-                      : fmv.data.fmv ? <span className="muted">FMV {format.price(fmv.data.fmv.pricePerShare)} · presumptively valid until {formatDate(fmvValuation?.presumptivelyValidUntil ?? fmvValuation?.expirationDate)} ({fmv.data.fmv.valuationName})</span>
-                        : <span className="err-inline">No presumptively valid 409A on {formatDate(grantDate)}{fallbackValuation ? ` (${fallbackValuation.name}: ${VALUATION_STATUS_LABELS[fallbackValuation.status].toLowerCase()})` : ""}</span>}
+              <div className="text-xs">
+                {!dateReady ? <span className="text-muted-foreground">Shown once the grant date is entered.</span>
+                  : fmv.error !== undefined ? <span className="font-medium text-destructive">Couldn't load the FMV. <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={fmv.reload}>Try again</Button></span>
+                    : !fmv.data ? <span className="text-muted-foreground" role="status">Loading the FMV…</span>
+                      : fmv.data.fmv ? <span className="text-muted-foreground">FMV {format.price(fmv.data.fmv.pricePerShare)} · presumptively valid until {formatDate(fmvValuation?.presumptivelyValidUntil ?? fmvValuation?.expirationDate)} ({fmv.data.fmv.valuationName})</span>
+                        : <span className="font-medium text-destructive">No presumptively valid 409A on {formatDate(grantDate)}{fallbackValuation ? ` (${fallbackValuation.name}: ${VALUATION_STATUS_LABELS[fallbackValuation.status].toLowerCase()})` : ""}</span>}
               </div>
               {memoOffered ? (
-                <div className="mt-8">
+                <div>
                   <DocumentUpload label="Counsel memo (409A override or NSO below FMV)" kind="COUNSEL_MEMO" required value={values.counselMemo} onChange={(document) => set("counselMemo", document)} error={errorOf("counselMemo")} disabled={!editing} />
                 </div>
               ) : null}
@@ -628,11 +632,11 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                 onChange={(value) => { setTouched((current) => ({ ...current, expiration: true })); set("expiration", value); }} />
             </Question>
             <Question n={10} title="Terms">
-              <div className="form-grid">
-                <SelectField className="full" label="Exit windows" value={values.windowsMode} onChange={(value) => set("windowsMode", value as GrantValues["windowsMode"])} error={errorOf("windowsMode")}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField className="sm:col-span-2" label="Exit windows" value={values.windowsMode} onChange={(value) => set("windowsMode", value as GrantValues["windowsMode"])} error={errorOf("windowsMode")}
                   options={[["inherit", `Inherit from the plan (${windowsLabel(plan?.defaultTerminationWindows ?? [])})`], ["override", "Override from the agreement"]]} />
                 {values.windowsMode === "override" ? WINDOW_REASONS.map((reason) => (
-                  <div className="row nowrap" key={reason}>
+                  <div className="flex items-end gap-2" key={reason}>
                     <AmountField label={TERMINATION_WINDOW_LABELS[reason]!} value={values.windows[reason].period} onChange={(value) => set("windows", { ...values.windows, [reason]: { ...values.windows[reason], period: value } })} />
                     <SelectField label={<span className="sr-only">{TERMINATION_WINDOW_LABELS[reason]} unit</span>} value={values.windows[reason].unit} onChange={(value) => set("windows", { ...values.windows, [reason]: { ...values.windows[reason], unit: value } })}
                       options={[["DAYS", "days"], ["MONTHS", "months"], ["YEARS", "years"]]} />
@@ -643,7 +647,7 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                 <TextField label="State exemption" value={values.state} onChange={(value) => set("state", value)} />
                 <TextField label="Issue reason" value={values.issueReason} onChange={(value) => set("issueReason", value)} error={errorOf("issueReason")} />
                 <TextField label="ID" value={values.displayId} onChange={(value) => set("displayId", value)} placeholder={optionId ? `Auto: ${optionId}` : "Auto-assigned"} hint="Auto-assigned; editable (must be unique)." error={errorOf("displayId")} />
-                <div className="fld"><span className="lbl">Legends</span><div className="small muted">Defaults: none on options (set on exercise shares)</div></div>
+                <div className="flex flex-col gap-1.5"><span className="text-sm font-medium">Legends</span><div className="text-xs text-muted-foreground">Defaults: none on options (set on exercise shares)</div></div>
               </div>
             </Question>
             <Question n={11} title="Signatures" required>
@@ -653,12 +657,12 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                 { value: "company", label: "Awaiting the company", sub: "The holder has signed; this doesn't block exercise" },
                 { value: "both", label: "Awaiting both", sub: "Recorded at board approval, before anyone signs" },
               ]} />
-              <div className="mt-8">
+              <div>
                 {signedAll ? (
                   <>
                     <DocumentUpload label="Executed agreement (PDF)" kind="GRANT_AGREEMENT" required value={values.agreement} onChange={(document) => set("agreement", document)} error={errorOf("agreement")} disabled={!editing}
                       hint="The PDF signed by both the holder and the company signatory." />
-                    <div className="mt-8">
+                    <div className="mt-2">
                       <CheckLine checked={values.signedByBoth} onChange={(checked) => set("signedByBoth", checked)} error={errorOf("signedByBoth")}>This PDF is signed by both the holder and the company signatory</CheckLine>
                     </div>
                   </>
@@ -671,14 +675,14 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
               </div>
             </Question>
           </fieldset>
-          <div className="q-card">
-            <h2 className="q">12. Review &amp; record</h2>
+          <section className="flex flex-col gap-3 border-t pt-5">
+            <h2 className="text-lg font-medium">12. Review &amp; record</h2>
             {flow.phase === "edit" || flow.phase === "previewing" ? (
               <>
-                <p className="small muted">The server checks the grant against the ledger and shows what it will record. The grant is recorded OUTSTANDING with execution status {EXECUTION_LABELS[SIGNATURE_STATUS[values.signatures]]}. The holder sees the grant in their holder view.</p>
-                <div className="row mt-8">
-                  <button type="button" className="btn btn-primary" onClick={review} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : "Review"}</button>
-                  <Link className="btn btn-ghost" to={back}>Cancel</Link>
+                <p className="text-xs text-muted-foreground">The server checks the grant against the ledger and shows what it will record. The grant is recorded OUTSTANDING with execution status {EXECUTION_LABELS[SIGNATURE_STATUS[values.signatures]]}. The holder sees the grant in their holder view.</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" onClick={review} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : "Review"}</Button>
+                  <Button asChild variant="ghost"><Link to={back}>Cancel</Link></Button>
                 </div>
               </>
             ) : (
@@ -686,22 +690,25 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
                 <FlowProblemBanner problem={flow.problem} onRetry={() => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
                 {flow.preview ? <CommandPreview transactions={flow.preview.transactions} changes={flow.preview.changes} names={names} /> : null}
                 <WarningsToAcknowledge flow={flow as never} />
-                <div className="wiz-foot">
-                  <button type="button" className="btn btn-ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Change answers</button>
-                  <button type="button" className="btn btn-primary" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll}>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Change answers</Button>
+                  <Button type="button" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll}>
                     {flow.phase === "committing" ? "Recording…" : "Record grant"}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
-          </div>
-        </div>
-        <aside className="wiz-summary card" aria-label="Grant summary">
-          <h3 className="mb-8">Grant summary</h3>
+          </section>
+          </CardContent>
+        </UiCard>
+        <aside className="lg:sticky lg:top-4" aria-label="Grant summary">
+        <UiCard>
+          <CardContent className="flex flex-col gap-3">
+          <h3 className="text-base font-semibold">Grant summary</h3>
           <DescriptionList
             split
             rows={[
-              ["Recipient", holder ? <>{holder.displayName} <span className="muted small">({RELATIONSHIP_LABELS[holder.relationship]})</span></> : DASH],
+              ["Recipient", holder ? <>{holder.displayName} <span className="text-xs text-muted-foreground">({RELATIONSHIP_LABELS[holder.relationship]})</span></> : DASH],
               ["Plan", plan?.name ?? DASH],
               ["Available after this grant", plan ? `${format.shares(plan.availableToGrant)} → ${availableAfter(plan.availableToGrant, quantity, format.shares)}` : DASH],
               ["Grant size", quantity ? `${format.shares(quantity)} options` : DASH],
@@ -717,10 +724,12 @@ function GrantWizard({ back, plans, templates, valuations, stakeholders }: Wizar
               ["ID", values.displayId.trim() || optionId || "Auto-assigned"],
             ]}
           />
-          <div className="mt-12">
+          <div className="flex flex-col gap-2">
             <BlockList items={blocks} />
-            {warns.length ? <div className="mt-8"><BlockList items={warns} kind="warn" /></div> : null}
+            {warns.length ? <BlockList items={warns} kind="warn" /> : null}
           </div>
+          </CardContent>
+        </UiCard>
         </aside>
       </div>
     </>
@@ -736,8 +745,8 @@ function availableAfter(available: string, quantity: string | null, shares: (val
 
 function Question({ n, title, required, children }: { n: number; title: string; required?: boolean; children: ReactNode }) {
   return (
-    <section className="q-card">
-      <h2 className="q">{n}. {title} {required ? <span className="req" aria-hidden="true">*</span> : null}</h2>
+    <section className="flex flex-col gap-3 border-b py-5 first:pt-0 last:border-b-0">
+      <h2 className="text-lg font-medium">{n}. {title} {required ? <span className="text-destructive" aria-hidden="true">*</span> : null}</h2>
       {children}
     </section>
   );
@@ -754,11 +763,11 @@ function SizingBase({ choice, plan, grantDate, fullyDiluted, base, achieved }: {
 }) {
   const { format } = useWorkspace();
   let text: ReactNode;
-  if (choice === "company" && grantDate === null) text = <span className="muted">Read as of the grant date: enter it first.</span>;
+  if (choice === "company" && grantDate === null) text = <span className="text-muted-foreground">Read as of the grant date: enter it first.</span>;
   else if (choice === "company" && fullyDiluted.error !== undefined) {
-    text = <span className="err-inline">Couldn't load the fully diluted shares. <button type="button" className="btn-link small" onClick={fullyDiluted.reload}>Try again</button></span>;
-  } else if (choice === "company" && !fullyDiluted.data) text = <span className="muted" role="status">Loading the fully diluted shares…</span>;
-  else if (base === null) text = <span className="muted">{choice === "plan" && plan === null ? "Choose the equity plan first." : "No shares to size against."}</span>;
+    text = <span className="font-medium text-destructive">Couldn't load the fully diluted shares. <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={fullyDiluted.reload}>Try again</Button></span>;
+  } else if (choice === "company" && !fullyDiluted.data) text = <span className="text-muted-foreground" role="status">Loading the fully diluted shares…</span>;
+  else if (base === null) text = <span className="text-muted-foreground">{choice === "plan" && plan === null ? "Choose the equity plan first." : "No shares to size against."}</span>;
   else {
     text = (
       <>
@@ -767,36 +776,36 @@ function SizingBase({ choice, plan, grantDate, fullyDiluted, base, achieved }: {
       </>
     );
   }
-  return <div className="fld"><span className="lbl">Sized against</span><div className="small">{text}</div></div>;
+  return <div className="flex flex-col gap-1.5"><span className="text-sm font-medium">Sized against</span><div className="text-xs">{text}</div></div>;
 }
 
 /** The generated tranche table (the vesting preview the server computes from the definition). */
 function VestingTable({ preview, ready }: { preview: Resource<api.VestingPreviewResponse>; ready: boolean }) {
   const { format } = useWorkspace();
-  if (!ready) return <p className="small muted mt-12">The generated table appears once the quantity, schedule and start date are entered.</p>;
-  if (preview.error !== undefined) return <p className="err-inline mt-12">Couldn't generate the table. <button type="button" className="btn-link small" onClick={preview.reload}>Try again</button></p>;
-  if (!preview.data) return <p className="small muted mt-12" role="status">Generating the table…</p>;
+  if (!ready) return <p className="text-xs text-muted-foreground">The generated table appears once the quantity, schedule and start date are entered.</p>;
+  if (preview.error !== undefined) return <p className="text-sm font-medium text-destructive">Couldn't generate the table. <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={preview.reload}>Try again</Button></p>;
+  if (!preview.data) return <p className="text-xs text-muted-foreground" role="status">Generating the table…</p>;
   const events = preview.data.events.filter((event) => event.state === "ACTIVE");
   const cliff = events.find((event) => event.kind === "CLIFF");
   const rest = events.filter((event) => event.kind !== "CLIFF").map((event) => engine.Dec.parse(event.quantity));
   const low = rest.length ? engine.Dec.min(rest[0]!, ...rest.slice(1)) : null;
   const high = rest.length ? engine.Dec.max(rest[0]!, ...rest.slice(1)) : null;
   return (
-    <div className="mt-12">
-      <div className="small mb-8">
+    <div className="flex flex-col gap-2">
+      <div className="text-xs">
         {cliff ? <>Cliff on <b>{formatDate(cliff.date)}</b> ({format.shares(cliff.quantity)}), then </> : null}
         {low && high ? `${low.eq(high) ? format.shares(low.toString()) : `${format.shares(low.toString())}/${format.shares(high.toString())}`} per tranche` : "fully vested at grant"}
         {events.length ? ` · final tranche ${formatDate(events.at(-1)!.date)}` : ""}
       </div>
-      <div className="tbl-scroll" style={{ maxHeight: 180, overflow: "auto" }}>
-        <table className="tbl dense" aria-label="Generated vesting table">
-          <thead><tr><th scope="col">Date</th><th scope="col" className="num">Tranche</th><th scope="col" className="num">Cumulative</th></tr></thead>
-          <tbody>
+      <div className="max-h-45 overflow-auto rounded-lg border">
+        <Table aria-label="Generated vesting table">
+          <TableHeader><TableRow><TableHead scope="col">Date</TableHead><TableHead scope="col" className="text-right">Tranche</TableHead><TableHead scope="col" className="text-right">Cumulative</TableHead></TableRow></TableHeader>
+          <TableBody>
             {events.map((event, index) => (
-              <tr key={`${event.date}-${index}`}><td>{formatDate(event.date)}{event.kind === "CLIFF" ? " · cliff" : ""}</td><td className="num">{format.shares(event.quantity)}</td><td className="num">{format.shares(event.cumulative)}</td></tr>
+              <TableRow key={`${event.date}-${index}`}><TableCell>{formatDate(event.date)}{event.kind === "CLIFF" ? " · cliff" : ""}</TableCell><TableCell className="text-right tabular-nums">{format.shares(event.quantity)}</TableCell><TableCell className="text-right tabular-nums">{format.shares(event.cumulative)}</TableCell></TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

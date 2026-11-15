@@ -1,27 +1,33 @@
-import { useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useId, useState, type ComponentProps, type ReactNode } from "react";
+import { TriangleAlertIcon, XIcon } from "lucide-react";
 import { api } from "#shared";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet, FieldTitle } from "@/components/ui/field.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
+import { Textarea } from "@/components/ui/textarea.tsx";
 import { apiRequest } from "../../api/request.ts";
 import { parseAmount, times } from "../../lib/amounts.ts";
-import { fieldProblem, ledgerUnmoved, useWriteFlow, type FieldMap } from "../../lib/flow.ts";
+import { fieldProblem, ledgerUnmoved, useWriteFlow, type FieldMap, type WriteFlow } from "../../lib/flow.ts";
 import { DASH, formatDate } from "../../lib/format.ts";
 import { UnsettledScope } from "../../lib/unsettled.ts";
 import { allOf, useResource } from "../../lib/useResource.ts";
-import { DescriptionList } from "../DescriptionList.tsx";
-import { DismissButton, Modal, NOT_DISMISSIBLE } from "../Dialog.tsx";
+import { NOT_DISMISSIBLE } from "../Dialog.tsx";
 import { DocumentUpload, type UploadedDocument } from "../DocumentUpload.tsx";
 import { ErrorFocus } from "../ErrorFocus.tsx";
-import { Banner, InlineError } from "../Feedback.tsx";
 import { CommandPreview, confirmationMatches, FlowProblemBanner, TypedConfirmation, WarningsToAcknowledge } from "../FlowParts.tsx";
-import { AmountField, DateField, SelectField, TextAreaField, TextField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
 
-// Record a repurchase: a repurchase the company has already completed and paid off-platform, of every share of a
-// terminated holder's restricted lot still unvested on the repurchase date. The admin gives the date, the price paid,
-// how and when it was paid and the notice sent; after the repurchase deadline, or with none on record, counsel's
-// authority too. The server's dry run shows what the ledger records (the repurchase and, for the vested remainder, a new
-// share lot), the display ID is typed to confirm, and the real call sends exactly what was reviewed. Nothing is sent
-// to the holder: the company's own notice already went.
+// Record a repurchase (the product rules; the API contract's record-repurchase): a repurchase the company has already
+// completed and paid off-platform, of every share of a terminated holder's restricted lot still unvested on the
+// repurchase date. The admin gives the date, the price paid, how and when it was paid and the notice sent; after the
+// repurchase deadline, or with none on record, counsel's authority too. The server's dry run shows what the ledger
+// records (the repurchase and, for the vested remainder, a new share lot), the display ID is typed to confirm, and the
+// real call sends exactly what was reviewed. Built with shadcn/ui, as internal-apps' Cap Table has it; the upload, the
+// problem banner and the preview are Cap Table's shared ones.
 
 export const REPURCHASE_METHOD_LABELS: Record<api.RecordRepurchase["consideration"]["method"], string> = {
   CHECK: "Check",
@@ -61,42 +67,92 @@ export function RecordRepurchaseDialog({ securityId, onClose, onDone }: RecordRe
   const loaded = allOf(security, status, stakeholder);
   if (!loaded.data) {
     return (
-      <Modal title="Record repurchase" onClose={onClose}>
-        {loaded.error !== undefined ? <InlineError what="the share lot" error={loaded.error} onRetry={loaded.reload} /> : <p className="muted" role="status">Loading the share lot…</p>}
-      </Modal>
+      <Shell title="Record repurchase" onClose={onClose}>
+        {loaded.error !== undefined ? (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>Couldn't load the share lot</AlertTitle>
+            <AlertDescription><Button type="button" variant="outline" size="sm" onClick={loaded.reload}>Try again</Button></AlertDescription>
+          </Alert>
+        ) : <p className="text-sm text-muted-foreground" role="status">Loading the share lot…</p>}
+      </Shell>
     );
   }
   const [detail, queues, holder] = loaded.data;
   const row = queues.unvestedSharesFromTerminated.find((item) => item.securityId === securityId);
   if (!row || !holder.termination) {
     return (
-      <Modal title={`Record repurchase of ${detail.displayId}`} onClose={onClose} footer={<DismissButton onClick={onClose}>Close</DismissButton>}>
-        <Banner kind="info" title="Nothing to repurchase">
-          Only the unvested shares of a terminated holder's restricted lot are repurchased. {detail.displayId} has none.
-        </Banner>
-      </Modal>
+      <Shell title={`Record repurchase of ${detail.displayId}`} onClose={onClose} footer={<Button type="button" variant="outline" onClick={onClose}>Close</Button>}>
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>Nothing to repurchase</AlertTitle>
+          <AlertDescription>Only the unvested shares of a terminated holder's restricted lot are repurchased. {detail.displayId} has none.</AlertDescription>
+        </Alert>
+      </Shell>
     );
   }
   return <RepurchaseForm security={detail} row={row} termination={holder.termination} onClose={onClose} onDone={onDone} />;
 }
 
+/** Whether a write in the dialog is unsettled: its footer's Cancel or Close waits too. */
+const Held = createContext(false);
+
 /**
- * Reports a write in the form (an upload) to the form as well as to the Modal: while its outcome is unknown the dialog
- * can't close, and the repurchase date and Review wait too, since either could unmount counsel's authority field and
- * drop that upload's key.
+ * The dialog's frame: it can't be closed while a write's outcome is unknown (lib/flow), the command's or an upload's in
+ * its form (lib/unsettled, as the Modal): Escape, a click outside, the ✕ and the footer's Cancel all wait.
  */
-function FormWrites({ onChange, children }: { onChange: (delta: number) => void; children: ReactNode }) {
-  const modal = useContext(UnsettledScope);
-  const change = useCallback((delta: number) => {
-    onChange(delta);
-    modal?.(delta);
-  }, [modal, onChange]);
-  return <UnsettledScope value={change}>{children}</UnsettledScope>;
+function Shell({ title, description, onClose, unsettled = false, footer, children }: { title: string; description?: ReactNode; onClose: () => void; unsettled?: boolean; footer?: ReactNode; children: ReactNode }) {
+  const [nested, setNested] = useState(0);
+  const change = useCallback((delta: number) => setNested((count) => Math.max(0, count + delta)), []);
+  const held = unsettled || nested > 0;
+  return (
+    <UnsettledScope value={change}>
+      <Held value={held}>
+        <Dialog open onOpenChange={(open) => { if (!open && !held) onClose(); }}>
+          <DialogContent showCloseButton={false} {...(description ? {} : { "aria-describedby": undefined })} className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+            <Button type="button" variant="ghost" size="icon-sm" className="absolute top-2 right-2" aria-label="Close" disabled={held} title={held ? NOT_DISMISSIBLE : undefined} onClick={onClose}>
+              <XIcon />
+            </Button>
+            <DialogHeader className="pr-8">
+              <DialogTitle>{title}</DialogTitle>
+              {description ? <DialogDescription>{description}</DialogDescription> : null}
+            </DialogHeader>
+            <ErrorFocus>
+              <div className="flex min-w-0 flex-col gap-4">{children}</div>
+            </ErrorFocus>
+            {footer ? <DialogFooter>{footer}</DialogFooter> : null}
+          </DialogContent>
+        </Dialog>
+      </Held>
+    </UnsettledScope>
+  );
+}
+
+/**
+ * The repurchase date, fixed while a write in the dialog is unsettled: moving it inside the window would unmount counsel's
+ * authority field and drop that upload's key.
+ */
+function HeldInput(props: ComponentProps<typeof Input>) {
+  const held = useContext(Held);
+  return <Input {...props} disabled={held || props.disabled} title={held ? NOT_DISMISSIBLE : props.title} />;
+}
+
+/** Review, which waits too: it recomputes what the repurchase needs and could unmount that upload's field. */
+function HeldButton(props: ComponentProps<typeof Button>) {
+  const held = useContext(Held);
+  return <Button {...props} disabled={held || props.disabled} title={held ? NOT_DISMISSIBLE : props.title} />;
+}
+
+/** A footer's Cancel or Close (Dialog.tsx's DismissButton): disabled while a write in the dialog is unsettled. */
+function DismissButton({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: ReactNode }) {
+  const held = useContext(Held);
+  return <Button type="button" variant="outline" onClick={onClick} disabled={held || disabled} title={held ? NOT_DISMISSIBLE : undefined}>{children}</Button>;
 }
 
 function RepurchaseForm({ security, row, termination, onClose, onDone }: { security: api.SecurityDetail; row: Row; termination: NonNullable<api.StakeholderDetail["termination"]> } & Omit<RecordRepurchaseDialogProps, "securityId">) {
   const { orgId, today, format } = useWorkspace();
   const toast = useToast();
+  const ids = { date: useId(), price: useId(), method: useId(), paidDate: useId(), reference: useId(), note: useId() };
   const [date, setDate] = useState(today);
   const [price, setPrice] = useState(row.repurchasePrice ?? "");
   const [method, setMethod] = useState<api.RecordRepurchase["consideration"]["method"] | "">("");
@@ -107,9 +163,6 @@ function RepurchaseForm({ security, row, termination, onClose, onDone }: { secur
   const [note, setNote] = useState("");
   const [typed, setTyped] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
-  const [writes, setWrites] = useState(0);
-  const countWrites = useCallback((delta: number) => setWrites((count) => Math.max(0, count + delta)), []);
-  const held = writes > 0;
   // Once asked for, counsel's authority field stays until the dialog closes: unmounting it while its upload's outcome is
   // unknown would drop that upload's key (a review, a retry or a date change can all stop asking for it).
   const [authorityAsked, setAuthorityAsked] = useState(false);
@@ -151,7 +204,6 @@ function RepurchaseForm({ security, row, termination, onClose, onDone }: { secur
   const editing = flow.phase === "edit" || flow.phase === "previewing";
   const clear = (key: string) => setErrors((current) => ({ ...current, [key]: undefined }));
   const review = () => {
-    if (held) return;
     const found: Record<string, string> = {};
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) found.date = "Enter the repurchase date.";
     else if (date > today) found.date = "A repurchase can't be dated in the future.";
@@ -175,74 +227,102 @@ function RepurchaseForm({ security, row, termination, onClose, onDone }: { secur
   const footer = editing ? (
     <>
       <DismissButton onClick={onClose} disabled={flow.busy}>Cancel</DismissButton>
-      <button type="button" className="btn btn-primary" onClick={review} disabled={flow.busy || held} title={held ? NOT_DISMISSIBLE : undefined}>
-        {flow.phase === "previewing" ? "Checking…" : "Review"}
-      </button>
+      <HeldButton type="button" onClick={review} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : "Review"}</HeldButton>
     </>
   ) : (
     <>
-      <button type="button" className="btn btn-ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back</button>
-      <button type="button" className="btn btn-danger" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !confirmationMatches(typed, security.displayId) || !flow.acknowledgedAll}>
+      <Button type="button" variant="outline" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back</Button>
+      <Button type="button" variant="destructive" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !confirmationMatches(typed, security.displayId) || !flow.acknowledgedAll}>
         {flow.phase === "committing" ? "Recording…" : "Record repurchase"}
-      </button>
+      </Button>
     </>
   );
   return (
-    <Modal title={`Record repurchase of ${security.displayId}`} onClose={onClose} footer={footer} dismissible={!flow.unsettled}>
-      <FormWrites onChange={countWrites}>
-        <ErrorFocus>
-          <p className="small muted">
-            Records a repurchase the company has already completed and paid. Every share still unvested on the repurchase date is bought back; the vested remainder
-            stays with the holder as a new share lot.
-          </p>
-          <FlowProblemBanner problem={flow.problem} onRetry={editing ? review : () => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-          <DescriptionList
-            split
-            label="The lot"
-            rows={[
-              ["Holder", `${security.stakeholderName} (left ${formatDate(termination.date)})`],
-              ["Unvested shares", format.shares(row.unvested)],
-              ["Repurchase price on record", row.repurchasePrice ? format.price(row.repurchasePrice) : "Not recorded"],
-              ["Last date to repurchase", deadline ? formatDate(deadline) : row.status === "no_deadline" ? "None (per agreement)" : "Not recorded"],
-            ]}
-          />
-          <fieldset className="flow-fields form mt-12" disabled={!editing}>
-            <DateField label="Repurchase date" min={termination.date} max={today} value={date} disabled={held}
-              onChange={(value) => { setDate(value); clear("date"); }} error={errorOf("date")} />
-            <div className="fld">
-              <span className="lbl">Shares repurchased</span>
-              <div className="small">{format.shares(row.unvested)} — every share unvested on the repurchase date</div>
-              {errorOf("quantity") ? <div className="err">{errorOf("quantity")}</div> : null}
-            </div>
-            <AmountField label="Price paid per share" value={price} onChange={(value) => { setPrice(value); clear("price"); }} error={errorOf("price")}
-              hint={`Total paid: ${total === null ? DASH : format.money(total)}`} />
-            <SelectField label="Paid by" value={method} placeholder="Choose how the company paid" error={errorOf("method")}
-              options={Object.entries(REPURCHASE_METHOD_LABELS)} onChange={(value) => { setMethod(value as typeof method); clear("method"); }} />
-            <DateField label="Paid on" max={today} value={paidDate} onChange={(value) => { setPaidDate(value); clear("paidDate"); }} error={errorOf("paidDate")} />
-            <TextField label="Payment reference" value={reference} placeholder="Check number, wire or ACH reference" hint="Optional."
-              onChange={(value) => { setReference(value); clear("reference"); }} error={errorOf("reference")} />
-            <DocumentUpload label="Repurchase notice" kind="OTHER" required value={notice} onChange={(next) => { setNotice(next); clear("notice"); }}
-              hint="The notice of repurchase sent to the holder." error={errorOf("notice")} disabled={!editing} />
-            {late || errorOf("authority") || authorityAsked ? (
-              <>
-                {late || errorOf("authority") ? (
-                  <Banner kind="warn" title={lateReason}>Record this repurchase only with counsel's written authority for it.</Banner>
-                ) : null}
-                <DocumentUpload label="Counsel's authority" kind="COUNSEL_MEMO" required value={authority} onChange={(next) => { setAuthority(next); clear("authority"); }}
-                  hint="Counsel's memo or approval for this repurchase." error={errorOf("authority")} disabled={!editing} />
-              </>
-            ) : null}
-            <TextAreaField label="Note" value={note} onChange={setNote} />
-          </fieldset>
-          {!editing && flow.preview ? (
-            <div className="mt-12">
-              <CommandPreview transactions={flow.preview.transactions} changes={flow.preview.changes} names={new Map([[security.id, security.displayId]])} />
-              <WarningsToAcknowledge flow={flow as never} />
-              <TypedConfirmation expected={security.displayId} value={typed} onChange={setTyped} disabled={flow.busy || flow.locked} />
-            </div>
+    <Shell
+      title={`Record repurchase of ${security.displayId}`}
+      description="Records a repurchase the company has already completed and paid. Every share still unvested on the repurchase date is bought back; the vested remainder stays with the holder as a new share lot."
+      onClose={onClose}
+      unsettled={flow.unsettled}
+      footer={footer}
+    >
+      <FlowProblemBanner problem={flow.problem} onRetry={editing ? review : () => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label="The lot">
+        <dt className="text-muted-foreground">Holder</dt><dd>{security.stakeholderName} (left {formatDate(termination.date)})</dd>
+        <dt className="text-muted-foreground">Unvested shares</dt><dd>{format.shares(row.unvested)}</dd>
+        <dt className="text-muted-foreground">Repurchase price on record</dt><dd>{row.repurchasePrice ? format.price(row.repurchasePrice) : "Not recorded"}</dd>
+        <dt className="text-muted-foreground">Last date to repurchase</dt><dd>{deadline ? formatDate(deadline) : row.status === "no_deadline" ? "None (per agreement)" : "Not recorded"}</dd>
+      </dl>
+      <FieldSet disabled={!editing}>
+        <FieldGroup className="gap-4">
+          <Field data-invalid={errorOf("date") ? true : undefined}>
+            <FieldLabel htmlFor={ids.date}>Repurchase date</FieldLabel>
+            <HeldInput id={ids.date} type="date" min={termination.date} max={today} value={date} aria-invalid={errorOf("date") ? true : undefined}
+              aria-describedby={errorOf("date") ? `${ids.date}-err` : undefined} onChange={(event) => { setDate(event.target.value); clear("date"); }} />
+            {errorOf("date") ? <FieldError id={`${ids.date}-err`}>{errorOf("date")}</FieldError> : null}
+          </Field>
+          <Field data-invalid={errorOf("quantity") ? true : undefined}>
+            <FieldTitle>Shares repurchased</FieldTitle>
+            <p className="text-sm">{format.shares(row.unvested)} — every share unvested on the repurchase date</p>
+            {errorOf("quantity") ? <FieldError>{errorOf("quantity")}</FieldError> : null}
+          </Field>
+          <Field data-invalid={errorOf("price") ? true : undefined}>
+            <FieldLabel htmlFor={ids.price}>Price paid per share</FieldLabel>
+            <Input id={ids.price} inputMode="decimal" value={price} aria-invalid={errorOf("price") ? true : undefined}
+              aria-describedby={errorOf("price") ? `${ids.price}-err` : `${ids.price}-hint`} onChange={(event) => { setPrice(event.target.value); clear("price"); }} />
+            {errorOf("price") ? <FieldError id={`${ids.price}-err`}>{errorOf("price")}</FieldError> : <FieldDescription id={`${ids.price}-hint`}>Total paid: {total === null ? DASH : format.money(total)}</FieldDescription>}
+          </Field>
+          <Field data-invalid={errorOf("method") ? true : undefined}>
+            <FieldLabel htmlFor={ids.method}>Paid by</FieldLabel>
+            <Select value={method} onValueChange={(value) => { setMethod(value as typeof method); clear("method"); }} disabled={!editing}>
+              <SelectTrigger id={ids.method} className="w-full" aria-invalid={errorOf("method") ? true : undefined} aria-describedby={errorOf("method") ? `${ids.method}-err` : undefined}>
+                <SelectValue placeholder="Choose how the company paid" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(REPURCHASE_METHOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {errorOf("method") ? <FieldError id={`${ids.method}-err`}>{errorOf("method")}</FieldError> : null}
+          </Field>
+          <Field data-invalid={errorOf("paidDate") ? true : undefined}>
+            <FieldLabel htmlFor={ids.paidDate}>Paid on</FieldLabel>
+            <Input id={ids.paidDate} type="date" max={today} value={paidDate} aria-invalid={errorOf("paidDate") ? true : undefined}
+              aria-describedby={errorOf("paidDate") ? `${ids.paidDate}-err` : undefined} onChange={(event) => { setPaidDate(event.target.value); clear("paidDate"); }} />
+            {errorOf("paidDate") ? <FieldError id={`${ids.paidDate}-err`}>{errorOf("paidDate")}</FieldError> : null}
+          </Field>
+          <Field data-invalid={errorOf("reference") ? true : undefined}>
+            <FieldLabel htmlFor={ids.reference}>Payment reference</FieldLabel>
+            <Input id={ids.reference} maxLength={200} value={reference} placeholder="Check number, wire or ACH reference" aria-describedby={errorOf("reference") ? `${ids.reference}-err` : `${ids.reference}-hint`}
+              onChange={(event) => { setReference(event.target.value); clear("reference"); }} />
+            {errorOf("reference") ? <FieldError id={`${ids.reference}-err`}>{errorOf("reference")}</FieldError> : <FieldDescription id={`${ids.reference}-hint`}>Optional.</FieldDescription>}
+          </Field>
+          <DocumentUpload label="Repurchase notice" kind="OTHER" required value={notice} onChange={(next) => { setNotice(next); clear("notice"); }}
+            hint="The notice of repurchase sent to the holder." error={errorOf("notice")} disabled={!editing} />
+          {late || errorOf("authority") || authorityAsked ? (
+            <>
+              {late || errorOf("authority") ? (
+                <Alert>
+                  <TriangleAlertIcon />
+                  <AlertTitle>{lateReason}</AlertTitle>
+                  <AlertDescription>Record this repurchase only with counsel's written authority for it.</AlertDescription>
+                </Alert>
+              ) : null}
+              <DocumentUpload label="Counsel's authority" kind="COUNSEL_MEMO" required value={authority} onChange={(next) => { setAuthority(next); clear("authority"); }}
+                hint="Counsel's memo or approval for this repurchase." error={errorOf("authority")} disabled={!editing} />
+            </>
           ) : null}
-        </ErrorFocus>
-      </FormWrites>
-    </Modal>
+          <Field>
+            <FieldLabel htmlFor={ids.note}>Note</FieldLabel>
+            <Textarea id={ids.note} maxLength={2000} value={note} onChange={(event) => setNote(event.target.value)} />
+          </Field>
+        </FieldGroup>
+      </FieldSet>
+      {!editing && flow.preview ? (
+        <>
+          <CommandPreview transactions={flow.preview.transactions} changes={flow.preview.changes} names={new Map([[security.id, security.displayId]])} />
+          <WarningsToAcknowledge flow={flow as WriteFlow<unknown, unknown, unknown>} />
+          <TypedConfirmation expected={security.displayId} value={typed} onChange={setTyped} disabled={flow.busy || flow.locked} />
+        </>
+      ) : null}
+    </Shell>
   );
 }

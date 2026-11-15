@@ -49,11 +49,14 @@ describe("% shares calculator", () => {
     expect(callsTo(api.routes.getFmv)[0]?.query.get("date")).toBe(TODAY);
 
     const price = within(dialog).getByRole("combobox", { name: "Value at the price of" });
-    fireEvent.change(price, { target: { value: SEED_CLASS.id } });
+    // A shadcn/ui (Radix) Select: open it from the keyboard, then pick the option.
+    fireEvent.keyDown(price, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: /Series Seed Preferred/ }));
     await waitFor(() => expect(value(/^Value at Series Seed Preferred price/)).toBe("$48,624.00"));
     // Only preferred classes with an original issue price are offered.
-    expect(within(price).getAllByRole("option").map((option) => option.textContent)).toEqual(["Series Seed Preferred ($0.80)", "Series A-1 Preferred ($1.25)"]);
-    expect(within(price).queryByRole("option", { name: /Common Stock/ })).toBeNull();
+    fireEvent.keyDown(price, { key: "Enter" });
+    expect((await screen.findAllByRole("option")).map((option) => option.textContent)).toEqual(["Series Seed Preferred ($0.80)", "Series A-1 Preferred ($1.25)"]);
+    expect(screen.queryByRole("option", { name: /Common Stock/ })).toBeNull();
   });
 
   it("refuses a percentage it can't use and says when no 409A is in effect", async () => {

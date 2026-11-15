@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Field, FieldLabel } from "@/components/ui/field.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { saveFile } from "../api/request.ts";
 import { fileStem } from "../components/CapTableDownload.tsx";
 import { Icon } from "../components/Icon.tsx";
@@ -61,38 +65,34 @@ export function ReportsPage() {
     <Page title="Reports" crumbs={[["Company"], ["Reports"]]}>
       <Card>
         <PageHead title="Reports" sub="Exports of the cap table and its records. Each download is written to the audit log." />
-        <div className="form" style={{ maxWidth: 260 }}>
-          <label>
-            As of
-            <input type="date" className="inp" value={asOf} max={today} required onChange={(event) => setAsOf(event.target.value)} />
-          </label>
-        </div>
-        {!validDate ? <p className="err-inline" role="alert">Choose a date up to today.</p> : null}
-        {error ? <p className="err-inline" role="alert">{error}</p> : null}
-        <div className="tbl-scroll mt-12">
-          <table className="tbl" aria-label="Reports">
-            <thead><tr><th scope="col">Report</th><th scope="col">What it holds</th><th scope="col"><span className="sr-only">Download</span></th></tr></thead>
-            <tbody>
+        <Field className="max-w-65" data-invalid={!validDate || undefined}>
+          <FieldLabel htmlFor="reports-as-of">As of</FieldLabel>
+          <Input id="reports-as-of" type="date" value={asOf} max={today} required aria-invalid={!validDate || undefined} onChange={(event) => setAsOf(event.target.value)} />
+        </Field>
+        {!validDate ? <p className="text-sm font-medium text-destructive" role="alert">Choose a date up to today.</p> : null}
+        {error ? <p className="text-sm font-medium text-destructive" role="alert">{error}</p> : null}
+        <Table aria-label="Reports">
+            <TableHeader><TableRow><TableHead scope="col">Report</TableHead><TableHead scope="col">What it holds</TableHead><TableHead scope="col"><span className="sr-only">Download</span></TableHead></TableRow></TableHeader>
+            <TableBody>
               {REPORTS.map((report) => (
-                <tr key={report.key}>
-                  <td><b>{report.title}</b>{report.asOf ? <div className="small muted">As of the date above</div> : null}</td>
-                  <td className="small">{report.description}</td>
-                  <td className="right nowrap">
-                    <span className="row">
+                <TableRow key={report.key}>
+                  <TableCell><div className="font-medium">{report.title}</div>{report.asOf ? <div className="text-xs text-muted-foreground">As of the date above</div> : null}</TableCell>
+                  <TableCell className="text-xs whitespace-normal">{report.description}</TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <span className="flex flex-wrap items-center justify-end gap-1">
                       {api.reportFormats(report.key).map((format) => (
-                        <button key={format} type="button" className="btn btn-ghost btn-sm" disabled={busy !== null || (report.asOf && !validDate)}
+                        <Button key={format} type="button" variant="ghost" size="sm" disabled={busy !== null || (report.asOf && !validDate)}
                           aria-label={`Download the ${report.title.toLowerCase()} as ${FORMAT_LABELS[format]}`} onClick={() => void download(report, format)}>
                           <Icon name="download" /> {busy === `${report.key}.${format}` ? "Downloading…" : FORMAT_LABELS[format]}
-                        </button>
+                        </Button>
                       ))}
                     </span>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-        {canSeePii ? null : <p className="small muted mt-8">Personal data (e-mails, addresses, phone numbers) is left out for your access level.</p>}
+            </TableBody>
+          </Table>
+        {canSeePii ? null : <p className="text-xs text-muted-foreground">Personal data (e-mails, addresses, phone numbers) is left out for your access level.</p>}
       </Card>
     </Page>
   );

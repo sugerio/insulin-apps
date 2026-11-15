@@ -54,6 +54,12 @@ function renderAt(path: string, session: Me, handlers: MockHandler[] = [], accou
 const primary = () => screen.getByRole("navigation", { name: "Primary" });
 const primaryLinks = () => within(primary()).getAllByRole("link").map((link) => link.textContent);
 const shell = () => document.querySelector<HTMLElement>("[data-insulin-shell]")!;
+const switcherFace = () => document.querySelector<HTMLElement>("[data-org-switcher]");
+/** Opens a shadcn/ui (Radix) menu the way the keyboard does: Radix opens on pointerdown or a key, not on click. */
+function openMenu(trigger: HTMLElement): HTMLElement {
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  return screen.getByRole("menu");
+}
 
 describe("the navigation manifest", () => {
   it("is valid: at most 12 items and 12 children, known icons, unique keys, app paths, labels of at most 40 characters", () => {
@@ -238,7 +244,7 @@ describe("the shell", () => {
     expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Rachel Ostrowski/ }).textContent).toContain("RORachel OstrowskiOwner");
     expect(switcher.getAttribute("aria-expanded")).toBe("false");
-    expect(document.getElementById(switcher.getAttribute("aria-controls")!)).toBeTruthy();
+    expect(switcher.getAttribute("aria-haspopup")).toBe("menu");
   });
 
   it("gives an editor the same sections and + New", async () => {
@@ -271,7 +277,7 @@ describe("the shell", () => {
     renderPage("dashboard", dashboardHandlers(), { preview: true });
     const strip = await screen.findByText("Preview mode.");
     expect(screen.getAllByText("Preview mode.")).toHaveLength(1);
-    expect(strip.closest(".content")?.firstElementChild?.contains(strip)).toBe(true);
+    expect(strip.closest("[data-slot='sidebar-inset']")?.firstElementChild?.contains(strip)).toBe(true);
     cleanup();
     renderAt("/setup", me("owner", { company: null, preview: true }));
     const above = await screen.findByText("Preview mode.");
@@ -283,7 +289,7 @@ describe("the shell", () => {
     renderPage("reports", []);
     const crumbs = await screen.findByRole("navigation", { name: "Breadcrumb" });
     expect(crumbs.textContent).toBe("Acme RoboticsCompanyReports");
-    expect(crumbs.closest("header.shell-header")).toBeTruthy();
+    expect(crumbs.closest("header")?.closest("[data-slot='sidebar-inset']")).toBeTruthy();
     expect(document.getElementById("main")!.contains(crumbs)).toBe(false);
   });
 });
@@ -293,7 +299,7 @@ describe("the organization switcher", () => {
     const { calls } = renderPage("dashboard", dashboardHandlers());
     await screen.findByRole("navigation", { name: "Primary" });
     await waitFor(() => expect(calls.some((call) => call.url.pathname === "/__insulin/me")).toBe(true));
-    expect(document.querySelector(".org-switcher")?.textContent).toBe("Acme RoboticsCap Table");
+    expect(switcherFace()?.textContent).toBe("Acme RoboticsCap Table");
     expect(screen.queryByRole("button", { name: /Organization:/ })).toBeNull();
   });
 
@@ -301,13 +307,14 @@ describe("the organization switcher", () => {
     const assign = vi.spyOn(browser, "assign").mockImplementation(() => {});
     const { platformRequests } = renderPage("dashboard", dashboardHandlers(), { platform: platformAccount() });
     const switcher = await screen.findByRole("button", { name: /Organization: Acme Robotics/ });
-    fireEvent.click(switcher);
+    const menu = openMenu(switcher);
     expect(switcher.getAttribute("aria-expanded")).toBe("true");
-    const menu = document.getElementById("insulin-org-menu")!;
-    expect(within(menu).getByRole("button", { name: /Acme Robotics/ }).getAttribute("aria-current")).toBe("true");
-    expect(within(menu).getByRole("link", { name: "All apps" }).getAttribute("href")).toBe(`${APEX}/`);
-    expect(within(menu).getByRole("link", { name: "Create organization" }).getAttribute("href")).toBe(`${APEX}/orgs/new`);
-    fireEvent.click(within(menu).getByRole("button", { name: /Nimbus Ledger Labs/ }));
+    expect(switcher.getAttribute("aria-controls")).toBe(menu.id);
+    expect(within(menu).getByText("Organizations")).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: /Acme Robotics/ }).getAttribute("aria-current")).toBe("true");
+    expect(within(menu).getByRole("menuitem", { name: "All apps" }).getAttribute("href")).toBe(`${APEX}/`);
+    expect(within(menu).getByRole("menuitem", { name: "Create organization" }).getAttribute("href")).toBe(`${APEX}/orgs/new`);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Nimbus Ledger Labs/ }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
     const sent = platformRequests.find((request) => request.path === "/__insulin/switch-org")!;
     expect(sent.method).toBe("POST");
@@ -318,19 +325,21 @@ describe("the organization switcher", () => {
   it("says so when the switch fails, and stays", async () => {
     const assign = vi.spyOn(browser, "assign").mockImplementation(() => {});
     renderPage("dashboard", dashboardHandlers(), { platform: platformAccount(), platformOptions: { switchOrg: () => new Response("{}", { status: 404 }) } });
-    fireEvent.click(await screen.findByRole("button", { name: /Organization: Acme Robotics/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Nimbus Ledger Labs/ }));
-    expect(await screen.findByText("Couldn’t switch organization. Please try again.")).toBeTruthy();
+    const menu = openMenu(await screen.findByRole("button", { name: /Organization: Acme Robotics/ }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Nimbus Ledger Labs/ }));
+    expect(await within(menu).findByText("Couldn’t switch organization. Please try again.")).toBeTruthy();
     expect(assign).not.toHaveBeenCalled();
   });
 
   it("closes on Escape, giving the focus back to its button", async () => {
     renderPage("dashboard", dashboardHandlers(), { platform: platformAccount() });
     const switcher = await screen.findByRole("button", { name: /Organization: Acme Robotics/ });
-    fireEvent.click(switcher);
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(switcher.getAttribute("aria-expanded")).toBe("false");
-    expect(document.activeElement).toBe(switcher);
+    switcher.focus();
+    openMenu(switcher);
+    fireEvent.keyDown(document.activeElement ?? document, { key: "Escape" });
+    await waitFor(() => expect(switcher.getAttribute("aria-expanded")).toBe("false"));
+    expect(screen.queryByRole("menu")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(switcher));
   });
 });
 
@@ -339,11 +348,10 @@ describe("the person", () => {
     const assign = vi.spyOn(browser, "assign").mockImplementation(() => {});
     const { platformRequests } = renderPage("dashboard", dashboardHandlers(), { platform: platformAccount() });
     await screen.findByRole("button", { name: /Organization: Acme Robotics/ });
-    fireEvent.click(screen.getByRole("button", { name: /Rachel Ostrowski/ }));
-    const menu = document.getElementById("insulin-person-menu")!;
+    const menu = openMenu(screen.getByRole("button", { name: /Rachel Ostrowski/ }));
     expect(within(menu).getByText("rachel@acmerobotics.example")).toBeTruthy();
-    expect(within(menu).getByRole("link", { name: "Account" }).getAttribute("href")).toBe(`${APEX}/account`);
-    fireEvent.click(within(menu).getByRole("button", { name: "Sign out" }));
+    expect(within(menu).getByRole("menuitem", { name: "Account" }).getAttribute("href")).toBe(`${APEX}/account`);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith(`${APEX}/`));
     const sent = platformRequests.find((request) => request.path === "/__insulin/logout")!;
     expect(sent.method).toBe("POST");
@@ -354,16 +362,15 @@ describe("the person", () => {
     const logout = () => new Response(JSON.stringify({ ok: true, next: "javascript:alert(1)" }), { headers: { "Content-Type": "application/json" } });
     renderPage("dashboard", dashboardHandlers(), { platform: platformAccount(), platformOptions: { logout } });
     await screen.findByRole("button", { name: /Organization: Acme Robotics/ });
-    fireEvent.click(screen.getByRole("button", { name: /Rachel Ostrowski/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    fireEvent.click(within(openMenu(screen.getByRole("button", { name: /Rachel Ostrowski/ }))).getByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
   });
 
   it("switches the theme", async () => {
     renderPage("dashboard", dashboardHandlers());
-    fireEvent.click(await screen.findByRole("button", { name: /Rachel Ostrowski/ }));
+    const menu = openMenu(await screen.findByRole("button", { name: /Rachel Ostrowski/ }));
     const before = document.documentElement.dataset.theme;
-    fireEvent.click(screen.getByRole("button", { name: "Switch theme" }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Switch theme" }));
     expect(document.documentElement.dataset.theme).not.toBe(before);
     delete document.documentElement.dataset.theme;
   });
@@ -475,7 +482,7 @@ describe("collapsing each level", () => {
     expect(dashboardLink.getAttribute("title")).toBe("Dashboard");
     expect(within(primary()).getByRole("button", { name: "Settings" }).getAttribute("title")).toBe("Settings");
     // The switcher shows the organization's initial; the person their initials.
-    expect(document.querySelector(".org-switcher .org-initial")?.textContent).toBe("A");
+    expect(switcherFace()?.querySelector("[data-org-initial]")?.textContent).toBe("A");
     expect(screen.getByRole("button", { name: "Rachel Ostrowski, Owner" }).getAttribute("title")).toBe("Rachel Ostrowski");
     expect(screen.getByRole("button", { name: "Expand navigation" }).getAttribute("aria-expanded")).toBe("false");
 

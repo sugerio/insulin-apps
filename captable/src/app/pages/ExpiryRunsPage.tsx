@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { Badge, EmptyState, InlineError, ResourceView } from "../components/Feedback.tsx";
 import { ExpiryRunReview, ExpiryRunView } from "../components/flows/ExpiryRunReview.tsx";
@@ -37,7 +39,7 @@ function ExpiryRunsBody() {
           title="Expiry runs"
           sub="While expiry is report-only, processing due items records what it would expire as a run for an admin to confirm, instead of expiring it."
         />
-        <p className="small">
+        <p className="text-sm">
           Expiry mode: <b>{automatic ? "Automatic" : "Report-only"}</b>
           {automatic ? " — processing due items expires options and warrants past their last exercise day without review." : " — until an admin confirms a run and switches to automatic."}
           {canWrite ? null : " Only someone who records changes confirms a run."}
@@ -49,36 +51,34 @@ function ExpiryRunsBody() {
               {automatic ? "Expiry is automatic, so none is recorded." : "One is recorded when processing due items finds something past its last exercise day."}
             </EmptyState>
           ) : (
-            <div className="tbl-scroll">
-              <table className="tbl" aria-label="Expiry runs pending confirmation">
-                <thead>
-                  <tr>
-                    <th scope="col">Run</th>
-                    <th scope="col">Recorded</th>
-                    <th scope="col" className="num">Proposed expiries</th>
-                    <th scope="col">Status</th>
-                    <th scope="col"><span className="sr-only">Open</span></th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Table aria-label="Expiry runs pending confirmation">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">Run</TableHead>
+                    <TableHead scope="col">Recorded</TableHead>
+                    <TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Proposed expiries</TableHead>
+                    <TableHead scope="col">Status</TableHead>
+                    <TableHead scope="col"><span className="sr-only">Open</span></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {data.items.map((run) => {
                     const label = `run of ${formatDate(run.localDate)}`;
                     const action = canWrite && run.state === "pending" ? "Review" : "View";
                     return (
-                      <tr key={run.runId}>
-                        <td>Run of {formatDate(run.localDate)}</td>
-                        <td>{format.dateTime(run.startedAt)}</td>
-                        <td className="num">{run.proposalCount}</td>
-                        <td><Badge tone={run.state === "pending" ? "amber" : "grey"}>{EXPIRY_RUN_STATE_LABELS[run.state]}</Badge></td>
-                        <td className="right">
-                          <button type="button" className="btn btn-sm" disabled={open !== null} aria-label={`${action} the ${label}`} onClick={() => setOpen(run.runId)}>{action}</button>
-                        </td>
-                      </tr>
+                      <TableRow key={run.runId}>
+                        <TableCell>Run of {formatDate(run.localDate)}</TableCell>
+                        <TableCell>{format.dateTime(run.startedAt)}</TableCell>
+                        <TableCell className="text-right tabular-nums whitespace-nowrap">{run.proposalCount}</TableCell>
+                        <TableCell><Badge tone={run.state === "pending" ? "amber" : "grey"}>{EXPIRY_RUN_STATE_LABELS[run.state]}</Badge></TableCell>
+                        <TableCell className="text-right">
+                          <Button type="button" variant="outline" size="sm" disabled={open !== null} aria-label={`${action} the ${label}`} onClick={() => setOpen(run.runId)}>{action}</Button>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
           )}
         </ResourceView>
       </Card>
@@ -95,11 +95,11 @@ function ExpiryRunPanel({ runId, onClose, onChanged }: { runId: number; onClose:
     return (
       <Card>
         <InlineError what="this run" error={detail.error} onRetry={detail.reload} />
-        <div className="row mt-12"><button type="button" className="btn btn-ghost" onClick={onClose}>Back to the runs</button></div>
+        <div className="flex"><Button type="button" variant="ghost" onClick={onClose}>Back to the runs</Button></div>
       </Card>
     );
   }
-  if (!detail.data) return <Card><p className="muted" role="status">Loading the run…</p></Card>;
+  if (!detail.data) return <Card><p className="text-sm text-muted-foreground" role="status">Loading the run…</p></Card>;
   const run = detail.data;
   if (canWrite && run.state === "pending") return <ExpiryRunReview run={run} onClose={onClose} onChanged={onChanged} />;
   const note = readOnly

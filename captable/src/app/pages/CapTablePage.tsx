@@ -1,10 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { TableCell, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { ActionsMenu } from "../components/Actions.tsx";
 import { CapTableDownloadButton } from "../components/CapTableDownload.tsx";
-import { DataTable, byDecimal, byDisplayId, byRatio, byText, type Column, type Filter } from "../components/DataTable.tsx";
+import { DataTable, byDecimal, byDisplayId, byRatio, byText, columnCellClassName, type Column, type Filter } from "../components/DataTable.tsx";
 import { Badge, Banner, ResourceView } from "../components/Feedback.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { LinkTabs } from "../components/LinkTabs.tsx";
@@ -106,11 +111,11 @@ export function CapTablePage() {
           title="Cap Table"
           actions={
             <>
-              <label className="asof" title="Recompute every number as of this date">
+              <label className="flex items-center gap-2 text-sm font-medium" title="Recompute every number as of this date">
                 As of
-                <input type="date" className="inp" value={asOf} max={today} aria-label="Cap table as-of date" onChange={(event) => setAsOf(event.target.value)} />
+                <Input type="date" className="w-auto" value={asOf} max={today} aria-label="Cap table as-of date" onChange={(event) => setAsOf(event.target.value)} />
               </label>
-              {asOf !== today ? <Link className="small" to={linkFor(tab, null)}>Today</Link> : null}
+              {asOf !== today ? <Button asChild variant="link" size="sm"><Link to={linkFor(tab, null)}>Today</Link></Button> : null}
               <CapTableDownloadButton asOf={asOf} />
               <ActionsMenu items={actions} />
             </>
@@ -304,27 +309,27 @@ function OwnershipTab({ context }: { context: Context }) {
         search={(row) => `${row.name} ${row.issuerAssignedId ?? ""} ${pii.canSeePii ? (emailOf(row) ?? "") : ""}`}
         searchPlaceholder="Search stakeholders…"
         toolbarExtra={empty.length ? (
-          <label className="row small nowrap">
-            <input type="checkbox" className="cb" checked={showEmpty} onChange={(event) => setShowEmpty(event.target.checked)} />
-            Show {plural(empty.length, "stakeholder")} with no holdings
-          </label>
+          <div className="flex items-center gap-2">
+            <Checkbox id="cap-own-show-empty" checked={showEmpty} onCheckedChange={(checked) => setShowEmpty(checked === true)} />
+            <Label htmlFor="cap-own-show-empty" className="text-xs font-normal whitespace-nowrap">Show {plural(empty.length, "stakeholder")} with no holdings</Label>
+          </div>
         ) : null}
         empty="No stakeholders hold securities on this date."
         pinned={({ columns: visible, rows: shown, filtered }) => {
           const pool = filtered ? null : (
-            <tr className="pool">
+            <TableRow className="bg-muted/40 hover:bg-muted/40" data-row="pool">
               {visible.map((column) => {
                 let value: ReactNode = "";
                 if (column.key === "name") value = "Available pool";
                 else if (column.key.startsWith("p_")) value = format.shares(capTable.plans.find((plan) => plan.stockPlanId === column.key.slice(2))?.available ?? null);
                 else if (column.key === "fd") value = format.shares(capTable.availablePool.fullyDiluted);
                 else if (column.key === "fdPct") value = format.percent(capTable.availablePool.fullyDilutedPct);
-                return <td key={column.key} className={[column.numeric ? "num" : "", column.sticky ? "sticky-col" : ""].join(" ").trim() || undefined}>{value}</td>;
+                return <TableCell key={column.key} className={columnCellClassName(column)}>{value}</TableCell>;
               })}
-            </tr>
+            </TableRow>
           );
           const totals = (
-            <tr className="totals">
+            <TableRow className="border-t-2 font-semibold hover:bg-transparent" data-row="totals">
               {visible.map((column) => {
                 let value: ReactNode = "";
                 if (column.key === "name") value = filtered ? `Totals (${shown.length} shown)` : "Totals";
@@ -334,9 +339,9 @@ function OwnershipTab({ context }: { context: Context }) {
                 else if (column.key === "issuedPct") value = filtered ? formatFractionPercent(fractionOf(sumOf(shown, "issued"), capTable.totals.issuedAndOutstanding)) : "100.00%";
                 else if (column.key === "capital") value = format.money(sumOf(shown, "capital"));
                 else if (column.numeric) value = format.shares(sumOf(shown, column.key));
-                return <td key={column.key} className={[column.numeric ? "num" : "", column.sticky ? "sticky-col" : ""].join(" ").trim() || undefined}>{value}</td>;
+                return <TableCell key={column.key} className={columnCellClassName(column)}>{value}</TableCell>;
               })}
-            </tr>
+            </TableRow>
           );
           return <>{pool}{totals}</>;
         }}
@@ -373,7 +378,7 @@ function InstrumentTab({ tab, context }: { tab: "shares" | "options" | "warrants
         <>
           <SecurityLink id={security.id} family={security.family} displayId={security.displayId} />
           {pendingRow(security) ? <> <Badge tone="amber">Execution pending</Badge></> : null}
-          {opening.has(security.id) ? <span className="faint" title={`Opening balance: earlier history was not provable from ${api.importSourceName(workspace.org.importSource)}`}> <Icon name="info" /></span> : null}
+          {opening.has(security.id) ? <span className="text-muted-foreground" title={`Opening balance: earlier history was not provable from ${api.importSourceName(workspace.org.importSource)}`}> <Icon name="info" /></span> : null}
         </>
       ),
       compare: byDisplayId((security) => security.displayId),

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
 import { apiRequest } from "../api/request.ts";
 import { WriteButton } from "../components/Actions.tsx";
 import { DescriptionList } from "../components/DescriptionList.tsx";
@@ -60,39 +61,39 @@ export function PortalSettingsPage() {
                     The portal still names it, and every change to the portal settings is refused until it is replaced: choose another one under Notice of exercise form and privacy notice.
                   </Banner>
                 ) : null}
-                <section id="contact">
-                  <div className="card-h"><h2>Company contact</h2><WriteButton label="Edit" size="sm" ariaLabel="Edit the company contact" onClick={() => setDialog({ kind: "contact" })} /></div>
+                <section id="contact" className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-semibold">Company contact</h2><WriteButton label="Edit" size="sm" ariaLabel="Edit the company contact" onClick={() => setDialog({ kind: "contact" })} /></div>
                   <DescriptionList rows={[["Name", data.settings.companyContact?.name ?? DASH], ["E-mail", data.settings.companyContact?.email ?? DASH]]} />
-                  <p className="small muted">Shown in the portal footer and on How to exercise.</p>
+                  <p className="text-xs text-muted-foreground">Shown in the portal footer and on How to exercise.</p>
                 </section>
-                <section id="resources" className="mt-16">
-                  <div className="card-h">
-                    <h2>Holder documents (company resources)</h2>
-                    <div className="row">
+                <section id="resources" className="flex flex-col gap-2 border-t pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-base font-semibold">Holder documents (company resources)</h2>
+                    <div className="flex flex-wrap items-center gap-2">
                       <WriteButton label="Upload" icon="upload" size="sm" ariaLabel="Upload a company resource" onClick={() => setDialog({ kind: "upload" })} />
                       <WriteButton label="Publish a document" size="sm" onClick={() => setDialog({ kind: "publish" })} />
                     </div>
                   </div>
                   <ResourceList org={data} documents={documents.data} error={documents.error} onRetry={documents.reload} onUnpublish={(document) => setDialog({ kind: "unpublish", document })} />
                 </section>
-                <section id="notices" className="mt-16">
-                  <div className="card-h"><h2>Notice of exercise form and privacy notice</h2><WriteButton label="Edit" size="sm" ariaLabel="Edit the portal documents" onClick={() => setDialog({ kind: "documents" })} /></div>
+                <section id="notices" className="flex flex-col gap-2 border-t pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-semibold">Notice of exercise form and privacy notice</h2><WriteButton label="Edit" size="sm" ariaLabel="Edit the portal documents" onClick={() => setDialog({ kind: "documents" })} /></div>
                   <DescriptionList
                     rows={[
                       ["Notice of exercise form (counsel's)", <PickedDocument id={data.settings.portal.noticeFormDocumentId} documents={documents.data} />],
                       ["Privacy notice (counsel's)", <PickedDocument id={data.settings.portal.privacyNoticeDocumentId} documents={documents.data} />],
                     ]}
                   />
-                  <p className="small muted">Each is a company resource every holder sees: How to exercise links the form, and the portal footer the privacy notice.</p>
+                  <p className="text-xs text-muted-foreground">Each is a company resource every holder sees: How to exercise links the form, and the portal footer the privacy notice.</p>
                 </section>
-                <section id="how-to" className="mt-16">
-                  <div className="card-h"><h2>How to exercise — text</h2><WriteButton label="Edit" size="sm" ariaLabel="Edit the How to exercise text" onClick={() => setDialog({ kind: "howTo" })} /></div>
-                  {data.settings.portal.howToExerciseText ? <p style={{ whiteSpace: "pre-wrap" }}>{data.settings.portal.howToExerciseText}</p> : <p className="muted">The default text (no custom text is set).</p>}
-                  <p className="small muted">Holders see it on How to exercise, above the payment instructions and their own reference.</p>
+                <section id="how-to" className="flex flex-col gap-2 border-t pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-semibold">How to exercise — text</h2><WriteButton label="Edit" size="sm" ariaLabel="Edit the How to exercise text" onClick={() => setDialog({ kind: "howTo" })} /></div>
+                  {data.settings.portal.howToExerciseText ? <p className="text-sm whitespace-pre-wrap">{data.settings.portal.howToExerciseText}</p> : <p className="text-sm text-muted-foreground">The default text (no custom text is set).</p>}
+                  <p className="text-xs text-muted-foreground">Holders see it on How to exercise, above the payment instructions and their own reference.</p>
                 </section>
-                <section id="what-holders-see" className="mt-16">
-                  <h2>What holders see</h2>
-                  <p className="muted">{WHAT_HOLDERS_SEE}</p>
+                <section id="what-holders-see" className="flex flex-col gap-2 border-t pt-4">
+                  <h2 className="text-base font-semibold">What holders see</h2>
+                  <p className="text-sm text-muted-foreground">{WHAT_HOLDERS_SEE}</p>
                 </section>
                 {dialog?.kind === "contact" ? <CompanyContactDialog org={data} onClose={close} onDone={orgSaved} /> : null}
                 {dialog?.kind === "documents" ? <PortalDocumentsDialog org={data} resources={resources} onClose={close} onDone={orgSaved} /> : null}
@@ -116,11 +117,11 @@ function PickedDocument({ id, documents }: { id: string | null; documents: reado
   const { href } = useWorkspace();
   if (id === null) return <>Not chosen</>;
   const document = documents?.find((item) => item.id === id);
-  if (!documents) return <span className="muted">Loading…</span>;
+  if (!documents) return <span className="text-muted-foreground">Loading…</span>;
   if (!document) return <span>A document you can't see here</span>;
   return (
     <>
-      <Link to={href(`documents/${document.id}`)}>{document.filename}</Link>
+      <Link className="font-medium underline underline-offset-4" to={href(`documents/${document.id}`)}>{document.filename}</Link>
       {!isPublishedResource(document) ? <> <Badge tone="amber">No longer a published company resource</Badge></> : null}
     </>
   );
@@ -132,23 +133,23 @@ function ResourceList({ org, documents, error, onRetry, onUnpublish }: { org: ap
   const canDownload = useCanDownload();
   const { download, error: downloadError, busy } = useDownload();
   if (!documents && error !== undefined) return <InlineError what="the company resources" error={error} onRetry={onRetry} />;
-  if (!documents) return <p className="muted small" role="status">Loading the company resources…</p>;
+  if (!documents) return <p className="text-xs text-muted-foreground" role="status">Loading the company resources…</p>;
   const resources = documents.filter(isPublishedResource);
-  if (!resources.length) return <p className="muted small">No company resources are published yet. Upload one, or publish a document that has no holder link.</p>;
+  if (!resources.length) return <p className="text-xs text-muted-foreground">No company resources are published yet. Upload one, or publish a document that has no holder link.</p>;
   return (
     <>
-      <ul className="plain" aria-label="Company resources">
+      <ul className="flex flex-col divide-y rounded-lg border" aria-label="Company resources">
         {resources.map((document) => {
           const use = portalUseOf(org, document.id);
           return (
-            <li key={document.id} className="row" style={{ justifyContent: "space-between" }}>
-              <span>
-                <Icon name="file" /> <Link to={href(`documents/${document.id}`)}>{document.filename}</Link>{" "}
-                <span className="small muted">{documentKindLabel(document.kind)}</span>
+            <li key={document.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <Icon name="file" /> <Link className="font-medium underline-offset-4 hover:underline" to={href(`documents/${document.id}`)}>{document.filename}</Link>{" "}
+                <span className="text-xs text-muted-foreground">{documentKindLabel(document.kind)}</span>
                 {use ? <> <Badge tone="teal">{use[0]!.toUpperCase()}{use.slice(1)}</Badge></> : null}
               </span>
-              <span className="row">
-                {canDownload ? <button type="button" className="btn btn-ghost btn-xs" disabled={busy === document.id} onClick={() => void download(document.id, document.filename)}>Download <span className="sr-only">{document.filename}</span></button> : null}
+              <span className="flex flex-wrap items-center gap-2">
+                {canDownload ? <Button type="button" variant="ghost" size="xs" disabled={busy === document.id} onClick={() => void download(document.id, document.filename)}>Download <span className="sr-only">{document.filename}</span></Button> : null}
                 <WriteButton label="Stop showing" size="xs" ariaLabel={`Stop showing ${document.filename} to holders`} onClick={() => onUnpublish(document)} />
               </span>
             </li>
@@ -156,7 +157,7 @@ function ResourceList({ org, documents, error, onRetry, onUnpublish }: { org: ap
         })}
       </ul>
       <DownloadError error={downloadError} />
-      <p className="small muted">Upload more here or under Documents; only documents with no holder link can be published for every holder.</p>
+      <p className="text-xs text-muted-foreground">Upload more here or under Documents; only documents with no holder link can be published for every holder.</p>
     </>
   );
 }

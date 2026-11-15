@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button.tsx";
 import { ErrorFocus } from "./ErrorFocus.tsx";
 import { Banner } from "./Feedback.tsx";
-import { Icon } from "./Icon.tsx";
 import { useWorkspace } from "./OrgWorkspace.tsx";
 import { Card } from "./Page.tsx";
 
@@ -24,7 +25,7 @@ export function WriteGate({ own, back, children }: { own?: boolean; back: { to: 
   return (
     <Card>
       <Banner kind={own ? "warn" : "info"} title={reason[0]}>{reason[1]}</Banner>
-      <div className="row mt-12"><Link className="btn btn-ghost" to={back.to}>{back.label}</Link></div>
+      <div className="flex flex-wrap items-center gap-2"><Button asChild variant="outline"><Link to={back.to}>{back.label}</Link></Button></div>
     </Card>
   );
 }
@@ -32,9 +33,9 @@ export function WriteGate({ own, back, children }: { own?: boolean; back: { to: 
 /** The wizard top bar: a close link back to where the flow started, and the flow's title. */
 export function WizardHead({ title, back }: { title: string; back: string }) {
   return (
-    <div className="wiz-head">
-      <Link className="wiz-close" to={back} aria-label="Close" title="Close"><Icon name="x" /></Link>
-      <h1 className="wiz-title">{title}</h1>
+    <div className="flex items-center gap-3">
+      <Button asChild variant="outline" size="icon-sm"><Link to={back} aria-label="Close" title="Close"><XIcon aria-hidden="true" /></Link></Button>
+      <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
     </div>
   );
 }

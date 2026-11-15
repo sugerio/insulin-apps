@@ -192,7 +192,8 @@ describe("securities status", () => {
     expect(within(options).getByText("(NSO)")).toBeTruthy();
     expect(within(options).queryByText(/Awaiting/)).toBeNull();
     expect(screen.getByText("Nothing expires in the next 90 days.")).toBeTruthy();
-    expect(document.getElementById("exp")?.className).toContain("collapsed");
+    // An empty queue collapses to its one line: no table.
+    expect(within(document.getElementById("exp")!).queryByRole("table")).toBeNull();
   });
 
   it("labels a lot whose agreement sets no repurchase deadline apart from one with none recorded", async () => {

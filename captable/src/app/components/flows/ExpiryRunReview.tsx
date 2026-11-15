@@ -1,5 +1,12 @@
 import { useRef, useState } from "react";
+import { ChevronRightIcon } from "lucide-react";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Card as UiCard, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { FieldError } from "@/components/ui/field.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { ApiError } from "../../api/client.ts";
 import { ApiRequestError, apiRequest, newIdempotencyKey } from "../../api/request.ts";
 import { describeError } from "../../lib/errors.ts";
@@ -16,6 +23,7 @@ import { CheckLine } from "../Form.tsx";
 import { HolderLink, SecurityLink } from "../Links.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // Confirming a report-only expiry run, owners and admins. The run (`GET …/expiry-runs/
 // :runId`) lists what processing due items would have expired, each with what confirming would cancel today
@@ -309,7 +317,7 @@ export function ExpiryRunReview({ run, onClose, onChanged }: {
 
   const statusNow = (proposal: api.ExpiryProposal) => {
     if (phase === "stopped") {
-      if (!stop?.statuses) return <span className="muted">Not read again</span>;
+      if (!stop?.statuses) return <span className="text-sm text-muted-foreground">Not read again</span>;
       const status = stop.statuses.get(proposal.securityId);
       return status === "EXPIRED" ? <Badge tone="red">Expired</Badge> : <Badge tone="grey">Not expired{status ? ` (${SECURITY_STATUS_LABELS[status]})` : ""}</Badge>;
     }
@@ -320,14 +328,16 @@ export function ExpiryRunReview({ run, onClose, onChanged }: {
   };
 
   return (
-    <section className="card" aria-labelledby={`run-${run.runId}`}>
+    <section aria-labelledby={`run-${run.runId}`}>
+      <UiCard>
+      <CardHeader>
+        <CardTitle><h2 id={`run-${run.runId}`} className="text-base font-semibold">Expiry run of {formatDate(run.localDate)}</h2></CardTitle>
+        {phase === "done" ? <CardAction><Badge tone="green">Confirmed</Badge></CardAction> : phase === "stopped" ? <CardAction><Badge tone="amber">Stopped</Badge></CardAction> : null}
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-4">
       <ErrorFocus>
-        <div className="card-h">
-          <h2 id={`run-${run.runId}`}>Expiry run of {formatDate(run.localDate)}</h2>
-          {phase === "done" ? <Badge tone="green">Confirmed</Badge> : phase === "stopped" ? <Badge tone="amber">Stopped</Badge> : null}
-        </div>
         {phase === "choose" || phase === "checking" ? (
-          <p className="small">
+          <p className="text-xs text-muted-foreground">
             Choose what to expire now. Each one is cancelled with reason <b>Expired</b>, effective the day after its last exercise day, as its own command recorded by you; "Will be cancelled" is what confirming would cancel today. An expiry can't be reversed in the app. What you leave out isn't expired by this run.
           </p>
         ) : null}
@@ -337,11 +347,11 @@ export function ExpiryRunReview({ run, onClose, onChanged }: {
           onRetry={phase === "unresolved" || (phase === "review" && problem?.kind === "failed") ? () => void confirm() : problem?.kind === "failed" ? () => void check(ordered(), automatic) : undefined}
         />
         {refusedRows && (phase === "choose" || phase === "checking") ? (
-          <div className="row mb-8"><button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={leaveOutRefused}>Leave the refused ones out and check again</button></div>
+          <div><Button type="button" variant="outline" size="sm" disabled={busy} onClick={leaveOutRefused}>Leave the refused ones out and check again</Button></div>
         ) : null}
         {narrowable && phase === "choose" ? (
-          <div className="row mb-8">
-            <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void narrow()}>{narrowing ? "Checking each security…" : "Find which securities the server refuses"}</button>
+          <div>
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void narrow()}>{narrowing ? "Checking each security…" : "Find which securities the server refuses"}</Button>
           </div>
         ) : null}
         {phase === "stopped" && stop ? (
@@ -349,22 +359,22 @@ export function ExpiryRunReview({ run, onClose, onChanged }: {
             {stop.message} Any security expired before it stopped stays expired{stop.statuses ? " — each is shown below as the ledger now has it" : " — the securities couldn't be read again: open each one to see its state"}. Once a confirmation has started, the run is bound to it, so it can't be confirmed again with another selection: what wasn't expired waits for the next expiry run.
           </Banner>
         ) : null}
-        <div className="tbl-scroll">
-          <table className="tbl" aria-label="Proposed expiries">
-            <thead>
-              <tr>
-                {phase === "choose" || phase === "checking" ? <th scope="col"><span className="sr-only">Expire</span></th> : null}
-                <th scope="col">Security</th>
-                <th scope="col">Holder</th>
-                <th scope="col">Why</th>
-                <th scope="col">Last exercise day</th>
-                <th scope="col">Expires on</th>
-                <th scope="col" className="num">Proposed</th>
-                <th scope="col" className="num">{reviewing || phase === "done" ? "Will be cancelled (server check)" : "Will be cancelled"}</th>
-                <th scope="col">{phase === "stopped" || phase === "done" ? "Now" : "Status"}</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="rounded-lg border">
+          <Table aria-label="Proposed expiries">
+            <TableHeader>
+              <TableRow>
+                {phase === "choose" || phase === "checking" ? <TableHead scope="col" className="w-10"><span className="sr-only">Expire</span></TableHead> : null}
+                <TableHead scope="col">Security</TableHead>
+                <TableHead scope="col">Holder</TableHead>
+                <TableHead scope="col">Why</TableHead>
+                <TableHead scope="col">Last exercise day</TableHead>
+                <TableHead scope="col">Expires on</TableHead>
+                <TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Proposed</TableHead>
+                <TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">{reviewing || phase === "done" ? "Will be cancelled (server check)" : "Will be cancelled"}</TableHead>
+                <TableHead scope="col">{phase === "stopped" || phase === "done" ? "Now" : "Status"}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {shown.map((proposal) => {
                 const mine = own(proposal);
                 const expirable = isConfirmable(proposal);
@@ -373,102 +383,109 @@ export function ExpiryRunReview({ run, onClose, onChanged }: {
                 const checkedEffect = reviewing || phase === "done" || phase === "stopped";
                 const error = rowErrors[proposal.securityId];
                 return (
-                  <tr key={proposal.securityId}>
+                  <TableRow key={proposal.securityId}>
                     {phase === "choose" || phase === "checking" ? (
-                      <td>
-                        <input type="checkbox" className="cb" aria-label={`Expire ${proposal.displayId}`} disabled={busy || !offered(proposal)}
+                      <TableCell>
+                        <Checkbox aria-label={`Expire ${proposal.displayId}`} disabled={busy || !offered(proposal)}
                           title={!expirable ? "Nothing left to expire: it was exercised, cancelled or extended since the run" : mine ? "Your own holding: another admin confirms it" : undefined}
                           aria-invalid={error ? true : undefined} aria-describedby={error ? `exp-err-${proposal.securityId}` : undefined}
-                          checked={selected.has(proposal.securityId) && offered(proposal)} onChange={(event) => setSelected((current) => {
+                          checked={selected.has(proposal.securityId) && offered(proposal)} onCheckedChange={(value) => setSelected((current) => {
                             const next = new Set(current);
-                            if (event.target.checked) next.add(proposal.securityId);
+                            if (value === true) next.add(proposal.securityId);
                             else next.delete(proposal.securityId);
                             return next;
                           })} />
-                      </td>
+                      </TableCell>
                     ) : null}
-                    <td>
+                    <TableCell>
                       <SecurityLink id={proposal.securityId} family={proposal.family} displayId={proposal.displayId} />
                       {checked?.changed.has(proposal.securityId) && reviewing ? <> <Badge tone="amber">Changed since your last check</Badge></> : null}
-                      {mine ? <div className="small muted">Your own holding: another admin confirms it.</div> : null}
-                      {error ? <div className="err-inline" id={`exp-err-${proposal.securityId}`}>{error}</div> : null}
-                    </td>
-                    <td>
+                      {mine ? <div className="text-xs text-muted-foreground">Your own holding: another admin confirms it.</div> : null}
+                      {error ? <FieldError id={`exp-err-${proposal.securityId}`} className="mt-1 whitespace-normal">{error}</FieldError> : null}
+                    </TableCell>
+                    <TableCell>
                       <HolderLink id={proposal.holder.stakeholderId} name={proposal.holder.name} />
-                      {proposal.holder.email ? <div className="small muted">{proposal.holder.email}</div> : null}
-                    </td>
-                    <td>{expiryReasonLabel(proposal.reason)}</td>
-                    <td>{formatDate(proposal.lastExerciseDate)}</td>
-                    <td>{formatDate(checkedEffect ? effect.date ?? proposal.confirmable?.effectiveDate ?? proposal.effectiveDate : proposal.confirmable?.effectiveDate ?? proposal.effectiveDate)}</td>
-                    <td className="num">{format.shares(proposal.quantity)}</td>
-                    <td className="num">{checkedEffect ? format.shares(effect.quantity) : expirable ? format.shares(proposal.confirmable!.quantity) : <span className="muted">Nothing left</span>}</td>
-                    <td>{statusNow(proposal)}</td>
-                  </tr>
+                      {proposal.holder.email ? <div className="text-xs text-muted-foreground">{proposal.holder.email}</div> : null}
+                    </TableCell>
+                    <TableCell>{expiryReasonLabel(proposal.reason)}</TableCell>
+                    <TableCell>{formatDate(proposal.lastExerciseDate)}</TableCell>
+                    <TableCell>{formatDate(checkedEffect ? effect.date ?? proposal.confirmable?.effectiveDate ?? proposal.effectiveDate : proposal.confirmable?.effectiveDate ?? proposal.effectiveDate)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(proposal.quantity)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{checkedEffect ? format.shares(effect.quantity) : expirable ? format.shares(proposal.confirmable!.quantity) : <span className="text-muted-foreground">Nothing left</span>}</TableCell>
+                    <TableCell>{statusNow(proposal)}</TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
         {reviewing && checked ? (
-          <div className="stack-8 mt-12">
+          <div className="flex flex-col gap-2">
             {checked.ids.map((id) => {
               const command = commands.get(id)!;
               const proposal = proposals.find((item) => item.securityId === id)!;
               const type = expiredQuantity(command, id).type;
               return (
-                <details key={id} className="adv">
-                  <summary>{proposal.displayId}: what the ledger records{type ? ` (${transactionLabel(type)})` : ""}{command.warnings.length ? ` — ${command.warnings.length} note${command.warnings.length === 1 ? "" : "s"}` : ""}</summary>
-                  <div className="adv-b">
+                <Collapsible key={id} className="rounded-lg border">
+                  <CollapsibleTrigger asChild>
+                    <Button type="button" variant="ghost" className="group h-auto w-full justify-start rounded-lg px-3 py-2 text-left font-normal whitespace-normal">
+                      <ChevronRightIcon className="transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
+                      {proposal.displayId}: what the ledger records{type ? ` (${transactionLabel(type)})` : ""}{command.warnings.length ? ` — ${command.warnings.length} note${command.warnings.length === 1 ? "" : "s"}` : ""}
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="flex flex-col gap-2 border-t p-3">
                     {command.warnings.length ? (
-                      <ul className="small" aria-label={`Notes for ${proposal.displayId}`} style={{ margin: "0 0 8px", paddingLeft: 18 }}>
-                        {command.warnings.map((warning) => <li key={warning.code}>{warning.message} <span className="mono">({warning.code})</span></li>)}
+                      <ul className="list-disc pl-5 text-xs" aria-label={`Notes for ${proposal.displayId}`}>
+                        {command.warnings.map((warning) => <li key={warning.code}>{warning.message} <span className="font-mono text-xs">({warning.code})</span></li>)}
                       </ul>
                     ) : null}
                     <CommandPreview transactions={command.transactions} changes={command.changes} names={new Map([[id, proposal.displayId]])} title={`${proposal.displayId}: the server's check`} />
-                  </div>
-                </details>
+                  </CollapsibleContent>
+                </Collapsible>
               );
             })}
-            <div className="review-panel" aria-label="Review">
+            <ReviewPanel>
               <p>
                 Confirming expires <b>{checked.ids.length} {checked.ids.length === 1 ? "security" : "securities"}</b> as you, one audited command each, held to exactly what this check shows
                 {checked.automatic ? <>, and then switches the company to <b>automatic expiry</b>: from the next time due items are processed, options and warrants past their last exercise day expire without review — including any left out here that are still past it</> : <>. Expiry stays <b>report-only</b>: the next time due items are processed, anything still past its last exercise day is listed for review</>}.
               </p>
-            </div>
+            </ReviewPanel>
             <TypedConfirmation expected={phrase(checked.ids.length)} value={typed} onChange={setTyped} disabled={locked} />
           </div>
         ) : null}
         {phase === "done" && result ? (
-          <p className="small mt-12" role="status">
+          <p className="text-sm" role="status">
             {result.commands.length} {result.commands.length === 1 ? "security" : "securities"} expired, each its own command. Expiry is now <b>{result.expiryMode === "automatic" ? "automatic" : "report-only"}</b>.
           </p>
         ) : null}
-        <div className="row mt-12">
+        <div className="flex flex-wrap items-center gap-2">
           {phase === "choose" || phase === "checking" ? (
             <>
               <CheckLine checked={automatic} onChange={setAutomatic} disabled={busy}>Then switch to automatic expiry (after the first confirmed run, expiry is automatic)</CheckLine>
-              <span className="spacer" />
-              <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>Back to the runs</button>
-              <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void check(ordered(), automatic)}>{phase === "checking" ? "Checking…" : "Check what confirming does"}</button>
+              <span className="flex-1" />
+              <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Back to the runs</Button>
+              <Button type="button" disabled={busy} onClick={() => void check(ordered(), automatic)}>{phase === "checking" ? "Checking…" : "Check what confirming does"}</Button>
             </>
           ) : reviewing ? (
             <>
-              <span className="spacer" />
-              <button type="button" className="btn btn-ghost" disabled={locked} onClick={() => { setPhase("choose"); setProblem(null); setTyped(""); }}>Back</button>
+              <span className="flex-1" />
+              <Button type="button" variant="outline" disabled={locked} onClick={() => { setPhase("choose"); setProblem(null); setTyped(""); }}>Back</Button>
               {phase === "unresolved" ? null : (
-                <button type="button" className="btn btn-danger" disabled={locked || !confirmationMatches(typed.toUpperCase(), phrase(checked?.ids.length ?? 0))} onClick={() => void confirm()}>
+                <Button type="button" variant="destructive" disabled={locked || !confirmationMatches(typed.toUpperCase(), phrase(checked?.ids.length ?? 0))} onClick={() => void confirm()}>
                   {phase === "confirming" ? "Expiring…" : `Confirm ${checked?.ids.length ?? 0} ${checked?.ids.length === 1 ? "expiry" : "expiries"}`}
-                </button>
+                </Button>
               )}
             </>
           ) : (
             <>
-              <span className="spacer" />
-              <button type="button" className="btn btn-primary" onClick={onClose}>Back to the runs</button>
+              <span className="flex-1" />
+              <Button type="button" onClick={onClose}>Back to the runs</Button>
             </>
           )}
         </div>
       </ErrorFocus>
+      </CardContent>
+      </UiCard>
     </section>
   );
 }
@@ -481,52 +498,55 @@ export function ExpiryRunReview({ run, onClose, onChanged }: {
 export function ExpiryRunView({ run, note, onClose }: { run: api.ExpiryRunDetail; note: string; onClose: () => void }) {
   const { format } = useWorkspace();
   return (
-    <section className="card" aria-labelledby={`run-${run.runId}`}>
-      <div className="card-h">
-        <h2 id={`run-${run.runId}`}>Expiry run of {formatDate(run.localDate)}</h2>
-        <Badge tone={run.state === "confirmed" ? "green" : run.state === "superseded" ? "grey" : "amber"}>{EXPIRY_RUN_STATE_LABELS[run.state]}</Badge>
-      </div>
-      <p className="small">{note}</p>
+    <section aria-labelledby={`run-${run.runId}`}>
+      <UiCard>
+      <CardHeader>
+        <CardTitle><h2 id={`run-${run.runId}`} className="text-base font-semibold">Expiry run of {formatDate(run.localDate)}</h2></CardTitle>
+        <CardAction><Badge tone={run.state === "confirmed" ? "green" : run.state === "superseded" ? "grey" : "amber"}>{EXPIRY_RUN_STATE_LABELS[run.state]}</Badge></CardAction>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-4">
+      <p className="text-xs text-muted-foreground">{note}</p>
       {run.confirmedAt !== null ? (
-        <p className="small">Confirmed {format.dateTime(run.confirmedAt)}{run.confirmedBy ? ` by ${run.confirmedBy}` : ""}.</p>
+        <p className="text-xs text-muted-foreground">Confirmed {format.dateTime(run.confirmedAt)}{run.confirmedBy ? ` by ${run.confirmedBy}` : ""}.</p>
       ) : run.confirmationStartedAt !== null ? (
-        <p className="small">A confirmation started {format.dateTime(run.confirmationStartedAt)}; only it can finish the run, and what it doesn't expire waits for the next run.</p>
+        <p className="text-xs text-muted-foreground">A confirmation started {format.dateTime(run.confirmationStartedAt)}; only it can finish the run, and what it doesn't expire waits for the next run.</p>
       ) : null}
-      <div className="tbl-scroll">
-        <table className="tbl" aria-label="Proposed expiries">
-          <thead>
-            <tr>
-              <th scope="col">Security</th>
-              <th scope="col">Holder</th>
-              <th scope="col">Why</th>
-              <th scope="col">Last exercise day</th>
-              <th scope="col">Expires on</th>
-              <th scope="col" className="num">Proposed</th>
-              <th scope="col" className="num">Will be cancelled</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="rounded-lg border">
+        <Table aria-label="Proposed expiries">
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Security</TableHead>
+              <TableHead scope="col">Holder</TableHead>
+              <TableHead scope="col">Why</TableHead>
+              <TableHead scope="col">Last exercise day</TableHead>
+              <TableHead scope="col">Expires on</TableHead>
+              <TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Proposed</TableHead>
+              <TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Will be cancelled</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {run.proposals.map((proposal) => (
-              <tr key={proposal.securityId}>
-                <td><SecurityLink id={proposal.securityId} family={proposal.family} displayId={proposal.displayId} /></td>
-                <td>
+              <TableRow key={proposal.securityId}>
+                <TableCell><SecurityLink id={proposal.securityId} family={proposal.family} displayId={proposal.displayId} /></TableCell>
+                <TableCell>
                   <HolderLink id={proposal.holder.stakeholderId} name={proposal.holder.name} />
-                  {proposal.holder.email ? <div className="small muted">{proposal.holder.email}</div> : null}
-                </td>
-                <td>{expiryReasonLabel(proposal.reason)}</td>
-                <td>{formatDate(proposal.lastExerciseDate)}</td>
-                <td>{formatDate(proposal.confirmable?.effectiveDate ?? proposal.effectiveDate)}</td>
-                <td className="num">{format.shares(proposal.quantity)}</td>
-                <td className="num">{proposal.confirmable ? format.shares(proposal.confirmable.quantity) : <span className="muted">Nothing left to expire</span>}</td>
-              </tr>
+                  {proposal.holder.email ? <div className="text-xs text-muted-foreground">{proposal.holder.email}</div> : null}
+                </TableCell>
+                <TableCell>{expiryReasonLabel(proposal.reason)}</TableCell>
+                <TableCell>{formatDate(proposal.lastExerciseDate)}</TableCell>
+                <TableCell>{formatDate(proposal.confirmable?.effectiveDate ?? proposal.effectiveDate)}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(proposal.quantity)}</TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">{proposal.confirmable ? format.shares(proposal.confirmable.quantity) : <span className="text-muted-foreground">Nothing left to expire</span>}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
-      <div className="row mt-12">
-        <span className="spacer" />
-        <button type="button" className="btn btn-primary" onClick={onClose}>Back to the runs</button>
+      <div className="flex justify-end">
+        <Button type="button" onClick={onClose}>Back to the runs</Button>
       </div>
+      </CardContent>
+      </UiCard>
     </section>
   );
 }

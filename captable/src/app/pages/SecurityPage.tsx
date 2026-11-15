@@ -1,6 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api } from "#shared";
+import { ChevronDownIcon } from "lucide-react";
+import { Button } from "@/components/ui/button.tsx";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { ActionsMenu, OwnRecordScope, type ActionEntry } from "../components/Actions.tsx";
 import { ProgressBar, VestingChart } from "../components/Charts.tsx";
@@ -195,8 +199,8 @@ function SecurityBody({ security, initialDialog, onChanged, onDialogClosed }: { 
           actions={own ? null : <ActionsMenu items={actions} />}
         />
         {own && canWrite ? <Banner kind="info" title="Your own holding">Admins never record writes on their own holdings — another admin must.</Banner> : null}
-        <div className="grid-detail">
-          <div>{left}</div>
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,62fr)_minmax(17.5rem,38fr)]">
+          <div className="flex min-w-0 flex-col gap-3">{left}</div>
           <RightColumn security={security} stakeholder={stakeholder} timeline={timeline} onChanged={onChanged} />
         </div>
       </Card>
@@ -213,7 +217,7 @@ function SecurityBody({ security, initialDialog, onChanged, onDialogClosed }: { 
 function RightColumn({ security, stakeholder, timeline, onChanged }: { security: api.SecurityDetail; stakeholder: Resource<api.StakeholderDetail>; timeline: Resource<TimelineList>; onChanged: () => void }) {
   const pii = usePii();
   return (
-    <div>
+    <div className="flex min-w-0 flex-col gap-3">
       <SectionTitle>Stakeholder</SectionTitle>
       <DescriptionList
         split
@@ -232,22 +236,34 @@ function RightColumn({ security, stakeholder, timeline, onChanged }: { security:
   );
 }
 
+/** A section that opens on demand: shadcn/ui's Collapsible, its trigger a full-width ghost button. */
+function Disclosure({ title, children }: { title: ReactNode; children: ReactNode }) {
+  return (
+    <Collapsible className="group/disclosure rounded-lg border">
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="ghost" className="h-auto w-full justify-between rounded-lg px-3 py-2.5 font-semibold">
+          <span className="flex items-center gap-1.5">{title}</span>
+          <ChevronDownIcon aria-hidden="true" className="transition-transform group-data-[state=open]/disclosure:rotate-180" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t px-3 py-3">{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function Provenance({ provenance }: { provenance: api.Security["provenance"] }) {
   const { org } = useWorkspace();
   if (!provenance.importedFromPulley) return null;
   return (
-    <details className="adv mt-12 prov">
-      <summary><Icon name="database" /> {api.importSourceLabel(org.importSource)}</summary>
-      <div className="adv-b">
-        <DescriptionList
-          rows={[
-            ["Source file", provenance.sourceFile ? <span className="mono">{provenance.sourceFile}</span> : DASH],
-            ["Source hash (SHA-256)", provenance.sourceSha256 ? <span className="mono small">{provenance.sourceSha256.slice(0, 24)}…</span> : DASH],
-            provenance.pulleyId ? ["Source id", <span className="mono">{api.displaySourceId(provenance.pulleyId)}</span>] : null,
-          ]}
-        />
-      </div>
-    </details>
+    <Disclosure title={<><Icon name="database" /> {api.importSourceLabel(org.importSource)}</>}>
+      <DescriptionList
+        rows={[
+          ["Source file", provenance.sourceFile ? <span className="font-mono text-xs">{provenance.sourceFile}</span> : DASH],
+          ["Source hash (SHA-256)", provenance.sourceSha256 ? <span className="font-mono text-xs">{provenance.sourceSha256.slice(0, 24)}…</span> : DASH],
+          provenance.pulleyId ? ["Source id", <span className="font-mono text-xs">{api.displaySourceId(provenance.pulleyId)}</span>] : null,
+        ]}
+      />
+    </Disclosure>
   );
 }
 
@@ -263,7 +279,7 @@ export function SecurityTimeline({ entries }: { entries: readonly api.TimelineEn
           <>
             {entry.summary}
             {entry.kind === "reversal" ? <> <Badge tone="grey">Reversed</Badge></> : null}
-            {entry.note ? <div className="small muted">{entry.note}</div> : null}
+            {entry.note ? <div className="text-xs text-muted-foreground">{entry.note}</div> : null}
           </>
         ),
         meta: `${entry.effectiveDate ? formatDate(entry.effectiveDate) : format.date(format.localDate(entry.at))} · ${entry.actor ?? DASH}`,
@@ -322,10 +338,10 @@ function VestingBody({ security, vesting, definition, unit }: Omit<VestingProps,
     <>
       <DescriptionList
         rows={[
-          ["Status", <>{<Badge tone={status === "Fully vested" ? "green" : status === "Stopped" ? "amber" : "teal"}>{status}</Badge>}{status === "Stopped" && vesting.vestingStopDate ? <span className="small muted"> on {formatDate(vesting.vestingStopDate)} — termination</span> : null}</>],
+          ["Status", <>{<Badge tone={status === "Fully vested" ? "green" : status === "Stopped" ? "amber" : "teal"}>{status}</Badge>}{status === "Stopped" && vesting.vestingStopDate ? <span className="text-xs text-muted-foreground"> on {formatDate(vesting.vestingStopDate)} — termination</span> : null}</>],
           ["Vesting progress", (
             <>
-              <div className="mb-8">
+              <div className="mb-2">
                 {format.shares(vesting.vested)} of the total {format.shares(issued)} {unit} ({percent}) have vested.
                 {cliff && cliff.date > today && status !== "Stopped" ? <b> Cliff on {formatDate(cliff.date)} ({format.shares(cliff.cumulative)} {unit}).</b> : next ? ` Next: ${format.shares(next.quantity)} on ${formatDate(next.date)}.` : ""}
                 {vesting.vestingStopDate && vesting.vestingStopDate > today ? ` Vesting stops on ${formatDate(vesting.vestingStopDate)} (scheduled termination).` : ""}
@@ -345,42 +361,39 @@ function VestingBody({ security, vesting, definition, unit }: Omit<VestingProps,
         />
       ) : null}
       <DescriptionList rows={[scheduleRow, ["Start date", formatDate(vesting.vestingStartDate)], ...shapeRows]} />
-      <details className="adv mt-12">
-        <summary>Full vesting schedule ({vesting.events.length} events)</summary>
-        <div className="adv-b">
-          <div className="tbl-scroll" style={{ maxHeight: 340, overflow: "auto" }}>
-            <table className="tbl dense" aria-label="Vesting schedule">
-              <thead><tr><th scope="col">Date</th><th scope="col" className="num">Tranche</th><th scope="col" className="num">Cumulative</th><th scope="col">Status</th></tr></thead>
-              <tbody>
-                {vesting.events.map((event, index) => (
-                  <tr key={`${event.date}-${index}`}>
-                    <td>
-                      {formatDate(event.date)}{event.kind === "CLIFF" ? " · cliff" : event.kind === "ACCELERATION" ? " · acceleration" : ""}
-                      {event.source === "pulley" ? <span className="faint small"> from {api.importSourceName(org.importSource)}</span> : null}
-                    </td>
-                    <td className="num">{format.shares(event.quantity)}</td>
-                    <td className="num">{format.shares(event.cumulative)}</td>
-                    <td>
-                      {event.state === "CANCELLED"
-                        ? <Badge tone="red">{vesting.vestingStopDate && vesting.vestingStopDate > today ? "Cancels on stop" : "Cancelled"}</Badge>
-                        : event.date <= today ? <Badge tone="green">Vested</Badge> : <Badge tone="grey">Unvested</Badge>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <Disclosure title={<>Full vesting schedule ({vesting.events.length} events)</>}>
+        <div className="max-h-85 overflow-auto">
+          <Table aria-label="Vesting schedule">
+            <TableHeader><TableRow><TableHead scope="col">Date</TableHead><TableHead scope="col" className="text-right">Tranche</TableHead><TableHead scope="col" className="text-right">Cumulative</TableHead><TableHead scope="col">Status</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {vesting.events.map((event, index) => (
+                <TableRow key={`${event.date}-${index}`}>
+                  <TableCell>
+                    {formatDate(event.date)}{event.kind === "CLIFF" ? " · cliff" : event.kind === "ACCELERATION" ? " · acceleration" : ""}
+                    {event.source === "pulley" ? <span className="text-xs text-muted-foreground"> from {api.importSourceName(org.importSource)}</span> : null}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{format.shares(event.quantity)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{format.shares(event.cumulative)}</TableCell>
+                  <TableCell>
+                    {event.state === "CANCELLED"
+                      ? <Badge tone="red">{vesting.vestingStopDate && vesting.vestingStopDate > today ? "Cancels on stop" : "Cancelled"}</Badge>
+                      : event.date <= today ? <Badge tone="green">Vested</Badge> : <Badge tone="grey">Unvested</Badge>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
-      </details>
+      </Disclosure>
       {unit === "options" ? (
         <>
-          <h4 className="mt-16">Accelerations</h4>
+          <h4 className="text-sm font-semibold">Accelerations</h4>
           {accelerations.length ? (
-            <table className="tbl dense" aria-label="Accelerations">
-              <thead><tr><th scope="col">Date</th><th scope="col" className="num">Quantity</th></tr></thead>
-              <tbody>{accelerations.map((event, index) => <tr key={index}><td>{formatDate(event.date)}</td><td className="num">{format.shares(event.quantity)}</td></tr>)}</tbody>
-            </table>
-          ) : <p className="muted small">No accelerations.</p>}
+            <Table aria-label="Accelerations">
+              <TableHeader><TableRow><TableHead scope="col">Date</TableHead><TableHead scope="col" className="text-right">Quantity</TableHead></TableRow></TableHeader>
+              <TableBody>{accelerations.map((event, index) => <TableRow key={index}><TableCell>{formatDate(event.date)}</TableCell><TableCell className="text-right tabular-nums">{format.shares(event.quantity)}</TableCell></TableRow>)}</TableBody>
+            </Table>
+          ) : <p className="text-xs text-muted-foreground">No accelerations.</p>}
         </>
       ) : null}
     </>
@@ -409,7 +422,7 @@ function windowRows(security: api.SecurityDetail, plan: api.StockPlanDetail | nu
     const own = ownWindows.get(reason);
     const inherited = planWindows.get(reason);
     const overrides = own && (!inherited || own.period !== inherited.period || own.unit !== inherited.unit);
-    return [TERMINATION_WINDOW_LABELS[reason], own || inherited ? <>{periodLabel(own ?? inherited)}{overrides ? " (override)" : <span className="muted small"> inherited from the plan</span>}</> : DASH] as const;
+    return [TERMINATION_WINDOW_LABELS[reason], own || inherited ? <>{periodLabel(own ?? inherited)}{overrides ? " (override)" : <span className="text-xs text-muted-foreground"> inherited from the plan</span>}</> : DASH] as const;
   });
 }
 
@@ -428,38 +441,38 @@ function IsoSplitSection({ security, isoSplit }: { security: api.SecurityDetail;
   return (
     <>
       <SectionTitle>ISO/NSO split</SectionTitle>
-      <p className="small muted">Statutory $100,000 test: shares first exercisable per calendar year, valued at the FMV on the grant date, across this holder's ISO grants in grant order.</p>
-      <div className="tbl-scroll">
-        <table className="tbl" aria-label="ISO/NSO split">
-          <thead>
-            <tr><th scope="col">Year</th><th scope="col" className="num">Shares first exercisable</th><th scope="col" className="num">FMV at grant</th><th scope="col" className="num">Value</th><th scope="col" className="num">ISO</th><th scope="col" className="num">NSO</th></tr>
-          </thead>
-          <tbody>
-            {lots.map((lot) => {
-              const shares = sumDecimals([lot.isoQuantity, lot.nsoQuantity]);
-              const consumed = isPositive(lot.exercisedIso) || isPositive(lot.exercisedNso);
-              return (
-                <tr key={lot.year}>
-                  <td>{lot.year}{consumed ? <span className="faint small"> · partly exercised</span> : null}</td>
-                  <td className="num">{format.shares(shares)}</td>
-                  <td className="num">{format.price(lot.fmvAtGrant)}</td>
-                  <td className="num">{format.money(multiplyDecimals(shares, lot.fmvAtGrant))}</td>
-                  <td className="num">{format.shares(lot.isoQuantity)}</td>
-                  <td className="num">{format.shares(lot.nsoQuantity)}</td>
-                </tr>
-              );
-            })}
-            <tr className="totals">
-              <td>Totals</td>
-              <td className="num">{format.shares(sumDecimals(lots.map((lot) => sumDecimals([lot.isoQuantity, lot.nsoQuantity]))))}</td>
-              <td />
-              <td className="num">{format.money(sumDecimals(lots.map((lot) => multiplyDecimals(sumDecimals([lot.isoQuantity, lot.nsoQuantity]), lot.fmvAtGrant))))}</td>
-              <td className="num">{format.shares(sumDecimals(lots.map((lot) => lot.isoQuantity)))}</td>
-              <td className="num">{format.shares(sumDecimals(lots.map((lot) => lot.nsoQuantity)))}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <p className="text-xs text-muted-foreground">Statutory $100,000 test: shares first exercisable per calendar year, valued at the FMV on the grant date, across this holder's ISO grants in grant order.</p>
+      <Table aria-label="ISO/NSO split">
+        <TableHeader>
+          <TableRow><TableHead scope="col">Year</TableHead><TableHead scope="col" className="text-right">Shares first exercisable</TableHead><TableHead scope="col" className="text-right">FMV at grant</TableHead><TableHead scope="col" className="text-right">Value</TableHead><TableHead scope="col" className="text-right">ISO</TableHead><TableHead scope="col" className="text-right">NSO</TableHead></TableRow>
+        </TableHeader>
+        <TableBody>
+          {lots.map((lot) => {
+            const shares = sumDecimals([lot.isoQuantity, lot.nsoQuantity]);
+            const consumed = isPositive(lot.exercisedIso) || isPositive(lot.exercisedNso);
+            return (
+              <TableRow key={lot.year}>
+                <TableCell>{lot.year}{consumed ? <span className="text-xs text-muted-foreground"> · partly exercised</span> : null}</TableCell>
+                <TableCell className="text-right tabular-nums">{format.shares(shares)}</TableCell>
+                <TableCell className="text-right tabular-nums">{format.price(lot.fmvAtGrant)}</TableCell>
+                <TableCell className="text-right tabular-nums">{format.money(multiplyDecimals(shares, lot.fmvAtGrant))}</TableCell>
+                <TableCell className="text-right tabular-nums">{format.shares(lot.isoQuantity)}</TableCell>
+                <TableCell className="text-right tabular-nums">{format.shares(lot.nsoQuantity)}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+        <TableFooter>
+          <TableRow>
+            <TableCell>Totals</TableCell>
+            <TableCell className="text-right tabular-nums">{format.shares(sumDecimals(lots.map((lot) => sumDecimals([lot.isoQuantity, lot.nsoQuantity]))))}</TableCell>
+            <TableCell />
+            <TableCell className="text-right tabular-nums">{format.money(sumDecimals(lots.map((lot) => multiplyDecimals(sumDecimals([lot.isoQuantity, lot.nsoQuantity]), lot.fmvAtGrant))))}</TableCell>
+            <TableCell className="text-right tabular-nums">{format.shares(sumDecimals(lots.map((lot) => lot.isoQuantity)))}</TableCell>
+            <TableCell className="text-right tabular-nums">{format.shares(sumDecimals(lots.map((lot) => lot.nsoQuantity)))}</TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
     </>
   );
 }
@@ -473,8 +486,8 @@ function OptionLeft({ security, vesting, definition, plan, fmv, isoSplit, stakeh
   const consent = security.documents.find((document) => document.kind === "BOARD_CONSENT");
   const deadlineRows: DlRow[] = deadlines
     ? [
-        ["Contractual deadline", deadlines.contractual ? <><b>{formatDate(deadlines.contractual)}</b> <span className="muted small">({formatDaysLeft(today, deadlines.contractual)})</span>{deadlines.reason ? <div className="small muted">{deadlines.reason}</div> : null}</> : DASH],
-        ["ISO deadline", deadlines.iso ? <><b>{formatDate(deadlines.iso)}</b> <span className="muted small">({formatDaysLeft(today, deadlines.iso)})</span></> : type === "NSO" ? "— (NSO)" : DASH],
+        ["Contractual deadline", deadlines.contractual ? <><b>{formatDate(deadlines.contractual)}</b> <span className="text-xs text-muted-foreground">({formatDaysLeft(today, deadlines.contractual)})</span>{deadlines.reason ? <div className="text-xs text-muted-foreground">{deadlines.reason}</div> : null}</> : DASH],
+        ["ISO deadline", deadlines.iso ? <><b>{formatDate(deadlines.iso)}</b> <span className="text-xs text-muted-foreground">({formatDaysLeft(today, deadlines.iso)})</span></> : type === "NSO" ? "— (NSO)" : DASH],
       ]
     : [];
   return (
@@ -496,8 +509,8 @@ function OptionLeft({ security, vesting, definition, plan, fmv, isoSplit, stakeh
             <Pending resource={fmv} what="the current FMV" inline>
               {(data) =>
                 // Shown only for the option's own class: an answer for another class is not this option's FMV.
-                security.stockClassId && data.stockClassId !== security.stockClassId ? <span className="err-inline">Unavailable for this class</span>
-                  : data.fmv ? <>{format.price(data.fmv.pricePerShare)} <span className="muted small">({data.fmv.valuationName} · {VALUATION_STATUS_LABELS[data.fmv.status]})</span></>
+                security.stockClassId && data.stockClassId !== security.stockClassId ? <span className="text-sm font-medium text-destructive">Unavailable for this class</span>
+                  : data.fmv ? <>{format.price(data.fmv.pricePerShare)} <span className="text-xs text-muted-foreground">({data.fmv.valuationName} · {VALUATION_STATUS_LABELS[data.fmv.status]})</span></>
                     : <Badge tone="red">No 409A</Badge>}
             </Pending>
           )],
@@ -556,8 +569,8 @@ function ConsentDocument({ document }: { document: api.DocumentRef }) {
   const { download, error } = useDownload();
   return (
     <>
-      <button type="button" className="btn-link" onClick={() => void download(document.id, document.filename)}>{document.filename}</button>
-      {error ? <div className="err-inline" role="alert">{error}</div> : null}
+      <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => void download(document.id, document.filename)}>{document.filename}</Button>
+      {error ? <div className="text-sm font-medium text-destructive" role="alert">{error}</div> : null}
     </>
   );
 }
@@ -621,7 +634,7 @@ function ShareLeft({ security, vesting, definition, stockClass, plan, elections 
             rows={[[
               "Repurchase right",
               repurchase
-                ? <>If the holder leaves before vesting, the company may buy back unvested shares at {repurchase.pricePerShare ? format.price(repurchase.pricePerShare) : "the price paid"}{repurchase.noDeadline ? " — no deadline (per agreement)" : repurchase.window ? ` within ${periodLabel(repurchase.window)} after termination` : ""}{repurchase.termsText ? <span className="muted small"> ({repurchase.termsText})</span> : null}</>
+                ? <>If the holder leaves before vesting, the company may buy back unvested shares at {repurchase.pricePerShare ? format.price(repurchase.pricePerShare) : "the price paid"}{repurchase.noDeadline ? " — no deadline (per agreement)" : repurchase.window ? ` within ${periodLabel(repurchase.window)} after termination` : ""}{repurchase.termsText ? <span className="text-xs text-muted-foreground"> ({repurchase.termsText})</span> : null}</>
                 : `not recorded in ${api.importSourceName(org.importSource)} — enter from the stock purchase agreement`,
             ]]}
           />
@@ -655,10 +668,10 @@ function CertificateDownload({ documentId, number }: { documentId: string; numbe
   const { download, error } = useDownload();
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-xs" onClick={() => void download(documentId, `${number}_certificate_unsigned.pdf`)}>
+      <Button type="button" variant="ghost" size="xs" onClick={() => void download(documentId, `${number}_certificate_unsigned.pdf`)}>
         Download <span className="sr-only">certificate {number}</span>
-      </button>
-      {error ? <div className="err-inline" role="alert">{error}</div> : null}
+      </Button>
+      {error ? <div className="text-sm font-medium text-destructive" role="alert">{error}</div> : null}
     </>
   );
 }
@@ -695,7 +708,7 @@ function WarrantLeft({ security, stockClass }: { security: api.SecurityDetail; s
           ["Issue reason", terms.issueReason(security.terms) ?? DASH],
         ]}
       />
-      <p className="small muted mt-12">
+      <p className="text-xs text-muted-foreground">
         The app doesn't record warrant exercises. An expired warrant is cancelled when due items are processed after its expiration date (audited).
       </p>
     </>
@@ -741,8 +754,8 @@ function ConvertibleBody({ security, onChanged }: { security: api.SecurityDetail
           actions={own ? null : <ActionsMenu items={[{ label: "Upload document", icon: "upload", onSelect: () => setUploading(true) }]} />}
         />
         {own && canWrite ? <Banner kind="info" title="Your own holding">Admins never record writes on their own holdings — another admin must.</Banner> : null}
-        <div className="grid-detail">
-          <div>
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,62fr)_minmax(17.5rem,38fr)]">
+          <div className="flex min-w-0 flex-col gap-3">
             <SectionTitle>Terms</SectionTitle>
             <DescriptionList
               split
@@ -761,10 +774,10 @@ function ConvertibleBody({ security, onChanged }: { security: api.SecurityDetail
               rows={[
                 ["Conversion date", converted ? <Pending resource={timeline} what="the conversion date" inline>{(data) => formatDate(dateFrom(data))}</Pending> : DASH],
                 ["Resulting share", intoLinks],
-                ["Conversion price", safe.conversionPrice ? <>{format.price(safe.conversionPrice)} <span className="muted small">per closing memo</span></> : DASH],
+                ["Conversion price", safe.conversionPrice ? <>{format.price(safe.conversionPrice)} <span className="text-xs text-muted-foreground">per closing memo</span></> : DASH],
                 ["Shares", results.length === 0 ? DASH : (
                   <Pending resource={resulting} what="the resulting shares" inline>
-                    {(data) => { const issued = sumDecimals(data.map((item) => item.numbers?.issued)); return isPositive(issued) ? <>{format.shares(issued)} <span className="muted small">per closing memo</span></> : DASH; }}
+                    {(data) => { const issued = sumDecimals(data.map((item) => item.numbers?.issued)); return isPositive(issued) ? <>{format.shares(issued)} <span className="text-xs text-muted-foreground">per closing memo</span></> : DASH; }}
                   </Pending>
                 )],
                 ["Principal converted", converted ? format.money(safe.principal, 0) : DASH],
@@ -783,9 +796,9 @@ function ConvertibleBody({ security, onChanged }: { security: api.SecurityDetail
             />
             <SectionTitle>Documents</SectionTitle>
             <LinkedDocuments targetType="security" targetId={security.id} />
-            <p className="small muted">The app does not compute SAFE conversions; values come from the closing memo.</p>
+            <p className="text-xs text-muted-foreground">The app does not compute SAFE conversions; values come from the closing memo.</p>
           </div>
-          <div>
+          <div className="flex min-w-0 flex-col gap-3">
             <SectionTitle>Stakeholder</SectionTitle>
             <DescriptionList
               split

@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
 import { apiRequest, newIdempotencyKey } from "../api/request.ts";
 import { useAuth, useMe } from "../auth/AuthProvider.tsx";
 import { canSetUpCompany } from "../auth/access.ts";
 import { BrandMark } from "../components/BrandMark.tsx";
 import { DateField, SelectField, TextField } from "../components/Form.tsx";
-import { ChoiceCard, ImportWizard, TemplateDownloadButton } from "../components/ImportWizard.tsx";
+import { ChoiceCard, ChoiceList, ImportWizard, TemplateDownloadButton } from "../components/ImportWizard.tsx";
 import { PageHead } from "../components/Page.tsx";
 import { describeError } from "../lib/errors.ts";
 import type { ImportSource } from "../lib/imports.ts";
@@ -69,6 +71,21 @@ export function setupRequest(values: SetupValues): api.CreateOrgRequestInput {
 
 const STARTS = { pulley: "pulley", spreadsheet: "template" } as const satisfies Record<string, ImportSource>;
 
+/** A first-run card in the middle of the page, outside the workspace: the brand, a title, then what the step needs. */
+function SetupCard({ wide, children }: { wide?: boolean; children: ReactNode }) {
+  return (
+    <div className="grid min-h-svh place-items-center bg-muted/40 p-6">
+      <Card className={wide ? "w-full max-w-215" : "w-full max-w-155"}>
+        <CardContent className="flex flex-col items-start gap-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:tracking-tight [&>p]:text-sm [&>p]:text-muted-foreground">
+          {children}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+const TEXT_LINK = "font-medium text-foreground underline underline-offset-4";
+
 export function SetupPage() {
   useDocumentTitle("Set up the company");
   const me = useMe();
@@ -81,14 +98,12 @@ export function SetupPage() {
   if (me.company !== null && !(imported && importing)) return <Navigate to="/" replace />;
   if (!canSetUpCompany(me)) {
     return (
-      <div className="center-page">
-        <div className="card setup-card">
-          <BrandMark size={40} />
-          <h1>Cap Table isn't set up yet</h1>
-          <p>An owner, admin or editor of your Insulin organization sets up the company the first time they open it. Ask one of them to open Cap Table; then come back here.</p>
-          <p className="setup-learn">Meanwhile, the docs explain what Cap Table does and the basics of equity: <Link to="/docs">Learn about cap tables</Link>.</p>
-        </div>
-      </div>
+      <SetupCard>
+        <BrandMark size={40} />
+        <h1>Cap Table isn't set up yet</h1>
+        <p>An owner, admin or editor of your Insulin organization sets up the company the first time they open it. Ask one of them to open Cap Table; then come back here.</p>
+        <p>Meanwhile, the docs explain what Cap Table does and the basics of equity: <Link className={TEXT_LINK} to="/docs">Learn about cap tables</Link>.</p>
+      </SetupCard>
     );
   }
   if (start === "empty") return <SetupForm />;
@@ -98,31 +113,29 @@ export function SetupPage() {
 
 function SetupChoices() {
   return (
-    <div className="center-page">
-      <div className="card setup-card setup-choices">
-        <BrandMark size={40} />
-        <h1>Set up your company</h1>
-        <p>Cap Table keeps one company's cap table. Choose how to start.</p>
-        <ul className="choice-list" aria-label="Ways to set up the company">
-          <ChoiceCard level={2} title="Start with an empty company" actions={<Link className="btn btn-primary" to="/setup?start=empty">Start with an empty company</Link>}>
-            Enter the company's details now. You can import its cap table afterwards, while it is still empty.
-          </ChoiceCard>
-          <ChoiceCard level={2} title="Import from Pulley" actions={<Link className="btn btn-primary" to="/setup?start=pulley">Import from Pulley</Link>}>
-            Upload Pulley's standard Excel exports, review what will be imported and fix any problems, then import.
-          </ChoiceCard>
-          <ChoiceCard
-            level={2}
-            title="Import from a spreadsheet"
-            actions={<><Link className="btn btn-primary" to="/setup?start=spreadsheet">Import from a spreadsheet</Link><TemplateDownloadButton /></>}
-          >
-            Fill in the Cap Table spreadsheet template with your stakeholders, share classes, equity plans and holdings, then upload it.
-          </ChoiceCard>
-        </ul>
-        <p className="setup-learn">
-          New to cap tables, or not sure which way to start? <Link to="/docs">Learn about cap tables</Link>: what Cap Table does, how the import works, and the basics of equity.
-        </p>
-      </div>
-    </div>
+    <SetupCard wide>
+      <BrandMark size={40} />
+      <h1>Set up your company</h1>
+      <p>Cap Table keeps one company's cap table. Choose how to start.</p>
+      <ChoiceList label="Ways to set up the company">
+        <ChoiceCard level={2} title="Start with an empty company" actions={<Button asChild><Link to="/setup?start=empty">Start with an empty company</Link></Button>}>
+          Enter the company's details now. You can import its cap table afterwards, while it is still empty.
+        </ChoiceCard>
+        <ChoiceCard level={2} title="Import from Pulley" actions={<Button asChild><Link to="/setup?start=pulley">Import from Pulley</Link></Button>}>
+          Upload Pulley's standard Excel exports, review what will be imported and fix any problems, then import.
+        </ChoiceCard>
+        <ChoiceCard
+          level={2}
+          title="Import from a spreadsheet"
+          actions={<><Button asChild><Link to="/setup?start=spreadsheet">Import from a spreadsheet</Link></Button><TemplateDownloadButton /></>}
+        >
+          Fill in the Cap Table spreadsheet template with your stakeholders, share classes, equity plans and holdings, then upload it.
+        </ChoiceCard>
+      </ChoiceList>
+      <p>
+        New to cap tables, or not sure which way to start? <Link className={TEXT_LINK} to="/docs">Learn about cap tables</Link>: what Cap Table does, how the import works, and the basics of equity.
+      </p>
+    </SetupCard>
   );
 }
 
@@ -130,14 +143,14 @@ function SetupChoices() {
 function SetupImport({ source, onImported }: { source: ImportSource; onImported: () => void }) {
   const navigate = useNavigate();
   return (
-    <div className="setup-import">
-      <header className="setup-import-head">
+    <div className="min-h-svh bg-background">
+      <header className="flex h-13 items-center gap-2.5 border-b bg-background px-3 text-sm sm:px-5">
         <BrandMark />
-        <strong>Cap Table</strong>
-        <span className="muted">Set up your company</span>
+        <strong className="font-semibold">Cap Table</strong>
+        <span className="text-muted-foreground">Set up your company</span>
       </header>
-      <main className="main" id="main" tabIndex={-1}>
-        <section className="page">
+      <main className="min-w-0 flex-1 outline-none" id="main" tabIndex={-1}>
+        <section className="mx-auto flex w-full max-w-370 flex-col gap-5 px-5 pt-6 pb-14 lg:px-8">
           <PageHead
             title={source === "pulley" ? "Import from Pulley" : "Import from a spreadsheet"}
             sub={source === "pulley" ? "Set the company up from Pulley's standard exports." : "Set the company up from the Cap Table spreadsheet template."}
@@ -182,25 +195,29 @@ function SetupForm() {
     }
   };
   return (
-    <div className="center-page">
-      <form className="card setup-card" aria-label="Set up the company" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        <Link className="setup-back" to="/setup">← All ways to start</Link>
-        <BrandMark size={40} />
-        <h1>Set up your company</h1>
-        <p>Cap Table keeps one company's cap table. Tell it which company; you can change all of this later in the company settings.</p>
-        <fieldset className="form" disabled={busy}>
-          <TextField label="Company name" required value={values.displayName} onChange={(value) => set("displayName", value)} placeholder="e.g. Acme Robotics" error={errors.displayName} />
-          <TextField label="Legal name" value={values.legalName} onChange={(value) => set("legalName", value)} placeholder="e.g. Acme Robotics, Inc." hint="Defaults to the company name." error={errors.legalName} />
-          <div className="form-grid">
-            <SelectField label="State of incorporation" value={values.jurisdiction} onChange={(value) => set("jurisdiction", value)} options={JURISDICTIONS} />
-            <DateField label="Incorporation date" value={values.incorporationDate} onChange={(value) => set("incorporationDate", value)} error={errors.incorporationDate} />
-            <SelectField label="Time zone" required value={values.timezone} onChange={(value) => set("timezone", value)} options={timezones(values.timezone).map((zone) => [zone, zone] as const)}
-              hint="Decides the company's “today” for vesting and deadlines." error={errors.timezone} />
-            <SelectField label="Fiscal year end" value={values.fiscalYearEnd} onChange={(value) => set("fiscalYearEnd", value)} options={FISCAL_YEAR_ENDS} />
-          </div>
-        </fieldset>
-        {problem ? <p className="err-inline" role="alert">{problem}</p> : null}
-        <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? "Setting up…" : "Set up company"}</button>
+    <div className="grid min-h-svh place-items-center bg-muted/40 p-6">
+      <form className="w-full max-w-155" aria-label="Set up the company" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <Card>
+          <CardContent className="flex flex-col items-start gap-3">
+            <Link className="text-sm text-muted-foreground hover:text-foreground" to="/setup">← All ways to start</Link>
+            <BrandMark size={40} />
+            <h1 className="text-xl font-semibold tracking-tight">Set up your company</h1>
+            <p className="text-sm text-muted-foreground">Cap Table keeps one company's cap table. Tell it which company; you can change all of this later in the company settings.</p>
+            <fieldset className="flex w-full min-w-0 flex-col gap-4" disabled={busy}>
+              <TextField label="Company name" required value={values.displayName} onChange={(value) => set("displayName", value)} placeholder="e.g. Acme Robotics" error={errors.displayName} />
+              <TextField label="Legal name" value={values.legalName} onChange={(value) => set("legalName", value)} placeholder="e.g. Acme Robotics, Inc." hint="Defaults to the company name." error={errors.legalName} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField label="State of incorporation" value={values.jurisdiction} onChange={(value) => set("jurisdiction", value)} options={JURISDICTIONS} />
+                <DateField label="Incorporation date" value={values.incorporationDate} onChange={(value) => set("incorporationDate", value)} error={errors.incorporationDate} />
+                <SelectField label="Time zone" required value={values.timezone} onChange={(value) => set("timezone", value)} options={timezones(values.timezone).map((zone) => [zone, zone] as const)}
+                  hint="Decides the company's “today” for vesting and deadlines." error={errors.timezone} />
+                <SelectField label="Fiscal year end" value={values.fiscalYearEnd} onChange={(value) => set("fiscalYearEnd", value)} options={FISCAL_YEAR_ENDS} />
+              </div>
+            </fieldset>
+            {problem ? <p className="text-sm font-medium text-destructive" role="alert">{problem}</p> : null}
+            <Button type="submit" className="w-full" disabled={busy}>{busy ? "Setting up…" : "Set up company"}</Button>
+          </CardContent>
+        </Card>
       </form>
     </div>
   );

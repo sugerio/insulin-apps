@@ -1,9 +1,12 @@
 import { useSearchParams } from "react-router";
+import { CircleHelpIcon } from "lucide-react";
 import type { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Item, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { ProgressBar } from "../../components/Charts.tsx";
 import { useDisplay } from "../../components/Display.tsx";
 import { Banner, NotFoundState, Pending } from "../../components/Feedback.tsx";
-import { Icon } from "../../components/Icon.tsx";
 import { Card } from "../../components/Page.tsx";
 import { DocumentCards, ExecutionBadge, PortalLink, PortalPage, StatusBadge } from "../../components/PortalParts.tsx";
 import { usePortal } from "../../components/PortalWorkspace.tsx";
@@ -12,6 +15,11 @@ import { DASH, formatDate, formatDaysLeft, plural } from "../../lib/format.ts";
 import { SECURITY_STATUS_LABELS } from "../../lib/labels.ts";
 import { awaitingHolderSignature, exitWindows, isPositive, securityPath, summarize, typeLabel, upcomingVests, type ExitWindow } from "../../lib/portal.ts";
 import { useResource } from "../../lib/useResource.ts";
+
+/** A link inside running text. */
+const TEXT_LINK = "font-medium underline underline-offset-4";
+/** A number in a table cell. */
+const NUM = "text-right tabular-nums whitespace-nowrap";
 
 // Portfolio: the exit-window banner for former employees, tiles,
 // vesting status, the next vest events, the holder's grants and shares, and company resources. Read-only. (`/portfolio`
@@ -56,63 +64,61 @@ function Overview({ record }: { record: api.PortalHolding }) {
   return (
     <>
       <Card>
-        <div className="port-hero">
-          <div className="spacer">
-            <div className="small muted">Portfolio</div>
-            <h1>{portal.orgName}</h1>
+        <div className="flex flex-wrap items-end gap-2" data-portfolio-hero="">
+          <div className="flex-1">
+            <div className="text-xs text-muted-foreground">Portfolio</div>
+            <h1 className="text-2xl font-semibold tracking-tight">{portal.orgName}</h1>
           </div>
-          <div className="small muted">{record.stakeholderName}</div>
+          <div className="text-xs text-muted-foreground">{record.stakeholderName}</div>
         </div>
         <RecordSwitcher current={record.stakeholderId} />
       </Card>
       {windows.length ? <ExitWindowBanner windows={windows} /> : null}
       <Tiles items={tiles} label="Holdings summary" />
       {hasVesting ? (
-        <div className="grid-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Vesting status">
-            <p className="small muted">
+            <p className="text-xs text-muted-foreground">
               Your equity vests over time, on the schedule in your grant agreement. Exercising an option means buying its shares at
               the exercise price: you can exercise vested options until they expire or, if you leave, until your exercise
-              deadline. <PortalLink to="how-to-exercise">How to exercise</PortalLink> explains the steps.
+              deadline. <PortalLink className={TEXT_LINK} to="how-to-exercise">How to exercise</PortalLink> explains the steps.
             </p>
             {summary.options ? (
-              <>
-                <div className="small muted mb-8">Options</div>
+              <div>
+                <div className="mb-2 text-xs text-muted-foreground">Options</div>
                 {isPositive(summary.options.vestedUnexercised) || isPositive(summary.options.unvested) || isPositive(summary.options.cancelled) ? (
                   <ProgressBar vested={summary.options.vestedUnexercised} unvested={summary.options.unvested} cancelled={summary.options.cancelled} unit="options" vestedLabel="Vested and unexercised" />
                 ) : (
-                  <p className="muted small">No options left to vest or exercise.</p>
+                  <p className="text-xs text-muted-foreground">No options left to vest or exercise.</p>
                 )}
-              </>
+              </div>
             ) : null}
             {restricted.length ? (
-              <>
-                <div className="small muted mt-12 mb-8">Restricted shares</div>
+              <div>
+                <div className="mb-2 text-xs text-muted-foreground">Restricted shares</div>
                 {restricted.map((security) => (
-                  <div className="small" key={security.id}>
+                  <div className="text-xs tabular-nums" key={security.id}>
                     {security.displayId}: <b>{format.shares(security.numbers.vested)}</b> vested · <b>{format.shares(security.numbers.unvested)}</b> unvested
                   </div>
                 ))}
-              </>
+              </div>
             ) : null}
           </Card>
           <Card title="Upcoming vest events">
             {upcoming.length ? (
-              <div className="tbl-scroll">
-                <table className="tbl dense" aria-label="Upcoming vest events">
-                  <thead><tr><th scope="col">Date</th><th scope="col">Event</th></tr></thead>
-                  <tbody>
-                    {upcoming.map((event) => (
-                      <tr key={`${event.security.id}-${event.date}`}>
-                        <td className="nowrap">{formatDate(event.date)}</td>
-                        <td>{format.shares(event.quantity)} {event.unit} ({event.security.displayId}) vest</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table aria-label="Upcoming vest events">
+                <TableHeader><TableRow><TableHead scope="col">Date</TableHead><TableHead scope="col">Event</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {upcoming.map((event) => (
+                    <TableRow key={`${event.security.id}-${event.date}`}>
+                      <TableCell className="whitespace-nowrap">{formatDate(event.date)}</TableCell>
+                      <TableCell className="whitespace-normal">{format.shares(event.quantity)} {event.unit} ({event.security.displayId}) vest</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
-              <p className="muted">No upcoming vesting events.</p>
+              <p className="text-sm text-muted-foreground">No upcoming vesting events.</p>
             )}
           </Card>
         </div>
@@ -148,12 +154,12 @@ function ExitWindowBanner({ windows }: { windows: readonly ExitWindow[] }) {
     }
     return `You can exercise ${format.shares(window.quantity)} vested options${grants} until ${until}.${iso}`;
   };
-  const how = <>Read <PortalLink to="how-to-exercise">How to exercise</PortalLink> — exercising is an offline process.</>;
+  const how = <>Read <PortalLink className={TEXT_LINK} to="how-to-exercise">How to exercise</PortalLink> — exercising is an offline process.</>;
   if (windows.length === 1) return <Banner kind="warn" title={statement(windows[0]!)}>{how}</Banner>;
   const title = windows.some((window) => window.awaitingSignature) ? "Your exercise deadlines:" : "You can exercise vested options before these deadlines:";
   return (
     <Banner kind="warn" title={title}>
-      <ul className="exit-windows">
+      <ul className="my-1 list-disc space-y-1 pl-5">
         {windows.map((window) => <li key={window.grants.map((grant) => grant.id).join()}>{statement(window)}</li>)}
       </ul>
       {how}
@@ -176,13 +182,14 @@ function RecordSwitcher({ current }: { current: string }) {
   const [params, setParams] = useSearchParams();
   if (portal.holdings.length < 2) return null;
   return (
-    <div className="row port-switch small" role="group" aria-label="Your records">
-      <span className="muted">You hold equity under {portal.holdings.length} records:</span>
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Your records">
+      <span className="text-muted-foreground">You hold equity under {portal.holdings.length} records:</span>
       {portal.holdings.map((holding) => (
-        <button
+        <Button
           key={holding.stakeholderId}
           type="button"
-          className={`btn btn-xs ${holding.stakeholderId === current ? "btn-primary" : "btn-ghost"}`}
+          size="xs"
+          variant={holding.stakeholderId === current ? "default" : "ghost"}
           aria-pressed={holding.stakeholderId === current}
           onClick={() => {
             const next = new URLSearchParams(params);
@@ -191,7 +198,7 @@ function RecordSwitcher({ current }: { current: string }) {
           }}
         >
           {holding.stakeholderName}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -203,24 +210,24 @@ function RecordSwitcher({ current }: { current: string }) {
  */
 function ExercisableCell({ security }: { security: api.PortalSecurity }) {
   const { format } = useDisplay();
-  if (security.family !== "EQUITY_COMPENSATION" && security.family !== "WARRANT") return <td className="num">{DASH}</td>;
-  if (awaitingHolderSignature(security)) return <td className="num muted">Awaiting your signature</td>;
+  if (security.family !== "EQUITY_COMPENSATION" && security.family !== "WARRANT") return <TableCell className={NUM}>{DASH}</TableCell>;
+  if (awaitingHolderSignature(security)) return <TableCell className={`${NUM} text-muted-foreground`}>Awaiting your signature</TableCell>;
   const exercisable = security.numbers.exercisable;
   return (
-    <td className="num">
+    <TableCell className={NUM}>
       {format.shares(exercisable)}
       {security.family === "EQUITY_COMPENSATION" && security.status === "OUTSTANDING" && isPositive(exercisable) ? (
-        <div className="small">
-          <PortalLink to={`how-to-exercise?grant=${security.id}`}>How to exercise <span className="sr-only">for {security.displayId}</span></PortalLink>
+        <div className="text-xs">
+          <PortalLink className={TEXT_LINK} to={`how-to-exercise?grant=${security.id}`}>How to exercise <span className="sr-only">for {security.displayId}</span></PortalLink>
         </div>
       ) : null}
-    </td>
+    </TableCell>
   );
 }
 
 function GrantsTable({ securities }: { securities: readonly api.PortalSecurity[] }) {
   const { format } = useDisplay();
-  if (securities.length === 0) return <p className="muted">No grants or shares.</p>;
+  if (securities.length === 0) return <p className="text-sm text-muted-foreground">No grants or shares.</p>;
   const ordered = [...securities].sort((a, b) => a.issueDate.localeCompare(b.issueDate) || a.displayId.localeCompare(b.displayId, undefined, { numeric: true }));
   const vestedOf = (security: api.PortalSecurity) => {
     if (security.family === "CONVERTIBLE") return null;
@@ -228,41 +235,41 @@ function GrantsTable({ securities }: { securities: readonly api.PortalSecurity[]
     return security.numbers.vested;
   };
   return (
-    <div className="tbl-scroll">
-      <table className="tbl" aria-label="My grants and shares">
-        <thead>
-          <tr>
-            <th scope="col">ID</th>
-            <th scope="col">Type</th>
-            <th scope="col">Status</th>
-            <th scope="col">Grant / issue date</th>
-            <th scope="col">Expiration</th>
-            <th scope="col" className="num">Quantity</th>
-            <th scope="col" className="num">Vested</th>
-            <th scope="col" className="num">Exercisable</th>
-            <th scope="col" className="num">Exercise price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ordered.map((security) => (
-            <tr key={security.id}>
-              <td className="nowrap"><PortalLink className="cell-link" to={securityPath(security)}>{security.displayId}</PortalLink></td>
-              <td>{typeLabel(security)}</td>
-              <td>
+    <Table aria-label="My grants and shares">
+      <TableHeader>
+        <TableRow>
+          <TableHead scope="col">ID</TableHead>
+          <TableHead scope="col">Type</TableHead>
+          <TableHead scope="col">Status</TableHead>
+          <TableHead scope="col">Grant / issue date</TableHead>
+          <TableHead scope="col">Expiration</TableHead>
+          <TableHead scope="col" className="text-right">Quantity</TableHead>
+          <TableHead scope="col" className="text-right">Vested</TableHead>
+          <TableHead scope="col" className="text-right">Exercisable</TableHead>
+          <TableHead scope="col" className="text-right">Exercise price</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {ordered.map((security) => (
+          <TableRow key={security.id}>
+            <TableCell><PortalLink className="font-medium tabular-nums underline-offset-4 hover:underline" to={securityPath(security)}>{security.displayId}</PortalLink></TableCell>
+            <TableCell>{typeLabel(security)}</TableCell>
+            <TableCell>
+              <span className="flex flex-wrap gap-1">
                 <StatusBadge status={security.status} />
                 {security.executionPending ? <> <ExecutionBadge security={security} /></> : null}
-              </td>
-              <td>{formatDate(security.issueDate)}</td>
-              <td>{formatDate(security.expirationDate)}</td>
-              <td className="num">{security.family === "CONVERTIBLE" ? DASH : format.shares(security.numbers.granted ?? security.numbers.outstanding)}</td>
-              <td className="num">{format.shares(vestedOf(security))}</td>
-              <ExercisableCell security={security} />
-              <td className="num">{security.family === "EQUITY_COMPENSATION" || security.family === "WARRANT" ? format.price(security.exercisePrice) : DASH}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+              </span>
+            </TableCell>
+            <TableCell>{formatDate(security.issueDate)}</TableCell>
+            <TableCell>{formatDate(security.expirationDate)}</TableCell>
+            <TableCell className={NUM}>{security.family === "CONVERTIBLE" ? DASH : format.shares(security.numbers.granted ?? security.numbers.outstanding)}</TableCell>
+            <TableCell className={NUM}>{format.shares(vestedOf(security))}</TableCell>
+            <ExercisableCell security={security} />
+            <TableCell className={NUM}>{security.family === "EQUITY_COMPENSATION" || security.family === "WARRANT" ? format.price(security.exercisePrice) : DASH}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -272,14 +279,19 @@ function CompanyResources() {
   const documents = useResource((signal) => portal.source.documents(signal), [portal.source.key]);
   return (
     <Card title="Company resources">
-      <div className="stack-8">
-        <div className="attach"><div className="a-n"><Icon name="help" /><PortalLink to="how-to-exercise">How to exercise your options</PortalLink></div></div>
-      </div>
-      <div className="mt-8">
-        <Pending resource={documents} what="the company resources">
-          {(data) => <DocumentCards documents={data.filter((document) => document.scope === "company")} empty="No company resources yet." />}
-        </Pending>
-      </div>
+      <Item variant="outline" size="sm">
+        <ItemMedia>
+          <CircleHelpIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+        </ItemMedia>
+        <ItemContent>
+          <ItemTitle>
+            <PortalLink className="font-medium underline-offset-4 hover:underline" to="how-to-exercise">How to exercise your options</PortalLink>
+          </ItemTitle>
+        </ItemContent>
+      </Item>
+      <Pending resource={documents} what="the company resources">
+        {(data) => <DocumentCards documents={data.filter((document) => document.scope === "company")} empty="No company resources yet." />}
+      </Pending>
     </Card>
   );
 }

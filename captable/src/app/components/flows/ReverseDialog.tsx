@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
 import { apiRequest } from "../../api/request.ts";
 import { useMe } from "../../auth/AuthProvider.tsx";
 import { commandLabel, transactionLabel } from "../../lib/changes.ts";
@@ -8,7 +9,7 @@ import { useWriteFlow } from "../../lib/flow.ts";
 import { RELATIONSHIP_LABELS } from "../../lib/labels.ts";
 import { useResource } from "../../lib/useResource.ts";
 import { DescriptionList } from "../DescriptionList.tsx";
-import { Modal } from "../Dialog.tsx";
+import { DismissButton, Modal } from "../Dialog.tsx";
 import { ErrorFocus } from "../ErrorFocus.tsx";
 import { Banner, InlineError } from "../Feedback.tsx";
 import { CommandPreview, confirmationMatches, FlowProblemBanner, TypedConfirmation } from "../FlowParts.tsx";
@@ -52,13 +53,13 @@ export function ReverseDialog({ target, onClose, onDone }: { target: ReverseTarg
   if (command.data === undefined) {
     return (
       <Modal title={title} onClose={onClose}>
-        {command.error !== undefined ? <InlineError what="the command to reverse" error={command.error} onRetry={command.reload} /> : <p className="muted" role="status">Finding the command to reverse…</p>}
+        {command.error !== undefined ? <InlineError what="the command to reverse" error={command.error} onRetry={command.reload} /> : <p className="text-sm text-muted-foreground" role="status">Finding the command to reverse…</p>}
       </Modal>
     );
   }
   if (command.data === null) {
     return (
-      <Modal title={title} onClose={onClose} footer={<button type="button" className="btn btn-ghost" onClick={onClose}>Close</button>}>
+      <Modal title={title} onClose={onClose} footer={<DismissButton onClick={onClose}>Close</DismissButton>}>
         <Banner kind="info" title="Nothing to reverse">Nothing on this security can be reversed in the app now: imported history isn't reversible, and a command that later ones depend on waits until they are reversed.</Banner>
       </Modal>
     );
@@ -115,52 +116,52 @@ function ReverseForm({ command, target, title, onClose, onDone }: { command: api
   };
   const footer = (
     <>
-      <button type="button" className="btn btn-ghost" onClick={onClose} disabled={flow.unsettled}>Cancel</button>
+      <DismissButton onClick={onClose} disabled={flow.unsettled}>Cancel</DismissButton>
       {preview ? (
-        <button type="button" className="btn btn-danger" onClick={confirm} disabled={flow.busy || flow.locked || blocked || !confirmationMatches(typed, expected)}>
+        <Button type="button" variant="destructive" onClick={confirm} disabled={flow.busy || flow.locked || blocked || !confirmationMatches(typed, expected)}>
           {flow.phase === "committing" ? "Reversing…" : "Reverse"}
-        </button>
+        </Button>
       ) : flow.phase === "edit" ? (
-        <button type="button" className="btn btn-primary" onClick={() => void flow.review()}>Review again</button>
+        <Button type="button" onClick={() => void flow.review()}>Review again</Button>
       ) : null}
     </>
   );
   return (
     <Modal title={title} onClose={onClose} footer={footer} dismissible={!flow.unsettled}>
       <ErrorFocus>
-      <div className="form">
+      <div className="flex flex-col gap-4">
         <DescriptionList rows={[["Command", `${commandLabel(command.type)} · ${expected}`], ["Recorded", `${format.dateTime(command.createdAt)}${command.actor ? ` by ${command.actor}` : ""}`]]} />
         <FlowProblemBanner problem={flow.problem} onRetry={() => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-        {flow.phase === "previewing" && !preview ? <p className="muted" role="status">Loading the reversal preview…</p> : null}
+        {flow.phase === "previewing" && !preview ? <p className="text-sm text-muted-foreground" role="status">Loading the reversal preview…</p> : null}
         {preview ? (
           <>
             {blocked ? (
               <Banner kind="danger" title="Blocked">
                 {blockedReason(preview)}
                 {preview.dependents.length ? (
-                  <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }} aria-label="Commands to reverse first">
+                  <ul className="mt-1.5 list-disc pl-5 text-xs" aria-label="Commands to reverse first">
                     {preview.dependents.map((dependent) => <li key={dependent.commandId}>{commandLabel(dependent.type)} · {format.dateTime(dependent.createdAt)}</li>)}
                   </ul>
                 ) : null}
               </Banner>
             ) : null}
-            <section className="review-panel" aria-label="Reversal preview">
-              <h3>What the reversal records</h3>
-              <ul className="small" style={{ margin: "0 0 8px", paddingLeft: 18 }} aria-label="Inverse transactions">
+            <section className="flex flex-col gap-2 rounded-lg border bg-muted/50 p-4 text-sm" aria-label="Reversal preview">
+              <h3 className="font-medium">What the reversal records</h3>
+              <ul className="list-disc pl-5 text-xs" aria-label="Inverse transactions">
                 {preview.inverse.map((item) => <li key={item.reversesTransactionId}>Reverses: {transactionLabel(item.type)} ({formatDate(item.effectiveDate)})</li>)}
               </ul>
               {preview.workflowEffects.map((effect) => (
-                <p className="small" key={`${effect.kind}-${effect.id}`}>
+                <p className="text-xs" key={`${effect.kind}-${effect.id}`}>
                   {effect.kind === "stakeholder_relationship"
                     ? `Relationship restored: ${RELATIONSHIP_LABELS[effect.from as api.Relationship] ?? effect.from} → ${RELATIONSHIP_LABELS[effect.to as api.Relationship] ?? effect.to}`
                     : `Exercise request: ${effect.from} → ${effect.to}`}
                 </p>
               ))}
             </section>
-            {preview.changes.length ? <div className="mt-8"><CommandPreview changes={preview.changes} title="What changes" /></div> : null}
+            {preview.changes.length ? <CommandPreview changes={preview.changes} title="What changes" /> : null}
             <TextAreaField label="Reason" required value={note} onChange={(value) => { setNote(value); setNoteError(undefined); }} placeholder="e.g. Cancelled in error — holder will sign" error={noteError} disabled={flow.locked} />
             <TypedConfirmation expected={expected} value={typed} onChange={setTyped} disabled={flow.busy || flow.locked || blocked} />
-            <p className="small muted">The inverse transactions are written atomically; the original stays visible, marked “Reversed on {formatDate(today)} by {me.user.displayName ?? me.user.email}”.</p>
+            <p className="text-xs text-muted-foreground">The inverse transactions are written atomically; the original stays visible, marked “Reversed on {formatDate(today)} by {me.user.displayName ?? me.user.email}”.</p>
           </>
         ) : null}
       </div>

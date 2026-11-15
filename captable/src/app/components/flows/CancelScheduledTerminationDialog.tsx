@@ -11,6 +11,7 @@ import { TextAreaField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
 import { FlowDialog } from "./FlowDialog.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // Cancel a scheduled termination (owners and admins): the stakeholder stays active and nothing is cancelled. It is a
 // workflow transition by id with the version read: if processing due items applied it first, the server says so and
@@ -35,7 +36,7 @@ export function CancelScheduledTerminationDialog({ scheduledTerminationId, stake
       <Modal title="Cancel the scheduled termination" onClose={onClose}>
         {status.error !== undefined ? <InlineError what="the scheduled termination" error={status.error} onRetry={status.reload} />
           : status.data ? <p>This termination is no longer scheduled: it was applied or cancelled. Reload the page to see its current state.</p>
-            : <p className="muted" role="status">Loading the scheduled termination…</p>}
+            : <p className="text-sm text-muted-foreground" role="status">Loading the scheduled termination…</p>}
       </Modal>
     );
   }
@@ -88,19 +89,19 @@ function CancelForm({ row, stakeholderName, onClose, onDone }: { row: Scheduled;
       danger
       review={
         gone ? (
-          <div className="review-panel" aria-label="Review">
+          <ReviewPanel>
             <p><b>This termination is no longer scheduled</b>: it was applied when due items were processed, or someone cancelled it. Close this and reload the page. An admin reverses an applied termination instead.</p>
-          </div>
-        ) : <div className="review-panel" aria-label="Review">
+          </ReviewPanel>
+        ) : <ReviewPanel>
           <p>
             Cancel the termination of <b>{stakeholderName}</b> scheduled for <b>{formatDate(row.terminationDate)}</b> ({TERMINATION_TYPE_LABELS[row.type]}).
             {" "}{row.securitiesAffected} securit{row.securitiesAffected === 1 ? "y" : "ies"} keep vesting; the {format.shares(row.unvestedToCancel)} unvested options it would cancel stay outstanding.
           </p>
-          <p className="small muted">To change the date, cancel it, then record the termination again.</p>
-        </div>
+          <p className="text-xs text-muted-foreground">To change the date, cancel it, then record the termination again.</p>
+        </ReviewPanel>
       }
     >
-      <p className="small">{stakeholderName} · TERMINATING {formatDate(row.terminationDate)} · {TERMINATION_TYPE_LABELS[row.type]}</p>
+      <p className="text-xs text-muted-foreground">{stakeholderName} · TERMINATING {formatDate(row.terminationDate)} · {TERMINATION_TYPE_LABELS[row.type]}</p>
       <TextAreaField label="Reason" required value={note} onChange={(value) => { setNote(value); setNoteError(undefined); }} placeholder="e.g. Employee decided to stay" error={noteError ?? fieldProblem(flow.problem, "note")} />
     </FlowDialog>
   );

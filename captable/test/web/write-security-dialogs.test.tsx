@@ -7,6 +7,7 @@ import { DIFF_A, DIFF_B, EFFECT_B, asReviewed, attach, choose, commandRoute, dry
 import { apiError, mock, type MockHandler, type MockRequest } from "./support/mockApi.ts";
 import { DETAILS, ECHO, STAKEHOLDER_DETAILS, detailOf, securityHandlers } from "./support/securities.ts";
 import { base, renderPage } from "./support/render.tsx";
+import { REPURCHASE_METHOD_LABELS } from "../../src/app/components/flows/RecordRepurchaseDialog.tsx";
 
 // The security dialogs: Cancel, the cap table's bulk cancel, Mark executed, Extend exercise deadline, Reverse and Record
 // repurchase. Each runs its dry run (or the reversal preview), shows the server's figures, asks for the typed ID, and
@@ -805,8 +806,10 @@ describe("record repurchase", () => {
     return screen.findByRole("dialog", { name: "Record repurchase of CS-4" });
   }
 
-  function payBy(method: "CHECK" | "WIRE" | "ACH") {
-    choose("Paid by", method);
+  /** "Paid by" is a shadcn/ui (Radix) Select: open it from the keyboard, then pick the option. */
+  async function payBy(method: "CHECK" | "WIRE" | "ACH") {
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Paid by" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: REPURCHASE_METHOD_LABELS[method] }));
   }
 
   it("records it from Securities Status: every unvested share, the price, how it was paid and the notice, then the typed ID", async () => {
@@ -823,7 +826,7 @@ describe("record repurchase", () => {
     // Within the window, it is recorded without counsel's authority.
     expect(within(dialog).queryByLabelText(/Counsel's authority/)).toBeNull();
 
-    payBy("CHECK");
+    await payBy("CHECK");
     type("Payment reference", "Check 1042");
     await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
     expect(within(dialog).getByRole("button", { name: "Remove CS-4 repurchase notice.pdf" })).toBeTruthy();
@@ -861,7 +864,7 @@ describe("record repurchase", () => {
     const dialog = await openFromStatus();
     expect(within(dialog).getByText("The repurchase right ended on Oct 1, 2026.")).toBeTruthy();
     expect(within(dialog).getByLabelText(/Counsel's authority/)).toBeTruthy();
-    payBy("WIRE");
+    await payBy("WIRE");
     await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
     fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
     expect(within(dialog).getByText("Upload counsel's authority for this repurchase.")).toBeTruthy();
@@ -903,7 +906,7 @@ describe("record repurchase", () => {
     });
     const { callsTo } = renderPage("securities-status", handlers(...lookups(), repurchase), { role: "admin_rw" });
     const dialog = await openFromStatus();
-    payBy("ACH");
+    await payBy("ACH");
     await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
     fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
     expect(await within(dialog).findByText("A repurchase takes all 34500 shares unvested on 2026-10-21, not 34499")).toBeTruthy();
@@ -987,7 +990,7 @@ describe("record repurchase", () => {
     // No longer late, so no warning; the field and its document stay, so no upload is ever dropped mid-answer.
     expect(within(dialog).queryByText(/The repurchase right ended on/)).toBeNull();
     expect(within(dialog).getByText("Counsel memo CS-4.pdf")).toBeTruthy();
-    payBy("WIRE");
+    await payBy("WIRE");
     await attach(/Repurchase notice/, "CS-4 repurchase notice.pdf");
     fireEvent.click(within(dialog).getByRole("button", { name: "Review" }));
     await waitForCalls(() => dryRuns(callsTo(api.routes.recordRepurchase)), 1);

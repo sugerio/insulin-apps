@@ -46,7 +46,7 @@ describe("publishable web sources", () => {
   it("reads every web source, style and test, this file included, and nothing the other parts own", () => {
     const names = sources.map(([name]) => name);
     expect(names.length).toBeGreaterThan(140);
-    for (const name of ["src/app/App.tsx", "src/app/app.css", "src/app/components/workspace.css", "test/web/setup.ts", "test/web/publishable-source.test.ts"]) {
+    for (const name of ["src/app/App.tsx", "src/app/app.css", "src/app/shadcn.css", "src/app/components/ui/button.tsx", "test/web/setup.ts", "test/web/publishable-source.test.ts"]) {
       expect(names).toContain(name);
     }
     expect(names.filter((name) => /^src\/app\/(?:shared|server|db|import)\//.test(name))).toEqual([]);

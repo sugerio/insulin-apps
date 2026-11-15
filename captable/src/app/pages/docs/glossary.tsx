@@ -105,11 +105,11 @@ function sections(): DocSection[] {
     id: `glossary-${anchorId(letter.replace("–", "-"))}`,
     title: letter,
     body: (
-      <dl className="docs-glossary">
+      <dl className="divide-y">
         {entries.map(([term, definition]) => (
-          <div key={term}>
-            <dt id={anchorId(term)} tabIndex={-1}>{term}</dt>
-            <dd>{definition}</dd>
+          <div key={term} className="py-2.5">
+            <dt id={anchorId(term)} tabIndex={-1} className="font-semibold text-foreground">{term}</dt>
+            <dd className="mt-1">{definition}</dd>
           </div>
         ))}
       </dl>

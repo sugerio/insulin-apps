@@ -28,7 +28,8 @@ describe("cap table", () => {
     expect(headers.slice(0, 5)).toEqual(["External ID", "Stakeholder", "Stakeholder type", "Common Stock", "Series Seed Preferred"]);
     expect(headers).toContain("Issued and outstanding %");
     expect(headers).toContain("2023 Equity Incentive Plan");
-    expect(headers).toContain("Fully diluted▼");
+    expect(headers).toContain("Fully diluted");
+    expect(within(table).getByRole("columnheader", { name: "Fully diluted" }).getAttribute("aria-sort")).toBe("descending");
     expect(headers.at(-1)).toBe("Fully diluted %");
     expect(headers).not.toContain("E-mail");
     const freya = rowOf(table, "Freya Lindqvist");
@@ -146,7 +147,7 @@ describe("cap table", () => {
   it("shows the options tab with Pulley's default columns, execution-pending badges and tiles", async () => {
     renderPage(`${base}/captable?tab=options`, handlers);
     const table = await screen.findByRole("table", { name: "Options" });
-    const headers = within(table).getAllByRole("columnheader").map((cell) => cell.textContent?.replace(/[▲▼]/, ""));
+    const headers = within(table).getAllByRole("columnheader").map((cell) => cell.textContent);
     expect(headers).toEqual(["Certificate", "Stakeholder", "Share Class", "Issued On", "Fully Diluted", "Ownership", "Price/Share", "Exercise Price"]);
     const pending = rowOf(table, "OPT-49");
     expect(within(pending).getByText("Execution pending")).toBeTruthy();
@@ -173,7 +174,7 @@ describe("cap table", () => {
     renderPage(`${base}/captable?tab=options`, [mock(api.routes.getCapTable, capTable("options", { rows })), ...handlers.slice(1)]);
     await screen.findByRole("table", { name: "Options" });
     const tiles = screen.getByRole("list", { name: "Options summary" });
-    const tile = (label: string) => within(tiles).getByText(label).closest("li")!.querySelector(".tile-v")!.textContent;
+    const tile = (label: string) => within(tiles).getByText(label).closest("li")!.querySelector('[data-slot="tile-value"]')!.textContent;
     expect(tile("Options outstanding")).toBe("360,000");
     expect(tile("Vested")).toBe("291,250");
     expect(tile("Unvested")).toBe("68,750");
@@ -204,7 +205,7 @@ describe("cap table", () => {
     expect(within(table).getByText("Marcus Oyelaran")).toBeTruthy();
     expect(within(rowOf(table, "Totals")).getByText("24,312,120")).toBeTruthy();
     const toggle = screen.getByRole("checkbox", { name: "Show 1 stakeholder with no holdings" });
-    expect((toggle as HTMLInputElement).checked).toBe(false);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
     expect(within(table).getByText("Rafael Duarte")).toBeTruthy();
     expect(within(rowOf(table, "Totals")).getByText("24,312,120")).toBeTruthy();

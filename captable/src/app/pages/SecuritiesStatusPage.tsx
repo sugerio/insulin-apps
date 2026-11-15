@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { api } from "#shared";
+import { Badge as UiBadge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import { apiRequest } from "../api/request.ts";
 import { OwnRecordScope, WriteButton } from "../components/Actions.tsx";
 import { DataTable, byDecimal, byDisplayId, byNumber, byText, type Column } from "../components/DataTable.tsx";
@@ -47,18 +49,18 @@ interface Lookups {
 function Section<T>(props: { id: string; title: string; explainer: string; rows: readonly T[]; empty: string; columns: Column<T>[]; rowKey: (row: T) => string; extra?: ReactNode }) {
   const headingId = `${props.id}-title`;
   return (
-    <Card id={props.id} className={props.rows.length ? undefined : "collapsed"} labelledBy={headingId}>
-      <div className="card-h">
-        <div style={{ flex: 1 }}>
-          <h2 id={headingId}>{props.title} <span className="sb-count">{props.rows.length}</span></h2>
-          <div className="muted mt-4">{props.explainer}</div>
-        </div>
+    <Card id={props.id} className={props.rows.length ? undefined : "gap-2 py-3"} labelledBy={headingId}>
+      <div className="flex flex-col gap-1">
+        <h2 id={headingId} className="flex items-center gap-2 text-base font-semibold">
+          {props.title} <UiBadge variant="secondary" className="tabular-nums">{props.rows.length}</UiBadge>
+        </h2>
+        <p className="text-sm text-muted-foreground">{props.explainer}</p>
       </div>
       {props.extra}
       {props.rows.length ? (
         <DataTable id={`ss-${props.id}`} label={props.title} rows={props.rows} rowKey={props.rowKey} columns={props.columns} toolbar={false} paginate={props.rows.length > 10} />
       ) : (
-        <p className="muted small">{props.empty}</p>
+        <p className="text-xs text-muted-foreground">{props.empty}</p>
       )}
     </Card>
   );
@@ -112,8 +114,8 @@ function StatusSections({ data, lookups, onAction }: { data: api.SecuritiesStatu
     return <SecurityLink id={securityId} family={known?.family ?? "EQUITY_COMPENSATION"} displayId={displayId ?? known?.displayId ?? "Security"} />;
   };
   const displayIdOf = (securityId: string) => lookups.securities.get(securityId)?.displayId ?? "";
-  const days = (date: string) => <span className="muted small"> ({daysBetween(today, date)} days)</span>;
-  const relative = (date: string) => <span className="muted small"> ({formatDaysRelative(today, date)})</span>;
+  const days = (date: string) => <span className="text-xs text-muted-foreground"> ({daysBetween(today, date)} days)</span>;
+  const relative = (date: string) => <span className="text-xs text-muted-foreground"> ({formatDaysRelative(today, date)})</span>;
   const awaiting = (status: api.ExecutionStatus) => {
     const label = AWAITING_LABELS[status];
     return label ? <> <Badge tone={label[1]}>{label[0]}</Badge></> : null;
@@ -144,7 +146,7 @@ function StatusSections({ data, lookups, onAction }: { data: api.SecuritiesStatu
             key: "actions", label: "",
             render: (row) => (
               <OwnRecordScope own={workspace.isOwn(row.stakeholderId)}>
-                <div className="row nowrap">
+                <div className="flex items-center gap-2">
                   <WriteButton label="Mark executed" kind="primary" size="xs" ariaLabel={`Mark ${row.displayId} executed`} onClick={() => onAction({ kind: "markExecuted", securityId: row.securityId })} />
                   <WriteButton label="Cancel" size="xs" ariaLabel={`Cancel ${row.displayId}`} onClick={() => onAction({ kind: "cancel", securityId: row.securityId, reason: "NOT_EXECUTED" })} />
                 </div>
@@ -162,15 +164,15 @@ function StatusSections({ data, lookups, onAction }: { data: api.SecuritiesStatu
         empty="No scheduled terminations."
         columns={[
           { key: "holder", label: "Stakeholder", render: (row) => holder(row.stakeholderId), compare: byText((row) => holderName(row.stakeholderId)) },
-          { key: "date", label: "Termination date", render: (row) => <>{formatDate(row.terminationDate)} <span className="muted small">(in {daysBetween(today, row.terminationDate)} days)</span></>, compare: byText((row) => row.terminationDate) },
+          { key: "date", label: "Termination date", render: (row) => <>{formatDate(row.terminationDate)} <span className="text-xs text-muted-foreground">(in {daysBetween(today, row.terminationDate)} days)</span></>, compare: byText((row) => row.terminationDate) },
           { key: "type", label: "Type", render: (row) => TERMINATION_TYPE_LABELS[row.type] },
           { key: "affected", label: "Securities affected", numeric: true, render: (row) => String(row.securitiesAffected), compare: byNumber((row) => row.securitiesAffected) },
           { key: "cancel", label: "Unvested to cancel on that date", numeric: true, render: (row) => format.shares(row.unvestedToCancel), compare: byDecimal((row) => row.unvestedToCancel) },
           {
             key: "actions", label: "",
             render: (row) => (
-              <div className="row nowrap">
-                <Link className="btn btn-ghost btn-xs" to={href(`stakeholders/${row.stakeholderId}`)}>Open</Link>
+              <div className="flex items-center gap-2">
+                <Button asChild variant="ghost" size="xs"><Link to={href(`stakeholders/${row.stakeholderId}`)}>Open</Link></Button>
                 <OwnRecordScope own={workspace.isOwn(row.stakeholderId)}>
                   <WriteButton label="Reverse" size="xs" ariaLabel={`Reverse the scheduled termination of ${holderName(row.stakeholderId)}`} onClick={() => onAction({ kind: "cancelScheduled", id: row.id, stakeholderName: holderName(row.stakeholderId) })} />
                 </OwnRecordScope>
@@ -215,7 +217,7 @@ function StatusSections({ data, lookups, onAction }: { data: api.SecuritiesStatu
           { key: "holder", label: "Stakeholder", render: (row) => holder(row.stakeholderId), compare: byText((row) => holderName(row.stakeholderId)) },
           { key: "vested", label: "Vested and unexercised", numeric: true, render: (row) => format.shares(row.vestedUnexercised), compare: byDecimal((row) => row.vestedUnexercised) },
           { key: "deadline", label: "Contractual deadline", render: (row) => <>{formatDate(row.contractualDeadline)}{relative(row.contractualDeadline)}{awaiting(row.executionStatus)}</>, compare: byNumber((row) => row.contractualDaysLeft) },
-          { key: "iso", label: "ISO deadline", render: (row) => (row.isoDeadline ? <>{formatDate(row.isoDeadline)}{relative(row.isoDeadline)}</> : <>— <span className="muted small">(NSO)</span></>), compare: byNumber((row) => row.isoDaysLeft) },
+          { key: "iso", label: "ISO deadline", render: (row) => (row.isoDeadline ? <>{formatDate(row.isoDeadline)}{relative(row.isoDeadline)}</> : <>— <span className="text-xs text-muted-foreground">(NSO)</span></>), compare: byNumber((row) => row.isoDaysLeft) },
           {
             key: "action", label: "",
             render: (row) => (

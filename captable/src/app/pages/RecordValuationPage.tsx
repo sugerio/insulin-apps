@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { FieldSet } from "@/components/ui/field.tsx";
 import { apiRequest } from "../api/request.ts";
 import { DocumentUpload, type UploadedDocument } from "../components/DocumentUpload.tsx";
 import { ErrorState, Loading } from "../components/Feedback.tsx";
@@ -129,12 +131,12 @@ function ValuationForm({ classes, valuations }: { classes: readonly api.StockCla
     <Card>
       <PageHead title="Record FMV" />
       {editing ? <FlowProblemBanner problem={flow.problem} /> : null}
-      <fieldset className="flow-fields form" disabled={!editing} style={{ maxWidth: 640 }} aria-label="Valuation">
-        <div className="form-grid">
+      <FieldSet className="max-w-160" disabled={!editing} aria-label="Valuation">
+        <div className="grid gap-4 sm:grid-cols-2">
           <TextField label="Provider" required value={provider} onChange={(value) => { setProvider(value); clear("provider"); }} placeholder="e.g. Harborline Valuation Partners" error={errorOf("provider")} />
           <TextField label="Name" value={name} onChange={setName} placeholder={`Auto: "${defaultValuationName(effective) || "<Mon YYYY> Valuation"}"`} error={errorOf("name")} />
         </div>
-        <div className="form-grid">
+        <div className="grid gap-4 sm:grid-cols-2">
           <DateField label="Effective date" required max={today} value={effective} error={errorOf("effective")}
             onChange={(value) => { setEffective(value); clear("effective"); if (!expirationTouched && DATE.test(value)) setExpiration(addYears(value, 1)); }} />
           <DateField label="Expiration date" required value={expiration} hint="Default +12 months — an upper bound, not a guarantee." error={errorOf("expiration")}
@@ -153,36 +155,36 @@ function ValuationForm({ classes, valuations }: { classes: readonly api.StockCla
           />
         ))}
         <DocumentUpload label="Valuation report (PDF)" kind="VALUATION_REPORT" required value={report} onChange={(document) => { setReport(document); clear("report"); }} error={errorOf("report")} disabled={!editing} />
-        <div className="form-grid">
+        <div className="grid gap-4 sm:grid-cols-2">
           <DateField label="Board adoption date (optional)" value={board} onChange={setBoard} error={errorOf("board")} />
           <TextField label="Method notes (optional)" value={method} onChange={setMethod} error={errorOf("method")} />
         </div>
         <DocumentUpload label="Board consent (optional)" kind="BOARD_CONSENT" value={consent} onChange={setConsent} error={errorOf("consent")} disabled={!editing} />
-      </fieldset>
+      </FieldSet>
       {editing ? (
         <>
-          <div className="row mt-12">
-            <Link className="btn btn-ghost" to={href("compliance/409a")}>Cancel</Link>
-            <button type="button" className="btn btn-primary" onClick={review}>Save</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="ghost"><Link to={href("compliance/409a")}>Cancel</Link></Button>
+            <Button type="button" onClick={review}>Save</Button>
           </div>
-          <p className="small muted mt-8">A later valuation marks earlier ones Superseded from its effective date. A recorded 409A cannot be reversed; record a corrected valuation instead.</p>
+          <p className="text-xs text-muted-foreground">A later valuation marks earlier ones Superseded from its effective date. A recorded 409A cannot be reversed; record a corrected valuation instead.</p>
         </>
       ) : (
-        <div className="mt-16">
+        <div className="flex flex-col gap-4">
           <FlowProblemBanner problem={flow.problem} onRetry={() => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-          <div className="review-panel mt-8" aria-label="Review">
-            <h3>Review the valuation</h3>
+          <div className="flex flex-col gap-2 rounded-lg border bg-muted/50 p-4 text-sm" aria-label="Review">
+            <h3 className="font-semibold">Review the valuation</h3>
             <p>
               Record <b>{resolvedName}</b> from {provider.trim()}: effective {formatDate(effective)}, presumptively valid until {formatDate(expiration)} at the latest.
             </p>
-            <ul className="small" style={{ margin: "4px 0 8px", paddingLeft: 18 }} aria-label="FMV per class">
+            <ul className="list-disc pl-5 text-xs" aria-label="FMV per class">
               {typedPrices.map((item) => <li key={item.stockClassId}>{item.name}: {format.price(item.value!)}</li>)}
             </ul>
-            <p className="small">Report: {report?.filename}{last && DATE.test(effective) && effective > last.effectiveDate ? ` · ${last.name} is superseded from ${formatDate(effective)}` : ""}. No e-mail is sent.</p>
+            <p className="text-xs">Report: {report?.filename}{last && DATE.test(effective) && effective > last.effectiveDate ? ` · ${last.name} is superseded from ${formatDate(effective)}` : ""}. No e-mail is sent.</p>
           </div>
-          <div className="wiz-foot">
-            <button type="button" className="btn btn-ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back to edit</button>
-            <button type="button" className="btn btn-primary" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked}>{flow.phase === "committing" ? "Saving…" : "Record valuation"}</button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back to edit</Button>
+            <Button type="button" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked}>{flow.phase === "committing" ? "Saving…" : "Record valuation"}</Button>
           </div>
         </div>
       )}

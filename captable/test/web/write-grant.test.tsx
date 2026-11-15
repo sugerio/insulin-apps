@@ -420,7 +420,9 @@ describe("record options", () => {
     type("Number of options", "40,000");
     type(/Board approval date/, "2026-10-20");
     // The block names the final 409A, not the newer token valuation or the draft.
-    expect(await screen.findByText(/No presumptively valid 409A on Oct 20, 2026 \(Nov 2025 Valuation: expiring soon\)/, { selector: ".err-inline" })).toBeTruthy();
+    // Under the exercise price, shown as a problem (the destructive text colour), not as a plain note.
+    const noValid = await screen.findAllByText(/No presumptively valid 409A on Oct 20, 2026 \(Nov 2025 Valuation: expiring soon\)/);
+    expect(noValid.some((element) => element.tagName === "SPAN" && element.className.includes("text-destructive"))).toBe(true);
     await attach(/Signed board consent/, "BA-19 New-hire grant consent.pdf");
     fireEvent.click(screen.getByLabelText(/employee at grant/));
     fireEvent.click(screen.getByLabelText(/Matches the signed agreement/));
@@ -441,7 +443,9 @@ describe("record options", () => {
     await waitFor(() => expect(within(holder).getByRole("option", { name: /Daniel Achterberg/ })).toBeTruthy());
     fireEvent.change(holder, { target: { value: IDS.daniel } });
     type(/Board approval date/, "2026-10-20");
-    expect(await screen.findByText(/No presumptively valid 409A on Oct 20, 2026 \(Nov 2025 Valuation: expiring soon\)/, { selector: ".err-inline" })).toBeTruthy();
+    // Under the exercise price, shown as a problem (the destructive text colour), not as a plain note.
+    const noValid = await screen.findAllByText(/No presumptively valid 409A on Oct 20, 2026 \(Nov 2025 Valuation: expiring soon\)/);
+    expect(noValid.some((element) => element.tagName === "SPAN" && element.className.includes("text-destructive"))).toBe(true);
     expect(screen.getByLabelText(/Counsel memo/)).toBeTruthy();
   }, 60_000);
 });

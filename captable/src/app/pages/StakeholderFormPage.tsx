@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Card as UiCard, CardContent } from "@/components/ui/card.tsx";
 import { apiRequest } from "../api/request.ts";
 import { DescriptionList } from "../components/DescriptionList.tsx";
 import { DocumentUpload, type UploadedDocument } from "../components/DocumentUpload.tsx";
@@ -144,13 +146,13 @@ function StakeholderForm({ mode, original: loaded }: { mode: "create" | "edit"; 
     <Card>
       <PageHead title={mode === "create" ? "Add stakeholder" : `Edit ${base!.displayName}`} />
       {editing ? <FlowProblemBanner problem={flow.problem} /> : null}
-      <fieldset className="flow-fields form" disabled={!editing} style={{ maxWidth: 760 }} aria-label="Stakeholder details">
-        <h3>Identity</h3>
+      <fieldset className="flex max-w-190 min-w-0 flex-col gap-4" disabled={!editing} aria-label="Stakeholder details">
+        <h3 className="text-base font-semibold">Identity</h3>
         <RadioCards label="Type" value={values.kind} onChange={(value) => set("kind", value as StakeholderValues["kind"])} options={[
           { value: "individual", label: "Individual", sub: "A person" },
           { value: "institution", label: "Institution", sub: "A fund, company or trust" },
         ]} />
-        <div className="form-grid">
+        <div className="grid gap-4 sm:grid-cols-2">
           <TextField label="Legal name" required value={values.legalName} onChange={(value) => set("legalName", value)} error={errorOf("legalName")} />
           <TextField label="Display name" value={values.displayName} onChange={(value) => set("displayName", value)} hint="Defaults to the legal name." error={errorOf("displayName")} />
           {mode === "create" ? (
@@ -164,17 +166,17 @@ function StakeholderForm({ mode, original: loaded }: { mode: "create" | "edit"; 
               ) : null}
             </>
           ) : (
-            <div className="fld full">
-              <span className="lbl">E-mails</span>
-              <div className="small">{activeEmails(base!).map((email) => pii.email(email.email)).join(", ") || DASH}</div>
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <span className="text-sm font-medium">E-mails</span>
+              <div className="text-xs">{activeEmails(base!).map((email) => pii.email(email.email)).join(", ") || DASH}</div>
             </div>
           )}
         </div>
         {duplicate ? (
           <Banner kind="warn" title="Duplicate e-mail">{duplicate.displayName} already uses this e-mail. You can still save; duplicate records can be merged from the stakeholder page.</Banner>
         ) : null}
-        <h3>Relationship</h3>
-        <div className="form-grid">
+        <h3 className="text-base font-semibold">Relationship</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
           {/* Ex-employee is set by a termination and locked while one is recorded or scheduled; one imported without
               a termination can be corrected. */}
           {base?.relationship === "ex_employee" && (base.termination !== null || base.scheduledTermination !== null) ? (
@@ -189,9 +191,9 @@ function StakeholderForm({ mode, original: loaded }: { mode: "create" | "edit"; 
           <TextField label="External ID" value={values.issuerAssignedId} onChange={(value) => set("issuerAssignedId", value)} error={errorOf("issuerAssignedId")} />
           <TextField label="Phone" type="tel" value={values.phone} onChange={(value) => set("phone", value)} error={errorOf("phone")} />
         </div>
-        <h3>Address and tax residence</h3>
-        <div className="form-grid">
-          <TextField className="full" label="Address" value={values.line1} onChange={(value) => set("line1", value)} placeholder="Street and number" error={errorOf("line1")} />
+        <h3 className="text-base font-semibold">Address and tax residence</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField className="sm:col-span-2" label="Address" value={values.line1} onChange={(value) => set("line1", value)} placeholder="Street and number" error={errorOf("line1")} />
           <TextField label="Address line 2" value={values.line2} onChange={(value) => set("line2", value)} />
           <TextField label="City" value={values.city} onChange={(value) => set("city", value)} error={errorOf("city")} />
           <TextField label="State or region" value={values.region} onChange={(value) => set("region", value)} />
@@ -200,29 +202,29 @@ function StakeholderForm({ mode, original: loaded }: { mode: "create" | "edit"; 
           <TextField label="Country of tax residence" value={values.countryOfResidence} onChange={(value) => set("countryOfResidence", value)} placeholder="US" hint="Two-letter code." error={errorOf("countryOfResidence")} />
         </div>
         <TextAreaField label="Comments" value={values.comments} onChange={(value) => set("comments", value)} error={errorOf("comments")} />
-        <p className="small muted">The app doesn't collect a TIN.{mode === "edit" ? " A leave of absence is recorded below, on the ledger." : ""}</p>
+        <p className="text-xs text-muted-foreground">The app doesn't collect a TIN.{mode === "edit" ? " A leave of absence is recorded below, on the ledger." : ""}</p>
       </fieldset>
       {editing ? (
-        <div className="row mt-12">
-          <button type="button" className="btn btn-primary" onClick={review}>Save</button>
-          <Link className="btn btn-ghost" to={base ? href(`stakeholders/${base.id}`) : href("stakeholders")}>Cancel</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={review}>Save</Button>
+          <Button asChild variant="ghost"><Link to={base ? href(`stakeholders/${base.id}`) : href("stakeholders")}>Cancel</Link></Button>
         </div>
       ) : (
-        <div className="mt-16">
+        <div className="flex flex-col gap-4">
           <FlowProblemBanner problem={flow.problem} onRetry={() => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
           {serverChanges.length ? <ServerChangeList changes={serverChanges} /> : null}
-          <div className="review-panel mt-8" aria-label="Review">
-            <h3>{mode === "create" ? "Review the new stakeholder" : "Review your changes"}</h3>
+          <div className="flex flex-col gap-2 rounded-lg border bg-muted/50 p-4" aria-label="Review">
+            <h3 className="text-sm font-semibold">{mode === "create" ? "Review the new stakeholder" : "Review your changes"}</h3>
             {mode === "create" && reviewed ? <CreateSummary request={reviewed as CreateRequest} />
-              : nothingLeft ? <p>Nothing left to save: the record already has these values.</p>
+              : nothingLeft ? <p className="text-sm">Nothing left to save: the record already has these values.</p>
                 : base ? <ChangeList values={values} original={base} /> : null}
           </div>
           <WarningsToAcknowledge flow={flow as never} />
-          <div className="wiz-foot">
-            <button type="button" className="btn btn-ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back to edit</button>
-            <button type="button" className="btn btn-primary" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll || nothingLeft}>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back to edit</Button>
+            <Button type="button" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll || nothingLeft}>
               {flow.phase === "committing" ? "Saving…" : mode === "create" ? "Add stakeholder" : "Save changes"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -235,7 +237,7 @@ function CreateSummary({ request }: { request: CreateRequest }) {
   const contact = request.emails.find((email) => email.kind === "contact");
   const own = request.emails.find((email) => email.kind !== "contact");
   return (
-    <p>
+    <p className="text-sm">
       Add <b>{request.displayName}</b> ({request.kind === "institution" ? "Institution" : "Individual"} · {RELATIONSHIP_LABELS[request.relationship]})
       {contact ? <> with contact <b>{contact.email}</b></> : null}
       {own ? <> with e-mail <b>{own.email}</b></> : null}
@@ -275,18 +277,18 @@ function ChangeList({ values, original }: { values: StakeholderValues; original:
   return (
     <div aria-label="Changes">
       {addressCleared ? (
-        <div className="change-row">
+        <div className="grid gap-x-3 gap-y-0.5 border-b border-dashed py-1 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto]">
           <span>Address</span>
-          <span className="cv">{addressLine(original.address) ?? DASH}<span className="arrow" aria-label="becomes">→</span><b>Cleared</b></span>
+          <span className="tabular-nums sm:text-right">{addressLine(original.address) ?? DASH}<span className="mx-1.5 text-muted-foreground" aria-label="becomes">→</span><b>Cleared</b></span>
         </div>
       ) : null}
       {keys.map((key) => (
-        <div className="change-row" key={key}>
+        <div className="grid gap-x-3 gap-y-0.5 border-b border-dashed py-1 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto]" key={key}>
           <span>{CHANGE_LABELS[key]}</span>
-          <span className="cv">{key === "displayName" && before.displayName === "" ? original.displayName : shown(key, before[key])}<span className="arrow" aria-label="becomes">→</span><b>{after(key)}</b></span>
+          <span className="tabular-nums sm:text-right">{key === "displayName" && before.displayName === "" ? original.displayName : shown(key, before[key])}<span className="mx-1.5 text-muted-foreground" aria-label="becomes">→</span><b>{after(key)}</b></span>
         </div>
       ))}
-      {values.displayName === "" && values.legalName !== before.legalName ? <p className="small muted mt-8">The display name follows the legal name.</p> : null}
+      {values.displayName === "" && values.legalName !== before.legalName ? <p className="mt-2 text-xs text-muted-foreground">The display name follows the legal name.</p> : null}
     </div>
   );
 }
@@ -294,15 +296,15 @@ function ChangeList({ values, original }: { values: StakeholderValues; original:
 /** What someone else changed while the admin was editing (after 409 stale_version). */
 function ServerChangeList({ changes }: { changes: readonly ServerChange[] }) {
   return (
-    <div className="review-panel mt-8" aria-label="Changed on the server">
-      <h3>Changed by someone else while you were editing</h3>
-      <p className="small">Fields you didn't edit now show the new values and are left as they are. Check them before you save again.</p>
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/50 p-4" aria-label="Changed on the server">
+      <h3 className="text-sm font-semibold">Changed by someone else while you were editing</h3>
+      <p className="text-xs">Fields you didn't edit now show the new values and are left as they are. Check them before you save again.</p>
       {changes.map((change) => (
-        <div className="change-row" key={change.field}>
+        <div className="grid gap-x-3 gap-y-0.5 border-b border-dashed py-1 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto]" key={change.field}>
           <span>{CHANGE_LABELS[change.field] ?? change.field}</span>
-          <span className="cv">
-            {shown(change.field, change.before)}<span className="arrow" aria-label="became">→</span><b>{shown(change.field, change.after)}</b>
-            {change.conflict ? <span className="small" style={{ color: "var(--warning-text)" }}> · you edited this too: your value replaces it if you save</span> : null}
+          <span className="tabular-nums sm:text-right">
+            {shown(change.field, change.before)}<span className="mx-1.5 text-muted-foreground" aria-label="became">→</span><b>{shown(change.field, change.after)}</b>
+            {change.conflict ? <span className="text-xs text-amber-700 dark:text-amber-300"> · you edited this too: your value replaces it if you save</span> : null}
           </span>
         </div>
       ))}
@@ -333,20 +335,20 @@ function LeaveOfAbsenceCard({ stakeholder, onRecorded }: { stakeholder: api.Stak
   };
   return (
     <Card>
-      <h2 className="mb-8">Leave of absence</h2>
-      <p className="small muted">Feeds the ISO test: a leave longer than 3 months without a guaranteed right to return ends employment for that test on the day after the 3rd month.</p>
+      <h2 className="text-lg font-semibold">Leave of absence</h2>
+      <p className="text-xs text-muted-foreground">Feeds the ISO test: a leave longer than 3 months without a guaranteed right to return ends employment for that test on the day after the 3rd month.</p>
       {stakeholder.leaveOfAbsence.length ? (
-        <ul className="small" style={{ margin: "4px 0 12px", paddingLeft: 18 }} aria-label="Recorded leaves">
+        <ul className="list-disc pl-4.5 text-xs" aria-label="Recorded leaves">
           {stakeholder.leaveOfAbsence.map((leave, index) => (
             <li key={`${leave.startDate}-${index}`}>
               {formatDate(leave.startDate)} → {leave.endDate ? formatDate(leave.endDate) : "open"} · return {leave.returnGuaranteed ? "guaranteed" : "not guaranteed"}
               {leave.endDate === null && closing?.startDate !== leave.startDate ? (
-                <> <button type="button" className="btn-link small" onClick={() => restart(leave)}>Record its end<span className="sr-only"> (the leave that started on {formatDate(leave.startDate)})</span></button></>
+                <> <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => restart(leave)}>Record its end<span className="sr-only"> (the leave that started on {formatDate(leave.startDate)})</span></Button></>
               ) : null}
             </li>
           ))}
         </ul>
-      ) : <p className="small">No leave of absence recorded.</p>}
+      ) : <p className="text-xs">No leave of absence recorded.</p>}
       <LeaveForm key={generation} stakeholder={stakeholder} closing={closing} onNewLeave={() => restart(null)} onRecorded={() => { restart(null); onRecorded(); }} />
     </Card>
   );
@@ -411,16 +413,16 @@ function LeaveForm({ stakeholder, closing, onNewLeave, onRecorded }: { stakehold
     if (Object.keys(found).length === 0) void flow.review();
   };
   return (
-    <section aria-label="Record a leave of absence">
+    <section className="flex flex-col gap-4" aria-label="Record a leave of absence">
       {editing ? <FlowProblemBanner problem={flow.problem} onRetry={review} busy={flow.busy} /> : null}
       {closing ? (
-        <p className="small">
+        <p className="text-xs">
           Record the end of the leave that started on <b>{formatDate(closing.startDate)}</b>: it is sent with that start date, so it ends that leave rather than adding one.{" "}
-          {editing ? <button type="button" className="btn-link small" onClick={onNewLeave}>Record a new leave instead</button> : null}
+          {editing ? <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={onNewLeave}>Record a new leave instead</Button> : null}
         </p>
       ) : null}
-      <fieldset className="flow-fields form" disabled={!editing} style={{ maxWidth: 560 }}>
-        <div className="form-grid">
+      <fieldset className="flex max-w-140 min-w-0 flex-col gap-4" disabled={!editing}>
+        <div className="grid gap-4 sm:grid-cols-2">
           <DateField label="Leave start" required max={today} value={start} disabled={closing !== null} onChange={(value) => { setStart(value); clear("start"); }} error={errorOf("start")} />
           <DateField label="Leave end" required={closing !== null} value={end} onChange={(value) => { setEnd(value); clear("end"); }} hint={closing ? "The day the leave ended." : "Empty while the leave is open."} error={errorOf("end")} />
         </div>
@@ -428,14 +430,14 @@ function LeaveForm({ stakeholder, closing, onNewLeave, onRecorded }: { stakehold
         <DocumentUpload label="Supporting document (optional)" kind="OTHER" value={document} onChange={(next) => { setDocument(next); clear("document"); }} error={errorOf("document")} disabled={!editing} />
       </fieldset>
       {editing ? (
-        <div className="row mt-12">
-          <button type="button" className="btn btn-primary" onClick={review} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : "Review leave"}</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={review} disabled={flow.busy}>{flow.phase === "previewing" ? "Checking…" : "Review leave"}</Button>
         </div>
       ) : (
-        <div className="mt-12">
+        <div className="flex flex-col gap-4">
           <FlowProblemBanner problem={flow.problem} onRetry={() => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
           {corrects && flow.request ? (
-            <p className="small" aria-label="What this records">
+            <p className="text-xs" aria-label="What this records">
               {flow.request.endDate
                 ? <>Ends the leave that started on <b>{formatDate(corrects.startDate)}</b> on <b>{formatDate(flow.request.endDate)}</b>, return {flow.request.returnGuaranteed ? "guaranteed" : "not guaranteed"}.</>
                 : <>Records the leave that started on <b>{formatDate(corrects.startDate)}</b> again, still open, return {flow.request.returnGuaranteed ? "guaranteed" : "not guaranteed"}.</>}
@@ -444,11 +446,11 @@ function LeaveForm({ stakeholder, closing, onNewLeave, onRecorded }: { stakehold
           ) : null}
           {flow.preview ? <CommandPreview transactions={flow.preview.transactions} changes={flow.preview.changes} names={new Map([[stakeholder.id, stakeholder.displayName]])} /> : null}
           <WarningsToAcknowledge flow={flow as never} />
-          <div className="wiz-foot">
-            <button type="button" className="btn btn-ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Change the leave</button>
-            <button type="button" className="btn btn-primary" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll}>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={flow.edit} disabled={flow.busy || flow.locked}>Change the leave</Button>
+            <Button type="button" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll}>
               {flow.phase === "committing" ? "Recording…" : closing ? "Record its end" : "Record leave"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -506,25 +508,26 @@ export function NewStakeholderCard({ stakeholders, onCreated, onUnsettledChange 
   };
   const reviewed = flow.request;
   return (
-    <div className="card mt-8" style={{ background: "var(--surface-2)" }} aria-label="New stakeholder">
-      <h4 className="mb-8">New stakeholder</h4>
+    <UiCard className="mt-2 bg-muted/50" aria-label="New stakeholder">
+      <CardContent className="flex flex-col gap-3">
+      <h4 className="text-sm font-semibold">New stakeholder</h4>
       {editing ? <FlowProblemBanner problem={flow.problem} /> : null}
-      <div className="form-grid">
+      <div className="grid gap-4 sm:grid-cols-2">
         <SelectField label="Type" value={values.kind} onChange={(value) => set("kind", value as StakeholderValues["kind"])} options={[["individual", "Individual"], ["institution", "Institution"]]} disabled={!editing} />
         <TextField label="Legal name" required value={values.legalName} onChange={(value) => set("legalName", value)} error={errorOf("legalName")} disabled={!editing} />
         <TextField label={values.kind === "institution" ? "Contact e-mail" : "E-mail"} type="email" required={values.kind === "institution"} value={values.email} onChange={(value) => set("email", value)} hint={values.kind === "institution" ? CONTACT_HINT : EMAIL_HINT} error={errorOf("email")} disabled={!editing} />
         <SelectField label="Relationship" value={values.relationship} onChange={(value) => set("relationship", value as api.Relationship)} options={RELATIONSHIP_OPTIONS} disabled={!editing} />
         <DateField label="Hire date" value={values.hireDate} onChange={(value) => set("hireDate", value)} error={errorOf("hireDate")} disabled={!editing} />
       </div>
-      {duplicate && editing ? <div className="mt-8"><Banner kind="warn" title="Duplicate e-mail">{duplicate.displayName} already uses this e-mail. Pick them from the list, use another address, or merge the duplicate records later.</Banner></div> : null}
+      {duplicate && editing ? <div><Banner kind="warn" title="Duplicate e-mail">{duplicate.displayName} already uses this e-mail. Pick them from the list, use another address, or merge the duplicate records later.</Banner></div> : null}
       {editing ? (
-        <div className="row mt-8">
-          <button type="button" className="btn btn-primary btn-sm" onClick={review}>Review</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" onClick={review}>Review</Button>
         </div>
       ) : (
-        <div className="mt-8">
+        <div className="flex flex-col gap-3">
           <FlowProblemBanner problem={flow.problem} onRetry={() => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-          <div className="review-panel" aria-label="Review the new stakeholder">
+          <div className="flex flex-col gap-2 rounded-lg border bg-muted/50 p-4" aria-label="Review the new stakeholder">
             {reviewed ? (
               <DescriptionList rows={[
                 ["Name", reviewed.displayName],
@@ -534,17 +537,18 @@ export function NewStakeholderCard({ stakeholders, onCreated, onUnsettledChange 
                 [values.kind === "institution" ? "Contact e-mail" : "E-mail", reviewed.emails[0]?.email ?? DASH],
               ]} />
             ) : null}
-            <p className="small muted mt-8">Added to the stakeholders now.</p>
+            <p className="text-xs text-muted-foreground">Added to the stakeholders now.</p>
           </div>
           <WarningsToAcknowledge flow={flow as never} />
-          <div className="row mt-8">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back</button>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={flow.edit} disabled={flow.busy || flow.locked}>Back</Button>
+            <Button type="button" size="sm" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.acknowledgedAll}>
               {flow.phase === "committing" ? "Adding…" : "Add stakeholder"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </div>
+      </CardContent>
+    </UiCard>
   );
 }

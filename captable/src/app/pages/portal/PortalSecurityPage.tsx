@@ -1,6 +1,10 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams } from "react-router";
+import { ChevronDownIcon } from "lucide-react";
 import { engine, type api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { ProgressBar, VestingChart } from "../../components/Charts.tsx";
 import { DescriptionList, type DlRow } from "../../components/DescriptionList.tsx";
 import { useDisplay } from "../../components/Display.tsx";
@@ -15,6 +19,9 @@ import {
   awaitingHolderSignature, decOf, discountLabel, formatComputedMoney, formatRecordedMoney, isPositive, isoDeadlineState, securityPath, unitOf,
 } from "../../lib/portal.ts";
 import { useResource } from "../../lib/useResource.ts";
+
+/** A number in a table cell. */
+const NUM = "text-right tabular-nums whitespace-nowrap";
 
 // A holding's detail page (option, share, warrant, SAFE): only what the allowlisted
 // PortalSecurityDetail carries — the holder's own numbers, deadlines, vesting events, the family's own facts and the
@@ -67,9 +74,9 @@ function Layout({ security, title, badges, actions, banners, children }: LayoutP
       <Card>
         <PageHead title={title} badges={badges ?? <StatusBadge status={security.status} />} actions={actions} />
         {banners}
-        <div className="grid-detail">
-          <div>{children}</div>
-          <div>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+          <div className="flex min-w-0 flex-col gap-3">{children}</div>
+          <div className="flex min-w-0 flex-col gap-3">
             <SectionTitle>Documents</SectionTitle>
             <DocumentCards documents={security.documents} />
           </div>
@@ -83,7 +90,7 @@ function Layout({ security, title, badges, actions, banners, children }: LayoutP
 function OwnLot({ displayId }: { displayId: string }) {
   const portal = usePortal();
   const lot = portal.holdings.flatMap((holding) => holding.securities).find((security) => security.displayId === displayId);
-  return lot ? <PortalLink to={securityPath(lot)}>{displayId}</PortalLink> : <>{displayId}</>;
+  return lot ? <PortalLink className="font-medium underline underline-offset-4" to={securityPath(lot)}>{displayId}</PortalLink> : <>{displayId}</>;
 }
 
 function joined(items: readonly ReactNode[]): ReactNode {
@@ -98,7 +105,7 @@ function OptionView({ security, detail }: { security: api.PortalSecurityDetail; 
   const isoRow: ReactNode = iso.kind === "upcoming"
     ? <Deadline date={iso.date} note="— exercises after it are taxed as NSOs" />
     : iso.kind === "passed"
-      ? <><b>{formatDate(iso.date)}</b> <span className="muted small">— passed: exercises from now on are taxed as NSOs</span></>
+      ? <><b>{formatDate(iso.date)}</b> <span className="text-xs text-muted-foreground">— passed: exercises from now on are taxed as NSOs</span></>
       : security.isoDeadline !== null
         ? <Deadline date={security.isoDeadline} />
         : security.optionType === "NSO" ? "— (NSO)" : DASH;
@@ -106,8 +113,8 @@ function OptionView({ security, detail }: { security: api.PortalSecurityDetail; 
     ? [["Contractual deadline", <Deadline date={security.contractualDeadline} />], ["ISO deadline", isoRow]]
     : [];
   const action = preview
-    ? <button type="button" className="btn btn-primary" disabled title="Disabled in the preview">How to exercise</button>
-    : <PortalLink className="btn btn-primary" to={`how-to-exercise?grant=${security.id}`}>How to exercise</PortalLink>;
+    ? <Button type="button" disabled title="Disabled in the preview">How to exercise</Button>
+    : <Button asChild><PortalLink to={`how-to-exercise?grant=${security.id}`}>How to exercise</PortalLink></Button>;
   const live = security.status === "OUTSTANDING" && isPositive(numbers.outstanding);
   const blocked = awaitingHolderSignature(security);
   return (
@@ -164,7 +171,7 @@ function OptionView({ security, detail }: { security: api.PortalSecurityDetail; 
           rows={detail.postTerminationPeriods.map((window) => [TERMINATION_WINDOW_LABELS[window.reason] ?? window.reason, periodLabel(window)])}
         />
       ) : (
-        <p className="muted small">No post-termination periods are recorded for this grant.</p>
+        <p className="text-xs text-muted-foreground">No post-termination periods are recorded for this grant.</p>
       )}
       {detail.exercises.length ? (
         <>
@@ -181,7 +188,7 @@ function OptionView({ security, detail }: { security: api.PortalSecurityDetail; 
           />
         </>
       ) : null}
-      {live && !blocked ? <p className="small muted mt-12">{SELF_SERVICE_NOTE}</p> : null}
+      {live && !blocked ? <p className="mt-3 text-xs text-muted-foreground">{SELF_SERVICE_NOTE}</p> : null}
     </Layout>
   );
 }
@@ -205,25 +212,29 @@ function IsoSplit({ rows }: { rows: api.PortalOptionDetail["isoSplit"] }) {
   return (
     <>
       <SectionTitle>ISO/NSO split</SectionTitle>
-      <div className="tbl-scroll">
-        <table className="tbl dense" aria-label="ISO/NSO split">
-          <thead>
-            <tr><th scope="col">Year</th><th scope="col" className="num">First exercisable</th><th scope="col" className="num">Value at grant</th><th scope="col" className="num">ISO</th><th scope="col" className="num">NSO</th></tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.year}>
-                <td>{row.year}</td>
-                <td className="num">{format.shares(row.firstExercisable)}</td>
-                <td className="num">{formatComputedMoney(decOf(row.valueAtGrant)).text}</td>
-                <td className="num">{format.shares(row.iso)}</td>
-                <td className="num">{format.shares(row.nso)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="small muted mt-8">ISOs that first become exercisable in one year are limited to $100,000 (valued at grant); the excess is treated as NSO.</p>
+      <Table aria-label="ISO/NSO split">
+        <TableHeader>
+          <TableRow>
+            <TableHead scope="col">Year</TableHead>
+            <TableHead scope="col" className="text-right">First exercisable</TableHead>
+            <TableHead scope="col" className="text-right">Value at grant</TableHead>
+            <TableHead scope="col" className="text-right">ISO</TableHead>
+            <TableHead scope="col" className="text-right">NSO</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.year}>
+              <TableCell>{row.year}</TableCell>
+              <TableCell className={NUM}>{format.shares(row.firstExercisable)}</TableCell>
+              <TableCell className={NUM}>{formatComputedMoney(decOf(row.valueAtGrant)).text}</TableCell>
+              <TableCell className={NUM}>{format.shares(row.iso)}</TableCell>
+              <TableCell className={NUM}>{format.shares(row.nso)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <p className="text-xs text-muted-foreground">ISOs that first become exercisable in one year are limited to $100,000 (valued at grant); the excess is treated as NSO.</p>
     </>
   );
 }
@@ -269,7 +280,7 @@ function ShareView({ security, detail }: { security: api.PortalSecurityDetail; d
           detail.origin ? ["Origin", <OriginLabel origin={detail.origin} />] : null,
         ]}
       />
-      {detail.form === "book_entry" ? <p className="small muted mt-8">These shares are held in book entry on the company's records.</p> : null}
+      {detail.form === "book_entry" ? <p className="text-xs text-muted-foreground">These shares are held in book entry on the company's records.</p> : null}
       {restricted || detail.repurchase ? (
         <>
           <SectionTitle>Vesting and repurchase</SectionTitle>
@@ -320,8 +331,8 @@ function WarrantView({ security }: { security: api.PortalSecurityDetail }) {
           ["Expiration", formatDate(security.expirationDate)],
         ]}
       />
-      <p className="small muted mt-12">
-        Contact the company to exercise{contact ? <>: <span className="email">{contact.email}</span></> : null}.
+      <p className="mt-3 text-xs text-muted-foreground">
+        Contact the company to exercise{contact ? <>: <span className="break-all select-all">{contact.email}</span></> : null}.
       </p>
     </Layout>
   );
@@ -390,14 +401,15 @@ function VestingSummaryLine({ security }: { security: api.PortalSecurity }) {
     if (summary.stopped) parts.push(last ? `Vesting stopped: last vest on ${formatDate(last)}` : "Vesting stopped before the first vest");
     else if (last) parts.push(`${last <= today ? "Fully vested" : "Fully vests"} on ${formatDate(last)}`);
   }
-  return <p className="small">{parts.join(" · ")}</p>;
+  return <p className="text-xs">{parts.join(" · ")}</p>;
 }
 
 /** The vesting chart and the full schedule ("Vesting timeline: chart and full schedule"). */
 function VestingTimeline({ security }: { security: api.PortalSecurity }) {
   const { format, today } = useDisplay();
+  const [open, setOpen] = useState(false);
   const events = [...security.vesting].sort((a, b) => a.date.localeCompare(b.date));
-  if (events.length === 0) return <p className="muted small">No vesting schedule on record: {unitOf(security) === "options" ? "these options are" : "these shares are"} fully vested.</p>;
+  if (events.length === 0) return <p className="text-xs text-muted-foreground">No vesting schedule on record: {unitOf(security) === "options" ? "these options are" : "these shares are"} fully vested.</p>;
   const total = security.numbers.granted ?? events.at(-1)!.cumulative;
   const start = [security.issueDate, events[0]!.date].sort()[0]!;
   const unit = unitOf(security);
@@ -411,27 +423,39 @@ function VestingTimeline({ security }: { security: api.PortalSecurity }) {
         stopDate={null}
         label={`Cumulative vested ${unit} over time for ${security.displayId}`}
       />
-      <details className="adv mt-12">
-        <summary>Full schedule ({events.length} events)</summary>
-        <div className="adv-b tbl-scroll">
-          <table className="tbl dense" aria-label="Vesting schedule">
-            <thead><tr><th scope="col">Date</th><th scope="col" className="num">Tranche</th><th scope="col" className="num">Cumulative</th><th scope="col">Status</th></tr></thead>
-            <tbody>
+      <Collapsible open={open} onOpenChange={setOpen} className="mt-3">
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" className="-ml-2">
+            <ChevronDownIcon className={open ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden="true" />
+            Full schedule ({events.length} events)
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <Table aria-label="Vesting schedule">
+            <TableHeader>
+              <TableRow>
+                <TableHead scope="col">Date</TableHead>
+                <TableHead scope="col" className="text-right">Tranche</TableHead>
+                <TableHead scope="col" className="text-right">Cumulative</TableHead>
+                <TableHead scope="col">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {events.map((event, index) => {
                 const [label, tone] = event.status === "STOPPED" && event.date > today ? ["Won't vest", "red" as const] : STATUS_BADGES[event.status];
                 return (
-                  <tr key={`${event.date}-${index}`}>
-                    <td>{formatDate(event.date)}</td>
-                    <td className="num">{format.shares(event.quantity)}</td>
-                    <td className="num">{format.shares(event.cumulative)}</td>
-                    <td><Badge tone={tone}>{label}</Badge></td>
-                  </tr>
+                  <TableRow key={`${event.date}-${index}`}>
+                    <TableCell>{formatDate(event.date)}</TableCell>
+                    <TableCell className={NUM}>{format.shares(event.quantity)}</TableCell>
+                    <TableCell className={NUM}>{format.shares(event.cumulative)}</TableCell>
+                    <TableCell><Badge tone={tone}>{label}</Badge></TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      </details>
+            </TableBody>
+          </Table>
+        </CollapsibleContent>
+      </Collapsible>
     </>
   );
 }

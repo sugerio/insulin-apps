@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { SearchIcon } from "lucide-react";
 import type { api } from "#shared";
-import { Icon } from "../../components/Icon.tsx";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group.tsx";
 import { Card, PageHead, SectionTitle } from "../../components/Page.tsx";
 import { DocumentCards, PortalLink, PortalPage, PortalResourceView } from "../../components/PortalParts.tsx";
 import { usePortal, type PortalScope } from "../../components/PortalWorkspace.tsx";
@@ -55,11 +56,12 @@ export function PortalDocumentsPage() {
             const filtered = words.length > 0;
             return (
               <>
-                <label className="dt-search">
-                  <Icon name="search" />
-                  <span className="sr-only">Search documents</span>
-                  <input type="search" value={query} placeholder="Search by name, kind or grant…" autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
-                </label>
+                <InputGroup className="max-w-sm">
+                  <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                  </InputGroupAddon>
+                  <InputGroupInput type="search" aria-label="Search documents" value={query} placeholder="Search by name, kind or grant…" autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
+                </InputGroup>
                 <SectionTitle>My documents</SectionTitle>
                 <DocumentCards
                   documents={shown.filter((document) => document.scope === "mine")}
@@ -71,7 +73,7 @@ export function PortalDocumentsPage() {
                   documents={shown.filter((document) => document.scope === "company")}
                   empty={filtered ? "No company resources match." : "No company resources yet."}
                 />
-                <p className="small muted mt-12">See also <PortalLink to="how-to-exercise">How to exercise</PortalLink>.</p>
+                <p className="text-xs text-muted-foreground">See also <PortalLink className="font-medium underline underline-offset-4" to="how-to-exercise">How to exercise</PortalLink>.</p>
               </>
             );
           }}

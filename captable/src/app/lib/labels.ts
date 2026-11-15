@@ -55,16 +55,17 @@ export function ownershipCategory(relationship: string): OwnershipCategory {
   }
 }
 
+/** The theme's chart colours (app.css), light and dark; unallocated and unknown shares in neutral tones. */
 export const CATEGORY_COLORS: Record<OwnershipCategory, string> = {
-  Founders: "var(--s1)",
-  Investors: "var(--s2)",
-  Employees: "var(--s3)",
-  "Former employees": "var(--s4)",
-  Advisors: "var(--s5)",
-  Consultants: "var(--s5)",
-  Other: "var(--s6)",
-  Unknown: "var(--hatch)",
-  Available: "var(--s-pool)",
+  Founders: "var(--chart-1)",
+  Investors: "var(--chart-2)",
+  Employees: "var(--chart-3)",
+  "Former employees": "var(--chart-4)",
+  Advisors: "var(--chart-5)",
+  Consultants: "var(--chart-5)",
+  Other: "color-mix(in oklab, var(--chart-3) 45%, var(--background))",
+  Unknown: "var(--muted-foreground)",
+  Available: "var(--muted)",
 };
 
 export const TERMINATION_TYPE_LABELS: Record<api.TerminationType, string> = {

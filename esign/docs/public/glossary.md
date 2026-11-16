@@ -67,8 +67,6 @@ says LOCAL TEST ONLY.
 
 **Page session.** What the signing page gets for its one-time link: 15 minutes of access to that signer's turn.
 
-**Process due work.** The button on **Envelopes** that runs due work for your organization at once.
-
 **RFC 3161 timestamp.** A timestamp signed by an independent time-stamping authority, showing that a piece of data
 existed at that time. A published Esign timestamps each seal.
 

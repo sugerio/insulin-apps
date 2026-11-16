@@ -44,7 +44,7 @@ for(const [who,session,editor] of [['an Admin',me('ADMIN',['esign.manage','esign
    assert.equal(named(primary,'a','Envelopes').props['aria-current'],'page','the open section is the page');
    assert.equal(byId(app,'insulin-nav-l2').props.hidden,true,'Envelopes has no level 2: the list has its own filters');
    assert.equal(crumbs(app),'Envelopes');
-   assert.equal(editor,!!app.link('New envelope'),'New envelope is on the page, for those who send');
+   assert.equal(editor,!!app.byLabel('New envelope'),'New envelope is on the page, for those who send');
    // A status is the list's filter, at its own address.
    await app.click(app.byLabel('Status filter'),'the Status filter');
    await app.click(app.renderer.root.findAll((n:any)=>n.props?.role==='menuitemradio'&&visibleText(n.children).trim()==='Completed')[0],'Completed');

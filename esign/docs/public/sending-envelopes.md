@@ -18,7 +18,7 @@ work and contacts. It is for people who send and for AI agents acting for them.
 
 ## Send an envelope
 
-1. On **Envelopes**, choose **New envelope**. Or, on **Templates**, choose **Use** next to a template (a draft template
+1. On **Envelopes**, choose **New envelope** › **From a template**. Or, on **Templates**, choose **Use** next to a template (a draft template
    can't be used until it is saved as ready).
 2. Under **Template**, choose the template.
 3. Under **Signers**, fill in one block for each role, numbered in signing order (for example **1. partner**,
@@ -42,7 +42,7 @@ signature** checks it as any envelope and sends it. Drafts appear on **Envelopes
 
 ## Upload and send
 
-To send a PDF of your own without making a template, choose **Upload and send** on **Envelopes**. Three steps:
+To send a PDF of your own without making a template, choose **New envelope** › **Upload and send** on **Envelopes**. Three steps:
 
 1. **Document and signers.** Choose the PDF (up to 5 MiB and 100 pages, with no form fields or annotations, pages not
    rotated) and its **Document name**. Add the signers in signing order (**Add signer**, and the arrows to reorder), each
@@ -203,11 +203,8 @@ Due work:
 - retries the signed-copy emails that didn't go out.
 
 **The platform runs it every five minutes for every organization**, so there is nothing to schedule. To run it at once
-for your organization:
-
-- choose **Process due work** on **Envelopes** (it says what it did, for example "Due work done: 1 completed." or
-  "Nothing was due."); or
-- call `POST /api/process-due` with an OAuth client or an AI agent whose role can send and manage envelopes.
+for your organization, call `POST /api/process-due` with an OAuth client or an AI agent whose role can send and manage
+envelopes.
 
 One run looks at up to 25 envelopes to finish and 25 owing signed copies, so a backlog takes several runs.
 

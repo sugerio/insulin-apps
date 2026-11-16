@@ -5,9 +5,10 @@
 // document, a signer's name or email, an envelope id; while empty, it offers the common filters), Date, Status, Sender
 // (theirs, or shared with them), Quick views (waiting for others, expiring soon) and Tags (the member's own, picked from
 // those they use), each shown
-// as a chip that removes it, and Clear all; below it, pages. Those who manage send new ones and run the due work.
+// as a chip that removes it, and Clear all; below it, pages. Those who manage start new ones from New envelope: from a
+// template, or a PDF of their own (Upload and send).
 import React, { useEffect, useRef, useState } from 'react'
-import { Ban, Download, Ellipsis, Eye, FilePlus2, Mail, Pencil, Plus, RefreshCw, Tag, Trash2, Upload, Users } from 'lucide-react'
+import { Ban, ChevronDown, Download, Ellipsis, Eye, FilePlus2, FileText, Mail, Pencil, Plus, Tag, Trash2, Upload, Users } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent } from '../components/ui/card.ts'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog.ts'
@@ -97,19 +98,6 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     try { await work() } catch (error) { setMessage({ text: describeError(error), error: true }) } finally { setBusy(false) }
   }
 
-  function processDue() {
-    void run(async () => {
-      const counts = await apiJson<{ expired?: number; completed?: number; waiting?: number; failed?: number }>('/api/process-due', { method: 'POST' })
-      const parts = [
-        counts.expired ? `${counts.expired} expired` : '',
-        counts.completed ? `${counts.completed} completed` : '',
-        counts.waiting ? `${counts.waiting} still waiting` : '',
-        counts.failed ? `${counts.failed} couldn't be finished yet` : '',
-      ].filter(Boolean)
-      await load()
-      setMessage({ text: parts.length ? `Due work done: ${parts.join(', ')}.` : 'Nothing was due.', error: !!counts.failed })
-    })
-  }
   const name = (e: EnvelopeSummary) => e.documentName || 'Untitled document'
   function resend(e: EnvelopeSummary) {
     if (!e.current) return
@@ -183,9 +171,14 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
       title: 'Envelopes',
       description: 'Documents sent for signature that are yours or shared with you, newest first.',
       actions: manage ? [
-        h(Button, { key: 'due', variant: 'outline', disabled: busy, onClick: processDue }, h(RefreshCw, { 'aria-hidden': true }), 'Process due work'),
-        h(Link, { key: 'upload', to: '/envelopes/send', className: buttonVariants({ variant: 'outline' }) }, h(Upload, { 'aria-hidden': true }), 'Upload and send'),
-        h(Link, { key: 'new', to: '/envelopes/new', className: buttonVariants() }, h(Plus, { 'aria-hidden': true }), 'New envelope'),
+        // One button, two ways to start: a template's document, or a PDF of the sender's own.
+        h(DropdownMenu, {
+          key: 'new', label: 'New envelope', items: [
+            { label: 'From a template', icon: FileText, onSelect: () => navigate('/envelopes/new') },
+            { label: 'Upload and send', icon: Upload, onSelect: () => navigate('/envelopes/send') },
+          ],
+          trigger: (props) => h(Button, props, h(Plus, { 'aria-hidden': true }), 'New envelope', h(ChevronDown, { 'aria-hidden': true })),
+        }),
       ] : null,
     }),
     me.signingEnabled === false ? h(Notice, { message: 'Signing isn\'t set up on this deployment yet, so envelopes can\'t be signed. An administrator of the deployment adds its settings.' }) : null,

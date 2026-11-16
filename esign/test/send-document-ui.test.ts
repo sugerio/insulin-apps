@@ -107,8 +107,10 @@ test('a draft opens again where it was; the Envelopes page leads to Upload and s
     if (c.path.startsWith('/api/envelopes?')) return json({ envelopes: [{ id: ID, templateId: null, status: 'DRAFT', createdAt: 0, documentName: 'Reseller agreement', signers: [], progress: { signed: 0, total: 1 }, owner: OWNER, myRole: 'owner', tags: [] }] });
   });
   try {
-    assert.equal(list.link('Upload and send').props.href, '/envelopes/send');
     assert.equal(list.link('Edit').props.href, `/envelopes/send?draft=${ID}`);
+    await list.click(list.byLabel('New envelope'), 'New envelope');
+    await list.click(list.renderer.root.findAll((n: any) => n.props?.role === 'menuitem' && visibleText(n.children).trim() === 'Upload and send')[0], 'Upload and send');
+    assert.equal(list.location.pathname, '/envelopes/send');
   } finally { await list.unmount(); }
 });
 

@@ -38,7 +38,7 @@ A template is a PDF and the roles that sign it, in signing order.
 
 ## 2. Send an envelope
 
-1. On **Templates**, choose **Send** next to your template, or open **Envelopes** and choose **New envelope**.
+1. On **Templates**, choose **Send** next to your template, or open **Envelopes** and choose **New envelope** › **From a template**.
 2. Under **Template**, choose the template if it isn't chosen already.
 3. Under **Signers**, give a **Name** and an **Email** for each role. They sign in this order.
 4. Optionally, under **Document**, give a **Document name**, a **Version**, the **Sender name** and **Sender company**,

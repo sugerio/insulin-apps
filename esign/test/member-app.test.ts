@@ -44,7 +44,12 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
  };
  const editor=await renderMember('/',routes(EDITOR));
  try{
-  assert.ok(editor.button('Process due work'));assert.ok(editor.link('New envelope'));
+  assert.equal(editor.button('Process due work'),undefined,'due work runs by itself');assert.ok(editor.byLabel('New envelope'));
+  await editor.click(editor.byLabel('New envelope'),'New envelope');
+  assert.deepEqual(editor.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['From a template','Upload and send']);
+  await editor.click(editor.renderer.root.findAll((n:any)=>n.props?.role==='menuitem'&&visibleText(n.children).trim()==='From a template')[0],'From a template');
+  assert.equal(editor.location.pathname,'/envelopes/new');
+  await editor.click(editor.link('Envelopes'),'Envelopes');
   assert.match(editor.text(),/Mutual NDA/);assert.match(editor.text(),/Out for signature/);assert.match(editor.text(),/Sam Example\s+Editor/);
   const me=editor.calls.find(c=>c.path==='/api/me')!;
   assert.equal(me.headers.authorization,undefined,'no key: the session is the platform\'s');
@@ -59,7 +64,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
  const viewer=await renderMember('/',routes(VIEWER));
  try{
   assert.match(viewer.text(),/Mutual NDA/);
-  assert.equal(viewer.button('Process due work'),undefined);assert.equal(viewer.link('New envelope'),undefined);
+  assert.equal(viewer.byLabel('New envelope'),undefined);
   await viewer.click(viewer.link('Mutual NDA'),'the envelope');
   assert.equal(viewer.location.pathname,`/envelopes/${ENV_ID}`);
   assert.match(viewer.text(),/Asked to sign/);
@@ -303,17 +308,13 @@ test('voiding asks first, sends the reason, and the envelope says it is voided',
  }finally{await app.unmount();}
 });
 
-test('Process due work says what it did, and a deployment without signing says so',async()=>{
+test('a deployment without signing says so',async()=>{
  const app=await renderMember('/',c=>{
   if(c.path==='/api/me')return json({...EDITOR,signingEnabled:false});
   if(c.path==='/api/envelopes'||c.path.startsWith('/api/envelopes?'))return json({envelopes:[]});
-  if(c.path==='/api/process-due')return json({expired:1,completed:2,waiting:0,failed:0});
  });
  try{
   assert.match(app.text(),/Signing isn't set up on this deployment yet/);
-  await app.click(app.button('Process due work'),'Process due work');
-  assert.equal(app.calls.find(c=>c.path==='/api/process-due')!.method,'POST');
-  assert.match(app.text(),/Due work done: 1 expired, 2 completed\./);
  }finally{await app.unmount();}
 });
 

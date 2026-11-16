@@ -44,7 +44,7 @@ Members open Esign at `https://esign.insulinapps.com`. Its navigation has four e
 
 | Page | What it shows |
 | --- | --- |
-| **Envelopes** | The envelopes you own or that are shared with you, newest first, with where each stands, searched and filtered by date, status, sender and quick views. Open one to see its signers, its audit trail and, once completed, the signed PDF and the certificate. Those who manage also find **New envelope** and **Process due work** here. |
+| **Envelopes** | The envelopes you own or that are shared with you, newest first, with where each stands, searched and filtered by date, status, sender and quick views. Open one to see its signers, its audit trail and, once completed, the signed PDF and the certificate. Those who manage also start new ones here, with **New envelope**: from a template, or upload and send. |
 | **Templates** | The PDFs your organization sends, with their signer roles and placed fields. Those who manage upload new ones here. |
 | **Docs** | The built-in help: getting started, the main tasks, what signers see, statuses, evidence, roles, background on electronic signatures and a glossary. Every role can open it. |
 | **Settings** | Esign's **People**, **Integrations**, **API access** and **Connect AI** pages, which are the platform's pages on `https://insulinapps.com/apps/esign/settings/` (see [Roles and access](/docs/esign/roles-and-access#people-and-integrations-live-on-the-platform)). |

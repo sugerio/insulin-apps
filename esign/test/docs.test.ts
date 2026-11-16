@@ -166,7 +166,7 @@ test('the Docs describe the navigation: both columns, Settings on Insulin Apps, 
 
 test('the Docs cover the main tasks, what each role sees, signers, statuses, evidence, and due work every five minutes',()=>{
  const all=textOf(DOC_TOPICS.map(t=>render(t.slug)).join(' '));
- for(const words of [/Upload and place fields/,/Send for signature/,/Void envelope/,/Process due work/,/Owner/,/Admin/,/Editor/,/User/,/Viewer/,/custom role/,/Service accounts/,/AI agents/,/About signing/,/Decline to sign/,/6-digit code/,/LOCAL TEST ONLY/,/RFC 3161/,/audit trail/])
+ for(const words of [/Upload and place fields/,/Send for signature/,/Void envelope/,/process-due/,/Owner/,/Admin/,/Editor/,/User/,/Viewer/,/custom role/,/Service accounts/,/AI agents/,/About signing/,/Decline to sign/,/6-digit code/,/LOCAL TEST ONLY/,/RFC 3161/,/audit trail/])
   assert.match(all,words);
  for(const slug of ['getting-started','statuses']){
   const text=textOf(render(slug));

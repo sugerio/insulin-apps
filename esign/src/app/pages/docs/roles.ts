@@ -63,7 +63,7 @@ export const roles: DocTopic = {
       title: 'Service accounts and AI agents',
       body: [
         ul(
-          [b('Service accounts. '), 'Another system, such as your host product, calls Esign\'s API with a role of its own, and can do what that role allows. What it creates is its own, and is shared with the person Ownership names for it. A host uses one to send envelopes, embed the signing page and the field editor, follow statuses, and, when it can\'t wait for the platform\'s five-minute run, finish due work at once with ', code('POST /api/process-due'), '.'],
+          [b('Service accounts. '), 'Another system, such as your host product, calls Esign\'s API with a role of its own, and can do what that role allows. What it creates is its own, and is seen by the people its page in Esign names (Esign settings, under the client on API access). A host uses one to send envelopes, embed the signing page and the field editor, follow statuses, and, when it can\'t wait for the platform\'s five-minute run, finish due work at once with ', code('POST /api/process-due'), '.'],
           [b('AI agents. '), 'Someone can connect an AI assistant to Esign through the Insulin platform. It acts with that person\'s role and permissions, and no more.'],
         ),
         p('Both can call ', code('GET /api/catalog'), ', which lists only the calls they may make, with their fields. Neither can use the signing page\'s own API, which answers only a signer\'s link and session.'),

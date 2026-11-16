@@ -187,7 +187,7 @@ sends nothing.
 - **Retention and integrity.** No retention policy; storage writes are create-only but not write-once storage; privileged
   changes to the database or keys remain possible and are detected only where the checks above run again.
 - **Due work.** Between the platform's five-minute runs, deadlines, unfinished envelopes and unsent copies wait for the
-  next request on the envelope or a **Process due work**. One run handles up to 25 envelopes to finish and 25 owing copies.
+  next request on the envelope or a call to `POST /api/process-due`. One run handles up to 25 envelopes to finish and 25 owing copies.
 - **Display.** The signing page draws the PDF as images, without selectable text, so it isn't an accessible reader. None
   of this proves a person read the document: Esign checks the session, the code, the consent and the current input, not
   the display.

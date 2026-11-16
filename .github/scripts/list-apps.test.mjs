@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { limitsProblems } from '../hosting/gateway/scripts/limits-catalog.mjs'
 import { NAVIGATION_ICONS, listApps, navigationPathProblem, publicPathProblem, readEngine, readLimits, readNavigation, scheduledProblem, validateAppName } from './list-apps.mjs'
 
 const temporary = []
@@ -270,31 +271,32 @@ test("reads an app's limit catalog, which the deploy writes to the gateway's D1,
   assert.deepEqual((await listApps(root))[0].limits, [{ ...limits[0], label: 'Collections' }, ...limits.slice(1)])
   const limit = (extra = {}) => ({ key: 'a', label: 'A', unit: 'count', default: 1, ...extra })
   for (const [raw, message] of [
-    [{}, /insulin\.limits must be an array of at most 20/],
-    [Array.from({ length: 21 }, (_, i) => limit({ key: `k${i}` })), /at most 20/],
+    [{}, /insulin\.limits must be a list/],
+    [Array.from({ length: 21 }, (_, i) => limit({ key: `k${i}` })), /insulin\.limits has 21 entries, at most 20/],
     [['a'], /insulin\.limits\[0\] must be an object/],
     [[limit({ key: 'Bad' })], /\[0\]\.key must match/],
     [[limit({ key: '1a' })], /\[0\]\.key must match/],
     [[limit({ key: 'a-b' })], /\[0\]\.key must match/],
     [[limit({ key: `a${'b'.repeat(40)}` })], /\[0\]\.key must match/],
-    [[limit(), limit()], /\[1\]\.key "a" is listed twice/],
-    [[limit({ label: '' })], /\[0\]\.label must be 1-80 characters/],
-    [[limit({ label: 'x'.repeat(81) })], /\[0\]\.label must be 1-80 characters/],
-    [[limit({ unit: 'minutes' })], /\[0\]\.unit must be count, bytes, hours, days/],
-    [[limit({ unit: undefined })], /\[0\]\.unit must be/],
+    [[limit(), limit()], /\[1\]\.key a is listed twice/],
+    [[limit({ label: '' })], /\[0\]\.label must be 1 to 80 characters on one line/],
+    [[limit({ label: 'x'.repeat(81) })], /\[0\]\.label must be 1 to 80 characters on one line/],
+    [[limit({ label: 'Two\nlines' })], /\[0\]\.label must be 1 to 80 characters on one line/],
+    [[limit({ unit: 'minutes' })], /\[0\]\.unit must be one of count, bytes, hours, days/],
+    [[limit({ unit: undefined })], /\[0\]\.unit must be one of/],
     [[limit({ default: -1 })], /\[0\]\.default must be a whole number from 0/],
     [[limit({ default: 1.5 })], /\[0\]\.default must be a whole number/],
     [[limit({ default: '5' })], /\[0\]\.default must be a whole number/],
     [[limit({ default: null })], /\[0\]\.default must be a whole number/],
     [[limit({ default: 10 ** 15 + 1 })], /\[0\]\.default must be a whole number/],
-    [[limit({ description: 'more' })], /\[0\]\.description is not a limit field/],
+    [[limit({ description: 'more' })], /\[0\] has unknown fields: description/],
   ]) {
     assert.throws(() => readLimits('knowledge', raw), message, JSON.stringify(raw).slice(0, 80))
   }
   assert.deepEqual(readLimits('knowledge', undefined), [])
   assert.equal(readLimits('knowledge', Array.from({ length: 20 }, (_, i) => limit({ key: `k${i}` }))).length, 20)
   const broken = await repository({ broken: { insulin: { limits: [limit({ unit: 'weeks' })] } } })
-  await assert.rejects(() => listApps(broken), /App "broken": insulin\.limits\[0\]\.unit must be/)
+  await assert.rejects(() => listApps(broken), /App "broken": insulin\.limits\[0\]\.unit must be one of/)
 })
 
 test("--engine names an app's engine directory for the workflows, reading only that app", () => {
@@ -305,5 +307,28 @@ test("--engine names an app's engine directory for the workflows, reading only t
     const result = run(...args)
     assert.equal(result.status, 1, args.join(' '))
     assert.match(result.stderr, message)
+  }
+})
+
+test("one rule for a limit catalog: list-apps.mjs refuses exactly what the gateway's limits-catalog.mjs refuses, naming the same problems", () => {
+  const limit = (extra = {}) => ({ key: 'a', label: 'A', unit: 'count', default: 1, ...extra })
+  const cases = [
+    [limit()], [limit({ label: 'Line\nbreak' })], [limit({ label: 'Tab\there' })], [limit({ label: 'Delete\u007f' })],
+    [limit({ label: ` ${'x'.repeat(80)}` })], [limit({ label: 'x'.repeat(80) })], [limit({ label: 'x'.repeat(81) })], [limit({ label: '   ' })],
+    [limit({ label: 7 })], [limit({ key: 'Bad' })], [limit({ key: `a${'b'.repeat(40)}` })], [limit({ unit: 'weeks' })], [limit({ default: -1 })],
+    [limit({ default: 1.5 })], [limit({ default: 10 ** 15 })], [limit({ default: 10 ** 15 + 1 })], [limit({ description: 'more' })],
+    [limit(), limit()], {}, 'a list', [null], [[]], Array.from({ length: 20 }, (_, i) => limit({ key: `k${i}` })),
+    Array.from({ length: 21 }, (_, i) => limit({ key: `k${i}` })),
+  ]
+  for (const raw of cases) {
+    const gateway = limitsProblems('knowledge', raw)
+    let refused = null
+    try {
+      readLimits('knowledge', raw)
+    } catch (error) {
+      refused = error.message
+    }
+    assert.equal(Boolean(refused), gateway.length > 0, `${JSON.stringify(raw).slice(0, 60)}: ${refused ?? 'accepted'} / ${gateway.join('; ') || 'accepted'}`)
+    for (const problem of gateway) assert.ok(refused.includes(problem.replace(/^knowledge: /, '')), `${refused} names ${problem}`)
   }
 })

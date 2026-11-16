@@ -5,6 +5,7 @@ import type { Bindings, EngineFetcher } from './env.ts'
 import { ApiError, logError } from './http.ts'
 import type { Caller } from './identity.ts'
 import { ensureAwakeBlock, release, reserve, settle } from './limits.ts'
+import { integrationFetchOverGateway } from './platform-api.ts'
 import { readOrgSettings, type OrgSettings } from './settings.ts'
 
 /**
@@ -141,9 +142,9 @@ export async function searchTargets(env: Bindings, engine: EngineFetcher, caller
   return results
 }
 
-/** The passages to answer from: the best of every collection's, at most `topK`. */
+/** The passages to answer from: the best of the collections that cover the question, at most `topK`. */
 export function bestPassages(results: CollectionResult[], topK: number): (Passage & { collectionId: string })[] {
-  return results.flatMap((result) => result.passages).sort((a, b) => b.score - a.score).slice(0, topK)
+  return results.filter((result) => result.covered).flatMap((result) => result.passages).sort((a, b) => b.score - a.score).slice(0, topK)
 }
 
 const normalized = (question: string) => question.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
@@ -177,7 +178,8 @@ export interface WrittenAnswer {
  * the written answer is dropped and the sources are shown alone.
  */
 export function checkCitations(answer: WrittenAnswer, given: number): number[] | null {
-  const inText = [...answer.text.matchAll(/\[(\d{1,3})\]/g)].map((match) => Number(match[1]))
+  // Every number in brackets counts, however long, and lists such as [1, 2] too.
+  const inText = [...answer.text.matchAll(/\[\s*(\d+(?:\s*[,;]\s*\d+)*)\s*\]/g)].flatMap((match) => match[1]!.split(/\s*[,;]\s*/).map(Number))
   const all = [...new Set([...answer.citations, ...inText])]
   if (all.length === 0) return null
   if (all.some((n) => !Number.isInteger(n) || n < 1 || n > given)) return null
@@ -193,9 +195,9 @@ const SYSTEM_PROMPT = [
 
 /** The organization's own model: an OpenAI-compatible chat completions endpoint, through its integration on the platform. */
 async function writeWithOwnModel(env: Bindings, org: string, settings: Extract<OrgSettings['answerWriter'], { kind: 'own' }>, question: string, passages: Passage[]): Promise<WrittenAnswer> {
-  if (!env.INTEGRATION_FETCH) throw new Error('No integration proxy')
+  const send = env.INTEGRATION_FETCH ? env.INTEGRATION_FETCH(settings.integrationKey) : integrationFetchOverGateway(env, settings.integrationKey, org)
   const sources = passages.map((passage, index) => `[${index + 1}] ${passage.documentName}${passage.page ? `, page ${passage.page}` : ''}:\n${passage.text}`).join('\n\n')
-  const response = await env.INTEGRATION_FETCH(settings.integrationKey)(settings.url, {
+  const response = await send(settings.url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-suger-organization-id': org },
     body: JSON.stringify({
@@ -257,7 +259,9 @@ export async function writeAnswer(env: Bindings, engine: EngineFetcher, caller: 
       question,
       passages: passages.map((passage) => ({ passageId: passage.passageId, documentName: passage.documentName, page: passage.page, text: passage.text })),
     })
-    const citations = checkCitations(written, passages.length)
+    // The engine takes out citations of passages it wasn't given and counts them (`dropped`): such an answer, like one
+    // that fails the check here, shows the sources without its text.
+    const citations = (written.dropped ?? 0) > 0 ? null : checkCitations(written, passages.length)
     if (!citations) {
       if (reservation) await release(env.DB, org, [reservation.id], now)
       return sourcesOnly("The written answer didn't cite these sources correctly, so here are the sources without it.", 'builtin')

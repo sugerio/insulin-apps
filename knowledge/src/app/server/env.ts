@@ -15,8 +15,10 @@ export interface Bindings {
   ENGINE?: EngineFetcher
   /** The gateway's service binding's fetch (mail, usage reports, limits, members); the global fetch without it. */
   GATEWAY_FETCH?: typeof fetch
-  /** The platform's integration proxy for the organization's own model (`integrationFetch` from @fours/app/server). */
+  /** How the organization's own model is called (tests replace it); without it, the platform's proxy over the gateway. */
   INTEGRATION_FETCH?: (key: string) => typeof fetch
+  /** SUGER_INTEGRATIONS_URL: the platform's integration proxy (DESIGN.md §6), reached over the gateway binding. */
+  SUGER_INTEGRATIONS_URL?: string
   /** How web pages are fetched (tests replace it). */
   WEB_FETCH?: typeof fetch
   /** The request's waitUntil, when the runtime gives one. */

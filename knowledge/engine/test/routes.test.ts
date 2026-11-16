@@ -14,6 +14,7 @@ const CONTRACT = [
   'GET /v1/collections/:cid',
   'POST /v1/collections/:cid/wake',
   'PUT /v1/collections/:cid/inbox/:fileId',
+  'POST /v1/collections/:cid/inbox/keep',
   'POST /v1/collections/:cid/imports',
   'GET /v1/collections/:cid/imports/:importId',
   'POST /v1/collections/:cid/search',

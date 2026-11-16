@@ -40,6 +40,12 @@ export async function syncLimits(env: Bindings, now: number, deadline: number): 
     if (!body) break
     pages += 1
     const statements: D1PreparedStatement[] = []
+    // The engine keeps daily backups as many days as the organization's backup_days: a change to it is sent again.
+    const storedBackupDays = await db.prepare(`SELECT value FROM limit_defaults WHERE key = 'backup_days'`).first<{ value: number | null }>()
+    const backupDefault = valueOf((body.defaults ?? {}).backup_days)
+    if (backupDefault !== undefined && (storedBackupDays === null || storedBackupDays.value !== backupDefault)) {
+      statements.push(db.prepare(`UPDATE collections SET settings_version = -1 WHERE state = 'active'`))
+    }
     for (const [key, raw] of Object.entries(body.defaults ?? {})) {
       const value = valueOf(raw)
       if (!LIMIT_KEYS.has(key) || value === undefined) continue
@@ -52,6 +58,7 @@ export async function syncLimits(env: Bindings, now: number, deadline: number): 
       if (!org) continue
       organizations += 1
       statements.push(db.prepare(`DELETE FROM org_limits WHERE org_id = ?`).bind(org))
+      statements.push(db.prepare(`UPDATE collections SET settings_version = -1 WHERE org_id = ? AND state = 'active'`).bind(org))
       for (const [key, raw] of Object.entries((entry.limits ?? {}) as Record<string, { value?: unknown; until?: unknown }>)) {
         const value = valueOf(raw?.value)
         if (!LIMIT_KEYS.has(key) || value === undefined) continue

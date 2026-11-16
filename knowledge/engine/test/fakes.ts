@@ -253,6 +253,9 @@ export class FakeCloud {
   failExtraction: Record<string, string> = {} // fileId -> permanent reason
   detectorError = false
   dataFormat = 'fmt-1'
+  failStarts = 0 // the next starts fail
+  hangJobs: string[] = [] // jobs of these ops never finish
+  onStart: (() => void) | null = null // e.g. move the fake clock: starting takes time
   calls: { collection: string; method: string; path: string; detail?: string }[] = []
 }
 
@@ -265,6 +268,7 @@ interface FakeJob {
   result?: any
   exitCode?: number
   progress?: any
+  prepared?: any
 }
 
 export class FakeContainer {
@@ -296,6 +300,11 @@ export class FakeContainer {
 
   start(options: { containerSnapshot?: { id: string }; image?: string; instance?: string; env?: Record<string, string> } = {}) {
     if (this.running) throw new Error('already running')
+    if (this.cloud.failStarts > 0) {
+      this.cloud.failStarts -= 1
+      throw new Error('the container could not start')
+    }
+    this.cloud.onStart?.()
     const id = options.containerSnapshot?.id ?? null
     if (id && !this.cloud.snapshots.has(id)) throw new Error('snapshot not found')
     this.data = id ? new Map(this.cloud.snapshots.get(id)!) : new Map()
@@ -370,7 +379,14 @@ export class FakeContainer {
       this.jobs.set(job.id, job)
       this.active = job.id
       this.cloud.calls.push({ collection: this.name, method, path: '/jobs', detail: op })
-      if (job.polls === 0) this.finish(job)
+      if (op === 'ingest') {
+        try {
+          this.read(job)
+        } catch (error) {
+          this.fail(job, error)
+        }
+      }
+      if (job.state === 'running' && job.polls === 0) this.finish(job)
       return json(this.view(job), 202)
     }
     if (method === 'GET' && parts[0] === 'jobs' && parts.length === 2) {
@@ -378,7 +394,7 @@ export class FakeContainer {
       if (!job) return json({ error: 'no such job' }, 404)
       if (job.state === 'running') {
         job.polls -= 1
-        if (job.op === 'ingest') job.progress = this.progress(job)
+        if (job.op === 'ingest') job.progress = { ...job.progress, ...this.progress(job) }
         if (job.polls <= 0) this.finish(job)
       }
       return json(this.view(job))
@@ -464,22 +480,27 @@ export class FakeContainer {
     const total = (batch.files ?? []).length
     const done = Math.max(0, total - job.polls)
     ;(batch.files ?? []).forEach((f: any, i: number) => {
-      files[f.fileId] = i < done ? 'learned' : i === done ? 'understanding' : 'reading'
+      files[f.fileId] = i < done ? 'learned' : 'understanding'
     })
-    return { done, total, current: null, files }
+    return { done, total, current: null, files, read: true }
   }
 
   finish(job: FakeJob) {
+    if (this.cloud.hangJobs.includes(job.op)) return
     try {
       job.result = this.run(job)
       job.state = 'succeeded'
       job.exitCode = 0
     } catch (error) {
-      job.state = 'failed'
-      job.exitCode = error instanceof Crash ? 70 : 2
-      job.result = error instanceof Stop ? error.result : undefined
-      if (error instanceof Crash) job.progress = { done: 0, total: 0, current: error.fileId, files: { [error.fileId]: 'reading' } }
+      this.fail(job, error)
     }
+  }
+
+  fail(job: FakeJob, error: unknown) {
+    job.state = 'failed'
+    job.exitCode = error instanceof Crash ? 70 : 2
+    job.result = error instanceof Stop ? error.result : undefined
+    if (error instanceof Crash) job.progress = { done: 0, total: 0, current: error.fileId, files: { [error.fileId]: 'reading' } }
   }
 
   run(job: FakeJob): any {
@@ -506,20 +527,29 @@ export class FakeContainer {
     throw new Stop({ reason: 'unknown op' })
   }
 
-  ingest(job: FakeJob) {
+  /**
+   * The import's first step, at the job's start: read and hide every file and note (or take the texts stored after an
+   * earlier try), stop on any failure, and write the redacted texts, so the progress says they are read.
+   */
+  read(job: FakeJob) {
     const batch = this.batch(job)
     if (JSON.parse(this.data.get('ledger.json') ?? '{"batches":{}}').batches[batch.importId]) throw new Stop({ reason: 'already ingested' })
     const words: string[] = batch.hiding?.words ?? []
     const test = this.env.KNOWLEDGE_TEST_CONTROLS === '1' ? (batch.test ?? {}) : {}
-    const documents: any[] = []
     const prepared: any[] = []
+    const stored = (documentId: string) => JSON.parse(new TextDecoder().decode(this.inbox.get(`${batch.importId}/${documentId}.json`) as Uint8Array))
+    const again = (s: any) => {
+      const more = hideFake(s.text, words)
+      return { ...s, text: more.text, hidden: [...s.hidden, ...more.hidden] }
+    }
     if (batch.kind === 'relearn') {
-      for (const d of batch.documents) {
-        const stored = JSON.parse(new TextDecoder().decode(this.inbox.get(`${batch.importId}/${d.documentId}.json`) as Uint8Array))
-        prepared.push({ stored: { ...stored, documentId: d.documentId, kind: d.kind, name: d.name }, fileId: null })
-      }
+      for (const d of batch.documents) prepared.push({ stored: { ...stored(d.documentId), documentId: d.documentId, kind: d.kind, name: d.name }, fileId: null })
     } else {
       for (const f of batch.files ?? []) {
+        if (f.stored) {
+          prepared.push({ stored: again(stored(f.documentId)), fileId: f.fileId })
+          continue
+        }
         if (this.cloud.crashFileId === f.fileId || test.crashFileId === f.fileId) throw new Crash(f.fileId)
         if (this.cloud.failExtraction[f.fileId]) throw new Stop({ reason: this.cloud.failExtraction[f.fileId], failedFileId: f.fileId, permanent: true, code: 'unsupported_type' })
         const original = this.inbox.get(`${batch.importId}/${f.fileId}`)
@@ -531,12 +561,20 @@ export class FakeContainer {
         prepared.push({ stored: { documentId: f.documentId, kind: 'file', name: f.name, type: f.type, ...text, pageCount: null, truncated: false }, fileId: f.fileId })
       }
       for (const n of batch.notes ?? []) {
-        prepared.push({ stored: { documentId: n.documentId, kind: 'note', name: n.title, type: 'text/markdown', ...hideFake(n.text, words), pageCount: null }, fileId: null, noteId: n.noteId })
+        const s = n.stored ? again(stored(n.documentId)) : { documentId: n.documentId, kind: 'note', name: n.title, type: 'text/markdown', ...hideFake(n.text, words), pageCount: null }
+        prepared.push({ stored: s, fileId: null, noteId: n.noteId })
       }
     }
-    for (const item of prepared) {
+    for (const item of prepared) this.data.set(`text/${item.stored.documentId}.json`, JSON.stringify(item.stored))
+    job.prepared = prepared
+    job.progress = { done: 0, total: prepared.length, current: null, read: true, files: Object.fromEntries((batch.files ?? []).map((f: any) => [f.fileId, 'understanding'])) }
+  }
+
+  ingest(job: FakeJob) {
+    const batch = this.batch(job)
+    const documents: any[] = []
+    for (const item of job.prepared) {
       const s = item.stored
-      this.data.set(`text/${s.documentId}.json`, JSON.stringify(s))
       this.data.set(`passages/${s.documentId}.json`, JSON.stringify(paragraphs(s.documentId, s.text)))
       this.data.set(`cognee/${s.documentId}`, `learned ${s.text}`)
       documents.push({ documentId: s.documentId, fileId: item.fileId, noteId: item.noteId, kind: s.kind, textBytes: Buffer.byteLength(s.text), pages: null, hidden: s.hidden.length, truncated: false, changed: true })
@@ -579,7 +617,7 @@ export class FakeContainer {
         if (mark.documentId !== id) continue
         const old = oldPassages.find((p: any) => p.textHash === mark.textHash)
         const moved = old ? newPassages.find((p: any) => p.index === old.index) : null
-        marks.push({ documentId: id, textHash: mark.textHash, newTextHash: moved?.textHash ?? null })
+        marks.push({ documentId: id, textHash: mark.textHash, newTextHash: moved?.textHash ?? null, changed: !moved || moved.text !== old.text })
       }
       changed.push(id)
       documents.push({ documentId: id, changed: true, textBytes: Buffer.byteLength(again.text), hidden: updated.hidden.length })

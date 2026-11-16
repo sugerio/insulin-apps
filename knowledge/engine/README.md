@@ -22,8 +22,12 @@ implements the same).
 | Answer model | `src/answer.ts` | `POST /v1/answer`: Gemma 4 (`@cf/google/gemma-4-26b-a4b-it`) on Workers AI, from the given passages only, with `[n]` citations |
 | Container | `container/` | Cognee 1.6.8, offline, with its models baked in. `server.py` (control server), `ops.py` (one operation per process), `query.py` (the query process), `extract.py`, `hide.py`, `passages.py`, `rank.py`, `facts.py`, `calibration.json` |
 
-R2: `FILES` holds `inbox/<org>/<collection>/` (originals while they wait to be read; deleted as soon as the import
-ends), `text/<org>/<collection>/` (the redacted text and page map of every document, and each version's facts) and
+R2: `FILES` holds `inbox/<org>/<collection>/` (originals while they wait to be read; deleted as soon as every file
+of the import is read and hidden; files no import names are deleted after a day, but the originals of an import
+that waits, for the documents-learned limit to reset on the 1st, are kept until it starts or until the date given
+with `POST /v1/collections/:cid/inbox/keep` passes, at most 45 days; deleting the collection deletes them all),
+`text/<org>/<collection>/` (the redacted text and page map of every document, and
+each version's facts) and
 `exports/`; `BACKUPS` holds `backups/<org>/<collection>/` (content-addressed files, daily indexes and the latest).
 The deploy names both buckets; the repository never does.
 
@@ -57,22 +61,43 @@ And from the design:
   Durable Object's alarm; during an import it answers `learning`. All container work happens in the alarm, one step
   at a time, so a collection's container is never driven twice at once.
 - **Changes within 5 minutes share one restore point** (the earlier one folds into the new one; undo takes both back).
-- **Remove for good** deletes the document's text at once, blocks every restore point and daily backup that holds it,
-  goes ahead of every other import to delete it from the databases, and writes a new latest backup without it.
-- **Hiding fails closed**: any detector error stops the import before anything is stored. Originals are deleted as
-  soon as they are read; only redacted text is stored, in the container, R2, backups and exports.
-- **Waking from the backup**: when a restore point's snapshot expired (30 days) or the engine image changed, the
-  collection comes back from its latest backup; if the backup's database format differs from the running image's
-  (`KNOWLEDGE_DATA_FORMAT` in the Dockerfile), every document is learned again from its stored text.
+- **Remove for good** deletes the document's text and its facts (in every stored facts file) at once, blocks every
+  restore point and daily backup that holds it, goes ahead of every other import to delete it from the databases,
+  and writes a new latest backup without it. An export or a re-read running at that moment is redone without it.
+- **Hiding fails closed**: any detector error stops the import before anything is stored. Once every file and note
+  of an import is read and hidden, their redacted texts are saved and the originals, and notes as written, are
+  deleted; a later try learns from the saved texts. Queued imports and saved texts are hidden with the rules in
+  force when learning starts, and stricter rules re-read every document, those of imports running at the time
+  included. Only redacted text is stored, in the container, R2, backups and exports.
+- **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
+  the correction keeps applying and a `needs_check` event asks a person to check it.
+- **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
+  failed its check twice (`damaged`), the collection comes back from its latest backup if that holds the same files
+  (matched by their checksum list, not the version) in the running image's database format
+  (`KNOWLEDGE_DATA_FORMAT`). Otherwise every document is learned again from its saved text; an import waiting
+  meanwhile gives way to that and isn't charged a try, and a removal for good learns the other documents itself.
+  A repair that answers from an earlier restore point then learns everything again, bringing back the files added
+  after it.
+- **Waking is never stuck**: each wake step that takes longer than 10 minutes is stopped and started again; a
+  snapshot is given up as gone only after three failed starts in a row. Running time is charged from the moment a
+  container starts (waking, going back, coming back from a backup, learning).
 
 ## Service settings
 
-`src/settings.ts`: imports at once (20, 2 per organization), three tries, 5 minutes for shared restore points,
-30 days of snapshots and daily backups, 7 days of outbox and exports, the planning times from the PoC (43 s per
+`src/settings.ts`: imports at once (20, 2 per organization), three tries, a job time limit (an hour, or three times
+the planned time for a large import), 5 minutes for shared restore points, 30 days of snapshots, 7 days of outbox
+and exports, the planning times from the PoC (43 s per
 import plus 5.3 s per document; about a minute to wake) and the built-in model. The container instance is chosen
 when the Durable Object starts it: `standard-4` for learning and, until Phase 0 shows a snapshot taken on
 `standard-4` starts on `standard-1` (design Q10), for questions too. A deployment can set `ENGINE_QUESTIONS_INSTANCE`
 and `ENGINE_LEARNING_INSTANCE` as vars to change them without a code change.
+
+Daily backups are kept for the collection's `backupDays` (its settings; the organization's backup_days limit,
+30 by default); the latest backup is kept for the collection's life.
+
+Each document keeps at most 2,000 passages (`PASSAGE_CAP` in `container/passages.py`, design section 11's cap on
+passages per document). The 2 MB text limit makes about a thousand of Cognee's chunks, so the cap binds only for
+unusual files; passages past it are not cited, and the file says so.
 
 The "won't guess" threshold is `container/calibration.json` (0.70, a placeholder: the PoC graded retrieval but did
 not record scores). Phase 0 sets it with the harness (`--calibrate`, plan ASK-02).

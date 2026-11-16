@@ -22,6 +22,7 @@ export const fixingAndReporting: DocTopic = {
           <ol>
             <li>Write the right answer.</li>
             <li>Pick the source that is out of date, or "None of them" if something is missing.</li>
+            <li>If you like, tick <b>Tell the person who added this file</b>: whoever added it gets an e-mail saying an answer from their file was corrected, with a link to the collection (not your correction), so they can update the file too.</li>
             <li><b>Save the correction.</b></li>
           </ol>
           <p>
@@ -32,6 +33,7 @@ export const fixingAndReporting: DocTopic = {
             <li>New questions on this site and from every AI assistant use your correction, and cite it.</li>
             <li>Answers already given don't change.</li>
             <li>The correction is listed with the collection's notes in Sources, and it can be undone by going back in History.</li>
+            <li>If the file it corrects is read again later and the words it applies to now read differently, the correction asks to be checked under <b>Needs attention</b>.</li>
           </ul>
         </>
       ),
@@ -48,7 +50,8 @@ export const fixingAndReporting: DocTopic = {
           </p>
           <p>
             Until someone checks it, the answer shows that it was reported, to everyone who gets it. The report is settled when
-            an owner, admin or editor fixes the answer, or marks the answer as right.
+            an owner, admin or editor fixes the answer (once Insulin has learned the fix; if learning it fails, the report stays
+            open), or marks the answer as right.
           </p>
         </>
       ),
@@ -84,6 +87,7 @@ export const fixingAndReporting: DocTopic = {
             <li><b>Files Insulin couldn't read</b>, with the reason and what to upload instead.</li>
             <li><b>Values hidden before learning</b>: which file, and how many e-mail addresses, phone numbers or other values were hidden. Open the file to see where. See <DocLink to="hiding-personal-data">Hiding personal data</DocLink>.</li>
             <li><b>Reported answers waiting</b>: fix the answer, or say it is right.</li>
+            <li><b>Corrections to check</b>: a file was read again, and the words a correction applies to now read differently. Check that the correction still says the right thing; writing a new correction of that file settles it.</li>
           </ul>
           <p>
             Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file

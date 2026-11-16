@@ -423,6 +423,10 @@ export async function deployApps({
   // The apps whose limit catalogs the gateway step writes: those this deploy put in production. A deploy of the
   // gateway alone (deploy-release.yml's gateway job) is told which apps its run deployed.
   const catalogApps = deployGateway ? (deployAppWorkers ? appsToDeploy : deployedApps(environment, apps)) : []
+  // Every catalog this deploy may write, made (and so checked by the gateway's rule) before anything is built,
+  // migrated or deployed: a malformed one can't fail the deploy after an app is live.
+  const catalogs = await loadLimitCatalogs(root)
+  catalogs?.sql(deployGateway ? catalogApps : appsToDeploy)
 
   const outputDirectory = out ? resolve(out) : mkdtempSync(join(tmpdir(), 'insulin-apps-deploy-'))
   if (appsToDeploy.length) mkdirSync(join(outputDirectory, 'apps'), { recursive: true })
@@ -525,10 +529,22 @@ export async function deployApps({
     // without limits, so one that dropped them leaves none behind), once the gateway's tables exist: the first release
     // that adds them writes it in the gateway step, after the gateway's migrations. Right after the deploy, before
     // the public-access check, since the new version runs even if that check then fails the job.
+    let catalogFailure = null
     if (!deployGateway) {
-      await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: [app], env: childEnvironment, dryRun, onlyIfReady: true })
+      try {
+        await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: [app], catalogs, env: childEnvironment, dryRun, onlyIfReady: true })
+      } catch (error) {
+        catalogFailure = error
+      }
     }
-    await removePublicAccess(runner, cloudflare, workerName(app.name), dryRun)
+    // Whatever happened to the catalog, the Worker that now runs keeps no public address.
+    try {
+      await removePublicAccess(runner, cloudflare, workerName(app.name), dryRun)
+    } catch (error) {
+      if (catalogFailure) error.message += `; its limit catalog wasn't written either: ${catalogFailure.message}`
+      throw error
+    }
+    if (catalogFailure) throw catalogFailure
   }
 
   if (deployGateway) {
@@ -546,7 +562,7 @@ export async function deployApps({
     })
     // What SITE_APPS can't hold (5 KB): the limit catalogs of the apps this deploy put in production (DESIGN.md §8.8).
     if (catalogApps.length) {
-      await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: catalogApps, env: childEnvironment, dryRun, configPath: gatewayConfigPath })
+      await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: catalogApps, catalogs, env: childEnvironment, dryRun, configPath: gatewayConfigPath })
     }
 
     // The secrets travel with the deploy itself, so no gateway version ever runs without them.
@@ -918,21 +934,34 @@ export function buildEngineImage({ runner, root, app, archive, environment }) {
 // --- Limit catalogs (DESIGN.md §8.8) ---------------------------------------------------------------------------------
 
 /**
- * Writes apps' limit catalogs to the gateway's D1 with the SQL the gateway's own module makes (gateway
- * scripts/limits-catalog.mjs), so the operator console manages the limits the running apps enforce. The gateway step
- * calls it after the gateway's migrations; a deploy of apps alone (`onlyIfReady`) first checks that the gateway's
- * database and tables exist, and leaves the catalog to the gateway step otherwise.
+ * The gateway's module that turns limit catalogs into SQL (gateway scripts/limits-catalog.mjs), as { sql(apps), table },
+ * or null when this checkout has none (an older gateway): then no catalog is written.
  */
-async function writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps, env, dryRun, configPath, onlyIfReady = false }) {
+async function loadLimitCatalogs(root) {
   const modulePath = join(root, LIMIT_CATALOG_MODULE)
   if (!existsSync(modulePath)) {
     process.stdout.write(`::notice::${LIMIT_CATALOG_MODULE} is missing: limit catalogs not written\n`)
-    return
+    return null
   }
   const catalog = await import(pathToFileURL(modulePath).href)
   if (typeof catalog.limitsCatalogSql !== 'function') throw new Error(`${LIMIT_CATALOG_MODULE} exports no limitsCatalogSql(apps)`)
   const table = typeof catalog.LIMIT_CATALOG_TABLE === 'string' ? catalog.LIMIT_CATALOG_TABLE : 'app_limit_catalog'
   if (!/^[a-z_]+$/.test(table)) throw new Error(`${LIMIT_CATALOG_MODULE}'s LIMIT_CATALOG_TABLE isn't a table name`)
+  // The module replaces each named app's whole catalog, and throws on a malformed one before anything is written.
+  return { table, sql: (apps) => catalog.limitsCatalogSql(apps.map(({ name, limits }) => ({ name, limits }))) }
+}
+
+/**
+ * Writes apps' limit catalogs to the gateway's D1, with the SQL the gateway's own module makes (loadLimitCatalogs), so
+ * the operator console manages the limits the running apps enforce. The SQL goes through D1's query path
+ * (`d1 execute --command`), one batch: an import (`--file`) would leave the database unavailable while it runs, and
+ * the apps' parallel jobs could start several. The gateway step calls it after the gateway's migrations; a deploy of
+ * apps alone (`onlyIfReady`) first checks that the gateway's database and tables exist, and leaves the catalog to the
+ * gateway step otherwise.
+ */
+async function writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps, catalogs, env, dryRun, configPath, onlyIfReady = false }) {
+  if (!catalogs) return
+  const { table } = catalogs
   if (onlyIfReady) {
     configPath = join(outputDirectory, 'gateway-d1.wrangler.json')
     if (dryRun) {
@@ -953,11 +982,7 @@ async function writeLimitCatalogs({ runner, wrangler, root, outputDirectory, app
       }
     }
   }
-  // The gateway's module replaces each named app's whole catalog, and refuses a malformed one before anything is written.
-  const sql = catalog.limitsCatalogSql(apps.map(({ name, limits }) => ({ name, limits })))
-  const file = join(outputDirectory, 'limit-catalogs.sql')
-  writeFileSync(file, sql)
-  runner.run(wrangler, ['d1', 'execute', GATEWAY_NAME, '--remote', '--file', file, '--config', configPath], { cwd: root, env })
+  runner.run(wrangler, ['d1', 'execute', GATEWAY_NAME, '--remote', '--command', catalogs.sql(apps), '--config', configPath], { cwd: root, env })
   process.stdout.write(`Wrote the limit catalogs of ${apps.map(({ name }) => name).join(', ')} to ${GATEWAY_NAME}\n`)
 }
 

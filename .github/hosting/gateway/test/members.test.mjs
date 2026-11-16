@@ -5,9 +5,13 @@
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac, hkdfSync } from 'node:crypto'
-import { APPS, NAVIGATE, SECRET_KEY, UUID, startGateway, uniqueEmail } from './helpers/harness.mjs'
+import { APPS, NAVIGATE, SECRET_KEY, UUID, splitStatements, startGateway, uniqueEmail } from './helpers/harness.mjs'
 import { appToken, connect, form, tool } from './helpers/oauth.mjs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import { housekeeping } from '../src/housekeeping.ts'
+import { changeRole, setAppAccess } from '../src/db/orgs.ts'
+import { pruneMemberEventsStatements } from '../src/db/members.ts'
 import { insertCustomRole, removeGrant, updateCustomRole, upsertGrant } from '../src/db/grants.ts'
 import { joinOrg, joinOrgByScim, leaveBySso } from '../src/db/sso.ts'
 import { setOrgStatus, setUserStatus } from '../src/super/db.ts'
@@ -546,6 +550,71 @@ test('ACC-15: someone removed and invited again: left, then returned, and member
     { type: 'returned', org: orgId, user: editor.id, orgRole: 'EDITOR', appRole: 'EDITOR', permissions: ['captable.view', 'captable.edit'] },
   ])
   assert.equal(parsed(await appPost('/__insulin/members/status', { org: orgId, ids: [editor.id] })).members[0].status, 'member')
+})
+
+test('a grant in a later transaction is a new event, even in the same millisecond, never a change to one an app may have read', async () => {
+  const { owner, orgId } = await team('Same Millisecond Org')
+  const mover = await person('Ms Same')
+  await invite(owner, orgId, mover, 'EDITOR')
+  await echo(owner, 'ledger')
+  const start = await cursor(LEDGER_TOKEN)
+  const now = Date.now()
+  assert.equal(await setAppAccess(h.db, { orgId, userId: mover.id, current: 'EDITOR', grants: [{ app: 'captable', role: 'VIEWER', customRoleId: null }], actorId: owner.id, now }), true)
+  const read = parsed(await appGet(`/__insulin/member-events?since=${start}`, { token: LEDGER_TOKEN }))
+  const left = { type: 'left', org: orgId, user: mover.id }
+  assert.deepEqual(shape(read.events.filter((event) => event.org === orgId)), [left], 'Ledger reads that they left')
+  // Another request, in the same millisecond, gives them Ledger back.
+  assert.equal(await upsertGrant(h.db, { orgId, userId: mover.id, grant: { app: 'ledger', role: 'EDITOR', customRoleId: null }, actorId: owner.id, now }), true)
+  assert.deepEqual(shape(await eventsSince(read.cursor, { token: LEDGER_TOKEN, org: orgId })), [
+    { type: 'returned', org: orgId, user: mover.id, orgRole: 'APPS', appRole: 'EDITOR' },
+  ], 'after the cursor the app saved')
+  assert.deepEqual(shape(await eventsSince(start, { token: LEDGER_TOKEN, org: orgId }))[0], left, 'the event already read is as it was')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM member_event_moves'))[0].n, 0, 'the move closed with its batch')
+  // Only setAppAccess moves someone to specific apps, so every move is closed in its own batch.
+  const other = await person('Rolf Role')
+  await invite(owner, orgId, other, 'EDITOR')
+  assert.equal(await changeRole(h.db, { orgId, userId: other.id, current: 'EDITOR', next: 'APPS', actorId: owner.id, now: Date.now() }), false)
+})
+
+test('an app\'s first request in an organization goes on only once where it is used is written; otherwise a 503 in plain words', async () => {
+  const owner = await h.user({ name: 'Una Unwritten' })
+  const orgId = await h.org(owner.client, 'Unwritten Org')
+  const agent = await connect(h, owner, orgId)
+  const client = await apiClient(owner, orgId, 'Unwritten client')
+  // A database that refuses the write, for this organization only.
+  await h.sql(`CREATE TRIGGER test_refuse_app_use BEFORE INSERT ON app_orgs WHEN NEW.org_id = '${orgId}' BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END`)
+  try {
+    const api = await owner.client.get(h.url('captable', '/api/echo'))
+    assert.equal(api.status, 503, 'not forwarded')
+    assert.match(parsed(api).message, /Cap Table isn't available right now\. Try again in a minute\./)
+    const page = await owner.client.raw(h.url('captable', '/'), { headers: NAVIGATE })
+    assert.equal(page.status, 503)
+    const viaClient = await h.client().get(h.url('captable', '/api/echo'), { headers: { Authorization: `Bearer ${client.accessToken}` } })
+    assert.equal(viaClient.status, 503)
+    const viaAgent = await tool(h, agent.access_token, 'read', { path: '/api/echo' })
+    assert.equal(viaAgent.isError, true)
+    assert.match(viaAgent.content[0].text, /Cap Table isn't available right now/)
+    assert.equal((await h.sql('SELECT COUNT(*) AS n FROM app_orgs WHERE org_id = ?1', orgId))[0].n, 0)
+  } finally {
+    await h.sql('DROP TRIGGER test_refuse_app_use')
+  }
+  assert.equal((await owner.client.get(h.url('captable', '/api/echo'))).status, 200, 'the next request writes it and goes on')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM app_orgs WHERE org_id = ?1', orgId))[0].n, 1)
+})
+
+test('the cleanup finds old member events through their time\'s index, never by reading the whole table', () => {
+  const sqlite = new DatabaseSync(':memory:')
+  const dir = new URL('../migrations/', import.meta.url)
+  for (const file of readdirSync(dir).filter((name) => name.endsWith('.sql')).sort()) {
+    for (const statement of splitStatements(readFileSync(new URL(file, dir), 'utf8'))) sqlite.exec(statement)
+  }
+  const statements = pruneMemberEventsStatements({ prepare: (sql) => ({ bind: () => sql }) }, Date.now(), 200)
+  for (const sql of statements) {
+    // node:sqlite binds no numbered parameters; the values don't change the plan.
+    const plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${sql.replaceAll('?1', '0').replaceAll('?2', '200')}`).all().map((row) => row.detail)
+    assert.ok(plan.some((detail) => /member_events_by_at/.test(detail)), plan.join('\n'))
+    assert.ok(!plan.some((detail) => /^SCAN member_events\b/.test(detail)), plan.join('\n'))
+  }
 })
 
 test('events: removed, leaving, and an owner leaving: each left, and the owners after it', async () => {

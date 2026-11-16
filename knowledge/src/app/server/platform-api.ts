@@ -8,6 +8,26 @@ import { gatewayEndpoint } from './gateway-fetch.ts'
  */
 export type PlatformUrl = 'SUGER_MAIL_URL' | 'SUGER_METRICS_URL' | 'SUGER_LIMITS_URL' | 'SUGER_MEMBERS_URL' | 'SUGER_MEMBER_STATUS_URL' | 'SUGER_MEMBER_EVENTS_URL'
 
+/**
+ * A fetch through the platform's integration proxy (DESIGN.md §6) for one stored credential, as `integrationFetch(key)`
+ * of @fours/app would make it, but sent over the gateway's service binding: an app Worker can't reach the gateway
+ * through its public address (§8.2). `https://host/path` goes to `<SUGER_INTEGRATIONS_URL>/<key>/proxy/host/path` with
+ * the app's token and the organization. Without the proxy's address or the token, every call fails.
+ */
+export function integrationFetchOverGateway(env: Bindings, key: string, org: string): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const endpoint = gatewayEndpoint(env.SUGER_INTEGRATIONS_URL, env.SUGER_APP_TOKEN)
+    if (!endpoint) throw new Error('The integration proxy is not configured')
+    const target = new URL(String(input instanceof Request ? input.url : input))
+    if (target.protocol !== 'https:') throw new Error('Integrations take https addresses only')
+    const headers = new Headers(init?.headers)
+    headers.set('authorization', `Bearer ${endpoint.token}`)
+    headers.set('x-suger-organization-id', org)
+    const send = env.GATEWAY_FETCH ?? fetch
+    return send(`${endpoint.url.replace(/\/+$/, '')}/${encodeURIComponent(key)}/proxy/${target.host}${target.pathname}${target.search}`, { ...init, headers, redirect: 'manual' })
+  }) as typeof fetch
+}
+
 /** The time a call may take before the tick moves on. */
 const CALL_TIMEOUT_MS = 8_000
 

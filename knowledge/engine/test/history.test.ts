@@ -191,11 +191,11 @@ test('HIS-04 a failed integrity check: one retry, then the previous restore poin
   const mismatches = (await log(t, 'c1')).filter((e: any) => e.event === 'checksum-mismatch')
   assert.equal(mismatches.length, 2, 'one retry')
   assert.ok(sawRepairing)
+  const points = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints
+  assert.equal(points.find((p: any) => p.version === 4).summary, 'Answering from version 2 after version 3 failed its check')
+  // Then everything is learned again from the saved text, the file of version 3 included.
   const status = (await t.api('GET', '/v1/collections/c1')).body
-  assert.equal(status.version, 4)
-  assert.equal(status.counts.documents, 3, 'answering from version 2')
-  const summary = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints[0].summary
-  assert.equal(summary, 'Answering from version 2 after version 3 failed its check')
+  assert.deepEqual([status.version, status.counts.documents], [5, 4])
   assert.ok((await outboxEvents(t)).some((e) => e.type === 'state' && e.state === 'repairing' && e.version === 2))
   // The version that failed twice is damaged: listed, not offered, refused.
   const failed = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints.find((p: any) => p.version === 3)
@@ -350,4 +350,96 @@ test('HID-04 a stricter rule re-reads old files in the background, hides the wor
   await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: false, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater'] } } })
   await t.drain('c1')
   assert.equal(t.cloud.calls.filter((c) => c.detail === 'reread').length, before)
+})
+
+test('HIS-07 remove for good also takes the document out of every stored facts file', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  const secret = 'Project Kestrel pays the vendor 41000 dollars.'
+  await learn(t, 'c1', 'imp-1', [doc(1), { fileId: 'f9', name: 'deal.md', text: `${secret}\n\nMore about the deal.` }])
+  t.advance(SIX_MINUTES)
+  await learn(t, 'c1', 'imp-2', [doc(2)])
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'deal.md')
+  await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+  await t.drain('c1')
+  assert.deepEqual(t.files.keys().filter((k) => t.files.text(k)!.includes('41000')), [])
+})
+
+test('an export being built when a file is removed for good does not keep the removed text', async () => {
+  const t = await threeVersions()
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'doc-3.md')
+  const get = t.files.get.bind(t.files)
+  let removed = false
+  t.files.get = async (key: string) => {
+    const object = await get(key)
+    if (!removed && key.endsWith(`/docs/${target.documentId}.json`)) {
+      // The export has read the text; the removal arrives before it finishes.
+      removed = true
+      await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+    }
+    return object
+  }
+  await t.api('POST', '/v1/collections/c1/exports', { exportId: 'exp-1' })
+  await t.drain('c1')
+  t.files.get = get
+  assert.ok(removed)
+  const status = (await t.api('GET', '/v1/collections/c1/exports/exp-1')).body
+  if (status.state === 'ready') {
+    const zip = new TextDecoder('latin1').decode(new Uint8Array(await (await t.api('GET', '/v1/collections/c1/exports/exp-1?download=1')).response.arrayBuffer()))
+    assert.ok(!zip.includes(target.documentId), 'the export holds nothing of the removed file')
+  }
+  for (const key of t.files.keys('exports/')) assert.ok(!t.files.text(key)!.includes(target.documentId))
+})
+
+test('a re-read finishing after a removal for good does not bring the removed text back', async () => {
+  const t = await threeVersions()
+  t.advance(SIX_MINUTES)
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'doc-1.md')
+  const put = t.files.put.bind(t.files)
+  let removed = false
+  t.files.put = async (key: string, value: unknown, options?: any) => {
+    const result = await put(key, value, options)
+    if (!removed && key.includes(`/docs/${target.documentId}.json`)) {
+      removed = true
+      await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+    }
+    return result
+  }
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['gateway'] } } })
+  await t.drain('c1')
+  t.advance(60_000)
+  await t.drain('c1')
+  t.files.put = put
+  assert.ok(removed)
+  assert.ok(!t.files.keys('text/').some((k) => k.endsWith(`/docs/${target.documentId}.json`)), 'no text of the removed file in R2')
+  assert.deepEqual(t.files.keys().filter((k) => t.files.text(k)!.includes('port is 8001')), [])
+})
+
+test('FIX-02 a re-read that changes a corrected passage asks for the correction to be checked; one that leaves it alone does not', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1, 'Owner of the gateway is Morgan.'), doc(2)])
+  t.advance(SIX_MINUTES)
+  const found = await ask(t, 'c1', 'topic number 1 gateway port')
+  const old = found.body.passages.find((p: any) => p.text.includes('8001'))
+  await t.api('POST', '/v1/collections/c1/corrections', {
+    importId: 'fix-1',
+    note: { noteId: 'n1', title: 'Port', text: 'Topic number 1: the gateway port is now 9001.', outdated: [{ documentId: old.documentId, textHash: old.textHash }] },
+  })
+  await t.drain('c1')
+  t.advance(SIX_MINUTES)
+  const hiding = (words: string[]) => ({ settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words } } })
+  // Unchanged: the word is only in another passage of the same file.
+  await t.api('PUT', '/v1/collections/c1', hiding(['Morgan']))
+  await t.drain('c1')
+  assert.ok(!(await outboxEvents(t)).some((e) => e.type === 'needs_check'))
+  assert.match((await ask(t, 'c1', 'topic number 1 gateway port')).body.passages[0].text, /9001/, 'the correction still applies')
+  t.advance(SIX_MINUTES)
+  // Changed: the corrected passage itself loses a word.
+  await t.api('PUT', '/v1/collections/c1', hiding(['Morgan', 'gateway']))
+  await t.drain('c1')
+  const checks = (await outboxEvents(t)).filter((e) => e.type === 'needs_check')
+  assert.equal(checks.length, 1)
+  assert.deepEqual([checks[0].noteId, checks[0].documentId], ['n1', old.documentId])
+  assert.equal(typeof checks[0].textHash, 'string')
 })

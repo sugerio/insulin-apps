@@ -15,7 +15,9 @@ editors, **Not right** opens the fix:
 
 1. Write the right answer.
 2. Pick the source that is out of date, or "None of them" if something is missing.
-3. **Save the correction.**
+3. If you like, tick **Tell the person who added this file**: whoever added it gets an e-mail saying an answer from their
+   file was corrected, with a link to the collection (not the correction), so they can update the file too.
+4. **Save the correction.**
 
 Knowledge saves the correction as a note, learns it (about a minute; questions to that collection wait meanwhile) and
 saves a restore point. The source picked is marked as corrected, so answers stop using that passage.
@@ -23,16 +25,20 @@ saves a restore point. The source picked is marked as corrected, so answers stop
 - New questions on the site and from every AI assistant use the correction, and cite it.
 - Answers already given don't change.
 - The correction can be undone by going back in [History](/docs/knowledge/history).
+- If the file it corrects is read again later and the words it applies to now read differently, the correction asks to
+  be checked under **Needs attention**.
 
 Through the API: `POST /api/collections/{id}/corrections` with `{ "text", "question", "outdated": [{ "documentId",
-"textHash" }] }` (the passage's ids from a search) and an `Idempotency-Key`. It needs the collection's Editor role.
+"textHash" }] }` (the passage's ids from a search), or `"factId"` for a fact, optionally `"notifyAuthors": true`, and
+an `Idempotency-Key`. It needs the collection's Editor role.
 
 ## Report a wrong answer
 
 Someone who can only read a collection gets **Not right** too, to tell its owner what's wrong: they say what they
 expected, then **Send to** the owner. The owner and the collection's admins get an e-mail, and the report waits for
 them under **Needs attention**. Until someone checks it, the answer shows that it was reported, to everyone who gets
-it. The report is settled when an owner, admin or editor fixes the answer, or marks it as right.
+it. The report is settled when an owner, admin or editor fixes the answer (once Insulin has learned the fix; if learning
+it fails, the report stays open), or marks it as right.
 
 Through the API: `POST /api/collections/{id}/reports` with `{ "question", "answer", "note" }`; settling is
 `PATCH /api/collections/{id}/reports/{reportId}` with `{ "status": "fixed" }` or `"dismissed"`.
@@ -57,7 +63,9 @@ they are an owner, admin or editor:
 - **Files Insulin couldn't read**, with the reason and what to upload instead;
 - **values hidden before learning**: which file, and how many e-mail addresses, phone numbers or other values were
   hidden (see [Hiding personal data](/docs/knowledge/hiding-personal-data));
-- **reported answers waiting**: fix the answer, or say it is right.
+- **reported answers waiting**: fix the answer, or say it is right;
+- **corrections to check**: a file was read again, and the words a correction applies to now read differently. Check
+  that the correction still says the right thing; writing a new correction of that file settles it.
 
 Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file with
 the same name is learned in that collection. Through the API: `GET /api/attention`, optionally `?collection=<id>`.

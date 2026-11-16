@@ -410,17 +410,21 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   a page. An organization's first use of an app moves its number on (a trigger on `app_orgs`), so overrides set before
   reach the app. The watch list compares each app's latest usage report with the limit in force.
 - **Where each app is used** (`app_orgs`): the first request the gateway forwards to an app for an organization (a
-  page, an AI agent's tool call, an API client) writes a row before the request goes on, once per pair and isolate. The
+  page, an AI agent's tool call, an API client) writes a row before the request goes on, once per pair and isolate; if
+  the row can't be written, the request doesn't go on (503, "isn't available right now"), and the next one tries again. The
   limits, members and member events an app reads are only those of its organizations; deleting an organization
   forgets its rows.
 - **Member events** (DESIGN.md §8.9) are written by triggers (migration 0012), so every path that changes memberships,
   app grants, custom roles' permissions, API clients or organizations records them in its own transaction, however it
   is made, with no code of its own. An event is stored once, for every app (`*`) or one, with the roles after the change
   and, for a move between an organization role and specific apps, the apps before (a `BEFORE UPDATE` trigger, since the
-  move drops the grants) or after (the grants of the same batch join the role's event by its stamp, so an app the person
+  move drops the grants) or after (the grants of the same batch join the role's event through `member_event_moves`, which
+  the move opens and `setAppAccess` closes before its batch commits, so a grant in any later transaction is an event of
+  its own, and an app the person
   keeps sees one `role_changed`, not a departure and a return). `src/members/events.ts` turns it into each app's terms
   when read. Changes the organization's deletion cascades into say nothing; one `org_deleted` per app it used says it
-  all. Housekeeping deletes events past 90 days, oldest first, and keeps the highest id it deleted
+  all. Housekeeping deletes events past 90 days, oldest first through the index on their time (it runs after every
+  change, so it must not read the table), and keeps the highest id it deleted
   (`member_events_pruned`): a cursor below it gets 410.
 - **The member lookup** takes the organization and person from the signed header, never from the app, checks the
   signature against the app the token names, then that the person can still use the app (`findAccessRow`), and limits

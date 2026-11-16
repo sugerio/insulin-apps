@@ -104,6 +104,8 @@ export const members = sqliteTable('members', {
   owner_since: integer('owner_since'),
   /** Set during a resync until member status has checked them. */
   unchecked: integer('unchecked').notNull().default(0),
+  /** Their permissions in Knowledge (JSON), when narrowed by a custom role; NULL means the role's own. */
+  permissions: text('permissions'),
   seen_at: integer('seen_at'),
   updated_at: integer('updated_at').notNull(),
 }, (table) => [
@@ -144,8 +146,10 @@ export const imports = sqliteTable('imports', {
   version: integer('version'),
   /** Plain words for a person: why it failed. */
   error: text('error'),
-  /** JSON: the files' names, for mail. */
+  /** JSON: the files' names, and the documents they became once learned (`documents`), for mail and Needs attention. */
   detail: text('detail').notNull().default('{}'),
+  /** JSON: the request of an import waiting for next month's documents learned, sent to the engine on the 1st. */
+  request: text('request'),
   notified_at: integer('notified_at'),
   finished_at: integer('finished_at'),
 }, (table) => [
@@ -396,3 +400,20 @@ export const factChecks = sqliteTable('fact_checks', {
   checked_by: text('checked_by').notNull(),
   checked_at: integer('checked_at').notNull(),
 }, (table) => [primaryKey({ columns: [table.collection_id, table.fact_id] }), index('fact_checks_by_org').on(table.org_id, table.collection_id)])
+
+/**
+ * Corrections that ask to be checked: the file they correct was read again and the passage they marked outdated now
+ * reads differently (the engine's outbox `needs_check`). Needs attention shows them until the correction is written
+ * again or the collection is deleted.
+ */
+export const correctionChecks = sqliteTable('correction_checks', {
+  collection_id: text('collection_id').notNull().references(() => collections.id),
+  note_id: text('note_id').notNull(),
+  document_id: text('document_id').notNull(),
+  text_hash: text('text_hash').notNull(),
+  org_id: text('org_id').notNull(),
+  at: integer('at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.collection_id, table.note_id, table.document_id, table.text_hash] }),
+  index('correction_checks_by_org').on(table.org_id, table.collection_id),
+])

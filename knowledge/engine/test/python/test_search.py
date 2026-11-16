@@ -43,6 +43,15 @@ class Passages(unittest.TestCase):
         self.assertEqual([p["page"] for p in index], [1, 2, 2])
         self.assertEqual(index[2]["end"], utf16_len(self.TEXT))
 
+    def test_a_document_keeps_at_most_the_capped_number_of_passages(self):
+        text = "\n\n".join(f"Paragraph {i}." for i in range(10))
+        chunks = [{"id": f"c{i}", "index": i, "text": f"Paragraph {i}."} for i in range(10)]
+        index, capped = passages.build_index("d1", text, [], chunks, cap=4), passages.capped("d1", 10, 4)
+        self.assertEqual([p["passageId"] for p in index], ["c0", "c1", "c2", "c3"])
+        self.assertTrue(capped)
+        self.assertEqual(len(passages.build_index("d1", text, [], chunks)), 10, "the default cap is far above this")
+        self.assertGreaterEqual(passages.PASSAGE_CAP, 1000)
+
     def test_fix02_marks_follow_their_passage_through_a_reread(self):
         old_text = "Rule one: ask Bluewater first.\n\nRule two: the port is 8443."
         old_index = passages.build_index("d1", old_text, [], [{"id": "a", "index": 0, "text": "Rule one: ask Bluewater first."}, {"id": "b", "index": 1, "text": "Rule two: the port is 8443."}])
@@ -53,6 +62,8 @@ class Passages(unittest.TestCase):
         moved = passages.remap_marks(marks, old_text, old_index, new_text, new_index, rehide)
         self.assertEqual(moved[0]["newTextHash"], new_index[0]["textHash"], "the changed passage is found again")
         self.assertEqual(moved[1]["newTextHash"], old_index[1]["textHash"], "an unchanged file keeps its marks")
+        self.assertTrue(moved[0]["changed"], "a passage that only gained a [hidden] moved, and changed: the correction asks to be checked")
+        self.assertFalse(moved[1]["changed"])
         changed = "Rule one: ask the lead first.\n\nRule two: the port is 9443."
         changed_index = passages.build_index("d1", changed, [], [{"id": "p", "index": 0, "text": "Rule one: ask the lead first."}, {"id": "q", "index": 1, "text": "Rule two: the port is 9443."}])
         gone = passages.remap_marks(marks[1:], old_text, old_index, changed, changed_index, rehide)

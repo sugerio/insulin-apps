@@ -1,8 +1,17 @@
-import type { CollectionStatus, DocumentInfo, DocumentText, ExportStatus, Fact, GoBackPreview, ImportStatus, Passage, RestorePoint } from '../../../engine/src/contract.ts'
+import type { CollectionStatus, DocumentInfo, DocumentText, ExportStatus, Fact, GoBackPreview, ImportStatus as EngineImportStatus, Passage, RestorePoint } from '../../../engine/src/contract.ts'
 
 // The shapes the screens read from Knowledge's API (src/app/server/routes/), as the server sends them.
 
-export type { CollectionStatus, DocumentInfo, DocumentText, ExportStatus, Fact, GoBackPreview, ImportStatus, Passage, RestorePoint }
+export type { CollectionStatus, DocumentInfo, DocumentText, ExportStatus, Fact, GoBackPreview, Passage, RestorePoint }
+
+/**
+ * An import as the app answers it: the engine's, or one waiting for next month's documents learned (`waiting`,
+ * learned on the 1st by itself).
+ */
+export type ImportStatus = Omit<EngineImportStatus, 'state' | 'waitingFor'> & {
+  state: EngineImportStatus['state'] | 'waiting'
+  waitingFor: EngineImportStatus['waitingFor'] | 'month'
+}
 
 export type AppRole = 'ADMIN' | 'EDITOR' | 'VIEWER'
 export type CollectionRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER'
@@ -197,7 +206,8 @@ export interface Health {
 
 export type AttentionItem =
   | { kind: 'unreadable'; id: string; at: string; files: { name: string; reason: string }[]; message: string }
-  | { kind: 'hidden'; id: string; at: string; documentId: string; documentName: string; counts: Record<string, number>; total: number }
+  | { kind: 'hidden'; id: string; at: string; documentId: string; documentName: string; total: number }
+  | { kind: 'needs_check'; id: string; at: string; correctionId: string | null; text: string | null; documentId: string; documentName: string | null }
   | { kind: 'reported'; id: string; at: string; question: string; note: string; answer: string; reportedBy: { id: string; name: string | null } }
 
 export interface AttentionCollection {

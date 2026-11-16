@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { ACTIONS, authorize, loadCollection, ownerName, quoted, ROLE_RANK, roleIn, type Action, type CollectionRole, type CollectionRow } from '../access.ts'
+import { ACTIONS, authorize, HAS_ROLE_SQL, loadCollection, ownerName, quoted, ROLE_RANK, roleIn, type Action, type CollectionRole, type CollectionRow } from '../access.ts'
 import type { AppEnv } from '../env.ts'
-import { badRequest, browserOnly, forbidden, logError, notFound, readJson } from '../http.ts'
+import { ApiError, badRequest, browserOnly, forbidden, logError, notFound, readJson } from '../http.ts'
 import { idempotent } from '../idempotency.ts'
 import { can, isOrgOwner, type Caller } from '../identity.ts'
 import { effectiveLimit, quotaExceeded, SECONDS_PER_HOUR, usageOf } from '../limits.ts'
-import { MAIL, sendMail } from '../mail.ts'
+import { eraseCollection } from '../erase.ts'
+import { appLink, MAIL, sendMail } from '../mail.ts'
 import { memberOf, memberStatus } from '../members.ts'
 import { engineSettings, pushSettings, readOrgSettings } from '../settings.ts'
 import { callerOf, engineFor, iso, json, now, param, type Ctx } from './common.ts'
@@ -68,10 +69,7 @@ export function collectionRoutes() {
     const caller = callerOf(c)
     const db = c.env.DB
     const { results } = await db.prepare(
-      `SELECT c.* FROM collections c WHERE c.org_id = ?1 AND c.state != 'deleted' AND (
-         (?2 = 'person' AND (c.owner_id = ?3 OR c.general_role IS NOT NULL))
-         OR EXISTS (SELECT 1 FROM collection_shares s WHERE s.collection_id = c.id AND s.org_id = ?1 AND s.principal_type = ?2 AND s.principal_id = ?3 AND s.status = 'active'))
-       ORDER BY lower(c.name), c.created_at`,
+      `SELECT c.* FROM collections c WHERE c.org_id = ?1 AND c.state != 'deleted' AND ${HAS_ROLE_SQL} ORDER BY lower(c.name), c.created_at`,
     ).bind(caller.organizationId, caller.kind, caller.id).all<CollectionRow>()
     const visible = results.filter((collection) => caller.via === 'browser' || collection.assistants === 1)
     return json(c, { collections: await Promise.all(visible.map((collection) => summaryOf(db, caller, collection))) })
@@ -98,7 +96,7 @@ export function collectionRoutes() {
       if (inserted.meta.changes !== 1) throw quotaExceeded(c.env, 'collections', limit ?? 0, at)
       const collection = (await loadCollection(db, org, id))!
       try {
-        await engine.putCollection(id, engineSettings(collection, await readOrgSettings(db, org)))
+        await engine.putCollection(id, engineSettings(collection, await readOrgSettings(db, org, at)))
       } catch (error) {
         await db.prepare(`DELETE FROM collections WHERE id = ? AND org_id = ?`).bind(id, org).run()
         throw error
@@ -189,14 +187,7 @@ export function collectionRoutes() {
     } else {
       collection = (await authorize(db, caller, param(c, 'id'), 'settings')).collection
     }
-    const statements: D1PreparedStatement[] = []
-    const set = (sql: string, ...values: unknown[]) => statements.push(db.prepare(`UPDATE collections SET ${sql}, updated_at = ? WHERE id = ? AND org_id = ?`).bind(...values, at, collection.id, org))
-    if (body.name !== undefined) set('name = ?', body.name)
-    if (body.purpose !== undefined) set('purpose = ?', body.purpose)
-    if (body.assistants !== undefined) set('assistants = ?', body.assistants ? 1 : 0)
-    if (body.awakeMinutes !== undefined) set('awake_minutes = ?', body.awakeMinutes)
-    if (body.keepReady === null) set('keep_ready = NULL, keep_ready_paused = 0')
-    if (statements.length) await db.batch(statements)
+    // A keep-ready window first: refused at the limit, nothing else of the request is changed.
     if (body.keepReady) {
       const limit = await effectiveLimit(db, org, 'ready_collections', at)
       const awakeLimit = await effectiveLimit(db, org, 'awake_hours_month', at)
@@ -209,8 +200,16 @@ export function collectionRoutes() {
       ).bind(JSON.stringify(body.keepReady), paused, at, collection.id, org, limit).run()
       if (updated.meta.changes !== 1) throw quotaExceeded(c.env, 'ready_collections', limit ?? 0, at)
     }
+    const statements: D1PreparedStatement[] = []
+    const set = (sql: string, ...values: unknown[]) => statements.push(db.prepare(`UPDATE collections SET ${sql}, updated_at = ? WHERE id = ? AND org_id = ?`).bind(...values, at, collection.id, org))
+    if (body.name !== undefined) set('name = ?', body.name)
+    if (body.purpose !== undefined) set('purpose = ?', body.purpose)
+    if (body.assistants !== undefined) set('assistants = ?', body.assistants ? 1 : 0)
+    if (body.awakeMinutes !== undefined) set('awake_minutes = ?', body.awakeMinutes)
+    if (body.keepReady === null) set('keep_ready = NULL, keep_ready_paused = 0')
+    if (statements.length) await db.batch(statements)
     const fresh = (await loadCollection(db, org, collection.id))!
-    if (body.keepReady !== undefined || body.awakeMinutes !== undefined) await pushSettings(c.env, fresh, await readOrgSettings(db, org), at)
+    if (body.keepReady !== undefined || body.awakeMinutes !== undefined) await pushSettings(c.env, fresh, await readOrgSettings(db, org, at), at)
     if (onlyKeepReadyOff && isOrgOwner(caller) && !(await roleIn(db, caller, fresh)).role) return json(c, { collection: { id: fresh.id, keepReady: null } })
     return json(c, { collection: await summaryOf(db, caller, fresh) })
   })
@@ -250,7 +249,7 @@ export function collectionRoutes() {
         const engine = engineFor(c)
         const answer = await engine.deleteCollection(collection.id)
         if (answer.state === 'deleted' || (await engine.getCollection(collection.id)).state === 'deleted') {
-          await db.prepare(`UPDATE collections SET state = 'deleted', engine_state = 'deleted', updated_at = ? WHERE id = ? AND org_id = ?`).bind(at, collection.id, org).run()
+          await eraseCollection(db, org, collection.id, at)
           state = 'deleted'
         }
       } catch (error) {
@@ -264,8 +263,9 @@ export function collectionRoutes() {
   app.post('/:id/transfer', async (c) => {
     const caller = callerOf(c)
     const body = await readJson(c, z.object({ to: z.string().min(1).max(128) }).strict())
-    const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'transfer')
+    // A transfer sent again answers as it did the first time, although the sender owns it no more.
     return idempotent(c, body, true, async () => {
+      const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'transfer')
       const db = c.env.DB
       const at = now(c)
       const org = caller.organizationId
@@ -282,19 +282,24 @@ export function collectionRoutes() {
       if (appRole !== 'ADMIN' && appRole !== 'EDITOR') {
         throw badRequest('Ownership can only go to someone who is an Admin or Editor in Knowledge. Viewers can only read.')
       }
-      await db.batch([
-        db.prepare(`UPDATE collections SET owner_id = ?3, owner_since = ?4, updated_at = ?4 WHERE id = ?1 AND org_id = ?2 AND owner_id = ?5`).bind(collection.id, org, body.to, at, caller.id),
-        db.prepare(`DELETE FROM collection_shares WHERE collection_id = ? AND org_id = ? AND principal_type = 'person' AND principal_id = ?`).bind(collection.id, org, body.to),
+      // Every change after the owner's goes ahead only if this request changed the owner (`won`): a transfer racing
+      // another, or a move by the tick, changes nothing and answers 409.
+      const transfer = crypto.randomUUID()
+      const won = `EXISTS (SELECT 1 FROM activity WHERE id = '${transfer}')`
+      const [owner] = await db.batch([
+        db.prepare(`UPDATE collections SET owner_id = ?3, owner_since = ?4, updated_at = ?4 WHERE id = ?1 AND org_id = ?2 AND owner_id = ?5 AND state = 'active'`).bind(collection.id, org, body.to, at, caller.id),
+        db.prepare(`INSERT INTO activity (id, org_id, collection_id, collection_name, action, actor_id, at, detail) SELECT ?, ?, ?, ?, 'transferred', ?, ?, ? WHERE changes() = 1`)
+          .bind(transfer, org, collection.id, collection.name, caller.id, at, JSON.stringify({ from: caller.id, to: body.to })),
+        db.prepare(`DELETE FROM collection_shares WHERE collection_id = ? AND org_id = ? AND principal_type = 'person' AND principal_id = ? AND ${won}`).bind(collection.id, org, body.to),
         db.prepare(
           `INSERT INTO collection_shares (collection_id, org_id, principal_type, principal_id, role, status, shared_by, shared_at, updated_at)
-           VALUES (?1, ?2, 'person', ?3, 'ADMIN', 'active', ?4, ?5, ?5)
+           SELECT ?1, ?2, 'person', ?3, 'ADMIN', 'active', ?4, ?5, ?5 WHERE ${won}
            ON CONFLICT (collection_id, principal_type, principal_id) DO UPDATE SET role = 'ADMIN', status = 'active', updated_at = excluded.updated_at`,
         ).bind(collection.id, org, caller.id, body.to, at),
-        db.prepare(`INSERT INTO activity (id, org_id, collection_id, collection_name, action, actor_id, at, detail) VALUES (?, ?, ?, ?, 'transferred', ?, ?, ?)`)
-          .bind(crypto.randomUUID(), org, collection.id, collection.name, caller.id, at, JSON.stringify({ from: caller.id, to: body.to })),
       ])
+      if (owner?.meta.changes !== 1) throw new ApiError('conflict', `${quoted(collection.name)} changed owner meanwhile, so it wasn't transferred. Reload and try again.`)
       const recipient = await memberOf(db, org, 'person', body.to)
-      if (recipient?.email) await sendMail(c.env, org, { to: recipient.email, ...MAIL.transferredToYou(caller.name ?? caller.email ?? 'Its owner', collection.name) }, 'transferred')
+      if (recipient?.email) await sendMail(c.env, org, { to: recipient.email, ...MAIL.transferredToYou(caller.name ?? caller.email ?? 'Its owner', collection.name, appLink(c.env, `/collections/${collection.id}`)) }, 'transferred')
       return json(c, { collection: await summaryOf(db, caller, (await loadCollection(db, org, collection.id))!) })
     })
   })

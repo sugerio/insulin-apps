@@ -69,6 +69,7 @@ export interface CollectionSettings {
   hiding: HidingRules
   keepReady: KeepReady | null
   awakeMinutes: number // stays awake this long after the last question (default 10)
+  backupDays: number // daily backups kept this many days (the organization's backup_days limit); the latest is kept for the collection's life
 }
 
 export interface CollectionCounts {
@@ -119,6 +120,13 @@ export interface ImportNote {
   title: string
   text: string
   outdated: PassageRef[] // passages this note corrects; they are marked outdated
+}
+
+// POST /v1/collections/:cid/inbox/keep: keep staged files that an import waiting for the next month will name, instead
+// of clearing them after a day. `until` is at most 45 days ahead; answers `{ kept: string[] }` (the ids still staged).
+export interface KeepStagedRequest {
+  fileIds: string[]
+  until: string // ISO time
 }
 
 export interface ImportRequest {
@@ -200,6 +208,7 @@ export interface Fact {
   sentence: string
   documentId: string
   passageId: string
+  passageTextHash: string // the source passage's textHash, so a fix can mark it outdated without searching
   sourceSentence: string
 }
 
@@ -224,7 +233,8 @@ export interface AnswerRequest {
 
 export interface AnswerResult {
   text: string // cites passages as [1], [2], … in the order given
-  citations: number[] // 1-based passage numbers the text cites
+  citations: number[] // 1-based passage numbers the text cites, all within the passages given
+  dropped: number // citations the model wrote outside the passages given; the app then shows sources without the text
   model: string
 }
 
@@ -240,6 +250,7 @@ export interface DocumentInfo {
   pages: number | null
   sha256: string
   active: boolean // false: "stop using" (kept, not used for answers)
+  hiddenValues: number // values hidden before learning
   addedAt: string
   version: number // the restore point that added it
 }
@@ -306,6 +317,8 @@ export type OutboxEvent =
   | { id: string; at: string; org: string; collectionId: string; type: 'state'; state: CollectionState; version: number }
   | { id: string; at: string; org: string; collectionId: string; type: 'backup'; version: number }
   | { id: string; at: string; org: string; collectionId: string; type: 'deleted' }
+  // A file re-read changed a passage a correction marked outdated: the correction asks to be checked.
+  | { id: string; at: string; org: string; collectionId: string; type: 'needs_check'; noteId: string; documentId: string; textHash: string }
 
 export interface OutboxPage {
   events: OutboxEvent[]

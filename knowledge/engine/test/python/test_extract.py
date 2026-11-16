@@ -100,6 +100,12 @@ class Formats(unittest.TestCase):
         self.assertGreater(len(result.text.encode("utf-8")), MAX_TEXT_BYTES * 0.9)
         self.assertEqual(result.note, "Only the first 2 MB of text was learned.")
 
+    def test_excel_keeps_each_value_in_its_column(self):
+        path = self.out / "sparse.xlsx"
+        make_fixtures.write_xlsx(path, [("Quotas", [["Person", "City", "Quota"], ["Jordan", "", "450"], ["", "Lisbon", ""]])])
+        rows = extract(path, "", "sparse.xlsx").text.split("\n")
+        self.assertEqual(rows[1:], ["Person\tCity\tQuota", "Jordan\t\t450", "\tLisbon"])
+
     def test_damaged_and_hostile_office_files_are_refused(self):
         broken = self.out / "broken.docx"
         broken.write_bytes(b"not a zip")

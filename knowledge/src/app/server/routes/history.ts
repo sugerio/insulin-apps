@@ -3,6 +3,7 @@ import { authorize } from '../access.ts'
 import type { AppEnv } from '../env.ts'
 import { ApiError, badRequest, logError, notFound } from '../http.ts'
 import { idempotent } from '../idempotency.ts'
+import { ensureAwakeBlock } from '../limits.ts'
 import { reconcileHistory } from '../outbox.ts'
 import { callerOf, engineFor, json, now, param } from './common.ts'
 
@@ -34,19 +35,27 @@ export function historyRoutes() {
 
   app.post('/:id/history/undo', async (c) => {
     const { collection } = await authorize(c.env.DB, callerOf(c), param(c, 'id'), 'change')
-    return idempotent(c, null, true, async () => json(c, { collection: await engineFor(c).undo(collection.id) }))
+    return idempotent(c, null, true, async () => {
+      await ensureAwakeBlock(c.env, collection.org_id, collection.id, now(c))
+      return json(c, { collection: await engineFor(c).undo(collection.id) })
+    })
   })
 
   app.post('/:id/history/:version/go-back', async (c) => {
     const { collection } = await authorize(c.env.DB, callerOf(c), param(c, 'id'), 'change')
     const version = versionOf(param(c, 'version'))
-    return idempotent(c, null, true, async () => json(c, { collection: await engineFor(c).goBack(collection.id, version) }))
+    return idempotent(c, null, true, async () => {
+      // Going back starts the collection from that restore point: awake time, like any work of the engine's.
+      await ensureAwakeBlock(c.env, collection.org_id, collection.id, now(c))
+      return json(c, { collection: await engineFor(c).goBack(collection.id, version) })
+    })
   })
 
   app.post('/:id/exports', async (c) => {
     const caller = callerOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'export')
     return idempotent(c, null, true, async () => {
+      await ensureAwakeBlock(c.env, collection.org_id, collection.id, now(c))
       const exportId = crypto.randomUUID().replace(/-/g, '')
       const status = await engineFor(c).startExport(collection.id, exportId)
       await c.env.DB.prepare(`INSERT INTO exports (id, org_id, collection_id, requested_by, created_at) VALUES (?, ?, ?, ?, ?)`).bind(exportId, caller.organizationId, collection.id, caller.id, now(c)).run()

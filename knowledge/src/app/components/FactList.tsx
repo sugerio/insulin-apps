@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button.tsx'
+import { Checkbox } from '@/components/ui/checkbox.tsx'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog.tsx'
 import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
@@ -8,7 +9,7 @@ import { api, collectionPath } from '../lib/api.ts'
 import { formatDay, plural } from '../lib/format.ts'
 import type { CollectionSummary, DocumentInfo, FactWithCheck, ImportStatus } from '../lib/types.ts'
 import { ActionError, Badge, Banner, ErrorState, Loading, Note } from './Feedback.tsx'
-import { FINAL, useImportWatch } from './ImportProgress.tsx'
+import { FINAL, nextMonth, useImportWatch } from './ImportProgress.tsx'
 
 // What a collection knows (design J1 step 4, FIX-04): facts as sentences a person can check, each with the source it
 // came from. Its editors mark one "Looks right" (with their name) or fix it once (a correction every new question
@@ -128,6 +129,7 @@ export function FactList({ collection, editor, onOpenSource, limit, search = tru
 
 function FixFactDialog({ collection, fact, onClose, onFixed }: { collection: CollectionSummary; fact: FactWithCheck; onClose: () => void; onFixed: () => void }) {
   const [text, setText] = useState(fact.sentence)
+  const [notify, setNotify] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [started, setStarted] = useState<ImportStatus | null>(null)
@@ -137,7 +139,7 @@ function FixFactDialog({ collection, fact, onClose, onFixed }: { collection: Col
     setBusy(true)
     setError(null)
     try {
-      const body = await api.create<{ import: ImportStatus }>(collectionPath(collection.id, '/corrections'), { text: text.trim(), factId: fact.factId, title: `Correction: ${fact.sentence}`.slice(0, 200) })
+      const body = await api.create<{ import: ImportStatus }>(collectionPath(collection.id, '/corrections'), { text: text.trim(), factId: fact.factId, title: `Correction: ${fact.sentence}`.slice(0, 200), notifyAuthors: notify })
       setStarted(body.import)
     } catch (failure) {
       setError(failure)
@@ -156,9 +158,16 @@ function FixFactDialog({ collection, fact, onClose, onFixed }: { collection: Col
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="fact-fix">The right fact</Label>
-            <Textarea id="fact-fix" required rows={3} value={text} onChange={(event) => setText(event.target.value)} />
+            <Textarea id="fact-fix" required rows={3} maxLength={20000} value={text} onChange={(event) => setText(event.target.value)} />
           </div>
-          {started && !failed ? <Banner kind="info">Learning your fix, about a minute. Questions to {collection.name} wait meanwhile.</Banner> : null}
+          {started ? null : (
+            <div className="flex items-start gap-2">
+              <Checkbox id="fact-notify" checked={notify} onCheckedChange={(value) => setNotify(value === true)} className="mt-0.5" />
+              <Label htmlFor="fact-notify" className="font-normal leading-snug">Tell the person who added this file, so they can update it too. They get an e-mail with a link, not your fix.</Label>
+            </div>
+          )}
+          {status?.state === 'waiting' ? <Banner kind="info">Your organization has learned this month's documents, so {collection.name} learns your fix on {nextMonth()}, by itself.</Banner>
+            : started && !failed ? <Banner kind="info">Learning your fix, about a minute. Questions to {collection.name} wait meanwhile.</Banner> : null}
           {failed ? <Banner kind="danger">{status?.error?.message ?? "The fix couldn't be learned."} Nothing was changed.</Banner> : null}
           <ActionError error={error} />
           <DialogFooter>

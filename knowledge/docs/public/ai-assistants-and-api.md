@@ -112,7 +112,7 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 | `GET /api/collections/{id}/sources` | Viewer | Its files, web pages and notes, and whether each is used |
 | `GET /api/collections/{id}/sources/{docId}` | Viewer | One source's text, with hidden values as `[hidden]`, and its pages |
 | `POST /api/collections/{id}/preflight` | Editor | Which files can be learned, with a `fileId` each, within the limits |
-| `PUT /api/collections/{id}/uploads/{fileId}` | Editor | Upload a file preflight accepted (raw bytes; `x-file-name`) |
+| `PUT /api/collections/{id}/uploads/{fileId}` | Editor | Upload a file preflight accepted (raw bytes; optionally `x-file-sha256`) |
 | `POST /api/collections/{id}/imports` | Editor | Learn uploaded files, all or nothing |
 | `GET /api/collections/{id}/imports/{importId}` | Viewer | An import's progress, file by file, with the time left |
 | `POST /api/collections/{id}/notes` | Editor | Add a note |
@@ -135,7 +135,7 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 
 | Endpoint | Role | What it does |
 |---|---|---|
-| `GET /api/attention` | Editor | Files Insulin couldn't read, values hidden before learning and reported answers waiting, in the collections you can change (`?collection=<id>` for one). Needs permission to change content. |
+| `GET /api/attention` | Editor | Files Insulin couldn't read, values hidden before learning, reported answers waiting and corrections to check, in the collections you can change (`?collection=<id>` for one). Needs permission to change content. |
 
 Its items are `unreadable` (an import that failed, or a file refused at upload, in the last 30 days, until a file with
 the same name is learned), `hidden` (a recent file or note in which values were hidden, with how many of each kind,

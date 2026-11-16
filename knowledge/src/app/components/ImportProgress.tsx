@@ -11,6 +11,12 @@ import { Badge, Banner } from './Feedback.tsx'
 
 export const FINAL = new Set(['committed', 'duplicate', 'failed', 'cancelled'])
 
+/** The 1st of next month (UTC), when an import waiting for the month's documents learned starts by itself. */
+export function nextMonth(now = Date.now()): string {
+  const date = new Date(now)
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
+}
+
 /** Follows an import until it is final; `onFinal` runs once when it is. */
 export function useImportWatch(collectionId: string, initial: ImportStatus | null, onFinal?: (status: ImportStatus) => void): { status: ImportStatus | null; error: unknown } {
   const [status, setStatus] = useState<ImportStatus | null>(initial)
@@ -23,6 +29,8 @@ export function useImportWatch(collectionId: string, initial: ImportStatus | nul
       onFinal?.(initial)
       return
     }
+    // Waiting for the 1st: nothing changes before then, so nothing is polled.
+    if (initial.state === 'waiting') return
     let live = true
     let timer: ReturnType<typeof setTimeout>
     const poll = async () => {
@@ -69,6 +77,7 @@ export function ImportProgress({ status, collectionName, title, error }: { statu
   const what = n ? plural(n, 'file') : status.notes === 1 ? 'a note' : plural(status.notes, 'note')
   const final = FINAL.has(status.state)
   const percent = status.state === 'committed' || status.state === 'duplicate' ? 100
+    : status.state === 'waiting' ? 0
     : status.state === 'saving' ? 95
       : n ? Math.round(((done + (status.state === 'learning' ? 0.5 : 0)) / n) * 90) : status.state === 'learning' ? 50 : 10
   const left = !final ? timeLeft(status.etaSeconds) : null
@@ -87,6 +96,12 @@ export function ImportProgress({ status, collectionName, title, error }: { statu
     message = { kind: 'danger', text: `${reason} Nothing from this import was kept, so ${collectionName} is exactly as it was.${n > 1 ? ` The other ${plural(n - 1, 'file')} can be learned without it: add them again.` : ''}` }
   } else if (status.state === 'cancelled') {
     message = { kind: 'warn', text: `This import was stopped. Nothing from it was kept, so ${collectionName} is exactly as it was.` }
+  } else if (status.state === 'waiting') {
+    // Files the engine couldn't keep until the 1st are listed as failed: they are to be added again.
+    const waits = files.filter((file) => file.state !== 'failed').length
+    const lost = files.filter((file) => file.state === 'failed')
+    const gone = lost.length ? ` Insulin couldn't keep ${lost.length === 1 ? `“${lost[0]!.name}”` : plural(lost.length, 'file')} until then: add ${lost.length === 1 ? 'it' : 'them'} again.` : ''
+    message = { kind: 'info', text: `Your organization has learned this month's documents, so ${waits ? (waits === 1 ? 'this file waits' : 'these files wait') : 'this waits'} and ${collectionName} learns ${waits === 1 || !waits ? 'it' : 'them'} on ${nextMonth()}, by itself. Everything already learned keeps answering.${gone} You can leave this page; Insulin e-mails you when it's done.` }
   } else if (retrying) {
     message = { kind: 'warn', text: `The import was interrupted. Nothing from it was kept, so ${collectionName} is exactly as it was before. Trying again (${status.attempt} of 3).` }
   } else if (status.state === 'queued' && status.waitingFor === 'organization') {
@@ -104,7 +119,7 @@ export function ImportProgress({ status, collectionName, title, error }: { statu
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-semibold">{title ?? `Adding ${what} to ${collectionName}`}</h3>
         {retrying ? <Badge tone="amber">Try {status.attempt} of 3</Badge> : null}
-        <span className="ml-auto text-sm text-muted-foreground" aria-live="polite">{final ? '' : left ?? 'Starting…'}</span>
+        <span className="ml-auto text-sm text-muted-foreground" aria-live="polite">{final ? '' : status.state === 'waiting' ? `Starts ${nextMonth()}` : left ?? 'Starting…'}</span>
       </div>
       <Progress value={percent} aria-label={`Learning: ${percent}%`} />
       <Banner kind={message.kind}>{message.text}</Banner>
@@ -114,7 +129,7 @@ export function ImportProgress({ status, collectionName, title, error }: { statu
             <li key={file.fileId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
               <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{file.name}</span>
               <span className={file.state === 'failed' ? 'text-destructive' : file.state === 'learned' ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}>
-                {file.state === 'learned' ? '✓ Learned' : FILE_STATE[file.state] ?? file.state}
+                {file.state === 'learned' ? '✓ Learned' : status.state === 'waiting' && file.state === 'failed' ? 'Not kept' : FILE_STATE[file.state] ?? file.state}
               </span>
               {file.reason ? <span className="basis-full text-xs text-muted-foreground">{file.reason}</span> : null}
             </li>

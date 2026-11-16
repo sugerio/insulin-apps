@@ -68,12 +68,20 @@ job="$(wait_job "$(start ingest b3)")"
 check "a detector error fails closed" test "$(echo "$job" | json "d['result']['reason']")" = "Hiding sensitive information failed, so nothing from this import was stored."
 check "nothing was stored" test "$(curl -s -o /dev/null -w '%{http_code}' "$url/text/d3")" = 404
 
+# A file that reads: its redacted text is written and the progress says "read" before learning starts (learning
+# itself needs Cognee, which this base image doesn't have, so the job then stops).
+curl -fs -X PUT --data-binary 'Write to dana.reyes@example.com about the gateway.' "$url/inbox/b4/f4" >/dev/null
+batch b4 "{\"importId\":\"b4\",\"kind\":\"import\",\"files\":[{\"fileId\":\"f4\",\"documentId\":\"d4\",\"name\":\"a.md\",\"type\":\"text/markdown\"}],\"notes\":[],\"hiding\":$rules}"
+job="$(wait_job "$(start ingest b4)")"
+check "everything read before learning" test "$(echo "$job" | json "d['progress']['read']")" = True
+check "the saved text is redacted" test "$(curl -fs "$url/text/d4" | json "d['text']")" = "Write to [hidden] about the gateway."
+
 # Files under /data, the manifest, cleanup and quiesce.
 curl -fs -X PUT --data-binary 'hello' "$url/files/system/databases/a.bin" >/dev/null
 check "a file comes back" test "$(curl -fs "$url/files/system/databases/a.bin")" = hello
 check "paths stay under /data" test "$(curl -s -o /dev/null -w '%{http_code}' "$url/files/..%2Fetc%2Fpasswd")" = 404
 job="$(wait_job "$(curl -fs -X POST -H 'content-type: application/json' -d '{"op":"manifest"}' "$url/jobs" | json "d['id']")")"
-check "the manifest lists it" test "$(echo "$job" | json "list(d['result']['entries'])")" = "['system/databases/a.bin']"
+check "the manifest lists it" test "$(echo "$job" | json "sorted(d['result']['entries'])")" = "['system/databases/a.bin', 'text/d4.json']"
 check "not quiescent while something is staged" test "$(curl -fs "$url/quiesce" | json "d['quiescent']")" = False
 curl -fs -X POST "$url/cleanup" >/dev/null
 check "quiescent after cleanup" test "$(curl -fs "$url/quiesce" | json "d['quiescent']")" = True

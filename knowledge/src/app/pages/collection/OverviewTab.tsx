@@ -71,7 +71,7 @@ export function OverviewTab({ detail }: TabProps) {
               <ul className="flex flex-col gap-1.5 text-sm">
                 {items.slice(0, 4).map((item) => (
                   <li key={item.id} className="[overflow-wrap:anywhere]">
-                    {item.kind === 'unreadable' ? `Couldn't read “${item.files[0]?.name ?? 'a file'}”` : item.kind === 'hidden' ? `Hidden before learning: ${plural(item.total, 'value')} in “${item.documentName}”` : `${item.reportedBy.name ?? 'Someone'} says an answer is wrong`}
+                    {item.kind === 'unreadable' ? `Couldn't read “${item.files[0]?.name ?? 'a file'}”` : item.kind === 'hidden' ? `Hidden before learning: ${plural(item.total, 'value')} in “${item.documentName}”` : item.kind === 'needs_check' ? `A correction of “${item.documentName ?? 'a file'}” asks to be checked` : `${item.reportedBy.name ?? 'Someone'} says an answer is wrong`}
                   </li>
                 ))}
               </ul>

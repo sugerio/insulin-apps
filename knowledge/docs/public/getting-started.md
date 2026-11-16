@@ -58,5 +58,5 @@ Integrations, API access and Connect AI.
 | Sharing | People and general access, AI assistants and API clients, keep it ready, export, transfer, delete |
 | History | Restore points: go back to one, and undo |
 
-**Needs attention**, for Editors and Admins, lists files Insulin couldn't read, values hidden before learning and
-reported answers waiting, across the collections they can change.
+**Needs attention**, for Editors and Admins, lists files Insulin couldn't read, values hidden before learning,
+reported answers waiting and corrections to check, across the collections they can change.

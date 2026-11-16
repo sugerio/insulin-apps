@@ -216,7 +216,8 @@ export async function createHarness(options: { timing?: Partial<StubTiming>; env
   const call = async (person: Person, method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
     const all: Record<string, string> = { ...headersOf(person), ...headers }
     let payload: BodyInit | undefined
-    if (body instanceof Uint8Array) payload = body as Uint8Array<ArrayBuffer>
+    // Bytes from any realm (jsdom's or Node's) go as they are; anything else as JSON.
+    if (ArrayBuffer.isView(body)) payload = new Uint8Array(body.buffer, body.byteOffset, body.byteLength) as Uint8Array<ArrayBuffer>
     else if (body !== undefined) {
       payload = JSON.stringify(body)
       all['content-type'] = 'application/json'

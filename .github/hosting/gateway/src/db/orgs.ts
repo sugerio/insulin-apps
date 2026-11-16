@@ -193,12 +193,13 @@ export async function deleteOrg(db: D1Database, orgId: string, actorId: string):
 /**
  * Changes a member's role if it is still `current` (so a concurrent change is never overwritten); when an OWNER loses
  * the role, another OWNER remains; and `actorId` may still make the change: an OWNER, or an ADMIN when neither the
- * current nor the new role is OWNER. Returns false otherwise.
+ * current nor the new role is OWNER. Never to specific apps: that is `setAppAccess`, which writes the grants and closes
+ * the move's member event in the same batch. Returns false otherwise.
  */
 export async function changeRole(db: D1Database, change: { orgId: string; userId: string; current: Role; next: Role; actorId: string; now: number }): Promise<boolean> {
   const result = await db.prepare(
     `UPDATE memberships SET role = ?4, updated_at = ?5
-     WHERE org_id = ?1 AND user_id = ?2 AND role = ?3
+     WHERE org_id = ?1 AND user_id = ?2 AND role = ?3 AND ?4 <> 'APPS'
        AND (?3 <> 'OWNER' OR ?4 = 'OWNER' OR ${ANOTHER_OWNER})
        AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?6
          AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?3 <> 'OWNER' AND ?4 <> 'OWNER')))`,
@@ -209,7 +210,7 @@ export async function changeRole(db: D1Database, change: { orgId: string; userId
 /**
  * Gives a member access to specific apps instead of an organization role, or changes which apps and roles they have,
  * in one batch: the role becomes APPS if it is still `current` (never the last OWNER), grants for apps left out go, and
- * the given grants are written. Every statement requires `actorId` still to be an OWNER, or an ADMIN when the member
+ * the given grants are written, joining the move's member event (migration 0012), which the batch then closes. Every statement requires `actorId` still to be an OWNER, or an ADMIN when the member
  * was not an OWNER. Moving from an organization role, the grant statements also require that this batch's own role
  * change applied (its `updated_at`), so a decision someone else made meanwhile is never overwritten. False when nothing
  * was written.
@@ -239,6 +240,8 @@ export async function setAppAccess(db: D1Database, change: { orgId: string; user
        ON CONFLICT (org_id, user_id, app) DO UPDATE SET role = excluded.role, custom_role_id = excluded.custom_role_id,
          updated_at = excluded.updated_at`,
     ).bind(change.orgId, change.userId, change.actorId, change.current, grants, change.now),
+    // Closed before the batch commits, so a grant in any later transaction is an event of its own.
+    db.prepare('DELETE FROM member_event_moves WHERE org_id = ?1 AND user_id = ?2').bind(change.orgId, change.userId),
   ]
   const [moved, , written] = await db.batch(statements)
   return (change.current === 'APPS' || (moved?.meta.changes ?? 0) > 0) && (written?.meta.changes ?? 0) > 0

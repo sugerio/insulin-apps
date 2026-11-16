@@ -71,3 +71,13 @@ class Rules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StoredTexts(unittest.TestCase):
+    def test_a_saved_text_read_again_keeps_its_marks_and_hides_what_new_rules_ask(self):
+        import ops
+
+        stored = {"text": "Mail [hidden] about Bluewater.", "pages": [], "hidden": [{"start": 5, "end": 13, "kind": "email"}]}
+        again = ops.rehide(stored, {"words": ["Bluewater"]})
+        self.assertEqual(again.text, "Mail [hidden] about [hidden].")
+        self.assertEqual([(s.start, s.kind) for s in again.hidden], [(5, "email"), (20, "word")])

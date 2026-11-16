@@ -22,6 +22,7 @@ export interface JobProgress {
   total: number
   current: string | null
   files?: Record<string, 'reading' | 'understanding' | 'learned' | 'failed'>
+  read?: boolean // every file and note of the import was read and hidden; their texts can be fetched
 }
 
 export interface Health {

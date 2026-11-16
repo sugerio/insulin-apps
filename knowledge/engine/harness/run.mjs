@@ -475,12 +475,55 @@ plan('FIX-01', 'Fix once: corrections reach new questions within 2 minutes', asy
   }
 })
 
-plan('FIX-02', 'Corrections survive a re-read', async () => {
-  const corrected = questions('answerable.json')[10]
-  const file = corpus('batch-001').find((f) => f.name.startsWith(corrected.expectDoc))
-  const again = await learn(MAIN, `reread-${stamp}`, [{ ...file, fileId: `again-${file.fileId}` }])
-  const first = (await search(MAIN, corrected.query)).passages[0]
-  return { checks: { unchangedFileIsAlreadyHere: again.state === 'duplicate', correctionStillApplies: first?.kind === 'note' }, evidence: { first: first?.documentName } }
+plan('FIX-02', 'Corrections survive a re-read; a changed passage asks to be checked', async () => {
+  // A file is read again when the hiding rules become stricter. The re-read either leaves the corrected passage's
+  // words alone (the correction just applies) or changes them (it applies, and asks a person to check it).
+  const cid = `e2e-${stamp}-fix`
+  await createCollection(cid)
+  const item = questions('answerable.json').find((q) => q.expectDoc === '03-oncall-rotation-policy')
+  const file = corpus('batch-001').find((f) => f.name.startsWith(item.expectDoc))
+  await learn(cid, 'file', [file])
+  const old = (await search(cid, item.query)).passages.find((p) => p.text.includes(item.expectFact))
+  if (!old) throw new Error('no passage holds the fact to correct')
+  await must('POST', `/v1/collections/${cid}/corrections`, {
+    importId: 'fix', note: { noteId: 'fix-note', title: 'Correction', text: `Correction: ${item.query} The answer changed.`, outdated: [{ documentId: old.documentId, textHash: old.textHash }] },
+  }, [202])
+  await waitIdle(cid)
+  const words = (text) => new Set(text.match(/[A-Za-z]{6,}/g) ?? [])
+  const fileText = (await must('GET', `/v1/collections/${cid}/documents/${old.documentId}`)).text
+  const inPassage = words(old.text)
+  const elsewhere = [...words(fileText)].find((w) => !inPassage.has(w) && !old.text.toLowerCase().includes(w.toLowerCase()))
+  const inside = [...inPassage].find((w) => !item.expectFact.includes(w))
+  const rule = (list) => ({ settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: list } } })
+  const needsCheck = async () => {
+    const found = []
+    let since = ''
+    for (let more = true; more; ) {
+      const page = await must('GET', `/v1/outbox?limit=500${since ? `&since=${since}` : ''}`, undefined, [200], { org: null })
+      found.push(...page.events.filter((e) => e.type === 'needs_check' && e.collectionId === cid))
+      since = page.cursor
+      more = page.more
+    }
+    return found
+  }
+  await sleep(SHARE_WINDOW_MS)
+  await must('PUT', `/v1/collections/${cid}`, rule([elsewhere]), [200])
+  await sleep(5000)
+  await waitIdle(cid)
+  const unchanged = { noteFirst: (await search(cid, item.query)).passages[0]?.kind === 'note', checks: (await needsCheck()).length }
+  await sleep(SHARE_WINDOW_MS)
+  await must('PUT', `/v1/collections/${cid}`, rule([elsewhere, inside]), [200])
+  await sleep(5000)
+  await waitIdle(cid)
+  const changedChecks = await needsCheck()
+  return {
+    checks: {
+      unchangedPassageStillCorrected: unchanged.noteFirst && unchanged.checks === 0,
+      changedPassageAsksToBeChecked: changedChecks.some((e) => e.noteId === 'fix-note' && e.documentId === old.documentId),
+      correctionStillApplies: (await search(cid, item.query)).passages[0]?.kind === 'note',
+    },
+    evidence: { words: { elsewhere, inside }, unchanged, changedChecks },
+  }
 })
 
 plan('HIS-05', 'Changes close together share one restore point', async () => {

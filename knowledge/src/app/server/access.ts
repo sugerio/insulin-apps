@@ -76,6 +76,8 @@ export async function loadCollection(db: D1Database, org: string, id: string): P
  * (an API client: its own share only); `role` is that after the Viewer cap.
  */
 export async function roleIn(db: D1Database, caller: Caller, collection: CollectionRow): Promise<{ granted: CollectionRole | null; role: CollectionRole | null }> {
+  // While a resync checks who is still in the organization, someone not yet checked is away: no role anywhere.
+  if (await unchecked(db, caller)) return { granted: null, role: null }
   const share = await db.prepare(
     `SELECT role FROM collection_shares WHERE collection_id = ? AND org_id = ? AND principal_type = ? AND principal_id = ? AND status = 'active'`,
   ).bind(collection.id, collection.org_id, caller.kind, caller.id).first<{ role: CollectionRole }>()
@@ -85,17 +87,26 @@ export async function roleIn(db: D1Database, caller: Caller, collection: Collect
   return { granted, role: capped(caller, granted) }
 }
 
+/** Whether a resync (members.ts) hasn't yet checked that the caller is still in the organization. */
+export async function unchecked(db: D1Database, caller: Caller): Promise<boolean> {
+  const row = await db.prepare(`SELECT unchecked FROM members WHERE org_id = ? AND principal_type = ? AND principal_id = ?`).bind(caller.organizationId, caller.kind, caller.id).first<{ unchecked: number }>()
+  return row?.unchecked === 1
+}
+
 /** The Viewer cap: without permission to change content, any collection role acts as Viewer. */
 export function capped(caller: Caller, role: CollectionRole | null): CollectionRole | null {
   if (!role) return null
   return can(caller, 'knowledge.collections.edit') ? role : 'VIEWER'
 }
 
-/** The SQL condition (on collections `c`) for collections where the caller has any role: ?1 org, ?2 type, ?3 id. */
-export const HAS_ROLE_SQL = `(
+/**
+ * The SQL condition (on collections `c`) for collections where the caller has any role: ?1 org, ?2 type, ?3 id. Nobody
+ * a resync hasn't checked yet has one.
+ */
+export const HAS_ROLE_SQL = `((
   (?2 = 'person' AND (c.owner_id = ?3 OR c.general_role IS NOT NULL))
   OR EXISTS (SELECT 1 FROM collection_shares s WHERE s.collection_id = c.id AND s.org_id = ?1 AND s.principal_type = ?2 AND s.principal_id = ?3 AND s.status = 'active')
-)`
+) AND NOT EXISTS (SELECT 1 FROM members um WHERE um.org_id = ?1 AND um.principal_type = ?2 AND um.principal_id = ?3 AND um.unchecked = 1))`
 
 /**
  * Loads a collection and checks the caller may do `action` in it, or throws: 404 for an id that isn't the
@@ -110,6 +121,7 @@ export async function authorize(db: D1Database, caller: Caller, id: string, acti
   if (collection.state === 'deleting') throw new ApiError('deleting', `${quoted(collection.name)} is being deleted.`)
   const { role } = await roleIn(db, caller, collection)
   if (!role) {
+    if (await unchecked(db, caller)) throw new ApiError('forbidden', 'Knowledge is checking who is still in your organization. Try again in a minute.')
     const owner = await ownerName(db, collection)
     throw new ApiError('forbidden', `You don't have access to ${quoted(collection.name)}. Ask ${owner ?? 'its owner'}${owner ? ', its owner,' : ''} to share it with you.`)
   }

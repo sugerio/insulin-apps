@@ -156,3 +156,12 @@ test('citations: groups, ranges and out-of-range numbers', () => {
   assert.deepEqual(citationsIn('A [2]. B [1, 3]. C [2-3]. D [9].', 3), [2, 1, 3])
   assert.equal(dropUnknownCitations('Port 8443 [1] [4].', 2), 'Port 8443 [1].')
 })
+
+test('grouped citations keep only the passages given, and the answer says how many it dropped', async () => {
+  assert.equal(dropUnknownCitations('Port 8443 [1, 9]. Also [2-9] and [7].', 2), 'Port 8443 [1]. Also [2] and.')
+  const t = makeEngine()
+  t.ai.reply = 'The gateway listens on port 8443 [1, 9]. See also [7].'
+  const res = await t.api('POST', '/v1/answer', { question: 'Which port?', passages: [{ passageId: 'p1', documentName: 'Gateway.md', page: null, text: 'Port 8443.' }] })
+  assert.equal(res.body.text, 'The gateway listens on port 8443 [1]. See also.')
+  assert.deepEqual([res.body.citations, res.body.dropped], [[1], 2])
+})

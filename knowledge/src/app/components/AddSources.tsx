@@ -212,7 +212,7 @@ function WriteNote({ collectionId, onStarted, onCancel }: { collectionId: string
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="note-text">Note</Label>
-        <Textarea id="note-text" required rows={5} placeholder="For example: Since October, partner managers can approve MDF requests up to $50,000." value={text} onChange={(event) => setText(event.target.value)} />
+        <Textarea id="note-text" required rows={5} maxLength={20000} placeholder="For example: Since October, partner managers can approve MDF requests up to $50,000." value={text} onChange={(event) => setText(event.target.value)} />
       </div>
       <Note>Insulin learns a note like a file, ahead of other files, and cites it by its title.</Note>
       <ActionError error={error} />

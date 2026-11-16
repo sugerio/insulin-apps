@@ -47,7 +47,7 @@ describe('the in-memory engine', () => {
     // BUILD.md's table of the contract's routes, each with a request it can answer or refuse in its own words.
     const routes: [string, string, unknown?][] = [
       ['PUT', '/v1/collections/c1', { settings: SETTINGS }], ['GET', '/v1/collections/c1'], ['POST', '/v1/collections/c1/wake'],
-      ['PUT', '/v1/collections/c1/inbox/file0001', new TextEncoder().encode('x')], ['POST', '/v1/collections/c1/imports', {}],
+      ['PUT', '/v1/collections/c1/inbox/file0001', new TextEncoder().encode('x')], ['POST', '/v1/collections/c1/inbox/keep', {}], ['POST', '/v1/collections/c1/imports', {}],
       ['GET', '/v1/collections/c1/imports/i1'], ['POST', '/v1/collections/c1/search', { query: 'x' }], ['POST', '/v1/answer', { question: 'x', passages: [] }],
       ['GET', '/v1/collections/c1/documents'], ['GET', '/v1/collections/c1/documents/d1'], ['PATCH', '/v1/collections/c1/documents/d1', { active: false }],
       ['DELETE', '/v1/collections/c1/documents/d1'], ['GET', '/v1/collections/c1/facts?cursor='], ['POST', '/v1/collections/c1/corrections', {}],
@@ -267,5 +267,24 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call('POST', '/v1/collections/c1/restore-points/1/go-back')).status).toBe(409)
     const http = await worker.fetch(new Request('https://engine.test/__control/damage', { method: 'POST', body: JSON.stringify({ org: 'org-a', collectionId: 'nope', version: 1 }) }), {})
     expect(http.status).toBe(400)
+  })
+
+  it('clears staged files nobody imported after a day, unless kept for a waiting import, at most 45 days', async () => {
+    const { call, stage, advance } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    for (const [fileId, text] of [['file0001', 'Alpha'], ['file0002', 'Beta'], ['file0003', 'Gamma']]) await stage('c1', fileId!, `${text}.md`, text!)
+    const until = '2026-12-03T00:00:00.000Z'
+    expect((await call('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['file0001', 'file0003', 'file0009'], until })).body).toEqual({ kept: ['file0001', 'file0003'] })
+    expect((await call('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['file0001'], until: '2027-01-05T00:00:00.000Z' })).status).toBe(400)
+    expect((await call('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['file0001'] })).status).toBe(400)
+    const importOf = (importId: string, fileId: string, text: string) => call<ImportStatus>('POST', '/v1/collections/c1/imports', {
+      importId, small: false, notes: [], files: [{ fileId, name: `${text}.md`, type: 'text/markdown', bytes: text.length, sha256: sha256Hex(text) }],
+    })
+    advance(25 * 60 * 60 * 1000)
+    expect((await importOf('imp2', 'file0002', 'Beta')).status).toBe(400)
+    advance(Date.parse('2026-12-02T00:00:00Z') - Date.parse('2026-11-17T10:00:00Z'))
+    expect((await importOf('imp1', 'file0001', 'Alpha')).status).toBe(202)
+    advance(Date.parse('2026-12-03T00:01:00Z') - Date.parse('2026-12-02T00:00:00Z'))
+    expect((await importOf('imp3', 'file0003', 'Gamma')).status).toBe(400)
   })
 })

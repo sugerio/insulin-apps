@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ORG, OTHER_ORG, createCollection, doc, learn, makeEngine, outboxEvents, startImport } from './helpers.ts'
+import { ORG, OTHER_ORG, createCollection, doc, learn, makeEngine, outboxEvents, stageFile, startImport } from './helpers.ts'
 
 test('DEL-01 deleting during an import: the import stops; inbox, text, exports and every backup are gone; storage is empty', async () => {
   const t = makeEngine()
@@ -16,6 +16,7 @@ test('DEL-01 deleting during an import: the import stops; inbox, text, exports a
   t.advance(6 * 60_000)
   t.cloud.jobPolls = 6
   await startImport(t, 'c1', 'imp-2', [doc(2), doc(3)])
+  await stageFile(t, 'c1', { fileId: 'waiting', name: 'waiting.md', text: 'Not imported yet.' })
   await t.drain('c1', { steps: 3 })
   assert.equal((await t.api('GET', '/v1/collections/c1')).body.state, 'learning')
   assert.ok(t.backups.keys(`backups/${ORG}/c1/`).some((k) => k.endsWith('latest.json')))

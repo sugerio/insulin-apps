@@ -2,8 +2,9 @@ import type { ImportStatus, OutboxEvent, RestorePoint } from '../../../engine/sr
 import { EngineClient, SERVICE_ORG } from './engine/client.ts'
 import type { Bindings } from './env.ts'
 import { logError } from './http.ts'
-import { consumeAwake, release, reservationsOf, settle } from './limits.ts'
-import { MAIL, sendMail } from './mail.ts'
+import { consumeAwake, releaseStatements, reservationsOf, settleStatements } from './limits.ts'
+import { eraseCollectionStatements } from './erase.ts'
+import { appLink, MAIL, sendMail } from './mail.ts'
 import { memberOf } from './members.ts'
 
 /**
@@ -36,6 +37,8 @@ export async function syncOutbox(env: Bindings, now: number, deadline: number): 
     pages += 1
     const committed = new Map<string, string>()
     for (const event of page.events) {
+      // Out of time mid-page: the page is read again next time, and events already applied are skipped.
+      if (Date.now() > deadline) return { applied, pages }
       if (await applyEngineEvent(env, event, now)) applied += 1
       if (event.type === 'committed') committed.set(`${event.org}\u0000${event.collectionId}`, event.org)
     }
@@ -106,22 +109,32 @@ export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: n
           `UPDATE reservations SET state = 'settled', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND period = 'all' AND state = 'held'`,
         ).bind(org, `import:${event.importId}`, now)] : []),
       ], now)
-      if (applied && event.importId) await finishImport(env, org, collection, event.importId, { state: 'committed', version: event.version }, now)
+      // What the import learned (and so its monthly use) comes with its own `import` event.
       return applied
     }
     case 'import': {
-      const applied = await once(db, event, [], now)
-      if (applied) await finishImport(env, org, collection, event.import.importId, event.import, now)
+      // The import's state, reservations and report go in the same batch as the event's mark: all or nothing.
+      const applied = await once(db, event, await finishImportStatements(db, org, collection, event.import.importId, event.import, now), now)
+      if (applied) await notifyImport(env, org, collection, event.import.importId, event.import, now)
       return applied
     }
+    case 'needs_check':
+      return once(db, event, [db.prepare(
+        `INSERT INTO correction_checks (collection_id, note_id, document_id, text_hash, org_id, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+      ).bind(collection.id, event.noteId, event.documentId, event.textHash, org, Date.parse(event.at) || now)], now)
     case 'usage':
       return once(db, event, await consumeAwake(db, org, collection.id, Math.max(0, event.seconds), Date.parse(event.at) || now), now)
     case 'state':
       return once(db, event, [db.prepare(`UPDATE collections SET engine_state = ?3, updated_at = ?4 WHERE id = ?1 AND org_id = ?2`).bind(collection.id, org, event.state, now)], now)
     case 'backup':
       return once(db, event, [db.prepare(`UPDATE collections SET last_backup_at = ?3, updated_at = ?3 WHERE id = ?1 AND org_id = ?2`).bind(collection.id, org, Date.parse(event.at) || now)], now)
-    case 'deleted':
-      return once(db, event, [db.prepare(`UPDATE collections SET state = 'deleted', engine_state = 'deleted', updated_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'deleting'`).bind(collection.id, org, now)], now)
+    case 'deleted': {
+      if (collection.state !== 'deleting') return once(db, event, [], now)
+      return once(db, event, [
+        db.prepare(`UPDATE collections SET state = 'deleted', engine_state = 'deleted', updated_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'deleting'`).bind(collection.id, org, now),
+        ...eraseCollectionStatements(db, org, collection.id),
+      ], now)
+    }
     default:
       return once(db, event, [], now)
   }
@@ -129,39 +142,76 @@ export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: n
 
 /**
  * An import's new state, from the outbox or from someone asking about it: recorded once it is final, its
- * reservations settled (committed) or released (anything else), and its starter told. Safe to call more than once.
+ * reservations settled (committed) or released (anything else), a report its correction settles marked fixed, and its
+ * starter told. Safe to call more than once.
  */
 export async function finishImport(env: Bindings, org: string, collection: { id: string; name: string }, importId: string, status: Pick<ImportStatus, 'state'> & Partial<ImportStatus>, now: number): Promise<void> {
-  const db = env.DB
-  const row = await db.prepare(`SELECT id, created_by, kind, files, notified_at FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id)
-    .first<{ id: string; created_by: string; kind: string; files: number; notified_at: number | null }>()
-  if (!row) return
+  const statements = await finishImportStatements(env.DB, org, collection, importId, status, now)
+  if (statements.length) await env.DB.batch(statements)
+  await notifyImport(env, org, collection, importId, status, now)
+}
+
+/** The statements that record an import's new state (see finishImport), for one batch. */
+export async function finishImportStatements(db: D1Database, org: string, collection: { id: string }, importId: string, status: Pick<ImportStatus, 'state'> & Partial<ImportStatus>, now: number): Promise<D1PreparedStatement[]> {
+  const row = await db.prepare(`SELECT id, detail FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ id: string; detail: string }>()
+  if (!row) return []
   const failure = status.state === 'failed' ? plainFailure(status) : null
-  await db.prepare(
-    `UPDATE imports SET state = ?3, version = COALESCE(?4, version), error = COALESCE(?5, error), finished_at = CASE WHEN ?6 THEN COALESCE(finished_at, ?7) ELSE finished_at END
+  // The documents each file became, so a fix can tell the person who added a file.
+  let detail = row.detail
+  const documents = (status.files ?? []).filter((file) => file.documentId && file.state === 'learned').map((file) => ({ id: file.documentId!, name: file.name }))
+  if (documents.length) {
+    try {
+      detail = JSON.stringify({ ...(JSON.parse(row.detail) as object), documents })
+    } catch {
+      detail = JSON.stringify({ documents })
+    }
+  }
+  const statements = [db.prepare(
+    `UPDATE imports SET state = ?3, version = COALESCE(?4, version), error = COALESCE(?5, error), detail = ?6,
+       finished_at = CASE WHEN ?7 THEN COALESCE(finished_at, ?8) ELSE finished_at END
      WHERE id = ?1 AND org_id = ?2 AND state NOT IN ('committed', 'duplicate', 'failed', 'cancelled')`,
-  ).bind(importId, org, status.state, status.version ?? null, failure, TERMINAL.has(status.state) ? 1 : 0, now).run()
-  if (!TERMINAL.has(status.state)) return
+  ).bind(importId, org, status.state, status.version ?? null, failure, detail, TERMINAL.has(status.state) ? 1 : 0, now)]
+  if (!TERMINAL.has(status.state)) return statements
   const held = await reservationsOf(db, org, `import:${importId}`)
   if (status.state === 'committed') {
-    // Monthly use is settled now; documents and stored bytes stay reserved until the outbox's `committed` event brings
-    // the collection's new counts, so the same last unit can't be taken in between.
-    const learned = status.files ? status.files.filter((file) => file.state === 'learned').length + (status.notes ?? 0) : Math.max(1, row.files)
-    await settle(db, org, held.filter((reservation) => reservation.key === 'learned_month').map((reservation) => ({ id: reservation.id, used: learned })), now)
+    // Monthly use is what was learned: files learned (not those already here) and notes. Documents and stored bytes
+    // stay reserved until the outbox's `committed` event brings the collection's new counts.
+    const learned = (status.files ?? []).filter((file) => file.state === 'learned').length + (status.notes ?? 0)
+    statements.push(...settleStatements(db, org, held.filter((reservation) => reservation.key === 'learned_month').map((reservation) => ({ id: reservation.id, used: learned })), now))
+    // A report the correction answers is fixed now that new questions use it.
+    statements.push(db.prepare(
+      `UPDATE reports SET status = 'fixed', resolved_at = ?3, resolved_by = (SELECT created_by FROM corrections WHERE import_id = ?1 AND org_id = ?2),
+         correction_id = (SELECT id FROM corrections WHERE import_id = ?1 AND org_id = ?2)
+       WHERE org_id = ?2 AND status = 'open' AND id IN (SELECT report_id FROM corrections WHERE import_id = ?1 AND org_id = ?2 AND report_id IS NOT NULL)`,
+    ).bind(importId, org, now))
+    // A new correction of a file settles the checks earlier corrections of it asked for.
+    statements.push(db.prepare(
+      `DELETE FROM correction_checks WHERE org_id = ?2 AND document_id IN (
+         SELECT json_extract(o.value, '$.documentId') FROM corrections k, json_each(k.outdated) o WHERE k.import_id = ?1 AND k.org_id = ?2)`,
+    ).bind(importId, org))
   } else {
-    await release(db, org, held.map((reservation) => reservation.id), now)
+    statements.push(...releaseStatements(db, org, held.map((reservation) => reservation.id), now))
   }
-  // Mail once, whoever saw the final state first.
+  return statements
+}
+
+/** Mail about an import's end, once, whoever saw it first: "learned" or "couldn't learn" to whoever started it. */
+async function notifyImport(env: Bindings, org: string, collection: { id: string; name: string }, importId: string, status: Pick<ImportStatus, 'state'> & Partial<ImportStatus>, now: number): Promise<void> {
+  if (!TERMINAL.has(status.state)) return
+  const db = env.DB
+  const row = await db.prepare(`SELECT created_by, kind, files FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ created_by: string; kind: string; files: number }>()
+  if (!row) return
   const claimed = await db.prepare(`UPDATE imports SET notified_at = ?3 WHERE id = ?1 AND org_id = ?2 AND notified_at IS NULL`).bind(importId, org, now).run()
   if (claimed.meta.changes !== 1 || row.kind === 'correction') return
   const starter = await memberOf(db, org, 'person', row.created_by)
   if (!starter?.email) return
+  const link = appLink(env, `/collections/${collection.id}/sources`)
   try {
     if (status.state === 'committed') {
       const files = status.files?.filter((file) => file.state === 'learned').length ?? row.files
-      await sendMail(env, org, { to: starter.email, ...MAIL.learned(collection.name, files, status.newFacts ?? null) }, 'learned')
+      await sendMail(env, org, { to: starter.email, ...MAIL.learned(collection.name, files, status.newFacts ?? null, link) }, 'learned')
     } else if (status.state === 'failed') {
-      await sendMail(env, org, { to: starter.email, ...MAIL.importFailed(collection.name, failure ?? 'The import failed.') }, 'import_failed')
+      await sendMail(env, org, { to: starter.email, ...MAIL.importFailed(collection.name, plainFailure(status), link) }, 'import_failed')
     }
   } catch (error) {
     logError('import_mail_failed', error, { org })

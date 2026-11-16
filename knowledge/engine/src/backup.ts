@@ -4,7 +4,7 @@
 // collection's life, so a collection is never lost by sitting unused.
 
 import type { CollectionEngine } from './collection.ts'
-import type { AnswerState, Manifest, Meta, Runtime } from './types.ts'
+import type { AnswerState, Manifest, Meta, Runtime, SnapshotRecord } from './types.ts'
 import { SETTINGS } from './settings.ts'
 import { clock, errorText, iso, utcDay } from './util.ts'
 
@@ -64,7 +64,7 @@ export async function run(e: CollectionEngine, runtime: Runtime): Promise<Backup
     m.lastBackupVersion = index.version
     m.backupDue = m.version !== index.version
   })
-  await e.event(`backup:${meta.org}:${meta.collectionId}:${day}:${index.version}`, { type: 'backup', version: index.version })
+  await e.event(`backup:${day}:${index.version}`, { type: 'backup', version: index.version })
   await e.store.log('backup', { version: index.version, files: manifest.files, uploaded })
   await prune(e)
   return index
@@ -92,6 +92,14 @@ export async function coldBackup(e: CollectionEngine): Promise<void> {
     await e.store.deleteRuntime()
     await e.chargeUsage(null)
   }
+}
+
+/**
+ * Whether a backup holds exactly a snapshot's files (by their checksum list, not by version: a change that adds no
+ * data keeps the files) in the database format the running image reads.
+ */
+export function holds(index: BackupIndex, snapshot: SnapshotRecord, dataFormat: string): boolean {
+  return index.manifest.digest === snapshot.manifest.digest && index.dataFormat === dataFormat
 }
 
 export async function latestIndex(e: CollectionEngine): Promise<BackupIndex | null> {
@@ -132,9 +140,10 @@ async function dailyIndexes(e: CollectionEngine): Promise<string[]> {
   return keys
 }
 
-/** Drops daily backups older than 30 days, then every stored file no backup names any more. */
+/** Drops daily backups older than the collection's backupDays, then every stored file no backup names any more. */
 export async function prune(e: CollectionEngine): Promise<void> {
-  const cutoff = utcDay(clock.now() - SETTINGS.backupDays * 24 * 60 * 60 * 1000)
+  const days = (await e.meta()).settings.backupDays ?? SETTINGS.backupDays
+  const cutoff = utcDay(clock.now() - days * 24 * 60 * 60 * 1000)
   const old = (await dailyIndexes(e)).filter((key) => (key.split('/').pop() ?? '').slice(0, 10) < cutoff)
   if (old.length) await e.env.BACKUPS.delete(old)
   await collectGarbage(e)

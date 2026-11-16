@@ -46,7 +46,8 @@ describe('the tick', () => {
     h.gateway.addEvent({ type: 'org_deleted', org: ORG })
     await h.tick()
     expect(h.engine.control.snapshot().collections).toEqual([expect.objectContaining({ collectionId: id, state: 'deleted' })])
-    expect(await h.db.prepare(`SELECT state FROM collections WHERE id = ?`).bind(id).first('state')).toBe('deleted')
+    // Nothing of the organization stays in D1 but the record of its purge.
+    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM collections WHERE id = ?`).bind(id).first('n')).toBe(0)
     expect(await h.db.prepare(`SELECT done_at IS NOT NULL AS done FROM org_purges WHERE org_id = ?`).bind(ORG).first('done')).toBe(1)
     expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM collection_shares WHERE org_id = ?`).bind(ORG).first('n')).toBe(0)
   })

@@ -14,23 +14,8 @@ import { canEdit, useMe } from '../session.tsx'
 import { NoPermissionPage } from './NotFoundPage.tsx'
 
 // Needs attention (design J6, LAUNCH items): what only a person can settle, across the collections the person can
-// change: files Insulin couldn't read, values hidden before learning, and answers reported as wrong. Insulin keeps
-// answering while they wait.
-
-const HIDDEN_WORDS: Record<string, [string, string]> = {
-  email: ['e-mail address', 'e-mail addresses'],
-  phone: ['phone number', 'phone numbers'],
-  card: ['card number', 'card numbers'],
-  api_key: ['API key', 'API keys'],
-  secret: ['password or secret', 'passwords or secrets'],
-  word: ['listed word', 'listed words'],
-}
-
-export function hiddenSummary(counts: Record<string, number>): string {
-  const parts = Object.entries(counts).filter(([, n]) => n > 0).map(([kind, n]) => plural(n, HIDDEN_WORDS[kind]?.[0] ?? 'value', HIDDEN_WORDS[kind]?.[1] ?? 'values'))
-  if (parts.length <= 1) return parts[0] ?? 'some values'
-  return `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
-}
+// change: files Insulin couldn't read, values hidden before learning, answers reported as wrong, and corrections to
+// check after their file was read again. Insulin keeps answering while they wait.
 
 export function AttentionPage() {
   const me = useMe()
@@ -96,9 +81,17 @@ function Item({ collection, item, onSettled }: { collection: AttentionCollection
       <Button asChild variant="outline" size="sm"><Link to={`/collections/${collection.id}/sources`}>Upload a version with text</Link></Button>)
   }
   if (item.kind === 'hidden') {
-    return frame('blue', 'Hidden', `Hidden before learning: ${hiddenSummary(item.counts)}`,
+    return frame('blue', 'Hidden', `Hidden before learning: ${plural(item.total, 'value')}`,
       <p>In “{item.documentName}”. Insulin removed {item.total === 1 ? 'it' : 'them'} before reading the file, so no answer can show {item.total === 1 ? 'it' : 'them'}.</p>,
       <Button asChild variant="outline" size="sm"><Link to={`/collections/${collection.id}/sources?source=${encodeURIComponent(item.documentId)}`}>See where</Link></Button>)
+  }
+  if (item.kind === 'needs_check') {
+    return frame('amber', 'Check', 'A correction asks to be checked',
+      <>
+        <p>{item.documentName ? <>“{item.documentName}”</> : 'A file'} was read again, and the words your correction applies to now read differently. Check that the correction still says the right thing, and write it again if not.</p>
+        {item.text ? <p className="mt-1 rounded-md bg-muted px-3 py-2">“{item.text}”</p> : null}
+      </>,
+      <Button asChild variant="outline" size="sm"><Link to={`/collections/${collection.id}/sources?source=${encodeURIComponent(item.documentId)}`}>Open the file</Link></Button>)
   }
   const who = item.reportedBy.name ?? 'Someone'
   return (
@@ -146,9 +139,9 @@ function FixReportDialog({ collection, item, onClose, onFixed }: { collection: A
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="report-fix">What's the right answer?</Label>
-            <Textarea id="report-fix" required rows={4} value={text} onChange={(event) => setText(event.target.value)} />
+            <Textarea id="report-fix" required rows={4} maxLength={20000} value={text} onChange={(event) => setText(event.target.value)} />
           </div>
-          <Note>Saved as a correction that new questions on this site and from AI assistants use, in about a minute. The report is closed as fixed.</Note>
+          <Note>Saved as a correction that new questions on this site and from AI assistants use, in about a minute. The report is closed as fixed once Insulin has learned it.</Note>
           <ActionError error={error} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

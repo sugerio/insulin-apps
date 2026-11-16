@@ -5,7 +5,7 @@
 
 import type { ExportStatus } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
-import { factFilter, publicDocument } from './collection.ts'
+import { factFilter, publicDocument, publicFact, type StoredFact } from './collection.ts'
 import { fail, json, requireId } from './http.ts'
 import { SETTINGS } from './settings.ts'
 import type { ExportRecord } from './types.ts'
@@ -112,9 +112,7 @@ async function build(e: CollectionEngine, record: ExportRecord): Promise<void> {
       const object = await e.env.FILES.get(state.factsKey)
       if (object) {
         const usable = factFilter(state, meta)
-        facts = ((await object.json()) as { facts: { textHash?: string; documentId: string }[] }).facts
-          .filter((f) => usable(f as never))
-          .map(({ textHash: _hash, ...fact }) => fact)
+        facts = ((await object.json()) as { facts: StoredFact[] }).facts.filter(usable).map(publicFact)
       }
     }
     await zip.add('facts.json', JSON.stringify({ facts }, null, 2))
@@ -125,6 +123,18 @@ async function build(e: CollectionEngine, record: ExportRecord): Promise<void> {
     await zip.add('history.json', JSON.stringify({ restorePoints: await history.list(e) }, null, 2))
     const bytes = await zip.finish()
     await sink.close()
+    // A removal for good that arrived while the export was written: build it again without the file.
+    const after = await e.meta()
+    const removed = after.removals.map((r) => r.documentId)
+    const stillHere = new Set((await e.currentState(after)).documents.map((d) => d.documentId))
+    if (documents.some((d) => removed.includes(d.documentId) || !stillHere.has(d.documentId))) {
+      await e.env.FILES.delete(record.key)
+      record.status.state = 'queued'
+      record.startedAt = null
+      await e.store.putExport(record)
+      await e.store.log('export-rebuilt', { exportId: record.status.exportId })
+      return
+    }
     const now = clock.now()
     record.status = { exportId: record.status.exportId, state: 'ready', bytes, readyAt: iso(now), expiresAt: iso(now + SETTINGS.exportKeepMs) }
     record.documentIds = documents.map((d) => d.documentId)

@@ -253,3 +253,166 @@ test('staging checks the file: a wrong SHA-256 is refused, and an import of an u
   assert.equal(unhashed.body.sha256, '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824')
   assert.equal((await t.api('PUT', '/v1/collections/c1/inbox/nohash2', new TextEncoder().encode('x'), { headers: { 'x-file-name': '' } })).status, 400, 'a name is required')
 })
+
+test('an upload that finishes after the collection was deleted leaves nothing behind', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  let push!: (bytes: Uint8Array | null) => void
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      push = (bytes) => (bytes ? controller.enqueue(bytes) : controller.close())
+    },
+  })
+  const { handle } = await import('../src/router.ts')
+  const upload = handle(
+    new Request('https://engine.internal/v1/collections/c1/inbox/late', {
+      method: 'PUT',
+      headers: { 'x-knowledge-org': ORG, 'content-type': 'text/plain', 'x-file-name': 'late.txt' },
+      body,
+      duplex: 'half',
+    } as RequestInit),
+    t.env,
+  )
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal((await t.api('DELETE', '/v1/collections/c1')).status, 202)
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.state, 'deleted')
+  push(new TextEncoder().encode('arrived late'))
+  push(null)
+  const answer = await upload
+  assert.ok(answer.status >= 400, `the late upload is refused (${answer.status})`)
+  assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [])
+  assert.equal(t.storage('c1').data.size, 0, 'no storage was made again')
+})
+
+test('a note is kept in the import only until it is read and hidden', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  const res = await t.api('POST', '/v1/collections/c1/imports', {
+    importId: 'note-1',
+    files: [],
+    notes: [{ noteId: 'n1', title: 'Desk', text: 'Write to dana.reyes@example.com for access.', outdated: [] }],
+    small: true,
+  })
+  assert.equal(res.status, 202)
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/note-1')).body.state, 'committed')
+  const stored = JSON.stringify([...t.storage('c1').data.values()])
+  assert.ok(!stored.includes('dana.reyes@example.com'), 'the note as written is not in Durable Object storage')
+})
+
+for (const when of ['queued', 'running'] as const) {
+  test(`HID-04 a stricter rule reaches a file whose import was ${when} when the rule changed`, async () => {
+    const t = makeEngine()
+    await createCollection(t)
+    await learn(t, 'c1', 'imp-1', [doc(1)])
+    t.advance(6 * 60_000)
+    t.cloud.jobPolls = 5
+    if (when === 'queued') {
+      await startImport(t, 'c1', 'imp-2', [doc(2)])
+      await t.drain('c1', { steps: 2 })
+      await startImport(t, 'c1', 'imp-3', [doc(3, 'The codename is Bluewater.')])
+    } else {
+      await startImport(t, 'c1', 'imp-3', [doc(3, 'The codename is Bluewater.')])
+      await t.drain('c1', { steps: 2 })
+    }
+    const put = await t.api('PUT', '/v1/collections/c1', {
+      settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater'] } },
+    })
+    assert.equal(put.status, 200)
+    t.cloud.jobPolls = 1
+    for (let i = 0; i < 5; i++) {
+      await t.drain('c1')
+      t.advance(60_000)
+    }
+    assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-3')).body.state, 'committed')
+    assert.deepEqual(t.files.keys('text/').filter((k) => t.files.text(k)!.includes('Bluewater')), [])
+    assert.equal([...t.container('c1').data.values()].filter((v) => v.includes('Bluewater')).length, 0)
+    const summaries = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints.map((p: any) => p.summary)
+    assert.ok(!summaries.includes('No changes'), summaries.join(' | '))
+  })
+}
+
+test("one import id in two collections: each collection's import event reaches the outbox", async () => {
+  const t = makeEngine()
+  for (const c of ['c1', 'c2']) {
+    await createCollection(t, c)
+    await learn(t, c, 'same-id', [doc(c === 'c1' ? 1 : 2)])
+  }
+  const events = (await outboxEvents(t)).filter((e) => e.type === 'import' && e.import.importId === 'same-id')
+  assert.deepEqual(events.map((e) => e.collectionId).sort(), ['c1', 'c2'])
+})
+
+test('HID-03 originals are deleted as soon as they are read, and a later try learns from the redacted text', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  t.cloud.jobPolls = 5
+  await startImport(t, 'c1', 'imp-1', [doc(1, 'Write to dana.reyes@example.com.'), doc(2)])
+  await t.drain('c1', { steps: 2 })
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-1')).body.state, 'learning')
+  assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [], 'gone while it is still learning')
+  await t.api('POST', '/v1/collections/c1/__test/destroy-container')
+  t.cloud.jobPolls = 1
+  await t.drain('c1', { steps: 1 })
+  t.advance(60_000)
+  await t.drain('c1')
+  const status = (await t.api('GET', '/v1/collections/c1/imports/imp-1')).body
+  assert.deepEqual([status.state, status.attempt], ['committed', 2])
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.counts.documents, 2)
+  for (const key of t.files.keys()) assert.ok(!t.files.text(key)!.includes('dana.reyes@example.com'), key)
+})
+
+test('IMP-04 the same file in two imports queued together: the second is "already here", with no restore point', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-0', [doc(9)])
+  t.advance(6 * 60_000)
+  await startImport(t, 'c1', 'imp-a', [doc(1)])
+  await startImport(t, 'c1', 'imp-b', [{ ...doc(1), fileId: 'f1-again', name: 'copy.md' }])
+  await t.drain('c1')
+  const b = (await t.api('GET', '/v1/collections/c1/imports/imp-b')).body
+  assert.deepEqual([b.state, b.version, b.files[0].state], ['duplicate', null, 'already_here'])
+  const points = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints
+  assert.equal(points.length, 2)
+  assert.deepEqual(t.files.keys('inbox/'), [])
+})
+
+test('files waiting for an import can be kept staged past a day, up to 45 days, and the delete still removes them', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  const waiting = await stageFile(t, 'c1', doc(1))
+  await stageFile(t, 'c1', doc(2))
+  const until = new Date(t.now() + 40 * 24 * 60 * 60_000).toISOString()
+  const kept = await t.api('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['f1', 'f-unknown'], until })
+  assert.equal(kept.status, 200)
+  assert.deepEqual(kept.body, { kept: ['f1'] })
+  const tooLong = await t.api('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['f1'], until: new Date(t.now() + 46 * 24 * 60 * 60_000).toISOString() })
+  assert.deepEqual([tooLong.status, tooLong.body.error], [400, 'bad_request'])
+  assert.equal((await t.api('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['f1'], until: 'soon' })).status, 400)
+
+  // Two days later the file nobody kept is gone; the kept one can still be learned.
+  t.advance(2 * 24 * 60 * 60_000)
+  await t.drain('c1', { horizonMs: 60_000 })
+  assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [`inbox/${ORG}/c1/f1`])
+  const later = await t.api('POST', '/v1/collections/c1/imports', { importId: 'imp-later', files: [waiting], notes: [], small: false })
+  assert.equal(later.status, 202)
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-later')).body.state, 'committed')
+
+  // Kept until a date that passes: cleared after it.
+  await stageFile(t, 'c1', doc(3))
+  await t.api('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['f3'], until: new Date(t.now() + 3 * 24 * 60 * 60_000).toISOString() })
+  t.advance(2 * 24 * 60 * 60_000)
+  await t.drain('c1', { horizonMs: 60_000 })
+  assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [`inbox/${ORG}/c1/f3`], 'kept past the usual day')
+  t.advance(2 * 24 * 60 * 60_000)
+  await t.drain('c1', { horizonMs: 60_000 })
+  assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [], 'cleared once the date passed')
+
+  // Deleting the collection deletes kept files too.
+  await stageFile(t, 'c1', doc(4))
+  await t.api('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['f4'], until: new Date(t.now() + 30 * 24 * 60 * 60_000).toISOString() })
+  await t.api('DELETE', '/v1/collections/c1')
+  await t.drain('c1')
+  assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [])
+})

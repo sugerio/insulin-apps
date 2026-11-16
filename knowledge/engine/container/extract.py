@@ -310,8 +310,12 @@ def _xlsx(path: Path) -> list[str]:
                 continue
             rows = []
             for row in _xml(archive, target).iter(f"{S}row"):
-                cells = []
+                cells: list[str] = []
                 for cell in row.iter(f"{S}c"):
+                    # Blank cells are left out of the file: each cell's reference ("C2") says its column.
+                    column = _column(cell.get("r", ""))
+                    if column is not None:
+                        cells.extend([""] * (column - len(cells)))
                     kind = cell.get("t")
                     value = cell.find(f"{S}v")
                     if kind == "s" and value is not None and value.text is not None:
@@ -323,12 +327,25 @@ def _xlsx(path: Path) -> list[str]:
                         cells.append("TRUE" if value.text == "1" else "FALSE")
                     elif value is not None and value.text is not None:
                         cells.append(value.text)
+                    else:
+                        cells.append("")
                 while cells and not cells[-1]:
                     cells.pop()
                 if cells:
                     rows.append("\t".join(cells))
             texts.append(f"{sheet.get('name', 'Sheet')}\n" + "\n".join(rows))
         return texts or [""]
+
+
+def _column(reference: str) -> int | None:
+    """The 0-based column of a cell reference such as "C2" or "AA10"."""
+    letters = re.match(r"([A-Z]{1,3})\d", reference)
+    if not letters:
+        return None
+    number = 0
+    for ch in letters.group(1):
+        number = number * 26 + (ord(ch) - 64)
+    return number - 1
 
 
 # ---------------------------------------------------------------------------- HTML

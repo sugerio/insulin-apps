@@ -4,11 +4,12 @@ import type { PassageRef } from '../../../../engine/src/contract.ts'
 import { authorize, type CollectionRow } from '../access.ts'
 import type { EngineClient } from '../engine/client.ts'
 import type { AppEnv } from '../env.ts'
-import { badRequest, notFound, readJson } from '../http.ts'
-import { idempotent } from '../idempotency.ts'
-import { MAIL, sendMailToAll } from '../mail.ts'
+import { ApiError, badRequest, notFound, readJson } from '../http.ts'
+import { idempotent, stableId } from '../idempotency.ts'
+import { appLink, MAIL, sendMail, sendMailToAll } from '../mail.ts'
+import { memberOf } from '../members.ts'
 import { callerOf, engineFor, iso, json, now, param } from './common.ts'
-import { startImport } from './sources.ts'
+import { refused, startImport } from './sources.ts'
 
 /**
  * What a collection knows, and fixing it once (design sections 09 and 11): facts as sentences; corrections, which are
@@ -18,21 +19,44 @@ import { startImport } from './sources.ts'
  */
 const refSchema = z.object({ documentId: z.string().min(1).max(200), textHash: z.string().regex(/^[0-9a-f]{64}$/) }).strict()
 
-/** The passage a fact came from, as an outdated mark: found by searching the fact's source sentence. */
+/**
+ * The passage a fact came from, as an outdated mark: the fact names its passage's text hash, so nothing is searched
+ * and a sleeping or learning collection isn't woken. Null when the fact is no longer listed.
+ */
 async function passageOfFact(engine: EngineClient, collection: CollectionRow, factId: string): Promise<PassageRef | null> {
   let cursor: string | null = null
   for (let page = 0; page < 40; page += 1) {
     const { facts, next } = await engine.facts(collection.id, cursor)
     const fact = facts.find((candidate) => candidate.factId === factId)
-    if (fact) {
-      const found = await engine.search(collection.id, { query: fact.sourceSentence, topK: 20 })
-      const passage = found.passages.find((candidate) => candidate.passageId === fact.passageId)
-      return passage ? { documentId: passage.documentId, textHash: passage.textHash } : null
-    }
+    if (fact) return { documentId: fact.documentId, textHash: fact.passageTextHash }
     if (!next) break
     cursor = next
   }
   return null
+}
+
+/** Who added the documents a correction marks outdated (from the imports that learned them), other than `except`. */
+async function authorsOf(db: D1Database, org: string, collectionId: string, documentIds: string[], except: string): Promise<{ id: string; files: string[] }[]> {
+  if (!documentIds.length) return []
+  const { results } = await db.prepare(
+    `SELECT created_by, detail FROM imports WHERE org_id = ? AND collection_id = ? AND state = 'committed' AND created_by != ?`,
+  ).bind(org, collectionId, except).all<{ created_by: string; detail: string }>()
+  const authors = new Map<string, Set<string>>()
+  for (const row of results) {
+    let documents: { id: string; name: string }[] = []
+    try {
+      const parsed = (JSON.parse(row.detail) as { documents?: unknown }).documents
+      documents = Array.isArray(parsed) ? parsed.filter((entry): entry is { id: string; name: string } => typeof entry?.id === 'string' && typeof entry?.name === 'string') : []
+    } catch {
+      documents = []
+    }
+    for (const document of documents) {
+      if (!documentIds.includes(document.id)) continue
+      if (!authors.has(row.created_by)) authors.set(row.created_by, new Set())
+      authors.get(row.created_by)!.add(document.name)
+    }
+  }
+  return [...authors].map(([id, files]) => ({ id, files: [...files] }))
 }
 
 export function knowledgeRoutes() {
@@ -81,6 +105,8 @@ export function knowledgeRoutes() {
       outdated: z.array(refSchema).max(20).optional(),
       factId: z.string().min(1).max(200).optional(),
       reportId: z.string().min(1).max(64).optional(),
+      /** Tell the people who added the files it corrects (an e-mail with a link, not the correction). */
+      notifyAuthors: z.boolean().optional(),
     }).strict())
     const db = c.env.DB
     const { collection } = await authorize(db, caller, param(c, 'id'), 'change')
@@ -97,19 +123,30 @@ export function knowledgeRoutes() {
         if (!ref) throw badRequest("That fact isn't in this collection any more. Reload What it knows and try again.")
         outdated.push(ref)
       }
-      const id = crypto.randomUUID()
+      const importId = await stableId(c)
+      const id = importId
       const note = { noteId: id.replace(/-/g, ''), title: body.title ?? (body.question ? `Correction: ${body.question}`.slice(0, 200) : 'Correction'), text: body.text, outdated }
-      const status = await startImport(c.env, engine, caller, collection, 'correction', { files: [], notes: [note] }, at)
-      const statements = [
-        db.prepare(`INSERT INTO corrections (id, org_id, collection_id, created_by, created_at, question, text, outdated, import_id, report_id, fact_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .bind(id, caller.organizationId, collection.id, caller.id, at, body.question ?? null, body.text, JSON.stringify(outdated), status.importId, body.reportId ?? null, body.factId ?? null),
-      ]
-      if (body.reportId) {
-        statements.push(db.prepare(`UPDATE reports SET status = 'fixed', resolved_by = ?, resolved_at = ?, correction_id = ? WHERE id = ? AND org_id = ? AND collection_id = ? AND status = 'open'`)
-          .bind(caller.id, at, id, body.reportId, caller.organizationId, collection.id))
+      // Recorded first: a report it answers is marked fixed once the correction is learned (outbox.ts), not before.
+      await db.prepare(
+        `INSERT INTO corrections (id, org_id, collection_id, created_by, created_at, question, text, outdated, import_id, report_id, fact_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO NOTHING`,
+      ).bind(id, caller.organizationId, collection.id, caller.id, at, body.question ?? null, body.text, JSON.stringify(outdated), importId, body.reportId ?? null, body.factId ?? null).run()
+      let started
+      try {
+        started = await startImport(c.env, engine, caller, collection, 'correction', { files: [], notes: [note] }, at, importId)
+      } catch (error) {
+        if (refused(error) || (error instanceof ApiError && error.status < 500)) await db.prepare(`DELETE FROM corrections WHERE id = ? AND org_id = ?`).bind(id, caller.organizationId).run()
+        throw error
       }
-      await db.batch(statements)
-      return json(c, { correction: { id, outdated }, import: status }, 202)
+      if (body.notifyAuthors) {
+        const link = appLink(c.env, `/collections/${collection.id}/sources`)
+        for (const author of await authorsOf(db, caller.organizationId, collection.id, outdated.map((ref) => ref.documentId), caller.id)) {
+          const member = await memberOf(db, caller.organizationId, 'person', author.id)
+          if (!member?.email || member.away) continue
+          await sendMail(c.env, caller.organizationId, { to: member.email, ...MAIL.correctedYourFile(caller.name ?? caller.email ?? 'Someone', collection.name, author.files, link) }, 'corrected_your_file')
+        }
+      }
+      return json(c, { correction: { id, outdated }, import: started.status, waiting: started.waiting }, 202)
     })
   })
 
@@ -133,7 +170,7 @@ export function knowledgeRoutes() {
         `SELECT m.email FROM members m WHERE m.org_id = ?1 AND m.principal_type = 'person' AND m.away = 0 AND m.email IS NOT NULL AND (
            m.principal_id = ?2 OR EXISTS (SELECT 1 FROM collection_shares s WHERE s.collection_id = ?3 AND s.org_id = ?1 AND s.principal_type = 'person' AND s.principal_id = m.principal_id AND s.role = 'ADMIN' AND s.status = 'active'))`,
       ).bind(caller.organizationId, collection.owner_id, collection.id).all<{ email: string }>()
-      await sendMailToAll(c.env, caller.organizationId, results.map((row) => row.email), MAIL.reported(caller.name ?? caller.email ?? 'Someone', collection.name, body.question, body.note ?? ''), 'reported')
+      await sendMailToAll(c.env, caller.organizationId, results.map((row) => row.email), MAIL.reported(caller.name ?? caller.email ?? 'Someone', collection.name, body.question, body.note ?? '', appLink(c.env, `/attention?collection=${collection.id}`)), 'reported')
       return json(c, { report: { id, status: 'open', answerId: body.answerId ?? null, createdAt: iso(at) } }, 201)
     })
   })

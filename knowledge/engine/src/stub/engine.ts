@@ -99,8 +99,8 @@ interface StoredDocument {
 
 interface Content {
   documents: Map<string, StoredDocument>
-  /** Outdated passages, as `documentId:textHash`. */
-  outdated: Set<string>
+  /** Outdated passages, as `documentId:textHash`, each with the correction note that marked it. */
+  outdated: Map<string, string>
   corrections: number
 }
 
@@ -135,6 +135,9 @@ interface StagedFile {
   name: string
   type: string
   sha256: string
+  stagedAt: number
+  /** Kept for an import waiting for the 1st (POST .../inbox/keep): not cleared before this time. */
+  keepUntil: number | null
 }
 
 interface RunningImport {
@@ -188,6 +191,10 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 /** The engine buffers what it stages, up to 64 MB. */
 const MAX_STAGED_BYTES = 64 * 1024 * 1024
+/** Staged files no import names are cleared a day after they arrived, or after the time they are kept until. */
+const STAGED_KEEP_MS = DAY_MS
+/** The longest a staged file is kept for an import waiting for the 1st. */
+const MAX_KEEP_STAGED_MS = 45 * DAY_MS
 /** Changes within this long of the last one share its restore point. */
 const SHARE_RESTORE_POINT_MS = 5 * 60 * 1000
 const FOLDABLE = new Set<PointKind>(['import', 'change'])
@@ -218,7 +225,7 @@ function copyContent(content: Content): Content {
   for (const [id, document] of content.documents) {
     documents.set(id, { ...document, info: { ...document.info }, pages: [...document.pages], hidden: [...document.hidden], passages: document.passages.map((passage) => ({ ...passage })), words: document.words })
   }
-  return { documents, outdated: new Set(content.outdated), corrections: content.corrections }
+  return { documents, outdated: new Map(content.outdated), corrections: content.corrections }
 }
 
 function randomId(prefix: string): string {
@@ -366,6 +373,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   }
 
   function pump(force = false): void {
+    clearStaged()
     for (let rounds = 0; rounds < 1000; rounds += 1) {
       let changed = false
       for (const collection of collections.values()) {
@@ -383,12 +391,18 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
           collection.wakingUntil = null
           keepAwake(collection)
         }
-        if (collection.awakeUntil !== null && collection.awakeUntil <= now() && !running(collection)) {
-          const since = collection.awakeSince ?? collection.awakeUntil
-          const seconds = Math.round((collection.awakeUntil - since) / 1000)
-          collection.awakeSince = null
+        // The running-time ledger: awake time is written every minute while awake, and the rest when it sleeps.
+        if (collection.awakeSince !== null) {
+          const asleep = collection.awakeUntil !== null && collection.awakeUntil <= now() && !running(collection)
+          const until = asleep ? collection.awakeUntil! : now()
+          if (asleep || until - collection.awakeSince >= 60_000) {
+            const seconds = Math.round((until - collection.awakeSince) / 1000)
+            collection.awakeSince = asleep ? null : until
+            if (asleep) collection.awakeUntil = null
+            if (seconds > 0) emit({ org: collection.org, collectionId: collection.id, type: 'usage', kind: 'awake', seconds })
+          }
+        } else if (collection.awakeUntil !== null && collection.awakeUntil <= now()) {
           collection.awakeUntil = null
-          if (seconds > 0) emit({ org: collection.org, collectionId: collection.id, type: 'usage', kind: 'awake', seconds })
         }
       }
       // Start what may start: one per collection, small ones first, within the organization's and the service's capacity.
@@ -420,6 +434,17 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       })
       const current = running(collection)
       if (current) current.status.etaSeconds = eta(collection, current)
+    }
+  }
+
+  /** The day's cleanup of the inbox: staged files no queued or running import names, past the time they are kept. */
+  function clearStaged(): void {
+    for (const collection of collections.values()) {
+      if (!collection.inbox.size) continue
+      const named = new Set(collection.queue.concat(collection.running ?? []).flatMap((id) => collection.imports.get(id)?.request.files.map((file) => file.fileId) ?? []))
+      for (const [fileId, staged] of collection.inbox) {
+        if (!named.has(fileId) && now() >= Math.max(staged.stagedAt + STAGED_KEEP_MS, staged.keepUntil ?? 0)) collection.inbox.delete(fileId)
+      }
     }
   }
 
@@ -526,7 +551,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       return
     }
     for (const document of added) content.documents.set(document.info.documentId, document)
-    for (const note of item.request.notes) for (const ref of note.outdated) content.outdated.add(`${ref.documentId}:${ref.textHash}`)
+    for (const note of item.request.notes) for (const ref of note.outdated) content.outdated.set(`${ref.documentId}:${ref.textHash}`, note.noteId)
     if (item.correction) content.corrections += 1
     const filesAdded = added.filter((document) => document.info.kind === 'file').length
     const notesAdded = added.length - filesAdded
@@ -562,7 +587,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       outdated: false,
     }))
     return {
-      info: { documentId, kind, name, type, bytes, textBytes: new TextEncoder().encode(hidden.text).byteLength, pages: mapped.length || null, sha256: sha256 || documentId, active: true, addedAt: new Date(now()).toISOString(), version },
+      info: { documentId, kind, name, type, bytes, textBytes: new TextEncoder().encode(hidden.text).byteLength, pages: mapped.length || null, sha256: sha256 || documentId, active: true, addedAt: new Date(now()).toISOString(), version, hiddenValues: hidden.hidden.length },
       text: hidden.text,
       pages: mapped,
       hidden: hidden.hidden,
@@ -648,7 +673,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       for (const passage of document.passages) {
         if (content.outdated.has(`${passage.documentId}:${passage.textHash}`)) continue
         const sentence = firstSentence(passage.text)
-        list.push({ factId: `f_${passage.passageId}`, sentence, documentId: document.info.documentId, passageId: passage.passageId, sourceSentence: sentence })
+        list.push({ factId: `f_${passage.passageId}`, sentence, documentId: document.info.documentId, passageId: passage.passageId, passageTextHash: passage.textHash, sourceSentence: sentence })
       }
     }
     return list
@@ -681,8 +706,9 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       })
     }
     found.sort((a, b) => b.score - a.score || a.passageId.localeCompare(b.passageId))
-    const passages = found.slice(0, topK)
-    const covered = (passages[0]?.score ?? 0) >= COVERED_THRESHOLD
+    // Only passages that pass the threshold are answered, as the real engine does: none means "I won't guess".
+    const passages = found.filter((passage) => passage.score >= COVERED_THRESHOLD).slice(0, topK)
+    const covered = passages.length > 0
     const factList = facts(collection.content).filter((fact) => passages.some((passage) => passage.passageId === fact.passageId)).slice(0, 5)
     return { status: 'ok', retryAfterSeconds: null, covered, passages, facts: factList, version: collection.version }
   }
@@ -774,6 +800,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     const purge = path.match(/^\/v1\/orgs\/([^/]+)\/purge$/)
     if (purge && method === 'POST') {
       const org = decodeURIComponent(purge[1]!)
+      if (request.headers.get(ORG_HEADER)?.trim() !== org) throw new StubError(404, 'not_found', 'No such organization.')
       for (const collection of collections.values()) if (collection.org === org && !collection.deleted) remove(collection)
       return json({ state: 'deleting' }, 202)
     }
@@ -793,7 +820,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       if (collection?.deleted) throw new StubError(409, 'deleting', 'This collection is being deleted.')
       if (!collection) {
         collection = {
-          org, id: collectionId, settings: normalSettings(settings), deleted: false, content: { documents: new Map(), outdated: new Set(), corrections: 0 },
+          org, id: collectionId, settings: normalSettings(settings), deleted: false, content: { documents: new Map(), outdated: new Map(), corrections: 0 },
           version: 0, snapshots: new Map(), imports: new Map(), queue: [], running: null, exports: new Map(), inbox: new Map(),
           awakeSince: null, awakeUntil: null, wakingUntil: null, lastQuestionAt: null, lastBackupAt: null, forced: null, removals: [],
         }
@@ -815,6 +842,22 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       wake(collection)
       return json(statusOf(collection))
     }
+    if (rest === '/inbox/keep' && method === 'POST') {
+      const keep = await body<{ fileIds?: unknown; until?: unknown }>(request)
+      const fileIds = keep?.fileIds
+      if (!Array.isArray(fileIds) || fileIds.length > 1000 || !fileIds.every((id) => typeof id === 'string' && ID.test(id))) throw new StubError(400, 'bad_request', 'fileIds must be a list of at most 1000 file ids.')
+      const until = typeof keep.until === 'string' ? Date.parse(keep.until) : NaN
+      if (!Number.isFinite(until)) throw new StubError(400, 'bad_request', 'until must be a date and time, such as 2026-12-01T00:00:00Z.')
+      if (until > now() + MAX_KEEP_STAGED_MS) throw new StubError(400, 'bad_request', 'Staged files can be kept at most 45 days.')
+      const kept: string[] = []
+      for (const fileId of fileIds as string[]) {
+        const staged = collection.inbox.get(fileId)
+        if (!staged) continue
+        staged.keepUntil = Math.max(staged.keepUntil ?? 0, until)
+        kept.push(fileId)
+      }
+      return json({ kept })
+    }
     const inbox = rest.match(/^\/inbox\/([^/]+)$/)
     if (inbox && method === 'PUT') {
       const fileId = decodeURIComponent(inbox[1]!)
@@ -830,7 +873,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       } catch {
         throw new StubError(400, 'bad_request', 'The file name is not valid.')
       }
-      collection.inbox.set(fileId, { bytes, name, type: request.headers.get('content-type') ?? 'application/octet-stream', sha256 })
+      collection.inbox.set(fileId, { bytes, name, type: request.headers.get('content-type') ?? 'application/octet-stream', sha256, stagedAt: now(), keepUntil: null })
       return json({ fileId, bytes: bytes.byteLength, sha256 })
     }
     if (rest === '/imports' && method === 'POST') {
@@ -966,7 +1009,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       collectionId: collection.id,
       version: collection.version,
       documents: [...collection.content.documents.values()].map((document) => ({ ...document.info, text: document.text, pages: document.pages })),
-      outdated: [...collection.content.outdated].map((entry): PassageRef => ({ documentId: entry.slice(0, entry.lastIndexOf(':')), textHash: entry.slice(entry.lastIndexOf(':') + 1) })),
+      outdated: [...collection.content.outdated.keys()].map((entry): PassageRef => ({ documentId: entry.slice(0, entry.lastIndexOf(':')), textHash: entry.slice(entry.lastIndexOf(':') + 1) })),
       facts: facts(collection.content),
       history: restorePoints(collection),
     }
@@ -977,6 +1020,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       hiding: { ...DEFAULT_HIDING, ...(settings.hiding ?? {}), words: Array.isArray(settings.hiding?.words) ? settings.hiding.words.filter((word) => typeof word === 'string') : [] },
       keepReady: settings.keepReady ?? null,
       awakeMinutes: Number.isFinite(settings.awakeMinutes) && settings.awakeMinutes > 0 ? settings.awakeMinutes : 10,
+      backupDays: Number.isFinite(settings.backupDays) && settings.backupDays > 0 ? settings.backupDays : 30,
     }
   }
 
@@ -1014,6 +1058,14 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       changed.add(id)
     }
     if (changed.size === 0) return
+    // A passage a correction marked outdated that now reads differently: the correction asks to be checked.
+    for (const [mark, noteId] of [...content.outdated]) {
+      const documentId = mark.slice(0, mark.lastIndexOf(':'))
+      const textHash = mark.slice(mark.lastIndexOf(':') + 1)
+      if (!changed.has(documentId)) continue
+      if (content.documents.get(documentId)?.passages.some((passage) => passage.textHash === textHash)) continue
+      emit({ org: collection.org, collectionId: collection.id, type: 'needs_check', noteId, documentId, textHash })
+    }
     for (const snapshot of collection.snapshots.values()) {
       if ([...changed].some((id) => snapshot.content.documents.has(id))) {
         snapshot.restorable = false
@@ -1025,7 +1077,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
 
   function remove(collection: StubCollection): void {
     collection.deleted = true
-    collection.content = { documents: new Map(), outdated: new Set(), corrections: 0 }
+    collection.content = { documents: new Map(), outdated: new Map(), corrections: 0 }
     collection.snapshots.clear()
     collection.inbox.clear()
     collection.exports.clear()
@@ -1042,8 +1094,8 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     }
     const used = request.passages.slice(0, 2)
     const text = used.map((passage, index) => `${bestSentence(passage.text, request.question)} [${index + 1}]`).join(' ')
-    if (answerMode === 'bad_citation') return { text: `${text} [${request.passages.length + 1}]`, citations: [...used.map((_, index) => index + 1), request.passages.length + 1], model: 'in-memory writer' }
-    return { text, citations: used.map((_, index) => index + 1), model: 'in-memory writer' }
+    // A citation outside the passages given is taken out of the text and counted, as the real engine does.
+    return { text, citations: used.map((_, index) => index + 1), model: 'in-memory writer', dropped: answerMode === 'bad_citation' ? 1 : 0 }
   }
 
   const control: StubControl = {

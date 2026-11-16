@@ -29,20 +29,39 @@ export function prompt(request: AnswerRequest): { role: 'system' | 'user'; conte
 /** The passage numbers a text cites, in order of first use, keeping only 1..count. */
 export function citationsIn(text: string, count: number): number[] {
   const out: number[] = []
-  for (const group of text.matchAll(/\[(\d+(?:\s*[,–-]\s*\d+)*)\]/g)) {
-    for (const piece of group[1].split(/\s*,\s*/)) {
-      const range = piece.split(/\s*[–-]\s*/).map(Number)
-      const [from, to] = range.length === 2 ? range : [range[0], range[0]]
-      for (let n = from; n <= to && n - from < 50; n++) if (n >= 1 && n <= count && !out.includes(n)) out.push(n)
-    }
+  for (const group of text.matchAll(CITATION)) {
+    for (const n of numbersIn(group[1])) if (n >= 1 && n <= count && !out.includes(n)) out.push(n)
   }
   return out
 }
 
-/** Removes citation marks that point at no given passage, so the text and the citations agree. */
+const CITATION = /\[(\d+(?:\s*[,–-]\s*\d+)*)\]/g
+
+/** The passage numbers a citation mark names: [2], [1, 3], [2-4]. */
+function numbersIn(inside: string): number[] {
+  const out: number[] = []
+  for (const piece of inside.split(/\s*,\s*/)) {
+    const range = piece.split(/\s*[–-]\s*/).map(Number)
+    const [from, to] = range.length === 2 ? range : [range[0], range[0]]
+    for (let n = from; n <= to && n - from < 50; n++) out.push(n)
+  }
+  return out
+}
+
+/** How many cited numbers point at no given passage. */
+export function unknownCitations(text: string, count: number): number {
+  let dropped = 0
+  for (const group of text.matchAll(CITATION)) dropped += numbersIn(group[1]).filter((n) => n < 1 || n > count).length
+  return dropped
+}
+
+/** Keeps only the numbers of given passages in each citation mark, so the text and the citations agree. */
 export function dropUnknownCitations(text: string, count: number): string {
   return text
-    .replace(/\[(\d+)\]/g, (mark, n) => (Number(n) >= 1 && Number(n) <= count ? mark : ''))
+    .replace(CITATION, (_mark, inside: string) => {
+      const kept = [...new Set(numbersIn(inside).filter((n) => n >= 1 && n <= count))]
+      return kept.length ? `[${kept.join(', ')}]` : ''
+    })
     .replace(/[ \t]+([.,;:!?])/g, '$1')
     .trim()
 }
@@ -81,5 +100,5 @@ export async function answer(env: Env, request: Request): Promise<AnswerResult> 
   }
   if (!text) throw new EngineFailure('model_unavailable', 'The built-in model gave no answer.')
   const cleaned = dropUnknownCitations(text, passages.length)
-  return { text: cleaned, citations: citationsIn(cleaned, passages.length), model: SETTINGS.answerModel }
+  return { text: cleaned, citations: citationsIn(cleaned, passages.length), dropped: unknownCitations(text, passages.length), model: SETTINGS.answerModel }
 }

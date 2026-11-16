@@ -146,7 +146,8 @@ test('the deploy writes an app\'s whole catalog to D1, replacing what it had; a 
     const run = spawnSync(process.execPath, [join(import.meta.dirname, '..', 'scripts', 'limits-catalog.mjs'), app, '--out', out], { encoding: 'utf8' })
     assert.equal(run.status, 0, run.stderr)
     const printed = spawnSync(process.execPath, [join(import.meta.dirname, '..', 'scripts', 'limits-catalog.mjs'), app], { encoding: 'utf8' })
-    assert.match(printed.stdout, /^DELETE FROM app_limit_catalog WHERE app = 'ledger' AND key NOT IN \('entries'\);\nINSERT INTO app_limit_catalog/)
+    assert.match(printed.stdout, /^UPDATE app_limit_sequence /, 'overrides of a key coming back are listed again first')
+    assert.match(printed.stdout, /\nDELETE FROM app_limit_catalog WHERE app = 'ledger' AND key NOT IN \('entries'\);\nINSERT INTO app_limit_catalog/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -288,6 +289,30 @@ test('an organization that starts using the app gets its overrides at the next r
   assert.ok(!(await limits(undefined, LEDGER_TOKEN)).organizations.some((entry) => entry.id === orgId))
   assert.equal((await owner.client.get(h.url('captable', '/api/echo'))).status, 200)
   assert.deepEqual((await limits(cursor)).organizations, [{ id: orgId, limits: { collections: { value: 40, until: null } } }])
+})
+
+test('a limit that leaves the catalog and comes back brings every organization\'s override of it back to the app', async () => {
+  const first = await team('Returning Key Org')
+  const second = await team('Returning Key Org Two')
+  const admin = await operator(ADMIN)
+  const set = (orgId, key, value) => admin.post(h.url('apex', `/super/orgs/${orgId}/limits`), { app: 'captable', action: 'set', key, value, until: '', reason: 'Kept longer' })
+  assert.equal((await set(first.orgId, 'backup_days', '90')).status, 303)
+  assert.equal((await set(second.orgId, 'backup_days', '60')).status, 303)
+  const before = await latestCursor()
+  // The app's version in production drops the limit, and meanwhile another override changes: the app replaces the
+  // organization's overrides with the ones it gets, without the one it no longer knows.
+  await writeCatalog([{ name: 'captable', limits: LIMITS.filter((limit) => limit.key !== 'backup_days') }])
+  assert.equal((await set(first.orgId, 'questions_month', '9000')).status, 303)
+  const dropped = await limits(before)
+  assert.deepEqual(dropped.organizations, [{ id: first.orgId, limits: { questions_month: { value: 9000, until: null } } }])
+  // A later version brings it back.
+  await writeCatalog([{ name: 'captable', limits: LIMITS }])
+  const back = await limits(dropped.cursor)
+  assert.deepEqual(back.organizations.map((entry) => [entry.id, entry.limits.backup_days?.value]).sort(), [[first.orgId, 90], [second.orgId, 60]].sort())
+  assert.deepEqual(back.organizations.find((entry) => entry.id === first.orgId).limits.questions_month, { value: 9000, until: null })
+  const seqs = await h.sql('SELECT seq FROM org_app_limit_changes WHERE org_id IN (?1, ?2)', first.orgId, second.orgId)
+  assert.equal(new Set(seqs.map((row) => row.seq)).size, 2, 'each organization its own change number, so a page never splits one')
+  assert.deepEqual((await limits(back.cursor)).organizations, [], 'and once')
 })
 
 test('pages hold 500 organizations, oldest change first, with the cursor and more', async () => {

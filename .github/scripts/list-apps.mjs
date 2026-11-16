@@ -2,6 +2,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { limitsProblems } from '../hosting/gateway/scripts/limits-catalog.mjs'
 
 export const APP_NAME_PATTERN = /^(?:[a-z]|[a-z][a-z0-9-]{0,30}[a-z0-9])$/
 export const RESERVED_APP_NAMES = new Set([
@@ -328,38 +329,20 @@ export function readEngine(app, raw, rawApi) {
   return { engine: segments.join('/'), engineApi: rawApi }
 }
 
-// A limit's key follows the rule for usage metric names (DESIGN.md §8.6), so usage can be reported under it.
-export const LIMIT_KEY = /^[a-z][a-z0-9_]{0,39}$/
-export const LIMIT_UNITS = Object.freeze(['count', 'bytes', 'hours', 'days'])
-/** At most this many limits an app. */
-export const LIMITS_MAX = 20
-const LIMIT_FIELDS = new Set(['key', 'label', 'unit', 'default'])
-const LIMIT_DEFAULT_MAX = 10 ** 15
-
 /**
  * An app's limit catalog, `insulin.limits` in its package.json (DESIGN.md §8.8): at most 20 entries of { key, label,
- * unit, default }, keys unique and named like usage metrics, `unit` one of count, bytes, hours or days, and `default`
- * a whole number from 0. It doesn't go to the gateway in SITE_APPS (5 KB): the deploy writes it to the gateway's D1.
+ * unit, default }, keys unique and named like usage metrics, a label of 1 to 80 characters on one line, `unit` one of
+ * count, bytes, hours or days, and `default` a whole number from 0 to 10^15. It is checked by the gateway's own rule
+ * (limitsProblems in gateway scripts/limits-catalog.mjs, which writes the catalog to the gateway's D1), so what passes
+ * here the deploy can write. It doesn't go to the gateway in SITE_APPS (5 KB).
  */
 export function readLimits(app, raw) {
   if (raw === undefined) return []
-  if (!Array.isArray(raw) || raw.length > LIMITS_MAX) throw new Error(`App ${JSON.stringify(app)}: insulin.limits must be an array of at most ${LIMITS_MAX}`)
-  const keys = new Set()
-  return raw.map((entry, index) => {
-    const where = `App ${JSON.stringify(app)}: insulin.limits[${index}]`
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${where} must be an object`)
-    for (const field of Object.keys(entry)) {
-      if (!LIMIT_FIELDS.has(field)) throw new Error(`${where}.${field} is not a limit field (key, label, unit, default)`)
-    }
-    const { key, label, unit, default: value } = entry
-    if (typeof key !== 'string' || !LIMIT_KEY.test(key)) throw new Error(`${where}.key must match ${LIMIT_KEY.source}`)
-    if (keys.has(key)) throw new Error(`${where}.key ${JSON.stringify(key)} is listed twice`)
-    keys.add(key)
-    if (typeof label !== 'string' || !label.trim() || label.trim().length > 80) throw new Error(`${where}.label must be 1-80 characters`)
-    if (!LIMIT_UNITS.includes(unit)) throw new Error(`${where}.unit must be ${LIMIT_UNITS.join(', ')}`)
-    if (!Number.isSafeInteger(value) || value < 0 || value > LIMIT_DEFAULT_MAX) throw new Error(`${where}.default must be a whole number from 0 to 10^15`)
-    return { key, label: label.trim(), unit, default: value }
-  })
+  const problems = limitsProblems(app, raw)
+  if (problems.length) {
+    throw new Error(`App ${JSON.stringify(app)}: ${problems.map((problem) => problem.replace(`${app}: `, '')).join('; ')}`)
+  }
+  return raw.map(({ key, label, unit, default: value }) => ({ key, label: label.trim(), unit, default: value }))
 }
 
 /** The prefix an app's secret names must carry: its name upper-cased, with `-` as `_`. */

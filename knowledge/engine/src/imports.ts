@@ -15,6 +15,7 @@ import type {
   AnswerState,
   SnapshotHandle,
   SnapshotRecord,
+  StagedFile,
 } from './types.ts'
 import type { CollectionCounts, HidingRules, ImportFile, ImportFileStatus, ImportNote, ImportStatus, RemoveResult } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
@@ -73,8 +74,40 @@ export async function stage(e: CollectionEngine, fileId: string, request: Reques
     httpMetadata: { contentType: type },
     customMetadata: { name: encodeURIComponent(name) },
   })
+  // The upload took time: if the collection was deleted meanwhile, nothing of it may stay.
+  const now = await e.store.getMeta()
+  if (!now || now.deleting) {
+    await e.env.FILES.delete(inboxKey(meta, fileId))
+    return fail('deleting', 'This collection was deleted.')
+  }
   await e.store.putStaged({ fileId, name, type, bytes: body.length, sha256, stagedAt: iso() })
   return { fileId, bytes: body.length, sha256 }
+}
+
+/** Keeps staged files for an import that waits (the documents-learned limit resets on the 1st), up to 45 days. */
+export async function keepStaged(e: CollectionEngine, body: { fileIds?: unknown; until?: unknown }): Promise<{ kept: string[] }> {
+  if (!Array.isArray(body.fileIds) || body.fileIds.length > 1000) return fail('bad_request', 'fileIds must be a list of at most 1000 file ids.')
+  const fileIds = body.fileIds.map((id) => requireId(id, 'Each file id'))
+  const until = typeof body.until === 'string' ? Date.parse(body.until) : NaN
+  if (!Number.isFinite(until)) return fail('bad_request', 'until must be a date and time, such as 2026-12-01T00:00:00Z.')
+  if (until > clock.now() + SETTINGS.maxKeepStagedMs) return fail('bad_request', 'Staged files can be kept at most 45 days.')
+  const kept: string[] = []
+  for (const fileId of fileIds) {
+    const staged = await e.store.getStaged(fileId)
+    if (!staged) continue
+    if (!staged.keepUntil || Date.parse(staged.keepUntil) < until) {
+      staged.keepUntil = iso(until)
+      await e.store.putStaged(staged)
+    }
+    kept.push(fileId)
+  }
+  await e.scheduleSoon()
+  return { kept }
+}
+
+/** When an unimported staged file is deleted: a day after it was staged, or the date it is kept until. */
+export function stagedExpiry(staged: StagedFile): number {
+  return Math.max(Date.parse(staged.stagedAt) + SETTINGS.stagedKeepMs, staged.keepUntil ? Date.parse(staged.keepUntil) : 0)
 }
 
 interface ImportBody {
@@ -170,6 +203,10 @@ async function create(e: CollectionEngine, importId: string, kind: ImportKind, s
     snapshotTaken: false,
     learningStartedAt: null,
     retryAt: null,
+    jobStartedAt: null,
+    textsSaved: false,
+    rebuild: false,
+    restoreFrom: null,
     result: null,
     test,
   }
@@ -219,13 +256,8 @@ async function placed(e: CollectionEngine, queue: string[], importId: string, ra
 async function enqueue(e: CollectionEngine, record: ImportRecord, front = false): Promise<void> {
   const meta = await e.meta()
   const importId = record.status.importId
-  meta.queue = front ? await placed(e, meta.queue, importId, -1) : await placed(e, meta.queue, importId, rankOf(record))
-  if (front) {
-    // Ahead of everything but removals.
-    const removals: string[] = []
-    for (const id of meta.queue) if (id !== importId && (await e.store.getImport(id))?.kind === 'remove') removals.push(id)
-    meta.queue = [...removals, importId, ...meta.queue.filter((id) => id !== importId && !removals.includes(id))]
-  }
+  // An import that gave way goes back ahead of everything but removals and re-learning (rank 0).
+  meta.queue = await placed(e, meta.queue, importId, front ? 0 : rankOf(record))
   await e.store.putMeta(meta)
 }
 
@@ -409,6 +441,7 @@ export async function removeForGood(e: CollectionEngine, documentId: string): Pr
   await enqueue(e, record)
   // Its text goes at once; stored exports that hold it are deleted too.
   await e.env.FILES.delete(doc.textKey)
+  await dropFacts(e, [documentId])
   await exporter.dropContaining(e, documentId)
   await e.store.log('remove-for-good', { documentId, version, blocked: blocked.length })
   await e.state.storage.setAlarm(clock.now())
@@ -451,11 +484,20 @@ export async function queueReread(e: CollectionEngine, hiding: HidingRules): Pro
   await e.store.log('reread-queued', { importId, documents: record.rereadDocumentIds.length })
 }
 
-/** Learns every document again from its stored text, in a fresh database (after an engine change). */
-export async function queueRelearn(e: CollectionEngine, reason: string): Promise<void> {
+/**
+ * Learns every document again from its stored text, in a fresh database (after an engine change, or to repair).
+ * `restoreFrom`: also bring back the documents of that version, which failed its check.
+ */
+export async function queueRelearn(e: CollectionEngine, reason: string, restoreFrom: number | null = null): Promise<void> {
   const meta = await e.meta()
   for (const id of [...meta.queue, ...(meta.active ? [meta.active] : [])]) {
-    if ((await e.store.getImport(id))?.kind === 'relearn') return
+    const queued = await e.store.getImport(id)
+    if (queued?.kind !== 'relearn') continue
+    if (restoreFrom !== null && queued.phase === 'queued') {
+      queued.restoreFrom = restoreFrom
+      await e.store.putImport(queued)
+    }
+    return
   }
   const importId = randomId('relearn')
   const state = await e.currentState(meta)
@@ -476,10 +518,11 @@ export async function queueRelearn(e: CollectionEngine, reason: string): Promise
     finishedAt: null,
   })
   record.small = true
+  record.restoreFrom = restoreFrom
   record.rereadDocumentIds = state.documents.map((d) => d.documentId)
   await e.store.putImport(record)
   await enqueue(e, record)
-  await e.store.log('relearn-queued', { importId, reason })
+  await e.store.log('relearn-queued', { importId, reason, restoreFrom })
 }
 
 function baseRecord(importId: string, kind: ImportKind, status: ImportStatus): ImportRecord {
@@ -499,6 +542,10 @@ function baseRecord(importId: string, kind: ImportKind, status: ImportStatus): I
     snapshotTaken: false,
     learningStartedAt: null,
     retryAt: null,
+    jobStartedAt: null,
+    textsSaved: false,
+    rebuild: false,
+    restoreFrom: null,
     result: null,
     test: null,
   }
@@ -565,6 +612,11 @@ export async function advance(e: CollectionEngine, record: ImportRecord): Promis
     else if (record.phase === 'saving') await save(e, record)
   } catch (error) {
     if (error instanceof Deferred) return
+    // A failure after the commit (tidying up) never turns a committed import into a failed try.
+    if ((await e.store.getImport(record.status.importId))?.phase === 'done') {
+      await e.store.log('after-commit-failed', { importId: record.status.importId, error: errorText(error) })
+      return
+    }
     if (error instanceof AttemptFailure) return attemptFailed(e, record, error)
     return attemptFailed(e, record, new AttemptFailure(errorText(error)))
   }
@@ -593,26 +645,44 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
 
 // ==================================================================== the container side
 
-/** A clean container on the learning instance holding the current restore point, with the query process stopped. */
+/**
+ * A clean container on the learning instance holding the current restore point, with the query process stopped.
+ * When the restore point's snapshot can't be started (expired, an engine change, damaged), its files come back from
+ * the latest backup if that holds the same files in this image's database format. Otherwise a removal for good learns
+ * the other documents again in an empty container, and any other import waits behind re-learning everything.
+ */
 async function learningContainer(e: CollectionEngine, record: ImportRecord): Promise<Runtime> {
   const meta = await e.meta()
-  let snapshot: SnapshotRecord | null = null
-  if (record.kind !== 'relearn') {
-    const current = await e.currentSnapshot(meta)
-    if (current.unusable) {
-      if (!meta.op) {
-        await e.updateMeta((m) => {
-          m.op = { kind: 'from_backup', reason: current.unusable!, startedAt: iso(), restartedAfterFailure: false }
-        })
-      }
-      throw new Deferred()
+  if (record.kind === 'relearn' || record.rebuild) return e.startContainer(null, 'learning')
+  const current = await e.currentSnapshot(meta)
+  if (current.unusable) {
+    const runtime = await e.startContainer(null, 'learning', true)
+    const latest = await backup.latestIndex(e)
+    if (current.snapshot && latest && backup.holds(latest, current.snapshot, runtime.dataFormat) && (await backup.restoreFiles(e, latest))) {
+      runtime.snapshotId = current.snapshot.handle.id
+      await e.store.putRuntime(runtime)
+      await e.store.log('restored-for-learning', { backup: latest.day })
+      return runtime
     }
-    snapshot = current.snapshot
+    if (record.kind === 'remove') {
+      record.rebuild = true
+      await e.store.putImport(record)
+      await e.store.log('removal-rebuilds', { reason: current.unusable })
+      return runtime
+    }
+    await e.box.destroy('waiting for re-learning')
+    await e.store.deleteRuntime()
+    await preempt(e, record)
+    await queueRelearn(e, current.unusable)
+    throw new Deferred()
   }
+  const snapshot = current.snapshot
   const wanted = snapshot?.handle.id ?? null
   const runtime = await e.store.getRuntime()
   const learning = instances(e.env).learning
-  if (e.box.running && runtime && !runtime.dirty && runtime.snapshotId === wanted && runtime.instance === learning && record.kind !== 'relearn') {
+  // Reused only once its files passed their check: a wake still starting or checking is not.
+  const checked = runtime && (runtime.phase === 'opening' || runtime.phase === 'ready' || runtime.phase === 'busy')
+  if (e.box.running && runtime && checked && !runtime.dirty && runtime.snapshotId === wanted && runtime.instance === learning) {
     if (runtime.queryStarted) await e.box.queryStop()
     runtime.queryStarted = false
     runtime.phase = 'busy'
@@ -632,16 +702,63 @@ async function learningContainer(e: CollectionEngine, record: ImportRecord): Pro
   return started
 }
 
+/** The documents a re-learning holds: the current ones, and after a repair those of the version that failed too. */
+async function relearnDocuments(e: CollectionEngine, record: ImportRecord, meta: Meta): Promise<{ current: AnswerState; extra: DocRecord[]; marks: OutdatedMark[] }> {
+  const current = await e.currentState(meta)
+  if (record.restoreFrom === null) return { current, extra: [], marks: [] }
+  const failed = await e.store.getState(record.restoreFrom)
+  const here = new Set(current.documents.map((d) => d.documentId))
+  const removing = new Set(meta.removals.map((r) => r.documentId))
+  const extra: DocRecord[] = []
+  for (const doc of failed?.documents ?? []) {
+    if (here.has(doc.documentId) || removing.has(doc.documentId)) continue
+    if (await e.env.FILES.head(doc.textKey)) extra.push(doc)
+  }
+  const kept = new Set([...here, ...extra.map((d) => d.documentId)])
+  const marks = (failed?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId) && !current.marks.some((c) => c.documentId === m.documentId && c.textHash === m.textHash))
+  return { current, extra, marks }
+}
+
 async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void> {
+  const importId = record.status.importId
+  const before = await e.meta()
+  if (record.kind === 'import' || record.kind === 'correction') {
+    // Content learned since this import was queued is already here: never learn it twice.
+    const state = await e.currentState(before)
+    const here = new Map(state.documents.filter((d) => d.kind === 'file').map((d) => [d.sha256, d.documentId]))
+    record.files.forEach((f, i) => {
+      if (!f.duplicateOf && here.has(f.sha256)) {
+        f.duplicateOf = here.get(f.sha256)!
+        record.status.files[i] = fileStatus(f)
+      }
+    })
+    if (!record.files.some((f) => !f.duplicateOf) && !record.notes.length) return finishUnchanged(e, record)
+  }
+  if (record.kind === 'relearn' && record.restoreFrom === null && !(await e.currentSnapshot(before)).unusable) {
+    return finishUnchanged(e, record) // something else brought the restore point back meanwhile
+  }
   const runtime = await learningContainer(e, record)
   const meta = await e.meta()
-  const importId = record.status.importId
+  // Hidden with the rules in force now, not those of when the import was queued.
+  record.hiding = meta.settings.hiding
   record.status.state = 'reading'
   await e.box.deleteInbox(importId)
 
+  const stageTexts = async (docs: Pick<DocRecord, 'documentId' | 'name' | 'textKey'>[]) => {
+    for (const doc of docs) {
+      const object = await e.env.FILES.get(doc.textKey)
+      if (!object) throw new AttemptFailure(`The saved text of “${doc.name}” is missing; add it again.`, null, true, 'bad_request')
+      await e.box.putInbox(importId, `${doc.documentId}.json`, await object.text())
+    }
+  }
   let batch: Record<string, unknown>
   let op = 'ingest'
-  if (record.kind === 'remove') {
+  if (record.kind === 'remove' && record.rebuild) {
+    const state = await e.currentState(meta)
+    const kept = state.documents.filter((d) => !record.removeDocumentIds.includes(d.documentId))
+    await stageTexts(kept)
+    batch = { importId, kind: 'relearn', hiding: record.hiding, documents: kept.map((d) => ({ documentId: d.documentId, kind: d.kind, name: d.name })) }
+  } else if (record.kind === 'remove') {
     op = 'remove'
     batch = { importId, kind: 'remove', documentIds: record.removeDocumentIds }
   } else if (record.kind === 'reread') {
@@ -651,38 +768,34 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
       importId,
       kind: 'reread',
       hiding: record.hiding,
-      documentIds: record.rereadDocumentIds.filter((id) => state.documents.some((d) => d.documentId === id)),
+      documentIds: state.documents.map((d) => d.documentId),
       marks: state.marks.map((m) => ({ documentId: m.documentId, textHash: m.textHash })),
     }
   } else if (record.kind === 'relearn') {
-    const state = await e.currentState(meta)
-    for (const doc of state.documents) {
-      const object = await e.env.FILES.get(doc.textKey)
-      if (!object) throw new AttemptFailure(`The stored text of “${doc.name}” is missing.`, null, true)
-      await e.box.putInbox(importId, `${doc.documentId}.json`, await object.text())
-    }
-    batch = { importId, kind: 'relearn', documents: state.documents.map((d) => ({ documentId: d.documentId, kind: d.kind, name: d.name })) }
+    const { current, extra } = await relearnDocuments(e, record, meta)
+    const docs = [...current.documents, ...extra]
+    await stageTexts(docs)
+    batch = { importId, kind: 'relearn', hiding: record.hiding, documents: docs.map((d) => ({ documentId: d.documentId, kind: d.kind, name: d.name })) }
   } else {
-    // Content learned since this import was queued is already here: never learn it twice.
-    const state = await e.currentState(meta)
-    const here = new Map(state.documents.filter((d) => d.kind === 'file').map((d) => [d.sha256, d.documentId]))
-    record.files.forEach((f, i) => {
-      if (!f.duplicateOf && here.has(f.sha256)) {
-        f.duplicateOf = here.get(f.sha256)!
-        record.status.files[i] = fileStatus(f)
-      }
-    })
     const fresh = record.files.filter((f) => !f.duplicateOf)
-    for (const file of fresh) {
-      const object = await e.env.FILES.get(inboxKey(meta, file.fileId))
-      if (!object) throw new AttemptFailure(`“${file.name}” is no longer waiting to be learned; add it again.`, file.fileId, true, 'bad_request')
-      await e.box.putInbox(importId, file.fileId, object.body)
+    if (record.textsSaved) {
+      // An earlier try read everything: learn from the redacted text it saved (the originals are gone).
+      await stageTexts([
+        ...fresh.map((f) => ({ documentId: f.documentId, name: f.name, textKey: textKey(meta, f.documentId) })),
+        ...record.notes.map((n) => ({ documentId: n.documentId, name: n.title, textKey: textKey(meta, n.documentId) })),
+      ])
+    } else {
+      for (const file of fresh) {
+        const object = await e.env.FILES.get(inboxKey(meta, file.fileId))
+        if (!object) throw new AttemptFailure(`“${file.name}” is no longer waiting to be learned; add it again.`, file.fileId, true, 'bad_request')
+        await e.box.putInbox(importId, file.fileId, object.body)
+      }
     }
     batch = {
       importId,
       kind: 'import',
-      files: fresh.map((f) => ({ fileId: f.fileId, documentId: f.documentId, name: f.name, type: f.type, sha256: f.sha256 })),
-      notes: record.notes.map((n) => ({ noteId: n.noteId, documentId: n.documentId, title: n.title, text: n.text, outdated: n.outdated })),
+      files: fresh.map((f) => ({ fileId: f.fileId, documentId: f.documentId, name: f.name, type: f.type, sha256: f.sha256, stored: record.textsSaved })),
+      notes: record.notes.map((n) => ({ noteId: n.noteId, documentId: n.documentId, title: n.title, outdated: n.outdated, ...(record.textsSaved ? { stored: true } : { text: n.text }) })),
       hiding: record.hiding,
       test: record.test ?? undefined,
     }
@@ -694,11 +807,34 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   const job = await e.box.startJob(op, { batchId: importId })
   record.jobId = job.id
   record.phase = 'running'
+  record.jobStartedAt = clock.now()
   record.learningStartedAt ??= clock.now()
   record.status.files = record.status.files.map((f) => (f.state === 'waiting' ? { ...f, state: 'reading' } : f))
   await e.store.putImport(record)
   await e.chargeUsage('learning')
   await e.store.log('job-started', { importId, op, job: job.id, attempt: record.status.attempt })
+}
+
+/** An import that turned out to change nothing (everything already here): no container work, no restore point. */
+async function finishUnchanged(e: CollectionEngine, record: ImportRecord): Promise<void> {
+  record.status.state = 'duplicate'
+  record.status.finishedAt = iso()
+  record.phase = 'done'
+  record.jobId = null
+  record.notes = scrubbed(record.notes)
+  await e.store.putImport(record)
+  await e.updateMeta((m) => {
+    if (m.active === record.status.importId) m.active = null
+  })
+  await e.event(`import:${record.status.importId}:duplicate`, { type: 'import', import: record.status })
+  if (record.capacity === 'granted') await e.releaseCapacity(record)
+  await deleteOriginals(e, record.files.map((f) => f.fileId))
+  await e.store.log('import-duplicate', { importId: record.status.importId })
+}
+
+/** Notes as written are kept only until they are read and hidden. */
+function scrubbed(notes: ImportRecord['notes']): ImportRecord['notes'] {
+  return notes.map((n) => ({ ...n, text: '' }))
 }
 
 async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
@@ -714,7 +850,14 @@ async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
   if (record.status.files.some((f) => f.state === 'understanding' || f.state === 'learned') || (!record.files.length && job.progress?.done)) {
     record.status.state = 'learning'
   }
+  if (job.state === 'running' && job.progress?.read && !record.textsSaved && (record.kind === 'import' || record.kind === 'correction')) {
+    await saveReadTexts(e, record)
+  }
   if (job.state === 'running') {
+    const limit = Math.max(SETTINGS.jobTimeoutMs, 3 * etaSeconds({ ...record, learningStartedAt: null }) * 1000)
+    if (record.jobStartedAt && clock.now() - record.jobStartedAt > limit) {
+      throw new AttemptFailure('Learning took far longer than it should, so it was stopped.')
+    }
     await e.store.putImport(record)
     return
   }
@@ -737,11 +880,39 @@ async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
   await save(e, record)
 }
 
+/**
+ * Every file and note was read and hidden: their redacted texts go to R2, the originals and the notes as written are
+ * deleted, and any later try learns from the saved texts.
+ */
+async function saveReadTexts(e: CollectionEngine, record: ImportRecord): Promise<void> {
+  const meta = await e.meta()
+  const docs = [...record.files.filter((f) => !f.duplicateOf).map((f) => f.documentId), ...record.notes.map((n) => n.documentId)]
+  for (const documentId of docs) {
+    const response = await e.box.fetch(`/text/${encodeURIComponent(documentId)}`)
+    if (!response.ok) {
+      await response.body?.cancel()
+      return // not all read yet; asked again on the next poll
+    }
+    await e.env.FILES.put(textKey(meta, documentId), await response.text(), { httpMetadata: { contentType: 'application/json' } })
+  }
+  record.textsSaved = true
+  record.notes = scrubbed(record.notes)
+  await e.store.putImport(record)
+  await deleteOriginals(e, record.files.map((f) => f.fileId))
+  await e.store.log('read', { importId: record.status.importId, documents: docs.length })
+}
+
 /** Quiesce, record counts and the full checksum manifest, copy texts out, snapshot, commit. */
 async function save(e: CollectionEngine, record: ImportRecord): Promise<void> {
   const meta = await e.meta()
   const importId = record.status.importId
   const result = (record.result ?? {}) as IngestResult
+  if (record.kind === 'reread' && !(result.changed ?? []).length) {
+    // The stricter rules found nothing new to hide: no restore point. The container ran the job, so it isn't reused.
+    await e.box.destroy('re-read changed nothing')
+    await e.store.deleteRuntime()
+    return finishUnchanged(e, record)
+  }
   await e.box.deleteInbox(importId)
   await e.box.cleanup()
   await e.box.waitQuiescent()
@@ -755,6 +926,10 @@ async function save(e: CollectionEngine, record: ImportRecord): Promise<void> {
     if (!response.ok) throw new AttemptFailure('A learned text could not be read back.')
     await e.env.FILES.put(textKey(meta, doc.documentId), await response.text(), { httpMetadata: { contentType: 'application/json' } })
   }
+  // A removal for good that arrived while these texts were copied must not get its text back.
+  const removing = (await e.meta()).removals.map((r) => r.documentId)
+  const resurrected = (result.documents ?? []).filter((d) => removing.includes(d.documentId)).map((d) => textKey(meta, d.documentId))
+  if (resurrected.length) await e.env.FILES.delete(resurrected)
   let facts: string | null = null
   const factsResponse = await e.box.getFile('facts.json')
   if (factsResponse.ok) {
@@ -790,7 +965,7 @@ interface IngestDocument {
 
 interface IngestResult {
   documents?: IngestDocument[]
-  marks?: { documentId: string; textHash: string; newTextHash?: string | null }[]
+  marks?: { documentId: string; textHash: string; newTextHash?: string | null; changed?: boolean }[]
   facts?: number
   newFacts?: number
   passages?: number
@@ -815,7 +990,8 @@ async function commitImport(
   const current = await e.currentState(meta)
   const result = (record.result ?? {}) as IngestResult
   const version = Math.max(meta.nextVersion, record.reserveVersion ?? 0)
-  const next = applyResult(meta, current, record, result, version, facts, stats)
+  const extra = record.kind === 'relearn' && record.restoreFrom !== null ? ((await e.store.getState(record.restoreFrom)) ?? null) : null
+  const next = applyResult(meta, current, record, result, version, facts, stats, extra)
   const changes = emptyChanges()
   changes.files = record.files.filter((f) => !f.duplicateOf).length
   changes.notes = record.kind === 'correction' ? 0 : record.notes.length
@@ -833,10 +1009,20 @@ async function commitImport(
     newFacts: result.newFacts ?? null,
     changedDocumentIds: result.changed ?? [],
     ...(record.kind === 'relearn' ? { summary: 'Learned everything again from its saved text' } : {}),
+    needsCheck: (result.marks ?? []).filter((m) => m.changed || m.newTextHash === null),
   })
 }
 
-function applyResult(meta: Meta, current: AnswerState, record: ImportRecord, result: IngestResult, version: number, facts: string | null, stats: Stats): AnswerState {
+function applyResult(
+  meta: Meta,
+  current: AnswerState,
+  record: ImportRecord,
+  result: IngestResult,
+  version: number,
+  facts: string | null,
+  stats: Stats,
+  extra: AnswerState | null = null,
+): AnswerState {
   const now = iso()
   const byId = new Map((result.documents ?? []).map((d) => [d.documentId, d]))
   let documents = current.documents.slice()
@@ -901,12 +1087,20 @@ function applyResult(meta: Meta, current: AnswerState, record: ImportRecord, res
     })
     // Outdated marks follow their passage to its new text; one whose passage changed asks to be checked.
     const remap = new Map((result.marks ?? []).map((m) => [`${m.documentId}:${m.textHash}`, m.newTextHash]))
+    const changed = new Set((result.marks ?? []).filter((m) => m.changed).map((m) => `${m.documentId}:${m.textHash}`))
     marks = marks.map((m): OutdatedMark => {
       const key = `${m.documentId}:${m.textHash}`
       if (!remap.has(key)) return m
       const moved = remap.get(key)
-      return moved ? { ...m, textHash: moved } : { ...m, needsCheck: true }
+      return moved ? { ...m, textHash: moved, needsCheck: m.needsCheck || changed.has(key) } : { ...m, needsCheck: true }
     })
+  } else if (record.kind === 'relearn' && record.restoreFrom !== null) {
+    // A repair's re-learning also brings back the documents of the version that failed its check.
+    const learned = new Set((result.documents ?? []).map((d) => d.documentId))
+    const here = new Set(documents.map((d) => d.documentId))
+    documents = [...documents, ...(extra?.documents ?? []).filter((d) => learned.has(d.documentId) && !here.has(d.documentId))]
+    const kept = new Set(documents.map((d) => d.documentId))
+    marks = [...marks, ...(extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId) && !marks.some((c) => c.documentId === m.documentId && c.textHash === m.textHash))]
   }
   return {
     documents,
@@ -961,6 +1155,7 @@ export interface PointCommit {
   summary?: string
   previous?: number | null
   importEvent?: boolean // false for going back, undo and repairs: no import of the app's is involved
+  needsCheck?: { documentId: string; textHash: string; newTextHash?: string | null }[] // corrected passages a re-read changed
 }
 
 /**
@@ -1035,6 +1230,7 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
     c.record.phase = 'done'
     c.record.jobId = null
     c.record.retryAt = null
+    c.record.notes = scrubbed(c.record.notes)
     await e.store.putImport(c.record, txn)
     if (c.snapshot && runtime) {
       await txn.put('runtime', { ...runtime, origin: version, snapshotId: c.snapshot.handle.id, dirty: false, phase: 'busy', checkJobId: null, queryStarted: false } satisfies Runtime)
@@ -1057,7 +1253,19 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
           key: `committed:${meta.org}:${meta.collectionId}:${version}`,
           event: { ...event, type: 'committed', version, summary: point.summary, counts: point.counts, importId: appImport ? status.importId : null },
         },
-        ...(appImport ? [{ key: `import:${status.importId}:committed`, event: { ...event, type: 'import' as const, import: status } }] : []),
+        ...(appImport ? [{ key: `${meta.org}:${meta.collectionId}:import:${status.importId}:committed`, event: { ...event, type: 'import' as const, import: status } }] : []),
+        // A re-read changed a passage a correction marked outdated: the correction asks to be checked.
+        ...(c.needsCheck ?? []).flatMap((m) => {
+          const mark = c.state.marks.find((x) => x.documentId === m.documentId && (x.textHash === m.newTextHash || x.textHash === m.textHash))
+          const note = mark && c.state.documents.find((d) => d.documentId === mark.noteDocumentId)
+          if (!mark || !note?.noteId) return []
+          return [
+            {
+              key: `${meta.org}:${meta.collectionId}:needs_check:${version}:${mark.noteDocumentId}:${m.documentId}:${m.textHash}`,
+              event: { ...event, type: 'needs_check' as const, noteId: note.noteId, documentId: m.documentId, textHash: mark.textHash },
+            },
+          ]
+        }),
       ],
       txn,
     )
@@ -1066,21 +1274,27 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   if (!committedMeta || !point) return false
   const done = point as RestorePointRecord
   await e.store.log('committed', { version: done.version, importId: c.record.status.importId, kind: done.kind, documents: done.counts.documents })
-  if (c.snapshot) await e.chargeUsage(await e.usageKind())
-  await e.flushOutbox()
-  if (c.record.capacity === 'granted') await e.releaseCapacity(c.record)
+  // The commit stands whatever happens from here: each step's failure is logged, and deletions are tried again later.
+  const step = async (name: string, work: () => Promise<unknown>) => {
+    try {
+      await work()
+    } catch (error) {
+      await e.store.log('after-commit-failed', { step: name, error: errorText(error) })
+    }
+  }
+  if (c.snapshot) await step('usage', async () => e.chargeUsage(await e.usageKind()))
+  await step('outbox', () => e.flushOutbox())
+  if (c.record.capacity === 'granted') await step('capacity', () => e.releaseCapacity(c.record))
   await deleteOriginals(e, c.record.files.map((f) => f.fileId))
   if (c.record.kind === 'remove') {
-    // The latest backup is written again without the removed file; older daily backups that hold it are dropped.
+    // Facts files and backups written while the removal waited may still hold the file: they go too, and the
+    // latest backup is written again without it.
+    await step('facts', () => dropFacts(e, c.record.removeDocumentIds))
+    await step('backups', async () => {
+      for (const documentId of c.record.removeDocumentIds) await backup.dropDocument(e, documentId)
+    })
     const runtime = await e.store.getRuntime()
-    for (const documentId of c.record.removeDocumentIds) await backup.dropDocument(e, documentId)
-    if (runtime && e.box.running) {
-      try {
-        await backup.run(e, runtime)
-      } catch (error) {
-        await e.store.log('backup-failed', { error: errorText(error) })
-      }
-    }
+    if (runtime && e.box.running) await step('backup', () => backup.run(e, runtime))
   }
   return true
 }
@@ -1136,11 +1350,18 @@ async function attemptFailed(e: CollectionEngine, record: ImportRecord, failure:
   )
   record.phase = 'done'
   record.retryAt = null
+  record.notes = scrubbed(record.notes)
   await e.store.putImport(record)
   await e.updateMeta((m) => {
     if (m.active === record.status.importId) m.active = null
     if (record.kind === 'remove') m.removals = m.removals.filter((r) => !record.removeDocumentIds.includes(r.documentId))
   })
+  if (record.textsSaved) {
+    // Texts saved for later tries of an import that will never commit.
+    const meta = await e.meta()
+    const unused = [...record.files.filter((f) => !f.duplicateOf), ...record.notes].map((d) => textKey(meta, d.documentId))
+    await deleteLater(e, unused)
+  }
   await e.event(`import:${record.status.importId}:failed`, { type: 'import', import: record.status })
   await e.releaseCapacity(record)
   // The failing file's original goes now; the others stay staged a day, so they can be learned without it.
@@ -1171,11 +1392,43 @@ async function requeueRemoval(e: CollectionEngine, failed: ImportRecord): Promis
   await enqueue(e, failed)
 }
 
+/** Deletes originals from the inbox. If R2 refuses, the keys are kept and deleted again on a later alarm. */
 async function deleteOriginals(e: CollectionEngine, fileIds: string[]): Promise<void> {
   if (!fileIds.length) return
   const meta = await e.meta()
-  await e.env.FILES.delete(fileIds.map((id) => inboxKey(meta, id)))
   await e.store.deleteStaged(fileIds)
+  await deleteLater(e, fileIds.map((id) => inboxKey(meta, id)))
+}
+
+export async function deleteLater(e: CollectionEngine, keys: string[]): Promise<void> {
+  const pending = [...new Set([...((await e.state.storage.get<string[]>('pendingDeletes')) ?? []), ...keys])]
+  try {
+    if (pending.length) await e.env.FILES.delete(pending)
+    await e.state.storage.delete('pendingDeletes')
+  } catch (error) {
+    await e.state.storage.put('pendingDeletes', pending)
+    await e.store.log('delete-failed', { keys: pending.length, error: errorText(error) })
+  }
 }
 
 export { EngineFailure }
+
+/** Remove for good: every stored facts file, of any version, is written again without the documents' facts. */
+export async function dropFacts(e: CollectionEngine, documentIds: string[]): Promise<void> {
+  const meta = await e.meta()
+  const gone = new Set(documentIds)
+  let cursor: string | undefined
+  do {
+    const listed = await e.env.FILES.list({ prefix: `text/${meta.org}/${meta.collectionId}/facts/`, cursor })
+    for (const { key } of listed.objects) {
+      const object = await e.env.FILES.get(key)
+      if (!object) continue
+      const stored = (await object.json()) as { facts?: { documentId: string }[] }
+      const kept = (stored.facts ?? []).filter((f) => !gone.has(f.documentId))
+      if (kept.length !== (stored.facts ?? []).length) {
+        await e.env.FILES.put(key, JSON.stringify({ ...stored, facts: kept }), { httpMetadata: { contentType: 'application/json' } })
+      }
+    }
+    cursor = listed.truncated ? listed.cursor : undefined
+  } while (cursor)
+}

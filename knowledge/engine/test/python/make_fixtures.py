@@ -170,6 +170,8 @@ def write_xlsx(path: Path, sheets: list[tuple[str, list[list[str]]]]) -> None:
             cells = []
             for c, value in enumerate(row):
                 ref = f"{chr(65 + c)}{r}"
+                if value == "":
+                    continue  # Excel leaves blank cells out; each cell names its column in `r`
                 if value.replace(".", "", 1).isdigit():
                     cells.append(f'<c r="{ref}"><v>{value}</v></c>')
                 else:

@@ -189,7 +189,12 @@ export async function reserve(env: Bindings, org: string, items: { key: LimitKey
  * reservation only ends. Idempotent: a reservation is settled once.
  */
 export async function settle(db: D1Database, org: string, settled: { id: string; used: number }[], now: number): Promise<void> {
-  if (!settled.length) return
+  const statements = settleStatements(db, org, settled, now)
+  if (statements.length) await db.batch(statements)
+}
+
+/** The statements of `settle`, for a caller's own batch (an outbox event applied with its effects, all or nothing). */
+export function settleStatements(db: D1Database, org: string, settled: { id: string; used: number }[], now: number): D1PreparedStatement[] {
   const statements: D1PreparedStatement[] = []
   for (const { id, used } of settled) {
     statements.push(db.prepare(
@@ -199,13 +204,17 @@ export async function settle(db: D1Database, org: string, settled: { id: string;
     ).bind(id, org, Math.max(0, used), now))
     statements.push(db.prepare(`UPDATE reservations SET state = 'settled', settled_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'held'`).bind(id, org, now))
   }
-  await db.batch(statements)
+  return statements
 }
 
 /** Releases reservations whose work failed or didn't happen. */
 export async function release(db: D1Database, org: string, ids: string[], now: number): Promise<void> {
-  if (!ids.length) return
-  await db.batch(ids.map((id) => db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'held'`).bind(id, org, now)))
+  const statements = releaseStatements(db, org, ids, now)
+  if (statements.length) await db.batch(statements)
+}
+
+export function releaseStatements(db: D1Database, org: string, ids: string[], now: number): D1PreparedStatement[] {
+  return ids.map((id) => db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'held'`).bind(id, org, now))
 }
 
 /** The held reservations of a piece of work (an import's), to settle or release them later. */

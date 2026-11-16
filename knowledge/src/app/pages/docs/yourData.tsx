@@ -53,8 +53,13 @@ export const yourData: DocTopic = {
             collection, its owner gets an e-mail.
           </p>
           <p>
+            Knowledge's own records of it go too: the questions asked of it, its reports and corrections, the names of its files,
+            its history and who it was shared with. What stays is a line in the organization's activity log: that a collection
+            with that name was deleted, by whom and when.
+          </p>
+          <p>
             Nobody deletes collections in bulk. When an organization is deleted on insulinapps.com, everything Knowledge kept for
-            it is deleted too.
+            it is deleted too, the activity log included: only a note that its data was removed, with no names, stays.
           </p>
         </>
       ),
@@ -73,7 +78,9 @@ export const yourData: DocTopic = {
               ['Restore points', '30 days'],
               ['Daily backups', '30 days; the latest as long as the collection exists'],
               ['Exports', '7 days'],
-              ['Who may do what: sharing, the list of collections, questions asked and reports', 'In Knowledge\'s own database, for the organization only'],
+              ['Who may do what: sharing, the list of collections, questions asked, reports and corrections', 'In Knowledge\'s own database, for the organization only, until the collection (or the organization) is deleted'],
+              ['The activity log: collections deleted or transferred, by whom and when', 'As long as the organization uses Knowledge'],
+              ['Answers to changes, kept so a change sent twice isn\'t done twice', 'A day'],
             ]}
           />
           <p>

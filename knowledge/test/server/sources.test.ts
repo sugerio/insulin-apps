@@ -61,7 +61,7 @@ describe('preflight and imports', () => {
     const again = await addFiles(PEOPLE.maya, id, files.slice(3, 5))
     const duplicate = await h.json<{ import: { state: string } }>(PEOPLE.maya, 'POST', `/api/collections/${id}/imports`, { fileIds: again.accepted })
     expect(duplicate.body.import.state).toBe('duplicate')
-    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM reservations WHERE org_id = ? AND state = 'held'`).bind(ORG).first('n')).toBe(0)
+    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM reservations WHERE org_id = ? AND state = 'held' AND key != 'awake_hours_month'`).bind(ORG).first('n')).toBe(0)
   })
 
   it('IMP-02 a file over the size limit is refused at preflight; more than 2 MB of text says what was learned', async () => {

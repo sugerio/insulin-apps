@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { inflateRawSync } from 'node:zlib'
+import { sha256 } from './fakes.ts'
 import { ask, createCollection, doc, learn, makeEngine, outboxEvents } from './helpers.ts'
 
 const SIX_MINUTES = 6 * 60_000
@@ -77,14 +78,14 @@ test('documents: the list, the redacted text with its page map, and facts with t
   await createCollection(t)
   await learn(t, 'c1', 'imp-1', [doc(1)])
   const [d] = (await t.api('GET', '/v1/collections/c1/documents')).body.documents
-  assert.deepEqual(Object.keys(d).sort(), ['active', 'addedAt', 'bytes', 'documentId', 'kind', 'name', 'pages', 'sha256', 'textBytes', 'type', 'version'])
+  assert.deepEqual(Object.keys(d).sort(), ['active', 'addedAt', 'bytes', 'documentId', 'hiddenValues', 'kind', 'name', 'pages', 'sha256', 'textBytes', 'type', 'version'])
   assert.equal(d.version, 1)
   const text = (await t.api('GET', `/v1/collections/c1/documents/${d.documentId}`)).body
   assert.deepEqual(Object.keys(text).sort(), ['document', 'hidden', 'pages', 'text'])
   const facts = (await t.api('GET', '/v1/collections/c1/facts')).body
   assert.equal(facts.next, null)
   assert.ok(facts.facts.length >= 1)
-  assert.deepEqual(Object.keys(facts.facts[0]).sort(), ['documentId', 'factId', 'passageId', 'sentence', 'sourceSentence'])
+  assert.deepEqual(Object.keys(facts.facts[0]).sort(), ['documentId', 'factId', 'passageId', 'passageTextHash', 'sentence', 'sourceSentence'])
 })
 
 function unzip(bytes: Uint8Array): Map<string, string> {
@@ -151,4 +152,33 @@ test('a large export is stored in equal parts', async () => {
   await sink.close()
   assert.equal(t.files.objects.get('exports/test.zip')!.body.length, 7000)
   assert.ok(t.files.multipart >= 1)
+})
+
+test('documents count their hidden values, facts carry their passage hash, and settings keep backupDays', async () => {
+  const t = makeEngine()
+  const created = await t.api('PUT', '/v1/collections/c1', {})
+  assert.equal(created.body.settings.backupDays, 30)
+  await learn(t, 'c1', 'imp-1', [doc(1, 'Write to dana.reyes@example.com or sam.okafor@example.com.')])
+  const [d] = (await t.api('GET', '/v1/collections/c1/documents')).body.documents
+  assert.equal(d.hiddenValues, 2)
+  const [fact] = (await t.api('GET', '/v1/collections/c1/facts')).body.facts
+  // The fake container's fact comes from the document's first paragraph.
+  assert.equal(fact.passageTextHash, sha256('# Document 1'))
+  assert.equal((await t.api('PUT', '/v1/collections/c1', { settings: { backupDays: 0 } })).status, 400)
+  assert.equal((await t.api('PUT', '/v1/collections/c1', { settings: { backupDays: 7 } })).body.settings.backupDays, 7)
+})
+
+test('daily backups are kept backupDays days; the latest is kept for good', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await t.api('PUT', '/v1/collections/c1', { settings: { backupDays: 2 } })
+  for (let day = 0; day < 4; day++) {
+    await learn(t, 'c1', `imp-${day}`, [doc(day + 1)])
+    t.advance(11 * 60_000)
+    await t.drain('c1')
+    t.advance(24 * 60 * 60_000)
+  }
+  const daily = t.backups.keys().filter((k) => k.includes('/daily/'))
+  assert.ok(daily.length <= 3 && daily.length >= 1, daily.join(', '))
+  assert.ok(t.backups.keys().some((k) => k.endsWith('latest.json')))
 })

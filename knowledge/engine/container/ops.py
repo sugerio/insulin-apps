@@ -85,6 +85,11 @@ class Progress:
         self.path = Path(path) if path else None
         self.state = {"done": 0, "total": total, "current": None, "files": {}}
 
+    def read(self) -> None:
+        self.state["read"] = True
+        if self.path:
+            write_json(self.path, self.state)
+
     def file(self, file_id: str | None, state: str, done: int | None = None) -> None:
         if file_id:
             self.state["files"][file_id] = state
@@ -150,11 +155,12 @@ def chunks_by_document(document_ids: set[str]) -> dict[str, list[dict]]:
     return out
 
 
-def index_passages(document_ids: list[str]) -> int:
-    from passages import build_index
+def index_passages(document_ids: list[str]) -> tuple[int, set[str]]:
+    """Writes each document's passage index. Returns the passages indexed and the documents cut at the cap."""
+    from passages import PASSAGE_CAP, build_index
 
     chunks = chunks_by_document(set(document_ids))
-    total = 0
+    total, capped = 0, set()
     for document_id in document_ids:
         stored = load_text(document_id)
         if not stored:
@@ -162,7 +168,20 @@ def index_passages(document_ids: list[str]) -> int:
         index = build_index(document_id, stored["text"], stored["pages"], chunks.get(document_id, []))
         write_json(PASSAGES_DIR / f"{document_id}.json", index)
         total += len(index)
-    return total
+        if len(chunks.get(document_id, [])) > PASSAGE_CAP:
+            capped.add(document_id)
+    return total, capped
+
+
+def rehide(stored: dict, rules: dict):
+    """A saved redacted text with the rules in force now: its [hidden] marks stay, new matches are hidden too."""
+    import hide
+    from offsets import Utf16
+
+    units = Utf16(stored["text"])
+    pages = [{"page": p["page"], "start": units.from_utf16(p["start"]), "end": units.from_utf16(p["end"])} for p in stored.get("pages") or []]
+    keep = [hide.Span(units.from_utf16(h["start"]), units.from_utf16(h["end"]), h["kind"]) for h in stored.get("hidden") or []]
+    return hide.apply(stored["text"], rules, pages, keep=keep)
 
 
 def all_passages() -> dict[str, dict]:
@@ -263,21 +282,34 @@ async def op_ingest(args) -> dict:
     prepared: list[dict] = []
     documents: list[dict] = []
 
+    rules = dict(batch.get("hiding") or {})
+    if test.get("detectorError"):
+        rules["_fail"] = True
+
+    def saved(document_id: str, name: str) -> dict:
+        """A text an earlier step saved (already redacted), hidden again with the rules in force now."""
+        stored = read_json(batch_dir / f"{document_id}.json", None)
+        if not stored:
+            raise Stop(f"The saved text of “{name}” is missing.", permanent=True)
+        (batch_dir / f"{document_id}.json").unlink(missing_ok=True)
+        try:
+            redaction = rehide(stored, rules)
+        except hide.HidingError as error:
+            raise Stop("Hiding sensitive information failed, so nothing from this import was stored.") from error
+        return to_stored(document_id, stored.get("kind", "file"), name, stored.get("type", ""), redaction, stored.get("pageCount"), stored.get("truncated"), stored.get("note"))
+
     if batch["kind"] == "relearn":
         for doc in batch["documents"]:
-            stored = read_json(batch_dir / f"{doc['documentId']}.json", None)
-            if not stored:
-                raise Stop(f"The stored text of “{doc['name']}” is missing.", permanent=True)
-            stored.update({"documentId": doc["documentId"], "kind": doc["kind"], "name": doc["name"]})
+            stored = saved(doc["documentId"], doc["name"])
+            stored.update({"kind": doc["kind"]})
             prepared.append({"stored": stored, "fileId": None, "noteId": None})
-            (batch_dir / f"{doc['documentId']}.json").unlink(missing_ok=True)
     else:
-        rules = dict(batch.get("hiding") or {})
-        if test.get("detectorError"):
-            rules["_fail"] = True
         # 1. Read and hide every file first: one that fails stops the import before anything is stored.
         for f in files:
             progress.file(f["fileId"], "reading")
+            if f.get("stored"):
+                prepared.append({"stored": saved(f["documentId"], f["name"]), "fileId": f["fileId"], "noteId": None})
+                continue
             if test.get("crashFileId") == f["fileId"]:
                 os._exit(70)  # the harness's IMP-05: extraction crashes on this file every time
             original = batch_dir / f["fileId"]
@@ -298,6 +330,11 @@ async def op_ingest(args) -> dict:
             )
             prepared.append({"stored": stored, "fileId": f["fileId"], "noteId": None})
         for n in notes:
+            if n.get("stored"):
+                stored = saved(n["documentId"], n.get("title") or "Note")
+                stored.update({"kind": "note"})
+                prepared.append({"stored": stored, "fileId": None, "noteId": n["noteId"]})
+                continue
             try:
                 redaction = hide.apply(n["text"], rules)
             except hide.HidingError as error:
@@ -305,12 +342,17 @@ async def op_ingest(args) -> dict:
             stored = to_stored(n["documentId"], "note", n.get("title") or "Note", "text/markdown", redaction, None, False, None)
             prepared.append({"stored": stored, "fileId": None, "noteId": n["noteId"]})
 
+    # Everything is read and hidden: the redacted texts are written now, and the progress says so, so the Durable
+    # Object saves them and deletes the originals before learning starts.
+    for item in prepared:
+        store_text(item["stored"])
+    progress.read()
+
     # 2. Learn the redacted text, one document at a time.
     previous_facts = len(read_json(FACTS_PATH, {"facts": []}).get("facts", []))
     for done, item in enumerate(prepared):
         stored = item["stored"]
         progress.file(item["fileId"], "understanding", done)
-        store_text(stored)
         await learn(stored["documentId"], stored["text"])
         progress.file(item["fileId"], "learned", done + 1)
         documents.append(
@@ -329,7 +371,13 @@ async def op_ingest(args) -> dict:
         )
 
     # 3. Passages, the corrections' marks and facts.
-    passages = index_passages([d["documentId"] for d in documents])
+    passages, capped = index_passages([d["documentId"] for d in documents])
+    from passages import PASSAGE_CAP
+
+    for d in documents:
+        if d["documentId"] in capped:
+            d["truncated"] = True
+            d["reason"] = f"Only the first {PASSAGE_CAP:,} passages of this file are used."
     marks = []
     for n in notes:
         for ref in n.get("outdated") or []:

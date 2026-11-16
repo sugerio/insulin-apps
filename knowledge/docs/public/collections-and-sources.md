@@ -37,8 +37,8 @@ On a collection's **Sources** tab, its owner, admins and editors can add three k
   says so.
 - **Add a web page**: the address of a public page (http or https). Knowledge reads it at once; add it again to read
   it again. Pages on private or local networks can't be added.
-- **Write a note**: a few lines in your own words. A note is learned like a file and cited as a note. Notes go ahead
-  of files waiting to be learned.
+- **Write a note**: a few lines in your own words, up to 20,000 characters (add a longer text as a file). A note is
+  learned like a file and cited as a note. Notes go ahead of files waiting to be learned.
 
 Before Insulin reads anything, it hides e-mail addresses, phone numbers, card numbers, API keys and values labelled as
 passwords or secrets. See [Hiding personal data](/docs/knowledge/hiding-personal-data).
@@ -98,10 +98,13 @@ Adding files takes three calls, each needing the collection's Editor role (see
 
 1. `POST /api/collections/{id}/preflight` with `{ "files": [{ "name", "bytes" }] }`: each file is accepted, with a
    `fileId`, or refused with a `reason`.
-2. `PUT /api/collections/{id}/uploads/{fileId}` with the file's bytes as the body, its name in `x-file-name`
-   (URI-encoded) and optionally its SHA-256 in `x-file-sha256`. A scanned PDF answers `accepted: false` with its reason.
+2. `PUT /api/collections/{id}/uploads/{fileId}` with the file's bytes as the body (it keeps the name preflight was
+   given) and optionally its SHA-256 in `x-file-sha256`. A scanned PDF answers `accepted: false` with its reason.
 3. `POST /api/collections/{id}/imports` with `{ "fileIds": [...] }` and an `Idempotency-Key`: the import's progress is
-   at `GET /api/collections/{id}/imports/{importId}`.
+   at `GET /api/collections/{id}/imports/{importId}`. When the organization has learned this month's documents, the
+   import answers `state: "waiting"` with `waiting: { until, message }`, and starts by itself then. A file Insulin
+   couldn't keep until then (uploaded more than a day before) is named in `message` and listed as `failed`: add it
+   again.
 
-A note is `POST /api/collections/{id}/notes` with `{ "title", "text" }`, and a web page
+A note is `POST /api/collections/{id}/notes` with `{ "title", "text" }` (text up to 20,000 characters), and a web page
 `POST /api/collections/{id}/web-pages` with `{ "url" }`, each with an `Idempotency-Key`.

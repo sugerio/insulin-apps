@@ -6,14 +6,18 @@
 // GET /__insulin/limits serves its defaults unless an admin set another.
 //
 //   import { limitsCatalogSql } from '.github/hosting/gateway/scripts/limits-catalog.mjs'
-//   writeFileSync(file, limitsCatalogSql([{ name: 'knowledge', limits: pkg.insulin.limits }]))
-//   wrangler d1 execute <gateway database> --remote --config <gateway config> --file <file>
+//   const sql = limitsCatalogSql([{ name: 'knowledge', limits: pkg.insulin.limits }])
+//   wrangler d1 execute <gateway database> --remote --config <gateway config> --command "<sql>"
+//
+// --command, D1's query path: --file goes through D1's import, which makes the database unavailable while it runs.
+// (The local run's `--local --file` reads the file into the local database, with no import.)
 //
 //   node scripts/limits-catalog.mjs <app directory>... [--out <file>]   # the SQL for those apps' package.json files
 //
 // For each app it names, the SQL replaces the app's whole catalog: limits the app no longer lists are removed (an
-// admin's default or an organization's override of one stays stored, unused, and applies again if the key returns).
-// An app named with no limits has its catalog emptied. Apps it doesn't name are left as they are.
+// admin's default or an organization's override of one stays stored, unused, and applies again if the key returns:
+// the organizations that hold one are listed again at the app's next read, with all their overrides). An app named
+// with no limits has its catalog emptied. Apps it doesn't name are left as they are.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 
@@ -75,6 +79,19 @@ export function limitsCatalogSql(apps, { now = Date.now() } = {}) {
   for (const app of apps) {
     const limits = app.limits ?? []
     const keys = limits.map((limit) => text(limit.key))
+    if (keys.length) {
+      // Keys coming (back) into the catalog: the organizations with an override of one get the next change numbers, one
+      // each, so GET /__insulin/limits lists them again with it. Read before the catalog changes, so "not in it" is now.
+      const returning = `SELECT DISTINCT l.org_id FROM org_app_limits l WHERE l.app = ${text(app.name)} AND l.key IN (${keys.join(', ')})
+         AND NOT EXISTS (SELECT 1 FROM app_limit_catalog c WHERE c.app = l.app AND c.key = l.key)`
+      statements.push(
+        `UPDATE app_limit_sequence SET seq = seq + (SELECT COUNT(*) FROM (${returning})) WHERE id = 1;`,
+        `INSERT INTO org_app_limit_changes (app, org_id, seq)
+         SELECT ${text(app.name)}, r.org_id, (SELECT seq FROM app_limit_sequence WHERE id = 1) - r.total + r.n
+         FROM (SELECT org_id, ROW_NUMBER() OVER (ORDER BY org_id) AS n, COUNT(*) OVER () AS total FROM (${returning})) r WHERE true
+         ON CONFLICT (app, org_id) DO UPDATE SET seq = excluded.seq;`,
+      )
+    }
     statements.push(keys.length
       ? `DELETE FROM app_limit_catalog WHERE app = ${text(app.name)} AND key NOT IN (${keys.join(', ')});`
       : `DELETE FROM app_limit_catalog WHERE app = ${text(app.name)};`)

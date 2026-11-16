@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { CollectionRow } from '../access.ts'
+import { HAS_ROLE_SQL, type CollectionRow } from '../access.ts'
 import type { AppEnv } from '../env.ts'
 import { ApiError, browserOnly, forbidden, logError, readJson } from '../http.ts'
 import { applyHiding } from '../hiding.ts'
@@ -44,10 +44,7 @@ function requireRules(c: Ctx): Caller {
 /** Collections the caller has a role in (owner, general access, own share). */
 async function collectionsWithRole(db: D1Database, caller: Caller): Promise<CollectionRow[]> {
   const { results } = await db.prepare(
-    `SELECT c.* FROM collections c WHERE c.org_id = ?1 AND c.state = 'active' AND (
-       (?2 = 'person' AND (c.owner_id = ?3 OR c.general_role IS NOT NULL))
-       OR EXISTS (SELECT 1 FROM collection_shares s WHERE s.collection_id = c.id AND s.org_id = ?1 AND s.principal_type = ?2 AND s.principal_id = ?3 AND s.status = 'active'))
-     ORDER BY lower(c.name)`,
+      `SELECT c.* FROM collections c WHERE c.org_id = ?1 AND c.state = 'active' AND ${HAS_ROLE_SQL} ORDER BY lower(c.name)`,
   ).bind(caller.organizationId, caller.kind, caller.id).all<CollectionRow>()
   return results
 }

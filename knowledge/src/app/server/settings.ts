@@ -3,6 +3,7 @@ import type { CollectionRow } from './access.ts'
 import { EngineClient } from './engine/client.ts'
 import type { Bindings } from './env.ts'
 import { logError } from './http.ts'
+import { effectiveLimit } from './limits.ts'
 
 /**
  * An organization's Rules and data (table `org_settings`): its time zone (until insulinapps.com keeps one), who
@@ -14,8 +15,13 @@ export interface OrgSettings {
   timeZone: string
   answerWriter: { kind: 'builtin' } | { kind: 'own'; integrationKey: string; url: string; model: string }
   hiding: HidingRules
+  /** Days of daily backups the engine keeps: the organization's backup_days limit. */
+  backupDays: number
   version: number
 }
+
+/** "Unlimited" days of daily backups, as a number the engine can keep to. */
+const UNLIMITED_BACKUP_DAYS = 3650
 
 export const DEFAULT_HIDING: HidingRules = { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: [] }
 
@@ -29,9 +35,10 @@ interface SettingsRow {
   version: number
 }
 
-export async function readOrgSettings(db: D1Database, org: string): Promise<OrgSettings> {
+export async function readOrgSettings(db: D1Database, org: string, now = Date.now()): Promise<OrgSettings> {
+  const backupDays = (await effectiveLimit(db, org, 'backup_days', now)) ?? UNLIMITED_BACKUP_DAYS
   const row = await db.prepare(`SELECT time_zone, answer_writer, integration_key, model_url, model, hiding, version FROM org_settings WHERE org_id = ?`).bind(org).first<SettingsRow>()
-  if (!row) return { timeZone: 'UTC', answerWriter: { kind: 'builtin' }, hiding: DEFAULT_HIDING, version: 0 }
+  if (!row) return { timeZone: 'UTC', answerWriter: { kind: 'builtin' }, hiding: DEFAULT_HIDING, backupDays, version: 0 }
   let hiding = DEFAULT_HIDING
   try {
     hiding = { ...DEFAULT_HIDING, ...(JSON.parse(row.hiding) as Partial<HidingRules>) }
@@ -41,7 +48,7 @@ export async function readOrgSettings(db: D1Database, org: string): Promise<OrgS
   const answerWriter = row.answer_writer === 'own' && row.integration_key && row.model_url && row.model
     ? { kind: 'own' as const, integrationKey: row.integration_key, url: row.model_url, model: row.model }
     : { kind: 'builtin' as const }
-  return { timeZone: row.time_zone, answerWriter, hiding, version: row.version }
+  return { timeZone: row.time_zone, answerWriter, hiding, backupDays, version: row.version }
 }
 
 export function keepReadyOf(collection: Pick<CollectionRow, 'keep_ready' | 'keep_ready_paused'>, timeZone: string): KeepReady | null {
@@ -55,10 +62,13 @@ export function keepReadyOf(collection: Pick<CollectionRow, 'keep_ready' | 'keep
 }
 
 export function engineSettings(collection: Pick<CollectionRow, 'keep_ready' | 'keep_ready_paused' | 'awake_minutes'>, org: OrgSettings): CollectionSettings {
-  return { hiding: org.hiding, keepReady: keepReadyOf(collection, org.timeZone), awakeMinutes: collection.awake_minutes }
+  return { hiding: org.hiding, keepReady: keepReadyOf(collection, org.timeZone), awakeMinutes: collection.awake_minutes, backupDays: org.backupDays }
 }
 
-/** Tells the engine a collection's settings; on success records the organization settings version it now has. */
+/**
+ * Tells the engine a collection's settings; on success records the organization settings version it now has. On
+ * failure the collection is marked behind (version -1), so the tick sends them again.
+ */
 export async function pushSettings(env: Bindings, collection: CollectionRow, org: OrgSettings, now: number): Promise<boolean> {
   if (!env.ENGINE) return false
   try {
@@ -67,6 +77,7 @@ export async function pushSettings(env: Bindings, collection: CollectionRow, org
     return true
   } catch (error) {
     logError('settings_push_failed', error, { org: collection.org_id })
+    await env.DB.prepare(`UPDATE collections SET settings_version = -1 WHERE id = ?1 AND org_id = ?2`).bind(collection.id, collection.org_id).run()
     return false
   }
 }

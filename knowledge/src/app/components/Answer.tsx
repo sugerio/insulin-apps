@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button.tsx'
+import { Checkbox } from '@/components/ui/checkbox.tsx'
 import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group.tsx'
@@ -8,7 +9,7 @@ import { api, collectionPath } from '../lib/api.ts'
 import type { AskAnswer, AskSource, CollectionSummary, ImportStatus, Report } from '../lib/types.ts'
 import { canChange } from './CollectionParts.tsx'
 import { ActionError, Badge, Banner, Note } from './Feedback.tsx'
-import { FINAL, useImportWatch } from './ImportProgress.tsx'
+import { FINAL, nextMonth, useImportWatch } from './ImportProgress.tsx'
 import type { SourceTarget } from './SourceViewer.tsx'
 
 // Asking on the site (design J2, J4, J5, section 10): the written answer with numbered sources that open the text at
@@ -232,6 +233,7 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
 }) {
   const [text, setText] = useState('')
   const [outdated, setOutdated] = useState(sources[0]?.passageId ?? '')
+  const [notify, setNotify] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [started, setStarted] = useState<ImportStatus | null>(null)
@@ -243,7 +245,7 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
     const source = sources.find((candidate) => candidate.passageId === outdated)
     try {
       const body = await api.create<{ import: ImportStatus }>(collectionPath(collection.id, '/corrections'), {
-        text: text.trim(), question, ...(source ? { outdated: [{ documentId: source.documentId, textHash: source.textHash }] } : {}), ...(reportId ? { reportId } : {}),
+        text: text.trim(), question, ...(source ? { outdated: [{ documentId: source.documentId, textHash: source.textHash }], notifyAuthors: notify } : {}), ...(reportId ? { reportId } : {}),
       })
       setStarted(body.import)
     } catch (failure) {
@@ -257,7 +259,7 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
     const failed = status && FINAL.has(status.state) && status.state !== 'committed'
     return (
       <div className="flex flex-col gap-3 rounded-lg border p-4" data-fix="">
-        {step < 4 && !failed ? (
+        {step < 4 && !failed && status?.state !== 'waiting' ? (
           <ol className="flex flex-col gap-1 text-sm" aria-label="Fixing">
             {FIX_STEPS.map((label, index) => (
               <li key={label} className={index + 1 < step ? 'text-emerald-700 dark:text-emerald-400' : index + 1 === step ? 'font-medium' : 'text-muted-foreground'}>
@@ -267,6 +269,9 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
           </ol>
         ) : null}
         {failed ? <Banner kind="danger">{status?.error?.message ?? "The correction couldn't be learned."} Nothing was changed. Try again.</Banner> : null}
+        {status?.state === 'waiting' ? (
+          <Banner kind="info">Your organization has learned this month's documents, so {collection.name} learns your correction on {nextMonth()}, by itself. Until then, answers stay as they are.</Banner>
+        ) : null}
         {step === 4 ? (
           <Banner kind="ok" title="Fixed." action={<Button type="button" size="sm" onClick={onAskAgain}>Ask again</Button>}>
             New questions on this site and from AI assistants use your correction. Answers already given don't change.
@@ -280,7 +285,7 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
       <h3 className="font-semibold">Fix this answer once. It changes everywhere.</h3>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="fix-text">What's the right answer?</Label>
-        <Textarea id="fix-text" required rows={4} value={text} onChange={(event) => setText(event.target.value)} />
+        <Textarea id="fix-text" required rows={4} maxLength={20000} value={text} onChange={(event) => setText(event.target.value)} />
       </div>
       {sources.length ? (
         <fieldset className="flex flex-col gap-2">
@@ -300,6 +305,12 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
             </div>
           </RadioGroup>
         </fieldset>
+      ) : null}
+      {outdated ? (
+        <div className="flex items-start gap-2">
+          <Checkbox id="fix-notify" checked={notify} onCheckedChange={(value) => setNotify(value === true)} className="mt-0.5" />
+          <Label htmlFor="fix-notify" className="font-normal leading-snug">Tell the person who added this file, so they can update it too. They get an e-mail with a link, not your correction.</Label>
+        </div>
       ) : null}
       <Note>Insulin saves your correction as a note and learns it, in about a minute. Questions to {collection.name} wait meanwhile. The source you pick stays, marked as corrected.</Note>
       <ActionError error={error} />

@@ -16,6 +16,7 @@ import {
   type ImportNote,
   type ImportRequest,
   type ImportStatus,
+  type KeepStagedRequest,
   type OutboxPage,
   type RemoveResult,
   type RestorePoint,
@@ -109,6 +110,14 @@ export class EngineClient {
     if (file.bytes !== undefined) headers['content-length'] = String(file.bytes)
     const response = await this.call('PUT', `/v1/collections/${EngineClient.id(collectionId)}/inbox/${EngineClient.id(fileId)}`, body, headers)
     return (await response.json()) as { fileId: string; bytes: number; sha256: string }
+  }
+
+  /**
+   * Keeps staged files past the day the engine otherwise keeps them, for an import waiting for the 1st (`until` at most
+   * 45 days ahead). Answers the ids it still had and now keeps; the others are gone.
+   */
+  keepStaged(collectionId: string, request: KeepStagedRequest): Promise<{ kept: string[] }> {
+    return this.json('POST', `/v1/collections/${EngineClient.id(collectionId)}/inbox/keep`, request)
   }
 
   startImport(collectionId: string, request: ImportRequest): Promise<ImportStatus> {

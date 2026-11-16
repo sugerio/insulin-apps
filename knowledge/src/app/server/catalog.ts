@@ -32,7 +32,12 @@ const ids = { type: 'array', minItems: 1, maxItems: 5, items: { type: 'string' }
 const COMMON = ['unauthorized', 'forbidden']
 const IN_COLLECTION = [...COMMON, 'not_found', 'assistants_off', 'deleting']
 const QUOTA = 'quota_exceeded (429: { error, limit, resets_at, message })'
-const CHANGE = [...IN_COLLECTION, 'busy_learning', 'idempotency_key_required', 'idempotency_key_reused', 'engine_unavailable']
+/** A change the engine makes, without an Idempotency-Key. */
+const ENGINE_CHANGE = [...IN_COLLECTION, 'bad_request', 'busy_learning', 'engine_unavailable']
+/** A change that needs an Idempotency-Key. */
+const CHANGE = [...ENGINE_CHANGE, 'idempotency_key_required', 'idempotency_key_reused', 'conflict (the same request is still running)']
+/** The engine works, so awake hours count: refused at the organization's limit. */
+const AWAKE = 'quota_exceeded (429, limit awake_hours_month)'
 
 const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/me', summary: 'Who is calling: the organization, the role in Knowledge and its permissions', query: null, body: null, idempotencyKey: false, permission: null, errors: COMMON },
@@ -65,7 +70,7 @@ const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/collections/{id}/facts', summary: 'What a collection knows: facts as sentences, each with its source sentence and who checked it', query: { type: 'object', properties: { cursor: { type: 'string' } } }, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
   { method: 'POST', path: '/api/collections/{id}/facts/{factId}/check', summary: 'Mark a fact as checked ("Looks right"), with your name', query: null, body: null, idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, 'bad_request'] },
   {
-    method: 'GET', path: '/api/attention', summary: 'Needs attention: files Insulin couldn\'t read, values hidden before learning and reported answers waiting, in the collections you can change',
+    method: 'GET', path: '/api/attention', summary: 'Needs attention: files Insulin couldn\'t read, values hidden before learning, reported answers waiting and corrections to check, in the collections you can change',
     query: { type: 'object', properties: { collection: { type: 'string', description: 'Only this collection' } } }, body: null, idempotencyKey: false, permission: 'knowledge.collections.edit', errors: [...IN_COLLECTION],
   },
   { method: 'GET', path: '/api/collections/{id}/history', summary: 'Restore points, newest first, and whether each can be brought back', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
@@ -77,21 +82,21 @@ const ENTRIES: Entry[] = [
   },
   { method: 'GET', path: '/api/collections/{id}/reports', summary: 'Reported answers and whether each is open, fixed or dismissed', query: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'fixed', 'dismissed'] }, answerId: { type: 'string' } } }, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: IN_COLLECTION },
   {
-    method: 'POST', path: '/api/collections/{id}/notes', summary: 'Add a note; the collection learns it in about a minute (questions wait meanwhile)',
-    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { title: str('A title', 200), text: str('The note', 100_000) } },
+    method: 'POST', path: '/api/collections/{id}/notes', summary: 'Add a note; the collection learns it in about a minute (questions wait meanwhile). When the organization has learned this month\'s documents, it waits and is learned on the 1st: `waiting` says until when.',
+    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { title: str('A title', 200), text: str('The note', 20_000) } },
     idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA],
   },
   {
     method: 'POST', path: '/api/collections/{id}/preflight', summary: 'Before adding files: which can be learned and which can\'t (with the reason), within your organization\'s limits. Gives a fileId for each file to upload.',
-    query: null, body: { type: 'object', required: ['files'], properties: { files: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', required: ['name', 'bytes'], properties: { name: str('The file name, with its extension', 255), bytes: { type: 'integer', minimum: 1 }, type: str('Its media type', 200) } } } } },
-    idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, QUOTA],
+    query: null, body: { type: 'object', required: ['files'], properties: { files: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', required: ['name', 'bytes'], properties: { name: str('The file name, with its extension', 255), bytes: { type: 'integer', minimum: 0, description: 'Its size; an empty file is named as such' }, type: str('Its media type', 200) } } } } },
+    idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, 'bad_request', QUOTA],
   },
   {
-    method: 'PUT', path: '/api/collections/{id}/uploads/{fileId}', summary: 'Upload a file preflight accepted: the raw bytes as the body, its name in x-file-name (URI-encoded), optionally its SHA-256 in x-file-sha256',
-    query: null, body: { type: 'string', contentMediaType: 'application/octet-stream' }, idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, 'payload_too_large', 'unsupported_type'],
+    method: 'PUT', path: '/api/collections/{id}/uploads/{fileId}', summary: 'Upload a file preflight accepted (it keeps the name preflight was given): the raw bytes as the body, optionally their SHA-256 in x-file-sha256. Answers accepted: false, with the reason, for a PDF that is only a scanned image.',
+    query: null, body: { type: 'string', contentMediaType: 'application/octet-stream' }, idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...ENGINE_CHANGE, 'quota_exceeded (429, limit file_bytes)', 'payload_too_large', 'unsupported_type'],
   },
   {
-    method: 'POST', path: '/api/collections/{id}/imports', summary: 'Learn uploaded files, all or nothing. Questions to the collection wait while it learns.',
+    method: 'POST', path: '/api/collections/{id}/imports', summary: 'Learn uploaded files, all or nothing. Questions to the collection wait while it learns. When the organization has learned this month\'s documents, the files wait and are learned on the 1st: `waiting` says until when, and names a file Insulin couldn\'t keep until then (listed as failed, to add again).',
     query: null, body: { type: 'object', required: ['fileIds'], additionalProperties: false, properties: { fileIds: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string' } } } },
     idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'capacity'],
   },
@@ -104,12 +109,12 @@ const ENTRIES: Entry[] = [
   {
     method: 'PATCH', path: '/api/collections/{id}/sources/{docId}', summary: 'Stop using a file (kept, not used for answers) or use it again; a restore point either way',
     query: null, body: { type: 'object', required: ['active'], additionalProperties: false, properties: { active: { type: 'boolean' } } },
-    idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: CHANGE,
+    idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: ENGINE_CHANGE,
   },
-  { method: 'DELETE', path: '/api/collections/{id}/sources/{docId}', summary: 'Remove a file for good: its text goes, and restore points that held it can no longer be brought back', query: null, body: null, idempotencyKey: false, permission: 'knowledge.collections.share', collectionRole: 'ADMIN', errors: CHANGE },
+  { method: 'DELETE', path: '/api/collections/{id}/sources/{docId}', summary: 'Remove a file for good: its text goes, and restore points that held it can no longer be brought back. Answers the version the removal commits as.', query: null, body: null, idempotencyKey: false, permission: 'knowledge.collections.share', collectionRole: 'ADMIN', errors: [...ENGINE_CHANGE, AWAKE] },
   {
     method: 'POST', path: '/api/collections/{id}/corrections', summary: 'Fix an answer or a fact once: a note the collection learns, marking the passages it corrects as outdated. New questions use it everywhere.',
-    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { text: str('The right answer', 20_000), question: str('The question it answers', 2000), outdated: { type: 'array', maxItems: 20, items: { type: 'object', required: ['documentId', 'textHash'], properties: { documentId: { type: 'string' }, textHash: { type: 'string' } } } }, factId: str('A fact from /facts to correct', 200), reportId: str('A report this settles', 64) } },
+    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { text: str('The right answer', 20_000), question: str('The question it answers', 2000), outdated: { type: 'array', maxItems: 20, items: { type: 'object', required: ['documentId', 'textHash'], properties: { documentId: { type: 'string' }, textHash: { type: 'string' } } } }, factId: str('A fact from /facts to correct', 200), reportId: str('A report this settles, once the correction is learned', 64), notifyAuthors: { type: 'boolean', description: 'E-mail the people who added the files it corrects (a link, not the correction)' } } },
     idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA],
   },
   {
@@ -117,8 +122,8 @@ const ENTRIES: Entry[] = [
     query: null, body: { type: 'object', required: ['status'], additionalProperties: false, properties: { status: { type: 'string', enum: ['fixed', 'dismissed'] }, correctionId: { type: 'string' } } },
     idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: IN_COLLECTION,
   },
-  { method: 'POST', path: '/api/collections/{id}/history/{version}/go-back', summary: 'Answer from an earlier restore point; later files are set aside, not deleted, and it can be undone', query: null, body: null, idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, 'not_restorable'] },
-  { method: 'POST', path: '/api/collections/{id}/history/undo', summary: 'Undo the last go back', query: null, body: null, idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, 'not_restorable'] },
+  { method: 'POST', path: '/api/collections/{id}/history/{version}/go-back', summary: 'Answer from an earlier restore point; later files are set aside, not deleted, and it can be undone', query: null, body: null, idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, 'not_restorable', AWAKE] },
+  { method: 'POST', path: '/api/collections/{id}/history/undo', summary: 'Undo the last change: go back to the version before it', query: null, body: null, idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, 'not_restorable (nothing to undo)', AWAKE] },
   { method: 'PATCH', path: '/api/collections/{id}', summary: 'Change a collection\'s name, purpose, AI assistants switch or keep-ready window', query: null, body: null, idempotencyKey: false, permission: 'knowledge.collections.share', collectionRole: 'ADMIN', browserOnly: true, errors: [] },
   { method: 'DELETE', path: '/api/collections/{id}', summary: 'Delete a collection', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'OWNER', browserOnly: true, errors: [] },
   { method: 'POST', path: '/api/collections/{id}/transfer', summary: 'Transfer ownership', query: null, body: null, idempotencyKey: true, permission: 'knowledge.collections.share', collectionRole: 'OWNER', browserOnly: true, errors: [] },

@@ -47,7 +47,7 @@ export const collectionsAndSources: DocTopic = {
           <ul>
             <li><b>Upload files</b>: PDF (with text), Word (.docx), PowerPoint (.pptx), Excel (.xlsx), Markdown (.md), plain text (.txt) and web pages saved as HTML, up to 100 at a time. Each file can be up to your organization's largest-file limit, 25 MB by default. At most 2 MB of text is learned from one file; if a file has more, Knowledge says so.</li>
             <li><b>Add a web page</b>: the address of a public page (http or https). Knowledge reads it now; add it again to read it again. Pages on private or local networks can't be added.</li>
-            <li><b>Write a note</b>: a few lines in your own words, such as "Since October, partner managers approve requests up to $50,000." A note is learned like a file and cited as a note. Notes go ahead of files that are waiting to be learned.</li>
+            <li><b>Write a note</b>: a few lines in your own words, such as "Since October, partner managers approve requests up to $50,000." A note is learned like a file and cited as a note, and can be up to 20,000 characters (add a longer text as a file). Notes go ahead of files that are waiting to be learned.</li>
           </ul>
           <p>
             Before Insulin reads anything, it hides e-mail addresses, phone numbers, card numbers, API keys and values labelled

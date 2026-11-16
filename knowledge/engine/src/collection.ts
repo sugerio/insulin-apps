@@ -47,7 +47,7 @@ import * as exporter from './exporter.ts'
 export const EMPTY_COUNTS: CollectionCounts = { documents: 0, activeDocuments: 0, passages: 0, facts: 0, textBytes: 0 }
 export const EMPTY_STATE: AnswerState = { documents: [], marks: [], factsKey: null, facts: 0, passages: 0, textBytes: 0 }
 
-const STAGED_KEEP_MS = 24 * 60 * 60 * 1000
+const START_FAILURES_BEFORE_EXPIRED = 3
 
 export class CollectionEngine {
   state: DurableObjectState
@@ -121,6 +121,8 @@ export class CollectionEngine {
         return json(await this.status())
       case 'stageFile':
         return json(await imports.stage(this, requireId(params.fileId, 'The file id'), request))
+      case 'keepStaged':
+        return json(await imports.keepStaged(this, await readJson(request)))
       case 'startImport': {
         const { status, record } = await imports.submit(this, await readJson(request))
         return json(await imports.view(this, record), status)
@@ -297,17 +299,11 @@ export class CollectionEngine {
     if (!state.factsKey) return { facts: [], next: null }
     const object = await this.env.FILES.get(state.factsKey)
     if (!object) return { facts: [], next: null }
-    const all = ((await object.json()) as { facts: (Fact & { textHash?: string })[] }).facts ?? []
+    const all = ((await object.json()) as { facts: StoredFact[] }).facts ?? []
     const usable = factFilter(state, meta)
     const shown = all.filter(usable)
     const start = Math.max(0, Number(cursor) || 0)
-    const page = shown.slice(start, start + 100).map(({ factId, sentence, documentId, passageId, sourceSentence }) => ({
-      factId,
-      sentence,
-      documentId,
-      passageId,
-      sourceSentence,
-    }))
+    const page = shown.slice(start, start + 100).map(publicFact)
     return { facts: page, next: start + 100 < shown.length ? String(start + 100) : null }
   }
 
@@ -345,7 +341,7 @@ export class CollectionEngine {
 
     const current = await this.currentState(meta)
     try {
-      const found = await this.box.querySearch<{ passages: SearchResult['passages']; facts: (Fact & { textHash?: string })[] }>({
+      const found = await this.box.querySearch<{ passages: SearchResult['passages']; facts: StoredFact[] }>({
         query,
         topK,
         filters: searchFilters(current, meta),
@@ -361,7 +357,7 @@ export class CollectionEngine {
       const passages = (found.passages ?? [])
         .filter((p) => docs.get(p.documentId)?.active && !p.outdated)
         .map((p) => ({ ...p, documentName: docs.get(p.documentId)!.name, kind: docs.get(p.documentId)!.kind }))
-      const facts = (found.facts ?? []).filter(usable).map(({ textHash: _hash, ...fact }) => fact)
+      const facts = (found.facts ?? []).filter(usable).map(publicFact)
       return { status: 'ok', retryAfterSeconds: null, covered: passages.length > 0, passages, facts, version: meta.version }
     } catch (error) {
       await this.store.log('search-failed', { error: errorText(error) })
@@ -462,8 +458,8 @@ export class CollectionEngine {
       const next = nextWindowStart(meta.settings.keepReady, now)
       if (next) times.push(next)
     }
-    if ((await this.store.pendingEvents()).length) times.push(now + 30_000)
-    for (const staged of await this.store.listStaged()) times.push(Date.parse(staged.stagedAt) + STAGED_KEEP_MS)
+    if ((await this.store.pendingEvents()).length || (await this.state.storage.get('pendingDeletes'))) times.push(now + 30_000)
+    for (const staged of await this.store.listStaged()) times.push(imports.stagedExpiry(staged))
     for (const record of await this.store.listExports()) {
       if (record.status.expiresAt) times.push(Date.parse(record.status.expiresAt))
       if (record.status.state === 'queued') times.push(now)
@@ -502,6 +498,8 @@ export class CollectionEngine {
     await this.box.destroy('replaced')
     const instance = instances(this.env)[purpose]
     const started = clock.now()
+    // Running time counts from the start: starting, checking and putting files back are paid for too.
+    await this.chargeUsage(purpose === 'learning' || fromBackup ? 'learning' : await this.questionsUsageKind())
     this.box.start({
       snapshot: snapshot?.handle ?? null,
       instance,
@@ -519,6 +517,7 @@ export class CollectionEngine {
       image: this.box.image,
       dataFormat: health.dataFormat,
       phase: purpose === 'learning' ? 'busy' : 'starting',
+      phaseAt: iso(),
       startedAt: iso(started),
       checkJobId: null,
       queryStarted: false,
@@ -535,11 +534,12 @@ export class CollectionEngine {
   }
 
   /** The snapshot the current restore point runs on, if it can still be started. */
-  async currentSnapshot(meta: Meta): Promise<{ snapshot: SnapshotRecord | null; unusable: 'expired' | 'engine_changed' | null }> {
+  async currentSnapshot(meta: Meta): Promise<{ snapshot: SnapshotRecord | null; unusable: 'expired' | 'engine_changed' | 'damaged' | null }> {
     if (meta.version === 0) return { snapshot: null, unusable: null }
     const point = await this.store.getPoint(meta.version)
     const snapshot = point?.snapshotId ? ((await this.store.getSnapshot(point.snapshotId)) ?? null) : null
     if (!snapshot) return { snapshot: null, unusable: 'expired' }
+    if (snapshot.damaged) return { snapshot, unusable: 'damaged' }
     return { snapshot, unusable: history.snapshotProblem(snapshot, this.box.image) }
   }
 
@@ -564,8 +564,10 @@ export class CollectionEngine {
     const current = await this.currentSnapshot(meta)
     if (!running || !runtime || runtime.dirty || runtime.snapshotId !== (current.snapshot?.handle.id ?? null)) {
       if (current.unusable) {
+        // A removal for good waiting in the queue brings the files back itself, without the removed one.
+        if (meta.removals.length) return
         await this.updateMeta((m) => {
-          m.op = { kind: 'from_backup', reason: current.unusable!, startedAt: iso(), restartedAfterFailure: false }
+          m.op = { kind: 'from_backup', reason: current.unusable === 'damaged' ? 'repair' : current.unusable!, startedAt: iso(), restartedAfterFailure: false }
         })
         await this.store.log('snapshot-unusable', { version: meta.version, reason: current.unusable })
         return
@@ -576,30 +578,51 @@ export class CollectionEngine {
         await this.store.log('start-failed', { error: errorText(error) })
         await this.box.destroy('failed to start')
         await this.store.deleteRuntime()
-        // A snapshot that can't be started any more is treated as expired: the collection comes back from its backup.
+        // A snapshot that fails to start time after time is treated as gone: the collection comes back from its backup.
         if (current.snapshot) {
-          current.snapshot.expired = true
-          await this.store.putSnapshot(current.snapshot)
+          const key = `startFailures:${current.snapshot.handle.id}`
+          const failures = ((await this.state.storage.get<number>(key)) ?? 0) + 1
+          await this.state.storage.put(key, failures)
+          if (failures >= START_FAILURES_BEFORE_EXPIRED) {
+            current.snapshot.expired = true
+            await this.store.putSnapshot(current.snapshot)
+            await this.state.storage.delete(key)
+          }
         }
         return
       }
-      // Step 2: load the models while the checksum check runs. Nothing opens the databases yet.
-      await this.box.queryStart()
-      const check = await this.box.startJob('manifest')
-      runtime.phase = 'checking'
-      runtime.queryStarted = true
-      runtime.checkJobId = check.id
-      await this.store.putRuntime(runtime)
-      await this.store.log('checking', { job: check.id })
-      return
+      if (current.snapshot) await this.state.storage.delete(`startFailures:${current.snapshot.handle.id}`)
+      return this.beginCheck(runtime)
     }
 
+    // A wake that doesn't reach "ready" in time is stopped; the next alarm starts it again.
+    if (runtime.phase !== 'ready' && runtime.phase !== 'busy' && clock.now() - Date.parse(runtime.phaseAt ?? runtime.startedAt) > SETTINGS.wakeTimeoutMs) {
+      await this.store.log('wake-timed-out', { phase: runtime.phase })
+      await this.box.destroy('the wake took too long')
+      await this.store.deleteRuntime()
+      return
+    }
+    if (runtime.phase === 'starting') return this.beginCheck(runtime)
     if (runtime.phase === 'checking') return this.continueCheck(runtime, current.snapshot)
     if (runtime.phase === 'busy') {
       runtime.phase = 'opening'
+      runtime.phaseAt = iso()
       await this.store.putRuntime(runtime)
     }
     if (runtime.phase === 'opening') return this.continueOpen(runtime)
+  }
+
+  /** Step 2: load the models while the checksum check runs. Nothing opens the databases yet. Safe to repeat. */
+  async beginCheck(runtime: Runtime): Promise<void> {
+    await this.box.queryStart()
+    runtime.queryStarted = true
+    await this.store.putRuntime(runtime)
+    const check = await this.box.startJob('manifest')
+    runtime.phase = 'checking'
+    runtime.phaseAt = iso()
+    runtime.checkJobId = check.id
+    await this.store.putRuntime(runtime)
+    await this.store.log('checking', { job: check.id })
   }
 
   async continueCheck(runtime: Runtime, snapshot: SnapshotRecord | null): Promise<void> {
@@ -616,6 +639,7 @@ export class CollectionEngine {
     const match = job.state === 'succeeded' && (!expected || job.result?.digest === expected.digest)
     if (match) {
       runtime.phase = 'opening'
+      runtime.phaseAt = iso()
       await this.store.putRuntime(runtime)
       await this.store.log('checksum-ok', { snapshot: snapshot?.handle.id ?? null, files: job.result?.files })
       return this.continueOpen(runtime)
@@ -723,6 +747,12 @@ export class CollectionEngine {
     if (!runtime || !this.box.running) return null
     const meta = await this.meta()
     if (meta.active || meta.op?.kind === 'from_backup') return 'learning'
+    return this.questionsUsageKind()
+  }
+
+  /** A container for questions: kept ready (a window, nobody asking) or awake. */
+  async questionsUsageKind(): Promise<UsageKind> {
+    const meta = await this.meta()
     const now = clock.now()
     const lastQuestion = meta.lastQuestionAt ? Date.parse(meta.lastQuestionAt) : 0
     const window = windowAt(meta.settings.keepReady, now)
@@ -765,9 +795,10 @@ export class CollectionEngine {
 
   // ================================================================== the outbox
 
+  /** Adds an event; its de-duplication key is the collection's own, since the outbox serves every collection. */
   async event(key: string, event: Record<string, unknown>): Promise<void> {
     const meta = await this.meta()
-    await this.store.addEvents([{ key, event: { at: iso(), org: meta.org, collectionId: meta.collectionId, ...event } as PendingEvent['event'] }])
+    await this.store.addEvents([{ key: `${meta.org}:${meta.collectionId}:${key}`, event: { at: iso(), org: meta.org, collectionId: meta.collectionId, ...event } as PendingEvent['event'] }])
   }
 
   /** Writes pending events to the Outbox. They were committed first, so a failure here is retried later. */
@@ -790,17 +821,18 @@ export class CollectionEngine {
   async housekeeping(): Promise<void> {
     const meta = await this.meta()
     const now = clock.now()
-    // Staged files nobody imported within a day are deleted.
+    // Staged files nobody imported are deleted after a day, or after the date a waiting import keeps them until.
     const queued = new Set<string>()
     for (const id of [...meta.queue, ...(meta.active ? [meta.active] : [])]) {
       const record = await this.store.getImport(id)
       for (const f of record?.files ?? []) queued.add(f.fileId)
     }
-    const old = (await this.store.listStaged()).filter((s) => !queued.has(s.fileId) && now - Date.parse(s.stagedAt) > STAGED_KEEP_MS)
+    const old = (await this.store.listStaged()).filter((s) => !queued.has(s.fileId) && now >= imports.stagedExpiry(s))
     if (old.length) {
       await this.env.FILES.delete(old.map((s) => imports.inboxKey(meta, s.fileId)))
       await this.store.deleteStaged(old.map((s) => s.fileId))
     }
+    await imports.deleteLater(this, [])
     await exporter.expire(this)
   }
 
@@ -834,6 +866,7 @@ export class CollectionEngine {
         record.status.finishedAt = iso()
         record.phase = 'done'
         record.retryAt = null
+        record.notes = record.notes.map((n) => ({ ...n, text: '' }))
         await this.store.putImport(record)
       }
       for (const record of await this.store.listExports()) {
@@ -873,7 +906,7 @@ export class CollectionEngine {
     }
     // The last events, then the registry, then this object's own storage. Snapshots can't be deleted: with no
     // handle left they can't be opened, and they expire within 30 days.
-    await this.event(`deleted:${meta.org}:${meta.collectionId}`, { type: 'deleted' })
+    await this.event('deleted', { type: 'deleted' })
     const pending = await this.store.pendingEvents()
     await callObject(this.env.OUTBOX, OUTBOX_NAME, '/append', { body: { events: pending.map(([, e]) => e) } })
     await callObject(this.env.REGISTRY, REGISTRY_NAME, '/state', { body: { org: meta.org, collectionId: meta.collectionId, state: 'deleted' } })
@@ -971,8 +1004,16 @@ function versionParam(value: string): number {
 
 export function publicDocument(doc: DocRecord): DocumentInfo {
   const { documentId, kind, name, type, bytes, textBytes, pages, sha256, active, addedAt, version } = doc
-  return { documentId, kind, name, type, bytes, textBytes, pages, sha256, active, addedAt, version }
+  return { documentId, kind, name, type, bytes, textBytes, pages, sha256, active, hiddenValues: doc.hiddenCount ?? 0, addedAt, version }
 }
+
+/** A fact as the contract shows it: the stored passage hash becomes passageTextHash. */
+export function publicFact(fact: StoredFact): Fact {
+  const { factId, sentence, documentId, passageId, sourceSentence } = fact
+  return { factId, sentence, documentId, passageId, passageTextHash: fact.textHash ?? '', sourceSentence }
+}
+
+export type StoredFact = Omit<Fact, 'passageTextHash'> & { textHash?: string }
 
 /** What the query process leaves out and how it ranks notes (container/rank.py). */
 export function searchFilters(state: AnswerState, meta: Meta) {
@@ -991,7 +1032,7 @@ export function searchFilters(state: AnswerState, meta: Meta) {
 }
 
 /** Facts from documents in use whose source passage isn't outdated. */
-export function factFilter(state: AnswerState, meta: Meta): (fact: Fact & { textHash?: string }) => boolean {
+export function factFilter(state: AnswerState, meta: Meta): (fact: StoredFact) => boolean {
   const removing = new Set(meta.removals.map((r) => r.documentId))
   const active = new Set(state.documents.filter((d) => d.active && !removing.has(d.documentId)).map((d) => d.documentId))
   const outdated = new Set(state.marks.map((m) => `${m.documentId}:${m.textHash}`))
@@ -1007,7 +1048,9 @@ export function validateSettings(value: unknown, base: CollectionSettings): Coll
   if (typeof keepReady === 'string') return fail('bad_request', keepReady)
   const awakeMinutes = s.awakeMinutes === undefined ? base.awakeMinutes : Number(s.awakeMinutes)
   if (!Number.isInteger(awakeMinutes) || awakeMinutes < 1 || awakeMinutes > 60) return fail('bad_request', 'awakeMinutes must be 1 to 60.')
-  return { hiding, keepReady, awakeMinutes }
+  const backupDays = s.backupDays === undefined ? (base.backupDays ?? DEFAULT_SETTINGS.backupDays) : Number(s.backupDays)
+  if (!Number.isInteger(backupDays) || backupDays < 1 || backupDays > 3650) return fail('bad_request', 'backupDays must be 1 to 3650.')
+  return { hiding, keepReady, awakeMinutes, backupDays }
 }
 
 function validateHiding(value: unknown): HidingRules {

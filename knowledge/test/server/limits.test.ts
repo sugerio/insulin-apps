@@ -83,7 +83,11 @@ describe('limits', () => {
     await override({ storage_bytes: 100 })
     expectQuota(await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/notes`, { text: 'x'.repeat(200) }), 'storage_bytes', false)
     await override({ learned_month: 1 })
-    expectQuota(await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/notes`, { text: 'A second document this month.' }), 'learned_month', true)
+    // At documents learned a month, new documents wait for the 1st instead of being refused (design section 12).
+    const waits = await h.json<{ import: { state: string }; waiting: { until: string; message: string } }>(PEOPLE.maya, 'POST', `/api/collections/${id}/notes`, { text: 'A second document this month.' })
+    expect(waits.status).toBe(202)
+    expect(waits.body).toMatchObject({ import: { state: 'waiting' }, waiting: { until: '2026-12-01T00:00:00Z' } })
+    expect(waits.body.waiting.message).toContain(SUPPORT)
     await override({ file_bytes: 1000 })
     const preflight = await h.json<{ files: { accepted: boolean; reason?: string }[] }>(PEOPLE.maya, 'POST', `/api/collections/${id}/preflight`, { files: [{ name: 'Big.pdf', bytes: 5000 }] })
     expect(preflight.body.files[0]).toMatchObject({ accepted: false })

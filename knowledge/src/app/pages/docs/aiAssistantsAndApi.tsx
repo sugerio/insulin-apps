@@ -82,7 +82,7 @@ export const aiAssistantsAndApi: DocTopic = {
               [<Code>POST /api/collections/{'{id}'}/preflight</Code>, 'Check files before adding them; then upload each one and start learning them, all or nothing', 'Editor'],
               [<Code>POST /api/collections/{'{id}'}/corrections</Code>, 'Fix an answer or a fact once', 'Editor'],
               [<Code>GET /api/collections/{'{id}'}/history</Code>, 'Restore points, and whether each can be brought back', 'Viewer'],
-              [<Code>GET /api/attention</Code>, "Needs attention: files Insulin couldn't read, values hidden before learning and reported answers waiting, in the collections you can change", 'Editor'],
+              [<Code>GET /api/attention</Code>, "Needs attention: files Insulin couldn't read, values hidden before learning, reported answers waiting and corrections to check, in the collections you can change", 'Editor'],
             ]}
           />
           <p>

@@ -27,6 +27,7 @@ export interface TestEngine {
   api(method: string, path: string, body?: unknown, options?: { org?: string | null; headers?: Record<string, string> }): Promise<{ status: number; body: any; response: Response }>
   drain(collectionId?: string, options?: { org?: string; horizonMs?: number; steps?: number }): Promise<number>
   advance(ms: number): void
+  now(): number
   object(collectionId: string, org?: string): CollectionEngine
   container(collectionId: string, org?: string): import('./fakes.ts').FakeContainer
   storage(collectionId: string, org?: string): import('./fakes.ts').FakeStorage
@@ -94,6 +95,7 @@ export function makeEngine(options: { testControls?: boolean; start?: number } =
     advance(ms) {
       now += ms
     },
+    now: () => now,
     object: (cid, org) => collections.instance(name(cid, org)).object,
     container: (cid, org) => collections.instance(name(cid, org)).state.container!,
     storage: (cid, org) => collections.instance(name(cid, org)).state.storage,

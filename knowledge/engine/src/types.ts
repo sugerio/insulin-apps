@@ -44,12 +44,12 @@ export interface SnapshotRecord {
   damaged?: boolean // failed its integrity check twice: never opened again
 }
 
-export interface DocRecord extends DocumentInfo {
+export interface DocRecord extends Omit<DocumentInfo, 'hiddenValues'> {
   importId: string
   textKey: string // R2 FILES key of its redacted text (DocumentText)
   truncated: boolean
   noteId: string | null
-  hiddenCount: number
+  hiddenCount: number // shown as hiddenValues
 }
 
 /** A passage marked outdated by a correction. Tied to the document and its text's hash, not to a passage id. */
@@ -108,6 +108,7 @@ export interface Runtime {
   image: string
   dataFormat: string
   phase: WakePhase
+  phaseAt?: string // when this phase began: a wake step that takes too long is stopped
   startedAt: string
   checkJobId: string | null
   queryStarted: boolean
@@ -125,6 +126,7 @@ export interface StagedFile {
   bytes: number
   sha256: string
   stagedAt: string
+  keepUntil?: string // an import waiting for the next month will name it: kept until then, not just a day
 }
 
 export interface ImportRecord {
@@ -143,6 +145,10 @@ export interface ImportRecord {
   snapshotTaken: boolean
   learningStartedAt: number | null
   retryAt: number | null
+  jobStartedAt: number | null // this try's job: a job that runs far past its time is given up
+  textsSaved: boolean // every file and note was read and hidden, and its redacted text saved: originals are gone
+  rebuild: boolean // a removal whose restore point can't be started: the other documents are learned again
+  restoreFrom: number | null // re-learning after a repair: also bring back that version's documents
   result: Record<string, any> | null // the container job's result, kept until the commit
   test: { crashFileId?: string; detectorError?: boolean } | null
 }

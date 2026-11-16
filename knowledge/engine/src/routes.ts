@@ -17,6 +17,7 @@ export const ROUTES: Route[] = [
   { name: 'getCollection', method: 'GET', path: '/v1/collections/:cid', scope: 'collection', orgHeader: true },
   { name: 'wake', method: 'POST', path: '/v1/collections/:cid/wake', scope: 'collection', orgHeader: true },
   { name: 'stageFile', method: 'PUT', path: '/v1/collections/:cid/inbox/:fileId', scope: 'collection', orgHeader: true },
+  { name: 'keepStaged', method: 'POST', path: '/v1/collections/:cid/inbox/keep', scope: 'collection', orgHeader: true },
   { name: 'startImport', method: 'POST', path: '/v1/collections/:cid/imports', scope: 'collection', orgHeader: true },
   { name: 'getImport', method: 'GET', path: '/v1/collections/:cid/imports/:importId', scope: 'collection', orgHeader: true },
   { name: 'search', method: 'POST', path: '/v1/collections/:cid/search', scope: 'collection', orgHeader: true },

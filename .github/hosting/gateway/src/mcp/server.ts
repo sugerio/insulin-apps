@@ -6,7 +6,7 @@ import type { Context } from '../context.ts'
 import { originOf } from '../context.ts'
 import { jsonResponse } from '../http/response.ts'
 import { log, logError } from '../log.ts'
-import { noteAppUse } from '../members/app-use.ts'
+import { appUseProblem, noteAppUse } from '../members/app-use.ts'
 import { allowApp } from '../ratelimit.ts'
 import { bearerHeaders, isAppApiPath, unauthorized } from '../oauth/app-api.ts'
 import { CORS, preflight, readJson } from '../oauth/http.ts'
@@ -235,7 +235,7 @@ async function callApp(ctx: Context, app: HostedApp, identity: Extract<BearerIde
     payload = JSON.stringify(body)
     headers.set('Content-Type', 'application/json')
   }
-  await noteAppUse(ctx, app, identity.orgId)
+  if (!(await noteAppUse(ctx, app, identity.orgId))) return { problem: appUseProblem(app) }
   let upstream: Response
   try {
     upstream = await app.service!.fetch(new Request(url.href, { method, headers, body: payload, redirect: 'manual' }))

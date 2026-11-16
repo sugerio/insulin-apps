@@ -6,11 +6,14 @@ import { ApiError } from './http.ts'
 /**
  * `Idempotency-Key` on changes: the first request with a key runs and its response is kept for a day; the same
  * request with the same key gets that response again (`Idempotent-Replay: true`), a different request with it
- * 409 idempotency_key_reused, and one while the first is still running 409 conflict. Creating things (a collection,
+ * 409 idempotency_key_reused, and one while the first is still running 409 conflict (unless the first stopped two
+ * minutes ago or more without an answer, a Worker cut short: then the request runs again). Creating things (a collection,
  * an import, a note, a report…) needs a key; other changes take one when given. Only successful answers are kept, so a
  * refused or failed change can be sent again with the same key.
  */
 const KEEP_MS = 24 * 60 * 60 * 1000
+/** A first request still "running" after this long died (a Worker stopped mid-way): the same request may take over. */
+const STALE_MS = 2 * 60 * 1000
 
 async function hashOf(method: string, path: string, body: unknown): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([method, path, body ?? null])))
@@ -37,9 +40,21 @@ export async function idempotent(c: Context<AppEnv>, body: unknown, required: bo
     const row = await db.prepare(`SELECT route, request_hash, status, body FROM idempotency WHERE org_id = ? AND actor = ? AND key = ?`).bind(caller.organizationId, caller.id, key)
       .first<{ route: string; request_hash: string; status: number; body: string | null }>()
     if (!row || row.route !== route || row.request_hash !== hash) throw new ApiError('idempotency_key_reused', 'This Idempotency-Key was already used for a different request. Use a new one.')
-    if (row.status === 0) throw new ApiError('conflict', 'The same request is still running. Try again in a moment.')
+    if (row.status === 0) {
+      const takenOver = await db.prepare(`UPDATE idempotency SET created_at = ? WHERE org_id = ? AND actor = ? AND key = ? AND status = 0 AND created_at < ?`)
+        .bind(now, caller.organizationId, caller.id, key, now - STALE_MS).run()
+      if (takenOver.meta.changes !== 1) throw new ApiError('conflict', 'The same request is still running. Try again in a moment.')
+      return runAndKeep(c, key, run)
+    }
     return new Response(row.body, { status: row.status, headers: { 'content-type': 'application/json', 'idempotent-replay': 'true', 'cache-control': 'no-store' } })
   }
+  return runAndKeep(c, key, run)
+}
+
+/** Runs the change, keeping a successful answer under its key; a refused or failed one frees the key. */
+async function runAndKeep(c: Context<AppEnv>, key: string, run: () => Promise<Response>): Promise<Response> {
+  const caller = c.get('caller')
+  const db = c.env.DB
   let response: Response
   try {
     response = await run()
@@ -59,4 +74,17 @@ export async function idempotent(c: Context<AppEnv>, body: unknown, required: bo
 /** A refused or failed change keeps nothing: the same key may be sent again. */
 async function forget(db: D1Database, org: string, actor: string, key: string): Promise<void> {
   await db.prepare(`DELETE FROM idempotency WHERE org_id = ? AND actor = ? AND key = ? AND status = 0`).bind(org, actor, key).run()
+}
+
+/**
+ * An id that stays the same when the same request is sent again with the same Idempotency-Key (a new one without a
+ * key): what a change names its engine work by, so a retry after an answer that was lost finds the work it started.
+ */
+export async function stableId(c: Context<AppEnv>): Promise<string> {
+  const key = c.req.header('idempotency-key')?.trim()
+  if (!key) return crypto.randomUUID()
+  const caller = c.get('caller')
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode([caller.organizationId, caller.id, c.req.method, c.req.path, key].join('\n')))
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
 }

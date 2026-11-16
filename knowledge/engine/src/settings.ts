@@ -46,6 +46,8 @@ export const SETTINGS = {
   jobTimeoutMs: 60 * 60 * 1000,
   quiesceTimeoutMs: 60 * 1000,
   queryLoadTimeoutMs: 5 * 60 * 1000,
+  // A wake that hasn't reached "ready" by then is stopped and started again.
+  wakeTimeoutMs: 10 * 60 * 1000,
   // Re-ask the capacity guard this often while an import waits, in case a release notice was lost.
   capacityRetryMs: 30 * 1000,
   // The container's own inactivity timeout: a safety net behind the Durable Object's sleep alarm.
@@ -55,6 +57,9 @@ export const SETTINGS = {
   // Files staged in the inbox: the app checks the organization's limit (25 MB by default); this is the engine's cap.
   maxFileBytes: 64 * 1024 * 1024,
   maxFilesPerImport: 200,
+  // Staged files nobody imported are deleted after a day, or at most this long when kept for a waiting import.
+  stagedKeepMs: 24 * 60 * 60 * 1000,
+  maxKeepStagedMs: 45 * 24 * 60 * 60 * 1000,
   maxNotesPerImport: 50,
   maxNoteChars: 20000,
   // Planning values from the PoC (section 13): about 43 s per import plus 5.3 s per document.
@@ -77,4 +82,5 @@ export const DEFAULT_SETTINGS: CollectionSettings = {
   hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: [] },
   keepReady: null,
   awakeMinutes: 10,
+  backupDays: 30,
 }

@@ -147,6 +147,7 @@ async function openAfterVerified(e: CollectionEngine): Promise<void> {
   const runtime = await e.store.getRuntime()
   if (runtime) {
     runtime.phase = 'opening'
+    runtime.phaseAt = iso()
     await e.store.putRuntime(runtime)
   }
   await e.updateMeta((m) => {
@@ -188,6 +189,10 @@ function syntheticRecord(prefix: string) {
     snapshotTaken: false,
     learningStartedAt: null,
     retryAt: null,
+    jobStartedAt: null,
+    textsSaved: false,
+    rebuild: false,
+    restoreFrom: null,
     result: null,
     test: null,
   }
@@ -247,7 +252,8 @@ async function goBack(e: CollectionEngine, op: Extract<Operation, { kind: 'go_ba
 async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repair' }>): Promise<void> {
   const meta = await e.meta()
   const latest = await backup.latestIndex(e)
-  if (latest && latest.version === meta.version && !op.tried.includes(-1)) {
+  const failed = (await e.currentSnapshot(meta)).snapshot
+  if (latest && failed && latest.manifest.digest === failed.manifest.digest && !op.tried.includes(-1)) {
     await e.updateMeta((m) => {
       m.op = { kind: 'from_backup', reason: 'repair', startedAt: iso(), restartedAfterFailure: false }
     })
@@ -281,19 +287,21 @@ async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repai
       m.op = null
       m.repairNote = note
     })
-    await e.event(`state:${meta.org}:${meta.collectionId}:repaired:${candidate.version}:${iso()}`, {
+    await e.event(`state:repaired:${candidate.version}:${iso()}`, {
       type: 'state',
       state: 'repairing',
       version: candidate.version,
     })
     await openAfterVerified(e)
+    // Meanwhile everything is learned again from the saved text, with the files added after this version.
+    await queueRelearn(e, 'repair', op.failedVersion)
     return
   }
   await e.store.log('repair-relearn', { failedVersion: op.failedVersion })
   await e.updateMeta((m) => {
     m.op = null
   })
-  await queueRelearn(e, 'repair')
+  await queueRelearn(e, 'repair', op.failedVersion)
 }
 
 /**
@@ -304,8 +312,9 @@ async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repai
 async function fromBackup(e: CollectionEngine, op: Extract<Operation, { kind: 'from_backup' }>): Promise<void> {
   const meta = await e.meta()
   const latest = await backup.latestIndex(e)
+  const current = (await e.currentSnapshot(meta)).snapshot
   const runtime = await e.startContainer(null, 'learning', true)
-  const usable = latest && latest.version === meta.version && latest.dataFormat === runtime.dataFormat
+  const usable = latest && current && backup.holds(latest, current, runtime.dataFormat)
   if (!usable || !(await backup.restoreFiles(e, latest))) {
     await e.store.log('from-backup-relearn', { reason: op.reason, backupVersion: latest?.version ?? null })
     await e.box.destroy('backup not usable; learning again')
@@ -320,7 +329,7 @@ async function fromBackup(e: CollectionEngine, op: Extract<Operation, { kind: 'f
   const manifest = await e.box.manifest()
   const snapshot = await e.box.snapshot(`${meta.collectionId}-from-backup-${latest.day}`)
   const state = await e.currentState(meta)
-  await commitPoint(e, {
+  const committed = await commitPoint(e, {
     record: syntheticRecord('restore'),
     kind: 'from_backup',
     changes: emptyChanges(),
@@ -332,6 +341,15 @@ async function fromBackup(e: CollectionEngine, op: Extract<Operation, { kind: 'f
     previous: meta.version,
     importEvent: false,
   })
+  if (!committed) {
+    // A removal for good came first: it brings the files back itself, without the removed one.
+    await e.box.destroy('a removal for good goes first')
+    await e.store.deleteRuntime()
+    await e.updateMeta((m) => {
+      m.op = null
+    })
+    return
+  }
   await e.updateMeta((m) => {
     m.op = null
     m.backupDue = false

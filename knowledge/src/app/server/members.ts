@@ -1,8 +1,9 @@
 import type { Bindings } from './env.ts'
 import { log, logError } from './http.ts'
 import type { AppRole, Caller, OrgRole } from './identity.ts'
-import { appRoleOf } from './identity.ts'
-import { MAIL, sendMail } from './mail.ts'
+import { appRoleOf, rolePermissions } from './identity.ts'
+import { eraseOrganizationStatements } from './erase.ts'
+import { appLink, MAIL, sendMail } from './mail.ts'
 import { callPlatform } from './platform-api.ts'
 
 /**
@@ -40,6 +41,33 @@ export interface MemberRow {
   away: number
   owner_since: number | null
   unchecked: number
+  permissions: string | null
+}
+
+/**
+ * Whether someone acts as a Viewer in every collection: a Viewer in Knowledge, or a custom role without permission
+ * to change content (`permissions` as the platform listed them; null means the role's own).
+ */
+export function actsAsViewer(appRole: string | null, permissions: string | string[] | null): boolean {
+  if (appRole === 'VIEWER') return true
+  if (permissions === null) return false
+  let list: unknown = permissions
+  if (typeof permissions === 'string') {
+    try {
+      list = JSON.parse(permissions)
+    } catch {
+      return false
+    }
+  }
+  return Array.isArray(list) && !list.includes('knowledge.collections.edit')
+}
+
+/** A permission list the platform sent, or null. */
+const permissionsOf = (value: unknown): string[] | null => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string').slice(0, 50) : null)
+
+/** Raised when ownership can't be moved yet because the platform didn't say who the owners are: the tick tries again. */
+export class TryAgainLater extends Error {
+  override name = 'TryAgainLater'
 }
 
 const ORG_ROLES = new Set(['OWNER', 'ADMIN', 'EDITOR', 'VIEWER', 'APPS'])
@@ -56,30 +84,36 @@ const timeOf = (value: unknown, fallback: number): number => {
 
 /** Remembers who called (name, address, roles), for mail and the sharing dialog. Writes only when something changed. */
 export async function rememberCaller(db: D1Database, caller: Caller, now: number): Promise<void> {
+  // A custom role's permissions are kept (the sharing dialog says "acts as Viewer"); a built-in role's are its own.
+  const own = rolePermissions(caller.appRole)
+  const narrowed = own.some((permission) => !caller.permissions.has(permission)) ? JSON.stringify([...caller.permissions]) : null
   await db.prepare(
-    `INSERT INTO members (org_id, principal_type, principal_id, name, email, app_role, org_role, away, unchecked, seen_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0, ?8, ?8)
+    `INSERT INTO members (org_id, principal_type, principal_id, name, email, app_role, org_role, permissions, away, unchecked, seen_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?9, 0, 0, ?8, ?8)
      ON CONFLICT (org_id, principal_type, principal_id) DO UPDATE SET
        name = COALESCE(excluded.name, members.name), email = COALESCE(excluded.email, members.email), app_role = excluded.app_role,
-       org_role = COALESCE(excluded.org_role, members.org_role), seen_at = excluded.seen_at, updated_at = excluded.updated_at
+       org_role = COALESCE(excluded.org_role, members.org_role), permissions = excluded.permissions, seen_at = excluded.seen_at, updated_at = excluded.updated_at
      WHERE members.name IS NOT COALESCE(excluded.name, members.name) OR members.email IS NOT COALESCE(excluded.email, members.email)
        OR members.app_role IS NOT excluded.app_role OR members.org_role IS NOT COALESCE(excluded.org_role, members.org_role)
-       OR members.seen_at IS NULL OR members.seen_at < excluded.seen_at - 3600000`,
-  ).bind(caller.organizationId, caller.kind, caller.id, caller.name, caller.email, caller.appRole, caller.orgRole, now).run()
+       OR members.permissions IS NOT excluded.permissions OR members.seen_at IS NULL OR members.seen_at < excluded.seen_at - 3600000`,
+  ).bind(caller.organizationId, caller.kind, caller.id, caller.name, caller.email, caller.appRole, caller.orgRole, now, narrowed).run()
 }
 
 export async function memberOf(db: D1Database, org: string, type: PrincipalType, id: string): Promise<MemberRow | null> {
   return db.prepare(`SELECT * FROM members WHERE org_id = ? AND principal_type = ? AND principal_id = ?`).bind(org, type, id).first<MemberRow>()
 }
 
-async function upsertMember(db: D1Database, org: string, type: PrincipalType, id: string, fields: { name?: string | null; email?: string | null; appRole?: AppRole | null; orgRole?: OrgRole | null }, now: number): Promise<void> {
+async function upsertMember(db: D1Database, org: string, type: PrincipalType, id: string, fields: { name?: string | null; email?: string | null; appRole?: AppRole | null; orgRole?: OrgRole | null; permissions?: string[] | null }, now: number): Promise<void> {
+  // Permissions sent with a role replace the ones kept; a role sent without them is a built-in role's own.
+  const roleSent = fields.appRole !== undefined && fields.appRole !== null
   await db.prepare(
-    `INSERT INTO members (org_id, principal_type, principal_id, name, email, app_role, org_role, away, unchecked, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0, ?8)
+    `INSERT INTO members (org_id, principal_type, principal_id, name, email, app_role, org_role, permissions, away, unchecked, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?9, 0, 0, ?8)
      ON CONFLICT (org_id, principal_type, principal_id) DO UPDATE SET
        name = COALESCE(excluded.name, members.name), email = COALESCE(excluded.email, members.email),
-       app_role = COALESCE(excluded.app_role, members.app_role), org_role = COALESCE(excluded.org_role, members.org_role), updated_at = excluded.updated_at`,
-  ).bind(org, type, id, fields.name ?? null, fields.email ?? null, fields.appRole ?? null, fields.orgRole ?? null, now).run()
+       app_role = COALESCE(excluded.app_role, members.app_role), org_role = COALESCE(excluded.org_role, members.org_role),
+       permissions = CASE WHEN ?10 THEN excluded.permissions ELSE members.permissions END, updated_at = excluded.updated_at`,
+  ).bind(org, type, id, fields.name ?? null, fields.email ?? null, fields.appRole ?? null, fields.orgRole ?? null, now, fields.permissions ? JSON.stringify(fields.permissions) : null, roleSent ? 1 : 0).run()
 }
 
 // ------------------------------------------------------------------ the member lookup (sharing dialog)
@@ -124,6 +158,7 @@ interface StatusEntry {
   gone: boolean
   appRole: AppRole | null
   orgRole: OrgRole | null
+  permissions: string[] | null
 }
 
 /**
@@ -145,7 +180,7 @@ export async function memberStatus(env: Bindings, org: string, ids: string[]): P
     if (!id) return []
     const gone = entry.gone === true || entry.status === 'gone'
     const member = !gone && (entry.status === 'member' || entry.member === true)
-    return [{ id, type: entry.type === 'client' ? 'client' : 'person', member, gone, appRole: appRoleOf(text(entry.appRole) ?? text(entry.app_role)), orgRole: orgRoleOf(entry.orgRole ?? entry.org_role) }]
+    return [{ id, type: entry.type === 'client' ? 'client' : 'person', member, gone, appRole: appRoleOf(text(entry.appRole) ?? text(entry.app_role)), orgRole: orgRoleOf(entry.orgRole ?? entry.org_role), permissions: permissionsOf(entry.permissions) }]
   })
   return { entries, owners: ownersOf(body.owners, Date.now()) }
 }
@@ -183,9 +218,11 @@ async function longestStandingOwner(env: Bindings, org: string, except: string):
   ).bind(org, except).first<{ principal_id: string }>()
   let row = await pick()
   if (!row) {
-    // Nobody known as an owner yet: ask the platform who the owners are.
+    // Nobody known as an owner yet: ask the platform who the owners are. If it can't say now, the move is tried
+    // again on the next tick (the event isn't consumed), so a collection never stays with someone who left.
     const status = await memberStatus(env, org, [except]).catch(() => null)
-    if (status && status !== 'deleted' && status.owners.length) {
+    if (status === null) throw new TryAgainLater('Member status did not answer; ownership moves on the next tick')
+    if (status !== 'deleted' && status.owners.length) {
       await applyOwners(env.DB, org, status.owners, Date.now())
       row = await pick()
     }
@@ -224,7 +261,7 @@ async function moveOwnership(env: Bindings, org: string, from: string, why: 'lef
     }
     await db.batch(statements)
     if (recipient?.email) {
-      await sendMail(env, org, { to: recipient.email, ...MAIL.ownershipMoved(previous?.name ?? previous?.email ?? 'Its owner', collection.name, why) }, 'ownership_moved')
+      await sendMail(env, org, { to: recipient.email, ...MAIL.ownershipMoved(previous?.name ?? previous?.email ?? 'Its owner', collection.name, why, appLink(env, `/collections/${collection.id}`)) }, 'ownership_moved')
     }
   }
   return owned.length
@@ -244,9 +281,9 @@ export async function applyLeft(env: Bindings, org: string, type: PrincipalType,
 }
 
 /** A person came back: their shares on hold are active again, and they get "Welcome back". */
-export async function applyReturned(env: Bindings, org: string, type: PrincipalType, id: string, fields: { appRole?: AppRole | null; orgRole?: OrgRole | null; email?: string | null }, now: number): Promise<number> {
+export async function applyReturned(env: Bindings, org: string, type: PrincipalType, id: string, fields: { appRole?: AppRole | null; orgRole?: OrgRole | null; email?: string | null; permissions?: string[] | null }, now: number): Promise<number> {
   const db = env.DB
-  await upsertMember(db, org, type, id, { appRole: fields.appRole, orgRole: fields.orgRole, email: fields.email }, now)
+  await upsertMember(db, org, type, id, { appRole: fields.appRole, orgRole: fields.orgRole, email: fields.email, permissions: fields.permissions }, now)
   const [, restored] = await db.batch([
     db.prepare(`UPDATE members SET away = 0, unchecked = 0, updated_at = ?4 WHERE org_id = ?1 AND principal_type = ?2 AND principal_id = ?3`).bind(org, type, id, now),
     db.prepare(`UPDATE collection_shares SET status = 'active', updated_at = ?4 WHERE org_id = ?1 AND principal_type = ?2 AND principal_id = ?3 AND status = 'on_hold'`).bind(org, type, id, now),
@@ -254,29 +291,25 @@ export async function applyReturned(env: Bindings, org: string, type: PrincipalT
   const count = restored?.meta.changes ?? 0
   if (type === 'person' && count > 0) {
     const member = await memberOf(db, org, type, id)
-    if (member?.email) await sendMail(env, org, { to: member.email, ...MAIL.welcomeBack(count) }, 'welcome_back')
+    if (member?.email) await sendMail(env, org, { to: member.email, ...MAIL.welcomeBack(count, appLink(env, '/collections')) }, 'welcome_back')
   }
   return count
 }
 
 /** New roles: a person who is now a Viewer in Knowledge no longer owns collections (they keep Viewer access). */
-export async function applyRoleChanged(env: Bindings, org: string, type: PrincipalType, id: string, appRole: AppRole | null, orgRole: OrgRole | null, now: number): Promise<void> {
-  await upsertMember(env.DB, org, type, id, { appRole, orgRole }, now)
-  if (type === 'person' && appRole === 'VIEWER') await moveOwnership(env, org, id, 'viewer', now)
+export async function applyRoleChanged(env: Bindings, org: string, type: PrincipalType, id: string, appRole: AppRole | null, orgRole: OrgRole | null, now: number, permissions: string[] | null = null): Promise<void> {
+  await upsertMember(env.DB, org, type, id, { appRole, orgRole, permissions }, now)
+  // A Viewer in Knowledge, or a custom role that can't change content, acts as Viewer: they own nothing.
+  if (type === 'person' && actsAsViewer(appRole, permissions)) await moveOwnership(env, org, id, 'viewer', now)
 }
 
 /** The organization was deleted on insulinapps.com: everything of it in the engine is purged, and its records here go. */
 export async function applyOrgDeleted(env: Bindings, org: string, now: number): Promise<void> {
   const db = env.DB
+  // Its engine data is purged by the tick (org_purges); everything Knowledge kept for it here goes now.
   await db.batch([
     db.prepare(`INSERT INTO org_purges (org_id, requested_at) VALUES (?, ?) ON CONFLICT (org_id) DO NOTHING`).bind(org, now),
-    db.prepare(`UPDATE collections SET state = 'deleted', deleted_at = ?2, updated_at = ?2 WHERE org_id = ?1 AND state != 'deleted'`).bind(org, now),
-    db.prepare(`DELETE FROM collection_shares WHERE org_id = ?`).bind(org),
-    db.prepare(`DELETE FROM members WHERE org_id = ?`).bind(org),
-    db.prepare(`DELETE FROM staged_files WHERE org_id = ?`).bind(org),
-    db.prepare(`DELETE FROM org_settings WHERE org_id = ?`).bind(org),
-    db.prepare(`DELETE FROM fact_checks WHERE org_id = ?`).bind(org),
-    db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?2 WHERE org_id = ?1 AND state = 'held'`).bind(org, now),
+    ...eraseOrganizationStatements(db, org),
   ])
 }
 
@@ -290,6 +323,7 @@ interface MemberEvent {
   orgRole: OrgRole | null
   email: string | null
   owners: { id: string; since: number }[]
+  permissions: string[] | null
 }
 
 function readEvent(raw: Record<string, unknown>, now: number): MemberEvent | null {
@@ -311,6 +345,7 @@ function readEvent(raw: Record<string, unknown>, now: number): MemberEvent | nul
     orgRole: orgRoleOf(raw.orgRole ?? raw.org_role ?? roles.org ?? nested?.orgRole),
     email: text(nested?.email ?? raw.email),
     owners: ownersOf(raw.owners, now),
+    permissions: permissionsOf(raw.permissions),
   }
 }
 
@@ -335,10 +370,10 @@ export async function applyMemberEvent(env: Bindings, raw: Record<string, unknow
       if (who) await applyLeft(env, event.org, who.type, who.id, now)
       break
     case 'returned':
-      if (who && (await holds(env.DB, event.org, who.type, who.id))) await applyReturned(env, event.org, who.type, who.id, { appRole: event.appRole, orgRole: event.orgRole, email: event.email }, now)
+      if (who && (await holds(env.DB, event.org, who.type, who.id))) await applyReturned(env, event.org, who.type, who.id, { appRole: event.appRole, orgRole: event.orgRole, email: event.email, permissions: event.permissions }, now)
       break
     case 'role_changed':
-      if (who && (await holds(env.DB, event.org, who.type, who.id))) await applyRoleChanged(env, event.org, who.type, who.id, event.appRole, event.orgRole, now)
+      if (who && (await holds(env.DB, event.org, who.type, who.id))) await applyRoleChanged(env, event.org, who.type, who.id, event.appRole, event.orgRole, now, event.permissions)
       break
     case 'owners':
       await applyOwners(env.DB, event.org, event.owners, now)
@@ -386,6 +421,13 @@ export async function syncMembers(env: Bindings, now: number, deadline: number):
     state = await readSync(db, EVENTS)
   }
   if (!state?.cursor) {
+    // The first time: a fresh cursor, and everyone already held checked with member status (someone who left before
+    // this first tick has no event after the cursor). Without member status there is nobody to check them with.
+    if (env.SUGER_MEMBER_STATUS_URL && env.SUGER_MEMBER_EVENTS_URL) {
+      await startResync(env, now)
+      await continueResync(env, now, deadline)
+      return { applied, resync: true }
+    }
     const cursor = await freshCursor(env)
     if (cursor !== null) await writeSync(db, EVENTS, { cursor, resyncStartedAt: null }, now)
     return { applied, resync: false }
@@ -403,11 +445,13 @@ export async function syncMembers(env: Bindings, now: number, deadline: number):
     const body = (await response.json().catch(() => ({}))) as { events?: unknown; cursor?: unknown; more?: unknown }
     const events = Array.isArray(body.events) ? (body.events as Record<string, unknown>[]) : []
     for (const event of events) {
+      // Out of time mid-page: the page is read again next time (applying an event twice changes nothing).
+      if (Date.now() > deadline) return { applied, resync: false }
       try {
         await applyMemberEvent(env, event, now)
         applied += 1
       } catch (error) {
-        logError('member_event_failed', error, { type: String(event.type ?? '') })
+        if (!(error instanceof TryAgainLater)) logError('member_event_failed', error, { type: String(event.type ?? '') })
         throw error
       }
     }
@@ -458,7 +502,9 @@ export async function continueResync(env: Bindings, now: number, deadline: numbe
         if (!row.away) await applyLeft(env, org, row.principal_type, row.principal_id, now)
       } else {
         if (row.away && row.principal_type === 'person') await applyReturned(env, org, row.principal_type, row.principal_id, { appRole: entry.appRole, orgRole: entry.orgRole }, now)
-        if (entry.appRole && entry.appRole !== row.app_role) await applyRoleChanged(env, org, row.principal_type, row.principal_id, entry.appRole, entry.orgRole, now)
+        if (entry.appRole && (entry.appRole !== row.app_role || JSON.stringify(entry.permissions) !== (row.permissions ?? 'null'))) {
+          await applyRoleChanged(env, org, row.principal_type, row.principal_id, entry.appRole, entry.orgRole, now, entry.permissions)
+        }
       }
       await db.prepare(`UPDATE members SET unchecked = 0 WHERE org_id = ? AND principal_type = ? AND principal_id = ?`).bind(org, row.principal_type, row.principal_id).run()
     }

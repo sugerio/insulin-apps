@@ -1098,7 +1098,12 @@ test("limit catalogs: the gateway step writes those of the apps it deployed afte
     const { spawn, calls } = engineSpawn(api, spawnOptions)
     const sql = []
     const watched = (command, args, options) => {
-      if (args[0] === 'd1' && args[1] === 'execute' && args.includes('--file')) sql.push(readFileSync(args[args.indexOf('--file') + 1], 'utf8'))
+      if (args[0] === 'd1' && args[1] === 'execute' && !args.includes('--json')) {
+        // D1's query path: an import (--file) leaves the database unavailable while it runs, and imports can overlap.
+        assert.ok(!args.includes('--file'), 'the catalog is written through a query, never an import')
+        assert.ok(args.includes('--remote'))
+        sql.push(args[args.indexOf('--command') + 1])
+      }
       return spawn(command, args, options)
     }
     const result = await deployApps({ root, skipBuild: true, spawn: watched, fetchImpl: api.fetch, ...options })
@@ -1110,7 +1115,7 @@ test("limit catalogs: the gateway step writes those of the apps it deployed afte
   const full = await run({ environment: settings({ GATEWAY_SECRET_KEY: key }) })
   assert.deepEqual(full.sql, ['-- catalog of alpha: documents=500\n-- catalog of alpha-app: none\n-- catalog of beta: none\n'])
   const migrate = full.calls.findIndex(({ args }) => args[0] === 'd1' && args[1] === 'migrations' && args[3] === 'insulin-apps-gateway')
-  const write = full.calls.findIndex(({ args }) => args.includes('--file'))
+  const write = full.calls.findIndex(({ args }) => args[1] === 'execute' && args.includes('--command') && !args.includes('--json'))
   assert.ok(migrate >= 0 && migrate < write, "after the gateway's migrations")
   assert.equal(full.calls[write].args[2], 'insulin-apps-gateway')
 
@@ -1306,9 +1311,48 @@ test("a deploy of the app alone writes its catalog right after its Worker, befor
   const { spawn } = engineSpawn(api, { databases: new Map([['insulin-apps-gateway', 'fixture-gateway-db'], ['insulin-apps-beta', 'fixture-beta-db']]) })
   const watched = (command, args, options) => {
     if (args[0] === 'deploy') events.push('deploy')
-    if (args.includes('--file')) events.push(`catalog: ${readFileSync(args[args.indexOf('--file') + 1], 'utf8').trim()}`)
+    if (args[1] === 'execute' && !args.includes('--json')) events.push(`catalog: ${args[args.indexOf('--command') + 1].trim()}`)
     return spawn(command, args, options)
   }
   await assert.rejects(() => deployApps({ root, environment: settings(), skipBuild: true, only: 'beta', spawn: watched, fetchImpl }), /Worker insulin-apps-beta still has public access/)
   assert.deepEqual(events.slice(0, 3), ['deploy', 'catalog: -- catalog of beta: none', 'public access'], 'the version that now runs has its catalog')
+})
+
+test("the app's public access is removed whatever happens to its catalog, and both failures are reported", async () => {
+  const root = await engineRepository()
+  await limitCatalogModule(root)
+  const databases = new Map([['insulin-apps-gateway', 'fixture-gateway-db'], ['insulin-apps-beta', 'fixture-beta-db']])
+  const attempt = async (domains) => {
+    const api = engineCloudflareMock({ domains })
+    const { spawn } = engineSpawn(api, { databases })
+    // The catalog's write fails, as when D1 refuses it.
+    const failing = (command, args, options) => (args[1] === 'execute' && !args.includes('--json') ? { status: 1, stdout: '', stderr: 'D1 refused the query' } : spawn(command, args, options))
+    const outcome = await deployApps({ root, environment: settings(), skipBuild: true, only: 'beta', spawn: failing, fetchImpl: api.fetch }).then(() => null, (error) => error)
+    return { outcome, checked: api.state.requests.some(({ url }) => url.pathname.endsWith('/workers/scripts/insulin-apps-beta/subdomain')) }
+  }
+  const quiet = await attempt([])
+  assert.ok(quiet.checked, "the Worker's public access was checked after the catalog failed")
+  assert.match(quiet.outcome?.message ?? '', /wrangler d1 execute failed/, 'and the catalog failure fails the deploy')
+  const exposed = await attempt([{ id: 'beta-domain', hostname: 'beta.apps.example.com', service: 'insulin-apps-beta', stuck: true }])
+  assert.match(exposed.outcome?.message ?? '', /Worker insulin-apps-beta still has public access after cleanup/)
+  assert.match(exposed.outcome.message, /wrangler d1 execute failed/, 'naming the catalog failure too')
+})
+
+test("a catalog the gateway's module refuses stops the deploy before any Worker or migration", async () => {
+  const root = await engineRepository()
+  const scripts = join(root, '.github', 'hosting', 'gateway', 'scripts')
+  await mkdir(scripts, { recursive: true })
+  await writeFile(join(scripts, 'limits-catalog.mjs'), [
+    'export function limitsCatalogSql(apps) {',
+    "  if (apps.some(({ name }) => name === 'alpha')) throw new Error('Malformed limit catalog:\\nalpha: insulin.limits[0].label must be 1 to 80 characters on one line')",
+    "  return ''",
+    '}',
+    '',
+  ].join('\n'))
+  for (const options of [{ only: 'alpha', environment: settings() }, { environment: settings({ GATEWAY_SECRET_KEY: Buffer.alloc(32, 7).toString('base64') }) }, { gatewayOnly: true, environment: settings({ DEPLOYED_APPS: '["alpha"]' }) }]) {
+    const api = engineCloudflareMock({ buckets: ['insulin-apps-alpha-engine-files', 'insulin-apps-alpha-engine-backups'] })
+    const { spawn, calls } = engineSpawn(api, { databases: new Map([['insulin-apps-gateway', 'fixture-gateway-db']]) })
+    await assert.rejects(() => deployApps({ root, skipBuild: true, spawn, fetchImpl: api.fetch, ...options }), /Malformed limit catalog/, JSON.stringify(options).slice(0, 60))
+    assert.deepEqual(calls.filter(({ args }) => args[0] === 'deploy' || args[1] === 'migrations'), [], 'nothing deployed or migrated')
+  }
 })

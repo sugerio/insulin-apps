@@ -54,7 +54,7 @@ describe('Needs attention', () => {
     expect(seen.body.collections[0]!.role).toBe('EDITOR')
     const kinds = items.map((item) => item.kind).sort()
     expect(kinds).toEqual(['hidden', 'reported', 'unreadable', 'unreadable'])
-    expect(items.find((item) => item.kind === 'hidden')).toMatchObject({ documentName: 'Council', counts: { email: 1, phone: 1 }, total: 2 })
+    expect(items.find((item) => item.kind === 'hidden')).toMatchObject({ documentName: 'Council', total: 2 })
     expect(JSON.stringify(items)).not.toContain('council@example.test')
     expect(items.find((item) => item.id.startsWith('upload:'))!.files[0]).toMatchObject({ name: 'Signed form.pdf', reason: expect.stringMatching(/scanned image with no text/) })
     expect(items.find((item) => item.id.startsWith('import:'))!.message).toMatch(/Q3 deck\.md/)

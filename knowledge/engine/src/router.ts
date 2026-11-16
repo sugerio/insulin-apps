@@ -5,7 +5,7 @@ import { ORG_HEADER } from './contract.ts'
 import type { CollectionStatus } from './contract.ts'
 import { answer } from './answer.ts'
 import { collectionName, type Env, OUTBOX_NAME, REGISTRY_NAME, callObject, stub, testControls } from './env.ts'
-import { errorResponse, fail, json, requireId, SAFE_ORG } from './http.ts'
+import { errorResponse, fail, json, readJson, requireId, SAFE_ORG } from './http.ts'
 import type { RegistryEntry } from './registry.ts'
 import { matchRoute, ROUTES, TEST_ROUTES } from './routes.ts'
 import { DEFAULT_SETTINGS, ENGINE_LABEL } from './settings.ts'
@@ -27,6 +27,13 @@ export async function handle(request: Request, env: Env): Promise<Response> {
         return await collection(env, request, route.name, org, requireId(params.cid, 'The collection id'))
       case 'org': {
         if (params.org !== org) return fail('not_found', 'No such organization.')
+        if (route.name === 'holdOrg') {
+          const { until } = await readJson<{ until?: unknown }>(request)
+          if (until !== null && (typeof until !== 'string' || !Number.isFinite(Date.parse(until)))) {
+            return fail('bad_request', 'until must be a date and time, or null to lift the hold.')
+          }
+          return json(await callObject(env.REGISTRY, REGISTRY_NAME, '/hold', { body: { org, until } }))
+        }
         const result = await callObject<{ collections: number }>(env.REGISTRY, REGISTRY_NAME, '/purge', { body: { org } })
         return json({ state: 'deleting', collections: result.collections }, 202)
       }

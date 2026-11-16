@@ -56,6 +56,8 @@ export const SETTINGS = {
   usageFlushMs: 60 * 1000,
   // Files staged in the inbox: the app checks the organization's limit (25 MB by default); this is the engine's cap.
   maxFileBytes: 64 * 1024 * 1024,
+  // Uploads go to R2 in parts this large (R2's least is 5 MB): one part at a time is held in memory.
+  uploadPartBytes: 8 * 1024 * 1024,
   maxFilesPerImport: 200,
   // Staged files nobody imported are deleted after a day, or at most this long when kept for a waiting import.
   stagedKeepMs: 24 * 60 * 60 * 1000,
@@ -83,4 +85,5 @@ export const DEFAULT_SETTINGS: CollectionSettings = {
   keepReady: null,
   awakeMinutes: 10,
   backupDays: 30,
+  revision: 0,
 }

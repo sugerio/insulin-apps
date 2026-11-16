@@ -128,3 +128,38 @@ class Formats(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Bounds(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_blank_cells_far_apart_do_not_blow_up_a_small_workbook(self):
+        path = self.out / "far.xlsx"
+        rows = "".join(f'<row r="{r}"><c r="XFD{r}"><v>1</v></c></row>' for r in range(1, 2001))
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>')
+            archive.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>')
+            archive.writestr("xl/worksheets/sheet1.xml", f'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>{rows}</sheetData></worksheet>')
+        import extract as module
+
+        parts = module._xlsx(path)
+        self.assertLess(sum(len(p) for p in parts), MAX_TEXT_BYTES * 2, "reading stops near the text limit")
+        self.assertLessEqual(len(extract(path, "", "far.xlsx").text.encode()), MAX_TEXT_BYTES)
+
+    @unittest.skipUnless(HAVE_PYPDF, "pypdf is not installed")
+    def test_a_long_pdf_is_read_only_up_to_the_text_limit(self):
+        page = ("The billing gateway retries outbound calls three times. " * 2000)[:100_000]
+        path = self.out / "long.pdf"
+        make_fixtures.write_pdf(path, [page] * 30)
+        import extract as module
+
+        pages = module._pdf(path, "long.pdf")
+        self.assertLess(len(pages), 30, "pages past the limit are not read")
+        result = extract(path, "application/pdf", "long.pdf")
+        self.assertTrue(result.truncated)
+        self.assertLessEqual(len(result.text.encode()), MAX_TEXT_BYTES)

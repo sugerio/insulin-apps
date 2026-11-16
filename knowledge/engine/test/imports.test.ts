@@ -416,3 +416,44 @@ test('files waiting for an import can be kept staged past a day, up to 45 days, 
   await t.drain('c1')
   assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [])
 })
+
+test('uploads stream to R2 in parts, checked against their SHA-256, without holding the whole file', async () => {
+  const { SETTINGS } = await import('../src/settings.ts')
+  const saved = SETTINGS.uploadPartBytes
+  SETTINGS.uploadPartBytes = 1024
+  try {
+    const t = makeEngine()
+    await createCollection(t)
+    const big = new Uint8Array(5000).map((_, i) => 65 + (i % 26))
+    const staged = await stageFile(t, 'c1', { fileId: 'big', name: 'big.txt', text: new TextDecoder().decode(big), type: 'text/plain' })
+    assert.equal(staged.bytes, 5000)
+    assert.ok(t.files.multipart >= 1, 'stored in parts')
+    assert.deepEqual(t.files.objects.get(`inbox/${ORG}/c1/big`)!.body, big)
+    const wrong = await t.api('PUT', '/v1/collections/c1/inbox/bad', big, { headers: { 'x-file-name': 'bad.txt', 'x-file-sha256': '0'.repeat(64) } })
+    assert.equal(wrong.status, 400)
+    assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/bad`), [], 'a file that does not match is not kept')
+  } finally {
+    SETTINGS.uploadPartBytes = saved
+  }
+})
+
+test('the daily clean-up never deletes a staged file that a keep request has just marked', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await stageFile(t, 'c1', doc(1))
+  t.advance(2 * 24 * 60 * 60_000)
+  const remove = t.files.delete.bind(t.files)
+  let answer: any = null
+  t.files.delete = async (keys: string | string[]) => {
+    if (!answer && [keys].flat().some((k) => k.endsWith('/f1'))) {
+      answer = (await t.api('POST', '/v1/collections/c1/inbox/keep', { fileIds: ['f1'], until: new Date(t.now() + 10 * 24 * 60 * 60_000).toISOString() })).body
+    }
+    return remove(keys)
+  }
+  await t.drain('c1', { horizonMs: 60_000 })
+  assert.ok(answer, 'a keep request arrived during the clean-up')
+  if (answer.kept.includes('f1')) {
+    assert.ok(await t.storage('c1').get('staged:f1'), 'reported kept, so it is still staged')
+    assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [`inbox/${ORG}/c1/f1`])
+  }
+})

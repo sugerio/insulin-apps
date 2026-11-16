@@ -101,6 +101,7 @@ export function stateLabel(state: string): { label: string; tone: Tone } {
     case 'deleting': return { label: 'Being deleted', tone: 'red' }
     case 'deleted': return { label: 'Deleted', tone: 'red' }
     case 'empty': return { label: 'Nothing learned yet', tone: 'grey' }
+    case 'held': return { label: 'Stopped until the 1st', tone: 'amber' }
     default: return { label: 'Asleep', tone: 'grey' }
   }
 }
@@ -118,6 +119,7 @@ export function stateMessage(state: string, name: string): string {
     case 'repairing': return `${name} couldn't open its latest restore point, so it's answering from an earlier version while Insulin repairs it.`
     case 'deleting': return `${name} is being deleted.`
     case 'empty': return 'Nothing learned yet. Add files, a web page or a note in Sources.'
+    case 'held': return `Your organization has used this month's awake hours, so ${name} has stopped until the 1st (or until Insulin Apps raises the limit). Everything it learned is kept, and removing a file for good still works.`
     default: return 'Asleep · your first question wakes it up (about a minute).'
   }
 }

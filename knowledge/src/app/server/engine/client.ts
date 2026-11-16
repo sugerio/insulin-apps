@@ -17,12 +17,14 @@ import {
   type ImportRequest,
   type ImportStatus,
   type KeepStagedRequest,
+  type OrgHoldRequest,
   type OutboxPage,
   type RemoveResult,
   type RestorePoint,
   type SearchRequest,
   type SearchResult,
 } from '../../../../engine/src/contract.ts'
+import { beforeDeadline } from '../deadline.ts'
 import type { EngineFetcher } from '../env.ts'
 
 export { ENGINE_API_VERSION }
@@ -48,12 +50,16 @@ export class EngineCallError extends Error {
 /** The organization used on the engine's service-wide routes (the outbox, health), which belong to no organization. */
 export const SERVICE_ORG = '_service'
 
-/** Anything the engine can be asked, typed on contract.ts, for one organization. */
+/**
+ * Anything the engine can be asked, typed on contract.ts, for one organization. With a `deadline` (the tick's), every
+ * call, its body included, is given up at that time (EngineCallError 0 unreachable).
+ */
 export class EngineClient {
-  constructor(private readonly engine: EngineFetcher, readonly org: string) {}
+  constructor(private readonly engine: EngineFetcher, readonly org: string, private readonly deadline?: number) {}
 
   private async call(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Response> {
     const init: RequestInit = { method, headers: { [ORG_HEADER]: this.org, accept: 'application/json', ...headers } }
+    if (this.deadline !== undefined) init.signal = AbortSignal.timeout(Math.max(1, this.deadline - Date.now()))
     if (body !== undefined) {
       if (body instanceof ReadableStream || body instanceof Uint8Array || body instanceof ArrayBuffer) {
         init.body = body as BodyInit
@@ -66,14 +72,14 @@ export class EngineClient {
     let response: Response
     try {
       // A service binding routes by its own name; the host is only a placeholder.
-      response = await this.engine.fetch(new Request(`https://engine.knowledge.insulinapps.localhost${path}`, init))
+      response = await beforeDeadline(this.engine.fetch(new Request(`https://engine.knowledge.insulinapps.localhost${path}`, init)), this.deadline, 'The engine')
     } catch (error) {
       throw new EngineCallError(0, 'unreachable', error instanceof Error ? error.message : 'The engine could not be reached')
     }
     if (response.ok) return response
     let failure: Partial<EngineError> = {}
     try {
-      failure = (await response.json()) as Partial<EngineError>
+      failure = (await beforeDeadline(response.json(), this.deadline, 'The engine')) as Partial<EngineError>
     } catch {
       // A body that isn't JSON says nothing more than the status.
     }
@@ -81,13 +87,19 @@ export class EngineClient {
   }
 
   private async json<T>(method: string, path: string, body?: unknown): Promise<T> {
-    return (await (await this.call(method, path, body)).json()) as T
+    const response = await this.call(method, path, body)
+    try {
+      return (await beforeDeadline(response.json(), this.deadline, 'The engine')) as T
+    } catch (error) {
+      throw new EngineCallError(0, 'unreachable', error instanceof Error ? error.message : 'The engine\'s answer could not be read')
+    }
   }
 
   private static id(value: string): string {
     return encodeURIComponent(value)
   }
 
+  /** 409 stale_settings when the engine already has a newer revision: a newer push won, and nothing changed. */
   putCollection(collectionId: string, settings: CollectionSettings): Promise<CollectionStatus> {
     return this.json('PUT', `/v1/collections/${EngineClient.id(collectionId)}`, { settings })
   }
@@ -194,8 +206,16 @@ export class EngineClient {
   /** 202 `{ state: 'deleting' }`, or `{ state: 'deleted' }` once the delete has finished (asking again is safe). */
   async deleteCollection(collectionId: string): Promise<{ state: 'deleting' | 'deleted' }> {
     const response = await this.call('DELETE', `/v1/collections/${EngineClient.id(collectionId)}`)
-    const body = (await response.json().catch(() => ({}))) as { state?: string }
+    const body = (await beforeDeadline(response.json(), this.deadline, 'The engine').catch(() => ({}))) as { state?: string }
     return { state: body.state === 'deleted' ? 'deleted' : 'deleting' }
+  }
+
+  /**
+   * The awake-hours stop, enforced in the engine: until `until` nothing runs for the organization but removing a file
+   * for good and deleting; `null` lets go.
+   */
+  hold(org: string, request: OrgHoldRequest): Promise<{ held: boolean; until: string | null }> {
+    return this.json('POST', `/v1/orgs/${encodeURIComponent(org)}/hold`, request)
   }
 
   async purge(org: string): Promise<void> {

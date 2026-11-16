@@ -135,7 +135,7 @@ export const sharingAndRoles: DocTopic = {
           <li><b>Returning.</b> If they are invited again, the shares on hold come back, and they get a "Welcome back" e-mail.</li>
           <li><b>An owner leaves.</b> When a collection's owner leaves, or can only read from then on (a Viewer in Knowledge, or a custom role without "Change content"), the longest-standing owner of the organization becomes its owner and gets an e-mail. An owner who can only read keeps Viewer access.</li>
           <li><b>An owner returns.</b> A former owner who comes back gets their other shares back, but not ownership; the new owner can transfer it back.</li>
-          <li><b>Checking who is still here.</b> If Knowledge has missed news of people leaving for a long time (more than 90 days), or starts for the first time, it checks everyone it knows with insulinapps.com. Until someone is checked, which takes a moment, their collections don't open for them.</li>
+          <li><b>Checking who is still here.</b> If Knowledge has missed news of people leaving for a long time (more than 90 days), or starts for the first time, it checks everyone it knows with insulinapps.com. Until someone is checked, which takes a moment, they count as away (Sharing says “checking”). Someone using Knowledge meanwhile is checked by using it: insulinapps.com says who they are with every request. Each check also moves collections whose owner can now only read to the longest-standing owner of the organization.</li>
         </ul>
       ),
     },

@@ -112,11 +112,13 @@ export class R2Sink {
   buffered = 0
   upload: R2MultipartUpload | null = null
   parts: R2UploadedPart[] = []
+  options: R2PutOptions
 
-  constructor(bucket: R2Bucket, key: string, partBytes = 8 * 1024 * 1024) {
+  constructor(bucket: R2Bucket, key: string, partBytes = 8 * 1024 * 1024, options: R2PutOptions = { httpMetadata: { contentType: 'application/zip' } }) {
     this.bucket = bucket
     this.key = key
     this.partBytes = partBytes
+    this.options = options
   }
 
   write = async (chunk: Uint8Array): Promise<void> => {
@@ -142,13 +144,14 @@ export class R2Sink {
   }
 
   async flushPart(count: number): Promise<void> {
-    this.upload ??= await this.bucket.createMultipartUpload(this.key, { httpMetadata: { contentType: 'application/zip' } })
+    this.upload ??= await this.bucket.createMultipartUpload(this.key, { httpMetadata: this.options.httpMetadata, customMetadata: this.options.customMetadata })
     this.parts.push(await this.upload.uploadPart(this.parts.length + 1, this.take(count)))
   }
 
-  async close(): Promise<void> {
+  /** Stores what was written. `sha256`, when given, is checked by R2 on a single put. */
+  async close(sha256?: string): Promise<void> {
     if (!this.upload) {
-      await this.bucket.put(this.key, this.take(), { httpMetadata: { contentType: 'application/zip' } })
+      await this.bucket.put(this.key, this.take(), { ...this.options, ...(sha256 ? { sha256 } : {}) })
       return
     }
     if (this.buffered) await this.flushPart(this.buffered)

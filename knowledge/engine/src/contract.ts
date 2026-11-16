@@ -25,6 +25,7 @@ export type EngineErrorCode =
   | 'too_large'
   | 'unsupported_type'
   | 'model_unavailable'
+  | 'stale_settings'
   | 'internal'
 
 export interface EngineError {
@@ -47,6 +48,7 @@ export type CollectionState =
   | 'repairing'
   | 'deleting'
   | 'deleted'
+  | 'held' // the organization is on hold (POST /v1/orgs/:org/hold): no container starts but to remove or delete
 
 export interface HidingRules {
   emails: boolean
@@ -70,6 +72,15 @@ export interface CollectionSettings {
   keepReady: KeepReady | null
   awakeMinutes: number // stays awake this long after the last question (default 10)
   backupDays: number // daily backups kept this many days (the organization's backup_days limit); the latest is kept for the collection's life
+  revision: number // grows with every change the app makes; a PUT with a lower revision than the engine has answers 409 stale_settings and changes nothing
+}
+
+// POST /v1/orgs/:org/hold: the app's hard stop on awake hours, enforced in the engine. While held (until `until`, or
+// until a call with `until: null`), the engine starts no container for the organization's collections except to remove
+// a file for good or delete a collection; running ones stop, and an interrupted import keeps nothing and waits. Answers
+// `{ held: boolean, until: string | null }`.
+export interface OrgHoldRequest {
+  until: string | null // ISO time
 }
 
 export interface CollectionCounts {
@@ -218,7 +229,7 @@ export interface SearchRequest {
 }
 
 export interface SearchResult {
-  status: 'ok' | 'waking' | 'learning' | 'busy'
+  status: 'ok' | 'waking' | 'learning' | 'busy' | 'held'
   retryAfterSeconds: number | null
   covered: boolean // false: nothing passes the calibrated threshold ("I won't guess")
   passages: Passage[] // outdated passages left out; notes ranked above the passages they correct

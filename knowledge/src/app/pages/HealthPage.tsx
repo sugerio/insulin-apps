@@ -24,6 +24,7 @@ function awakeLabel(state: string): string {
     case 'repairing': return 'Awake, repairing'
     case 'deleting': return 'Being deleted'
     case 'empty': return 'Asleep, nothing learned yet'
+    case 'held': return 'Stopped until the 1st'
     default: return 'Asleep'
   }
 }
@@ -40,6 +41,7 @@ const ENGINE_TERMS: Record<string, string> = {
   going_back: 'start from an older snapshot and verify its own manifest',
   repairing: 'integrity check failed: answering from the previous restore point or the latest backup',
   deleting: 'deletion protocol running',
+  held: 'organization held (POST /v1/orgs/:org/hold): no container starts but to remove or delete',
 }
 
 export function HealthPage() {

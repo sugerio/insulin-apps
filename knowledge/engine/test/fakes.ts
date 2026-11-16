@@ -256,6 +256,7 @@ export class FakeCloud {
   failStarts = 0 // the next starts fail
   hangJobs: string[] = [] // jobs of these ops never finish
   onStart: (() => void) | null = null // e.g. move the fake clock: starting takes time
+  openWrites = false // the query process writes under /data when it opens (as databases may): /data no longer equals the snapshot
   calls: { collection: string; method: string; path: string; detail?: string }[] = []
 }
 
@@ -269,6 +270,7 @@ interface FakeJob {
   exitCode?: number
   progress?: any
   prepared?: any
+  newlyHidden?: string[]
 }
 
 export class FakeContainer {
@@ -451,6 +453,7 @@ export class FakeContainer {
     if (action === 'open') {
       if (q.state !== 'loaded') return json({ error: 'not loaded' }, 409)
       this.cloud.calls.push({ collection: this.name, method: 'POST', path: '/query/open', detail: 'open' })
+      if (this.cloud.openWrites) this.data.set('system/databases/opened', `opened ${this.cloud.calls.length}`)
       q.state = 'opening'
       q.polls = this.cloud.queryPolls
       return json(this.queryStatus(), 202)
@@ -538,12 +541,15 @@ export class FakeContainer {
     const test = this.env.KNOWLEDGE_TEST_CONTROLS === '1' ? (batch.test ?? {}) : {}
     const prepared: any[] = []
     const stored = (documentId: string) => JSON.parse(new TextDecoder().decode(this.inbox.get(`${batch.importId}/${documentId}.json`) as Uint8Array))
+    const newlyHidden: string[] = []
     const again = (s: any) => {
       const more = hideFake(s.text, words)
+      if (more.text !== s.text) newlyHidden.push(s.documentId)
       return { ...s, text: more.text, hidden: [...s.hidden, ...more.hidden] }
     }
     if (batch.kind === 'relearn') {
-      for (const d of batch.documents) prepared.push({ stored: { ...stored(d.documentId), documentId: d.documentId, kind: d.kind, name: d.name }, fileId: null })
+      // Saved texts are hidden again with the rules in force, as ops.py does.
+      for (const d of batch.documents) prepared.push({ stored: { ...again(stored(d.documentId)), documentId: d.documentId, kind: d.kind, name: d.name }, fileId: null })
     } else {
       for (const f of batch.files ?? []) {
         if (f.stored) {
@@ -567,6 +573,7 @@ export class FakeContainer {
     }
     for (const item of prepared) this.data.set(`text/${item.stored.documentId}.json`, JSON.stringify(item.stored))
     job.prepared = prepared
+    job.newlyHidden = newlyHidden
     job.progress = { done: 0, total: prepared.length, current: null, read: true, files: Object.fromEntries((batch.files ?? []).map((f: any) => [f.fileId, 'understanding'])) }
   }
 
@@ -583,7 +590,7 @@ export class FakeContainer {
     const ledger = JSON.parse(this.data.get('ledger.json') ?? '{"batches":{}}')
     ledger.batches[batch.importId] = documents.map((d) => d.documentId)
     this.data.set('ledger.json', JSON.stringify(ledger))
-    return { documents, marks: [], facts, newFacts: documents.length, files: Object.fromEntries((batch.files ?? []).map((f: any) => [f.fileId, 'learned'])) }
+    return { documents, marks: [], facts, newFacts: documents.length, changed: job.newlyHidden ?? [], files: Object.fromEntries((batch.files ?? []).map((f: any) => [f.fileId, 'learned'])) }
   }
 
   remove(job: FakeJob) {

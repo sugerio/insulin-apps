@@ -65,7 +65,8 @@ they are an owner, admin or editor:
   hidden (see [Hiding personal data](/docs/knowledge/hiding-personal-data));
 - **reported answers waiting**: fix the answer, or say it is right;
 - **corrections to check**: a file was read again, and the words a correction applies to now read differently. Check
-  that the correction still says the right thing; writing a new correction of that file settles it.
+  that the correction still says the right thing (shown as Insulin learned it, with hidden values hidden); writing a
+  new correction of that file settles it.
 
 Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file with
 the same name is learned in that collection. Through the API: `GET /api/attention`, optionally `?collection=<id>`.

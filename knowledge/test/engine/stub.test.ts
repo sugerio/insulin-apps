@@ -53,7 +53,7 @@ describe('the in-memory engine', () => {
       ['DELETE', '/v1/collections/c1/documents/d1'], ['GET', '/v1/collections/c1/facts?cursor='], ['POST', '/v1/collections/c1/corrections', {}],
       ['GET', '/v1/collections/c1/restore-points'], ['GET', '/v1/collections/c1/restore-points/1/preview'], ['POST', '/v1/collections/c1/restore-points/1/go-back'],
       ['POST', '/v1/collections/c1/undo'], ['POST', '/v1/collections/c1/exports', { exportId: 'e1' }], ['GET', '/v1/collections/c1/exports/e1'],
-      ['GET', '/v1/outbox?since=&limit=10'], ['GET', '/v1/health'], ['POST', '/v1/orgs/org-a/purge'], ['DELETE', '/v1/collections/c1'],
+      ['GET', '/v1/outbox?since=&limit=10'], ['GET', '/v1/health'], ['POST', '/v1/orgs/org-a/hold', { until: null }], ['POST', '/v1/orgs/org-a/purge'], ['DELETE', '/v1/collections/c1'],
     ]
     for (const [method, path, body] of routes) {
       const answer = await call(method, path, body)
@@ -267,6 +267,73 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call('POST', '/v1/collections/c1/restore-points/1/go-back')).status).toBe(409)
     const http = await worker.fetch(new Request('https://engine.test/__control/damage', { method: 'POST', body: JSON.stringify({ org: 'org-a', collectionId: 'nope', version: 1 }) }), {})
     expect(http.status).toBe(400)
+  })
+
+  it('numbers outbox events as the cursor that continues after them', async () => {
+    const { call, engine } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    for (let index = 0; index < 3; index += 1) engine.control.addUsage('org-a', 'c1', 'awake', 60)
+    const first = await call<OutboxPage>('GET', '/v1/outbox?since=&limit=2', undefined, null)
+    expect(first.body.events.map((event) => event.id)).toEqual(['000000000001', '000000000002'])
+    expect(first.body.cursor).toBe('000000000002')
+    const next = await call<OutboxPage>('GET', `/v1/outbox?since=${first.body.events[0]!.id}&limit=10`, undefined, null)
+    expect(next.body.events.map((event) => event.id)).toEqual(['000000000002', '000000000003'])
+  })
+
+  it('refuses the settings the real engine refuses', async () => {
+    const { call } = engineFor()
+    for (const settings of [
+      { ...SETTINGS, backupDays: 0 }, { ...SETTINGS, backupDays: 3651 }, { ...SETTINGS, awakeMinutes: 0 }, { ...SETTINGS, awakeMinutes: 61 },
+      { ...SETTINGS, hiding: { ...SETTINGS.hiding, words: ['x'.repeat(101)] } }, { ...SETTINGS, keepReady: { timeZone: 'Europe/Berlin', days: [1], start: '9am', hours: 1, paused: false } },
+      { ...SETTINGS, keepReady: { timeZone: 'Nowhere/Else', days: [1], start: '09:00', hours: 1, paused: false } }, { ...SETTINGS, revision: -1 },
+    ]) {
+      expect((await call('PUT', '/v1/collections/c1', { settings })).status).toBe(400)
+    }
+    expect((await call('PUT', '/v1/collections/c1', { settings: { ...SETTINGS, backupDays: 3650 } })).status).toBe(200)
+  })
+
+  it('keeps the newest settings: an older revision is refused, the same one again changes nothing', async () => {
+    const { call } = engineFor()
+    expect((await call<CollectionStatus>('PUT', '/v1/collections/c1', { settings: { ...SETTINGS, awakeMinutes: 20, revision: 2 } })).body.settings.awakeMinutes).toBe(20)
+    const older = await call<{ error: string }>('PUT', '/v1/collections/c1', { settings: { ...SETTINGS, awakeMinutes: 30, revision: 1 } })
+    expect(older.status).toBe(409)
+    expect(older.body.error).toBe('stale_settings')
+    expect((await call<CollectionStatus>('PUT', '/v1/collections/c1', { settings: { ...SETTINGS, awakeMinutes: 40, revision: 2 } })).body.settings.awakeMinutes).toBe(20)
+    expect((await call<CollectionStatus>('PUT', '/v1/collections/c1', { settings: { ...SETTINGS, awakeMinutes: 50, revision: 3 } })).body.settings.awakeMinutes).toBe(50)
+  })
+
+  it('holds an organization: nothing starts but removing for good, running work stops and waits, and letting go starts it again', async () => {
+    const { call, learn, engine, advance } = engineFor({ importMs: 60_000 })
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'One.md', text: 'The first rule.' }])
+    engine.control.runUntilIdle()
+    await learn('c1', 'imp2', [{ fileId: 'file0002', name: 'Two.md', text: 'The second rule.' }])
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('learning')
+    expect((await call('POST', '/v1/orgs/org-b/hold', { until: '2026-12-01T00:00:00Z' })).status).toBe(404)
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: 'soon' })).status).toBe(400)
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z' })).body).toEqual({ held: true, until: '2026-12-01T00:00:00.000Z' })
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('held')
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('queued')
+    const page = await call<OutboxPage>('GET', '/v1/outbox?since=&limit=100', undefined, null)
+    expect(page.body.events.some((event) => event.type === 'import' && event.import.importId === 'imp2' && event.import.state === 'interrupted')).toBe(true)
+    expect((await call<{ status: string }>('POST', '/v1/collections/c1/search', { query: 'first rule' })).body.status).toBe('held')
+    expect((await call<CollectionStatus>('POST', '/v1/collections/c1/wake')).body.state).toBe('held')
+    expect((await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })).status).toBe(429)
+    engine.control.runUntilIdle()
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('queued')
+    const documents = await call<{ documents: { documentId: string }[] }>('GET', '/v1/collections/c1/documents')
+    expect((await call('DELETE', `/v1/collections/c1/documents/${documents.body.documents[0]!.documentId}`)).status).toBe(200)
+    engine.control.runUntilIdle()
+    expect((await call<{ documents: unknown[] }>('GET', '/v1/collections/c1/documents')).body.documents).toHaveLength(0)
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: null })).body).toEqual({ held: false, until: null })
+    advance(1)
+    engine.control.runUntilIdle()
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('committed')
+    // A hold ends by itself at its time.
+    await call('POST', '/v1/orgs/org-a/hold', { until: new Date(Date.UTC(2026, 10, 16, 10)).toISOString() })
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('held')
+    advance(2 * 60 * 60 * 1000)
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).not.toBe('held')
   })
 
   it('clears staged files nobody imported after a day, unless kept for a waiting import, at most 45 days', async () => {

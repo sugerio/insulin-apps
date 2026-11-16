@@ -8,7 +8,8 @@ import { idempotent } from '../idempotency.ts'
 import { can, type Caller } from '../identity.ts'
 import { effectiveLimits, formatBytes, inUnit, LIMITS, MONTHLY, periodOf, resetsAt, SECONDS_PER_HOUR, usageOf } from '../limits.ts'
 import { MAIL, sendMail } from '../mail.ts'
-import { DEFAULT_HIDING, pushSettings, readOrgSettings, validTimeZone } from '../settings.ts'
+import { hideKept } from '../kept.ts'
+import { bumpOrgSettings, DEFAULT_HIDING, pushSettings, readOrgSettings, validTimeZone } from '../settings.ts'
 import { callerOf, engineFor, iso, json, now, type Ctx } from './common.ts'
 
 /**
@@ -92,7 +93,7 @@ export function rulesRoutes() {
     const writer = body.answerWriter ?? current.answerWriter
     const hiding = body.hiding ?? current.hiding
     const engineChanged = body.timeZone !== undefined || body.hiding !== undefined
-    await db.prepare(
+    const saved = db.prepare(
       `INSERT INTO org_settings (org_id, time_zone, answer_writer, integration_key, model_url, model, hiding, version, updated_by, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
        ON CONFLICT (org_id) DO UPDATE SET time_zone = excluded.time_zone, answer_writer = excluded.answer_writer, integration_key = excluded.integration_key,
@@ -101,11 +102,15 @@ export function rulesRoutes() {
       caller.organizationId, body.timeZone ?? current.timeZone, writer.kind,
       writer.kind === 'own' ? writer.integrationKey : null, writer.kind === 'own' ? writer.url : null, writer.kind === 'own' ? writer.model : null,
       JSON.stringify(hiding), Math.max(1, current.version + (engineChanged ? 1 : 0)), caller.id, at, engineChanged ? 1 : 0,
-    ).run()
+    )
+    // The rules and every collection's new settings revision, in one batch.
+    await db.batch(engineChanged ? [saved, bumpOrgSettings(db, caller.organizationId)] : [saved])
     const settings = await readOrgSettings(db, caller.organizationId)
+    // What Knowledge keeps of corrections and waiting notes is hidden with the new rules too.
+    if (body.hiding !== undefined) await hideKept(db, caller.organizationId, settings.hiding)
     if (engineChanged && c.env.ENGINE) {
-      const { results } = await db.prepare(`SELECT * FROM collections WHERE org_id = ? AND state = 'active' AND settings_version < ? LIMIT 20`).bind(caller.organizationId, settings.version).all<CollectionRow>()
-      for (const collection of results) await pushSettings(c.env, collection, settings, at)
+      const { results } = await db.prepare(`SELECT id, org_id FROM collections WHERE org_id = ? AND state = 'active' AND settings_pushed < settings_revision LIMIT 20`).bind(caller.organizationId).all<Pick<CollectionRow, 'id' | 'org_id'>>()
+      for (const collection of results) await pushSettings(c.env, collection, at)
     }
     return json(c, { timeZone: settings.timeZone, answerWriter: settings.answerWriter, hiding: settings.hiding })
   })

@@ -37,16 +37,45 @@ export class Registry {
     if (route === 'POST /register') return json(await this.register(body.org, body.collectionId ?? ''))
     if (route === 'POST /state') return json(await this.setState(body.org, body.collectionId ?? '', body.state ?? 'live'))
     if (route === 'POST /purge') return json(await this.purge(body.org), 202)
+    if (route === 'POST /hold') return json(await this.hold(body.org, (body as { until?: string | null }).until ?? null))
     return json({ error: 'not_found', message: 'No such registry route.' }, 404)
   }
 
-  async register(org: string, collectionId: string): Promise<RegistryEntry> {
+  /**
+   * The organization's hold: no container starts for its collections (but to remove a file for good or delete)
+   * until `until`, or until it is lifted with null. Every collection is told now; a new one asks when it is made.
+   */
+  async hold(org: string, until: string | null): Promise<{ held: boolean; until: string | null }> {
+    if (until && Date.parse(until) > clock.now()) await this.storage.put(`hold:${org}`, until)
+    else await this.storage.delete(`hold:${org}`)
+    const kept = until && Date.parse(until) > clock.now() ? until : null
+    for (const entry of (await this.entries(org)).filter((e) => e.state === 'live')) {
+      try {
+        await stub(this.env.COLLECTIONS, collectionName(org, entry.collectionId)).fetch('https://engine.internal/internal/hold', {
+          method: 'POST',
+          headers: { 'x-knowledge-org': org, 'content-type': 'application/json' },
+          body: JSON.stringify({ until: kept }),
+        })
+      } catch (error) {
+        console.warn('registry: a collection could not be told of its hold', String(error))
+      }
+    }
+    return { held: kept !== null, until: kept }
+  }
+
+  async holdOf(org: string): Promise<string | null> {
+    const until = await this.storage.get<string>(`hold:${org}`)
+    return until && Date.parse(until) > clock.now() ? until : null
+  }
+
+  async register(org: string, collectionId: string): Promise<RegistryEntry & { holdUntil: string | null }> {
+    const holdUntil = await this.holdOf(org)
     const existing = await this.storage.get<RegistryEntry>(key(org, collectionId))
-    if (existing) return existing
+    if (existing) return { ...existing, holdUntil }
     const entry: RegistryEntry = { org, collectionId, state: 'live', createdAt: iso(), deletedAt: null }
     const count = ((await this.storage.get<number>('count')) ?? 0) + 1
     await this.storage.put({ [key(org, collectionId)]: entry, count })
-    return entry
+    return { ...entry, holdUntil }
   }
 
   async setState(org: string, collectionId: string, state: RegistryEntry['state']): Promise<RegistryEntry | null> {

@@ -27,6 +27,8 @@ import type { SlotAnswer } from './capacity.ts'
 import { clock, documentIdFor, errorText, iso, isSha256, plural, randomId, sha256Hex } from './util.ts'
 import * as backup from './backup.ts'
 import * as exporter from './exporter.ts'
+import { Sha256 } from './sha256.ts'
+import { R2Sink } from './zip.ts'
 
 export const inboxKey = (meta: Meta, fileId: string) => `inbox/${meta.org}/${meta.collectionId}/${fileId}`
 export const textKey = (meta: Meta, documentId: string) => `text/${meta.org}/${meta.collectionId}/docs/${documentId}.json`
@@ -64,24 +66,48 @@ export async function stage(e: CollectionEngine, fileId: string, request: Reques
   if (!name || name.length > 255) return fail('bad_request', 'x-file-name must name the file (up to 255 characters).')
   const type = (request.headers.get('content-type') ?? 'application/octet-stream').split(';')[0].trim().toLowerCase()
   const declared = Number(request.headers.get('content-length') ?? NaN)
-  if (declared > SETTINGS.maxFileBytes) return fail('too_large', `Files can be at most ${SETTINGS.maxFileBytes / 1024 / 1024} MB.`)
-  const body = new Uint8Array(await request.arrayBuffer())
-  if (body.length > SETTINGS.maxFileBytes) return fail('too_large', `Files can be at most ${SETTINGS.maxFileBytes / 1024 / 1024} MB.`)
-  const sha256 = await sha256Hex(body)
-  if (declaredSha !== null && declaredSha !== sha256) return fail('bad_request', "The file's content doesn't match x-file-sha256.")
-  await e.env.FILES.put(inboxKey(meta, fileId), body, {
-    sha256,
+  const tooLarge = `Files can be at most ${SETTINGS.maxFileBytes / 1024 / 1024} MB.`
+  if (declared > SETTINGS.maxFileBytes) return fail('too_large', tooLarge)
+  // Streamed to R2 in parts and hashed on the way, so no more than a part is held in memory.
+  const sink = new R2Sink(e.env.FILES, inboxKey(meta, fileId), SETTINGS.uploadPartBytes, {
     httpMetadata: { contentType: type },
     customMetadata: { name: encodeURIComponent(name) },
   })
+  const hash = new Sha256()
+  const reader = request.body?.getReader()
+  try {
+    for (;;) {
+      const chunk = reader ? await reader.read() : { done: true as const, value: undefined }
+      if (chunk.done) break
+      hash.update(chunk.value)
+      if (hash.length > SETTINGS.maxFileBytes) {
+        await reader?.cancel()
+        await sink.abort()
+        return fail('too_large', tooLarge)
+      }
+      await sink.write(chunk.value)
+    }
+  } catch (error) {
+    await sink.abort()
+    throw error
+  }
+  const bytes = hash.length
+  const sha256 = hash.hex()
+  if (declaredSha !== null && declaredSha !== sha256) {
+    await sink.abort()
+    return fail('bad_request', "The file's content doesn't match x-file-sha256.")
+  }
+  await sink.close(sha256)
   // The upload took time: if the collection was deleted meanwhile, nothing of it may stay.
   const now = await e.store.getMeta()
   if (!now || now.deleting) {
     await e.env.FILES.delete(inboxKey(meta, fileId))
     return fail('deleting', 'This collection was deleted.')
   }
-  await e.store.putStaged({ fileId, name, type, bytes: body.length, sha256, stagedAt: iso() })
-  return { fileId, bytes: body.length, sha256 }
+  const staged: StagedFile = { fileId, name, type, bytes, sha256, stagedAt: iso() }
+  await e.store.putStaged(staged)
+  await e.scheduleSoon(stagedExpiry(staged)) // cleared after a day if no import names it
+  return { fileId, bytes, sha256 }
 }
 
 /** Keeps staged files for an import that waits (the documents-learned limit resets on the 1st), up to 45 days. */
@@ -402,7 +428,7 @@ export async function removeForGood(e: CollectionEngine, documentId: string): Pr
   if (!doc) return fail('not_found', 'No such document.')
 
   const version = meta.nextVersion + meta.removals.length
-  const importId = `rm-${documentId}-${version}`
+  const importId = `rm-v${version}` // never the document id: it ends up in file names that outlive the document
   const record = baseRecord(importId, 'remove', {
     importId,
     state: 'queued',
@@ -602,9 +628,14 @@ export async function advance(e: CollectionEngine, record: ImportRecord): Promis
   if (meta.removals.length && record.kind !== 'remove' && !record.snapshotTaken) return preempt(e, record)
   if (record.retryAt && record.retryAt > clock.now()) return
   if (record.capacity === 'granted') {
-    await callObject(e.env.CAPACITY, CAPACITY_NAME, '/renew', {
+    // A slot that lapsed may have gone to another import: this one stops, keeps nothing and waits for a new one.
+    const renewed = await callObject<{ renewed: boolean }>(e.env.CAPACITY, CAPACITY_NAME, '/renew', {
       body: { org: meta.org, collectionId: meta.collectionId, importId: record.status.importId, small: record.small },
-    }).catch(() => undefined)
+    }).catch(() => ({ renewed: false }))
+    if (!renewed.renewed && !record.snapshotTaken) {
+      await e.store.log('lease-lost', { importId: record.status.importId })
+      return preempt(e, record)
+    }
   }
   try {
     if (record.phase === 'staging') await startJob(e, record)
@@ -620,6 +651,15 @@ export async function advance(e: CollectionEngine, record: ImportRecord): Promis
     if (error instanceof AttemptFailure) return attemptFailed(e, record, error)
     return attemptFailed(e, record, new AttemptFailure(errorText(error)))
   }
+}
+
+/** The organization was put on hold: a running import stops, keeps nothing and waits, its try not counted. */
+export async function stopForHold(e: CollectionEngine, record: ImportRecord): Promise<void> {
+  await e.store.log('import-held', { importId: record.status.importId })
+  await preempt(e, record)
+  await e.box.destroy('the organization is on hold')
+  await e.store.deleteRuntime()
+  await e.chargeUsage(null)
 }
 
 /** A removal for good goes first: the running import starts over after it, and the try isn't counted. */
@@ -754,8 +794,11 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   let batch: Record<string, unknown>
   let op = 'ingest'
   if (record.kind === 'remove' && record.rebuild) {
+    // Learned again without every document waiting to be removed for good: their texts are already gone.
     const state = await e.currentState(meta)
-    const kept = state.documents.filter((d) => !record.removeDocumentIds.includes(d.documentId))
+    const removing = new Set([...record.removeDocumentIds, ...meta.removals.map((r) => r.documentId)])
+    const kept = state.documents.filter((d) => !removing.has(d.documentId))
+    record.rereadDocumentIds = kept.map((d) => d.documentId) // its time limit counts them
     await stageTexts(kept)
     batch = { importId, kind: 'relearn', hiding: record.hiding, documents: kept.map((d) => ({ documentId: d.documentId, kind: d.kind, name: d.name })) }
   } else if (record.kind === 'remove') {
@@ -774,6 +817,7 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   } else if (record.kind === 'relearn') {
     const { current, extra } = await relearnDocuments(e, record, meta)
     const docs = [...current.documents, ...extra]
+    record.rereadDocumentIds = docs.map((d) => d.documentId) // its time limit counts them
     await stageTexts(docs)
     batch = { importId, kind: 'relearn', hiding: record.hiding, documents: docs.map((d) => ({ documentId: d.documentId, kind: d.kind, name: d.name })) }
   } else {
@@ -997,7 +1041,7 @@ async function commitImport(
   changes.notes = record.kind === 'correction' ? 0 : record.notes.length
   changes.corrections = record.kind === 'correction' ? record.notes.length : 0
   changes.removed = record.removeDocumentIds.length
-  changes.reread = (result.changed ?? []).length
+  changes.reread = record.kind === 'reread' ? (result.changed ?? []).length : 0
   const pointKind = record.kind === 'remove' ? 'remove' : record.kind === 'reread' ? 'reread' : record.kind === 'relearn' ? 'from_backup' : 'import'
   return commitPoint(e, {
     record,
@@ -1245,6 +1289,10 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
     meta.removals = meta.removals.filter((r) => !c.record.removeDocumentIds.includes(r.documentId))
     if (c.record.kind === 'reread') meta.hidingAppliedAt = now
     await txn.put('meta', meta)
+    if (c.record.kind === 'remove') {
+      const owed = (await txn.get<string[]>('removalCleanup')) ?? []
+      await txn.put('removalCleanup', [...new Set([...owed, ...c.record.removeDocumentIds])])
+    }
     const event = { at: now, org: meta.org, collectionId: meta.collectionId }
     const appImport = c.importEvent !== false
     await e.store.addEvents(
@@ -1287,16 +1335,29 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   if (c.record.capacity === 'granted') await step('capacity', () => e.releaseCapacity(c.record))
   await deleteOriginals(e, c.record.files.map((f) => f.fileId))
   if (c.record.kind === 'remove') {
-    // Facts files and backups written while the removal waited may still hold the file: they go too, and the
-    // latest backup is written again without it.
-    await step('facts', () => dropFacts(e, c.record.removeDocumentIds))
-    await step('backups', async () => {
-      for (const documentId of c.record.removeDocumentIds) await backup.dropDocument(e, documentId)
-    })
+    // Facts files and backups written while the removal waited may still hold the file: they go too (tried again
+    // from the alarm until they have), and the latest backup is written again without it.
+    await retryRemovalCleanup(e)
     const runtime = await e.store.getRuntime()
     if (runtime && e.box.running) await step('backup', () => backup.run(e, runtime))
   }
   return true
+}
+
+/** The clean-up a committed removal still owes: its facts in older facts files, and backups that hold it. */
+export async function retryRemovalCleanup(e: CollectionEngine): Promise<void> {
+  const owed = (await e.state.storage.get<string[]>('removalCleanup')) ?? []
+  if (!owed.length) return
+  try {
+    await dropFacts(e, owed)
+    for (const documentId of owed) await backup.dropDocument(e, documentId)
+    const now = (await e.state.storage.get<string[]>('removalCleanup')) ?? []
+    const left = now.filter((id) => !owed.includes(id))
+    if (left.length) await e.state.storage.put('removalCleanup', left)
+    else await e.state.storage.delete('removalCleanup')
+  } catch (error) {
+    await e.store.log('after-commit-failed', { step: 'removal clean-up', error: errorText(error) })
+  }
 }
 
 function learnedNote(record: ImportRecord, fileId: string): string | undefined {
@@ -1387,10 +1448,14 @@ async function requeueRemoval(e: CollectionEngine, failed: ImportRecord): Promis
   failed.status.attempt = 1
   failed.status.error = null
   failed.status.finishedAt = null
-  failed.retryAt = clock.now() + 60_000
+  // A removal must happen, so it is tried again, but each round waits longer (its failure was reported once).
+  failed.rounds = (failed.rounds ?? 0) + 1
+  failed.retryAt = clock.now() + REMOVAL_BACKOFF_MS[Math.min(failed.rounds, REMOVAL_BACKOFF_MS.length) - 1]
   await e.store.putImport(failed)
   await enqueue(e, failed)
 }
+
+const REMOVAL_BACKOFF_MS = [60_000, 10 * 60_000, 60 * 60_000, 6 * 60 * 60_000]
 
 /** Deletes originals from the inbox. If R2 refuses, the keys are kept and deleted again on a later alarm. */
 async function deleteOriginals(e: CollectionEngine, fileIds: string[]): Promise<void> {

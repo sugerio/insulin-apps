@@ -38,6 +38,11 @@ export interface Bindings {
   SUGER_MEMBER_EVENTS_URL?: string
   /** The clock (tests move it). */
   NOW?: () => number
+  /**
+   * The tick's deadline (Date.now() time), set on the tick's own copy of the bindings: engine and platform calls made
+   * with it are given up at that time, their bodies included.
+   */
+  DEADLINE?: number
 }
 
 export type AppEnv = { Bindings: Bindings; Variables: { caller: Caller } }

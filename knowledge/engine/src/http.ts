@@ -12,6 +12,7 @@ const STATUS: Record<EngineErrorCode, number> = {
   too_large: 413,
   unsupported_type: 415,
   model_unavailable: 503,
+  stale_settings: 409,
   internal: 500,
 }
 

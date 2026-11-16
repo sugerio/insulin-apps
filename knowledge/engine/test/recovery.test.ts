@@ -240,3 +240,192 @@ test('a failure to tidy up after a commit leaves the import committed and is ret
   await t.drain('c1', { horizonMs: 60_000 })
   assert.deepEqual(t.files.keys('inbox/'), [], 'the originals were deleted on a later try')
 })
+
+test('a backup taken after a wake still serves its snapshot, though the open databases changed /data', async () => {
+  const t = makeEngine()
+  t.cloud.openWrites = true
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  await ask(t, 'c1', 'topic number 1')
+  t.advance(11 * 60_000)
+  await t.drain('c1') // asleep: the backup holds /data as it was after the wake
+  await t.api('POST', '/v1/collections/c1/__test/drop-snapshot')
+  assert.equal((await ask(t, 'c1', 'topic number 2 gateway port')).body.status, 'ok')
+  const entries = (await log(t, 'c1')).map((e: any) => e.event)
+  assert.ok(entries.includes('from-backup-done'), entries.join(', '))
+  assert.ok(!entries.includes('from-backup-relearn'))
+})
+
+for (const format of ['same', 'changed'] as const) {
+  test(`two removals for good after an engine change (${format} database format) both commit, without looping`, async () => {
+    const t = await asleepWithBackup()
+    await learn(t, 'c1', 'imp-2', [doc(3)])
+    t.advance(11 * 60_000)
+    await t.drain('c1')
+    t.cloud.image = 'registry.example/engine@2'
+    if (format === 'changed') t.cloud.dataFormat = 'fmt-2'
+    const docs = (await t.api('GET', '/v1/collections/c1/documents')).body.documents
+    const first = await t.api('DELETE', `/v1/collections/c1/documents/${docs[0].documentId}`)
+    const second = await t.api('DELETE', `/v1/collections/c1/documents/${docs[1].documentId}`)
+    await settle(t)
+    const status = (await t.api('GET', '/v1/collections/c1')).body
+    assert.deepEqual([status.version, status.counts.documents], [second.body.version, 1])
+    assert.ok(first.body.version < second.body.version)
+    assert.ok(t.cloud.starts.length < 12, `bounded container starts (${t.cloud.starts.length})`)
+    assert.ok(!(await log(t, 'c1')).some((e: any) => e.event === 'import-try-failed'))
+  })
+}
+
+test('a removal that keeps failing backs off and is reported, instead of retrying every minute', async () => {
+  const t = await asleepWithBackup()
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents[0]
+  await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+  t.cloud.hangJobs = [] // the remove job itself fails every time:
+  const box = t.container('c1') as any
+  const serve = box.serve.bind(box)
+  box.serve = async (request: Request) => {
+    if (new URL(request.url).pathname === '/jobs' && request.method === 'POST') {
+      const body = (await request.clone().json()) as { op: string }
+      if (body.op === 'remove') return new Response('{"error":"broken"}', { status: 500 })
+    }
+    return serve(request)
+  }
+  for (let i = 0; i < 60; i++) {
+    await t.drain('c1', { steps: 20 })
+    t.advance(60_000)
+  }
+  const tries = (await log(t, 'c1')).filter((e: any) => e.event === 'import-try-failed').length
+  assert.ok(tries <= 9, `tries in an hour: ${tries}`)
+  assert.ok((await outboxEvents(t)).some((e) => e.type === 'import' && e.import.importId.startsWith('rm-') && e.import.state === 'failed'), 'the failure is reported')
+})
+
+test('a re-learning waiting for an import slot does not restart a container on every alarm', async () => {
+  const t = await asleepWithBackup()
+  t.cloud.image = 'registry.example/engine@2'
+  t.cloud.dataFormat = 'fmt-2'
+  t.cloud.jobPolls = 100000
+  for (const cid of ['c2', 'c3']) {
+    await createCollection(t, cid)
+    await startImport(t, cid, `big-${cid}`, [doc(5)])
+    await t.drain(cid, { steps: 3 })
+  }
+  const before = t.cloud.starts.filter((s) => s.collection.endsWith(':c1')).length
+  await t.api('POST', '/v1/collections/c1/search', { query: 'topic number 2' })
+  for (let i = 0; i < 20; i++) {
+    await t.drain('c1', { steps: 30, horizonMs: 30_000 })
+    t.advance(30_000)
+  }
+  const starts = t.cloud.starts.filter((s) => s.collection.endsWith(':c1')).length - before
+  assert.ok(starts <= 2, `c1 container starts in 10 minutes: ${starts}`)
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.queuedImports, 1)
+})
+
+test("a removal's clean-up of old backups and facts files is retried when it fails", async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2, 'The vault code is 7781-secret.')])
+  t.advance(11 * 60_000)
+  await t.drain('c1')
+  t.advance(24 * 60 * 60_000)
+  await ask(t, 'c1', 'topic number 1')
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'doc-2.md')
+  await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+  const list = t.backups.list.bind(t.backups)
+  let failed = false
+  t.backups.list = async (options: any) => {
+    if (!failed && options?.prefix?.includes('/daily/')) {
+      failed = true
+      throw new Error('R2 unavailable')
+    }
+    return list(options)
+  }
+  for (let i = 0; i < 30; i++) {
+    await t.drain('c1')
+    t.advance(60_000)
+  }
+  assert.ok(failed)
+  const holding = t.backups.keys().filter((k) => (t.backups.text(k) ?? '').includes('7781-secret') || (k.includes('/daily/') && (t.backups.text(k) ?? '').includes(target.documentId)))
+  assert.deepEqual(holding, [])
+})
+
+test('a wake that times out three times running stops asking, says so, and charges no more', async () => {
+  const t = await asleepWithBackup()
+  const box = t.container('c1') as any
+  const serve = box.serve.bind(box)
+  box.serve = async (request: Request) => (new URL(request.url).pathname === '/query/open' ? new Response('{"error":"boom"}', { status: 500 }) : serve(request))
+  await t.api('POST', '/v1/collections/c1/search', { query: 'topic' })
+  for (let i = 0; i < 180; i++) {
+    await t.drain('c1', { steps: 20 })
+    t.advance(60_000)
+  }
+  const entries = (await log(t, 'c1')).map((e: any) => e.event)
+  assert.ok(entries.filter((e: string) => e === 'wake-timed-out').length <= 3)
+  assert.ok(entries.includes('wake-gave-up'))
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.state, 'asleep')
+  assert.ok((await outboxEvents(t)).some((e) => e.type === 'state' && e.state === 'asleep'))
+  const awake = (await outboxEvents(t)).filter((e) => e.type === 'usage').reduce((s, e) => s + e.seconds, 0)
+  assert.ok(awake < 60 * 60, `seconds charged ${awake}`)
+})
+
+test("a rebuilding removal's time limit counts the documents it learns again", async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  const many = Array.from({ length: 300 }, (_, i) => ({ fileId: `m${i}`, name: `m${i}.md`, text: `Item ${i} is here.` }))
+  await learn(t, 'c1', 'imp-1', many.slice(0, 150))
+  await learn(t, 'c1', 'imp-2', many.slice(150))
+  t.advance(11 * 60_000)
+  await t.drain('c1')
+  t.cloud.image = 'registry.example/engine@2'
+  t.cloud.dataFormat = 'fmt-2'
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents[0]
+  await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+  t.cloud.hangJobs = ['ingest']
+  await t.drain('c1', { steps: 10 })
+  assert.ok((await log(t, 'c1')).some((e: any) => e.event === 'removal-rebuilds'))
+  t.advance(70 * 60_000) // past an hour, well inside three times the plan for 299 documents
+  await t.drain('c1', { steps: 5 })
+  assert.ok(!(await log(t, 'c1')).some((e: any) => e.event === 'import-try-failed'), 'not given up after an hour')
+})
+
+test('a repair that learns again under stricter rules blocks the restore points that hold the newly hidden text', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1, 'The codename is Bluewater.'), doc(2)])
+  t.advance(6 * 60_000)
+  await learn(t, 'c1', 'imp-2', [doc(3)])
+  t.advance(11 * 60_000)
+  await t.drain('c1')
+  for (const key of t.backups.keys()) await t.backups.delete(key)
+  await t.api('POST', '/v1/collections/c1/__test/corrupt-manifest')
+  await t.api('POST', '/v1/collections/c1/search', { query: 'topic' })
+  // While the repair answers from version 1, the rules get stricter: the re-learning hides the word.
+  for (let i = 0; i < 40 && !(await log(t, 'c1')).some((entry: any) => entry.event === 'relearn-queued'); i++) await t.drain('c1', { steps: 1 })
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater'] } } })
+  await settle(t)
+  assert.deepEqual(t.files.keys('text/').filter((k) => t.files.text(k)!.includes('Bluewater')), [])
+  const points = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints
+  const holding = points.filter((p: any) => p.version <= 3)
+  assert.ok(holding.length > 0)
+  for (const p of holding) assert.equal(p.restorable, false, `version ${p.version} (${p.reason})`)
+  assert.ok(holding.some((p: any) => p.reason === 'newly_hidden'))
+})
+
+test('an import that loses its capacity slot stops, keeps nothing and waits for a new one', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  t.cloud.jobPolls = 6
+  await startImport(t, 'c1', 'imp-1', [doc(1)])
+  await t.drain('c1', { steps: 2 })
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-1')).body.state, 'learning')
+  const capacity = t.capacity.instance('capacity').state.storage
+  await capacity.put('running', {}) // the slot was given away (its lease ran out)
+  await t.drain('c1', { steps: 1 })
+  const stopped = (await t.api('GET', '/v1/collections/c1/imports/imp-1')).body
+  assert.deepEqual([stopped.state, stopped.attempt], ['queued', 1])
+  assert.equal(t.container('c1').running, false)
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, 0)
+  t.cloud.jobPolls = 1
+  t.advance(60_000)
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-1')).body.state, 'committed')
+})

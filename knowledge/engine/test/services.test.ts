@@ -165,3 +165,14 @@ test('grouped citations keep only the passages given, and the answer says how ma
   assert.equal(res.body.text, 'The gateway listens on port 8443 [1]. See also.')
   assert.deepEqual([res.body.citations, res.body.dropped], [[1], 2])
 })
+
+test('SHA-256 in pieces equals SHA-256 of the whole, wherever the pieces break', async () => {
+  const { Sha256 } = await import('../src/sha256.ts')
+  const { createHash } = await import('node:crypto')
+  for (const size of [0, 1, 55, 56, 63, 64, 65, 1000, 70_000]) {
+    const bytes = new Uint8Array(size).map((_, i) => (i * 31 + size) & 0xff)
+    const hash = new Sha256()
+    for (let at = 0; at < size; at += 1 + (at % 97)) hash.update(bytes.subarray(at, Math.min(size, at + 1 + (at % 97))))
+    assert.equal(hash.hex(), createHash('sha256').update(bytes).digest('hex'), `size ${size}`)
+  }
+})

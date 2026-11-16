@@ -1,3 +1,4 @@
+import { beforeDeadline } from './deadline.ts'
 import type { Bindings } from './env.ts'
 import { gatewayEndpoint } from './gateway-fetch.ts'
 
@@ -33,7 +34,8 @@ const CALL_TIMEOUT_MS = 8_000
 
 /**
  * Calls one endpoint, or answers null when it isn't configured. `query` is added to the URL; `headers` go with the
- * token. Network failures and timeouts throw.
+ * token. Network failures and timeouts throw. The call, its body included, takes at most 8 seconds, and never runs past
+ * the tick's deadline (`env.DEADLINE`): the answer comes back with its body already read.
  */
 export async function callPlatform(
   env: Bindings,
@@ -47,11 +49,17 @@ export async function callPlatform(
   const headers: Record<string, string> = { authorization: `Bearer ${endpoint.token}`, accept: 'application/json', ...init.headers }
   if (init.body !== undefined) headers['content-type'] = 'application/json'
   const send = env.GATEWAY_FETCH ?? fetch
-  return send(url.toString(), {
+  const deadline = Math.min(Date.now() + CALL_TIMEOUT_MS, env.DEADLINE ?? Number.POSITIVE_INFINITY)
+  const response = await beforeDeadline(send(url.toString(), {
     method: init.method ?? 'GET',
     headers,
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     redirect: 'manual',
-    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-  })
+    signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+  }), deadline, 'The platform')
+  const text = await beforeDeadline(response.text(), deadline, 'The platform')
+  return new Response(NULL_BODY.has(response.status) ? null : text, { status: response.status, headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' } })
 }
+
+/** Statuses whose answer has no body. */
+const NULL_BODY = new Set([101, 204, 205, 304])

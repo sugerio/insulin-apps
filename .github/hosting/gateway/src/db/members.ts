@@ -64,9 +64,9 @@ export async function memberEventsAfter(db: D1Database, app: string, since: numb
 }
 
 /**
- * The cleanup (housekeeping.ts): events past 90 days, oldest first, noting the highest id it deletes. It runs after
- * every change, so it finds them through the index on their time, which ends at once when none is old; ordering by id
- * would read the whole table each time.
+ * The cleanup (housekeeping.ts): events past 90 days, oldest first, noting the highest id it deletes, and stale moves.
+ * It runs after every change, so it finds events through the index on their time, which ends at once when none is old;
+ * ordering by id would read the whole table each time.
  */
 export function pruneMemberEventsStatements(db: D1Database, now: number, limit: number): D1PreparedStatement[] {
   const cut = now - MEMBER_EVENT_RETENTION_MS
@@ -76,6 +76,9 @@ export function pruneMemberEventsStatements(db: D1Database, now: number, limit: 
        WHERE id = 1`,
     ).bind(cut, limit),
     db.prepare('DELETE FROM member_events WHERE id IN (SELECT id FROM member_events WHERE at < ?1 ORDER BY at LIMIT ?2)').bind(cut, limit),
+    // A move to specific apps is closed by the batch that makes it, so any this transaction sees is stale (one the
+    // gateway before migration 0012's code left open, during the release that added it).
+    db.prepare('DELETE FROM member_event_moves WHERE rowid IN (SELECT rowid FROM member_event_moves LIMIT ?1)').bind(limit),
   ]
 }
 

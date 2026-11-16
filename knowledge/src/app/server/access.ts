@@ -57,6 +57,9 @@ export interface CollectionRow {
   last_restore_point_at: number | null
   last_backup_at: number | null
   settings_version: number
+  settings_revision: number
+  settings_pushed: number
+  settings_tried_at: number | null
   updated_at: number
 }
 

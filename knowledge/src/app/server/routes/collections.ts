@@ -3,13 +3,13 @@ import { z } from 'zod'
 import { ACTIONS, authorize, HAS_ROLE_SQL, loadCollection, ownerName, quoted, ROLE_RANK, roleIn, type Action, type CollectionRole, type CollectionRow } from '../access.ts'
 import type { AppEnv } from '../env.ts'
 import { ApiError, badRequest, browserOnly, forbidden, logError, notFound, readJson } from '../http.ts'
-import { idempotent } from '../idempotency.ts'
+import { idempotent, stableId } from '../idempotency.ts'
 import { can, isOrgOwner, type Caller } from '../identity.ts'
 import { effectiveLimit, quotaExceeded, SECONDS_PER_HOUR, usageOf } from '../limits.ts'
-import { eraseCollection } from '../erase.ts'
+import { eraseCollection, releaseImportsStatement } from '../erase.ts'
 import { appLink, MAIL, sendMail } from '../mail.ts'
 import { memberOf, memberStatus } from '../members.ts'
-import { engineSettings, pushSettings, readOrgSettings } from '../settings.ts'
+import { engineSettings, markPushed, pushSettings, readOrgSettings } from '../settings.ts'
 import { callerOf, engineFor, iso, json, now, param, type Ctx } from './common.ts'
 
 const nameSchema = z.string().trim().min(1, 'give the collection a name').max(200, 'use at most 200 characters')
@@ -86,22 +86,30 @@ export function collectionRoutes() {
       const org = caller.organizationId
       const engine = engineFor(c)
       const limit = await effectiveLimit(db, org, 'collections', at)
-      const id = crypto.randomUUID()
+      // The same id when the same request comes back after its answer was lost: it finds the collection it made.
+      const id = await stableId(c)
       // One statement: the collection is added only while the organization is under its limit.
       const inserted = await db.prepare(
         `INSERT INTO collections (id, org_id, owner_id, owner_since, name, purpose, created_at, created_by, updated_at)
          SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?4, ?3, ?4
-         WHERE ?7 IS NULL OR (SELECT COUNT(*) FROM collections WHERE org_id = ?2 AND state = 'active') < ?7`,
+         WHERE ?7 IS NULL OR (SELECT COUNT(*) FROM collections WHERE org_id = ?2 AND state = 'active') < ?7
+         ON CONFLICT (id) DO NOTHING`,
       ).bind(id, org, caller.id, at, body.name, body.purpose ?? '', limit).run()
-      if (inserted.meta.changes !== 1) throw quotaExceeded(c.env, 'collections', limit ?? 0, at)
-      const collection = (await loadCollection(db, org, id))!
+      const collection = await loadCollection(db, org, id)
+      if (inserted.meta.changes !== 1) {
+        const made = await db.prepare(`SELECT state, created_by FROM collections WHERE id = ?`).bind(id).first<{ state: string; created_by: string }>()
+        if (!made) throw quotaExceeded(c.env, 'collections', limit ?? 0, at)
+        if (!collection || made.created_by !== caller.id) throw new ApiError('conflict', 'The collection this request made was deleted since. Send it again with a new Idempotency-Key.')
+      }
       try {
-        await engine.putCollection(id, engineSettings(collection, await readOrgSettings(db, org, at)))
+        const settings = engineSettings(collection!, await readOrgSettings(db, org, at))
+        await engine.putCollection(id, settings)
+        await markPushed(db, collection!, settings.revision, at)
       } catch (error) {
-        await db.prepare(`DELETE FROM collections WHERE id = ? AND org_id = ?`).bind(id, org).run()
+        if (inserted.meta.changes === 1) await db.prepare(`DELETE FROM collections WHERE id = ? AND org_id = ?`).bind(id, org).run()
         throw error
       }
-      return json(c, { collection: await summaryOf(db, caller, collection) }, 201)
+      return json(c, { collection: await summaryOf(db, caller, collection!) }, 201)
     })
   })
 
@@ -195,7 +203,7 @@ export function collectionRoutes() {
       const paused = awakeLimit !== null && (usage.awake_hours_month?.used ?? 0) >= awakeLimit * SECONDS_PER_HOUR * 0.9 ? 1 : 0
       // One statement: kept ready only while the organization is under its limit of collections kept ready.
       const updated = await db.prepare(
-        `UPDATE collections SET keep_ready = ?1, keep_ready_paused = ?2, updated_at = ?3 WHERE id = ?4 AND org_id = ?5
+        `UPDATE collections SET keep_ready = ?1, keep_ready_paused = ?2, settings_revision = settings_revision + 1, updated_at = ?3 WHERE id = ?4 AND org_id = ?5
            AND (keep_ready IS NOT NULL OR ?6 IS NULL OR (SELECT COUNT(*) FROM collections WHERE org_id = ?5 AND state = 'active' AND keep_ready IS NOT NULL) < ?6)`,
       ).bind(JSON.stringify(body.keepReady), paused, at, collection.id, org, limit).run()
       if (updated.meta.changes !== 1) throw quotaExceeded(c.env, 'ready_collections', limit ?? 0, at)
@@ -205,11 +213,12 @@ export function collectionRoutes() {
     if (body.name !== undefined) set('name = ?', body.name)
     if (body.purpose !== undefined) set('purpose = ?', body.purpose)
     if (body.assistants !== undefined) set('assistants = ?', body.assistants ? 1 : 0)
-    if (body.awakeMinutes !== undefined) set('awake_minutes = ?', body.awakeMinutes)
-    if (body.keepReady === null) set('keep_ready = NULL, keep_ready_paused = 0')
+    // What the engine keeps changes its settings' revision in the same statement.
+    if (body.awakeMinutes !== undefined) set('awake_minutes = ?, settings_revision = settings_revision + 1', body.awakeMinutes)
+    if (body.keepReady === null) set('keep_ready = NULL, keep_ready_paused = 0, settings_revision = settings_revision + 1')
     if (statements.length) await db.batch(statements)
+    if (body.keepReady !== undefined || body.awakeMinutes !== undefined) await pushSettings(c.env, collection, at)
     const fresh = (await loadCollection(db, org, collection.id))!
-    if (body.keepReady !== undefined || body.awakeMinutes !== undefined) await pushSettings(c.env, fresh, await readOrgSettings(db, org, at), at)
     if (onlyKeepReadyOff && isOrgOwner(caller) && !(await roleIn(db, caller, fresh)).role) return json(c, { collection: { id: fresh.id, keepReady: null } })
     return json(c, { collection: await summaryOf(db, caller, fresh) })
   })
@@ -234,6 +243,8 @@ export function collectionRoutes() {
       await db.batch([
         db.prepare(`UPDATE collections SET state = 'deleting', deleted_at = ?3, deleted_by = ?4, keep_ready = NULL, updated_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'active'`).bind(collection.id, org, at, caller.id),
         db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND state = 'held'`).bind(org, `awake:${collection.id}`, at),
+        // Its imports, learning or waiting, will never count: what they held is free again.
+        releaseImportsStatement(db, org, collection.id, at),
         db.prepare(`INSERT INTO activity (id, org_id, collection_id, collection_name, action, actor_id, at, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(crypto.randomUUID(), org, collection.id, collection.name, owner ? 'deleted' : 'deleted_by_org_owner', caller.id, at, JSON.stringify({ owner: collection.owner_id })),
       ])
@@ -262,6 +273,8 @@ export function collectionRoutes() {
   // Transfer ownership to an Admin or Editor in Knowledge; the old owner becomes a collection Admin. Browser-only.
   app.post('/:id/transfer', async (c) => {
     const caller = callerOf(c)
+    // Browser-only before anything else, the saved answer of a transfer sent again included.
+    if (caller.via !== 'browser') throw browserOnly()
     const body = await readJson(c, z.object({ to: z.string().min(1).max(128) }).strict())
     // A transfer sent again answers as it did the first time, although the sender owns it no more.
     return idempotent(c, body, true, async () => {

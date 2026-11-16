@@ -5,6 +5,8 @@
 // good, changes within 5 minutes sharing one restore point; organizations kept apart) and none of its machinery (no
 // containers, models or storage). Unlike the real engine it goes back and undoes at once, rather than in an alarm. It also has a control
 // interface that puts a collection asleep, waking or learning, fails the next import or records usage, for tests.
+// Like the real engine it refuses settings out of range (and older revisions), and holds an organization at the
+// app's awake-hours stop (POST /v1/orgs/:org/hold).
 //
 // Development only: the app imports it dynamically when it runs without the SUGER_ENGINE binding in a development
 // build, so production builds never contain it (scripts/check-no-stub.mjs looks for STUB_MARKER).
@@ -188,6 +190,8 @@ class StubError extends Error {
 
 const DEV_TIMING: StubTiming = { wakeMs: 0, importMs: 0, perDocumentMs: 0 }
 const DAY_MS = 24 * 60 * 60 * 1000
+/** Outbox ids are zero-padded sequence numbers, ordered as strings and as numbers. */
+const OUTBOX_ID_WIDTH = 12
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 /** The engine buffers what it stages, up to 64 MB. */
 const MAX_STAGED_BYTES = 64 * 1024 * 1024
@@ -198,6 +202,7 @@ const MAX_KEEP_STAGED_MS = 45 * DAY_MS
 /** Changes within this long of the last one share its restore point. */
 const SHARE_RESTORE_POINT_MS = 5 * 60 * 1000
 const FOLDABLE = new Set<PointKind>(['import', 'change'])
+const DEFAULT_SETTINGS: CollectionSettings = { hiding: DEFAULT_HIDING, keepReady: null, awakeMinutes: 10, backupDays: 30, revision: 0 }
 const NO_CHANGES: Changes = { files: 0, notes: 0, corrections: 0, stopped: 0, resumed: 0 }
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`
@@ -228,6 +233,56 @@ function copyContent(content: Content): Content {
   return { documents, outdated: new Map(content.outdated), corrections: content.corrections }
 }
 
+const refuse = (message: string): never => {
+  throw new StubError(400, 'bad_request', message)
+}
+
+/** The settings a PUT sends, checked as the real engine checks them (collection.ts validateSettings); missing parts keep `base`. */
+function validateSettings(value: unknown, base: CollectionSettings): CollectionSettings {
+  if (!value || typeof value !== 'object') return refuse('settings must be an object.')
+  const s = value as Partial<CollectionSettings>
+  const hiding = s.hiding === undefined ? base.hiding : validateHiding(s.hiding)
+  const keepReady = s.keepReady === undefined ? base.keepReady : validateKeepReady(s.keepReady)
+  const awakeMinutes = s.awakeMinutes === undefined ? base.awakeMinutes : Number(s.awakeMinutes)
+  if (!Number.isInteger(awakeMinutes) || awakeMinutes < 1 || awakeMinutes > 60) return refuse('awakeMinutes must be 1 to 60.')
+  const backupDays = s.backupDays === undefined ? base.backupDays : Number(s.backupDays)
+  if (!Number.isInteger(backupDays) || backupDays < 1 || backupDays > 3650) return refuse('backupDays must be 1 to 3650.')
+  const revision = s.revision === undefined ? base.revision : Number(s.revision)
+  if (!Number.isInteger(revision) || revision < 0) return refuse('revision must be a whole number, 0 or more.')
+  return { hiding, keepReady, awakeMinutes, backupDays, revision }
+}
+
+function validateHiding(value: unknown): CollectionSettings['hiding'] {
+  if (!value || typeof value !== 'object') return refuse('settings.hiding must be an object.')
+  const h = value as Partial<CollectionSettings['hiding']>
+  const flag = (v: unknown, name: string) => (typeof v === 'boolean' ? v : refuse(`settings.hiding.${name} must be true or false.`))
+  const words = h.words ?? []
+  if (!Array.isArray(words) || words.length > 200 || words.some((word) => typeof word !== 'string' || !word.trim() || word.length > 100)) {
+    return refuse('settings.hiding.words must be at most 200 words or phrases of up to 100 characters.')
+  }
+  return {
+    emails: flag(h.emails, 'emails'), phones: flag(h.phones, 'phones'), cards: flag(h.cards, 'cards'), apiKeys: flag(h.apiKeys, 'apiKeys'), secrets: flag(h.secrets, 'secrets'),
+    words: [...new Set((words as string[]).map((word) => word.trim()))],
+  }
+}
+
+function validateKeepReady(value: unknown): CollectionSettings['keepReady'] {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'object') return refuse('keepReady must be an object or null.')
+  const k = value as Partial<NonNullable<CollectionSettings['keepReady']>>
+  let zone = false
+  try {
+    zone = typeof k.timeZone === 'string' && Boolean(new Intl.DateTimeFormat('en-US', { timeZone: k.timeZone }))
+  } catch {
+    zone = false
+  }
+  if (!zone) return refuse('keepReady.timeZone must be an IANA time zone, such as "Europe/Berlin".')
+  if (!Array.isArray(k.days) || k.days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) return refuse('keepReady.days must list days from 0 (Sunday) to 6 (Saturday).')
+  if (typeof k.start !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(k.start)) return refuse('keepReady.start must be a time such as "09:00".')
+  if (!Number.isInteger(k.hours) || (k.hours as number) < 1 || (k.hours as number) > 3) return refuse('keepReady.hours must be 1, 2 or 3.')
+  return { timeZone: k.timeZone!, days: [...new Set(k.days)].sort(), start: k.start, hours: k.hours as number, paused: k.paused === true }
+}
+
 function randomId(prefix: string): string {
   const bytes = crypto.getRandomValues(new Uint8Array(9))
   return `${prefix}_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`
@@ -244,6 +299,8 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   let sequence = 0
   let failures: Failure[] = []
   let held = false
+  /** Organizations on hold (the app's awake-hours stop), until when. */
+  let holds = new Map<string, number>()
   let answerMode: 'ok' | 'bad_citation' | 'fail' = 'ok'
   let order = 0
 
@@ -251,7 +308,8 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
 
   function emit(event: Omit<OutboxEvent, 'id' | 'at'> & Record<string, unknown>): void {
     sequence += 1
-    outbox.push({ seq: sequence, event: { id: `e${sequence}`, at: new Date(now()).toISOString(), ...event } as OutboxEvent })
+    // As the real engine numbers them: the id is the cursor that continues after the event.
+    outbox.push({ seq: sequence, event: { id: String(sequence).padStart(OUTBOX_ID_WIDTH, '0'), at: new Date(now()).toISOString(), ...event } as OutboxEvent })
     const cutoff = now() - 7 * DAY_MS
     outbox = outbox.filter((entry) => Date.parse(entry.event.at) >= cutoff)
   }
@@ -279,8 +337,20 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     return collection.forced
   }
 
+  /** Whether the organization is on hold now; a hold past its time ends by itself. */
+  function onHold(org: string): boolean {
+    const until = holds.get(org)
+    if (until === undefined) return false
+    if (until <= now()) {
+      holds.delete(org)
+      return false
+    }
+    return true
+  }
+
   function stateOf(collection: StubCollection): CollectionState {
     if (collection.deleted) return 'deleted'
+    if (onHold(collection.org) && !collection.removals.length) return 'held'
     const forced = forcedState(collection)
     if (forced && forced.state !== 'busy') return forced.state
     const current = running(collection)
@@ -372,8 +442,40 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     item.status.files = item.status.files.map((file) => ({ ...file, state: 'understanding' }))
   }
 
+  /**
+   * An organization on hold runs nothing: the import running stops (it keeps nothing and waits in the queue), and its
+   * collections stop being awake, the time they were awake written to the ledger.
+   */
+  function stopForHold(collection: StubCollection): void {
+    const current = running(collection)
+    if (current) {
+      emit({ org: collection.org, collectionId: collection.id, type: 'import', import: { ...current.status, state: 'interrupted', files: current.status.files.map((file) => ({ ...file })) } })
+      current.status.state = 'queued'
+      current.status.files = current.status.files.map((file) => ({ ...file, state: 'waiting' }))
+      current.startedAt = null
+      current.finishAt = null
+      collection.running = null
+      collection.queue.unshift(current.status.importId)
+    }
+    if (collection.awakeSince !== null) {
+      const seconds = Math.round((now() - collection.awakeSince) / 1000)
+      if (seconds > 0) emit({ org: collection.org, collectionId: collection.id, type: 'usage', kind: 'awake', seconds })
+      collection.awakeSince = null
+    }
+    collection.awakeUntil = null
+    collection.wakingUntil = null
+  }
+
+  /** Work that needs the collection running, refused while its organization is on hold. */
+  function refuseWhileHeld(collection: StubCollection): void {
+    if (!onHold(collection.org)) return
+    const seconds = Math.max(1, Math.ceil(((holds.get(collection.org) ?? now()) - now()) / 1000))
+    throw new StubError(429, 'capacity', 'This organization has used its awake hours, so nothing runs until the hold ends.', seconds)
+  }
+
   function pump(force = false): void {
     clearStaged()
+    for (const collection of collections.values()) if (!collection.deleted && onHold(collection.org)) stopForHold(collection)
     for (let rounds = 0; rounds < 1000; rounds += 1) {
       let changed = false
       for (const collection of collections.values()) {
@@ -407,7 +509,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       }
       // Start what may start: one per collection, small ones first, within the organization's and the service's capacity.
       const waiting = [...collections.values()]
-        .filter((collection) => !collection.deleted && !collection.running && collection.queue.length > 0)
+        .filter((collection) => !collection.deleted && !collection.running && collection.queue.length > 0 && !onHold(collection.org))
         .map((collection) => ({ collection, item: next(collection) }))
         .sort((a, b) => Number(b.item.request.small) - Number(a.item.request.small) || a.item.order - b.item.order)
       for (const { collection, item } of waiting) {
@@ -684,6 +786,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     const answer = (status: SearchResult['status'], retryAfterSeconds: number | null): SearchResult => ({ status, retryAfterSeconds, covered: false, passages: [], facts: [], version: collection.version })
     if (forced?.state === 'busy') return answer('busy', 30)
     const state = stateOf(collection)
+    if (state === 'held') return answer('held', Math.max(1, Math.ceil(((holds.get(collection.org) ?? now()) - now()) / 1000)))
     if (state === 'learning' || state === 'saving') return answer('learning', Math.max(5, running(collection)?.status.etaSeconds ?? 60))
     if (state === 'waking') return answer('waking', Math.max(1, Math.ceil(((collection.wakingUntil ?? now() + 60_000) - now()) / 1000)))
     if (state === 'asleep') {
@@ -790,13 +893,30 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     pump()
     if (path === '/v1/health' && method === 'GET') return json({ engine: `in-memory stub, API ${ENGINE_API_VERSION}`, collections: [...collections.values()].filter((collection) => !collection.deleted).length })
     if (path === '/v1/outbox' && method === 'GET') {
-      const since = Number(url.searchParams.get('since') ?? 0) || 0
+      const raw = url.searchParams.get('since') ?? ''
+      const since = /^\d{1,20}$/.test(raw) ? Number(raw) : 0
       const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') ?? 100) || 100))
       const after = outbox.filter((entry) => entry.seq > since)
       const page = after.slice(0, limit)
-      return json({ events: page.map((entry) => entry.event), cursor: String(page.at(-1)?.seq ?? since), more: after.length > page.length })
+      return json({ events: page.map((entry) => entry.event), cursor: page.at(-1)?.event.id ?? (raw && since ? String(since).padStart(OUTBOX_ID_WIDTH, '0') : ''), more: after.length > page.length })
     }
     if (path === '/v1/answer' && method === 'POST') return json(answer(await body<AnswerRequest>(request)))
+    const hold = path.match(/^\/v1\/orgs\/([^/]+)\/hold$/)
+    if (hold && method === 'POST') {
+      const org = decodeURIComponent(hold[1]!)
+      if (request.headers.get(ORG_HEADER)?.trim() !== org) throw new StubError(404, 'not_found', 'No such organization.')
+      const { until } = await body<{ until?: unknown }>(request)
+      if (until === null) {
+        holds.delete(org)
+        pump()
+        return json({ held: false, until: null })
+      }
+      const at = typeof until === 'string' ? Date.parse(until) : NaN
+      if (!Number.isFinite(at)) throw new StubError(400, 'bad_request', 'until must be a date and time, such as 2026-12-01T00:00:00Z, or null.')
+      holds.set(org, at)
+      pump()
+      return json({ held: onHold(org), until: onHold(org) ? new Date(at).toISOString() : null })
+    }
     const purge = path.match(/^\/v1\/orgs\/([^/]+)\/purge$/)
     if (purge && method === 'POST') {
       const org = decodeURIComponent(purge[1]!)
@@ -818,15 +938,21 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       if (elsewhere) throw new StubError(404, 'not_found', 'There is no such collection.')
       let collection = collections.get(key(org, collectionId))
       if (collection?.deleted) throw new StubError(409, 'deleting', 'This collection is being deleted.')
+      const next = validateSettings(settings, collection?.settings ?? DEFAULT_SETTINGS)
+      // Settings carry the app's revision: an older one arriving late never undoes a newer one, and the same one again
+      // changes nothing.
+      const sent = (settings as { revision?: unknown }).revision
+      if (collection && sent !== undefined && next.revision < collection.settings.revision) throw new StubError(409, 'stale_settings', 'These settings are older than the ones the engine has.')
+      if (collection && sent !== undefined && next.revision === collection.settings.revision && next.revision > 0) return json(statusOf(collection))
       if (!collection) {
         collection = {
-          org, id: collectionId, settings: normalSettings(settings), deleted: false, content: { documents: new Map(), outdated: new Map(), corrections: 0 },
+          org, id: collectionId, settings: next, deleted: false, content: { documents: new Map(), outdated: new Map(), corrections: 0 },
           version: 0, snapshots: new Map(), imports: new Map(), queue: [], running: null, exports: new Map(), inbox: new Map(),
           awakeSince: null, awakeUntil: null, wakingUntil: null, lastQuestionAt: null, lastBackupAt: null, forced: null, removals: [],
         }
         collections.set(key(org, collectionId), collection)
       } else {
-        rehide(collection, normalSettings(settings))
+        rehide(collection, next)
       }
       return json(statusOf(collection))
     }
@@ -910,6 +1036,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       if (!stored) throw new StubError(404, 'not_found', 'There is no such document.')
       if (method === 'GET') return json({ document: stored.info, text: stored.text, pages: stored.pages, hidden: stored.hidden } satisfies DocumentText)
       if (method === 'PATCH') {
+        refuseWhileHeld(collection)
         const { active } = await body<{ active: boolean }>(request)
         if (typeof active !== 'boolean') throw new StubError(400, 'bad_request', 'Say whether to use the file.')
         if (collection.removals.length) throw new StubError(409, 'busy_learning', 'A file is being removed for good; try again in a minute.')
@@ -966,9 +1093,13 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     if (point) {
       const version = Number(point[1])
       if (point[2] === 'preview' && method === 'GET') return json(preview(collection, version))
-      if (point[2] === 'go-back' && method === 'POST') return json(goBack(collection, version, false))
+      if (point[2] === 'go-back' && method === 'POST') {
+        refuseWhileHeld(collection)
+        return json(goBack(collection, version, false))
+      }
     }
     if (rest === '/undo' && method === 'POST') {
+      refuseWhileHeld(collection)
       const previous = collection.snapshots.get(collection.version)?.previous ?? null
       if (!previous) throw new StubError(409, 'not_restorable', 'There is nothing to undo.')
       return json(goBack(collection, previous, true))
@@ -978,6 +1109,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       if (typeof exportId !== 'string' || !ID.test(exportId)) throw new StubError(400, 'bad_request', 'Send an export id.')
       const existing = collection.exports.get(exportId)
       if (existing) return json(exportStatus(existing))
+      refuseWhileHeld(collection)
       const content = JSON.stringify(exportOf(collection), null, 2)
       const status = { exportId, state: 'ready' as const, bytes: new TextEncoder().encode(content).byteLength, readyAt: new Date(now()).toISOString(), expiresAt: new Date(now() + 7 * DAY_MS).toISOString(), body: content }
       collection.exports.set(exportId, status)
@@ -1012,15 +1144,6 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       outdated: [...collection.content.outdated.keys()].map((entry): PassageRef => ({ documentId: entry.slice(0, entry.lastIndexOf(':')), textHash: entry.slice(entry.lastIndexOf(':') + 1) })),
       facts: facts(collection.content),
       history: restorePoints(collection),
-    }
-  }
-
-  function normalSettings(settings: CollectionSettings): CollectionSettings {
-    return {
-      hiding: { ...DEFAULT_HIDING, ...(settings.hiding ?? {}), words: Array.isArray(settings.hiding?.words) ? settings.hiding.words.filter((word) => typeof word === 'string') : [] },
-      keepReady: settings.keepReady ?? null,
-      awakeMinutes: Number.isFinite(settings.awakeMinutes) && settings.awakeMinutes > 0 ? settings.awakeMinutes : 10,
-      backupDays: Number.isFinite(settings.backupDays) && settings.backupDays > 0 ? settings.backupDays : 30,
     }
   }
 
@@ -1147,6 +1270,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     },
     reset() {
       collections = new Map()
+      holds = new Map()
       outbox = []
       failures = []
       held = false

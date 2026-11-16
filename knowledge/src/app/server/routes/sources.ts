@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { ImportFile, ImportStatus } from '../../../../engine/src/contract.ts'
+import type { HidingRules, ImportFile, ImportStatus } from '../../../../engine/src/contract.ts'
 import { authorize, ownerName, type CollectionRow } from '../access.ts'
 import { EngineCallError, type EngineClient } from '../engine/client.ts'
 import type { AppEnv, Bindings } from '../env.ts'
@@ -9,6 +9,8 @@ import { idempotent, stableId } from '../idempotency.ts'
 import type { Caller } from '../identity.ts'
 import { effectiveLimit, ensureAwakeBlock, quotaExceeded, release, reservationsOf, reserve, resetsAt, supportSentence, usageOf, type LimitKey } from '../limits.ts'
 import { finishImport } from '../outbox.ts'
+import { hiddenNote } from '../kept.ts'
+import { readOrgSettings } from '../settings.ts'
 import { FILE_ID, inspect, sha256Hex, TooLargeError, verdictOf } from '../uploads.ts'
 import { fetchWebPage } from '../web-pages.ts'
 import { callerOf, engineFor, json, now, param } from './common.ts'
@@ -19,12 +21,34 @@ const MAX_TEXT_BYTES = 2 * 1024 * 1024
 export const MAX_NOTE_CHARS = 20_000
 /** Files whose text can be far larger than the file itself (compressed formats): they reserve the most one file keeps. */
 const COMPRESSED = new Set(['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
-/** Hiding replaces a value with "[hidden]", which can be longer than the value: twice the text is the bound reserved. */
-const HIDING_GROWTH = 2
+/** Reading a file's text can make it longer than the file: a byte that isn't valid UTF-8 becomes "�", 3 bytes. */
+const DECODE_GROWTH = 3
+/** What hiding puts in place of each value it finds: "[hidden]". */
+const HIDDEN_BYTES = 8
+/** The built-in kinds hide values that, with what labels them, take at least half as many bytes as "[hidden]". */
+const BUILT_IN_GROWTH = 2
 
-/** The most stored text a file can come to, after extraction and hiding: what an import reserves of stored bytes. */
-export function storedBound(file: { type: string; bytes: number }): number {
-  return HIDING_GROWTH * (COMPRESSED.has(file.type) ? MAX_TEXT_BYTES : Math.min(file.bytes, MAX_TEXT_BYTES))
+/**
+ * How many times longer hiding can make a text, at most. Each value hidden becomes "[hidden]" (8 bytes): the built-in
+ * kinds (addresses, phone numbers, cards, keys, labelled secrets) at most double a text; the organization's own words
+ * grow it by 8 bytes over the shortest word's length (a two-letter word, four times).
+ */
+export function hidingGrowth(rules: Pick<HidingRules, 'words'>): number {
+  const lengths = (rules.words ?? []).map((word) => new TextEncoder().encode(word.trim()).byteLength).filter((length) => length > 0)
+  return lengths.length ? Math.max(BUILT_IN_GROWTH, Math.ceil(HIDDEN_BYTES / Math.min(...lengths))) : BUILT_IN_GROWTH
+}
+
+/**
+ * The most stored text a file can come to, after reading and hiding with the organization's rules: what an import
+ * reserves of stored bytes. The engine learns at most 2 MB of a file's text before hiding.
+ */
+export function storedBound(file: { type: string; bytes: number }, rules: Pick<HidingRules, 'words'>): number {
+  return hidingGrowth(rules) * (COMPRESSED.has(file.type) ? MAX_TEXT_BYTES : Math.min(DECODE_GROWTH * file.bytes, MAX_TEXT_BYTES))
+}
+
+/** The same bound for a note: its title and text, hidden. */
+export function noteBound(note: { title: string; text: string }, rules: Pick<HidingRules, 'words'>): number {
+  return hidingGrowth(rules) * new TextEncoder().encode(`${note.title}\n\n${note.text}`).byteLength
 }
 
 export type ImportRequestBody = { files: ImportFile[]; notes: { noteId: string; title: string; text: string; outdated: { documentId: string; textHash: string }[] }[] }
@@ -32,9 +56,10 @@ export type ImportKind = 'files' | 'web_page' | 'note' | 'correction'
 
 /**
  * An import waiting for the 1st, as kept in D1 (`imports.request`): what it sends then, the 1st it waits for, and the
- * files the engine no longer had when asked to keep them, taken out of it to be added again.
+ * files the engine no longer had when asked to keep them, taken out of it to be added again. Its notes are kept with
+ * the organization's hidden values hidden (`hidden`: an older row without it is hidden by the tick).
  */
-export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[] }
+export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[]; hidden?: boolean }
 
 /** An import kept for the 1st of next month, when the organization has used this month's documents learned. */
 export interface Waiting {
@@ -132,8 +157,8 @@ export async function startImport(
   if (!existing) {
     await ensureAwakeBlock(env, org, collection.id, at)
     const documents = request.files.length + request.notes.length
-    const stored = request.files.reduce((sum, file) => sum + storedBound(file), 0)
-      + request.notes.reduce((sum, note) => sum + HIDING_GROWTH * new TextEncoder().encode(`${note.title}\n\n${note.text}`).byteLength, 0)
+    const { hiding } = await readOrgSettings(db, org, at)
+    const stored = request.files.reduce((sum, file) => sum + storedBound(file, hiding), 0) + request.notes.reduce((sum, note) => sum + noteBound(note, hiding), 0)
     const ref = `import:${importId}`
     const standing = await reserve(env, org, [{ key: 'documents', amount: documents }, { key: 'storage_bytes', amount: stored }], ref, at)
     const detail = JSON.stringify({ files: request.files.map((file) => file.name) })
@@ -148,7 +173,9 @@ export async function startImport(
       // keeps its files until then. Files it no longer has are named, to be added again; with none left, nothing waits.
       let waiting: WaitingRequest
       try {
-        waiting = await waitForNextMonth(engine, collection.id, request, at)
+        // Its notes are kept hidden, as the engine would learn them: Knowledge keeps no hidden value.
+        waiting = { ...(await waitForNextMonth(engine, collection.id, request, at)), hidden: true }
+        waiting.notes = waiting.notes.map((note) => hiddenNote(note, hiding))
       } catch (failure) {
         await release(db, org, standing.map((reservation) => reservation.id), at)
         throw failure
@@ -217,6 +244,7 @@ export function sourceRoutes() {
     const at = now(c)
     const { collection } = await authorize(db, caller, param(c, 'id'), 'change')
     const fileLimit = await effectiveLimit(db, caller.organizationId, 'file_bytes', at)
+    const { hiding } = await readOrgSettings(db, caller.organizationId, at)
     const verdicts = body.files.map((file) => ({ file, verdict: verdictOf(file.name, file.bytes, fileLimit) }))
     const accepted = verdicts.filter((entry) => entry.verdict.ok)
     // The rest must fit the organization's limits: documents and stored bytes. Past this month's documents learned
@@ -224,7 +252,7 @@ export function sourceRoutes() {
     const usage = await usageOf(db, caller.organizationId, at)
     const need: [LimitKey, number][] = [
       ['documents', accepted.length],
-      ['storage_bytes', accepted.reduce((sum, entry) => sum + storedBound({ type: entry.verdict.ok ? entry.verdict.type : '', bytes: entry.file.bytes }), 0)],
+      ['storage_bytes', accepted.reduce((sum, entry) => sum + storedBound({ type: entry.verdict.ok ? entry.verdict.type : '', bytes: entry.file.bytes }, hiding), 0)],
     ]
     for (const [key, amount] of need) {
       const limit = await effectiveLimit(db, caller.organizationId, key, at)
@@ -399,8 +427,9 @@ export function sourceRoutes() {
   app.delete('/:id/sources/:docId', async (c) => {
     const caller = callerOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'remove')
-    // The engine learns the collection again without it: that is awake time like any import.
-    await ensureAwakeBlock(c.env, caller.organizationId, collection.id, now(c))
+    // The engine learns the collection again without it: awake time like any import, counted from the engine's
+    // ledger. It isn't refused at the awake-hours stop: removing what shouldn't be kept always goes ahead.
+    await ensureAwakeBlock(c.env, caller.organizationId, collection.id, now(c), { allowAtStop: true })
     const result = await engineFor(c).removeDocument(collection.id, param(c, 'docId'))
     return json(c, { removed: result })
   })

@@ -32,7 +32,7 @@ export const limits: DocTopic = {
               ['Built-in answers a month', '2,000', "Answers written by Insulin Knowledge's built-in model; your organization's own model doesn't count"],
               ['Awake hours a month', '100', 'Time collections are awake: while people ask and 10 minutes after, while learning, while exporting, and kept-ready hours'],
               ['Collections kept ready', '1', 'Collections with a keep-ready window'],
-              ['Days of daily backups', '30', 'How long daily backups are kept; the latest is kept as long as the collection exists'],
+              ['Days of daily backups', '30', 'How long daily backups are kept (at least a day, at most ten years); the latest is kept as long as the collection exists'],
             ]}
           />
           <p>The monthly limits start again on the 1st of each month (UTC).</p>
@@ -46,11 +46,11 @@ export const limits: DocTopic = {
         <>
           <ul>
             <li><b>At 80%</b> of a monthly limit, your organization's admins get an e-mail, once that month; of any other limit, each time use goes past 80% again.</li>
-            <li><b>Collections, documents, stored files, largest file:</b> new files are refused before anything starts, saying what to remove. Nothing partial is learned. <b>Remove for good</b> frees space; <b>Stop using</b> doesn't. Until a file is learned, it holds room for up to twice its size, or 4 MB for a PDF, Word, PowerPoint or Excel file, whose text can be larger than the file.</li>
+            <li><b>Collections, documents, stored files, largest file:</b> new files are refused before anything starts, saying what to remove. Nothing partial is learned. <b>Remove for good</b> frees space; <b>Stop using</b> doesn't. Until a file is learned, it holds room for the most its text can come to with values hidden: up to six times its size (at most 4 MB), or 4 MB for a PDF, Word, PowerPoint or Excel file, whose text can be larger than the file. Short words of your organization's own in the hiding rules raise this (a two-letter word, to twice as much).</li>
             <li><b>Documents learned:</b> new files, web pages, notes and corrections wait and are learned on the 1st, by themselves; their files are kept until then, and if the month after is full too, until the next 1st. Everything already learned keeps answering. A file Insulin couldn't keep (one uploaded more than a day before it was added) is named, to be added again.</li>
             <li><b>Questions:</b> the site, AI assistants and API clients are told your organization has used this month's questions, until the 1st.</li>
             <li><b>Built-in answers:</b> people get the sources without a written answer. An Admin can switch to your organization's own model in Rules and data, which doesn't count.</li>
-            <li><b>Awake hours:</b> keep-ready pauses at 90%, so the rest stays for questions, and starts again on the 1st. At 100%, Knowledge stops answering until the 1st, and refuses what would wake a collection to work (adding files and notes, removing a file for good, going back, exporting): on the site a pop-up says so and names Insulin Apps support; AI assistants and API clients get the same message.</li>
+            <li><b>Awake hours:</b> keep-ready pauses at 90%, so the rest stays for questions, and starts again on the 1st. At 100%, Knowledge stops until the 1st: it doesn't answer, refuses what would wake a collection to work (adding files and notes, going back, exporting), and stops what is running: learning that was under way keeps nothing and starts again then, and collections show <b>Stopped until the 1st</b>. Removing a file for good still works. On the site a pop-up says so and names Insulin Apps support; AI assistants and API clients get the same message. If Insulin Apps raises the limit, everything goes on within minutes.</li>
             <li><b>Collections kept ready:</b> turn keep-ready off on another collection first.</li>
           </ul>
           <p>

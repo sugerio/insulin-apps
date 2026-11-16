@@ -1,5 +1,6 @@
 import { ApiError } from './http.ts'
 import type { Bindings } from './env.ts'
+import { holdOrganization } from './holds.ts'
 
 /**
  * Free limits (design section 12; DESIGN.md §8.8). The catalog is package.json `insulin.limits` (a test keeps this
@@ -231,22 +232,40 @@ export function addUse(db: D1Database, org: string, key: LimitKey, amount: numbe
   ).bind(org, periodOf(now), key, amount, now)
 }
 
-/**
- * Before a question wakes or keeps a collection awake: the hard stop at 100% of awake hours (429), and a ten-minute
- * block reserved for the collection unless one with time left is already held, in which case its expiry moves on.
- */
-export async function ensureAwakeBlock(env: Bindings, org: string, collectionId: string, now: number): Promise<void> {
-  const db = env.DB
+/** Whether the organization has used this month's awake hours (the hard stop), and the limit. */
+export async function atAwakeStop(db: D1Database, org: string, now: number): Promise<{ stopped: boolean; limit: number | null }> {
   const limit = await effectiveLimit(db, org, 'awake_hours_month', now)
-  if (limit !== null) {
-    const used = await db.prepare(`SELECT COALESCE(SUM(used), 0) AS used FROM usage_counters WHERE org_id = ? AND period = ? AND key = 'awake_hours_month'`).bind(org, periodOf(now)).first<{ used: number }>()
-    if (Number(used?.used ?? 0) >= limit * SECONDS_PER_HOUR) throw quotaExceeded(env, 'awake_hours_month', limit, now)
+  if (limit === null) return { stopped: false, limit }
+  const used = await db.prepare(`SELECT COALESCE(SUM(used), 0) AS used FROM usage_counters WHERE org_id = ? AND period = ? AND key = 'awake_hours_month'`).bind(org, periodOf(now)).first<{ used: number }>()
+  return { stopped: Number(used?.used ?? 0) >= limit * SECONDS_PER_HOUR, limit }
+}
+
+/**
+ * Before work that wakes or keeps a collection awake: the hard stop at 100% of awake hours (429, and the organization
+ * held in the engine until the 1st, so nothing already running goes on either), and a ten-minute block reserved for
+ * the collection unless one with time left is already held, in which case its expiry moves on.
+ *
+ * `allowAtStop`: removing a file for good goes ahead at the stop (the engine runs it even while holding the
+ * organization): no 429, and a block only if one fits; its time is counted from the engine's ledger all the same.
+ */
+export async function ensureAwakeBlock(env: Bindings, org: string, collectionId: string, now: number, options: { allowAtStop?: boolean } = {}): Promise<void> {
+  const db = env.DB
+  if (!options.allowAtStop) {
+    const { stopped, limit } = await atAwakeStop(db, org, now)
+    if (stopped) {
+      await holdOrganization(env, org, Date.parse(resetsAt(now)), now)
+      throw quotaExceeded(env, 'awake_hours_month', limit ?? 0, now)
+    }
   }
   const extended = await db.prepare(
     `UPDATE reservations SET expires_at = ?4 WHERE org_id = ?1 AND ref = ?2 AND key = 'awake_hours_month' AND period = ?3 AND state = 'held' AND amount > consumed AND expires_at > ?5`,
   ).bind(org, `awake:${collectionId}`, periodOf(now), now + AWAKE_BLOCK_SECONDS * 1000, now).run()
   if (extended.meta.changes > 0) return
-  await reserve(env, org, [{ key: 'awake_hours_month', amount: AWAKE_BLOCK_SECONDS }], `awake:${collectionId}`, now, AWAKE_BLOCK_SECONDS * 1000)
+  try {
+    await reserve(env, org, [{ key: 'awake_hours_month', amount: AWAKE_BLOCK_SECONDS }], `awake:${collectionId}`, now, AWAKE_BLOCK_SECONDS * 1000)
+  } catch (error) {
+    if (!(options.allowAtStop && error instanceof ApiError && error.code === 'quota_exceeded')) throw error
+  }
 }
 
 /**

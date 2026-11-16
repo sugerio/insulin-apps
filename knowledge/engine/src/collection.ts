@@ -48,6 +48,7 @@ export const EMPTY_COUNTS: CollectionCounts = { documents: 0, activeDocuments: 0
 export const EMPTY_STATE: AnswerState = { documents: [], marks: [], factsKey: null, facts: 0, passages: 0, textBytes: 0 }
 
 const START_FAILURES_BEFORE_EXPIRED = 3
+const WAKE_TIMEOUTS_BEFORE_GIVING_UP = 3
 
 export class CollectionEngine {
   state: DurableObjectState
@@ -71,6 +72,18 @@ export class CollectionEngine {
       const url = new URL(request.url)
       if (request.method === 'POST' && url.pathname === '/internal/kick') {
         if (await this.store.getMeta()) await this.state.storage.setAlarm(clock.now())
+        return json({ ok: true })
+      }
+      if (request.method === 'POST' && url.pathname === '/internal/hold') {
+        const { until } = await readJson<{ until: string | null }>(request)
+        const meta = await this.store.getMeta()
+        if (meta && meta.org === request.headers.get(ORG_HEADER)) {
+          await this.updateMeta((m) => {
+            m.heldUntil = until
+          })
+          await this.store.log(until ? 'held' : 'hold-lifted', { until })
+          await this.state.storage.setAlarm(clock.now())
+        }
         return json({ ok: true })
       }
       const match = matchRoute(request.method, url.pathname, testControls(this.env) ? [...TEST_ROUTES, ...ROUTES] : ROUTES)
@@ -180,8 +193,18 @@ export class CollectionEngine {
     if (existing && existing.org !== org) return fail('not_found', 'No such collection.')
     if (existing?.deleting) return fail('deleting', 'This collection is being deleted.')
     const settings = validateSettings(body.settings, existing?.settings ?? DEFAULT_SETTINGS)
+    // Settings carry the app's revision: an older one arriving late never undoes a newer one, and the same one again
+    // changes nothing.
+    const held = existing?.settings.revision ?? 0
+    const sent = (body.settings as { revision?: unknown } | undefined)?.revision
+    if (existing && sent !== undefined && settings.revision < held) {
+      return fail('stale_settings', 'These settings are older than the ones the engine has.')
+    }
+    if (existing && sent !== undefined && settings.revision === held && held > 0) return this.status()
     if (!existing) {
-      const entry = await callObject<{ state: string }>(this.env.REGISTRY, REGISTRY_NAME, '/register', { body: { org, collectionId } })
+      const entry = await callObject<{ state: string; holdUntil?: string | null }>(this.env.REGISTRY, REGISTRY_NAME, '/register', {
+        body: { org, collectionId },
+      })
       if (entry.state !== 'live') return fail('deleting', 'This collection was deleted; make a new one.')
       const now = iso()
       await this.store.putMeta({
@@ -206,6 +229,7 @@ export class CollectionEngine {
         removals: [],
         hidingAppliedAt: now,
         repairNote: null,
+        heldUntil: entry.holdUntil ?? null,
       })
       await this.store.log('created')
     } else {
@@ -246,6 +270,7 @@ export class CollectionEngine {
 
   collectionState(meta: Meta, runtime: Runtime | null, active: ImportRecord | null): CollectionState {
     if (meta.deleting) return 'deleting'
+    if (isHeld(meta)) return 'held'
     if (meta.op?.kind === 'go_back') return 'going_back'
     if (meta.op?.kind === 'repair' || (meta.op?.kind === 'from_backup' && meta.op.reason === 'repair')) return 'repairing'
     if (meta.op?.kind === 'from_backup') return 'waking_from_backup'
@@ -330,6 +355,7 @@ export class CollectionEngine {
       facts: [],
       version: meta.version,
     })
+    if (state === 'held') return empty('held', Math.max(1, Math.round((Date.parse(meta.heldUntil!) - clock.now()) / 1000)))
     if (state === 'learning' || state === 'saving') return empty('learning', active ? Math.max(5, imports.etaSeconds(active)) : 30)
     if (state === 'going_back' || state === 'repairing') return empty('busy', SETTINGS.goBackSeconds)
     if (meta.version === 0) return empty('ok', null)
@@ -372,7 +398,7 @@ export class CollectionEngine {
 
   async requestWake(): Promise<void> {
     const meta = await this.meta()
-    if (meta.version === 0 || meta.deleting) return
+    if (meta.version === 0 || meta.deleting || isHeld(meta)) return
     const runtime = await this.store.getRuntime()
     if (runtime?.phase === 'ready' && this.box.running) {
       await this.updateMeta((m) => {
@@ -420,6 +446,7 @@ export class CollectionEngine {
     // Exports need no container: they are built from the stored texts, facts and history.
     await exporter.runPending(this)
     meta = await this.meta()
+    if (isHeld(meta)) return this.whileHeld(meta)
     if (meta.op) return history.runOperation(this)
     if (meta.active) {
       const record = await this.store.getImport(meta.active)
@@ -432,12 +459,36 @@ export class CollectionEngine {
     await this.lifecycle()
   }
 
+  /**
+   * The organization is on hold (the app's hard stop on awake hours): only a removal for good runs; any other import
+   * stops, keeps nothing and waits; a container left running is stopped; nothing else starts.
+   */
+  async whileHeld(meta: Meta): Promise<void> {
+    const active = meta.active ? await this.store.getImport(meta.active) : undefined
+    if (active && active.kind !== 'remove') return imports.stopForHold(this, active)
+    if (active) return imports.advance(this, active)
+    const head = meta.queue[0] ? await this.store.getImport(meta.queue[0]) : undefined
+    if (head?.kind === 'remove' && (await imports.startNext(this))) return
+    if (this.box.running || (await this.store.getRuntime())) {
+      await this.box.destroy('the organization is on hold')
+      await this.store.deleteRuntime()
+      await this.chargeUsage(null)
+      await this.store.log('stopped-for-hold')
+    }
+    if (meta.wakeRequested) {
+      await this.updateMeta((m) => {
+        m.wakeRequested = false
+      })
+    }
+  }
+
   /** The next time the alarm must run. */
   async schedule(): Promise<void> {
     const meta = await this.meta()
     const now = clock.now()
     const runtime = await this.store.getRuntime()
     const times: number[] = [now + 24 * 60 * 60 * 1000]
+    if (meta.heldUntil) times.push(Math.max(now, Date.parse(meta.heldUntil)))
     if (meta.op) times.push(now + SETTINGS.wakePollMs)
     if (meta.active) {
       const record = await this.store.getImport(meta.active)
@@ -458,7 +509,8 @@ export class CollectionEngine {
       const next = nextWindowStart(meta.settings.keepReady, now)
       if (next) times.push(next)
     }
-    if ((await this.store.pendingEvents()).length || (await this.state.storage.get('pendingDeletes'))) times.push(now + 30_000)
+    const pendingWork = (await this.state.storage.get('pendingDeletes')) || (await this.state.storage.get('removalCleanup'))
+    if ((await this.store.pendingEvents()).length || pendingWork) times.push(now + 30_000)
     for (const staged of await this.store.listStaged()) times.push(imports.stagedExpiry(staged))
     for (const record of await this.store.listExports()) {
       if (record.status.expiresAt) times.push(Date.parse(record.status.expiresAt))
@@ -564,8 +616,12 @@ export class CollectionEngine {
     const current = await this.currentSnapshot(meta)
     if (!running || !runtime || runtime.dirty || runtime.snapshotId !== (current.snapshot?.handle.id ?? null)) {
       if (current.unusable) {
-        // A removal for good waiting in the queue brings the files back itself, without the removed one.
+        // A removal for good or a re-learning waiting in the queue brings the files back itself: questions wait for
+        // it, and no container starts meanwhile.
         if (meta.removals.length) return
+        for (const id of [...meta.queue, ...(meta.active ? [meta.active] : [])]) {
+          if ((await this.store.getImport(id))?.kind === 'relearn') return
+        }
         await this.updateMeta((m) => {
           m.op = { kind: 'from_backup', reason: current.unusable === 'damaged' ? 'repair' : current.unusable!, startedAt: iso(), restartedAfterFailure: false }
         })
@@ -597,9 +653,24 @@ export class CollectionEngine {
 
     // A wake that doesn't reach "ready" in time is stopped; the next alarm starts it again.
     if (runtime.phase !== 'ready' && runtime.phase !== 'busy' && clock.now() - Date.parse(runtime.phaseAt ?? runtime.startedAt) > SETTINGS.wakeTimeoutMs) {
-      await this.store.log('wake-timed-out', { phase: runtime.phase })
+      const timeouts = ((await this.state.storage.get<number>('wakeTimeouts')) ?? 0) + 1
+      await this.store.log('wake-timed-out', { phase: runtime.phase, timeouts })
       await this.box.destroy('the wake took too long')
       await this.store.deleteRuntime()
+      await this.chargeUsage(null)
+      if (timeouts < WAKE_TIMEOUTS_BEFORE_GIVING_UP) {
+        await this.state.storage.put('wakeTimeouts', timeouts)
+        return
+      }
+      // Waking keeps failing: stop trying (and paying) until someone asks again.
+      await this.state.storage.delete('wakeTimeouts')
+      await this.updateMeta((m) => {
+        m.wakeRequested = false
+        m.lastActivityAt = null
+        m.lastQuestionAt = null
+      })
+      await this.store.log('wake-gave-up', { timeouts })
+      await this.event(`state:${meta.version}:asleep:wake-gave-up:${iso()}`, { type: 'state', state: 'asleep', version: meta.version })
       return
     }
     if (runtime.phase === 'starting') return this.beginCheck(runtime)
@@ -703,7 +774,7 @@ export class CollectionEngine {
     if (status.state === 'ready') {
       runtime.phase = 'ready'
       await this.store.putRuntime(runtime)
-      await this.state.storage.delete('verifyFailures')
+      await this.state.storage.delete(['verifyFailures', 'wakeTimeouts'])
       const meta = await this.updateMeta((m) => {
         m.wakeRequested = false
         m.lastActivityAt = iso()
@@ -829,10 +900,14 @@ export class CollectionEngine {
     }
     const old = (await this.store.listStaged()).filter((s) => !queued.has(s.fileId) && now >= imports.stagedExpiry(s))
     if (old.length) {
-      await this.env.FILES.delete(old.map((s) => imports.inboxKey(meta, s.fileId)))
+      // The records go first, with nothing awaited in between: a keep request that comes later finds the file gone
+      // (and says so) instead of keeping a file whose original is about to be deleted.
       await this.store.deleteStaged(old.map((s) => s.fileId))
+      await imports.deleteLater(this, old.map((s) => imports.inboxKey(meta, s.fileId)))
+    } else {
+      await imports.deleteLater(this, [])
     }
-    await imports.deleteLater(this, [])
+    await imports.retryRemovalCleanup(this)
     await exporter.expire(this)
   }
 
@@ -996,6 +1071,8 @@ export class CollectionEngine {
 
 // ==================================================================== helpers
 
+export const isHeld = (meta: Meta): boolean => !!meta.heldUntil && Date.parse(meta.heldUntil) > clock.now()
+
 function versionParam(value: string): number {
   const version = Number(value)
   if (!Number.isInteger(version) || version < 1) return fail('bad_request', 'version must be a restore point number.')
@@ -1050,7 +1127,9 @@ export function validateSettings(value: unknown, base: CollectionSettings): Coll
   if (!Number.isInteger(awakeMinutes) || awakeMinutes < 1 || awakeMinutes > 60) return fail('bad_request', 'awakeMinutes must be 1 to 60.')
   const backupDays = s.backupDays === undefined ? (base.backupDays ?? DEFAULT_SETTINGS.backupDays) : Number(s.backupDays)
   if (!Number.isInteger(backupDays) || backupDays < 1 || backupDays > 3650) return fail('bad_request', 'backupDays must be 1 to 3650.')
-  return { hiding, keepReady, awakeMinutes, backupDays }
+  const revision = s.revision === undefined ? (base.revision ?? 0) : Number(s.revision)
+  if (!Number.isInteger(revision) || revision < 0) return fail('bad_request', 'revision must be a whole number, 0 or more.')
+  return { hiding, keepReady, awakeMinutes, backupDays, revision }
 }
 
 function validateHiding(value: unknown): HidingRules {

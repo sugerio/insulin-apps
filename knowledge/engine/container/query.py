@@ -20,6 +20,11 @@ import os
 import sys
 import threading
 import traceback
+
+# Questions are never kept: Cognee writes every search's question and results into its database unless this is off,
+# and that database is in every snapshot and backup. Less logging too, so no question reaches a log file.
+os.environ["COGNEE_LOG_SEARCH_HISTORY"] = "false"
+os.environ.setdefault("LOG_LEVEL", "WARNING")
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path

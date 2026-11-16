@@ -253,7 +253,8 @@ async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repai
   const meta = await e.meta()
   const latest = await backup.latestIndex(e)
   const failed = (await e.currentSnapshot(meta)).snapshot
-  if (latest && failed && latest.manifest.digest === failed.manifest.digest && !op.tried.includes(-1)) {
+  const fromIt = latest && failed && (latest.snapshotId ? latest.snapshotId === failed.handle.id : latest.manifest.digest === failed.manifest.digest)
+  if (fromIt && !op.tried.includes(-1)) {
     await e.updateMeta((m) => {
       m.op = { kind: 'from_backup', reason: 'repair', startedAt: iso(), restartedAfterFailure: false }
     })

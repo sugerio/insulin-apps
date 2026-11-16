@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { authorize } from '../access.ts'
 import type { AppEnv } from '../env.ts'
 import { ApiError, badRequest, logError, notFound } from '../http.ts'
-import { idempotent } from '../idempotency.ts'
+import { idempotent, stableId } from '../idempotency.ts'
 import { ensureAwakeBlock } from '../limits.ts'
 import { reconcileHistory } from '../outbox.ts'
 import { callerOf, engineFor, json, now, param } from './common.ts'
@@ -56,9 +56,10 @@ export function historyRoutes() {
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'export')
     return idempotent(c, null, true, async () => {
       await ensureAwakeBlock(c.env, collection.org_id, collection.id, now(c))
-      const exportId = crypto.randomUUID().replace(/-/g, '')
+      // The same id when the same request comes back after its answer was lost: the engine answers the export it started.
+      const exportId = (await stableId(c)).replace(/-/g, '')
       const status = await engineFor(c).startExport(collection.id, exportId)
-      await c.env.DB.prepare(`INSERT INTO exports (id, org_id, collection_id, requested_by, created_at) VALUES (?, ?, ?, ?, ?)`).bind(exportId, caller.organizationId, collection.id, caller.id, now(c)).run()
+      await c.env.DB.prepare(`INSERT INTO exports (id, org_id, collection_id, requested_by, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`).bind(exportId, caller.organizationId, collection.id, caller.id, now(c)).run()
       return json(c, { export: status }, 202)
     })
   })

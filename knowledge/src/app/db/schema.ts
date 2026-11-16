@@ -49,9 +49,19 @@ export const collections = sqliteTable('collections', {
   engine_state: text('engine_state').notNull().default('empty'),
   last_restore_point_at: integer('last_restore_point_at'),
   last_backup_at: integer('last_backup_at'),
-  /** The organization's settings version the engine last received (hiding rules, time zone). */
+  /** No longer read: settings_revision and settings_pushed say whether the engine has the collection's settings. */
   settings_version: integer('settings_version').notNull().default(0),
+  /** When the engine last took the collection's settings. */
   settings_synced: integer('settings_synced').notNull().default(0),
+  /**
+   * The revision of the collection's engine settings: it grows with every change to them (its own, its organization's
+   * rules and limits), in the same statement as the change. The engine refuses a revision older than it has.
+   */
+  settings_revision: integer('settings_revision').notNull().default(1),
+  /** The revision the engine has taken; behind settings_revision, the tick sends the settings again. */
+  settings_pushed: integer('settings_pushed').notNull().default(0),
+  /** When the settings were last sent, taken or not: the tick retries the longest-waiting first. */
+  settings_tried_at: integer('settings_tried_at'),
   deleted_at: integer('deleted_at'),
   deleted_by: text('deleted_by'),
   updated_at: integer('updated_at').notNull(),
@@ -383,6 +393,16 @@ export const exportsTable = sqliteTable('exports', {
 export const engineEvents = sqliteTable('engine_events', {
   id: text('id').primaryKey().notNull(),
   at: integer('at').notNull(),
+})
+
+/**
+ * Organizations held in the engine (POST /v1/orgs/:org/hold) because they used their awake hours: nothing runs for
+ * them until `until` (the 1st), or until the tick lets go when a raised limit frees them.
+ */
+export const orgHolds = sqliteTable('org_holds', {
+  org_id: text('org_id').primaryKey().notNull(),
+  until: integer('until').notNull(),
+  held_at: integer('held_at').notNull(),
 })
 
 /** Organizations deleted on insulinapps.com whose engine data must be purged; the tick retries until the engine agrees. */

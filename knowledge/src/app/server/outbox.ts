@@ -24,29 +24,47 @@ import { memberOf } from './members.ts'
 const NAME = 'outbox'
 const TERMINAL = new Set(['committed', 'duplicate', 'failed', 'cancelled'])
 
-export async function syncOutbox(env: Bindings, now: number, deadline: number): Promise<{ applied: number; pages: number }> {
-  if (!env.ENGINE) return { applied: 0, pages: 0 }
+/**
+ * Pulls the outbox and applies it, page after page, until `deadline`. The engine's event ids are ordered and each is
+ * the cursor that continues after it, so the cursor is saved after every event: a page longer than the tick's time
+ * still moves on. Engine calls give up at the deadline, their bodies included.
+ */
+export async function syncOutbox(input: Bindings, now: number, deadline: number): Promise<{ applied: number; pages: number }> {
+  if (!input.ENGINE) return { applied: 0, pages: 0 }
+  const env: Bindings = { ...input, DEADLINE: Math.min(input.DEADLINE ?? deadline, deadline) }
   const db = env.DB
-  const engine = new EngineClient(env.ENGINE, SERVICE_ORG)
+  const engine = new EngineClient(env.ENGINE!, SERVICE_ORG, env.DEADLINE)
   const state = await db.prepare(`SELECT cursor FROM sync_state WHERE name = ?`).bind(NAME).first<{ cursor: string | null }>()
   let cursor = state?.cursor ?? null
   let applied = 0
   let pages = 0
+  const save = (value: string) => db.prepare(
+    `INSERT INTO sync_state (name, cursor, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (name) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at`,
+  ).bind(NAME, value, now).run()
   for (; pages < 20 && Date.now() < deadline; ) {
     const page = await engine.outbox(cursor, 200)
     pages += 1
     const committed = new Map<string, string>()
+    let done = true
     for (const event of page.events) {
-      // Out of time mid-page: the page is read again next time, and events already applied are skipped.
-      if (Date.now() > deadline) return { applied, pages }
+      if (Date.now() > deadline) {
+        done = false
+        break
+      }
       if (await applyEngineEvent(env, event, now)) applied += 1
       if (event.type === 'committed') committed.set(`${event.org}\u0000${event.collectionId}`, event.org)
+      if (/^\d{1,20}$/.test(event.id)) {
+        cursor = event.id
+        await save(cursor)
+      }
     }
-    for (const [key, org] of committed) await reconcileHistory(env, org, key.slice(org.length + 1)).catch((error) => logError('history_reconcile_failed', error, { org }))
-    cursor = page.cursor
-    await db.prepare(
-      `INSERT INTO sync_state (name, cursor, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (name) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at`,
-    ).bind(NAME, cursor, now).run()
+    for (const [key, org] of committed) {
+      if (Date.now() > deadline) break
+      await reconcileHistory(env, org, key.slice(org.length + 1)).catch((error) => logError('history_reconcile_failed', error, { org }))
+    }
+    if (!done) return { applied, pages }
+    cursor = page.cursor || cursor
+    if (cursor) await save(cursor)
     if (!page.more) break
   }
   return { applied, pages }
@@ -61,7 +79,7 @@ export async function reconcileHistory(env: Bindings, org: string, collectionId:
   const db = env.DB
   const collection = await db.prepare(`SELECT id FROM collections WHERE id = ? AND org_id = ? AND state = 'active'`).bind(collectionId, org).first()
   if (!collection) return
-  const listed = points ?? (await new EngineClient(env.ENGINE!, org).restorePoints(collectionId)).restorePoints
+  const listed = points ?? (await new EngineClient(env.ENGINE!, org, env.DEADLINE).restorePoints(collectionId)).restorePoints
   const versions = listed.map((point) => point.version)
   const statements = [
     db.prepare(`DELETE FROM history WHERE collection_id = ?1 AND org_id = ?2 AND version NOT IN (SELECT value FROM json_each(?3))`).bind(collectionId, org, JSON.stringify(versions)),
@@ -87,6 +105,8 @@ async function once(db: D1Database, event: OutboxEvent, statements: D1PreparedSt
 
 export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: number): Promise<boolean> {
   const db = env.DB
+  // An event applied before (a page read again, an overlapping tick) costs one read and nothing else.
+  if (await db.prepare(`SELECT 1 AS seen FROM engine_events WHERE id = ?`).bind(event.id).first()) return false
   const org = event.org
   const collection = await db.prepare(`SELECT id, name, state FROM collections WHERE id = ? AND org_id = ?`).bind(event.collectionId, org).first<{ id: string; name: string; state: string }>()
   if (!collection) return once(db, event, [], now)
@@ -132,7 +152,7 @@ export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: n
       if (collection.state !== 'deleting') return once(db, event, [], now)
       return once(db, event, [
         db.prepare(`UPDATE collections SET state = 'deleted', engine_state = 'deleted', updated_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'deleting'`).bind(collection.id, org, now),
-        ...eraseCollectionStatements(db, org, collection.id),
+        ...eraseCollectionStatements(db, org, collection.id, now),
       ], now)
     }
     default:
@@ -168,7 +188,7 @@ export async function finishImportStatements(db: D1Database, org: string, collec
   }
   const statements = [db.prepare(
     `UPDATE imports SET state = ?3, version = COALESCE(?4, version), error = COALESCE(?5, error), detail = ?6,
-       finished_at = CASE WHEN ?7 THEN COALESCE(finished_at, ?8) ELSE finished_at END
+       finished_at = CASE WHEN ?7 THEN COALESCE(finished_at, ?8) ELSE finished_at END, request = CASE WHEN ?7 THEN NULL ELSE request END
      WHERE id = ?1 AND org_id = ?2 AND state NOT IN ('committed', 'duplicate', 'failed', 'cancelled')`,
   ).bind(importId, org, status.state, status.version ?? null, failure, detail, TERMINAL.has(status.state) ? 1 : 0, now)]
   if (!TERMINAL.has(status.state)) return statements
@@ -202,7 +222,8 @@ async function notifyImport(env: Bindings, org: string, collection: { id: string
   const row = await db.prepare(`SELECT created_by, kind, files FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ created_by: string; kind: string; files: number }>()
   if (!row) return
   const claimed = await db.prepare(`UPDATE imports SET notified_at = ?3 WHERE id = ?1 AND org_id = ?2 AND notified_at IS NULL`).bind(importId, org, now).run()
-  if (claimed.meta.changes !== 1 || row.kind === 'correction') return
+  // A correction's starter sees it learned where they wrote it; only its failure is mailed.
+  if (claimed.meta.changes !== 1 || (row.kind === 'correction' && status.state !== 'failed')) return
   const starter = await memberOf(db, org, 'person', row.created_by)
   if (!starter?.email) return
   const link = appLink(env, `/collections/${collection.id}/sources`)

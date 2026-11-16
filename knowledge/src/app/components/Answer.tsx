@@ -194,10 +194,20 @@ function Waiting({ answer, onAskAgain }: { answer: AskAnswer; onAskAgain: () => 
     const timer = setInterval(() => setLeft((value) => Math.max(0, value - 1)), 1000)
     return () => clearInterval(timer)
   }, [answer, retry])
+  // Stopped at the awake-hours limit: nothing changes before the 1st (or a raised limit), so it isn't asked again.
+  const held = answer.status === 'held'
   useEffect(() => {
-    if (left === 0) onAskAgain()
-  }, [left, onAskAgain])
+    if (left === 0 && !held) onAskAgain()
+  }, [left, onAskAgain, held])
   const step = waking ? Math.min(3, 1 + Math.floor(((retry - left) / retry) * 3)) : 0
+  if (held) {
+    return (
+      <div className="flex flex-col gap-3" data-waiting="held">
+        <p className="font-medium">{answer.message}</p>
+        <Note>Nothing runs until then but removing a file for good. Ask again on the 1st.</Note>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col gap-3" data-waiting={answer.status}>
       <p className="font-medium">{answer.message}</p>

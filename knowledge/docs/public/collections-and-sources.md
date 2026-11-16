@@ -26,6 +26,7 @@ A collection's **Overview** says what state it is in:
 | Saving a restore point | So you can always come back to this version. |
 | Going back | Answering from an earlier restore point soon; about a minute. |
 | Repairing | It couldn't open its latest restore point, so it answers from an earlier version while Insulin repairs it. |
+| Stopped until the 1st | The organization has used this month's awake hours (see [Limits](/docs/knowledge/limits)). Everything learned is kept; removing a file for good still works. |
 
 ## Add files, web pages and notes
 
@@ -64,7 +65,8 @@ how many files it learned and how many new facts it found.
 - **Questions wait.** While a collection learns, questions to it wait until it finishes; assistants are told to ask
   again in a minute.
 - **You can leave.** Learning goes on without the page, and Knowledge e-mails whoever added the files when they are
-  learned, or if they couldn't be.
+  learned, or if they couldn't be. If Insulin Knowledge never received an import (a connection dropped), it says so
+  after an hour, by e-mail too; an import that waited for the 1st is sent again instead.
 - **Waiting your turn.** An organization learns two imports at a time, and the service has a limit for everyone
   together; a new import waits behind them and says when it should start. Notes and corrections go first.
 

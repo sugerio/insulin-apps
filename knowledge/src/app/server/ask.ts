@@ -85,7 +85,9 @@ export function waitingMessage(results: CollectionResult[]): string {
   const learning = results.filter((result) => result.status === 'learning')
   const waking = results.filter((result) => result.status === 'waking')
   const busy = results.filter((result) => result.status === 'busy')
+  const held = results.filter((result) => result.status === 'held')
   const names = (list: CollectionResult[]) => list.map((result) => quoted(result.name)).join(', ')
+  if (held.length && !learning.length && !waking.length) return "Your organization has used this month's awake hours, so Knowledge has stopped until the 1st, or until Insulin Apps raises the limit. Everything it learned is kept."
   if (learning.length) return `${names(learning)} ${learning.length === 1 ? 'is' : 'are'} learning. Questions wait until it finishes; ask again in a minute.`
   if (waking.length) return `Waking up ${names(waking)}. This takes about a minute; ask again then.`
   if (busy.length) return 'Insulin Knowledge is busy. Ask again in a minute.'

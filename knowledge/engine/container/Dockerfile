@@ -35,6 +35,7 @@ ENV DATA_ROOT_DIRECTORY=/data/documents \
     COGNEE_REPOS_DIR=/var/lib/cognee/repos \
     ENABLE_BACKEND_ACCESS_CONTROL=false \
     TELEMETRY_DISABLED=1 \
+    COGNEE_LOG_SEARCH_HISTORY=false \
     GLINER_AUTO_INSTALL=false \
     HF_HOME=/opt/models/hf \
     TIKTOKEN_CACHE_DIR=/opt/models/tiktoken \

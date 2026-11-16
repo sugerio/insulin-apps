@@ -419,8 +419,10 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   is made, with no code of its own. An event is stored once, for every app (`*`) or one, with the roles after the change
   and, for a move between an organization role and specific apps, the apps before (a `BEFORE UPDATE` trigger, since the
   move drops the grants) or after (the grants of the same batch join the role's event through `member_event_moves`, which
-  the move opens and `setAppAccess` closes before its batch commits, so a grant in any later transaction is an event of
-  its own, and an app the person
+  the move opens and `setAppAccess` closes before its batch commits; a grant joins it only when the membership changed at
+  the grant's own time, so a move left open (by the gateway before migration 0012's code, during that release) is
+  ignored and deleted by the next grant and by housekeeping, and a grant in any later transaction is an event of its
+  own. So an app the person
   keeps sees one `role_changed`, not a departure and a return). `src/members/events.ts` turns it into each app's terms
   when read. Changes the organization's deletion cascades into say nothing; one `org_deleted` per app it used says it
   all. Housekeeping deletes events past 90 days, oldest first through the index on their time (it runs after every

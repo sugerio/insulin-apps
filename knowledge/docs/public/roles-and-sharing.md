@@ -91,4 +91,6 @@ its name, and its owner gets an e-mail. Organization admins don't see this list.
   can transfer it back.
 - **Checking who is still here.** If Knowledge has missed news of people leaving for a long time (more than 90 days), or
   starts for the first time, it checks everyone it knows with insulinapps.com. Until someone is checked, which takes a
-  moment, their collections don't open for them.
+  moment, they count as away (Sharing says "checking"). Someone using Knowledge meanwhile is checked by using it:
+  insulinapps.com says who they are with every request. Each check also moves collections whose owner can now only
+  read to the longest-standing owner of the organization.

@@ -1,8 +1,10 @@
 import './setup.ts'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { AnswerView } from '../../src/app/components/Answer.tsx'
 import { ImportProgress } from '../../src/app/components/ImportProgress.tsx'
-import type { ImportStatus } from '../../src/app/lib/types.ts'
+import { stateLabel, stateMessage } from '../../src/app/lib/format.ts'
+import type { AskAnswer, ImportStatus } from '../../src/app/lib/types.ts'
 import { ORG, PEOPLE } from '../support/harness.ts'
 import { liveApi, renderApp, type Live } from './support/live.tsx'
 
@@ -59,6 +61,22 @@ describe('fixing and waiting', () => {
     render(<ImportProgress status={status} collectionName="Partner Programs" />)
     expect(screen.getByText(/so this file waits and Partner Programs learns it on .*Insulin couldn't keep “Old\.md” until then: add it again\./)).toBeTruthy()
   })
+
+  it('at the awake-hours stop, a question and a collection say Knowledge has stopped until the 1st, and nothing asks again', async () => {
+    const answer: AskAnswer = {
+      answerId: null, outcome: 'waiting', status: 'held', text: null, retryAfterSeconds: 3,
+      message: "Your organization has used this month's awake hours, so Knowledge has stopped until the 1st, or until Insulin Apps raises the limit. Everything it learned is kept.",
+      citations: [], sources: [], collections: [{ id: 'c1', name: 'Partner Programs', status: 'held', retryAfterSeconds: 3, covered: false }], skipped: [],
+    }
+    let asked = 0
+    render(<AnswerView question="Who signs off?" answer={answer} collections={[]} onOpenSource={() => {}} onAskAgain={() => { asked += 1 }} />)
+    expect(screen.getByText(/has stopped until the 1st/)).toBeTruthy()
+    expect(screen.queryByText(/Asking again in/)).toBeNull()
+    await new Promise((resolve) => setTimeout(resolve, 3_200))
+    expect(asked).toBe(0)
+    expect(stateLabel('held').label).toBe('Stopped until the 1st')
+    expect(stateMessage('held', 'Partner Programs')).toMatch(/removing a file for good still works/)
+  }, 10_000)
 
   it('Needs attention shows a correction that asks to be checked after its file was read again', async () => {
     live = await liveApi(PEOPLE.maya)

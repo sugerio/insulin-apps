@@ -149,6 +149,7 @@ export interface ImportRecord {
   textsSaved: boolean // every file and note was read and hidden, and its redacted text saved: originals are gone
   rebuild: boolean // a removal whose restore point can't be started: the other documents are learned again
   restoreFrom: number | null // re-learning after a repair: also bring back that version's documents
+  rounds?: number // a removal for good that failed its three tries this many times: each wait is longer
   result: Record<string, any> | null // the container job's result, kept until the commit
   test: { crashFileId?: string; detectorError?: boolean } | null
 }
@@ -202,6 +203,7 @@ export interface Meta {
   removals: { documentId: string; importId: string; version: number }[] // remove for good, pending in the container
   hidingAppliedAt: string | null
   repairNote: string | null // "answering from version n", while repairing
+  heldUntil?: string | null // the organization's hold: no container starts until then, but to remove or delete
 }
 
 export type { CollectionSettings }

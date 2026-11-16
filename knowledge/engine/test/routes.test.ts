@@ -33,6 +33,7 @@ const CONTRACT = [
   'GET /v1/collections/:cid/exports/:exportId',
   'DELETE /v1/collections/:cid',
   'POST /v1/orgs/:org/purge',
+  'POST /v1/orgs/:org/hold',
   'GET /v1/outbox',
   'GET /v1/health',
 ]

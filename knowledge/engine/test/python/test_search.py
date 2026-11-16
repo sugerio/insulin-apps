@@ -126,3 +126,18 @@ class Facts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QueryProcess(unittest.TestCase):
+    def test_questions_are_never_kept_in_cognee_search_history(self):
+        import os
+
+        os.environ.pop("COGNEE_LOG_SEARCH_HISTORY", None)
+        import importlib
+
+        import query
+
+        importlib.reload(query)
+        self.assertEqual(os.environ.get("COGNEE_LOG_SEARCH_HISTORY"), "false")
+        dockerfile = (_paths.CONTAINER / "Dockerfile").read_text()
+        self.assertIn("COGNEE_LOG_SEARCH_HISTORY=false", dockerfile)

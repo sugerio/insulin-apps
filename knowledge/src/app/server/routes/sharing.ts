@@ -16,6 +16,21 @@ import { callerOf, iso, json, now, param, type Ctx } from './common.ts'
  */
 const roleSchema = z.enum(['VIEWER', 'EDITOR', 'ADMIN'])
 
+/**
+ * The condition every sharing change is written under, in its own statement: the collection is still active and the
+ * caller is still its owner or one of its Admins (and not waiting for a resync's check). Authority checked before an
+ * awaited call (member status) can be gone by the time the change is written; then nothing changes. The arguments
+ * are the statement's placeholders for the collection, the organization and the caller.
+ */
+const mayShare = (collection: string, org: string, caller: string) => `EXISTS (
+  SELECT 1 FROM collections sc WHERE sc.id = ${collection} AND sc.org_id = ${org} AND sc.state = 'active' AND (sc.owner_id = ${caller} OR EXISTS (
+    SELECT 1 FROM collection_shares sa WHERE sa.collection_id = sc.id AND sa.org_id = sc.org_id AND sa.principal_type = 'person' AND sa.principal_id = ${caller}
+      AND sa.role = 'ADMIN' AND sa.status = 'active'))
+  AND NOT EXISTS (SELECT 1 FROM members sm WHERE sm.org_id = ${org} AND sm.principal_type = 'person' AND sm.principal_id = ${caller} AND sm.unchecked = 1))`
+
+/** Sharing authority lost between the check and the change: nothing changed. */
+const lostAuthority = (name: string) => new ApiError('forbidden', `You can no longer share ${quoted(name)}, so nothing changed. Reload to see who has access.`)
+
 export function sharingRoutes() {
   const app = new Hono<AppEnv>()
 
@@ -63,7 +78,9 @@ export function sharingRoutes() {
     if (body.role !== null && body.role !== 'VIEWER' && body.role !== 'EDITOR') {
       throw badRequest('Everyone in the organization can get Viewer or Editor at most. Give Admin to named people.')
     }
-    await c.env.DB.prepare(`UPDATE collections SET general_role = ?, updated_at = ? WHERE id = ? AND org_id = ?`).bind(body.role, now(c), collection.id, collection.org_id).run()
+    const changed = await c.env.DB.prepare(`UPDATE collections SET general_role = ?4, updated_at = ?5 WHERE id = ?1 AND org_id = ?2 AND ${mayShare('?1', '?2', '?3')}`)
+      .bind(collection.id, collection.org_id, caller.id, body.role, now(c)).run()
+    if (changed.meta.changes !== 1) throw lostAuthority(collection.name)
     return json(c, { general: body.role })
   })
 
@@ -94,11 +111,12 @@ export function sharingRoutes() {
     }
     const existing = await db.prepare(`SELECT role, status FROM collection_shares WHERE collection_id = ? AND org_id = ? AND principal_type = ? AND principal_id = ?`)
       .bind(collection.id, collection.org_id, type, principalId).first<{ role: string; status: string }>()
-    await db.prepare(
+    const written = await db.prepare(
       `INSERT INTO collection_shares (collection_id, org_id, principal_type, principal_id, role, status, shared_by, shared_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7, ?7)
+       SELECT ?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7, ?7 WHERE ${mayShare('?1', '?2', '?6')}
        ON CONFLICT (collection_id, principal_type, principal_id) DO UPDATE SET role = excluded.role, updated_at = excluded.updated_at`,
     ).bind(collection.id, collection.org_id, type, principalId, body.role, caller.id, at).run()
+    if (written.meta.changes !== 1) throw lostAuthority(collection.name)
     if (!existing && type === 'person') {
       const member = await memberOf(db, collection.org_id, 'person', principalId)
       if (member?.email) await sendMail(c.env, collection.org_id, { to: member.email, ...MAIL.sharedWithYou(caller.name ?? caller.email ?? 'Someone', collection.name, body.role, appLink(c.env, `/collections/${collection.id}`)) }, 'shared_with_you')
@@ -113,8 +131,14 @@ export function sharingRoutes() {
     if (type !== 'person' && type !== 'client') throw badRequest('Stop sharing with a person or an API client.')
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'share')
     if (type === 'person' && param(c, 'principalId') === collection.owner_id) throw forbidden(`The owner of ${quoted(collection.name)} always has access.`)
-    await c.env.DB.prepare(`DELETE FROM collection_shares WHERE collection_id = ? AND org_id = ? AND principal_type = ? AND principal_id = ?`)
-      .bind(collection.id, collection.org_id, type, param(c, 'principalId')).run()
+    const [, allowed] = await c.env.DB.batch<{ allowed: number }>([
+      c.env.DB.prepare(`DELETE FROM collection_shares WHERE collection_id = ?1 AND org_id = ?2 AND principal_type = ?4 AND principal_id = ?5 AND ${mayShare('?1', '?2', '?3')}`)
+        .bind(collection.id, collection.org_id, caller.id, type, param(c, 'principalId')),
+      c.env.DB.prepare(`SELECT ${mayShare('?1', '?2', '?3')} AS allowed`).bind(collection.id, collection.org_id, caller.id),
+    ])
+    // Removing their own Admin share leaves the caller without authority afterwards: that is what they asked for.
+    const removedOwn = type === 'person' && param(c, 'principalId') === caller.id
+    if (!removedOwn && !allowed?.results[0]?.allowed) throw lostAuthority(collection.name)
     return json(c, { removed: true })
   })
 

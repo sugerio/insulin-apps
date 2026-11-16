@@ -205,19 +205,22 @@ describe('ownership, sharing and members', () => {
     expect(await h.db.prepare(`SELECT owner_id FROM collections WHERE id = ?`).bind(id).first('owner_id')).toBe(PEOPLE.dana.id)
   })
 
-  it('people not yet checked by a resync are away: no collection opens for them until they are', async () => {
+  it('people not yet checked by a resync are away until they are, unless they call with the platform\'s identity', async () => {
     const id = await h.collection(PEOPLE.maya)
+    expect(await h.share(PEOPLE.maya, id, PEOPLE.eli, 'EDITOR')).toBe(200)
     await h.tick()
     h.gateway.eventsExpired = true
     const real = h.env.GATEWAY_FETCH!
     h.env.GATEWAY_FETCH = (async (input: RequestInfo | URL, init?: RequestInit) => (String(input).endsWith('/members/status') ? Response.json({ error: 'unavailable' }, { status: 503 }) : real(input, init))) as typeof fetch
     await h.tick()
-    expect((await h.call(PEOPLE.maya, 'GET', `/api/collections/${id}`)).status).toBe(403)
-    expect((await h.json<{ collections: unknown[] }>(PEOPLE.maya, 'GET', '/api/collections')).body.collections).toEqual([])
-    expect((await h.call(PEOPLE.maya, 'POST', '/api/search', { collections: [id], query: 'anything' })).status).toBe(403)
+    // Maya calls: the platform says who she is, so she is in the organization now. Eli hasn't called: he is away.
+    expect((await h.call(PEOPLE.maya, 'GET', `/api/collections/${id}`)).status).toBe(200)
+    const shareOf = async () => (await h.json<{ shares: { id: string; status: string }[] }>(PEOPLE.maya, 'GET', `/api/collections/${id}/sharing`)).body.shares.find((share) => share.id === PEOPLE.eli.id)?.status
+    expect(await shareOf()).toBe('checking')
+    expect(await h.db.prepare(`SELECT unchecked FROM members WHERE org_id = ? AND principal_id = ?`).bind(ORG, PEOPLE.eli.id).first('unchecked')).toBe(1)
     h.env.GATEWAY_FETCH = real
     await h.tick()
-    expect((await h.call(PEOPLE.maya, 'GET', `/api/collections/${id}`)).status).toBe(200)
+    expect(await shareOf()).toBe('active')
   })
 
   it('an owner who left is moved once member status answers again, even if it failed the first time', async () => {

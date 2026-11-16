@@ -286,6 +286,8 @@ async def op_ingest(args) -> dict:
     if test.get("detectorError"):
         rules["_fail"] = True
 
+    newly_hidden: list[str] = []  # saved texts the rules in force hid more of: older restore points hold them unhidden
+
     def saved(document_id: str, name: str) -> dict:
         """A text an earlier step saved (already redacted), hidden again with the rules in force now."""
         stored = read_json(batch_dir / f"{document_id}.json", None)
@@ -296,6 +298,8 @@ async def op_ingest(args) -> dict:
             redaction = rehide(stored, rules)
         except hide.HidingError as error:
             raise Stop("Hiding sensitive information failed, so nothing from this import was stored.") from error
+        if redaction.text != stored["text"]:
+            newly_hidden.append(document_id)
         return to_stored(document_id, stored.get("kind", "file"), name, stored.get("type", ""), redaction, stored.get("pageCount"), stored.get("truncated"), stored.get("note"))
 
     if batch["kind"] == "relearn":
@@ -395,6 +399,7 @@ async def op_ingest(args) -> dict:
         "facts": total_facts,
         "newFacts": max(0, total_facts - previous_facts),
         "files": progress.state["files"],
+        "changed": newly_hidden,
     }
 
 

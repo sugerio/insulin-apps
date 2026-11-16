@@ -78,9 +78,27 @@ And from the design:
   meanwhile gives way to that and isn't charged a try, and a removal for good learns the other documents itself.
   A repair that answers from an earlier restore point then learns everything again, bringing back the files added
   after it.
-- **Waking is never stuck**: each wake step that takes longer than 10 minutes is stopped and started again; a
-  snapshot is given up as gone only after three failed starts in a row. Running time is charged from the moment a
-  container starts (waking, going back, coming back from a backup, learning).
+- **Waking is never stuck**: each wake step that takes longer than 10 minutes is stopped and started again; after
+  three timeouts in a row the collection stops trying (and paying) until someone asks again, and says so with a
+  `state` event. A snapshot is given up as gone only after three failed starts in a row. Running time is charged from
+  the moment a container starts (waking, going back, coming back from a backup, learning).
+- **Questions are never kept**: Cognee's search history is off (`COGNEE_LOG_SEARCH_HISTORY=false`, in the image and
+  forced by `query.py`), so no question reaches the databases, snapshots or backups, and the query process logs at
+  WARNING.
+- **Backups belong to a snapshot**: a backup records the snapshot its container started from, and is used for that
+  snapshot's restore points in the same database format; restoring checks the files against the backup's own list.
+- **Removals for good finish**: a removal whose restore point can't be started learns the other documents again
+  without every pending removal's documents. One that keeps failing is reported (an `import` event, failed) and tried
+  again after 1 minute, 10 minutes, an hour, then every 6 hours. Its clean-up of older facts files and backups is
+  kept with the commit and retried from the alarm until it is done.
+- **The organization hold** (`POST /v1/orgs/:org/hold`, the app's hard stop on awake hours): while held, the engine
+  starts no container for the organization's collections except to remove a file for good or delete; running
+  containers stop, an import in progress stops, keeps nothing and waits, questions answer `held`, and the collection's
+  state is `held`. The hold lifts at its `until` time or with `until: null`. A collection made while held is held.
+- **Imports hold their capacity slot or stop**: an import whose slot lapsed (its renewal failed or was refused) stops,
+  keeps nothing and waits for a new slot, so no more than the allowed imports ever run.
+- **Settings carry the app's revision**: a PUT with a lower revision than the engine holds answers 409
+  `stale_settings` and changes nothing; the same revision again changes nothing.
 
 ## Service settings
 
@@ -94,6 +112,10 @@ and `ENGINE_LEARNING_INSTANCE` as vars to change them without a code change.
 
 Daily backups are kept for the collection's `backupDays` (its settings; the organization's backup_days limit,
 30 by default); the latest backup is kept for the collection's life.
+
+Uploads are streamed to R2 in 8 MB parts and hashed on the way (`src/sha256.ts`), so a file is never held whole in
+memory; a file whose SHA-256 doesn't match is not kept. Readers stop a little past the 2 MB text limit (a spreadsheet
+also keeps at most 64 blank cells between two values), so a small file can't expand into gigabytes.
 
 Each document keeps at most 2,000 passages (`PASSAGE_CAP` in `container/passages.py`, design section 11's cap on
 passages per document). The 2 MB text limit makes about a thousand of Cognee's chunks, so the cap binds only for

@@ -78,7 +78,8 @@ export const yourData: DocTopic = {
               ['Restore points', '30 days'],
               ['Daily backups', '30 days; the latest as long as the collection exists'],
               ['Exports', '7 days'],
-              ['Who may do what: sharing, the list of collections, questions asked, reports and corrections', 'In Knowledge\'s own database, for the organization only, until the collection (or the organization) is deleted'],
+              ['Who may do what: sharing, the list of collections, questions asked, reports and corrections (kept as learned, with hidden values hidden)', 'In Knowledge\'s own database, for the organization only, until the collection (or the organization) is deleted'],
+              ['Notes waiting for the 1st (the month\'s documents learned used up), with hidden values hidden', 'Until they are learned'],
               ['The activity log: collections deleted or transferred, by whom and when', 'As long as the organization uses Knowledge'],
               ['Answers to changes, kept so a change sent twice isn\'t done twice', 'A day'],
             ]}

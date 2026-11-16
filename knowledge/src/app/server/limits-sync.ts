@@ -1,6 +1,7 @@
 import type { Bindings } from './env.ts'
 import { LIMIT_KEYS } from './limits.ts'
 import { callPlatform } from './platform-api.ts'
+import { bumpOrgSettings } from './settings.ts'
 
 /**
  * Pulls the limits Insulin Apps' operators set (DESIGN.md §8.8): `GET <SUGER_LIMITS_URL>?since=<cursor>` with the
@@ -44,7 +45,7 @@ export async function syncLimits(env: Bindings, now: number, deadline: number): 
     const storedBackupDays = await db.prepare(`SELECT value FROM limit_defaults WHERE key = 'backup_days'`).first<{ value: number | null }>()
     const backupDefault = valueOf((body.defaults ?? {}).backup_days)
     if (backupDefault !== undefined && (storedBackupDays === null || storedBackupDays.value !== backupDefault)) {
-      statements.push(db.prepare(`UPDATE collections SET settings_version = -1 WHERE state = 'active'`))
+      statements.push(db.prepare(`UPDATE collections SET settings_revision = settings_revision + 1 WHERE state = 'active'`))
     }
     for (const [key, raw] of Object.entries(body.defaults ?? {})) {
       const value = valueOf(raw)
@@ -58,7 +59,7 @@ export async function syncLimits(env: Bindings, now: number, deadline: number): 
       if (!org) continue
       organizations += 1
       statements.push(db.prepare(`DELETE FROM org_limits WHERE org_id = ?`).bind(org))
-      statements.push(db.prepare(`UPDATE collections SET settings_version = -1 WHERE org_id = ? AND state = 'active'`).bind(org))
+      statements.push(bumpOrgSettings(db, org))
       for (const [key, raw] of Object.entries((entry.limits ?? {}) as Record<string, { value?: unknown; until?: unknown }>)) {
         const value = valueOf(raw?.value)
         if (!LIMIT_KEYS.has(key) || value === undefined) continue

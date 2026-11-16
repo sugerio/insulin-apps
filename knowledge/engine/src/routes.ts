@@ -36,6 +36,7 @@ export const ROUTES: Route[] = [
   { name: 'getExport', method: 'GET', path: '/v1/collections/:cid/exports/:exportId', scope: 'collection', orgHeader: true },
   { name: 'deleteCollection', method: 'DELETE', path: '/v1/collections/:cid', scope: 'collection', orgHeader: true },
   { name: 'purgeOrg', method: 'POST', path: '/v1/orgs/:org/purge', scope: 'org', orgHeader: true },
+  { name: 'holdOrg', method: 'POST', path: '/v1/orgs/:org/hold', scope: 'org', orgHeader: true },
   // Service-wide: the app's tick pulls every organization's events, and health counts every collection.
   { name: 'outbox', method: 'GET', path: '/v1/outbox', scope: 'service', orgHeader: false },
   { name: 'health', method: 'GET', path: '/v1/health', scope: 'service', orgHeader: false },

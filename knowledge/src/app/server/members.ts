@@ -82,7 +82,11 @@ const timeOf = (value: unknown, fallback: number): number => {
   return fallback
 }
 
-/** Remembers who called (name, address, roles), for mail and the sharing dialog. Writes only when something changed. */
+/**
+ * Remembers who called (name, address, roles), for mail and the sharing dialog. Writes only when something changed.
+ * Someone calling with the platform's identity for the organization is in it now: a resync needn't check them
+ * (`unchecked` cleared), unless Knowledge holds them as away, which only their return or the resync settles.
+ */
 export async function rememberCaller(db: D1Database, caller: Caller, now: number): Promise<void> {
   // A custom role's permissions are kept (the sharing dialog says "acts as Viewer"); a built-in role's are its own.
   const own = rolePermissions(caller.appRole)
@@ -92,8 +96,9 @@ export async function rememberCaller(db: D1Database, caller: Caller, now: number
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?9, 0, 0, ?8, ?8)
      ON CONFLICT (org_id, principal_type, principal_id) DO UPDATE SET
        name = COALESCE(excluded.name, members.name), email = COALESCE(excluded.email, members.email), app_role = excluded.app_role,
-       org_role = COALESCE(excluded.org_role, members.org_role), permissions = excluded.permissions, seen_at = excluded.seen_at, updated_at = excluded.updated_at
-     WHERE members.name IS NOT COALESCE(excluded.name, members.name) OR members.email IS NOT COALESCE(excluded.email, members.email)
+       org_role = COALESCE(excluded.org_role, members.org_role), permissions = excluded.permissions, seen_at = excluded.seen_at, updated_at = excluded.updated_at,
+       unchecked = CASE WHEN members.away = 0 THEN 0 ELSE members.unchecked END
+     WHERE (members.unchecked = 1 AND members.away = 0) OR members.name IS NOT COALESCE(excluded.name, members.name) OR members.email IS NOT COALESCE(excluded.email, members.email)
        OR members.app_role IS NOT excluded.app_role OR members.org_role IS NOT COALESCE(excluded.org_role, members.org_role)
        OR members.permissions IS NOT excluded.permissions OR members.seen_at IS NULL OR members.seen_at < excluded.seen_at - 3600000`,
   ).bind(caller.organizationId, caller.kind, caller.id, caller.name, caller.email, caller.appRole, caller.orgRole, now, narrowed).run()
@@ -246,6 +251,8 @@ async function moveOwnership(env: Bindings, org: string, from: string, why: 'lef
   const previous = await memberOf(db, org, 'person', from)
   const recipient = await memberOf(db, org, 'person', to)
   for (const collection of owned) {
+    // Out of the tick's time: the event isn't done, so it is applied again (what moved stays moved).
+    if (env.DEADLINE !== undefined && Date.now() > env.DEADLINE) throw new TryAgainLater('Out of time; the rest of the collections move on the next tick')
     const statements = [
       db.prepare(`UPDATE collections SET owner_id = ?3, owner_since = ?4, updated_at = ?4 WHERE id = ?1 AND org_id = ?2 AND owner_id = ?5`).bind(collection.id, org, to, now, from),
       db.prepare(`DELETE FROM collection_shares WHERE collection_id = ? AND org_id = ? AND principal_type = 'person' AND principal_id = ?`).bind(collection.id, org, to),
@@ -408,10 +415,13 @@ async function freshCursor(env: Bindings): Promise<string | null> {
 }
 
 /**
- * Pulls member events since the saved cursor and applies them, page after page while `more`, saving the cursor
- * after each page, until `deadline`. The first call takes the current cursor and applies nothing; a 410 starts a resync.
+ * Pulls member events since the saved cursor and applies them, page after page while `more`, until `deadline`. The
+ * gateway's event ids are ordered and each is the cursor that continues after it, so the cursor is saved after every
+ * event applied: a page longer than the tick's time still moves on. The first call takes the current cursor and
+ * applies nothing; a 410 starts a resync. Platform calls give up at the deadline too.
  */
-export async function syncMembers(env: Bindings, now: number, deadline: number): Promise<{ applied: number; resync: boolean }> {
+export async function syncMembers(input: Bindings, now: number, deadline: number): Promise<{ applied: number; resync: boolean }> {
+  const env: Bindings = { ...input, DEADLINE: Math.min(input.DEADLINE ?? deadline, deadline) }
   const db = env.DB
   let state = await readSync(db, EVENTS)
   let applied = 0
@@ -445,7 +455,7 @@ export async function syncMembers(env: Bindings, now: number, deadline: number):
     const body = (await response.json().catch(() => ({}))) as { events?: unknown; cursor?: unknown; more?: unknown }
     const events = Array.isArray(body.events) ? (body.events as Record<string, unknown>[]) : []
     for (const event of events) {
-      // Out of time mid-page: the page is read again next time (applying an event twice changes nothing).
+      // Out of time mid-page: the next tick goes on after the last event applied.
       if (Date.now() > deadline) return { applied, resync: false }
       try {
         await applyMemberEvent(env, event, now)
@@ -453,6 +463,10 @@ export async function syncMembers(env: Bindings, now: number, deadline: number):
       } catch (error) {
         if (!(error instanceof TryAgainLater)) logError('member_event_failed', error, { type: String(event.type ?? '') })
         throw error
+      }
+      if (typeof event.id === 'string' && /^\d{1,20}$/.test(event.id)) {
+        cursor = event.id
+        await writeSync(db, EVENTS, { cursor, resyncStartedAt: null }, now)
       }
     }
     if (typeof body.cursor === 'string' || typeof body.cursor === 'number') cursor = String(body.cursor)
@@ -478,7 +492,8 @@ export async function startResync(env: Bindings, now: number): Promise<void> {
  * Checks unchecked members with member status, 100 at a time per organization, saving progress as it goes (each
  * checked row is marked), until none are left (true) or the deadline (false).
  */
-export async function continueResync(env: Bindings, now: number, deadline: number): Promise<boolean> {
+export async function continueResync(input: Bindings, now: number, deadline: number): Promise<boolean> {
+  const env: Bindings = { ...input, DEADLINE: Math.min(input.DEADLINE ?? deadline, deadline) }
   const db = env.DB
   for (let round = 0; round < 50 && Date.now() < deadline; round += 1) {
     const first = await db.prepare(`SELECT org_id FROM members WHERE unchecked = 1 ORDER BY org_id LIMIT 1`).first<{ org_id: string }>()
@@ -497,17 +512,39 @@ export async function continueResync(env: Bindings, now: number, deadline: numbe
     }
     if (status.owners.length) await applyOwners(db, org, status.owners, now)
     for (const row of results) {
+      // Out of time: the rows not yet checked stay unchecked, and the next tick goes on with them.
+      if (Date.now() > deadline) return false
       const entry = status.entries.find((candidate) => candidate.id === row.principal_id)
       if (!entry || entry.gone || !entry.member) {
         if (!row.away) await applyLeft(env, org, row.principal_type, row.principal_id, now)
       } else {
         if (row.away && row.principal_type === 'person') await applyReturned(env, org, row.principal_type, row.principal_id, { appRole: entry.appRole, orgRole: entry.orgRole }, now)
-        if (entry.appRole && (entry.appRole !== row.app_role || JSON.stringify(entry.permissions) !== (row.permissions ?? 'null'))) {
+        // Every resync keeps the rule that an owner acts as more than a Viewer, whether or not their roles changed.
+        const changed = entry.appRole !== row.app_role || JSON.stringify(entry.permissions) !== (row.permissions ?? 'null')
+        if (entry.appRole && (changed || actsAsViewer(entry.appRole, entry.permissions))) {
           await applyRoleChanged(env, org, row.principal_type, row.principal_id, entry.appRole, entry.orgRole, now, entry.permissions)
         }
       }
       await db.prepare(`UPDATE members SET unchecked = 0 WHERE org_id = ? AND principal_type = ? AND principal_id = ?`).bind(org, row.principal_type, row.principal_id).run()
     }
+    await enforceOwnership(env, org, now, deadline)
   }
   return false
+}
+
+/**
+ * Collections whose owner acts as a Viewer, as Knowledge last knew them (their own visit or a resync), move to the
+ * organization's longest-standing owner: run at the end of each resync batch, so owners who called during the resync
+ * (and so weren't checked by it) keep the rule too.
+ */
+async function enforceOwnership(env: Bindings, org: string, now: number, deadline: number): Promise<void> {
+  const { results } = await env.DB.prepare(
+    `SELECT DISTINCT c.owner_id, m.app_role, m.permissions FROM collections c
+     JOIN members m ON m.org_id = c.org_id AND m.principal_type = 'person' AND m.principal_id = c.owner_id
+     WHERE c.org_id = ? AND c.state = 'active' AND m.away = 0`,
+  ).bind(org).all<{ owner_id: string; app_role: string | null; permissions: string | null }>()
+  for (const row of results) {
+    if (Date.now() > deadline) return
+    if (actsAsViewer(row.app_role, row.permissions)) await moveOwnership(env, org, row.owner_id, 'viewer', now)
+  }
 }

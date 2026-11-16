@@ -63,16 +63,16 @@ export class FakeGateway {
   limits: { status: number; pages: { defaults: Record<string, number | null>; organizations: { id: string; limits: Record<string, { value: number | null; until: string | null }> }[] }[] } = { status: 503, pages: [] }
   limitCalls: (string | null)[] = []
   /** Who can use Knowledge, per organization (member status and the lookup). */
-  members = new Map<string, Map<string, { type: 'person' | 'client'; member: boolean; gone?: boolean; appRole: string | null; orgRole: string | null; name?: string; email?: string }>>()
+  members = new Map<string, Map<string, { type: 'person' | 'client'; member: boolean; gone?: boolean; appRole: string | null; orgRole: string | null; permissions?: string[]; name?: string; email?: string }>>()
   owners = new Map<string, { user: string; since: string }[]>()
   deletedOrgs = new Set<string>()
   events: Record<string, unknown>[] = []
   eventsExpired = false
   eventCalls: (string | null)[] = []
 
-  setMember(org: string, id: string, entry: { type?: 'person' | 'client'; member?: boolean; appRole?: string | null; orgRole?: string | null; name?: string; email?: string }) {
+  setMember(org: string, id: string, entry: { type?: 'person' | 'client'; member?: boolean; appRole?: string | null; orgRole?: string | null; permissions?: string[]; name?: string; email?: string }) {
     if (!this.members.has(org)) this.members.set(org, new Map())
-    this.members.get(org)!.set(id, { type: entry.type ?? 'person', member: entry.member ?? true, appRole: entry.appRole ?? null, orgRole: entry.orgRole ?? null, name: entry.name, email: entry.email })
+    this.members.get(org)!.set(id, { type: entry.type ?? 'person', member: entry.member ?? true, appRole: entry.appRole ?? null, orgRole: entry.orgRole ?? null, permissions: entry.permissions, name: entry.name, email: entry.email })
   }
 
   /** Every person of PEOPLE in their organization, as members who can use Knowledge. */
@@ -83,8 +83,9 @@ export class FakeGateway {
     this.owners.set(ORG, [{ user: PEOPLE.dana.id, since: '2024-01-01T00:00:00Z' }, { user: PEOPLE.sam.id, since: '2025-06-01T00:00:00Z' }])
   }
 
+  /** As the gateway numbers them: each event's id is the cursor that continues after it. */
   addEvent(event: Record<string, unknown>) {
-    this.events.push({ id: `ev${this.events.length + 1}`, at: new Date().toISOString(), ...event })
+    this.events.push({ id: String(this.events.length + 1), at: new Date().toISOString(), ...event })
   }
 
   fetch: typeof fetch = async (input, init) => {
@@ -131,7 +132,7 @@ export class FakeGateway {
             const entry = known.get(id)
             if (!entry) return { id, type: null, status: 'gone' }
             if (!entry.member) return { id, type: entry.type, status: entry.type === 'client' ? 'revoked' : 'left' }
-            return { id, type: entry.type, status: 'member', appRole: entry.appRole, ...(entry.type === 'person' ? { orgRole: entry.orgRole } : {}) }
+            return { id, type: entry.type, status: 'member', appRole: entry.appRole, ...(entry.type === 'person' ? { orgRole: entry.orgRole } : {}), ...(entry.permissions ? { permissions: entry.permissions } : {}) }
           }),
         })
       }

@@ -6,6 +6,8 @@ import type { EngineClient } from '../engine/client.ts'
 import type { AppEnv } from '../env.ts'
 import { ApiError, badRequest, notFound, readJson } from '../http.ts'
 import { idempotent, stableId } from '../idempotency.ts'
+import { hide } from '../kept.ts'
+import { readOrgSettings } from '../settings.ts'
 import { appLink, MAIL, sendMail, sendMailToAll } from '../mail.ts'
 import { memberOf } from '../members.ts'
 import { callerOf, engineFor, iso, json, now, param } from './common.ts'
@@ -127,10 +129,12 @@ export function knowledgeRoutes() {
       const id = importId
       const note = { noteId: id.replace(/-/g, ''), title: body.title ?? (body.question ? `Correction: ${body.question}`.slice(0, 200) : 'Correction'), text: body.text, outdated }
       // Recorded first: a report it answers is marked fixed once the correction is learned (outbox.ts), not before.
+      // Kept as the engine learns it, with the organization's hidden values hidden: Knowledge keeps none.
+      const { hiding } = await readOrgSettings(db, caller.organizationId, at)
       await db.prepare(
         `INSERT INTO corrections (id, org_id, collection_id, created_by, created_at, question, text, outdated, import_id, report_id, fact_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO NOTHING`,
-      ).bind(id, caller.organizationId, collection.id, caller.id, at, body.question ?? null, body.text, JSON.stringify(outdated), importId, body.reportId ?? null, body.factId ?? null).run()
+      ).bind(id, caller.organizationId, collection.id, caller.id, at, body.question === undefined ? null : hide(body.question, hiding), hide(body.text, hiding), JSON.stringify(outdated), importId, body.reportId ?? null, body.factId ?? null).run()
       let started
       try {
         started = await startImport(c.env, engine, caller, collection, 'correction', { files: [], notes: [note] }, at, importId)
@@ -163,9 +167,14 @@ export function knowledgeRoutes() {
     const { collection } = await authorize(db, caller, param(c, 'id'), 'report')
     return idempotent(c, body, true, async () => {
       const at = now(c)
-      const id = crypto.randomUUID()
-      await db.prepare(`INSERT INTO reports (id, org_id, collection_id, answer_id, reported_by, created_at, question, answer, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`)
+      // The same id when the same request comes back after its answer was lost: one report, mailed once.
+      const id = await stableId(c)
+      const inserted = await db.prepare(`INSERT INTO reports (id, org_id, collection_id, answer_id, reported_by, created_at, question, answer, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open') ON CONFLICT (id) DO NOTHING`)
         .bind(id, caller.organizationId, collection.id, body.answerId ?? null, caller.id, at, body.question, body.answer ?? '', body.note ?? '').run()
+      if (inserted.meta.changes !== 1) {
+        const report = await db.prepare(`SELECT status, answer_id, created_at FROM reports WHERE id = ? AND org_id = ?`).bind(id, caller.organizationId).first<{ status: string; answer_id: string | null; created_at: number }>()
+        return json(c, { report: { id, status: report?.status ?? 'open', answerId: report?.answer_id ?? null, createdAt: iso(report?.created_at ?? at) } }, 201)
+      }
       const { results } = await db.prepare(
         `SELECT m.email FROM members m WHERE m.org_id = ?1 AND m.principal_type = 'person' AND m.away = 0 AND m.email IS NOT NULL AND (
            m.principal_id = ?2 OR EXISTS (SELECT 1 FROM collection_shares s WHERE s.collection_id = ?3 AND s.org_id = ?1 AND s.principal_type = 'person' AND s.principal_id = m.principal_id AND s.role = 'ADMIN' AND s.status = 'active'))`,

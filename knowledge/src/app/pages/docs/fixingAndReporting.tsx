@@ -87,7 +87,7 @@ export const fixingAndReporting: DocTopic = {
             <li><b>Files Insulin couldn't read</b>, with the reason and what to upload instead.</li>
             <li><b>Values hidden before learning</b>: which file, and how many e-mail addresses, phone numbers or other values were hidden. Open the file to see where. See <DocLink to="hiding-personal-data">Hiding personal data</DocLink>.</li>
             <li><b>Reported answers waiting</b>: fix the answer, or say it is right.</li>
-            <li><b>Corrections to check</b>: a file was read again, and the words a correction applies to now read differently. Check that the correction still says the right thing; writing a new correction of that file settles it.</li>
+            <li><b>Corrections to check</b>: a file was read again, and the words a correction applies to now read differently. Check that the correction still says the right thing (shown as Insulin learned it, with hidden values hidden); writing a new correction of that file settles it.</li>
           </ul>
           <p>
             Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file

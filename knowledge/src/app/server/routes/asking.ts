@@ -11,10 +11,11 @@ function perCollection(results: CollectionResult[]) {
   return results.map((result) => ({ id: result.collectionId, name: result.name, status: result.status, retryAfterSeconds: result.retryAfterSeconds, covered: result.covered }))
 }
 
-/** The overall status when no collection answered: learning wins, then waking, then busy. */
-function waitingStatus(results: CollectionResult[]): 'learning' | 'waking' | 'busy' {
+/** The overall status when no collection answered: learning wins, then waking, then held (the awake-hours stop), then busy. */
+function waitingStatus(results: CollectionResult[]): 'learning' | 'waking' | 'held' | 'busy' {
   if (results.some((result) => result.status === 'learning')) return 'learning'
   if (results.some((result) => result.status === 'waking')) return 'waking'
+  if (results.some((result) => result.status === 'held')) return 'held'
   return 'busy'
 }
 

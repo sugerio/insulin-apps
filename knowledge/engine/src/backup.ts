@@ -12,6 +12,7 @@ export interface BackupIndex {
   format: 1
   collectionId: string
   version: number
+  snapshotId?: string | null // the snapshot the backed-up container started from
   createdAt: string
   day: string
   image: string
@@ -49,6 +50,7 @@ export async function run(e: CollectionEngine, runtime: Runtime): Promise<Backup
     format: 1,
     collectionId: meta.collectionId,
     version: meta.version,
+    snapshotId: runtime.snapshotId,
     createdAt: iso(),
     day,
     image: runtime.image,
@@ -95,11 +97,13 @@ export async function coldBackup(e: CollectionEngine): Promise<void> {
 }
 
 /**
- * Whether a backup holds exactly a snapshot's files (by their checksum list, not by version: a change that adds no
- * data keeps the files) in the database format the running image reads.
+ * Whether a backup was taken of a snapshot's restore point, in the database format the running image reads. Matched
+ * by the snapshot it came from, not by version (a change that adds no data keeps the snapshot) and not by checksums
+ * (open databases change /data a little after every wake). Restoring checks the files against the backup's own list.
  */
 export function holds(index: BackupIndex, snapshot: SnapshotRecord, dataFormat: string): boolean {
-  return index.manifest.digest === snapshot.manifest.digest && index.dataFormat === dataFormat
+  if (index.dataFormat !== dataFormat) return false
+  return index.snapshotId ? index.snapshotId === snapshot.handle.id : index.manifest.digest === snapshot.manifest.digest
 }
 
 export async function latestIndex(e: CollectionEngine): Promise<BackupIndex | null> {

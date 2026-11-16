@@ -96,7 +96,7 @@ export interface AskCitation {
 export interface CollectionAskStatus {
   id: string
   name: string
-  status: 'ok' | 'waking' | 'learning' | 'busy'
+  status: 'ok' | 'waking' | 'learning' | 'busy' | 'held'
   retryAfterSeconds: number | null
   covered: boolean
 }
@@ -104,7 +104,7 @@ export interface CollectionAskStatus {
 export interface AskAnswer {
   answerId: string | null
   outcome: 'answered' | 'sources_only' | 'wont_guess' | 'waiting'
-  status?: 'learning' | 'waking' | 'busy'
+  status?: 'learning' | 'waking' | 'busy' | 'held'
   text: string | null
   model?: string | null
   writer?: 'builtin' | 'own' | null

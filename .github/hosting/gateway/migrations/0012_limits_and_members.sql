@@ -97,8 +97,9 @@ CREATE INDEX member_events_by_subject ON member_events (org_id, subject, id);
 
 -- A move from an organization role to specific apps, open for the length of the batch that makes it: the grants that
 -- batch writes join the move's event (below), and the batch closes it before it commits (db/orgs.ts setAppAccess, the
--- only statement that moves a member to specific apps), so no other transaction ever sees one open, and a grant made
--- later is always an event of its own.
+-- only statement that moves a member to specific apps). A grant joins only a move of its own batch (the membership was
+-- changed at the grant's time, both from the batch's clock), so a move left open by the gateway before this
+-- migration's code ran, or by anything else, is ignored and deleted by the next grant, and by the cleanup.
 CREATE TABLE member_event_moves (
   org_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -127,9 +128,10 @@ CREATE TRIGGER memberships_role_event BEFORE UPDATE OF role ON memberships WHEN 
 
 CREATE TRIGGER memberships_role_owners_event AFTER UPDATE OF role ON memberships WHEN OLD.role <> NEW.role AND (OLD.role = 'OWNER' OR NEW.role = 'OWNER') BEGIN INSERT INTO member_events (app, org_id, type, subject, payload, at) SELECT '*', NEW.org_id, 'owners', NULL, json_object('owners', json((SELECT json_group_array(json_object('user', o.user_id, 'since', o.updated_at)) FROM (SELECT user_id, updated_at FROM memberships WHERE org_id = NEW.org_id AND role = 'OWNER' ORDER BY updated_at, user_id) o))), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER); END;
 
--- A grant gives a specific-apps member one app; in the batch that moved them from an organization role (an open move),
--- it joins that move's event instead, so the app sees one change and no false departure.
-CREATE TRIGGER app_grants_insert_event AFTER INSERT ON app_grants BEGIN UPDATE member_events SET payload = json_set(payload, '$.grantsAfter."' || NEW.app || '"', json_object('role', NEW.role, 'permissions', json((SELECT c.permissions FROM custom_roles c WHERE c.id = NEW.custom_role_id)))) WHERE id = (SELECT m.event_id FROM member_event_moves m WHERE m.org_id = NEW.org_id AND m.user_id = NEW.user_id); INSERT INTO member_events (app, org_id, type, subject, payload, at) SELECT NEW.app, NEW.org_id, 'returned', NEW.user_id, json_object('role', NEW.role, 'permissions', json((SELECT c.permissions FROM custom_roles c WHERE c.id = NEW.custom_role_id))), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE NOT EXISTS (SELECT 1 FROM member_event_moves m WHERE m.org_id = NEW.org_id AND m.user_id = NEW.user_id); END;
+-- A grant gives a specific-apps member one app; in the batch that moved them from an organization role (its open move,
+-- with the membership changed at the grant's time), it joins that move's event instead, so the app sees one change and
+-- no false departure. Any other open move of theirs is stale: the grant is an event of its own and the move goes.
+CREATE TRIGGER app_grants_insert_event AFTER INSERT ON app_grants BEGIN UPDATE member_events SET payload = json_set(payload, '$.grantsAfter."' || NEW.app || '"', json_object('role', NEW.role, 'permissions', json((SELECT c.permissions FROM custom_roles c WHERE c.id = NEW.custom_role_id)))) WHERE id = (SELECT m.event_id FROM member_event_moves m JOIN memberships ms ON ms.org_id = m.org_id AND ms.user_id = m.user_id WHERE m.org_id = NEW.org_id AND m.user_id = NEW.user_id AND ms.updated_at = NEW.created_at); INSERT INTO member_events (app, org_id, type, subject, payload, at) SELECT NEW.app, NEW.org_id, 'returned', NEW.user_id, json_object('role', NEW.role, 'permissions', json((SELECT c.permissions FROM custom_roles c WHERE c.id = NEW.custom_role_id))), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE NOT EXISTS (SELECT 1 FROM member_event_moves m JOIN memberships ms ON ms.org_id = m.org_id AND ms.user_id = m.user_id WHERE m.org_id = NEW.org_id AND m.user_id = NEW.user_id AND ms.updated_at = NEW.created_at); DELETE FROM member_event_moves WHERE org_id = NEW.org_id AND user_id = NEW.user_id AND NOT EXISTS (SELECT 1 FROM memberships ms WHERE ms.org_id = NEW.org_id AND ms.user_id = NEW.user_id AND ms.updated_at = NEW.created_at); END;
 
 CREATE TRIGGER app_grants_update_event AFTER UPDATE ON app_grants WHEN OLD.role IS NOT NEW.role OR OLD.custom_role_id IS NOT NEW.custom_role_id BEGIN INSERT INTO member_events (app, org_id, type, subject, payload, at) VALUES (NEW.app, NEW.org_id, 'role_changed', NEW.user_id, json_object('role', NEW.role, 'permissions', json((SELECT c.permissions FROM custom_roles c WHERE c.id = NEW.custom_role_id))), CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)); END;
 

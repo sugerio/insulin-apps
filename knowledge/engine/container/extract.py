@@ -18,6 +18,9 @@ from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
 MAX_TEXT_BYTES = 2 * 1024 * 1024
+# Readers stop a little past the limit (the cap then cuts and says so), so a small file can't grow into gigabytes.
+READ_BUDGET_BYTES = MAX_TEXT_BYTES + 64 * 1024
+MAX_BLANK_COLUMNS = 64  # blank cells kept between two values of one spreadsheet row
 MAX_XML_PART_BYTES = 64 * 1024 * 1024  # one part of an Office file, uncompressed
 MAX_OFFICE_TOTAL_BYTES = 256 * 1024 * 1024
 
@@ -179,7 +182,13 @@ def _pdf(path: Path, name: str) -> list[str]:
         reader = PdfReader(str(path))
         if reader.is_encrypted and not reader.decrypt(""):
             raise ExtractionError(f"“{name}” is protected with a password, so Knowledge can't read it.")
-        pages = [(page.extract_text() or "") for page in reader.pages]
+        pages, read = [], 0
+        for page in reader.pages:
+            if read > READ_BUDGET_BYTES:
+                break
+            text = page.extract_text() or ""
+            pages.append(text)
+            read += len(text.encode("utf-8"))
     except ExtractionError:
         raise
     except PdfReadError as error:
@@ -302,20 +311,25 @@ def _xlsx(path: Path) -> list[str]:
                 shared.append("".join(t.text or "" for t in item.iter(f"{S}t")))
         workbook = _xml(archive, "xl/workbook.xml")
         rels = _rels(archive, "xl/workbook.xml")
-        texts = []
+        texts, read = [], 0
         sheets = workbook.find(f"{S}sheets")
         for sheet in sheets if sheets is not None else []:
+            if read > READ_BUDGET_BYTES:
+                break
             target = rels.get(sheet.get(f"{R}id", ""))
             if not target or target not in archive.namelist():
                 continue
             rows = []
             for row in _xml(archive, target).iter(f"{S}row"):
+                if read > READ_BUDGET_BYTES:
+                    break
                 cells: list[str] = []
                 for cell in row.iter(f"{S}c"):
-                    # Blank cells are left out of the file: each cell's reference ("C2") says its column.
+                    # Blank cells are left out of the file: each cell's reference ("C2") says its column. A run of
+                    # blanks is kept up to a limit, so one value in column XFD doesn't become 16,383 tabs.
                     column = _column(cell.get("r", ""))
                     if column is not None:
-                        cells.extend([""] * (column - len(cells)))
+                        cells.extend([""] * min(column - len(cells), MAX_BLANK_COLUMNS))
                     kind = cell.get("t")
                     value = cell.find(f"{S}v")
                     if kind == "s" and value is not None and value.text is not None:
@@ -333,6 +347,7 @@ def _xlsx(path: Path) -> list[str]:
                     cells.pop()
                 if cells:
                     rows.append("\t".join(cells))
+                    read += len(rows[-1].encode("utf-8")) + 1
             texts.append(f"{sheet.get('name', 'Sheet')}\n" + "\n".join(rows))
         return texts or [""]
 

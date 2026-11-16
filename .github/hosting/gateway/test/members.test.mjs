@@ -576,6 +576,66 @@ test('a grant in a later transaction is a new event, even in the same millisecon
   assert.equal(await changeRole(h.db, { orgId, userId: other.id, current: 'EDITOR', next: 'APPS', actorId: owner.id, now: Date.now() }), false)
 })
 
+/**
+ * setAppAccess as the gateway before migration 0012 runs it, which production does between the migration and the new
+ * Worker's deploy: the same three statements, and no move closed.
+ */
+async function setAppAccessBeforeThisRelease(db, change) {
+  const actor = `EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?3
+    AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?4 <> 'OWNER')))`
+  const ours = `(?4 = 'APPS' OR (SELECT m.updated_at FROM memberships m WHERE m.org_id = ?1 AND m.user_id = ?2 AND m.role = 'APPS') = ?6)`
+  const anotherOwner = "(SELECT COUNT(*) FROM memberships o WHERE o.org_id = ?1 AND o.role = 'OWNER') > 1"
+  const apps = JSON.stringify(change.grants.map((grant) => grant.app))
+  const grants = JSON.stringify(change.grants.map((grant) => ({ app: grant.app, role: grant.role, customRoleId: grant.customRoleId })))
+  await db.batch([
+    db.prepare(
+      `UPDATE memberships SET role = 'APPS', updated_at = ?5
+       WHERE org_id = ?1 AND user_id = ?2 AND role = ?4 AND ?4 <> 'APPS'
+         AND (?4 <> 'OWNER' OR ${anotherOwner}) AND ${actor}`,
+    ).bind(change.orgId, change.userId, change.actorId, change.current, change.now),
+    db.prepare(
+      `DELETE FROM app_grants WHERE org_id = ?1 AND user_id = ?2
+         AND app NOT IN (SELECT value FROM json_each(?5)) AND ${actor} AND ${ours}`,
+    ).bind(change.orgId, change.userId, change.actorId, change.current, apps, change.now),
+    db.prepare(
+      `INSERT INTO app_grants (org_id, user_id, app, role, custom_role_id, created_at, updated_at)
+       SELECT ?1, ?2, json_extract(value, '$.app'), json_extract(value, '$.role'), json_extract(value, '$.customRoleId'), ?6, ?6
+       FROM json_each(?5)
+       WHERE (SELECT role FROM memberships WHERE org_id = ?1 AND user_id = ?2) = 'APPS' AND ${actor} AND ${ours}
+       ON CONFLICT (org_id, user_id, app) DO UPDATE SET role = excluded.role, custom_role_id = excluded.custom_role_id,
+         updated_at = excluded.updated_at`,
+    ).bind(change.orgId, change.userId, change.actorId, change.current, grants, change.now),
+  ])
+}
+
+test('a move the previous gateway made during the release, which closes nothing, still leaves later grants events of their own', async () => {
+  const { owner, orgId } = await team('Release Gap Org')
+  const mover = await person('Gap Mover')
+  await invite(owner, orgId, mover, 'EDITOR')
+  await echo(owner, 'ledger')
+  const start = await cursor(LEDGER_TOKEN)
+  await setAppAccessBeforeThisRelease(h.db, { orgId, userId: mover.id, current: 'EDITOR', grants: [{ app: 'captable', role: 'VIEWER', customRoleId: null }], actorId: owner.id, now: Date.now() - 5000 })
+  const captableStart = await cursor()
+  const read = parsed(await appGet(`/__insulin/member-events?since=${start}`, { token: LEDGER_TOKEN }))
+  const left = { type: 'left', org: orgId, user: mover.id }
+  assert.deepEqual(shape(read.events.filter((event) => event.org === orgId)), [left])
+  // Later, once the new Worker runs: Ledger again.
+  assert.equal(await upsertGrant(h.db, { orgId, userId: mover.id, grant: { app: 'ledger', role: 'EDITOR', customRoleId: null }, actorId: owner.id, now: Date.now() }), true)
+  assert.deepEqual(shape(await eventsSince(read.cursor, { token: LEDGER_TOKEN, org: orgId })), [
+    { type: 'returned', org: orgId, user: mover.id, orgRole: 'APPS', appRole: 'EDITOR' },
+  ])
+  assert.deepEqual(shape(await eventsSince(start, { token: LEDGER_TOKEN, org: orgId }))[0], left, 'the event already read is as it was')
+  assert.deepEqual(await eventsSince(captableStart, { org: orgId }), [], 'and nothing new for Cap Table')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM member_event_moves WHERE org_id = ?1', orgId))[0].n, 0, 'the stale move goes')
+  // A move left open and never followed by a grant goes with the cleanup.
+  const other = await person('Gap Other')
+  await invite(owner, orgId, other, 'EDITOR')
+  await setAppAccessBeforeThisRelease(h.db, { orgId, userId: other.id, current: 'EDITOR', grants: [{ app: 'captable', role: 'VIEWER', customRoleId: null }], actorId: owner.id, now: Date.now() })
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM member_event_moves WHERE org_id = ?1', orgId))[0].n, 1)
+  await housekeeping(h.db, Date.now())
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM member_event_moves WHERE org_id = ?1', orgId))[0].n, 0)
+})
+
 test('an app\'s first request in an organization goes on only once where it is used is written; otherwise a 503 in plain words', async () => {
   const owner = await h.user({ name: 'Una Unwritten' })
   const orgId = await h.org(owner.client, 'Unwritten Org')
@@ -609,6 +669,8 @@ test('the cleanup finds old member events through their time\'s index, never by 
     for (const statement of splitStatements(readFileSync(new URL(file, dir), 'utf8'))) sqlite.exec(statement)
   }
   const statements = pruneMemberEventsStatements({ prepare: (sql) => ({ bind: () => sql }) }, Date.now(), 200)
+    .filter((sql) => /\bmember_events\b/.test(sql))
+  assert.equal(statements.length, 2)
   for (const sql of statements) {
     // node:sqlite binds no numbered parameters; the values don't change the plan.
     const plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${sql.replaceAll('?1', '0').replaceAll('?2', '200')}`).all().map((row) => row.detail)

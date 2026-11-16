@@ -33,6 +33,7 @@ export const collectionsAndSources: DocTopic = {
               ['Saving a restore point', 'So you can always come back to this version.'],
               ['Going back to an earlier version', 'About a minute; questions wait for a moment.'],
               ['Repairing', "It couldn't open its latest restore point, so it answers from an earlier version while Insulin repairs it."],
+              ['Stopped until the 1st', "Your organization has used this month's awake hours (see Limits). Everything learned is kept; removing a file for good still works."],
             ]}
           />
         </>
@@ -86,7 +87,7 @@ export const collectionsAndSources: DocTopic = {
           </p>
           <ul>
             <li><b>Questions wait.</b> While a collection learns, questions to it wait until it finishes; AI assistants are told to ask again in a minute.</li>
-            <li><b>You can leave.</b> Learning goes on without the page, and Knowledge e-mails whoever added the files when they are learned, or if they couldn't be.</li>
+            <li><b>You can leave.</b> Learning goes on without the page, and Knowledge e-mails whoever added the files when they are learned, or if they couldn't be. If Insulin Knowledge never received an import (a connection dropped), it says so after an hour, by e-mail too; an import that waited for the 1st is sent again instead.</li>
             <li><b>Waiting your turn.</b> An organization learns two imports at a time, and Insulin Knowledge has a limit for everyone together; a new import waits behind them and says when it should start. Notes and corrections go first.</li>
           </ul>
         </>

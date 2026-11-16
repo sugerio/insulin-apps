@@ -165,5 +165,5 @@ support.
 
 ### Is the source code available?
 
-Yes. The gateway and every app are open source under the MIT License, and **Source code** in the footer of every page
-links to the repository.
+Yes. The gateway and every app are open source under the MIT License, and **Source code** in the footer of the Insulin
+Apps pages (the home page, settings and these docs) links to the repository.

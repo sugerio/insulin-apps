@@ -20,6 +20,23 @@ const PREFILL_NAME=/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$/;
 /** A pre-filled value: what the text renderer draws (printable ASCII, trimmed, at most 128 characters), or '' for none. */
 export const validPrefillValue=(value:unknown):value is string=>typeof value==='string'&&(value===''||(value.length<=128&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value)));
 const validLabel=(value:unknown):value is string=>typeof value==='string'&&value.length>=1&&value.length<=80&&value.trim()===value&&!/[\u0000-\u001f\u007f]/.test(value);
+/** A pre-filled field a host fills in, offered to place (editor-routes.ts `prefill`): its name and label. */
+export type PrefillCatalogEntry={name:string;label:string};
+/** The most pre-filled fields a host offers. */
+export const MAX_PREFILL_CATALOG=MAX_PREFILL_NAMES;
+/** The editing session's `prefill`: 1 to 30 distinct names, each with a label; null when not given, or 'invalid'. */
+export function parsePrefillCatalog(value:unknown):PrefillCatalogEntry[]|null|'invalid'{
+  if(value===undefined)return null;
+  if(!Array.isArray(value)||value.length<1||value.length>MAX_PREFILL_CATALOG)return 'invalid';
+  const out:PrefillCatalogEntry[]=[];
+  for(const item of value){
+    if(!item||typeof item!=='object'||Array.isArray(item))return 'invalid';
+    const {name,label,...rest}=item as Record<string,unknown>;
+    if(Object.keys(rest).length||typeof name!=='string'||name.length>64||!PREFILL_NAME.test(name)||!validLabel(label)||out.some(e=>e.name===name))return 'invalid';
+    out.push({name,label});
+  }
+  return out;
+}
 /** Normalized coordinates use the displayed page's top-left as origin. */
 export function validateTemplateFields(value:unknown,roles:string[],pageCount:number):TemplateField[] {
   if(!Array.isArray(value)||value.length>200||!Number.isSafeInteger(pageCount)||pageCount<1)throw new Error('Invalid fields');

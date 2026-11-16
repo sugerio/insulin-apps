@@ -187,4 +187,7 @@ Rules for embedding:
 - `allowedParentOrigin` must be one of the origins the deployment allows to embed Esign (https). The editor refuses to
   open inside any other page, and stops working at its next request if that origin is removed.
 - One session saves once. For another version, open a new session.
+- `prefill`, `[{"name": "partner.name", "label": "Partner name"}, …]` (1 to 30): the [pre-filled fields](#pre-filled-fields)
+  your product fills in when it sends. The editor offers those, to drag onto the page, and the author can't add their
+  own or rename them; without it, the author names their own.
 - The editor's code works once, within two minutes. Never log codes or put them in a query string.

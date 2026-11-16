@@ -6,7 +6,7 @@ import {bodyLimit} from 'hono/body-limit';
 import {PDFDocument} from 'pdf-lib';
 import {issueEditorPage,editorPageParent,exchangeEditorPage,editorPageContext,editorCodeOpen} from './editor-session.ts';
 import {editorOriginAllowed,syncEditorOrigins} from './access.ts';
-import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFields} from './fields.ts';
+import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFields,parsePrefillCatalog} from './fields.ts';
 import type {Hono} from 'hono';
 import type { BlobStore } from './blob-store.ts';
 import {parseMetadata,parseTemplateName,unknownKeys} from './metadata.ts';
@@ -34,12 +34,12 @@ export function mountEditorRoutes(app:Hono<Env>){
  const syncOrigins=async(c:import('hono').Context<Env>,next:import('hono').Next)=>{await syncEditorOrigins(c.env.DB,editorOrigins(new URL(c.req.url).origin,c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)));await next();};
  app.use('/api/template-editing-sessions',syncOrigins);app.use('/api/template-editing-sessions/*',syncOrigins);app.use('/api/public/editor/*',syncOrigins);
  app.post('/api/template-editing-sessions',bodyLimit({maxSize:32768}),async c=>{
-  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown;tags?:unknown;share?:unknown;replace?:unknown;envelopeId?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
-  if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata','tags','share','replace','envelopeId']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
+  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown;tags?:unknown;share?:unknown;replace?:unknown;envelopeId?:unknown;prefill?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
+  if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata','tags','share','replace','envelopeId','prefill']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
   // `envelopeId`: the fields of an envelope draft with an uploaded document (envelope-documents.ts), for its editors,
   // admins and owner: its roles are its signers', its document the one uploaded, and saving writes the draft's fields.
   if(input&&typeof input==='object'&&input.envelopeId!==undefined){
-   if(typeof input.envelopeId!=='string'||typeof input.allowedParentOrigin!=='string'||['sourceTemplateId','roles','name','metadata','tags','share','replace'].some(k=>(input as Record<string,unknown>)[k]!==undefined))return c.json({error:'invalid_session'},422);
+   if(typeof input.envelopeId!=='string'||typeof input.allowedParentOrigin!=='string'||['sourceTemplateId','roles','name','metadata','tags','share','replace','prefill'].some(k=>(input as Record<string,unknown>)[k]!==undefined))return c.json({error:'invalid_session'},422);
    const tenant=c.get('tenantId'),envelopeId=input.envelopeId;
    const found=await documentRole(c.env.DB,tenant,c.get('caller'),'envelope',envelopeId);
    if(!found)return c.json({error:'not_found'},404);
@@ -55,9 +55,11 @@ export function mountEditorRoutes(app:Hono<Env>){
   }
   // The name and metadata the saved template gets (metadata.ts); without them, an edited template keeps its source's.
   // Its owner is the caller, with their tags (and theirs on the source) and the shares asked for (ownership.ts).
+  // `prefill`: the pre-filled fields the host fills in when it sends ([{name,label}], fields.ts): the editor offers those
+  // to place, and no add of its own; without it, the template's author names their own.
   const templateName=parseTemplateName(input?.name),templateMetadata=parseMetadata(input?.metadata);
-  const tags=parseTags(input?.tags),shares=parseShares(input?.share);
-  if(templateName==='invalid'||templateMetadata==='invalid'||tags==='invalid'||shares==='invalid')return c.json({error:'invalid_session'},422);
+  const tags=parseTags(input?.tags),shares=parseShares(input?.share),prefillCatalog=parsePrefillCatalog(input?.prefill);
+  if(templateName==='invalid'||templateMetadata==='invalid'||tags==='invalid'||shares==='invalid'||prefillCatalog==='invalid')return c.json({error:'invalid_session'},422);
   if(!input||typeof input.allowedParentOrigin!=='string'||(input.sourceTemplateId!==undefined&&(typeof input.sourceTemplateId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(input.sourceTemplateId)))||(input.roles!==undefined&&!rolesValid(input.roles)))return c.json({error:'invalid_session'},422);
   const tenant=c.get('tenantId'),caller=c.get('caller');
   let sourceHash:string|null=null;
@@ -77,7 +79,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   }
   const given=sharesFor(shares,caller);
   const allTags=mergeTags(tags,input.sourceTemplateId?await tagsOf(c.env.DB,tenant,caller.userId,'template',input.sourceTemplateId as string):[]);
-  let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{sourceTemplateId:(input.sourceTemplateId as string|undefined)??null,sourceSha256:sourceHash,roles:(input.roles as string[]|undefined)??[],templateName,templateMetadata,ownerUserId:caller.userId,shares:replace?[]:given,tags:replace?[]:allTags,replacesSource:replace});}catch{return c.json({error:'origin_not_allowed'},403);}
+  let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{sourceTemplateId:(input.sourceTemplateId as string|undefined)??null,sourceSha256:sourceHash,roles:(input.roles as string[]|undefined)??[],templateName,templateMetadata,ownerUserId:caller.userId,shares:replace?[]:given,tags:replace?[]:allTags,replacesSource:replace,prefillCatalog});}catch{return c.json({error:'origin_not_allowed'},403);}
   const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;
   c.header('Cache-Control','no-store');c.header('Referrer-Policy','no-referrer');return c.json({sessionId:issued.pageId,url:url.toString()},201);
  });
@@ -105,7 +107,8 @@ export function mountEditorRoutes(app:Hono<Env>){
   // An envelope draft's: its roles (fixed when the session opened) with each signer's name, and the fields placed so
   // far for those roles.
   if(session.envelopeId){const row=await c.env.DB.prepare("SELECT fields_json,draft_json FROM envelopes WHERE id=? AND tenant_id=? AND status='DRAFT'").bind(session.envelopeId,session.tenantId).first<{fields_json:string|null;draft_json:string|null}>();if(!row)return c.json({error:'not_found'},404);let fields:unknown=[];try{fields=JSON.parse(row.fields_json??'[]');}catch{fields=[];}return c.json({roles:session.roles,roleLabels:draftRoleLabels(row.draft_json),prefill:false,fields:Array.isArray(fields)?fields.filter((f:{role?:unknown})=>session.roles.includes(f?.role as string)):[],sourceTemplateId:null,hasStagedSource:true,envelopeId:session.envelopeId,parentOrigin:session.parentOrigin});}
-  if(!session.sourceTemplateId)return c.json({roles:session.roles,fields:[],sourceTemplateId:null,hasStagedSource:!!session.stagedObjectKey,parentOrigin:session.parentOrigin});const row=await c.env.DB.prepare('SELECT roles_json,fields_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{roles_json:string;fields_json:string}>();if(!row)return c.json({error:'not_found'},404);return c.json({roles:JSON.parse(row.roles_json),fields:JSON.parse(row.fields_json),sourceTemplateId:session.sourceTemplateId,parentOrigin:session.parentOrigin});});
+  const catalog=session.prefillCatalog?{prefillCatalog:session.prefillCatalog}:{};
+  if(!session.sourceTemplateId)return c.json({roles:session.roles,fields:[],sourceTemplateId:null,hasStagedSource:!!session.stagedObjectKey,parentOrigin:session.parentOrigin,...catalog});const row=await c.env.DB.prepare('SELECT roles_json,fields_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{roles_json:string;fields_json:string}>();if(!row)return c.json({error:'not_found'},404);return c.json({roles:JSON.parse(row.roles_json),fields:JSON.parse(row.fields_json),sourceTemplateId:session.sourceTemplateId,parentOrigin:session.parentOrigin,...catalog});});
  app.get('/api/public/editor/pdf',async c=>{let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}if(session.envelopeId){const bytes=await envelopeDocument(c.env.DB,c.env.ARTIFACTS,session.envelopeId);return bytes?new Response(bytes,{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}}):c.json({error:'source_unavailable'},409);}if(session.stagedObjectKey&&session.stagedSha256){try{return new Response(await stagedBytes(c.env.ARTIFACTS,session.stagedObjectKey,session.stagedSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}}if(!session.sourceTemplateId)return c.json({error:'not_found'},404);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string}>();if(!row)throw new Error('Source unavailable');return new Response(await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}});
  app.post('/api/public/editor/save',bodyLimit({maxSize:limit+65536}),async c=>{
   let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}

@@ -559,7 +559,7 @@ by the same live session with the same input and values, and returns the same si
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?}`; returns `{sessionId, url}`, the code in the URL fragment |
+| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?, prefill?}` (`prefill`: the host's pre-filled fields, the only ones offered); returns `{sessionId, url}`, the code in the URL fragment |
 | `POST /api/template-editing-sessions/:id/source` | Management | The PDF bytes (`Content-Type: application/pdf`, at most 5 MiB and 100 pages), once, before the page is opened |
 | `GET /api/template-editing-sessions/:id` | Management | `{templateId}` once saved, else null |
 | `GET /editor/page/:id` | — | The editor page, framable only by the session's parent origin |

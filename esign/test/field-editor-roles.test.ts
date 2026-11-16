@@ -68,3 +68,17 @@ test('pre-filled fields: offered for a template, listed once per name with its n
  const without=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner']}));
  assert.doesNotMatch(without,/Pre-filled fields/,'an uploaded envelope\'s editor offers none');
 });
+
+test('pre-filled fields a host fills in: only those are offered, to drag on, with no adding one\'s own', async()=>{
+ const {renderToStaticMarkup}=await import('react-dom/server');
+ const {FieldEditor}=await import('../src/app/ui/FieldEditor.ts');
+ const prefillCatalog=[{name:'partner.name',label:'Partner name'},{name:'agreement.sentDate',label:'Sent date'}];
+ const placed={id:'p1',type:'Prefill',role:'',name:'legacy.field',label:'Legacy field',required:false,page:1,rect:{x:.1,y:.1,width:.3,height:.05}};
+ const html=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner'],initialFields:[placed],allowPrefill:true,prefillCatalog}));
+ assert.ok(html.indexOf('aria-label="Place Partner name"')<html.indexOf('aria-label="Place Sent date"'),'the host\'s, in its order');
+ assert.match(html,/aria-label="Place Legacy field"/,'one the template has already stays placeable');
+ assert.match(html,/<code class="esign-prefill-name">agreement\.sentDate<\/code>/);
+ assert.doesNotMatch(html,/id="prefill-label"/);
+ assert.doesNotMatch(html,/Add pre-filled field/);
+ assert.match(html,/Drag one onto the page/);
+});

@@ -220,6 +220,11 @@ export const editorSessions = sqliteTable('editor_sessions', {
   /** 1: the saved template is a new version of the source, which it replaces (its owner, shares and tags carry over). */
   replaces_source: integer('replaces_source').notNull().default(0),
   /**
+   * The pre-filled fields the host fills in (JSON `[{name,label}]`, editor-routes.ts): when set, the editor offers these
+   * to place and no others; none means the template's author names their own.
+   */
+  prefill_catalog_json: text('prefill_catalog_json'),
+  /**
    * The envelope draft whose fields it places (an uploaded document: envelopes with no template), instead of a
    * template: it saves the draft's roles and fields, and reads its document (editor-routes.ts).
    */

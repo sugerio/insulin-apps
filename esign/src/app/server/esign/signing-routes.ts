@@ -25,6 +25,7 @@ import { embedderAllowed, frameAncestors } from './signing-page.ts';
 import { releaseCopyLink, useCopyLink } from './signed-copies.ts';
 import type { Env } from './app.ts';
 import { deliveryPdf } from './delivery-pdf.ts';
+import { ENVELOPE_FIELDS, ENVELOPE_ROLES } from './envelope-fields.ts';
 import { contentDisposition, signedFileNameOf } from './signed-file-name.ts';
 import { finalizeLocalTestEvidence } from './seal/local.ts';
 import type { BlobStore } from './blob-store.ts';
@@ -247,7 +248,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   }
   async function fieldsFor(c:import('hono').Context<Env>) {
     const task=await authorizeRecipientSession(c.env.DB,pageToken(c),requestOrigin(c),Date.now());
-    const row=await c.env.DB.prepare('SELECT t.role,t.recipient_name,t.recipient_email,p.roles_json,p.fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id WHERE t.id=?').bind(task).first<{role:string;recipient_name:string;recipient_email:string;roles_json:string;fields_json:string}>();
+    const row=await c.env.DB.prepare(`SELECT t.role,t.recipient_name,t.recipient_email,${ENVELOPE_ROLES} AS roles_json,${ENVELOPE_FIELDS} AS fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id WHERE t.id=?`).bind(task).first<{role:string;recipient_name:string;recipient_email:string;roles_json:string;fields_json:string}>();
     if(!row)throw new Error('Missing template');const raw:unknown=JSON.parse(row.fields_json);if(!Array.isArray(raw))throw new Error('Invalid fields');
     // The page shows Date signed and Title fields only when the template has any.
     const hasTextFields=raw.some((f:any)=>f.type==='Date signed'||f.type==='Title');

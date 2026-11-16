@@ -1,6 +1,6 @@
 /**
  * One-time access codes and the short-lived sessions they open (tables `access_codes` and
- * `access_sessions`, migrations/0005_access.sql), shared by the two browser pages:
+ * `access_sessions`, db/schema.ts), shared by the two browser pages:
  *
  * - scope `recipient`: the signing page. The subject is a task; the code and the session are
  *   bound to the page origin the code was issued for.

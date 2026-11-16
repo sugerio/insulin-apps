@@ -1,1 +1,0 @@
-CREATE INDEX `tasks_by_recipient_email` ON `tasks` (lower("recipient_email"));

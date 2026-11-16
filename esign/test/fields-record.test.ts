@@ -37,7 +37,7 @@ test('a fields signature captures only the verified current role, time and image
   const pdf=await PDFDocument.create();pdf.addPage([600,800]);const form=new FormData();form.set('file',new File([await pdf.save()],'synthetic.pdf'));form.set('roles','["ana","bob"]');
   const template=await (await req('/api/templates',{method:'POST',headers:mgmt,body:form})).json();
   const fields=[{id:'sig-a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.05,y:.1,width:.25,height:.08}},{id:'sig-b',type:'Signature',role:'bob',page:1,required:true,rect:{x:.05,y:.7,width:.25,height:.08}}];
-  const setFields=(value:unknown)=>db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(value),template.id).run();
+  const setFields=(value:unknown)=>db.batch([db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(value),template.id),db.prepare('UPDATE envelopes SET fields_json=? WHERE template_id=? AND fields_json IS NOT NULL').bind(JSON.stringify(value),template.id)]);
   await setFields(fields);
   const created=await req('/api/envelopes',post({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'},{role:'bob',name:'Bob',email:'bob@example.com'}]},{...mgmt,'idempotency-key':'v3-fixture'}));assert.equal(created.status,201);const envelope=await created.json();
   assert.equal((await req(`/api/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);

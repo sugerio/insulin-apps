@@ -45,7 +45,8 @@ export const templates = sqliteTable('templates', {
 export const envelopes = sqliteTable('envelopes', {
   id: text('id').primaryKey().notNull(),
   tenant_id: text('tenant_id').notNull(),
-  template_id: text('template_id').notNull().references(() => templates.id),
+  /** The template it was sent from; null for one whose document was uploaded with it. */
+  template_id: text('template_id').references(() => templates.id),
   status: text('status').notNull(),
   created_at: integer('created_at').notNull(),
   /** SHA-256 (hex) of the normalized request that created it: the id comes from the tenant and the Idempotency-Key. */
@@ -59,6 +60,12 @@ export const envelopes = sqliteTable('envelopes', {
    * checked against the template. Sending it checks it, creates its tasks and clears this. Null once sent.
    */
   draft_json: text('draft_json'),
+  /**
+   * The roles and fields it is signed with, set when it is sent (envelope-fields.ts): its template's, byte for byte, or
+   * its own for an uploaded document. Null for a draft only.
+   */
+  roles_json: text('roles_json'),
+  fields_json: text('fields_json'),
 }, (table) => [
   index('envelopes_by_tenant').on(table.tenant_id, table.created_at),
   index('envelopes_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),

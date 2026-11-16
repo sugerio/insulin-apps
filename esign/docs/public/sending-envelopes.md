@@ -91,7 +91,7 @@ the envelope is not changed.
 
 | Field | What it does |
 | --- | --- |
-| **Document name** | Shown to signers, and named in the statement they agree to when they sign. Without one, signers see "the document". |
+| **Document name** | Shown to signers, named in the statement they agree to when they sign, and the name of the signed PDF. Filled in with the template's name (on **Upload and send**, the PDF's file name), which you can change; left empty, the template's is used, else "Document" and the day. Sent through the API without one, signers see "the document". |
 | **Version** and **Published (YYYY-MM-DD)** | Which version of the document this is, and when it was published. |
 | **Sender name** and **Sender company** | Who sent it, shown on the signing page. |
 | **Sign by (optional)** | If a signer hasn't signed by the end of this day (in your time zone), the envelope expires and nobody can sign it. Up to 400 days ahead. |

@@ -389,10 +389,11 @@ role in that app (Admin, Editor, Viewer or a custom role).
 #### 5.3.1 An app's settings for each client
 
 An app can keep settings of its own for each of its OAuth clients, such as who in the organization sees what the client
-creates (Esign's), on a page of its own. It declares the page's path in `insulin.clientSettings`, and the API access
-page links each live client there, for the organization's owners and admins only: **<App> settings**, to
-`https://<app host><path>/<service account id>?name=<client name>`. That is all the gateway does: it neither reads nor
-stores the settings, and calls nothing.
+creates (Esign's), on a page of its own. It declares the page in `insulin.clientSettings`: its path, or
+`{path, description}` with one line (1 to 160 characters of plain text) on what is set there. The API access page shows,
+under each live client and for the organization's owners and admins only, an outlined button **<App> settings** to
+`https://<app host><path>/<service account id>?name=<client name>`, with that line below it (without one, a generic
+line). That is all the gateway does: it neither reads nor stores the settings, and calls nothing.
 
 - **The path.** A page a navigation item could link to (§3.2: on the app's own host, never one of the gateway's
   paths), without a query or a trailing slash, outside `/api/`, and neither one of the app's public paths nor under one,
@@ -509,7 +510,7 @@ declared in the app's `package.json` under `insulin`:
   "permissions": [ … ],
   "publicPaths": ["/sign", "/api/public/", "/assets/"],
   "scheduled": "/api/scheduled",
-  "clientSettings": "/client-settings",
+  "clientSettings": { "path": "/client-settings", "description": "Choose who in your organization sees … in Esign." },
   "secrets": ["ESIGN_OTP_KEY", "ESIGN_FRAME_ANCESTORS"]
 }
 ```

@@ -80,3 +80,29 @@ test('the list: a scheduled draft says when it sends, one not sent says why; dra
     assert.equal(app.renderer.root.findAll((n: any) => n.type === 'a' && visibleText(n.children).trim() === 'Continue').length, 2);
   } finally { await app.unmount(); }
 });
+
+test('the document name: the template\'s, filled in and followed until one is typed; never sent empty', async () => {
+  const OTHER = { ...TEMPLATE, id: 'tpl-2', name: 'Mutual NDA' };
+  const { defaultDocumentName } = await import('../src/app/member/api.ts');
+  assert.equal(defaultDocumentName({ name: ' Reseller agreement ' }), 'Reseller agreement');
+  assert.equal(defaultDocumentName(null, new Date(2026, 10, 16)), 'Document 2026-11-16');
+  const app = await renderMember('/envelopes/new?template=tpl-1', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path === '/api/templates' || c.path.startsWith('/api/templates?')) return json({ templates: [TEMPLATE, OTHER] });
+    if (c.path.startsWith('/api/contacts')) return json({ contacts: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === '/api/envelopes' && c.method === 'POST') return json({ id: DRAFT_ID, status: 'DRAFT' }, 201);
+  });
+  try {
+    assert.equal(app.byId('doc-name').props.value, 'Reseller agreement', 'the template\'s');
+    await app.type(app.byId('envelope-template'), 'tpl-2');
+    assert.equal(app.byId('doc-name').props.value, 'Mutual NDA', 'follows the template while untouched');
+    await app.type(app.byId('doc-name'), 'Acme NDA');
+    await app.type(app.byId('envelope-template'), 'tpl-1');
+    assert.equal(app.byId('doc-name').props.value, 'Acme NDA', 'a name typed stays');
+    await app.type(app.byId('doc-name'), '');
+    await app.click(app.button('Save draft'), 'Save draft');
+    const saved = JSON.parse(String(app.calls.find((c) => c.method === 'POST' && c.path === '/api/envelopes')!.body));
+    assert.equal(saved.documentName, 'Reseller agreement', 'emptied: the template\'s is sent');
+  } finally { await app.unmount(); }
+});

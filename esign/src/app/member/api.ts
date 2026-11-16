@@ -199,6 +199,17 @@ export function formFromRequest(request: Record<string, unknown>, roles: string[
   }
 }
 
+/**
+ * The document's name when none is typed: the template's (or the uploaded PDF's) name, else "Document" and today's date, so that no envelope
+ * is "Untitled document" in the lists, in the signers' statement and on the signed PDF's name.
+ */
+export function defaultDocumentName(template: { name?: string } | null, today = new Date()): string {
+  const name = template?.name?.trim()
+  if (name) return name.slice(0, 200)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `Document ${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+}
+
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const MAX_PDF_BYTES = 5 * 1024 * 1024
 

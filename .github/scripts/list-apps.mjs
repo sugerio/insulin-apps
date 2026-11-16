@@ -212,12 +212,22 @@ export function clientSettingsProblem(entry, publicPaths = []) {
   return null
 }
 
-/** The app's page of settings for each OAuth client (`insulin.clientSettings`), or null when it has none. */
+/**
+ * The app's page of settings for each OAuth client (`insulin.clientSettings`): its path, or `{path, description?}` with
+ * one line, 1 to 160 characters of plain text, the API access page shows beside the link. As `{path, description}`
+ * (description null when there is none), or null when it has none. The gateway's config.ts keeps the same rule.
+ */
 export function readClientSettings(app, raw, publicPaths = []) {
   if (raw === undefined || raw === null) return null
-  const problem = clientSettingsProblem(raw, publicPaths)
-  if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.clientSettings ${problem}`)
-  return raw
+  const at = `App ${JSON.stringify(app)}: insulin.clientSettings`
+  const { path, description, ...rest } = typeof raw === 'string' ? { path: raw } : raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : { path: raw }
+  if (Object.keys(rest).length) throw new Error(`${at} has unknown fields (${Object.keys(rest).join(', ')}): path and description only`)
+  const problem = clientSettingsProblem(path, publicPaths)
+  if (problem) throw new Error(`${at} ${problem}`)
+  if (description !== undefined && (typeof description !== 'string' || !description.trim() || description.length > 160 || /[\u0000-\u001f\u007f]/.test(description))) {
+    throw new Error(`${at}.description must be 1 to 160 characters of plain text`)
+  }
+  return { path, description: description === undefined ? null : description.trim() }
 }
 
 /**

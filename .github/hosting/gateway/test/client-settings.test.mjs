@@ -8,12 +8,13 @@ import { clientSettingsProblem as listAppsClientSettingsProblem } from '../../..
 
 const CAPTABLE = APPS.find((app) => app.name === 'captable')
 const SETTINGS_APPS = [
-  { ...CAPTABLE, clientSettings: '/client-settings', publicPaths: ['/sign', '/api/public/'] },
+  { ...CAPTABLE, clientSettings: { path: '/client-settings', description: 'Choose who sees what this client creates.' }, publicPaths: ['/sign', '/api/public/'] },
   { name: 'ledger', title: 'Ledger', summary: 'Keeps no settings per client.', binding: 'APP_LEDGER' },
+  { name: 'books', title: 'Books', summary: 'A page per client, without a line on it.', binding: 'APP_BOOKS', clientSettings: '/client-settings' },
 ]
 
 let h
-before(async () => { h = await startGateway({ apps: SETTINGS_APPS, stubBindings: ['APP_LEDGER'] }) })
+before(async () => { h = await startGateway({ apps: SETTINGS_APPS, stubBindings: ['APP_LEDGER', 'APP_BOOKS'] }) })
 after(async () => { await h?.close() })
 
 const CLIENT_ID = /(ia_sa_[A-Za-z0-9_-]{22})/
@@ -59,7 +60,8 @@ test("owners and admins get a link to the app's settings page under each live cl
     const page = await apiPage(person)
     assert.equal(page.status, 200)
     assert.ok(page.text.includes(`href="${href}"`), `${person.name}: the link`)
-    assert.match(page.text, />Cap Table settings<span class="sr-only"> for Nightly &amp; export<\/span>/)
+    assert.match(page.text, /Cap Table settings<span class="sr-only"> for Nightly &amp; export<\/span>/)
+    assert.match(page.text, /Choose who sees what this client creates\./, `${person.name}: the app's line on it`)
     assert.ok(!page.text.includes(`/client-settings/${revoked}`), `${person.name}: none for a revoked client`)
   }
   const editorPage = await apiPage(editor)
@@ -70,5 +72,9 @@ test("owners and admins get a link to the app's settings page under each live cl
   await createClient(owner, orgId, 'Ledger sync', 'ledger')
   const ledger = await apiPage(owner, 'ledger')
   assert.equal(ledger.status, 200)
-  assert.doesNotMatch(ledger.text, />Ledger settings<span class="sr-only">/)
+  assert.doesNotMatch(ledger.text, /Ledger settings<span class="sr-only">/)
+  // A page without a line of its own: the gateway's.
+  await createClient(owner, orgId, 'Books sync', 'books')
+  const books = await apiPage(owner, 'books')
+  assert.match(books.text, /Settings Books keeps for this client, on Books&#x27;s own page\./)
 })

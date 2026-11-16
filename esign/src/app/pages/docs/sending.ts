@@ -51,13 +51,13 @@ export const sending: DocTopic = {
       title: 'The document and the sign-by day',
       body: [
         ul(
-          [b('Document name. '), 'Shown to signers, and named in the statement they agree to when they sign.'],
+          [b('Document name. '), 'Shown to signers, named in the statement they agree to when they sign, and the name of the signed PDF. It is filled in with the template\'s name (on Upload and send, the PDF\'s), and you can change it; left empty, the template\'s is used.'],
           [b('Version'), ' and ', b('Published'), ': which version of the document this is, and when it was published.'],
           [b('Sender name'), ' and ', b('Sender company'), ': who sent it, shown on the signing page.'],
           [b('Sign by. '), 'If a signer hasn\'t signed by the end of this day, the envelope expires and nobody can sign it any more. It can be up to 400 days ahead.'],
           [b('Message. '), 'Optional: an email subject and a message, shown on the signing page and in the invitations Esign emails. Choose Write a different message to each signer to give each their own instead.'],
         ),
-        p('All of these are optional. Without a document name, signers see "the document".'),
+        p('All of these are optional. An envelope always has a document name: the template\'s (or the PDF\'s) when you don\'t give one, else "Document" and the day.'),
       ],
     },
     {

@@ -115,8 +115,16 @@ test("reads the path an app's due work runs on, which must be under /api/ and ne
 
 test("reads the path of an app's own page of settings for each OAuth client: a signed-in page, never public or under /api/", async () => {
   const root = await repository({ signing: { insulin: { publicPaths: ['/api/public/', '/sign'], clientSettings: '/client-settings' } } })
-  assert.equal((await listApps(root))[0].clientSettings, '/client-settings')
+  assert.deepEqual((await listApps(root))[0].clientSettings, { path: '/client-settings', description: null })
+  assert.deepEqual(readClientSettings('signing', { path: '/client-settings', description: ' Who sees what it creates. ' }), { path: '/client-settings', description: 'Who sees what it creates.' })
   assert.equal(readClientSettings('signing', undefined), null)
+  for (const [raw, message] of [
+    [{ path: '/client-settings', description: '' }, /description must be 1 to 160 characters/],
+    [{ path: '/client-settings', description: 'x'.repeat(161) }, /description must be 1 to 160 characters/],
+    [{ path: '/client-settings', description: 'line\nbreak' }, /description must be 1 to 160 characters/],
+    [{ path: '/client-settings', label: 'Settings' }, /unknown fields \(label\)/],
+    [{ description: 'No path' }, /insulin\.clientSettings must be a path/],
+  ]) assert.throws(() => readClientSettings('signing', raw), message, JSON.stringify(raw))
   for (const [clientSettings, message] of [
     ['/sign/clients', /insulin\.clientSettings must not be one of the app's public paths or under one/],
     ['/api/client-settings', /insulin\.clientSettings must be a page, not under \/api\//],

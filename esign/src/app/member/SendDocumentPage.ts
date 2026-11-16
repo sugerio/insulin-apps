@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { checkClass, Input } from '../components/ui/input.ts'
 import { Textarea } from '../components/ui/textarea.ts'
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
-import { api, apiJson, canManage, describeError, EMAIL, envelopeRequest, formFromRequest, MAX_PDF_BYTES, signByTime, type Contact, type Envelope, type Me, type Signer } from './api.ts'
+import { api, apiJson, canManage, defaultDocumentName, describeError, EMAIL, envelopeRequest, formFromRequest, MAX_PDF_BYTES, signByTime, type Contact, type Envelope, type Me, type Signer } from './api.ts'
 import { ContactField } from './ContactField.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
@@ -112,7 +112,9 @@ export function SendDocumentPage({ me }: { me: Me }) {
   /** The request the form makes: the signers in order, each invited by email, with what the signers see. */
   function request() {
     const signers: Signer[] = people.map((p) => ({ name: p.name, email: p.email, title: p.title, company: p.company, after: '', delivery: 'email', subject: '', body: '' }))
-    const { templateId: _none, ...rest } = envelopeRequest('', people.map((p) => p.role.trim()), signers, { name: docName, version: '', published: '', senderName: '', senderCompany: '' }, signBy, note)
+    // Never without a name: the PDF's when it was chosen (filled in then), else "Document" and the day.
+    const name = docName.trim() || defaultDocumentName(null)
+    const { templateId: _none, ...rest } = envelopeRequest('', people.map((p) => p.role.trim()), signers, { name, version: '', published: '', senderName: '', senderCompany: '' }, signBy, note)
     return { ...rest, ...(tags.length ? { tags } : {}) }
   }
   /** Saves the draft as it is (the first time, a new one; this page is then its address), and the document chosen. */
@@ -246,7 +248,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Review')), h(CardDescription, null, 'Check what is sent. Once sent, the first signer is invited at once.')),
       h(CardContent, null, h('dl', { 'aria-label': 'Review', className: 'grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[max-content_1fr]' },
-        h('dt', { className: 'text-muted-foreground' }, 'Document'), h('dd', null, docName.trim() || 'Untitled document'),
+        h('dt', { className: 'text-muted-foreground' }, 'Document'), h('dd', null, docName.trim() || defaultDocumentName(null)),
         h('dt', { className: 'text-muted-foreground' }, 'Signers'),
         h('dd', null, h('ol', { className: 'flex flex-col gap-1' }, ...people.map((p, i) => h('li', { key: i }, `${i + 1}. ${p.role} — ${p.name} (${p.email}): ${count(p.role.trim())} ${count(p.role.trim()) === 1 ? 'field' : 'fields'}`)))),
         h('dt', { className: 'text-muted-foreground' }, 'Message'), h('dd', null, note.subject.trim() || note.body.trim() ? [note.subject.trim(), note.body.trim()].filter(Boolean).join(' — ') : 'None'),

@@ -76,7 +76,8 @@ After 24 hours the previous secret simply stops issuing tokens, and those it iss
 ### The app's own settings for a client
 
 Some apps keep settings of their own for each OAuth client, on a page of their own. Their API access page then links
-each client there, for the organization's owners and admins: **Esign settings**, say, under the client's name.
+each client there, for the organization's owners and admins: a button such as **Esign settings** under the client's
+name, with a line saying what is set there.
 
 Esign's page sets **Who sees what it creates**: the members you add see, and manage as admins, every template and
 envelope the client creates, including those it made before. Removing someone takes that away at once.

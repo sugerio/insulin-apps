@@ -50,7 +50,7 @@
       "/api/public/"
     ],
     "scheduled": "/api/scheduled",
-    "clientSettings": "/client-settings",
+    "clientSettings": { "path": "/client-settings", "description": "Choose who in your organization sees, and manages as admins, everything this client creates in Esign." },
     "secrets": [
       "ESIGN_OTP_KEY",
       "ESIGN_FRAME_ANCESTORS"

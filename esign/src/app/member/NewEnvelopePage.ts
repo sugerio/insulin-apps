@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { checkClass, Input } from '../components/ui/input.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
 import { Textarea } from '../components/ui/textarea.ts'
-import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, formFromRequest, signByTime, type Contact, type DocumentFacts, type Envelope, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
+import { apiJson, canManage, dateTime, defaultDocumentName, describeError, EMAIL, envelopeRequest, formFromRequest, signByTime, type Contact, type DocumentFacts, type Envelope, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
 import { ContactField } from './ContactField.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
@@ -22,6 +22,7 @@ const h = React.createElement
 // opens signers' pages itself (POST /api/envelopes' `delivery` 'host' is for host products).
 const EMPTY_SIGNER: Signer = { name: '', email: '', title: '', company: '', after: '', delivery: 'email', subject: '', body: '' }
 const EMPTY_DOCUMENT: DocumentFacts = { name: '', version: '', published: '', senderName: '', senderCompany: '' }
+
 
 export function NewEnvelopePage({ me }: { me: Me }) {
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null)
@@ -66,8 +67,13 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   const template = templates?.find((t) => t.id === templateId) ?? null
   // One signer per role of the chosen template, keeping what was typed; a role nobody was typed for gets the
   // template's default signer, if it has one.
+  // The document's name follows the template chosen, until the member types one of their own.
+  const autoName = useRef('')
   useEffect(() => {
     if (!template) return
+    const previous = autoName.current, suggested = defaultDocumentName(template)
+    autoName.current = suggested
+    setDoc((d) => (!d.name.trim() || d.name === previous ? { ...d, name: suggested } : d))
     setSigners((old) => template.roles.map((role, i) => {
       if (old[i] && !old[i]!.fromTemplate && (old[i]!.name.trim() || old[i]!.email.trim())) return old[i]!
       const d = template.defaultSigners?.[role]
@@ -93,7 +99,9 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   /** The request the form makes: what is typed, each signer's own message or the one for everybody, never both. */
   function request() {
     const people = perSigner ? signers : signers.map((s) => ({ ...s, subject: '', body: '' }))
-    return { ...envelopeRequest(templateId, template?.roles ?? [], people, doc, signBy, perSigner ? { subject: '', body: '' } : note), ...(tags.length ? { tags } : {}) }
+    // Never without a name: the template's, when the field was emptied.
+    const named = doc.name.trim() || !template ? doc : { ...doc, name: defaultDocumentName(template) }
+    return { ...envelopeRequest(templateId, template?.roles ?? [], people, named, signBy, perSigner ? { subject: '', body: '' } : note), ...(tags.length ? { tags } : {}) }
   }
   /** Saves the form as a draft, as it is: the first time a new one (then this page is its address), later in place. */
   function saveDraft() {
@@ -193,7 +201,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     template ? h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Document')), h(CardDescription, null, 'Shown to signers. All optional.')),
       h(CardContent, { className: 'grid gap-4 sm:grid-cols-2' },
-        text('doc-name', 'Document name', doc.name, (v) => setDoc((d) => ({ ...d, name: v }))),
+        text('doc-name', 'Document name', doc.name, (v) => setDoc((d) => ({ ...d, name: v })), { hint: 'Shown to signers and names the signed PDF. Filled in with the template\'s name: change it if you like.' }),
         text('doc-version', 'Version', doc.version, (v) => setDoc((d) => ({ ...d, version: v }))),
         text('doc-published', 'Published (YYYY-MM-DD)', doc.published, (v) => setDoc((d) => ({ ...d, published: v }))),
         text('doc-sender', 'Sender name', doc.senderName, (v) => setDoc((d) => ({ ...d, senderName: v }))),

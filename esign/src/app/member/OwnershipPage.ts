@@ -1,4 +1,5 @@
-// Ownership (server/esign/members.ts), for the organization's owners: everyone who owns templates or envelopes, and
+// Ownership (server/esign/members.ts), for the organization's owners, not in the navigation (an API client's page and
+// the Docs link to it): everyone who owns templates or envelopes, and
 // taking over everything someone owns, for someone who left or an API client no longer used. Who sees what an API
 // client creates is set per OAuth client on the platform's API access page (members.ts, `/api/client-settings`).
 import React, { useEffect, useState } from 'react'

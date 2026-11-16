@@ -196,7 +196,18 @@ test("an API client's page, reached from API access: owners and admins choose wh
     const saved = app.calls.find((c) => c.path === '/api/client-settings/sa-1' && c.method === 'POST')!;
     assert.deepEqual(JSON.parse(String(saved.body)), { people: ['bo@example.com'] });
     assert.match(app.text(), /Saved\. 1 person sees everything this client creates\./);
+    assert.equal(app.link('Ownership'), undefined, 'taking over is for owners only');
   } finally { await app.unmount(); }
+  // An organization owner also gets the way to take over what the client owns.
+  const owner = await renderMember('/client-settings/sa-1', (c) => {
+    if (c.path === '/api/me') return json(OWNER);
+    if (c.path === '/api/client-settings/sa-1') return json({ id: 'sa-1', name: 'Host product', people: [] });
+  });
+  try {
+    assert.match(owner.text(), /No longer used\? Take over everything it owns on\s+Ownership/);
+    await owner.click(owner.link('Ownership'), 'Ownership');
+    assert.equal(owner.location.pathname, '/ownership');
+  } finally { await owner.unmount(); }
   // Anyone else is told whose it is, and nothing is asked of the server.
   const editor = await renderMember('/client-settings/sa-1', (c) => c.path === '/api/me' ? json(EDITOR) : undefined);
   try {

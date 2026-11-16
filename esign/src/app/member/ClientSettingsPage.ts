@@ -1,7 +1,8 @@
 // Esign's page for one OAuth client (`/client-settings/{service account id}?name=…`, package.json
 // `insulin.clientSettings`): who in the organization sees everything the client creates, as admins
 // (server/esign/members.ts, ownership.ts). Nothing in Esign links here: the platform's API access page does, under each
-// client, for the organization's owners and admins, who alone may change it.
+// client, for the organization's owners and admins, who alone may change it. For the organization's owners it links to
+// Ownership, to take over what a client no longer used owns (Ownership isn't in the navigation).
 import React, { useEffect, useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import { Button } from '../components/ui/button.ts'
@@ -9,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { apiJson, canManage, describeError, EMAIL, type Me } from './api.ts'
 import { Notice, PageHeader } from './parts.ts'
+import { Link } from './router.ts'
 import { MemberEmailField } from './SharePanel.ts'
 
 const h = React.createElement
@@ -81,5 +83,7 @@ export function ClientSettingsPage({ me, id, name }: { me: Me; id: string; name?
             h(Button, { variant: 'outline', disabled: busy, onClick: add }, h(UserPlus, { 'aria-hidden': true }), 'Add'))),
         h(CardFooter, { className: 'flex items-center gap-3 border-t' },
           h(Button, { disabled: busy || !changed, onClick: () => void save() }, busy ? 'Saving…' : 'Save'),
-          changed ? h(Button, { variant: 'ghost', disabled: busy, onClick: () => { setPeople(settings.people); setMessage({ text: '', error: false }) } }, 'Discard changes') : null)))
+          changed ? h(Button, { variant: 'ghost', disabled: busy, onClick: () => { setPeople(settings.people); setMessage({ text: '', error: false }) } }, 'Discard changes') : null)),
+    settings && me.role === 'OWNER' ? h('p', { className: 'text-sm text-muted-foreground' }, 'No longer used? Take over everything it owns on ',
+      h(Link, { to: '/ownership', className: 'font-medium text-foreground underline underline-offset-4' }, 'Ownership'), '.') : null)
 }

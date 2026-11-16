@@ -26,8 +26,7 @@
         "group": "Esign"
       },
       { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "group": "Esign" },
-      { "key": "contacts", "label": "Contacts", "icon": "users", "path": "/contacts", "group": "Esign" },
-      { "key": "ownership", "label": "Ownership", "icon": "key", "path": "/ownership", "group": "Esign", "role": "ADMIN" }
+      { "key": "contacts", "label": "Contacts", "icon": "users", "path": "/contacts", "group": "Esign" }
     ],
     "permissions": [
       {

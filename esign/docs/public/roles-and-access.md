@@ -46,9 +46,10 @@ owners and admins choose **Esign settings** under a client: its page in Esign, *
 people who see everything it owns, as Admin. Add or remove people and **Save**. Without anyone, only the client sees it.
 A change applies at once, to what the client created before too. Nothing in Esign's navigation leads to that page.
 
-**Ownership**, for organization owners (admins find it in their navigation, with a pointer to API access): **Owners**
-lists everyone who owns templates or envelopes. **Take over** makes you the owner of everything someone owns, for
-someone who left or a client no longer used; the people it is shared with keep their roles.
+**Ownership** (`/ownership`, not in the navigation), for organization owners: **Owners** lists everyone who owns
+templates or envelopes. **Take over** makes you the owner of everything someone owns, for someone who left or a client
+no longer used; the people it is shared with keep their roles. An API client's page links to it; otherwise open
+`https://esign.insulinapps.com/ownership`.
 
 ## Who can do what
 

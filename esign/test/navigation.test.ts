@@ -24,7 +24,7 @@ const PLATFORM:PlatformMe={
 test('the navigation manifest in package.json is valid, and the members\' app renders from it',()=>{
  assert.deepEqual(navigationProblems(manifest),[]);
  assert.deepEqual(NAVIGATION,manifest,'the shell reads package.json itself');
- assert.deepEqual(manifest.map(i=>i.key),['envelopes','templates','contacts','ownership']);
+ assert.deepEqual(manifest.map(i=>i.key),['envelopes','templates','contacts'],'Ownership is reached from an API client\'s page or the Docs, not the navigation');
  assert.ok(!manifest.some(i=>i.key==='docs'||i.key==='settings'),'Docs and Settings are the platform\'s, not the manifest\'s');
  for(const item of manifest.flatMap(i=>[i,...(i.children??[])])){
   const [pathname,search='']=item.path.split('?');
@@ -58,7 +58,7 @@ test('a malformed manifest is refused, with the reason',()=>{
 test('each role sees the items its role reaches: Ownership is for admins',()=>{
  assert.deepEqual(['OWNER','ADMIN','EDITOR','USER','VIEWER',undefined,'SOMETHING'].map(appRole),['ADMIN','ADMIN','EDITOR','VIEWER','VIEWER','VIEWER','VIEWER']);
  assert.ok(NAVIGATION.every((item)=>!item.children),'no section has a level 2: each page has its own filters');
- assert.deepEqual(visibleNavigation(NAVIGATION,'ADMIN').map(i=>i.key),['envelopes','templates','contacts','ownership']);
+ assert.deepEqual(visibleNavigation(NAVIGATION,'ADMIN').map(i=>i.key),['envelopes','templates','contacts']);
  assert.deepEqual(visibleNavigation(NAVIGATION,'VIEWER').map(i=>i.key),['envelopes','templates','contacts'],'every role sees the sections but Ownership, which is for admins');
  const synthetic:NavItem[]=[{key:'a',label:'A',icon:'home',path:'/a'},{key:'b',label:'B',icon:'key',path:'/b',role:'ADMIN'},{key:'c',label:'C',icon:'bot',path:'/c',role:'EDITOR'}];
  assert.deepEqual(visibleNavigation(synthetic,'VIEWER').map(i=>i.key),['a']);

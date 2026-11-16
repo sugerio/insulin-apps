@@ -1,4 +1,4 @@
-import { b, code, DocTable, h, p, ul, type DocTopic } from './parts.ts'
+import { b, code, DocTable, h, p, PageLink, ul, type DocTopic } from './parts.ts'
 
 // Docs › Roles and permissions: the console roles, Esign's two permissions, who sees each template and envelope (owners,
 // sharing, tags and the Ownership page), custom roles, service accounts and AI agents, and signers, who have no account.
@@ -50,7 +50,7 @@ export const roles: DocTopic = {
         p('A role in a template or an envelope never goes beyond your role in Esign: with View envelopes only, you are a Viewer of everything shared with you. ', b('Share'), ' in a template\'s ⋯ menu, or ', b('Who sees it'), ' on an envelope\'s page, shows its owner and the people it is shared with; its admins and owner share it there, and anyone shared by email can leave. Its ', b('General access'), ' shares it with everyone in your organization, as Viewer or Editor: everyone who uses Esign finds it in their lists, at that role or the higher one they are shared by email. API clients are not part of everyone. An envelope sent from a template is its sender\'s, not shared with the template\'s people.'),
         p('Your tags on a template or an envelope are yours alone. The lists filter by them (', b('Tags'), '), and by whether they are yours or shared with you (', b('Sender'), ' on Envelopes, ', b('Owner'), ' on Templates).'),
         p('What an API client creates is its own. On Esign\'s ', b('API access'), ' page, organization owners and admins choose ', b('Esign settings'), ' under a client: its page in Esign, ', b('Who sees what it creates'), ', lists the people who see everything it owns, as Admin; without anyone, only the client sees it. A change applies at once, to what it created before too.'),
-        p(b('Ownership'), ', for organization owners, lists everyone who owns templates or envelopes, with ', b('Take over'), ' to become the owner of everything someone owns.'),
+        p(h(PageLink, { to: '/ownership' }, 'Ownership'), ', for organization owners and not in the navigation (an API client\'s page links to it too), lists everyone who owns templates or envelopes, with ', b('Take over'), ' to become the owner of everything someone owns, for someone who left or a client no longer used.'),
       ],
     },
     {

@@ -63,7 +63,7 @@ role, with your Insulin Apps **Account** and **Sign out**. The second column lis
 | --- | --- |
 | **Docs** | The topics, under Using Esign and Electronic signatures, then **Public docs**, a link to these pages. |
 | **Settings** | **People**, **Integrations**, **API access** and **Connect AI**, links to the platform's pages (in the console's preview, listed without links). |
-| **Envelopes**, **Templates**, **Contacts**, **Ownership** | None: each page has its own search, filters and buttons. |
+| **Envelopes**, **Templates**, **Contacts** | None: each page has its own search, filters and buttons. |
 
 The bar above the page shows where you are, such as Envelopes › Envelope; the section's name goes back to it.
 

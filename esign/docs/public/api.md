@@ -219,7 +219,7 @@ for as long as they are on the list. They are not shares: the documents' **Share
 settings, and only that page changes them. `share` on a create request shares with others as usual.
 
 **Taking over.** An organization owner can take over everything someone owns, for someone who left or an API client no
-longer used (`POST /api/owners/{id}/transfer`, or **Ownership** › **Owners**).
+longer used (`POST /api/owners/{id}/transfer`, or **Owners** on the Ownership page, `/ownership`, linked from an API client's page).
 
 **Tags** are your own: up to 20 per template or envelope, each up to 50 characters, compared case-insensitively. Nobody
 else sees them, the owner included. `tags` on a create request sets them; an envelope also gets yours on its template,

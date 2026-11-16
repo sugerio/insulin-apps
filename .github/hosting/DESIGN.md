@@ -79,7 +79,7 @@ Apps without a catalog have no custom roles.
 ### 2.4 What the app receives
 
 The gateway forwards each request with the identity contract of `@fours/app` plus three headers. Every incoming
-`x-suger-*` header is removed first.
+`x-suger-*` header is removed first. (Accepted, not built: the organization role too, §12.3.)
 
 | Header | Value |
 |---|---|
@@ -497,7 +497,7 @@ declared in the app's `package.json` under `insulin`:
 ```
 
 The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths` and
-`scheduled` again and fails closed.
+`scheduled` again and fails closed. (Accepted, not built: an app-owned engine and app limits, §12.1 and §12.2.)
 
 ### 8.1 Public paths
 
@@ -806,3 +806,97 @@ assets and the cron triggers.
 `super_audit` records every sign-in to the console and every action: when, the operator's address, what, the
 organization or account (with its name or address at the time) and the reason. It is kept for good, shown at
 `/super/audit` and on each organization's and account's page. Reading pages isn't recorded.
+
+## 12. Accepted, not built yet: engines, limits, organization roles and resource access
+
+Accepted on 2026-11-16 for Insulin Knowledge, a planned app (`knowledge/`, not in the repository yet) that keeps a
+team's documents in collections, each served by its own Cloudflare Container. Nothing in this section is built. When
+a part ships, it moves into the section it extends (§2.4, §3, §8, §9, §10, §11) and leaves this one.
+
+### 12.1 App-owned engines
+
+Some apps need compute that D1 and a Worker can't give. Such an app may own one **engine**: a second Worker in the
+app's directory, reached only by the app.
+
+- **Declaration.** `"insulin": { "engine": "engine/" }` names a directory inside the app. It holds one Worker with its
+  own package, exact lockfile and Wrangler config, which may declare Durable Objects, Containers, R2 buckets and the
+  Workers AI binding, and nothing else: no routes, custom domains or `workers_dev`, so the engine has no public
+  address.
+- **Checks.** `check-insulin-app.mjs` leaves the engine directory out of the app's rules (no `cloudflare:` imports, no
+  Wrangler file, the file limits, one npm package) and checks it with its own: only the bindings above, no public
+  route, a base image pinned by digest, no account id or image digest written in the repository.
+- **Deploy.** A release deploys the engine Worker, `insulin-apps-<app>-engine`, before the app, and gives the app a
+  service binding to it, `SUGER_ENGINE`, as it gives `SUGER_GATEWAY`; the app's own build still declares no binding.
+  The engine trusts only that binding: every call names the organization the app is acting for, and the app checks
+  access before calling.
+- **Images.** The release builds the engine's container image only when the engine changed, and pushes it with a
+  registry credential that outlasts the upload (Wrangler's default lasts 15 minutes, too short for a large dependency
+  layer). The account id and the image digest come from CI. An unchanged engine keeps its digest; a changed image
+  makes the engine's container snapshots unusable, which the app must handle (Knowledge restores from its own
+  backups).
+- **Stub.** An app with an engine ships a stub that answers from memory, used by `npm run dev`, the AppBuilder's
+  preview and the workerd smoke test.
+- **AppBuilder.** The Insulin console publishes D1-only apps, so an app with an engine stays out of the template
+  catalog until the console can publish engines too.
+- **Operator console.** `SUPER_CLOUDFLARE_API_TOKEN` also gets Containers and R2 read access, and §11.5 lists each
+  engine Worker with its container instances and R2 use. Cloudflare has no API that lists snapshots, so their count
+  comes from the app's usage report.
+
+### 12.2 App limits
+
+An app with real running costs may limit each organization's use. Operators set the limits in the console; the app
+enforces them.
+
+- **Catalog.** `insulin.limits` lists at most 20 limits: `{ key, label, unit, default }`, where `key` follows the rule
+  for usage metric names (§8.6) and `unit` is `count`, `bytes`, `hours` or `days`. `list-apps.mjs` checks it. It may
+  not fit `SITE_APPS` (5 KB), so the deploy writes it to the gateway's D1 instead.
+- **Console pages.** `/super/apps/<app>/limits` shows each limit's catalog default and the default in force; console
+  admins change a default with a reason (3 to 500 characters). Each organization's page gets a **Limits** section:
+  usage beside each limit, from the app's latest report, and an override (a number or `unlimited`, an optional end
+  date, a reason). Every change goes to `super_audit`. Organizations at 80% of a limit or more join the watch list.
+- **Data.** A migration adds `app_limit_catalog`, `app_limit_defaults` and `org_app_limits`, each change stamped so
+  apps can ask for changes since a cursor.
+- **Delivery.** The app calls `GET https://insulinapps.com/__insulin/limits?since=<cursor>` (`SUGER_LIMITS_URL`) over
+  `SUGER_GATEWAY` with `SUGER_APP_TOKEN`, on its tick, and gets
+  `{ "cursor", "defaults": { key: value }, "organizations": [ { "id", "limits": { key: { "value", "until" } } } ], "next" }`
+  with at most 500 organizations a page. It keeps the effective limits in its own D1, so a change applies within five
+  minutes; an override past its end date falls back to the default. Without `GATEWAY_SECRET_KEY` it answers 503
+  `not_configured` and the app uses the catalog's defaults.
+- **Usage beside limits.** An app with a catalog reports usage under the same keys (§8.6). A monthly count is a
+  month-to-date gauge that drops to 0 on the first of the month, UTC.
+- **Messages.** A limit's message names Insulin Apps support. The deploy gives each app the platform's `SUPPORT_EMAIL`
+  as `SUGER_SUPPORT_EMAIL`; no address is written in the repository. API and MCP callers get 429
+  `{ "error": "quota_exceeded", "limit": "<key>", "resets_at": "<time>", "message": "…" }`.
+- **Self-hosted.** A deployment starts with the catalog's defaults; its own operators change them.
+
+### 12.3 Organization role, members and member events
+
+- **Header.** Requests also carry `x-suger-org-role`: `OWNER`, `ADMIN`, `EDITOR`, `VIEWER` or `APPS` (specific apps).
+  It is removed from incoming requests like every `x-suger-*` header, and absent for API clients, on public paths and
+  on the tick. An app may give organization owners powers over its records that no app role gives (Knowledge lets
+  them see every collection's basic information and delete one), and must still enforce them on the server.
+- **Member lookup.** `GET https://insulinapps.com/__insulin/members?org=<id>&q=<text>` over `SUGER_GATEWAY` with
+  `SUGER_APP_TOKEN` and the acting person's `x-suger-user-id`. The gateway checks that person can use the app in that
+  organization and returns at most 20 matches among those who can: people (id, name, address, app role) and the app's
+  API clients (id, name), each with its `type`. Apps call it from their server for a person acting in the browser, to
+  fill a sharing dialog; it shows no more than that dialog needs. Limited per person.
+- **Member events.** `GET https://insulinapps.com/__insulin/member-events?since=<cursor>` over the same binding
+  returns, for organizations where the app is used: `left` (removed from the organization, or from the app),
+  `returned`, `role_changed` (the new app and organization roles), `owners` (the organization's owners and since when,
+  after any change), `client_revoked` and `org_deleted`. Events are kept 90 days, at most 1,000 a page. Apps pull them
+  on their tick.
+
+### 12.4 Resource access inside apps
+
+An app may let people share its own records (Knowledge's collections) with people and API clients of the same
+organization, with roles of its own. That is access to the app's data, managed in the app; it is not the platform's
+people, roles or permissions (§3, §4), so app Editors may share what the app lets them share. Every app with resource
+roles keeps these rules:
+
+- **An app role opens no record by itself.** An app Admin who has no role on a record can't read it.
+- **A Viewer only reads.** Whatever resource role someone holds, they can only read unless their permissions in the
+  app allow changes (permissions, not role names, decide).
+- **Sharing is browser-only** (§4): AI agents and API clients can use what is shared with them, but can't share,
+  unshare or delete.
+- **Leaving and returning** follow the app's own rule, stated in its Docs. Knowledge keeps a person's shares on hold
+  and restores them if they return; the platform's AI agent grants still don't come back (§5.2).

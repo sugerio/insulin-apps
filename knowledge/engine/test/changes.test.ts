@@ -1,0 +1,154 @@
+// Changes that make restore points without new files, and what the collection shows: corrections, stop using,
+// facts, exports.
+
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { inflateRawSync } from 'node:zlib'
+import { ask, createCollection, doc, learn, makeEngine, outboxEvents } from './helpers.ts'
+
+const SIX_MINUTES = 6 * 60_000
+
+test('FIX-01 a correction: the outdated passage is left out, the note answers in its place, ranked first', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  const before = await ask(t, 'c1', 'topic number 1 gateway port')
+  const old = before.body.passages.find((p: any) => p.text.includes('8001'))
+  assert.ok(old)
+  t.advance(SIX_MINUTES)
+
+  const res = await t.api('POST', '/v1/collections/c1/corrections', {
+    importId: 'fix-1',
+    note: { noteId: 'n1', title: 'Gateway port', text: 'Topic number 1: the gateway port is now 9001.', outdated: [{ documentId: old.documentId, textHash: old.textHash }] },
+  })
+  assert.equal(res.status, 202)
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/fix-1')).body.state, 'committed')
+  const after = await ask(t, 'c1', 'topic number 1 gateway port')
+  assert.ok(!after.body.passages.some((p: any) => p.textHash === old.textHash), 'the old passage is left out')
+  assert.equal(after.body.passages[0].kind, 'note')
+  assert.match(after.body.passages[0].text, /9001/)
+  assert.equal((await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints[0].summary, 'Correction')
+  // A paraphrase finds the note too.
+  const paraphrase = await ask(t, 'c1', 'what port does topic number 1 use for the gateway')
+  assert.match(paraphrase.body.passages[0].text, /9001/)
+  // Facts whose source passage is outdated are hidden.
+  const facts = (await t.api('GET', '/v1/collections/c1/facts')).body.facts
+  assert.ok(!facts.some((f: any) => f.passageId === old.passageId))
+  // A correction naming a document that isn't here is refused.
+  const bad = await t.api('POST', '/v1/collections/c1/corrections', {
+    importId: 'fix-2',
+    note: { noteId: 'n2', title: 'x', text: 'x', outdated: [{ documentId: 'd_unknown', textHash: old.textHash }] },
+  })
+  assert.equal(bad.status, 400)
+})
+
+test('stop using and use again are changes with their own restore point, on the same snapshot', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  t.advance(SIX_MINUTES)
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'doc-2.md')
+  const startsBefore = t.cloud.starts.length
+  const stopped = await t.api('PATCH', `/v1/collections/c1/documents/${target.documentId}`, { active: false })
+  assert.equal(stopped.status, 200)
+  assert.equal(stopped.body.state, 'committed')
+  assert.equal(stopped.body.version, 2)
+  assert.equal(t.cloud.starts.length, startsBefore, 'no container work')
+  const status = (await t.api('GET', '/v1/collections/c1')).body
+  assert.deepEqual([status.counts.documents, status.counts.activeDocuments], [2, 1])
+  const points = await t.storage('c1').list<any>({ prefix: 'rp:' })
+  const [v1, v2] = [...points.values()]
+  assert.equal(v2.snapshotId, v1.snapshotId)
+  const answer = await ask(t, 'c1', 'topic number 2 gateway port')
+  assert.ok(!answer.body.passages.some((p: any) => p.documentId === target.documentId), 'not used for answers')
+  assert.equal((await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints[0].summary, 'Stopped using 1 file')
+  // Same again: nothing changes.
+  const again = await t.api('PATCH', `/v1/collections/c1/documents/${target.documentId}`, { active: false })
+  assert.equal(again.body.state, 'duplicate')
+  const resumed = await t.api('PATCH', `/v1/collections/c1/documents/${target.documentId}`, { active: true })
+  assert.equal(resumed.body.version, 3)
+  assert.ok((await ask(t, 'c1', 'topic number 2 gateway port')).body.passages.some((p: any) => p.documentId === target.documentId))
+  assert.ok((await outboxEvents(t)).some((e) => e.type === 'committed' && e.version === 2))
+})
+
+test('documents: the list, the redacted text with its page map, and facts with their source sentence', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1)])
+  const [d] = (await t.api('GET', '/v1/collections/c1/documents')).body.documents
+  assert.deepEqual(Object.keys(d).sort(), ['active', 'addedAt', 'bytes', 'documentId', 'kind', 'name', 'pages', 'sha256', 'textBytes', 'type', 'version'])
+  assert.equal(d.version, 1)
+  const text = (await t.api('GET', `/v1/collections/c1/documents/${d.documentId}`)).body
+  assert.deepEqual(Object.keys(text).sort(), ['document', 'hidden', 'pages', 'text'])
+  const facts = (await t.api('GET', '/v1/collections/c1/facts')).body
+  assert.equal(facts.next, null)
+  assert.ok(facts.facts.length >= 1)
+  assert.deepEqual(Object.keys(facts.facts[0]).sort(), ['documentId', 'factId', 'passageId', 'sentence', 'sourceSentence'])
+})
+
+function unzip(bytes: Uint8Array): Map<string, string> {
+  const files = new Map<string, string>()
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  let at = 0
+  while (view.getUint32(at, true) === 0x04034b50) {
+    const size = view.getUint32(at + 18, true)
+    const nameLength = view.getUint16(at + 26, true)
+    const extra = view.getUint16(at + 28, true)
+    const name = new TextDecoder().decode(bytes.subarray(at + 30, at + 30 + nameLength))
+    const data = bytes.subarray(at + 30 + nameLength + extra, at + 30 + nameLength + extra + size)
+    files.set(name, new TextDecoder().decode(inflateRawSync(data)))
+    at += 30 + nameLength + extra + size
+  }
+  return files
+}
+
+test('DEL-03 an export holds text, notes, facts, corrections and history, and no originals or hidden values', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await t.api('PUT', '/v1/collections/c1', {
+    settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater'] } },
+  })
+  await learn(t, 'c1', 'imp-1', [doc(1, 'Contact jordan.lee@example.com about Bluewater.'), doc(2)])
+  await t.api('POST', '/v1/collections/c1/imports', {
+    importId: 'note-1',
+    files: [],
+    notes: [{ noteId: 'n1', title: 'Hours', text: 'The help desk opens at 08:00.', outdated: [] }],
+    small: true,
+  })
+  await t.drain('c1')
+  const started = await t.api('POST', '/v1/collections/c1/exports', { exportId: 'exp-1' })
+  assert.equal(started.status, 200)
+  assert.equal(started.body.state, 'queued')
+  assert.equal((await t.api('POST', '/v1/collections/c1/exports', { exportId: 'exp-1' })).body.exportId, 'exp-1')
+  await t.drain('c1')
+  const status = (await t.api('GET', '/v1/collections/c1/exports/exp-1')).body
+  assert.equal(status.state, 'ready')
+  assert.ok(status.bytes > 0 && status.expiresAt)
+  const download = await t.api('GET', '/v1/collections/c1/exports/exp-1?download=1')
+  assert.equal(download.response.headers.get('content-type'), 'application/zip')
+  const files = unzip(new Uint8Array(await download.response.arrayBuffer()))
+  const names = [...files.keys()]
+  for (const required of ['README.txt', 'collection.json', 'notes.json', 'facts.json', 'corrections.json', 'history.json']) assert.ok(names.includes(required), required)
+  assert.equal(names.filter((n) => n.startsWith('documents/') && n.endsWith('.txt')).length, 3)
+  const everything = [...files.values()].join('\n')
+  assert.ok(!everything.includes('jordan.lee@example.com'), 'no hidden e-mail address')
+  assert.ok(!everything.includes('Bluewater'), "no hidden word, not even in the settings' word list")
+  assert.ok(everything.includes('[hidden]'))
+  assert.equal(JSON.parse(files.get('notes.json')!).notes[0].text, 'The help desk opens at 08:00.')
+  assert.ok(JSON.parse(files.get('history.json')!).restorePoints.length >= 1)
+  assert.ok(!t.files.keys('inbox/').length, 'no original kept to export')
+})
+
+test('a large export is stored in equal parts', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  const big = Array.from({ length: 4000 }, (_, i) => `Line ${i} ${Math.random().toString(36).repeat(8)}`).join('\n\n')
+  await learn(t, 'c1', 'imp-1', [{ fileId: 'big', name: 'big.txt', text: big, type: 'text/plain' }])
+  const { R2Sink } = await import('../src/zip.ts')
+  const sink = new R2Sink(t.env.FILES, 'exports/test.zip', 1024)
+  for (let i = 0; i < 10; i++) await sink.write(new Uint8Array(700).fill(i))
+  await sink.close()
+  assert.equal(t.files.objects.get('exports/test.zip')!.body.length, 7000)
+  assert.ok(t.files.multipart >= 1)
+})

@@ -1,0 +1,6 @@
+{
+  "about": "The \"won't guess\" threshold: a passage is used only when its similarity to the question (1 minus Cognee's cosine distance, from 0 to 1) is at least this. When no passage passes, the collection doesn't cover the question (covered: false). This value is a placeholder: the PoC's run (results/REPORT.md) graded retrieval by document and fact and did not record scores. Phase 0 sets it from the answerable, uncovered and near-miss question sets in test/fixtures/questions (plan ASK-02: at least 19 of 20 uncovered questions get \"won't guess\", and no near miss gets a confident wrong answer), using harness/run.mjs --calibrate.",
+  "threshold": 0.7,
+  "model": "BAAI/bge-small-en-v1.5",
+  "calibratedAt": null
+}

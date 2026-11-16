@@ -1,0 +1,73 @@
+"""hide.py against the shared fixtures (test/fixtures/hiding-cases.json), which the app's preview is tested against
+too (HID-05), and the rules around them: fails closed (HID-02), page maps follow, re-reads keep earlier marks."""
+
+from __future__ import annotations
+
+import json
+import unittest
+
+import _paths  # noqa: F401
+import hide
+from offsets import Utf16
+
+CASES = json.loads((_paths.FIXTURES / "hiding-cases.json").read_text())["cases"]
+
+
+class Fixtures(unittest.TestCase):
+    def test_hid01_every_fixture_case(self):
+        self.assertGreaterEqual(len(CASES), 30)
+        kinds = set()
+        for case in CASES:
+            with self.subTest(case["id"]):
+                text = case["input"]
+                units = Utf16(text)
+                spans = hide.find_spans(text, case["rules"])
+                got = [{"start": units.to_utf16(s.start), "end": units.to_utf16(s.end), "kind": s.kind} for s in spans]
+                self.assertEqual(got, case["spans"])
+                result = hide.apply(text, case["rules"])
+                self.assertEqual(result.text, case["redacted"])
+                out = Utf16(result.text)
+                self.assertEqual([{"start": out.to_utf16(s.start), "end": out.to_utf16(s.end), "kind": s.kind} for s in result.hidden], case["hidden"])
+                for span in case["spans"]:
+                    kinds.add(span["kind"])
+                    value = text[units.from_utf16(span["start"]) : units.from_utf16(span["end"])]
+                    if span["kind"] != "word":  # "Bluewaters" stays, though it contains a hidden word
+                        self.assertNotIn(value, result.text, "a hidden value is never kept")
+        self.assertEqual(kinds, {"email", "phone", "card", "api_key", "secret", "word"})
+
+    def test_the_fixture_file_spells_no_key_plainly(self):
+        raw = (_paths.FIXTURES / "hiding-cases.json").read_text()
+        for prefix in ("AKIA", "ghp_", "xoxb-", "sk_test_", "AIza", "-----BEGIN"):
+            self.assertNotIn(prefix, raw)
+        self.assertTrue(any("AKIA" in c["input"] for c in CASES), "but the parsed values are real-shaped")
+
+
+class Rules(unittest.TestCase):
+    def test_hid02_a_detector_error_fails_closed(self):
+        with self.assertRaises(hide.HidingError):
+            hide.apply("Write to dana@example.com", {"_fail": True})
+        with self.assertRaises(hide.HidingError):
+            hide.find_spans("text", {"words": [None]})
+
+    def test_luhn(self):
+        self.assertTrue(hide.luhn("4111111111111111"))
+        self.assertFalse(hide.luhn("4111111111111112"))
+
+    def test_page_map_moves_with_the_redaction(self):
+        text = "Page one: dana@example.com\n\nPage two: nothing"
+        pages = [{"page": 1, "start": 0, "end": 26}, {"page": 2, "start": 28, "end": len(text)}]
+        result = hide.apply(text, {}, pages)
+        self.assertEqual(result.text, "Page one: [hidden]\n\nPage two: nothing")
+        self.assertEqual(result.pages, [{"page": 1, "start": 0, "end": 18}, {"page": 2, "start": 20, "end": len(result.text)}])
+
+    def test_hid04_a_reread_keeps_earlier_marks_in_their_new_place(self):
+        once = hide.apply("Mail dana@example.com about Bluewater today.", {})
+        self.assertEqual(once.text, "Mail [hidden] about Bluewater today.")
+        twice = hide.apply(once.text, {"words": ["Bluewater"]}, keep=once.hidden)
+        self.assertEqual(twice.text, "Mail [hidden] about [hidden] today.")
+        self.assertEqual([(s.start, s.kind) for s in twice.hidden], [(5, "email"), (20, "word")])
+        self.assertEqual(hide.apply(twice.text, {"words": ["Bluewater"]}).text, twice.text, "nothing new to hide: unchanged")
+
+
+if __name__ == "__main__":
+    unittest.main()

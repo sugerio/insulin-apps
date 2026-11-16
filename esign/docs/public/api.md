@@ -113,7 +113,7 @@ Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLI
 | `POST /api/{kind}/{id}/shares/delete` | Admin, or anyone for themselves | Stop sharing it with someone: `{email}`, or with everyone: `{organization: true}`. Removing yourself answers `{id, removed: true}`. Someone it isn't shared with answers `404 not_shared`. |
 | `POST /api/{kind}/{id}/tags` | Viewer | Replace your own tags on it: `{tags}` (`[]` clears them). Answers `{id, tags}`. |
 | `GET /api/tags` | View | Your own tags, most used first: `{tags: [{tag, uses}]}`. `q` keeps those containing it; `limit` 1 to 100 (20 by default). |
-| `GET /api/members` | View | People Esign has seen in your organization, to share with: `{members: [{id, email, name?}]}`. `q` and `limit` as for tags. |
+| `GET /api/members` | View | The people of your organization who can use Esign, to share with: `{members: [{id, email, name?}]}`, as the platform lists them (someone who has never opened Esign included). `q` and `limit` as for tags. |
 | `GET /api/owners` | Organization owners | Everyone who owns templates or envelopes: `{owners: [{id, kind, name?, email?, templates, envelopes, lastSeenAt?}]}`. |
 | `POST /api/owners/{id}/transfer` | Organization owners | Take over everything someone (a person or an API client) owns: answers `{from, to, templates, envelopes}`. Shares stay, but yours on those documents (you own them now). |
 

@@ -1,5 +1,5 @@
 // A member's own tags on a template or an envelope (server/esign/tags.ts): nobody else sees them. Each tag is a badge
-// that can be removed; typing adds one with Enter or a comma, and suggests the member's tags already in use.
+// that can be removed; typing adds one with Enter, a comma or leaving the field, and suggests the member's tags already in use.
 import React, { useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { Badge } from '../components/ui/badge.ts'
@@ -42,8 +42,10 @@ export function TagsField({ id, label = 'Your tags', hint = 'Only you see your t
         id, value: text, maxLength: MAX_TAG + 1, autoComplete: 'off', placeholder: value.length >= MAX_TAGS ? 'At most 20 tags' : 'Add a tag',
         disabled: value.length >= MAX_TAGS,
         onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value),
-        onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') { e.preventDefault(); add(text) } },
-        onBlur: () => setFound([]),
+        // Enter adds the tag typed, unless it confirms an input method's composition (pinyin, kana).
+        onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); add(text) } },
+        // Leaving the field (Done, Save, elsewhere) adds what was typed, so a tag never stays unsaved in it.
+        onBlur: () => { if (text.trim()) add(text); else setFound([]) },
       }),
       found.length ? h('ul', { role: 'listbox', 'aria-label': 'Your tags', className: 'absolute z-20 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
         ...found.map((tag) => h('li', { key: tag, role: 'option', 'aria-selected': false, className: 'cursor-pointer rounded-sm px-2 py-1.5 text-sm hover:bg-accent', onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => add(tag) }, tag))) : null))

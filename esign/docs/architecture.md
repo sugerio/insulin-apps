@@ -539,7 +539,7 @@ is enabled.
 | `POST /api/contacts`, `POST /api/contacts/:id`, `POST /api/contacts/:id/delete` | Add a contact (or change the one with that email), change one, delete one |
 | `GET`/`POST /api/{templates,envelopes}/:id/shares`, `POST .../shares/delete` | Who sees it; share it or change a role (admin); stop sharing (admin, or oneself) |
 | `POST /api/{templates,envelopes}/:id/tags`, `GET /api/tags` | Replace one's own tags on it; one's tags, most used first |
-| `GET /api/members` | Members Esign has seen, to share with |
+| `GET /api/members` | The organization's people who can use Esign, from the gateway's `GET /__insulin/members` (`directory.ts`, `SUGER_MEMBERS_URL`); without it, the members Esign has seen. An API client's people must be among them (`422 not_members`) |
 | `GET /api/owners`, `POST /api/owners/:id/transfer` | Organization owners: everyone who owns something; take over all of it |
 | `GET`/`POST /api/client-settings/:id` | Organization owners and admins, in the browser (the page `/client-settings/:id`, linked from API access): who sees what an API client owns, `{id, name?, people}`; replacing the list, `{people: [email]}` |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |

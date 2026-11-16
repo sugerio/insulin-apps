@@ -27,6 +27,7 @@ import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsBy
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
+import type { DirectoryEnv } from './directory.ts';
 import { callerOf, dueScheduled, parseSendAt, recordScheduleFailure, scheduledBy, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
@@ -35,7 +36,7 @@ const MAX_PDF_BYTES = 5 * 1024 * 1024;
  * ESIGN_* secrets, the addresses of the mail relay and the usage reports, and the app's token); tests
  * build it directly.
  */
-export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & MetricsEnv & {
+export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & MetricsEnv & DirectoryEnv & {
   DB: D1Database;
   /** PDFs, field images, seals and delivery PDFs, in D1 (blob-store.ts). */
   ARTIFACTS: BlobStore;

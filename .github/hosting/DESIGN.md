@@ -646,6 +646,22 @@ of each kind and the bytes of files stored. Counts and sizes only: never a name,
 - **Configuration.** The deploy gives each app `SUGER_METRICS_URL` next to `SUGER_MAIL_URL`, when `GATEWAY_SECRET_KEY`
   is set. Without it (a local preview), an app reports nothing.
 
+### 8.7 Who can use the app
+
+An app has no directory of its own: the gateway tells it who calls, at each request. An app that lets someone pick
+people of the organization (Esign: whom to share with, who sees what an API client creates) asks
+`GET https://<apex>/__insulin/members` over its `SUGER_GATEWAY` binding, with its `SUGER_APP_TOKEN` and the organization
+in `x-suger-organization-id`; the deploy gives it the address as `SUGER_MEMBERS_URL`.
+
+- **Who is listed.** The organization's people who can use the app, as its People page counts them: owners, admins,
+  editors and viewers of the organization, and the specific-apps members given the app (a built-in or custom role).
+  Each with their id (the `x-suger-user-id` their requests carry), name and email; nothing about their roles. Nobody
+  of another organization, and nothing for a suspended or disabled organization (403) or an unknown one (404).
+- **Narrowing.** `q` keeps those whose name or email contains it, without regard to case (at most 100 characters);
+  `limit` caps the answer (1 to 500, 500 by default). The answer is never cached (`Cache-Control: no-store`).
+- **Who may ask.** An app, with its own token (401 otherwise), on the apex only, by GET, under the per-app rate limit.
+  The app still checks what it is given: Esign falls back on the people it has seen when the gateway can't be asked.
+
 ## 9. Data
 
 All in the gateway's D1 database; migrations are forward-only.

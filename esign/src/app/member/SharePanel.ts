@@ -1,6 +1,6 @@
 // Who sees a template or an envelope (server/esign/ownership.ts): its owner, everyone in the organization when it is
 // shared with them, and the people it is shared with and their roles. Its admins and owner share it with everyone (as
-// viewers or editors) or with anyone by email (members Esign has seen are suggested), change a role, or stop sharing;
+// viewers or editors) or with anyone by email (the organization's people who can use Esign are suggested), change a role, or stop sharing;
 // anyone it is shared with by email can remove themselves.
 import React, { useEffect, useRef, useState } from 'react'
 import { Building2, Lock, UserPlus } from 'lucide-react'
@@ -17,7 +17,7 @@ type Member = { id: string; email: string; name?: string }
 /** General access: only the people it is shared with, or everyone in the organization, as viewers or editors. */
 const ACCESS: Record<'' | 'viewer' | 'editor', string> = { '': 'Only the people below', viewer: 'Everyone in your organization can view', editor: 'Everyone in your organization can edit' }
 
-/** An email field that suggests the organization's members Esign has seen, by name or email. */
+/** An email field that suggests the organization's people who can use Esign (server directory.ts), by name or email. */
 export function MemberEmailField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
   const [found, setFound] = useState<Member[]>([])
   const latest = useRef(0)

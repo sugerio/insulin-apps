@@ -243,6 +243,8 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     h(Dialog, { open: opened?.kind === 'tags', onOpenChange: (o) => { if (!o) setOpened(null) }, label: 'Your tags' },
       current && opened?.kind === 'tags' ? [
         h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Your tags on ${name(current)}`), h(DialogDescription, null, 'Only you see them. Tags, above the list, filters it by them.')),
+        // A save that failed says so here: the page's notice is hidden while a dialog is open.
+        h(Notice, { key: 'notice', message: message.error ? message.text : '', error: true }),
         h(TagsField, { key: 'tags', id: 'list-envelope-tags', value: current.tags ?? [], onChange: (tags) => saveTags(current, tags) }),
         h(DialogFooter, { key: 'footer' }, h(Button, { variant: 'outline', onClick: () => setOpened(null) }, 'Done')),
       ] : null),

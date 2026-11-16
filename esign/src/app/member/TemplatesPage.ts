@@ -333,6 +333,8 @@ export function TemplatesPage({ me }: { me: Me }) {
       current && opened?.kind === 'tags' ? [
         h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Your tags on ${label(current)}`), h(DialogDescription, null, 'Only you see them. Filter the list by them with With your tags.')),
         h('div', { key: 'notice' }, notice),
+        // A save that failed says so here: the page's notice is hidden while a dialog is open.
+        h(Notice, { key: 'notice', message: message.error ? message.text : '', error: true }),
         h(TagsField, { key: 'tags', id: 'opened-template-tags', value: current.tags ?? [], onChange: (tags) => saveTags(current.id, tags) }),
         h(DialogFooter, { key: 'footer' }, h(Button, { variant: 'outline', onClick: close }, 'Done')),
       ] : null),

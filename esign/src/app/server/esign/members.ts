@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from './app.ts';
 import { can, type Caller } from './identity.ts';
+import { directoryMembers } from './directory.ts';
 import { emailKey, isClient, ownerSummary, shareableEmail } from './ownership.ts';
 import { unknownKeys } from './metadata.ts';
 
@@ -40,11 +41,14 @@ const orgOwner = (caller: Caller) => caller.role === 'OWNER' && can(caller, 'esi
 const orgAdmin = (caller: Caller) => (caller.role === 'OWNER' || caller.role === 'ADMIN') && can(caller, 'esign.manage');
 
 export function mountMemberRoutes(app: Hono<Env>) {
-  // People to share with: members seen in Esign whose name or email contains `q`, most recently seen first.
+  // People to share with: the organization's people who can use Esign, as the platform says (directory.ts), whose name
+  // or email contains `q`; else, when the platform can't be asked, those Esign has seen, most recently seen first.
   app.get('/api/members', async (context) => {
     const limit = context.req.query('limit') === undefined ? 20 : Number(context.req.query('limit'));
     const q = (context.req.query('q') ?? '').trim();
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || q.length > MAX_QUERY) return context.json({ error: 'invalid_query' }, 400);
+    const directory = await directoryMembers(context.env, context.get('tenantId'), { q, limit });
+    if (directory) return context.json({ members: directory });
     const pattern = q ? likeContaining(q.toLowerCase()) : null;
     const { results } = await context.env.DB.prepare(`SELECT user_id, email, name FROM members WHERE tenant_id = ? AND kind = 'person' AND email IS NOT NULL
         AND (? IS NULL OR email_key LIKE ? ESCAPE '\\' OR lower(name) LIKE ? ESCAPE '\\') ORDER BY last_seen_at DESC, user_id LIMIT ?`)
@@ -127,6 +131,13 @@ export function mountMemberRoutes(app: Hono<Env>) {
     const people = (body as { people?: unknown }).people;
     if (!Array.isArray(people) || people.length > MAX_CLIENT_PEOPLE || people.some((email) => !shareableEmail(email))) return context.json({ error: 'invalid_people' }, 422);
     if (!await db.prepare("SELECT 1 FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'client'").bind(tenantId, id).first()) return context.json({ error: 'not_found' }, 404);
+    // Only people who can use Esign, when the platform can say who they are (directory.ts).
+    const directory = (people as string[]).length ? await directoryMembers(context.env, tenantId) : null;
+    if (directory) {
+      const allowed = new Set(directory.map((m) => emailKey(m.email)));
+      const outside = (people as string[]).filter((email) => !allowed.has(emailKey(email)));
+      if (outside.length) return context.json({ error: 'not_members', emails: outside }, 422);
+    }
     const byKey = new Map<string, string>();
     for (const email of people as string[]) if (!byKey.has(emailKey(email))) byKey.set(emailKey(email), email.trim());
     const now = Date.now();

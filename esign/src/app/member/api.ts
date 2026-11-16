@@ -69,6 +69,7 @@ export function describeError(error: unknown): string {
     if (error.status === 404 && error.code === 'signing_disabled') return 'Signing isn\'t set up on this deployment yet.'
     if (error.status === 404) return 'That isn\'t here any more, or belongs to another organization.'
     if (error.status === 409 && error.code === 'template_draft') return 'That template is a draft: save it as ready in the field editor before using it.'
+    if (error.status === 422 && error.code === 'not_members') return 'Only people of your organization who can use Esign can be added.'
     if (error.status === 422 && error.code === 'prefill_too_long') return 'A pre-filled value is too long for its box on the document: shorten it.'
     if (error.status === 422 && error.code === 'prefill_missing') return 'Fill in every required pre-filled field.'
     if (error.status === 422 && error.code === 'invalid_prefill') return 'Pre-filled values can hold plain English letters, digits and punctuation, at most 128 characters.'

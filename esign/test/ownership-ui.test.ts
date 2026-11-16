@@ -215,3 +215,32 @@ test("an API client's page, reached from API access: owners and admins choose wh
     assert.ok(!editor.calls.some((c) => c.path.startsWith('/api/client-settings')));
   } finally { await editor.unmount(); }
 });
+
+test('a tag typed and left (Done, without Enter) is saved; a save that fails says so in the dialog', async () => {
+  const ENV = '22222222-2222-4222-8222-222222222222';
+  let failing = false;
+  const row = { id: ENV, templateId: 'tpl-1', status: 'IN_PROGRESS', createdAt: 0, documentName: 'Reseller agreement', signers: [], progress: { signed: 0, total: 1 }, owner: { id: 'u1', kind: 'person', name: 'Sam Example' }, myRole: 'owner', tags: [] };
+  const app = await renderMember('/envelopes', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path.startsWith('/api/envelopes?') || c.path === '/api/envelopes') return json({ envelopes: [row] });
+    if (c.path === `/api/envelopes/${ENV}/tags`) return failing ? json({ error: 'forbidden' }, 403) : json({ id: ENV, tags: JSON.parse(String(c.body)).tags });
+  });
+  try {
+    await app.click(app.byLabel('More for Reseller agreement'), 'menu');
+    await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitem' && visibleText(n.children).trim() === 'Tags')[0], 'Tags');
+    await app.type(app.byId('list-envelope-tags'), 'q4');
+    await app.act(async () => { app.byId('list-envelope-tags').props.onBlur(); });
+    await app.settle();
+    const saved = app.calls.filter((c) => c.path === `/api/envelopes/${ENV}/tags`);
+    assert.deepEqual(JSON.parse(String(saved.at(-1)!.body)), { tags: ['q4'] });
+    // Typing with an input method: its Enter confirms the composition and adds nothing.
+    await app.type(app.byId('list-envelope-tags'), 'ni');
+    await app.act(async () => { app.byId('list-envelope-tags').props.onKeyDown({ key: 'Enter', nativeEvent: { isComposing: true }, preventDefault() {} }); });
+    assert.equal(app.calls.filter((c) => c.path === `/api/envelopes/${ENV}/tags`).length, 1);
+    failing = true;
+    await app.type(app.byId('list-envelope-tags'), 'nda');
+    await app.keyDown(app.byId('list-envelope-tags'), 'Enter');
+    assert.match(visibleText(app.byLabel('Your tags').children), /Your role in Esign doesn't allow that/);
+  } finally { await app.unmount(); }
+});

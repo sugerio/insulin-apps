@@ -37,7 +37,7 @@ export function FilterButton({ name, value, options, onChange }: { name: string;
 /** The member's own tags, for the Tags filter; `reload` after they change some. */
 export function useMyTags(): [string[], () => void] {
   const [tags, setTags] = useState<string[]>([])
-  const reload = () => { apiJson<{ tags: { tag: string }[] }>('/api/tags?limit=50').then((data) => setTags(data.tags.map((t) => t.tag))).catch(() => {}) }
+  const reload = () => { apiJson<{ tags: { tag: string }[] }>('/api/tags?limit=100').then((data) => setTags(data.tags.map((t) => t.tag))).catch(() => {}) }
   useEffect(reload, [])
   return [tags, reload]
 }

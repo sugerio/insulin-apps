@@ -62,7 +62,7 @@ test('pre-filled fields: offered for a template, listed once per name with its n
  const html=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner'],initialFields,allowPrefill:true}));
  assert.match(html,/aria-label="Pre-filled fields"/);
  assert.equal(html.split('aria-label="Place Partner legal name"').length-1,1,'one entry for the name placed twice');
- assert.match(html,/<code class="esign-prefill-name">partner\.legalName<\/code>/);
+ assert.match(html,/title="partner\.legalName"[^>]*aria-label="Place Partner legal name"/,'its name on hover');
  assert.match(html,/id="prefill-label"/);
  assert.match(html,/Add pre-filled field/);
  const without=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner']}));
@@ -77,8 +77,8 @@ test('pre-filled fields a host fills in: only those are offered, to drag on, wit
  const html=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner'],initialFields:[placed],allowPrefill:true,prefillCatalog}));
  assert.ok(html.indexOf('aria-label="Place Partner name"')<html.indexOf('aria-label="Place Sent date"'),'the host\'s, in its order');
  assert.match(html,/aria-label="Place Legacy field"/,'one the template has already stays placeable');
- assert.match(html,/<code class="esign-prefill-name">agreement\.sentDate<\/code>/);
+ assert.match(html,/title="agreement\.sentDate"/);
  assert.doesNotMatch(html,/id="prefill-label"/);
  assert.doesNotMatch(html,/Add pre-filled field/);
- assert.match(html,/Drag one onto the page/);
+ assert.match(html,/Drag onto the page/);
 });

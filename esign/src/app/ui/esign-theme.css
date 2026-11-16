@@ -40,9 +40,8 @@
 /* A pre-filled field: nobody signs it; its value is drawn when the envelope is sent. */
 .esign-placed-field[data-prefill] { background: oklch(0.97 0.06 95); border-style: dashed; }
 .esign-prefill-fields { margin-top: 16px; }
-.esign-prefill-definition { display: flex; flex-direction: column; margin-bottom: 8px; }
-.esign-prefill-definition .esign-field-tool { margin-bottom: 2px; }
-.esign-prefill-name { font-size: .75rem; color: oklch(0.45 0 0); overflow-wrap: anywhere; }
+.esign-prefill-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.esign-prefill-list .esign-prefill-chip { width: auto; margin: 0; }
 .esign-prefill-new { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid oklch(0.92 0 0); }
 .esign-placed-field-delete { position: absolute; right: 0; top: 0; height: 100%; min-width: 0; min-height: 0; padding: 0 4px; line-height: 1; color: oklch(0.205 0 0); background: transparent; border: 0; cursor: pointer; }
 @media (max-width: 720px) {

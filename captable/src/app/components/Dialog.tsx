@@ -43,6 +43,8 @@ let handoff: { opener: HTMLElement | null; timer: ReturnType<typeof setTimeout> 
  * Gives focus back to what had it when the dialog opened. Radix returns it to a DialogTrigger; these dialogs have none
  * (the caller mounts them), so they note the opener and focus it once they have unmounted, after Radix's focus trap has
  * let go. A dialog that replaces another in the same flow (its form after its loading state) takes over that opener.
+ * An opener marked `data-return-focus` that a recorded write has since remounted (a page body read again) hands the
+ * focus to the element that now carries its mark.
  */
 export function useReturnFocus(): (event: Event) => void {
   useLayoutEffect(() => {
@@ -52,10 +54,12 @@ export function useReturnFocus(): (event: Event) => void {
       opener = handoff.opener;
       handoff = null;
     }
+    const mark = opener?.dataset.returnFocus;
     return () => {
       const timer = setTimeout(() => {
         if (handoff?.timer === timer) handoff = null;
-        if (opener?.isConnected) opener.focus();
+        const target = opener?.isConnected ? opener : mark ? document.querySelector<HTMLElement>(`[data-return-focus="${CSS.escape(mark)}"]`) : null;
+        target?.focus();
       }, 0);
       handoff = { opener, timer };
     };

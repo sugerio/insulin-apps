@@ -78,6 +78,7 @@ function referenceStatements(
         definitionSha256: row.definitionSha256,
         createdBy: userId,
         pulleyId: row.sourceId,
+        isTemplate: row.isTemplate,
         now,
       })])
     }

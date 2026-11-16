@@ -85,6 +85,8 @@ export interface SecurityDraft extends Sourced {
   uncapped: boolean | null;
   discountRate: string | null;
   convertedDate: string | null;
+  /** The company's right to buy back a stock lot's unvested shares, as its agreement sets it (the spreadsheet template). */
+  repurchaseRight?: { pricePerShare: string | null; windowDays: number | null; noDeadline: boolean };
 }
 
 export interface VestingEventDraft extends Sourced {
@@ -181,7 +183,7 @@ export type ImportReferenceRow =
   | { entity: "stakeholder"; id: string; displayName: string; kind: "individual" | "institution"; relationship: engine.Relationship; email: string | null; sourceId: string }
   | { entity: "stock_class"; id: string; name: string; classType: "COMMON" | "PREFERRED"; currency: string; originalIssuePrice: { amount: string; currency: string } | null; sourceId: string }
   | { entity: "stock_plan"; id: string; name: string; stockClassId: string; effectiveDate: string | null; sourceId: string }
-  | { entity: "vesting_terms"; id: string; name: string; definition: ImportVestingDefinition; definitionSha256: string; sourceId: string | null }
+  | { entity: "vesting_terms"; id: string; name: string; isTemplate: boolean; definition: ImportVestingDefinition; definitionSha256: string; sourceId: string | null }
   | { entity: "certificate"; id: string; securityId: string; certificateNumber: string; issuedDate: string; status: "ISSUED" | "CANCELLED" | "VOID"; cancelledDate: string | null; sourceId: string };
 
 export interface ImportWritePlan {
@@ -205,7 +207,7 @@ const referenceRowSchema = z.discriminatedUnion("entity", [
   z.strictObject({ entity: z.literal("stakeholder"), id, displayName: id, kind: z.enum(["individual", "institution"]), relationship: z.enum(["founder", "employee", "ex_employee", "officer", "board_member", "advisor", "consultant", "investor", "other"]), email: z.string().nullable(), sourceId: sourceIdSchema }),
   z.strictObject({ entity: z.literal("stock_class"), id, name: id, classType: z.enum(["COMMON", "PREFERRED"]), currency: id, originalIssuePrice: z.strictObject({ amount: decimalString, currency: id }).nullable(), sourceId: sourceIdSchema }),
   z.strictObject({ entity: z.literal("stock_plan"), id, name: id, stockClassId: id, effectiveDate: isoDate.nullable(), sourceId: sourceIdSchema }),
-  z.strictObject({ entity: z.literal("vesting_terms"), id, name: id, definition: importedVestingDefinitionSchema, definitionSha256: id, sourceId: sourceIdSchema.nullable() }),
+  z.strictObject({ entity: z.literal("vesting_terms"), id, name: id, isTemplate: z.boolean(), definition: importedVestingDefinitionSchema, definitionSha256: id, sourceId: sourceIdSchema.nullable() }),
   z.strictObject({ entity: z.literal("certificate"), id, securityId: id, certificateNumber: id, issuedDate: isoDate, status: z.enum(["ISSUED", "CANCELLED", "VOID"]), cancelledDate: isoDate.nullable(), sourceId: sourceIdSchema }),
 ]);
 export const plannedTransactionSchema = z.strictObject({

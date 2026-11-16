@@ -11,6 +11,7 @@ import { api, apiJson, canManage, dateTime, describeError, ownerName, ROLE_NAMES
 import { Notice, PageHeader } from './parts.ts'
 import { Link } from './router.ts'
 import { TagList } from './TagsField.ts'
+import { loadPart, reloadForUpdate, StaleVersion } from './update.ts'
 
 const h = React.createElement
 
@@ -26,7 +27,7 @@ export type TemplateDetails = Owned & {
  */
 export const pdfView = {
   render: async (blob: Blob, target: HTMLElement, signal: AbortSignal): Promise<HTMLElement[]> => {
-    const { renderPdf } = await import('../ui/pdf.ts')
+    const { renderPdf } = await loadPart(() => import('../ui/pdf.ts'))
     signal.throwIfAborted()
     const detached = target.ownerDocument.createElement('div')
     await renderPdf(blob, detached, signal, target, true)
@@ -125,7 +126,7 @@ export function TemplatePage({ me, id }: { me: Me; id: string }) {
 function DocumentView({ id, roles, fields }: { id: string; roles: string[]; fields: PlacedField[] }) {
   const container = useRef<HTMLDivElement | null>(null)
   const [pages, setPages] = useState<HTMLElement[]>([])
-  const [state, setState] = useState<'loading' | 'shown' | 'failed'>('loading')
+  const [state, setState] = useState<'loading' | 'shown' | 'failed' | 'stale'>('loading')
   useEffect(() => {
     const target = container.current
     if (!target) return
@@ -137,7 +138,12 @@ function DocumentView({ id, roles, fields }: { id: string; roles: string[]; fiel
         const shown = await pdfView.render(blob, target, controller.signal)
         if (controller.signal.aborted) return
         setPages(shown); setState('shown')
-      } catch { if (!controller.signal.aborted) setState('failed') }
+      } catch (error) {
+        if (controller.signal.aborted) return
+        // Esign was updated since the page opened: once, the page reloads to take the new version.
+        if (error instanceof StaleVersion) { if (!reloadForUpdate()) setState('stale'); return }
+        setState('failed')
+      }
     })()
     return () => { controller.abort(); target.replaceChildren?.() }
   }, [id])
@@ -146,6 +152,7 @@ function DocumentView({ id, roles, fields }: { id: string; roles: string[]; fiel
       h('li', { key: role, className: 'flex items-center gap-1.5' }, h('span', { className: 'size-2.5 rounded-sm border-2', style: { borderColor: colorOf(roles, role) }, 'aria-hidden': true }), role))) : null,
     state === 'loading' ? h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading the document…') : null,
     state === 'failed' ? h(Notice, { message: 'The document could not be shown. Reload the page to try again.', error: true }) : null,
+    state === 'stale' ? h(Notice, { message: 'Esign was updated since this page opened: reload the page to see the document.', error: true }) : null,
     h('div', { ref: container, 'aria-label': 'Template document', className: 'max-h-[80vh] overflow-auto rounded-md bg-muted/40 p-4' }),
     ...fields.map((field, i) => {
       const page = pages[field.page - 1]

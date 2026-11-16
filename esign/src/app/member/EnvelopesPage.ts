@@ -29,6 +29,8 @@ const STATUSES: Record<string, { label: string; query: string }> = {
   DRAFT: { label: 'Draft', query: 'DRAFT' }, IN_PROGRESS: { label: 'In progress', query: 'IN_PROGRESS,FINALIZING' }, COMPLETED: { label: 'Completed', query: 'COMPLETED' },
   DECLINED: { label: 'Declined', query: 'DECLINED' }, VOIDED: { label: 'Voided', query: 'VOIDED' }, EXPIRED: { label: 'Expired', query: 'EXPIRED' },
 }
+/** Without a Status filter, the list is of every envelope, drafts with them (the API leaves drafts out unless asked). */
+const EVERY_STATUS = 'DRAFT,IN_PROGRESS,FINALIZING,COMPLETED,DECLINED,VOIDED,EXPIRED'
 const VIEWS: Record<string, string> = { waiting: 'Waiting for others', expiring: 'Expiring soon' }
 
 type Filters = { q: string; date: string; scope: Scope; view: string; tags: string[] }
@@ -70,7 +72,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     const ask = ++latest.current
     try {
       const data = await apiJson<{ envelopes: EnvelopeSummary[]; next?: number }>(listPath('/api/envelopes', {
-        status: STATUSES[statusKey]?.query, scope: filters.scope, tags: filters.tags, q: filters.q, view: filters.view,
+        status: STATUSES[statusKey]?.query ?? EVERY_STATUS, scope: filters.scope, tags: filters.tags, q: filters.q, view: filters.view,
         ...sinceOf(filters.date), limit: pageSize, before: at.before,
       }))
       if (ask !== latest.current) return

@@ -37,7 +37,7 @@ same request key, so the envelope is never sent twice.
 
 **Save draft** keeps the form as it is, unfinished even, to send later: nobody is asked to sign, and no contact is added,
 until it is sent. The page becomes the draft's (**Draft envelope**); **Save draft** saves it again, and **Send for
-signature** checks it as any envelope and sends it. Drafts appear on **Envelopes** under **Status**: **Draft**, each with
+signature** checks it as any envelope and sends it. Drafts appear on **Envelopes** with the others, marked **Draft** (or alone, with **Status**: **Draft**), each with
 **Edit** to go on with it and, in its **⋯** menu, **Discard**, which deletes it after asking.
 
 ## Upload and send
@@ -55,7 +55,7 @@ To send a PDF of your own without making a template, choose **Upload and send** 
    and choose **Send for signature**.
 
 It is a draft from the first step on: **Save draft**, on any step, keeps it (with the fields placed so far), and it is
-listed under **Status**: **Draft**, where **Edit** opens it again on this page. Choosing another PDF replaces the one
+listed on **Envelopes** as a draft, where **Edit** opens it again on this page. Choosing another PDF replaces the one
 uploaded and clears the fields placed on it. The envelope has no template: its document and fields are its own.
 
 To send the same document again, make it a template. Tick **Also save as a template** on the review step (it is
@@ -148,7 +148,7 @@ Each filter in use shows as a chip under them, which removes it; **Clear all** r
 
 | Status | API value | What it means |
 | --- | --- | --- |
-| **Draft** | `DRAFT` | Saved, not sent: it has no signers' tasks yet. Listed only under **Status**: **Draft**. |
+| **Draft** | `DRAFT` | Saved, not sent: it has no signers' tasks yet. Listed on **Envelopes** with the others; the API lists drafts only when `status` asks for `DRAFT`. |
 | **Out for signature** | `IN_PROGRESS` | Signers are signing in turn. The only status in which anyone can sign, decline or void. |
 | **Finishing** | `FINALIZING` | Everyone has signed, and Esign is sealing the signed PDF. This usually takes seconds. |
 | **Completed** | `COMPLETED` | Sealed. The signed PDF and the certificate can be downloaded, and each signer is sent a link to their copy. |

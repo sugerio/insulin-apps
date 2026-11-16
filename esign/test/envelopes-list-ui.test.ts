@@ -96,7 +96,8 @@ test('the search, its suggested filters, the filter buttons, their chips and Cle
     await app.click(app.byLabel('Remove Quick view: Waiting for others'), 'chip');
     assert.equal(lastQuery().get('view'), null);
     await app.click(app.button('Clear all'), 'Clear all');
-    assert.deepEqual([...lastQuery().keys()], ['limit']);
+    assert.deepEqual([...lastQuery().keys()], ['status', 'limit']);
+    assert.equal(lastQuery().get('status'), 'DRAFT,IN_PROGRESS,FINALIZING,COMPLETED,DECLINED,VOIDED,EXPIRED', 'every envelope, drafts too');
     // Per page.
     await app.type(app.byId('envelope-page-size'), '50');
     await app.settle();

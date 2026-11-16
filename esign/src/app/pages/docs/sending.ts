@@ -25,7 +25,7 @@ export const sending: DocTopic = {
         'Choose the template.',
         ['For each role, name the signer and give their email address, or choose them from your contacts. The signers sign in this order.'],
         'Add what the signers should see about the document, and a sign-by day if there is one. Both are optional.',
-        ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn. Or choose ', b('Save draft'), ' to finish it later: nobody is asked to sign until it is sent, and Envelopes lists it under Status: Draft, with Edit and Discard.'],
+        ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn. Or choose ', b('Save draft'), ' to finish it later: nobody is asked to sign until it is sent, and Envelopes lists it as a draft, with Edit and Discard.'],
       ),
     },
     {

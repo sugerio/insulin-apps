@@ -6,6 +6,11 @@ import { openAppD1, readAppEnv } from '#platform'
 import { pageHeaders } from './page-policy.ts'
 
 export default onResponse(async (response, event) => {
+  // A built file that isn't there (a page still running the version before a deploy asks for one of its parts) is not
+  // found: never the page's HTML, which the browser would refuse as a script and the page couldn't tell apart.
+  if (event.url.pathname.startsWith('/assets/') && /^text\/html\b/i.test(response.headers.get('content-type') ?? '')) {
+    return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
+  }
   const headers = await pageHeaders(event.url.pathname, response.headers.get('content-type'), {
     frameAncestors: readAppEnv('ESIGN_FRAME_ANCESTORS') ?? '',
     viaGateway: event.req.headers.get('x-suger-access-via') !== null,

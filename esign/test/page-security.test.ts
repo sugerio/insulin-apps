@@ -52,6 +52,7 @@ test('the editor is framed by its session\'s parent, the copy page and the membe
   const member = (await pageHeaders('/envelopes/1', HTML, context()))!;
   assert.equal(directive(member['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'none'", 'a member page can\'t be framed to clickjack a send or a void');
   assert.equal(directive(member['Content-Security-Policy']!, 'frame-src'), "frame-src 'self' blob:", 'it frames the signing page and the editor itself');
+  assert.equal(member['Cache-Control'], 'no-cache', 'checked with the server each time, so a reload takes a newly deployed version');
 });
 
 test('frame-ancestors only behind the gateway (the console frames its own preview), and never anything that isn\'t an origin', async () => {

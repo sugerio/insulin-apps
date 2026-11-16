@@ -20,7 +20,7 @@ test('the landing page presents the hosted apps, with sign-in links, and links t
   assert.match(page.text, /<h1>Insulin Apps<\/h1>/)
   assert.match(page.text, /<h3>Cap Table<\/h3>[^<]*<\/div><div data-slot="card-description"[^>]*>Equity management for startups\.<\/div>/)
   assert.ok(page.text.includes('href="http://captable.insulinapps.localhost/">Open Cap Table</a>'))
-  assert.match(page.text, /href="https:\/\/github\.com\/example\/insulin-apps\/tree\/main\/captable"><svg[^>]*>[\s\S]*?<\/svg>Source<\/a>/)
+  assert.doesNotMatch(page.text, /tree\/main\/captable/, 'an app card links no source')
   assert.match(page.text, /<h3>Ledger<\/h3>[\s\S]*?Not available right now/, 'an app whose Worker is missing')
   assert.ok(page.text.includes(`href="http://insulinapps.localhost/signup?return_to=${encodeURIComponent('http://insulinapps.localhost/')}"`))
   assert.ok(page.text.includes(`href="${PRIVACY}"`))
@@ -35,6 +35,7 @@ test('signed in, / is the home page with the active organization\'s apps, and si
   const page = await person.client.get(h.url('apex', '/'))
   assert.match(page.text, /<h1>Apps in Landing Org<\/h1>/, "the apps section's title is the page's heading")
   assert.match(page.text, /<h2>Cap Table<\/h2>/, 'an app card right under it')
+  assert.doesNotMatch(page.text, /tree\/main\/captable/, 'an app card links no source')
   // The navigation's organization switcher lists the organizations and creates one: the page doesn't repeat it.
   assert.doesNotMatch(page.text, /Welcome, Landing Person/)
   assert.doesNotMatch(page.text, /<h2>Your organizations<\/h2>/)

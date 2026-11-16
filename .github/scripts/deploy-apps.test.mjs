@@ -366,7 +366,7 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   assert.deepEqual(alpha.compatibility_flags, ['nodejs_compat'])
   assert.deepEqual(alpha.rules, [{ type: 'ESModule', globs: ['**/*.mjs'], fallthrough: true }])
   assert.equal(alpha.no_bundle, true)
-  assert.deepEqual(alpha.vars, { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: '1' }, 'the gateway sets x-suger-org-role (DESIGN.md §12.3)')
+  assert.deepEqual(alpha.vars, { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: '1' }, 'the gateway sets x-suger-org-role (DESIGN.md §2.4)')
   assert.equal(alpha.workers_dev, false)
   assert.equal(alpha.preview_urls, false)
   for (const key of ['build', 'unsafe', 'routes']) assert.ok(!(key in alpha), `${key} leaked from the generated config`)
@@ -1032,6 +1032,7 @@ test("versions: a deploy refuses an engine that doesn't serve the app version in
     /The new alpha engine serves engine API 2-2, but the alpha version in production calls 1\. Deploy an engine that serves both first/,
   )
   assert.deepEqual(deploys(calls), [], 'neither Worker deployed')
+  assert.deepEqual(calls.filter(({ args }) => args[0] === 'd1'), [], 'and no migration applied')
 
   // A rollback: an older release whose engine serves 1 only, while production's app (a newer one) calls 2.
   const older = await engineRepository({ engineApi: 1 })
@@ -1050,6 +1051,7 @@ test("versions: a deploy refuses an engine that doesn't serve the app version in
   await assert.rejects(() => deployApps({ root: stale, environment: settings(), skipBuild: true, only: 'alpha', spawn: keep.spawn, fetchImpl: held.fetch }),
     /The alpha engine in production serves engine API 1-1, but this alpha calls 2, so it isn't deployed/)
   assert.deepEqual(deploys(keep.calls), ['alpha-engine.wrangler.json'], 'the engine went, the app did not')
+  assert.deepEqual(keep.calls.filter(({ args }) => args[0] === 'd1' && args.includes('insulin-apps-alpha')), [], "nor its database or migrations: a refused app changes nothing")
 
   // A first deploy: nothing in production yet, and the app version before its engine (no variable) calls none.
   const first = await engineRepository()
@@ -1124,7 +1126,7 @@ test("limit catalogs: the gateway step writes those of the apps it deployed afte
   assert.ok(alone.steps.lastIndexOf('deploy --config') < alone.steps.indexOf('d1 execute'), "after the app's deploy")
   assert.deepEqual((await run({ only: 'alpha', environment: settings() }, {}, { databases, catalogTable: false })).sql, [], 'no tables yet: the gateway step writes it')
   assert.deepEqual((await run({ only: 'alpha', environment: settings() }, {}, { databases: new Map() })).sql, [], 'no gateway database yet')
-  assert.deepEqual((await run({ only: 'beta', environment: settings() })).sql, [], 'an app without limits writes nothing alone')
+  assert.deepEqual((await run({ only: 'beta', environment: settings() }, {}, { databases })).sql, ['-- catalog of beta: none\n'], 'an app without limits writes an empty catalog, so one that dropped its limits keeps none')
 
   // The gateway's own module (in another repository: a module is imported once a path): each app's whole catalog
   // replaced, an app without limits emptied.
@@ -1290,4 +1292,23 @@ test("every Wrangler command for an engine names its config: inside the app, Wra
     if (call.args[0] === 'd1' && ['list', 'create'].includes(call.args[1])) assert.equal(call.cwd, root, call.args.join(' '))
     else assert.ok(named(call), call.args.join(' '))
   }
+})
+
+test("a deploy of the app alone writes its catalog right after its Worker, before the public-access check, which may then fail", async () => {
+  const root = await engineRepository()
+  await limitCatalogModule(root)
+  const events = []
+  const api = engineCloudflareMock({ domains: [{ id: 'beta-domain', hostname: 'beta.apps.example.com', service: 'insulin-apps-beta', stuck: true }] })
+  const fetchImpl = async (input, init) => {
+    if (new URL(input).pathname.endsWith('/workers/domains')) events.push('public access')
+    return api.fetch(input, init)
+  }
+  const { spawn } = engineSpawn(api, { databases: new Map([['insulin-apps-gateway', 'fixture-gateway-db'], ['insulin-apps-beta', 'fixture-beta-db']]) })
+  const watched = (command, args, options) => {
+    if (args[0] === 'deploy') events.push('deploy')
+    if (args.includes('--file')) events.push(`catalog: ${readFileSync(args[args.indexOf('--file') + 1], 'utf8').trim()}`)
+    return spawn(command, args, options)
+  }
+  await assert.rejects(() => deployApps({ root, environment: settings(), skipBuild: true, only: 'beta', spawn: watched, fetchImpl }), /Worker insulin-apps-beta still has public access/)
+  assert.deepEqual(events.slice(0, 3), ['deploy', 'catalog: -- catalog of beta: none', 'public access'], 'the version that now runs has its catalog')
 })

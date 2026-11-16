@@ -43,7 +43,14 @@ jobs:
         working-directory: .
         env:
           APP: ${{ inputs.app }}
-        run: echo "dir=$(node .github/scripts/list-apps.mjs --engine "$APP")" >> "$GITHUB_OUTPUT"
+        # Its directory, and which of the scripts check-insulin-app.mjs asks for when they apply it declares:
+        # test:python (an image that runs Python) and test:container (an engine with a container).
+        run: |
+          dir=$(node .github/scripts/list-apps.mjs --engine "$APP")
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          [ -n "$dir" ] || exit 0
+          node -e 'const scripts = require(`./${process.argv[1]}/package.json`).scripts ?? {}
+            console.log(`python=${Boolean(scripts["test:python"])}\ncontainer=${Boolean(scripts["test:container"])}`)' "$dir" >> "$GITHUB_OUTPUT"
       - name: Install, build and bundle the engine
         if: steps.engine.outputs.dir != ''
         working-directory: .
@@ -62,23 +69,23 @@ jobs:
       - name: Check the engine's Wrangler config
         if: steps.engine.outputs.dir != ''
         working-directory: ${{ steps.engine.outputs.dir }}
-        # Its own `check`, a dry run with --config: Wrangler would otherwise follow the app's generated
-        # .wrangler/deploy/config.json.
+        # Its own `check`, which every engine has: a dry run given its --config, since Wrangler would otherwise follow
+        # the app's generated .wrangler/deploy/config.json.
         run: npm run check
       - name: Test the engine's Python
-        if: steps.engine.outputs.dir != ''
+        if: steps.engine.outputs.python == 'true'
         working-directory: ${{ steps.engine.outputs.dir }}
-        # In a virtual environment, with pypdf pinned by the hashes of the image's own lockfile, so the PDF tests run
-        # rather than being skipped.
+        # In a virtual environment, with what the tests install pinned by version and hash in
+        # test/python/requirements.lock (check-insulin-app.mjs checks it), so no test is skipped for a missing package.
         run: |
           venv="$RUNNER_TEMP/engine-venv"
           python3 -m venv "$venv"
-          awk '/^pypdf==/ { on = 1 } on { print; if ($0 !~ /\\$/) exit }' container/requirements.lock > "$RUNNER_TEMP/engine-test-requirements.txt"
-          "$venv/bin/pip" install --require-hashes --no-deps -r "$RUNNER_TEMP/engine-test-requirements.txt"
-          PATH="$venv/bin:$PATH" python3 -c 'import pypdf'
+          if grep -qv '^[[:space:]]*\(#.*\)\?$' test/python/requirements.lock; then
+            "$venv/bin/pip" install --require-hashes -r test/python/requirements.lock
+          fi
           PATH="$venv/bin:$PATH" npm run test:python
       - name: Test the engine's container
-        if: steps.engine.outputs.dir != ''
+        if: steps.engine.outputs.container == 'true'
         working-directory: ${{ steps.engine.outputs.dir }}
         # Its control server in the image's base image, with Docker; the full image only runs on Cloudflare.
         run: npm run test:container

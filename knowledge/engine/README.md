@@ -85,7 +85,8 @@ From `knowledge/engine/`:
 npm ci --ignore-scripts
 npm run typecheck
 npm test                  # the Worker logic, with a fake container (Node 22's TypeScript stripping)
-npm run test:python       # extract.py, hide.py, ranking, passages, facts; the PDF tests need pypdf==6.21.4
+npm run test:python       # extract.py, hide.py, ranking, passages, facts; the PDF tests need pypdf from
+                          # test/python/requirements.lock (pip install --require-hashes -r …)
 npm run test:container    # the real server.py and the import's fail paths in the base image (needs Docker)
 npm run check             # typecheck and bundle (wrangler deploy --dry-run, without building the image)
 ```

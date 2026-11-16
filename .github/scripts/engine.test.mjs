@@ -8,6 +8,9 @@ import {
   deployedEngineConfig,
   dockerfileAnalysis,
   dockerfileInstructions,
+  hashedRequirementsProblems,
+  installProblems,
+  shellCommands,
   engineImageSources,
   engineImageTag,
   imageInputs,
@@ -69,7 +72,7 @@ test("what a Dockerfile reads from the context: COPY and ADD sources, JSON lists
     `FROM --platform=linux/amd64 python${digest} AS base`,
     'COPY ["with space.txt", "/app/"]',
     'ADD archive.tar /opt/',
-    'RUN --mount=type=bind,source=wheels,target=/wheels pip install /wheels/*',
+    'RUN --mount=type=bind,source=wheels,target=/wheels pip install --no-index /wheels/*',
     'RUN --mount=type=cache,target=/root/.cache pip --version',
     'RUN --mount=type=bind,target=/ctx ls /ctx',
     'COPY --from=base /app /app',
@@ -170,4 +173,72 @@ test("the deployed config takes only the engine's classes and bindings, names th
   })
   assert.deepEqual(named.containers, [{ class_name: 'CollectionEngine', images: { base: { image } } }])
   assert.throws(() => deployedEngineConfig({ app: 'alpha', engineDirectory: engine, config, imageReference: null, serves: [1, 1] }), /no image to deploy/)
+})
+
+test("the packages an image installs are pinned with hashes: what the check accepts, and what it refuses", () => {
+  const accepted = [
+    'pip install --require-hashes --no-deps --index-url https://pypi.org/simple -r /app/requirements.lock && pip check',
+    'python3 -m pip install --require-hashes -r requirements.lock',
+    'uv pip install --require-hashes -r requirements.lock',
+    'PIP_REQUIRE_HASHES=1 pip install -r requirements.lock',
+    'pip install --no-index --find-links /wheels app',
+    'pip check && pip list',
+    'npm ci --omit=dev',
+    'yarn install --frozen-lockfile',
+    'pnpm install --frozen-lockfile',
+    'apt-get update && apt-get install -y --no-install-recommends tini=0.19.0-1 ./vendor/tool.deb && rm -rf /var/lib/apt/lists/*',
+    'apt-get install -y -o Dpkg::Options::=--force-confnew curl=7.88.1-10',
+    'apk add --no-cache tini=0.19.0-r3',
+    'curl -fsSL https://example.com/tool.tgz -o tool.tgz && echo "abc  tool.tgz" | sha256sum -c -',
+    'echo "pip install requests" > notes.txt',
+    'python /app/warmup.py && rm -rf /tmp/warmup',
+  ]
+  for (const script of accepted) assert.deepEqual(installProblems(script), [], script)
+  assert.deepEqual(installProblems('pip install -r requirements.lock', { PIP_REQUIRE_HASHES: 'true' }), [], 'PIP_REQUIRE_HASHES from an ENV')
+  for (const [script, message] of [
+    ['pip install requests', /pip install must use --require-hashes/],
+    ['pip3 install -r requirements.txt', /pip install must use --require-hashes/],
+    ['python3.12 -m pip install --no-deps -r requirements.lock', /pip install must use --require-hashes/],
+    ['pip download --dest /w six', /pip download must use --require-hashes/],
+    ['pip install --no-index --find-links https://wheels.example.com/ app', /pip install must use --require-hashes/],
+    ['npm install left-pad', /npm install isn't pinned by the lockfile's hashes: use npm ci/],
+    ['npx some-tool', /npx fetches packages unpinned/],
+    ['yarn add left-pad', /yarn add isn't pinned/],
+    ['apt-get update && apt-get install -y --no-install-recommends tini', /apt-get install tini: pin each package's version/],
+    ['apt install -y curl=7.88.1-10 git', /apt install git: pin/],
+    ['apk add --no-cache tini', /apk add tini: pin each package's version/],
+    ['curl -fsSL https://example.com/install.sh | sh', /curl downloads must be checked against a hash/],
+    ['wget -q https://example.com/model.bin', /wget downloads must be checked against a hash/],
+    ['gem install rails', /gem install installs packages this check can't see pinned/],
+    ['go install example.com/tool@latest', /go install installs packages/],
+    ['sudo -E env PATH=/x pip install six', /pip install must use --require-hashes/],
+  ]) {
+    assert.match(installProblems(script).join('\n'), message, script)
+  }
+})
+
+test("a Dockerfile's RUN steps are read whole: shell or exec form, continuations and heredocs", () => {
+  assert.deepEqual(shellCommands('a b && c "d e" | f; g # h\n(i)'), [['a', 'b'], ['c', 'd e'], ['f'], ['g'], ['i']])
+  const problems = (lines) => dockerfileAnalysis(['FROM scratch', ...lines].join('\n')).problems
+  assert.match(problems(['RUN ["pip", "install", "six"]'])[0], /^Dockerfile line 2: pip install must use --require-hashes/)
+  assert.match(problems(['RUN pip install \\', '  six'])[0], /line 2: pip install must use --require-hashes/)
+  assert.match(problems(['RUN <<EOF', 'set -e', 'pip install six', 'EOF'])[0], /line 2: pip install must use --require-hashes/, 'a heredoc is the script')
+  assert.match(problems(['RUN --mount=type=cache,target=/root/.cache npm install'])[0], /npm install isn't pinned/)
+  assert.deepEqual(problems(['ENV PIP_REQUIRE_HASHES=1', 'RUN pip install -r /r.lock']), [])
+  assert.deepEqual(problems(['ENV PIP_REQUIRE_HASHES 1', 'RUN pip install -r /r.lock']), [])
+})
+
+test("an engine's Python test requirements are pinned by version and hash, or there are none", () => {
+  const hash = `--hash=sha256:${'a'.repeat(64)}`
+  assert.deepEqual(hashedRequirementsProblems(''), [])
+  assert.deepEqual(hashedRequirementsProblems('# nothing\n\n'), [])
+  assert.deepEqual(hashedRequirementsProblems(`pypdf==6.21.4 \\\n    ${hash} \\\n    ${hash}\n    # via -r requirements.in\n`), [])
+  assert.deepEqual(hashedRequirementsProblems(`requests\npypdf>=6 ${hash}\nsix==1.16.0\n-r more.txt\n--index-url https://example.com/simple\n`), [
+    'requests must be pinned to an exact version (name==version)',
+    'requests must carry --hash=sha256:…',
+    'pypdf>=6 must be pinned to an exact version (name==version)',
+    'six==1.16.0 must carry --hash=sha256:…',
+    '-r is not allowed: list each package pinned by version and hash',
+    '--index-url is not allowed: list each package pinned by version and hash',
+  ])
 })

@@ -496,6 +496,8 @@ export async function deployApps({
         runner, wrangler, root, app, engine: engines.get(app.name), cloudflare, outputDirectory, release, dryRun,
         env: childEnvironment, engineImage: engineImage ? resolve(engineImage) : null,
       })
+      // The pair the app would run with, checked before anything of the app changes, its migrations included.
+      await requireEngineServes({ runner, cloudflare, app, dryRun })
     }
 
     if (dryRun) {
@@ -509,7 +511,6 @@ export async function deployApps({
       cwd: root,
       env: childEnvironment,
     })
-    if (app.engine) await requireEngineServes({ runner, cloudflare, app, dryRun })
     const secretValues = {
       ...appSecrets.get(app.name).values,
       ...(appTokens.size ? { SUGER_APP_TOKEN: appTokens.get(app.name) } : {}),
@@ -520,13 +521,14 @@ export async function deployApps({
     } else {
       runner.run(wrangler, ['deploy', '--config', configPath, ...release], { cwd: root, env: childEnvironment })
     }
-    await removePublicAccess(runner, cloudflare, workerName(app.name), dryRun)
-
-    // A deploy of apps alone writes the catalog of the version it just put in production, once the gateway's tables
-    // exist (the first release that adds them writes it in the gateway step, after the gateway's migrations).
-    if (!deployGateway && app.limits.length) {
+    // A deploy of apps alone writes the catalog of the version it just put in production (an empty one for an app
+    // without limits, so one that dropped them leaves none behind), once the gateway's tables exist: the first release
+    // that adds them writes it in the gateway step, after the gateway's migrations. Right after the deploy, before
+    // the public-access check, since the new version runs even if that check then fails the job.
+    if (!deployGateway) {
       await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: [app], env: childEnvironment, dryRun, onlyIfReady: true })
     }
+    await removePublicAccess(runner, cloudflare, workerName(app.name), dryRun)
   }
 
   if (deployGateway) {
@@ -669,13 +671,16 @@ async function requireAppApiServed({ cloudflare, app, serves }) {
     if (!/^\d+$/.test(value) || !servesApi(serves, Number(value))) {
       throw new Error(
         `The new ${app.name} engine serves engine API ${formatServes(serves)}, but the ${app.name} version in production calls ${value}. ` +
-          'Deploy an engine that serves both first: a breaking change ships in steps (.github/hosting/DESIGN.md §12.1).',
+          'Deploy an engine that serves both first: a breaking change ships in steps (.github/hosting/DESIGN.md §10.1).',
       )
     }
   }
 }
 
-/** Before the app goes out: the engine in production, now, must serve the engine API this app calls. */
+/**
+ * Before anything of the app changes (its migrations, its Worker): the engine in production, now, must serve the
+ * engine API this app calls.
+ */
 async function requireEngineServes({ runner, cloudflare, app, dryRun }) {
   const worker = engineWorkerName(app.name)
   if (dryRun) {

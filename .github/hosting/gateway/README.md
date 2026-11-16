@@ -102,7 +102,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `SITE_ENV` | var | **local development and tests only**: `test` captures mail and relaxes cookies on `http://*.localhost`. Any non-empty value is a configuration error unless it is `test` and `SITE_DOMAIN` ends in `.localhost` |
 | `SUPER_SAML_IDP_ENTITY_ID`, `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_CERT`, `SUPER_GOOGLE_GROUP` | var | optional; the operator console's Google Workspace SAML app (entity id, sign-in URL, signing certificate as PEM) and the group whose members may sign in, by its name as Google sends it (DESIGN.md §11.1). All four, or the console is off: set in part or unusable, it stays off and the names are logged, and the rest of the site is unaffected |
 | `SUPER_ADMIN_EMAILS` | var | optional; the console's admins, addresses separated by commas or whitespace; an entry that isn't an address is ignored and logged |
-| `SUPER_CLOUDFLARE_API_TOKEN`, `SUPER_CLOUDFLARE_ACCOUNT_ID` | secret, var | optional; a Cloudflare API token with Workers Scripts: Read and Account Analytics: Read only (never D1, which could query the apps' databases) and the 32-hex account it reads, for the console's hourly resource snapshot (DESIGN.md §11.5). Both, or none |
+| `SUPER_CLOUDFLARE_API_TOKEN`, `SUPER_CLOUDFLARE_ACCOUNT_ID` | secret, var | optional; a Cloudflare API token with Workers Scripts: Read, Account Analytics: Read and Containers: Read only (never D1, which could query the apps' databases, nor R2, which could read every object in the engines' buckets) and the 32-hex account it reads, for the console's hourly resource snapshot (DESIGN.md §11.5). Both, or none |
 
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
@@ -428,7 +428,12 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **The Cloudflare snapshot** (DESIGN.md §11.5) is the five-minute tick's: the first tick of each hour to claim the
   run in `super_jobs` reads the account (`api.cloudflare.com` only, no redirects, a 20-second timeout, the token never
   logged), keeps whatever parts it could read and names the rest. It finds each Worker's D1 database in the Worker's
-  settings and the database's size in the analytics, so its token needs no D1 permission.
+  settings and the database's size in the analytics, so its token needs no D1 permission. For an app's engine
+  (`insulin-apps-<app>-engine`) it also reads the container applications and their instances (Containers: Read),
+  matched by the engine's Durable Object namespaces, and from the analytics the containers' time, the R2 buckets'
+  storage and operations and the Durable Object requests, so it needs no R2 permission either; each such product is
+  a part of its own, and Durable Objects' duration and Workers AI's neurons, which Cloudflare documents no source for,
+  stay unknown.
 - **Logs** carry event names, ids, error class names and identifier-like codes; never exception messages.
 - **Retention.** Expired sessions, used or expired links, mail-log rows older than two days, apps' hourly usage
   reports past three days and daily ones past 400, member events past 90 days, and the console's expired sessions and

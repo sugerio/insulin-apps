@@ -219,8 +219,9 @@ release that deploys one, since the deploy creates the engine's buckets through 
      create organizations past an owner domain's limit. Keep these addresses in GitHub only, never in the repository.
 
    Without all of the first four variables the console isn't there (every `/super` path is a 404). For its Cloudflare
-   page, create a second, read-only account API token with **Account · Account Analytics · Read** and **Account ·
-   Workers Scripts · Read** only, and add it as the environment secret `SUPER_CLOUDFLARE_API_TOKEN`; the deploy gives the
+   page, create a second, read-only account API token with **Account · Account Analytics · Read**, **Account ·
+   Workers Scripts · Read** and **Account · Containers · Read** only (the last for the app engines' container
+   instances), and add it as the environment secret `SUPER_CLOUDFLARE_API_TOKEN`; the deploy gives the
    gateway its own `CLOUDFLARE_ACCOUNT_ID` with it. Never give it a D1 or R2 permission: even D1 Read can query the
    apps' databases, and Workers R2 Storage Read reads every file in an engine's buckets, which the console must not
    reach. Signing in to the console also needs no change to Google's OAuth client of step 3: the console never uses it.

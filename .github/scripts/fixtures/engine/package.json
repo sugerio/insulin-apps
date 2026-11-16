@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test"
+    "test": "node --test",
+    "test:python": "python3 -m unittest discover -s test/python",
+    "test:container": "bash test/container-smoke.sh",
+    "check": "wrangler deploy --config wrangler.jsonc --dry-run --containers-rollout none --outdir .wrangler/dry-run"
   },
   "devDependencies": {
     "wrangler": "4.149.0"

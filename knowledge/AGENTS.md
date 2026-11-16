@@ -67,8 +67,8 @@ These follow the root `AGENTS.md` and DESIGN.md §2, §4 and §8.9.
 - **Permissions only narrow.** Effective permissions are the role's intersected with `x-suger-app-permissions`.
   Decide by permission with `can()`, never by role name.
 - **The organization role** (`x-suger-org-role`) is honoured only when the deploy sets `SUGER_TRUST_ORG_ROLE`, and
-  only for people. It gives organization owners two powers and nothing else: the basic information of every
-  collection, and deleting one at a time.
+  only for people. It gives organization owners three powers and nothing else, none of which opens content: the basic
+  information of every collection, deleting one at a time, and turning a collection's keep-ready window off.
 - **Resource roles.** Every collection route calls `authorize(caller, id, action)` (access.ts): the collection role
   from owner, general access (up to Editor) and shares by name, highest wins; API clients only by name; then the
   Viewer cap (without `knowledge.collections.edit` every role acts as Viewer); then the action's own permission. An

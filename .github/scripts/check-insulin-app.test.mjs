@@ -256,3 +256,37 @@ test("the app's manifest declares its engine and limits as the deploy reads them
     await writeFile(join(engine, '.output', 'worker', 'index.js'), 'export default {}\n')
   }, { built: true }), /index\.js is missing/)
 })
+
+test("the engine's image installs packages pinned with hashes (§8.7), and its Dockerfile says where it doesn't", async () => {
+  const dockerfile = (change) => (engine) => edit(engine, join('container', 'Dockerfile'), change)
+  assert.match(await checkEngine(dockerfile((text) => text.replace('pip install --no-deps --require-hashes', 'pip install --no-deps'))),
+    /container\/Dockerfile: Dockerfile line 7: pip install must use --require-hashes, with a requirements file that pins every package by version and hash/)
+  assert.match(await checkEngine(dockerfile((text) => `${text}RUN apt-get update && apt-get install -y --no-install-recommends tini\n`)),
+    /apt-get install tini: pin each package's version \(name=version\)/)
+  assert.equal(await checkEngine(dockerfile((text) => `${text}RUN apt-get update && apt-get install -y --no-install-recommends tini=0.19.0-1\n`)), '')
+  assert.match(await checkEngine(dockerfile((text) => `${text}RUN curl -fsSL https://example.com/model.bin -o /models/model.bin\n`)), /curl downloads must be checked against a hash/)
+})
+
+test("the engine's package has the scripts the app's pipeline runs: check (with Wrangler's --config), test:container with a container, test:python with Python", async () => {
+  const scripts = (change) => (engine) => edit(engine, 'package.json', (text) => {
+    const json = JSON.parse(text)
+    json.scripts = change({ ...json.scripts })
+    return JSON.stringify(json)
+  })
+  const without = (name) => scripts((all) => { delete all[name]; return all })
+  assert.match(await checkEngine(without('check')), /missing the "check" script, which the app's pipeline runs/)
+  assert.match(await checkEngine(scripts((all) => ({ ...all, check: 'wrangler deploy --dry-run' }))), /"check" script must give Wrangler its --config/)
+  assert.equal(await checkEngine(scripts((all) => ({ ...all, check: 'tsc --noEmit && wrangler deploy -c wrangler.jsonc --dry-run' }))), '')
+  assert.match(await checkEngine(without('test:container')), /missing the "test:container" script: an engine with a container tests it/)
+  assert.match(await checkEngine(without('test:python')), /missing the "test:python" script: the image runs Python/)
+  // Without Python in the image, no Python tests are asked for.
+  assert.equal(await checkEngine(async (engine) => {
+    await without('test:python')(engine)
+    await rm(join(engine, 'container', 'server', 'main.py'))
+    await writeFile(join(engine, 'container', 'server', 'main.sh'), 'echo fixture\n')
+  }), '')
+  assert.match(await checkEngine((engine) => rm(join(engine, 'test', 'python', 'requirements.lock'))),
+    /declares "test:python", so test\/python\/requirements\.lock must list what its Python tests install, each pinned with --hash/)
+  assert.match(await checkEngine((engine) => writeFile(join(engine, 'test', 'python', 'requirements.lock'), 'pypdf==6.21.4\n')),
+    /test\/python\/requirements\.lock: pypdf==6\.21\.4 must carry --hash=sha256/)
+})

@@ -59,9 +59,10 @@ ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
     LITELLM_LOCAL_MODEL_COST_MAP=True
 
-# tini is PID 1 so database worker processes that outlive an op get reaped.
+# tini is PID 1 so database worker processes that outlive an op get reaped. Pinned to the version in bookworm's
+# signed index for the base image above (apt-cache policy tini); a newer Debian build of it means updating the pin.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tini \
+ && apt-get install -y --no-install-recommends tini=0.19.0-1+b3 \
  && rm -rf /var/lib/apt/lists/*
 
 # /data is empty in the image. Cognee creates its databases on the first import; a snapshot brings them back.

@@ -20,6 +20,9 @@ export const REGISTRY = 'registry.cloudflare.com'
 /** R2's limit on a bucket name. */
 export const BUCKET_NAME_MAX = 63
 
+/** What an engine's Python tests install, under its directory, when it declares `test:python` (app.yml installs it). */
+export const PYTHON_TEST_REQUIREMENTS = 'test/python/requirements.lock'
+
 export const engineWorkerName = (app) => `insulin-apps-${app}-engine`
 /** The bucket the deploy creates for an engine's R2 binding: never a name from the repository. */
 export const engineBucketName = (app, binding) => `${engineWorkerName(app)}-${binding.toLowerCase()}`
@@ -130,6 +133,26 @@ export function parseServes(value) {
   if (!match) return null
   const serves = [Number(match[1]), Number(match[2])]
   return serves[0] >= 1 && serves[0] <= serves[1] ? serves : null
+}
+
+/**
+ * Why a pip requirements file isn't pinned with hashes, as a list: every requirement names an exact version (`==`) and
+ * at least one `--hash=sha256:…`, and nothing else is fetched (`-r`, `-e`, URLs, `--index-url`). Comments, blank lines
+ * and no requirement at all are fine.
+ */
+export function hashedRequirementsProblems(text) {
+  const problems = []
+  const entries = text.replace(/\\\r?\n/g, ' ').split(/\r?\n/).map((line) => line.replace(/(^|\s)#.*$/, '').trim()).filter(Boolean)
+  for (const entry of entries) {
+    const name = entry.split(/\s+/)[0]
+    if (name.startsWith('-')) {
+      problems.push(`${name} is not allowed: list each package pinned by version and hash`)
+      continue
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9,._-]+\])?==[^\s;]+/.test(entry)) problems.push(`${name} must be pinned to an exact version (name==version)`)
+    if (!/--hash=sha256:[0-9a-f]{64}\b/.test(entry)) problems.push(`${name} must carry --hash=sha256:…`)
+  }
+  return problems
 }
 
 /** The Durable Object classes an engine's migrations leave it with, in order, or a problem. */
@@ -365,7 +388,7 @@ export function engineImageSources(engineDirectory, config) {
 
 // --- Dockerfiles ---------------------------------------------------------------------------------------------------
 
-/** A Dockerfile's instructions: continuation lines joined, comments and heredoc bodies left out. */
+/** A Dockerfile's instructions: continuation lines joined, comments left out, heredoc bodies apart (`heredocs`). */
 export function dockerfileInstructions(text) {
   const lines = text.split(/\r?\n/)
   const instructions = []
@@ -389,14 +412,18 @@ export function dockerfileInstructions(text) {
       full += current
       break
     }
+    const heredocs = []
     for (const heredoc of full.matchAll(/(?<!<)<<(?!<)(-?)(["']?)([A-Za-z_][A-Za-z0-9_]*)\2/g)) {
+      const body = []
       while (index < lines.length) {
-        const body = lines[index++]
-        if ((heredoc[1] ? body.replace(/^\t+/, '') : body) === heredoc[3]) break
+        const current = lines[index++]
+        if ((heredoc[1] ? current.replace(/^\t+/, '') : current) === heredoc[3]) break
+        body.push(current)
       }
+      heredocs.push(body.join('\n'))
     }
     const match = full.match(/^\s*([A-Za-z]+)\s*([\s\S]*)$/)
-    if (match) instructions.push({ keyword: match[1].toUpperCase(), args: match[2].trim(), line })
+    if (match) instructions.push({ keyword: match[1].toUpperCase(), args: match[2].trim(), line, heredocs })
   }
   return instructions
 }
@@ -405,18 +432,23 @@ const DIGEST_PINNED = /^[^\s@$]+@sha256:[0-9a-f]{64}$/
 
 /**
  * What a Dockerfile takes from outside, and why it is refused: `FROM` (and `COPY --from` of an image) pinned by
- * digest, no `ADD` from a URL, and the context files `COPY`, `ADD` and `RUN --mount=type=bind` read, which are the
- * image's inputs with the Dockerfile itself.
+ * digest, no `ADD` from a URL, packages its `RUN` steps install pinned with hashes (installProblems), and the context
+ * files `COPY`, `ADD` and `RUN --mount=type=bind` read, which are the image's inputs with the Dockerfile itself.
  */
 export function dockerfileAnalysis(text) {
   const problems = []
   const sources = []
   const stages = new Set()
+  const env = {}
   const pinned = (image, where, line) => {
     if (!DIGEST_PINNED.test(image)) problems.push(`Dockerfile line ${line}: ${where} ${image} must be pinned by digest (name@sha256:…)`)
   }
-  for (const { keyword, args, line } of dockerfileInstructions(text)) {
+  for (const { keyword, args, line, heredocs } of dockerfileInstructions(text)) {
     const tokens = args.split(/\s+/).filter(Boolean)
+    if (keyword === 'ENV') {
+      for (const [, name, value] of args.matchAll(/([A-Za-z_][A-Za-z0-9_]*)[= ]("[^"]*"|'[^']*'|\S*)/g)) env[name] = value.replace(/^["']|["']$/g, '')
+      continue
+    }
     if (keyword === 'FROM') {
       const words = tokens.filter((token) => !token.startsWith('--'))
       const image = words[0] ?? ''
@@ -471,9 +503,143 @@ export function dockerfileAnalysis(text) {
         }
         sources.push({ source: options.source ?? options.src ?? '.', line })
       }
+      for (const problem of installProblems(runScript(args, heredocs), env)) problems.push(`Dockerfile line ${line}: ${problem}`)
     }
   }
   return { problems, sources }
+}
+
+/** What a RUN instruction runs, as shell text: its command (an exec-form list joined) and any heredoc it feeds. */
+function runScript(args, heredocs = []) {
+  let rest = args
+  while (rest.startsWith('--')) rest = rest.replace(/^--\S+\s*/, '')
+  if (rest.startsWith('[')) {
+    try {
+      const parts = JSON.parse(rest)
+      if (Array.isArray(parts)) rest = parts.map((part) => (/^[\w./:=@+-]+$/.test(part) ? part : `'${String(part).replaceAll("'", '')}'`)).join(' ')
+    } catch {}
+  }
+  return [rest, ...heredocs].join('\n')
+}
+
+/** Shell text as simple commands, each a list of words: split at `&&`, `||`, `;`, `|`, `&`, newlines and parentheses. */
+export function shellCommands(text) {
+  const commands = []
+  let words = []
+  let word = null
+  const end = () => {
+    if (word !== null) words.push(word)
+    word = null
+  }
+  const close = () => {
+    end()
+    if (words.length) commands.push(words)
+    words = []
+  }
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (char === "'" || char === '"') {
+      const stop = text.indexOf(char, index + 1)
+      word = (word ?? '') + text.slice(index + 1, stop < 0 ? text.length : stop)
+      index = stop < 0 ? text.length : stop
+    } else if (char === '\\') {
+      word = (word ?? '') + (text[index + 1] ?? '')
+      index += 1
+    } else if (char === '#' && word === null) {
+      while (index < text.length && text[index] !== '\n') index += 1
+      close()
+    } else if (/[;&|\n()]/.test(char)) close()
+    else if (/\s/.test(char)) end()
+    else word = (word ?? '') + char
+  }
+  close()
+  return commands
+}
+
+const PIP = /^pip(?:3(?:\.\d+)?)?$/
+const PYTHON = /^python(?:\d(?:\.\d+)?)?$/
+const TRUE = /^(?:1|true|yes|on)$/i
+// Installers whose packages this check can't see pinned with hashes.
+const UNCHECKED_INSTALLERS = new Map([
+  ['gem', ['install']], ['cargo', ['install']], ['go', ['install', 'get']], ['conda', ['install', 'create']], ['mamba', ['install', 'create']],
+  ['micromamba', ['install', 'create']], ['pipx', ['install', 'run']], ['easy_install', null], ['uvx', null],
+])
+const VALUE_OPTIONS = new Set(['-o', '-t', '--target-release', '--default-release', '-c', '--config-file', '-X', '--repository'])
+
+/**
+ * Why the commands of one RUN step install packages that aren't pinned with hashes (DESIGN.md §8.7), as a list. It
+ * accepts: `pip install` (and `download`, `wheel`; also as `python -m pip` or `uv pip`) with `--require-hashes`, or
+ * with PIP_REQUIRE_HASHES set (ENV or inline), or only local files (`--no-index`, no URL); `npm ci`, and `yarn` or
+ * `pnpm` installs from a frozen lockfile, whose integrity hashes pin every package; `apt-get install` and `apk add`
+ * with every package at an exact version (`name=version`), which the package manager checks against the
+ * distribution's signed index (local `.deb` files too); and `curl` or `wget` only in a step that checks a checksum
+ * (`sha256sum -c` and the like). It refuses `npm install` and `npx`, and installers it can't check (gem, cargo, go,
+ * conda, pipx …). What a script the step runs fetches by itself (a model download, say) is beyond it.
+ */
+export function installProblems(script, env = {}) {
+  const problems = []
+  const commands = shellCommands(script)
+  const verifies = commands.some((words) => /^(?:sha(?:1|224|256|384|512)sum|shasum|b2sum|md5sum)$/.test(words[0] ?? '') && words.some((word) => word === '-c' || word === '--check'))
+  for (const command of commands) {
+    const words = [...command]
+    const assigned = {}
+    for (;;) {
+      const assignment = words[0]?.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
+      if (assignment) {
+        assigned[assignment[1]] = assignment[2]
+        words.shift()
+      } else if (['sudo', 'env', 'exec', 'command', 'time', 'nice', 'nohup'].includes(words[0])) {
+        words.shift()
+        while (words[0]?.startsWith('-')) words.shift()
+      } else break
+    }
+    if (!words.length) continue
+    const program = words[0].split('/').pop()
+    const subcommand = (list) => list.find((word) => !word.startsWith('-'))
+    let pip = null
+    if (PIP.test(program)) pip = words.slice(1)
+    else if (PYTHON.test(program) && words[1] === '-m' && PIP.test(words[2] ?? '')) pip = words.slice(3)
+    else if (program === 'uv' && words[1] === 'pip') pip = words.slice(2)
+    if (pip) {
+      const action = subcommand(pip)
+      if (!['install', 'download', 'wheel'].includes(action)) continue
+      const hashes = pip.includes('--require-hashes') || TRUE.test(assigned.PIP_REQUIRE_HASHES ?? env.PIP_REQUIRE_HASHES ?? '')
+      const local = pip.includes('--no-index') && !pip.some((word) => /^(?:--[\w-]+=)?https?:\/\//.test(word))
+      if (!hashes && !local) {
+        problems.push(`pip ${action} must use --require-hashes, with a requirements file that pins every package by version and hash (or install only files from the build context, with --no-index)`)
+      }
+      continue
+    }
+    const action = subcommand(words.slice(1))
+    if (program === 'npm' && ['install', 'i', 'add', 'update', 'up', 'upgrade', 'exec', 'x'].includes(action)) {
+      problems.push(`npm ${action} isn't pinned by the lockfile's hashes: use npm ci`)
+    } else if (program === 'npx') {
+      problems.push('npx fetches packages unpinned: install them with npm ci from a lockfile')
+    } else if (['yarn', 'pnpm', 'bun'].includes(program) && (action === undefined || ['install', 'add', 'i', 'up', 'update', 'dlx', 'x'].includes(action))) {
+      if (!(['install', 'i', undefined].includes(action) && words.some((word) => word === '--frozen-lockfile' || word === '--immutable'))) {
+        problems.push(`${program} ${action ?? 'install'} isn't pinned: install from the lockfile with --frozen-lockfile (or npm ci)`)
+      }
+    } else if (['apt-get', 'apt', 'aptitude'].includes(program) && action === 'install') {
+      const packages = []
+      const rest = words.slice(words.indexOf('install') + 1)
+      for (let index = 0; index < rest.length; index += 1) {
+        if (VALUE_OPTIONS.has(rest[index])) index += 1
+        else if (!rest[index].startsWith('-')) packages.push(rest[index])
+      }
+      const loose = packages.filter((name) => !/^[^=\s]+=[^=\s]+$/.test(name) && !/^\.{0,2}\/.*\.deb$/.test(name))
+      if (loose.length) problems.push(`${program} install ${loose.join(' ')}: pin each package's version (name=version), which apt checks against the distribution's signed index`)
+    } else if (program === 'apk' && action === 'add') {
+      const rest = words.slice(words.indexOf('add') + 1)
+      const packages = rest.filter((word, index) => !word.startsWith('-') && !VALUE_OPTIONS.has(rest[index - 1]))
+      const loose = packages.filter((name) => !/^[^=\s]+=[^=\s]+$/.test(name))
+      if (loose.length) problems.push(`apk add ${loose.join(' ')}: pin each package's version (name=version)`)
+    } else if ((program === 'curl' || program === 'wget') && !verifies) {
+      problems.push(`${program} downloads must be checked against a hash in the same step (sha256sum -c), or come from the build context`)
+    } else if (UNCHECKED_INSTALLERS.has(program) && (UNCHECKED_INSTALLERS.get(program) === null || UNCHECKED_INSTALLERS.get(program).includes(action))) {
+      problems.push(`${program} ${action ?? ''}`.trim() + " installs packages this check can't see pinned with hashes: install them with pip --require-hashes, npm ci or a checked download")
+    }
+  }
+  return [...new Set(problems)]
 }
 
 /** The files under a directory, relative and with `/`, leaving out what installs and builds write. */
@@ -611,8 +777,21 @@ export function engineProblems({ app, appDirectory, engine, engineApi }) {
     }
   }
   if (!manifest.devDependencies?.wrangler && !manifest.dependencies?.wrangler) at('package.json must depend on wrangler (an exact version): the release bundles the engine with it')
-  for (const script of ['typecheck', 'test']) {
+  // The scripts the app's pipeline (app.yml) runs: every engine's, and those its image calls for (below).
+  for (const script of ['typecheck', 'test', 'check']) {
     if (!manifest.scripts?.[script]) at(`package.json is missing the "${script}" script, which the app's pipeline runs`)
+  }
+  const check = manifest.scripts?.check ?? ''
+  if (/\bwrangler\b/.test(check) && !/(?:^|\s)(?:--config|-c)[\s=]/.test(check)) {
+    at("package.json's \"check\" script must give Wrangler its --config: inside the app, Wrangler would follow the app's generated .wrangler/deploy/config.json")
+  }
+  if (manifest.scripts?.['test:python']) {
+    const path = join(engineDirectory, PYTHON_TEST_REQUIREMENTS)
+    if (!existsSync(path)) {
+      at(`package.json declares "test:python", so ${PYTHON_TEST_REQUIREMENTS} must list what its Python tests install, each pinned with --hash (it may list nothing)`)
+    } else {
+      for (const problem of hashedRequirementsProblems(readFileSync(path, 'utf8'))) at(`${PYTHON_TEST_REQUIREMENTS}: ${problem}`)
+    }
   }
   try {
     const serves = readServes(manifest)
@@ -645,10 +824,18 @@ export function engineProblems({ app, appDirectory, engine, engineApi }) {
   if (config) for (const problem of engineConfigProblems({ app, engineDirectory, config })) at(problem)
   try {
     const image = config ? engineImageSources(engineDirectory, config) : null
+    // An engine with a container tests it (its control server, in its base image) in the app's pipeline.
+    if (image && !manifest.scripts?.['test:container']) at('package.json is missing the "test:container" script: an engine with a container tests it in the app\'s pipeline')
     if (image && existsSync(image.dockerfile)) {
       const { problems: dockerProblems } = dockerfileAnalysis(readFileSync(image.dockerfile, 'utf8'))
       for (const problem of dockerProblems) at(`${relative(engineDirectory, image.dockerfile)}: ${problem}`)
-      if (!dockerProblems.length && existsSync(image.context)) imageInputs(image)
+      if (!dockerProblems.length && existsSync(image.context)) {
+        // Python in the image: its tests run in the app's pipeline too.
+        const { files } = imageInputs(image)
+        if (files.some((file) => file.endsWith('.py')) && !manifest.scripts?.['test:python']) {
+          at('package.json is missing the "test:python" script: the image runs Python, which the app\'s pipeline tests')
+        }
+      }
     }
   } catch (error) {
     at(error.message)

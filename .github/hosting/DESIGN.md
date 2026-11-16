@@ -670,30 +670,34 @@ app's directory, `insulin-apps-<app>-engine`, reached only by the app, over the 
 Knowledge's is the first: a Durable Object and a container for each collection.
 
 - **Declaration.** `"insulin": { "engine": "engine/", "engineApi": <n> }` names a directory inside the app and the
-  engine API version the app calls, a positive integer that an engine needs and an app without one may not declare.
-  The directory has lower-case names and is none of the app's own (`src/`, `public/`, `docs/`) or what builds and tools
+  engine API version the app calls, a positive integer that an engine needs and an app without one may not declare. The
+  directory has lower-case names and is none of the app's own (`src/`, `public/`, `docs/`) or what builds and tools
   write. It holds one Worker with its own `package.json`, exact `package-lock.json` (registry versions only) and
-  `wrangler.jsonc`. Its `package.json` depends on an exact Wrangler, has the `typecheck` and `test` scripts the app's
-  pipeline runs, and declares the engine API versions it serves, `"insulin": { "serves": [<min>, <max>] }`, which must
-  cover the app's `engineApi`.
-- **Its Wrangler config** is named `insulin-apps-<app>-engine`. Besides `main`, `compatibility_date` and its flags, it
-  may declare only: Durable Objects of the engine's own classes (no `script_name`); Durable Object `migrations` that
-  only create, rename or delete the engine's own classes (no `transferred_classes` or `from_script`, which would take
-  over another Worker's stored objects); Containers of those classes, all built from one Dockerfile in the engine's
-  directory (an engine has one image; no image from a registry, no SSH); R2 buckets by binding name alone, matching
-  `[A-Z][A-Z0-9]*` (no underscore, no bucket name); the Workers AI binding; `observability`; and plain `vars` whose
-  names don't look like secrets, since they are written in the repository. No binding name starts with `SUGER_`. It
-  declares no `route`, `routes`, custom domain or `account_id`, and sets `workers_dev: false` and `preview_urls:
-  false`: without routes, Wrangler's default is a public workers.dev address. `list-apps.mjs` refuses app names ending
-  in `-engine`, which would collide with another app's engine Worker.
+  `wrangler.jsonc`. Its `package.json` depends on an exact Wrangler, has the scripts the app's pipeline runs
+  (`typecheck`, `test`, and `check`, which runs Wrangler's dry run with `--config`; `test:container` with a container;
+  `test:python` when the image copies Python files, with the packages its tests install in
+  `test/python/requirements.lock`, pinned by version and hash), and declares the engine API versions it serves,
+  `"insulin": { "serves": [<min>, <max>] }`, which must cover the app's `engineApi`.
+- **Its Wrangler config** is named `insulin-apps-<app>-engine`. Besides `$schema`, `main`, `compatibility_date` and its
+  flags, it may declare only: Durable Objects of the engine's own classes (no `script_name`); Durable Object
+  `migrations` that only create, rename or delete the engine's own classes (no `transferred_classes` or `from_script`,
+  which would take over another Worker's stored objects); Containers of those classes, all built from one Dockerfile in
+  the engine's directory (an engine has one image; no image from a registry, no SSH); R2 buckets by binding name alone,
+  matching `[A-Z][A-Z0-9]*` (no underscore, no bucket name); the Workers AI binding; `observability`; and plain `vars`
+  whose names don't look like secrets, since they are written in the repository. No binding name starts with `SUGER_`.
+  It declares no `route`, `routes`, custom domain or `account_id`, and sets `workers_dev: false` and
+  `preview_urls: false`: without routes, Wrangler's default is a public workers.dev address. `list-apps.mjs` refuses app
+  names ending in `-engine`, which would collide with another app's engine Worker.
 - **Checks.** `check-insulin-app.mjs` leaves the engine directory out of the app's rules (no `cloudflare:` imports, no
   Wrangler file, the file limits, one npm package) and checks it with its own (`.github/scripts/engine.mjs`): the
   package and lockfile, the config above, a Dockerfile whose images (`FROM`, `COPY --from`, a `RUN --mount` from an
   image) are pinned by digest and which fetches nothing with `ADD` from a URL, no binding that would make a bucket name
   past R2's 63 characters (§10.1), and no account id in the config or reference to the engine's own image in the
-  registry anywhere in the directory. Packages the image installs are pinned with hashes (Knowledge's Dockerfile runs
-  `pip install --require-hashes`); no check reads that. The deploy checks the config again and never trusts it: it
-  writes the deployed one itself (§10.1).
+  registry anywhere in the directory. Every package a `RUN` step installs is pinned: `pip` with `--require-hashes` (or
+  only local files), `npm ci` or a frozen `yarn`/`pnpm` install, `apt-get`/`apk` with exact versions, and `curl` or
+  `wget` only in a step that also checks a checksum; `npm install`, `npx` and installers it can't check are refused.
+  What a script fetches by itself (Knowledge's model download at build time) is out of the check's sight. The deploy
+  checks the config again and never trusts it: it writes the deployed one itself (§10.1).
 - **The seam.** The engine trusts only its binding: every call names the organization the app is acting for, and the
   app checks access, roles and limits before calling. The app's own build declares no binding; the deploy adds
   `SUGER_ENGINE`, as it adds `SUGER_GATEWAY`.
@@ -719,12 +723,13 @@ app enforces them.
 - **The catalog in the gateway.** It may not fit `SITE_APPS` (5 KB), so the deploy writes each app's catalog to the
   gateway's D1 (`app_limit_catalog`), replacing the app's whole catalog: a key the app no longer lists goes, and a
   default or override set for it stays stored, unused, and applies again if the key returns. It writes the catalog of
-  the app version in production. The deploy job of an app with limits writes its catalog right after the app's
-  deploy, once the gateway's tables exist, and the gateway's step writes those of every app its run deployed (emptying
-  the catalog of one that lists none), after the gateway's migrations, so the first release with the tables writes them
-  there: the apps' jobs run first. An app held back, or whose deploy failed, keeps the catalog of the version it still
-  runs. So the console manages the limits the running app enforces, after every deploy that changes an app, a rollback
-  or a deploy of apps alone included, and whether or not the gateway Worker is deployed too.
+  the app version in production. The deploy job of every app writes its catalog (an empty one for an app without limits)
+  right after the app's deploy and before the public-access check, so the version now running has its catalog even if
+  that check fails, once the gateway's tables exist; and the gateway's step writes those of every app its run deployed
+  (emptying the catalog of one that lists none), after the gateway's migrations, so the first release with the tables
+  writes them there: the apps' jobs run first. An app held back, or whose deploy failed, keeps the catalog of the
+  version it still runs. So the console manages the limits the running app enforces, after every deploy that changes an
+  app, a rollback or a deploy of apps alone included, and whether or not the gateway Worker is deployed too.
 - **Delivery.** On its tick the app calls `GET https://insulinapps.com/__insulin/limits?since=<cursor>`
   (`SUGER_LIMITS_URL`), one of the app endpoints of §8.9 (its token, over `SUGER_GATEWAY`), and gets
   `{ "defaults": { key: value }, "organizations": [ { "id", "limits": { key: { "value", "until" } } } ], "cursor", "more" }`.
@@ -863,10 +868,10 @@ runbook says so); the old `auth.` callback redirects there but Google checks the
 A release deploys an app's engine (§8.7) with the app, in the app's own jobs of `deploy-release.yml`.
 
 - **Build.** The build job, which has no deploy settings, also installs the engine's exact lockfile without scripts,
-  runs its build if it has one, and bundles its Worker with its own Wrangler into `<engine>/.output/worker`. The
-  archive it hands the production job may hold the app's `.output` and the engine's, nothing else. The app's own
-  pipeline (`app.yml`) builds and bundles the engine the same way on every pull request and push, typechecks and tests
-  it, and runs its Wrangler dry run (`npm run check`), Python tests and container test.
+  runs its build if it has one, and bundles its Worker with its own Wrangler into `<engine>/.output/worker`. The archive
+  it hands the production job may hold the app's `.output` and the engine's, nothing else. The app's own pipeline
+  (`app.yml`) builds and bundles the engine the same way on every pull request and push, typechecks and tests it, and
+  runs its Wrangler dry run (`npm run check`), and its Python tests and container test when the engine declares them.
 - **Deploy.** The production job deploys the engine Worker, `insulin-apps-<app>-engine`, before the app. It writes the
   engine's deployed config itself, as it does the app's: the bundle uploaded as it was built, the engine's classes,
   migrations and bindings, the image by digest, the API versions it serves in `SUGER_ENGINE_SERVES`, both public
@@ -876,16 +881,16 @@ A release deploys an app's engine (§8.7) with the app, in the app's own jobs of
   preview URL, as `removeAppPublicAccess` does for apps, and fails the deploy if one remains. Then it deploys the app
   with a service binding to the engine, `SUGER_ENGINE`, and the API version it calls in `SUGER_ENGINE_API`. Each
   engine version is tagged with the release, like the app's.
-- **Versions.** Before deploying either Worker, the deploy checks the pair it would leave running, the new one with the
-  other's version actually in production (every version of the Worker's latest deployment, read from Cloudflare), and
-  refuses a pair that doesn't match. Before the engine, every app version in production must call an API version the
-  new engine serves (an app version from before its engine calls none); before the app, the engine in production must
-  serve the one the app calls, and with no engine in production the app isn't deployed. So the check holds after a
-  failed or held-back app deploy, several releases later, and in a rollback too, and a breaking change ships in steps:
-  an engine that serves the old and new versions, then the app, then an engine that drops the old one. A
-  `wrangler rollback` by hand checks nothing: the runbook says to roll back with the Deploy workflow. The engine's
-  Durable Object migrations are forward-only: `check-deploy.mjs` refuses going back to a release whose engine has other
-  migrations than the latest's, as it does for D1.
+- **Versions.** Before deploying either Worker, and before an app's D1 migrations, so a refused pair changes nothing,
+  the deploy checks the pair it would leave running, the new one with the other's version actually in production (every
+  version of the Worker's latest deployment, read from Cloudflare), and refuses a pair that doesn't match. Before the
+  engine, every app version in production must call an API version the new engine serves (an app version from before its
+  engine calls none); before the app, the engine in production must serve the one the app calls, and with no engine in
+  production the app isn't deployed. So the check holds after a failed or held-back app deploy, several releases later,
+  and in a rollback too, and a breaking change ships in steps: an engine that serves the old and new versions, then the
+  app, then an engine that drops the old one. A `wrangler rollback` by hand checks nothing: the runbook says to roll
+  back with the Deploy workflow. The engine's Durable Object migrations are forward-only: `check-deploy.mjs` refuses
+  going back to a release whose engine has other migrations than the latest's, as it does for D1.
 - **Images.** The engine's container image is tagged with a hash of its inputs (`inputs-<sha-256>` of the Dockerfile,
   its build variables and the files of the build context it copies), and the release job (`check-deploy.mjs`, which
   already reads the workflow runs, with no credential) finds the last release whose deploy of the app succeeded, from
@@ -1029,23 +1034,40 @@ support, which doesn't name the operator, linking to the organization's settings
 Once an hour, the first five-minute tick of the hour that claims the run in `super_jobs` (a run that failed or read
 only part of the account, or one unfinished after 15 minutes, is claimed again by the next tick) reads the Cloudflare
 account with `SUPER_CLOUDFLARE_API_TOKEN`, a read-only token with
-**Workers Scripts: Read** and **Account Analytics: Read** only, on the account the platform deploys to
-(`SUPER_CLOUDFLARE_ACCOUNT_ID`, which the deploy sets from its own `CLOUDFLARE_ACCOUNT_ID`). It never has a D1
-permission: Cloudflare's D1 query API takes a read-only D1 token, so one would let the console read every app's
+**Workers Scripts: Read**, **Account Analytics: Read** and **Containers: Read** only, on the account the platform
+deploys to (`SUPER_CLOUDFLARE_ACCOUNT_ID`, which the deploy sets from its own `CLOUDFLARE_ACCOUNT_ID`). It never has a
+D1 permission: Cloudflare's D1 query API takes a read-only D1 token, so one would let the console read every app's
 database. Nor an R2 one: Workers R2 Storage: Read reads every object in an app engine's buckets (§8.7). So:
 
 - the Worker scripts named `insulin-apps-*`, and from each one's settings the D1 database it binds (named after the
-  Worker, as the deploy names it);
+  Worker, as the deploy names it) and, for an engine Worker (`insulin-apps-<app>-engine`), its Durable Object
+  namespaces;
 - from the GraphQL Analytics API, each Worker's requests, errors and CPU time (median and 99th percentile) for the
   last 24 hours, and its requests and errors since the month began; each database's size, and its rows read and
-  written yesterday and this month (D1's analytics count by UTC day, so a whole day is the shortest window).
+  written yesterday and this month (D1's analytics count by UTC day, so a whole day is the shortest window);
+- when there is an engine Worker: from the Containers API, the account's container applications with the instances
+  each has running or starting, an engine's being those of its Durable Object namespaces (or named after it, as
+  Wrangler names them); and from the GraphQL Analytics API, as Cloudflare documents the datasets, the container
+  applications' vCPU, memory and disk time this month (`containersUsageAdaptiveGroups`), the `insulin-apps-*` R2
+  buckets' storage over the last day and their Class A and Class B operations this month (`r2StorageAdaptiveGroups`,
+  `r2OperationsAdaptiveGroups`; deleting is free and counts in neither), and the account's Durable Object requests
+  this month (`durableObjectsInvocationsAdaptiveGroups`). The page lists each engine Worker with its container
+  instances, container time and buckets.
+
+Two figures the plan bills aren't read, because Cloudflare documents no source for them: Durable Objects' duration
+(GB-s; the documented fields are requests, CPU time and storage) and Workers AI's neurons (no GraphQL dataset is
+documented). They are unknown, never guessed, and the page says so. Nor does any API list container snapshots: their
+count comes from the app's usage report (§8.6).
 
 It stores a snapshot (one an hour, the latest try; kept 90 days) even when a part fails, naming the part: figures
 that weren't read are unknown, never zero, so they make no meter (a D1 meter needs every database's figure: a total
-that leaves one out would understate), and the overview says part of the read failed. Requests go to `api.cloudflare.com`
+that leaves one out would understate), and the overview says part of the read failed. The engines' parts are named
+`containers`, `r2`, `durable_objects` and `container_usage`. Requests go to `api.cloudflare.com`
 only, follow no redirect and time out after 20 seconds; the token is never logged. The console compares the month's
 figures with what the Workers Paid plan includes (10 million requests, 25 billion D1 rows read and 50 million written a
-month, 5 GB of D1 storage) and the largest database with D1's hard limit of 10 GB, projects the month at the current
+month, 5 GB of D1 storage; 1 million Durable Object requests; 375 vCPU-minutes, 25 GiB-hours of memory and 200 GB-hours
+of disk for Containers; 10 GB of R2 storage, 1 million Class A and 10 million Class B operations) and the largest
+database with D1's hard limit of 10 GB, projects the month at the current
 pace (from an hour into the month: before that there's too little to go on), and puts anything past 80%, or heading
 past a limit, on the watch list. Requests count the gateway's alone:
 every request from outside reaches it first, and its calls to the apps go over service bindings, which Cloudflare
@@ -1053,15 +1075,7 @@ doesn't bill as requests. The allowances are the account's, so the meters assume
 alone. The figures are in `gateway/src/super/cloudflare.ts` (`PLAN`); without a token the page says how to add one.
 The page also lists everything else the platform uses, from the gateway's configuration: its custom domains, each
 app's Worker and binding, the Email Service (with the last 48 hours' messages), the rate limiters, the docs' static
-assets and the cron triggers.
-
-**Not built yet: what app engines hold.** An engine Worker (§8.7) is read like any `insulin-apps-*` Worker, its
-requests, errors and CPU time, and nothing of its containers, Durable Objects, R2 buckets or Workers AI use. Accepted
-for when it is built: the token gets a read-only Containers permission, and still never an R2 one; the page lists
-each engine Worker with its container instances, and its R2 storage and operations from the GraphQL Analytics API;
-and the meters and the watch list gain Durable Object requests and duration, Containers' vCPU, memory and disk time,
-R2 storage and operations, and Workers AI neurons. Cloudflare has no API that lists container snapshots, so their
-count will come from the app's usage report.
+assets and the cron triggers, and each engine Worker the latest snapshot found.
 
 ### 11.6 Audit log
 

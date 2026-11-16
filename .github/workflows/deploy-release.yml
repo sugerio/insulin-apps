@@ -12,6 +12,12 @@ name: Deploy release
 # an app it doesn't have, and going back past a migration of anything it deploys, which needs the database restored;
 # and it deploys only what passed its latest check at or before the release (for a release, the rest is held back).
 #
+# An app with an engine (.github/hosting/DESIGN.md §12.1) has its engine built and bundled in the same build job, and
+# its container image built there only when check-deploy.mjs says the image changed (its tag, a hash of its inputs,
+# differs from the last release that deployed the app; a deploy by hand always builds it). The image goes to the
+# production job as an artifact of this run, never through a cache. The production job pushes it only when the
+# registry lacks its tag, deploys the engine by the digest the tag resolves to, then the app.
+#
 # "Re-run failed jobs" would reuse an earlier attempt's check, so the production jobs refuse it: run Deploy by hand.
 on:
   workflow_call:
@@ -49,6 +55,8 @@ jobs:
       commit: ${{ steps.check.outputs.commit }}
       apps: ${{ steps.check.outputs.apps }}
       gateway: ${{ steps.check.outputs.gateway }}
+      # The apps whose engine image this run builds.
+      images: ${{ steps.check.outputs.images }}
       attempt: ${{ github.run_attempt }}
     steps:
       # main's history and tags; the release is read from its tag.
@@ -81,7 +89,8 @@ jobs:
     needs: release
     if: needs.release.outputs.apps != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Building an engine image (its dependencies and models) takes far longer than an app.
+    timeout-minutes: ${{ contains(fromJSON(needs.release.outputs.images), matrix.app) && 120 || 30 }}
     strategy:
       fail-fast: false
       matrix:
@@ -107,25 +116,54 @@ jobs:
         env:
           NODE_ENV: production
           NITRO_PRESET: cloudflare_module
+      - name: Build the engine
+        id: engine
+        working-directory: .
+        env:
+          APP: ${{ matrix.app }}
+          IMAGE: ${{ contains(fromJSON(needs.release.outputs.images), matrix.app) }}
+        # Its exact lockfile without scripts, its build if any, its Worker bundled into <engine>/.output, and its image
+        # saved for the deploy when this release needs it.
+        run: |
+          engine=$(node .github/scripts/list-apps.mjs --engine "$APP")
+          echo "dir=$engine" >> "$GITHUB_OUTPUT"
+          [ -n "$engine" ] || exit 0
+          args=(--build-engine --only "$APP")
+          if [ "$IMAGE" = true ]; then args+=(--engine-image "$RUNNER_TEMP/$APP-engine-image.tar"); fi
+          node .github/scripts/deploy-apps.mjs "${args[@]}"
       - name: Insulin compatibility (build output)
         working-directory: .
         run: node .github/scripts/check-insulin-app.mjs "${{ matrix.app }}" --built
       - name: Pack build
         working-directory: .
-        run: tar -czf "$RUNNER_TEMP/${{ matrix.app }}-build.tgz" "${{ matrix.app }}/.output"
+        env:
+          APP: ${{ matrix.app }}
+          ENGINE: ${{ steps.engine.outputs.dir }}
+        run: tar -czf "$RUNNER_TEMP/$APP-build.tgz" "$APP/.output" ${ENGINE:+"$ENGINE/.output"}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.app }}-build
           path: ${{ runner.temp }}/${{ matrix.app }}-build.tgz
           if-no-files-found: error
           retention-days: 3
+      - name: Keep the engine image for the deploy
+        if: contains(fromJSON(needs.release.outputs.images), matrix.app)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.app }}-engine-image
+          path: ${{ runner.temp }}/${{ matrix.app }}-engine-image.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 1
 
   deploy:
-    name: Deploy ${{ matrix.app }}
+    # Named after the app and the version: check-deploy.mjs finds the last release that deployed an app by this name.
+    name: Deploy ${{ matrix.app }} ${{ inputs.version }}
     needs: [release, build]
     if: needs.release.outputs.apps != '[]'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Pushing an engine image can take long; the registry credential (deploy-apps.mjs) lasts 240 minutes, longer.
+    timeout-minutes: ${{ contains(fromJSON(needs.release.outputs.images), matrix.app) && 180 || 20 }}
     environment: production
     strategy:
       fail-fast: false
@@ -150,13 +188,23 @@ jobs:
         with:
           name: ${{ matrix.app }}-build
           path: ${{ runner.temp }}
+      - name: Download the engine image
+        if: contains(fromJSON(needs.release.outputs.images), matrix.app)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ matrix.app }}-engine-image
+          path: ${{ runner.temp }}
       - name: Unpack build
+        env:
+          APP: ${{ matrix.app }}
+        # The archive may hold the app's .output and, for an app with an engine, the engine's .output: nothing else.
         run: |
           set -o pipefail
-          archive="$RUNNER_TEMP/${{ matrix.app }}-build.tgz"
-          members="$RUNNER_TEMP/${{ matrix.app }}-build.members"
+          archive="$RUNNER_TEMP/$APP-build.tgz"
+          members="$RUNNER_TEMP/$APP-build.members"
+          engine=$(node .github/scripts/list-apps.mjs --engine "$APP")
           tar --list --gzip --file "$archive" --quoting-style=literal | tee "$members"
-          node .github/scripts/check-build-archive.mjs "$members" "${{ matrix.app }}/.output"
+          node .github/scripts/check-build-archive.mjs "$members" "$APP/.output" ${engine:+"$engine/.output"}
           if ! tar --list --verbose --gzip --file "$archive" | awk 'substr($1, 1, 1) != "-" && substr($1, 1, 1) != "d" { exit 1 }'; then
             echo "::error::Build archive contains a link or special file."
             exit 1
@@ -165,13 +213,21 @@ jobs:
       - name: Install deployment tooling
         run: npm ci --prefix .github/hosting/gateway --ignore-scripts --no-audit --no-fund
       - name: Deploy app
-        run: node .github/scripts/deploy-apps.mjs --skip-build --only "${{ matrix.app }}"
+        # With the engine's image when this run built it: the deploy pushes it only if the registry lacks its tag.
+        run: |
+          args=(--skip-build --only "$APP")
+          image="$RUNNER_TEMP/$APP-engine-image.tar"
+          if [ -f "$image" ]; then args+=(--engine-image "$image"); fi
+          node .github/scripts/deploy-apps.mjs "${args[@]}"
         env:
+          APP: ${{ matrix.app }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_COMMIT: ${{ needs.release.outputs.commit }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulinapps.com' }}
+          # The address an app's limit messages name (SUGER_SUPPORT_EMAIL). Optional.
+          SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}
           # Optional: derives the app's SUGER_APP_TOKEN for the gateway's integration proxy and mail relay.
           GATEWAY_SECRET_KEY: ${{ secrets.GATEWAY_SECRET_KEY }}
           # The environment's secrets and variables, from which the deploy picks only the names the app declares in
@@ -210,6 +266,8 @@ jobs:
       - name: Deploy gateway
         run: node .github/scripts/deploy-apps.mjs --gateway-only
         env:
+          # The apps this run deployed, whose limit catalogs the gateway's D1 gets (an app held back keeps its own).
+          DEPLOYED_APPS: ${{ needs.release.outputs.apps }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_COMMIT: ${{ needs.release.outputs.commit }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

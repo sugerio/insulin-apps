@@ -68,7 +68,9 @@ export async function listApps(root = repositoryRoot) {
     const scheduled = readScheduled(entry.name, manifest.insulin?.scheduled, publicPaths)
     const secrets = readSecretNames(entry.name, manifest.insulin?.secrets)
     const navigation = readNavigation(entry.name, manifest.insulin?.navigation)
-    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, navigation, secrets })
+    const { engine, engineApi } = readEngine(entry.name, manifest.insulin?.engine, manifest.insulin?.engineApi)
+    const limits = readLimits(entry.name, manifest.insulin?.limits)
+    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, navigation, secrets, engine, engineApi, limits })
   }
 
   checkSecretNamespaces(apps)
@@ -288,11 +290,76 @@ export function readNavigation(app, raw) {
 }
 
 /**
- * An app's navigation as the gateway gets it in SITE_APPS: level 1 without children. The gateway draws only an app's
- * level 1 (DESIGN.md §3.2), and a Worker variable is limited to 5 KB, which SITE_APPS passed with the children.
+ * An app's navigation as the gateway gets it in SITE_APPS: level 1 without children, and without the fields that hold
+ * their defaults (no group, role VIEWER, maxRole ADMIN), which the gateway fills in again. The gateway draws only an
+ * app's level 1 (DESIGN.md §3.2), and a Worker variable is limited to 5 KB, which SITE_APPS passed with the children.
  */
 export function gatewayNavigation(navigation) {
-  return navigation.map(({ children: _children, ...item }) => item)
+  return navigation.map(({ children: _children, group, role, maxRole, ...item }) => ({
+    ...item,
+    ...(group !== null ? { group } : {}),
+    ...(role !== 'VIEWER' ? { role } : {}),
+    ...(maxRole !== 'ADMIN' ? { maxRole } : {}),
+  }))
+}
+
+// The app's own directories, which an engine's can't be or sit under: the app's code, its assets and docs, and what
+// builds and tools write.
+const ENGINE_RESERVED_DIRECTORIES = new Set(['src', 'public', 'docs', 'node_modules', '.output', '.nitro', '.wrangler', 'dist', '.git', '.suger', '.tanstack'])
+const ENGINE_SEGMENT = /^[a-z0-9][a-z0-9_-]{0,39}$/
+
+/**
+ * An app's engine (DESIGN.md §12.1): `insulin.engine`, a directory inside the app that holds a second Worker of its
+ * own (`"engine/"`), and `insulin.engineApi`, the engine API version the app calls (a positive integer, required with
+ * an engine and refused without one). The directory comes back without its trailing slash, or null without an engine.
+ */
+export function readEngine(app, raw, rawApi) {
+  const at = `App ${JSON.stringify(app)}: insulin`
+  if (raw === undefined || raw === null) {
+    if (rawApi !== undefined && rawApi !== null) throw new Error(`${at}.engineApi needs insulin.engine`)
+    return { engine: null, engineApi: null }
+  }
+  const segments = typeof raw === 'string' ? raw.replace(/\/$/, '').split('/') : []
+  if (typeof raw !== 'string' || raw.length > 100 || !segments.every((segment) => ENGINE_SEGMENT.test(segment))) {
+    throw new Error(`${at}.engine must be a directory inside the app, such as "engine/" (lower-case names, no "..", no leading /)`)
+  }
+  if (ENGINE_RESERVED_DIRECTORIES.has(segments[0])) throw new Error(`${at}.engine must not be in the app's ${segments[0]}/`)
+  if (!Number.isSafeInteger(rawApi) || rawApi < 1) throw new Error(`${at}.engineApi must be a positive integer, the engine API version the app calls`)
+  return { engine: segments.join('/'), engineApi: rawApi }
+}
+
+// A limit's key follows the rule for usage metric names (DESIGN.md §8.6), so usage can be reported under it.
+export const LIMIT_KEY = /^[a-z][a-z0-9_]{0,39}$/
+export const LIMIT_UNITS = Object.freeze(['count', 'bytes', 'hours', 'days'])
+/** At most this many limits an app. */
+export const LIMITS_MAX = 20
+const LIMIT_FIELDS = new Set(['key', 'label', 'unit', 'default'])
+const LIMIT_DEFAULT_MAX = 10 ** 15
+
+/**
+ * An app's limit catalog, `insulin.limits` in its package.json (DESIGN.md §12.2): at most 20 entries of { key, label,
+ * unit, default }, keys unique and named like usage metrics, `unit` one of count, bytes, hours or days, and `default`
+ * a whole number from 0. It doesn't go to the gateway in SITE_APPS (5 KB): the deploy writes it to the gateway's D1.
+ */
+export function readLimits(app, raw) {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > LIMITS_MAX) throw new Error(`App ${JSON.stringify(app)}: insulin.limits must be an array of at most ${LIMITS_MAX}`)
+  const keys = new Set()
+  return raw.map((entry, index) => {
+    const where = `App ${JSON.stringify(app)}: insulin.limits[${index}]`
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${where} must be an object`)
+    for (const field of Object.keys(entry)) {
+      if (!LIMIT_FIELDS.has(field)) throw new Error(`${where}.${field} is not a limit field (key, label, unit, default)`)
+    }
+    const { key, label, unit, default: value } = entry
+    if (typeof key !== 'string' || !LIMIT_KEY.test(key)) throw new Error(`${where}.key must match ${LIMIT_KEY.source}`)
+    if (keys.has(key)) throw new Error(`${where}.key ${JSON.stringify(key)} is listed twice`)
+    keys.add(key)
+    if (typeof label !== 'string' || !label.trim() || label.trim().length > 80) throw new Error(`${where}.label must be 1-80 characters`)
+    if (!LIMIT_UNITS.includes(unit)) throw new Error(`${where}.unit must be ${LIMIT_UNITS.join(', ')}`)
+    if (!Number.isSafeInteger(value) || value < 0 || value > LIMIT_DEFAULT_MAX) throw new Error(`${where}.default must be a whole number from 0 to 10^15`)
+    return { key, label: label.trim(), unit, default: value }
+  })
 }
 
 /** The prefix an app's secret names must carry: its name upper-cased, with `-` as `_`. */
@@ -331,12 +398,31 @@ export function validateAppName(name) {
   if (RESERVED_APP_NAMES.has(name)) {
     throw new Error(`App directory name ${JSON.stringify(name)} is reserved for the hosting gateway`)
   }
+  // An app's engine Worker is insulin-apps-<app>-engine (DESIGN.md §12.1): an app named so would collide with one.
+  if (name.endsWith('-engine')) {
+    throw new Error(`App directory name ${JSON.stringify(name)} ends in -engine, which names another app's engine Worker`)
+  }
 }
 
 async function main(args) {
-  if (args.some((arg) => arg !== '--json')) {
-    throw new Error('usage: node .github/scripts/list-apps.mjs [--json]')
+  const usage = 'usage: node .github/scripts/list-apps.mjs [--json | --engine <app>]'
+  // --engine <app>: the app's engine directory, relative to the repository, or nothing when it has none (for workflows).
+  // Only that app's manifest is read, so another app's mistake never stops its pipeline.
+  if (args[0] === '--engine') {
+    if (args.length !== 2) throw new Error(usage)
+    const name = args[1]
+    validateAppName(name)
+    let manifest
+    try {
+      manifest = JSON.parse(await readFile(join(repositoryRoot, name, 'package.json'), 'utf8'))
+    } catch {
+      throw new Error(`App ${JSON.stringify(name)} has no readable package.json`)
+    }
+    const { engine } = readEngine(name, manifest.insulin?.engine, manifest.insulin?.engineApi)
+    process.stdout.write(engine ? `${name}/${engine}\n` : '\n')
+    return
   }
+  if (args.some((arg) => arg !== '--json')) throw new Error(usage)
   const apps = await listApps()
   const output = args.includes('--json') ? apps.map(({ name }) => name) : apps
   process.stdout.write(`${JSON.stringify(output)}\n`)

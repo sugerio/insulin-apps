@@ -11,7 +11,7 @@ over a service binding with the console identity headers. The apps need no hosti
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
 | `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*`, the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) and their hourly usage reports `/__insulin/metrics` (DESIGN.md §8.6) |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*`, the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2), their hourly usage reports `/__insulin/metrics` (DESIGN.md §8.6), their limits `/__insulin/limits` (DESIGN.md §12.2), and their members `/__insulin/members`, `/__insulin/members/status` and `/__insulin/member-events` (DESIGN.md §12.3) |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
 app) is `.github/hosting/README.md`. This file is for developers.
@@ -44,7 +44,7 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
 | `src/scheduled.ts` | the crons: the apps' five-minute tick to their `insulin.scheduled` path, and which cron runs the daily cleanup |
 | `src/metrics/report.ts`, `src/db/metrics.ts` | the apps' hourly usage reports (`POST /__insulin/metrics`, DESIGN.md §8.6): checking them, storing them hourly and daily, and reading them back for the console |
-| `src/super/` | the operator console (DESIGN.md §11): its routes and actions (`routes.ts`), its Google Workspace SAML sign-in and session (`auth.ts`), its queries, standings and audit log (`db.ts`), the Cloudflare snapshot (`cloudflare.ts`) and the hourly job that takes it (`jobs.ts`); its pages are in `src/pages/super/` |
+| `src/super/` | the operator console (DESIGN.md §11): its routes and actions (`routes.ts`), its Google Workspace SAML sign-in and session (`auth.ts`), its queries, standings and audit log (`db.ts`), the Cloudflare snapshot (`cloudflare.ts`) and the hourly job that takes it (`jobs.ts`), and what admins type into a limit's form (`limits.ts`); its pages are in `src/pages/super/` (`limits.tsx`: an app's limits page and each organization's Limits section) |
 | `src/oauth/` | the authorization server: metadata, registration, authorize and consent, token, revoke; token formats and lifetimes, `resolveBearer`, and calls to an app with a token (`app-api.ts`) |
 | `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
 | `src/mcp/docs.ts` | the docs' MCP server at `/docs/mcp` on the apex: public, no sign-in, tools `search_docs`, `read_doc`, `list_docs` |
@@ -52,7 +52,10 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/integrations/` | an app's integrations page (`settings.ts`, stored credentials), its API access page (`api-clients.ts`, OAuth clients: owners and admins manage them, rotation with a 24-hour overlap) and the integration proxy (`proxy.ts`) |
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, disconnecting them, and links to each app's Connect AI |
 | `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
-| `src/reserved.ts` | `/__insulin/me` (who is signed in, their organizations, the apex's origin and, in an app, its settings pages), `switch-org`, `logout`, `nav` (the navigation's collapse toggles), and the local captured-mail page |
+| `src/reserved.ts` | `/__insulin/me` (who is signed in, their organizations, the apex's origin and, in an app, its settings pages), `switch-org`, `logout`, `nav` (the navigation's collapse toggles), and the local captured-mail page; and routes the apps' own endpoints (mail, metrics, limits, members) |
+| `src/http/app-caller.ts` | the apps' endpoints of DESIGN.md §12.2 and §12.3: apex only, the app's `SUGER_APP_TOKEN` only (the app is the token's), 503 without `GATEWAY_SECRET_KEY`, and their cursors |
+| `src/limits/endpoint.ts`, `src/db/limits.ts`, `scripts/limits-catalog.mjs` | app limits (DESIGN.md §12.2): `GET /__insulin/limits`; the catalog, the admins' defaults and each organization's overrides with their change numbers, and the watch list's query; the SQL the deploy and the local run use to write each app's catalog to D1 |
+| `src/members/` | what apps learn about their organizations' people (DESIGN.md §12.3): the signed `x-suger-member-lookup` header (`lookup-token.ts`), where each app is used (`app-use.ts`, one D1 write per app, organization and isolate), member events in one app's terms (`events.ts`), and the lookup, member status and member events endpoints (`endpoints.ts`); their queries are in `src/db/members.ts`, and the events are written by the triggers of migration 0012 |
 | `src/navigation.ts` | the two-level navigation of the signed-in pages as data (DESIGN.md §3.2): level 1 and 2 for the organization's pages, the account pages and an app's settings pages (its manifest, by the person's role), the breadcrumb, the `insulin_nav` cookie and `/__insulin/nav`; `src/nav-icons.ts` the icon names an app's manifest may use (list-apps.mjs's) and each app's own icon (also the docs') |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode), the messages, and the apps' mail relay (`relay.ts`) |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
@@ -95,7 +98,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `EMAIL_FROM` | var | `Name <address>` or a bare address (the name then is "Insulin Apps") |
 | `SUPPORT_EMAIL` | var | optional contact on the landing, privacy and terms pages; empty points to the repository's issues |
 | `ORG_REQUEST_EMAIL` | var | optional; Insulin Apps support's address, which gets requests for more organizations (DESIGN.md §3.1) with Reply-To the requester. Empty: the page at the limit shows the contact above instead. An unusable value is ignored and logged by name |
-| `GATEWAY_SECRET_KEY` | secret | optional, base64 of 32 random bytes; seals stored secrets (AES-256-GCM, a key per purpose) and derives per-app secrets. A value that isn't 32 bytes fails closed |
+| `GATEWAY_SECRET_KEY` | secret | optional, base64 of 32 random bytes; seals stored secrets (AES-256-GCM, a key per purpose), derives per-app secrets and signs the member lookup header. Without it the apps' endpoints (mail, metrics, limits, members) answer 503 and browser requests carry no `x-suger-member-lookup`. A value that isn't 32 bytes fails closed |
 | `SITE_ENV` | var | **local development and tests only**: `test` captures mail and relaxes cookies on `http://*.localhost`. Any non-empty value is a configuration error unless it is `test` and `SITE_DOMAIN` ends in `.localhost` |
 | `SUPER_SAML_IDP_ENTITY_ID`, `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_CERT`, `SUPER_GOOGLE_GROUP` | var | optional; the operator console's Google Workspace SAML app (entity id, sign-in URL, signing certificate as PEM) and the group whose members may sign in, by its name as Google sends it (DESIGN.md §11.1). All four, or the console is off: set in part or unusable, it stays off and the names are logged, and the rest of the site is unaffected |
 | `SUPER_ADMIN_EMAILS` | var | optional; the console's admins, addresses separated by commas or whitespace; an entry that isn't an address is ignored and logged |
@@ -104,7 +107,12 @@ The deploy pipeline generates the production wrangler config from this list; kee
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
 `SUGER_ACCESS_MODE=console`, plus `x-suger-access-via` (`browser`, `mcp` or `api`) and, for an app with a permission
-catalog, `x-suger-app-permissions` (space-separated). A request on a public path carries only `x-suger-app-id` and
+catalog, `x-suger-app-permissions` (space-separated). A person's requests (`browser` and `mcp`) also carry
+`x-suger-org-role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for specific apps; DESIGN.md §12.3), and browser
+requests, when `GATEWAY_SECRET_KEY` is set, `x-suger-member-lookup`: `v1.<organization>.<person>.<expiry>.<signature>`,
+the expiry five minutes ahead in epoch seconds and the signature an HMAC-SHA256 (base64url) over
+`v1|<app>|<organization>|<person>|<expiry>` with a key derived from `GATEWAY_SECRET_KEY` (HKDF-SHA256, info
+`insulin-apps:member-lookup`). A request on a public path carries only `x-suger-app-id` and
 `x-suger-access-via: public`, and the five-minute tick only `x-suger-app-id` and `x-suger-access-via: schedule`. The
 app role is `ADMIN`, `EDITOR` or `VIEWER`: organization owners and admins are admins in every app, and a custom role is
 sent as the least built-in role that has its permissions (DESIGN.md §2.4). Every incoming `x-suger-*` header and the gateway's cookies are removed first. User, organization and
@@ -393,14 +401,38 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   organizations go as one JSON parameter that `json_each` unpacks, so a report of 500 never meets D1's limits on
   statements per invocation or parameters per statement, and only organizations the gateway knows are stored. Each
   report also prunes up to 1,000 of its app's expired rows per table, more than it can add.
+- **App limits** (DESIGN.md §12.2). The deploy writes each app's catalog (`insulin.limits`) to `app_limit_catalog` with
+  `scripts/limits-catalog.mjs`, which replaces the app's whole catalog. A console admin's default (`app_limit_defaults`)
+  or an organization's override (`org_app_limits`, a number or NULL for unlimited, until an optional time) is written in
+  one batch with its audit record, conditional on being a change, and stamped with the next number of
+  `app_limit_sequence`; `org_app_limit_changes` keeps each organization's latest number, removals included, so
+  `GET /__insulin/limits?since=` lists the organizations changed after the cursor with all their current overrides, 500
+  a page. An organization's first use of an app moves its number on (a trigger on `app_orgs`), so overrides set before
+  reach the app. The watch list compares each app's latest usage report with the limit in force.
+- **Where each app is used** (`app_orgs`): the first request the gateway forwards to an app for an organization (a
+  page, an AI agent's tool call, an API client) writes a row before the request goes on, once per pair and isolate. The
+  limits, members and member events an app reads are only those of its organizations; deleting an organization
+  forgets its rows.
+- **Member events** (DESIGN.md §12.3) are written by triggers (migration 0012), so every path that changes memberships,
+  app grants, custom roles' permissions, API clients or organizations records them in its own transaction, however it
+  is made, with no code of its own. An event is stored once, for every app (`*`) or one, with the roles after the change
+  and, for a move between an organization role and specific apps, the apps before (a `BEFORE UPDATE` trigger, since the
+  move drops the grants) or after (the grants of the same batch join the role's event by its stamp, so an app the person
+  keeps sees one `role_changed`, not a departure and a return). `src/members/events.ts` turns it into each app's terms
+  when read. Changes the organization's deletion cascades into say nothing; one `org_deleted` per app it used says it
+  all. Housekeeping deletes events past 90 days, oldest first, and keeps the highest id it deleted
+  (`member_events_pruned`): a cursor below it gets 410.
+- **The member lookup** takes the organization and person from the signed header, never from the app, checks the
+  signature against the app the token names, then that the person can still use the app (`findAccessRow`), and limits
+  each person on `RL_APP`. Member status reads no standing: a suspended account or organization is still a member.
 - **The Cloudflare snapshot** (DESIGN.md §11.5) is the five-minute tick's: the first tick of each hour to claim the
   run in `super_jobs` reads the account (`api.cloudflare.com` only, no redirects, a 20-second timeout, the token never
   logged), keeps whatever parts it could read and names the rest. It finds each Worker's D1 database in the Worker's
   settings and the database's size in the analytics, so its token needs no D1 permission.
 - **Logs** carry event names, ids, error class names and identifier-like codes; never exception messages.
 - **Retention.** Expired sessions, used or expired links, mail-log rows older than two days, apps' hourly usage
-  reports past three days and daily ones past 400, and the console's expired sessions and sign-ins, job records past
-  a week and Cloudflare snapshots past 90 days are deleted in batches of at most 200 per table after each POST
+  reports past three days and daily ones past 400, member events past 90 days, and the console's expired sessions and
+  sign-ins, job records past a week and Cloudflare snapshots past 90 days are deleted in batches of at most 200 per table after each POST
   (`src/housekeeping.ts`); the console's audit log is kept. The daily cron (`17 3 * * *`) runs the same
   cleanup in bigger batches.
 

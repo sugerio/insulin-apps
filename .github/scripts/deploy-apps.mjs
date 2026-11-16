@@ -4,6 +4,7 @@ import { createHmac, hkdfSync } from 'node:crypto'
 import {
   appendFileSync,
   chmodSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -16,6 +17,27 @@ import {
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import {
+  ENGINE_API_VAR,
+  ENGINE_BINDING,
+  ENGINE_BUNDLE,
+  ENGINE_OUTPUT,
+  ENGINE_SERVES_VAR,
+  REGISTRY,
+  deployedEngineConfig,
+  engineBucketName,
+  engineConfigProblems,
+  engineImageRepository,
+  engineImageSources,
+  engineWorkerName,
+  formatServes,
+  imageInputs,
+  imageTag,
+  parseServes,
+  readEngineConfig,
+  readServes,
+  servesApi,
+} from './engine.mjs'
 import { gatewayNavigation, listApps } from './list-apps.mjs'
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url))
@@ -33,6 +55,12 @@ const SECRET_SETTINGS = [
   ...ENVIRONMENT_JSON_SETTINGS,
 ]
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4'
+// How long the registry credential for pushing an engine's image lasts: longer than the deploy job may run, so a large
+// dependency layer finishes uploading (Wrangler's own credential lasts 15 minutes). deploy-release.yml's deploy job
+// times out before it.
+export const REGISTRY_CREDENTIAL_MINUTES = 240
+// The gateway's module that writes an app's limit catalog to its D1 (DESIGN.md §12.2).
+const LIMIT_CATALOG_MODULE = join('.github', 'hosting', 'gateway', 'scripts', 'limits-catalog.mjs')
 const APP_CONFIG_KEYS = new Set(['compatibility_date', 'compatibility_flags', 'rules', 'no_bundle', 'assets'])
 const APP_ASSET_KEYS = new Set(['binding', 'html_handling', 'not_found_handling', 'run_worker_first'])
 const APP_RULE_KEYS = new Set(['type', 'globs', 'fallthrough'])
@@ -72,6 +100,9 @@ export function readSettings(environment = process.env, { gateway = true } = {})
     cloudflareAccountId: environment.CLOUDFLARE_ACCOUNT_ID.trim(),
     siteDomain: environment.SITE_DOMAIN?.trim() || 'insulinapps.com',
     gatewaySecretKey,
+    // The contact the landing pages show, and the support address an app's limit messages name (SUGER_SUPPORT_EMAIL,
+    // DESIGN.md §12.2). Optional.
+    supportEmail: environment.SUPPORT_EMAIL?.trim() ?? '',
   }
   if (!gateway) return settings
 
@@ -81,7 +112,6 @@ export function readSettings(environment = process.env, { gateway = true } = {})
     turnstileSiteKey: environment.TURNSTILE_SITE_KEY.trim(),
     turnstileSecretKey: environment.TURNSTILE_SECRET_KEY.trim(),
     emailFrom: environment.EMAIL_FROM.trim(),
-    supportEmail: environment.SUPPORT_EMAIL?.trim() ?? '',
     // Where requests for more organizations go (DESIGN.md §3.1); optional, like SUPPORT_EMAIL.
     orgRequestEmail: environment.ORG_REQUEST_EMAIL?.trim() ?? '',
     // The operator console (DESIGN.md §11): its Google Workspace SAML app, the operators' group and the admins, all
@@ -144,8 +174,51 @@ export function appSecretValues(app, environment) {
   return { values, missing }
 }
 
-export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null, mailUrl = null, metricsUrl = null }) {
+/**
+ * The gateway's endpoints an app calls, by the variable that holds each URL (DESIGN.md §6, §8.2, §8.6, §12.2, §12.3),
+ * all on the apex and sent over the SUGER_GATEWAY binding with SUGER_APP_TOKEN. `origin` is
+ * http://insulinapps.localhost:<port> in a local run.
+ */
+export function gatewayUrls(origin) {
+  return {
+    SUGER_INTEGRATIONS_URL: `${origin}/__insulin/integrations`,
+    SUGER_MAIL_URL: `${origin}/__insulin/mail`,
+    // Where the app reports its usage every hour (§8.6).
+    SUGER_METRICS_URL: `${origin}/__insulin/metrics`,
+    // Its organizations' limits, set in the operator console (§12.2).
+    SUGER_LIMITS_URL: `${origin}/__insulin/limits`,
+    // The member lookup, member status and member events of §12.3.
+    SUGER_MEMBERS_URL: `${origin}/__insulin/members`,
+    SUGER_MEMBER_STATUS_URL: `${origin}/__insulin/members/status`,
+    SUGER_MEMBER_EVENTS_URL: `${origin}/__insulin/member-events`,
+  }
+}
+
+/**
+ * The variables and service bindings the platform gives an app Worker, in production and in a local run alike:
+ * the gateway's URLs with the binding to call them through (when there is an app token to call them with), the
+ * support address, the organization role trusted (the gateway sets x-suger-org-role, §12.3) and, for an app with an
+ * engine, the binding to it and the engine API version it calls, recorded so a later deploy can read it back (§12.1).
+ */
+export function platformAppBindings({ app, gatewayVars = null, supportEmail = '' }) {
+  const vars = {
+    ...(gatewayVars ?? {}),
+    ...(supportEmail ? { SUGER_SUPPORT_EMAIL: supportEmail } : {}),
+    SUGER_TRUST_ORG_ROLE: '1',
+    ...(app.engine ? { [ENGINE_API_VAR]: String(app.engineApi) } : {}),
+  }
+  const services = [
+    // With the gateway's URLs, the binding to call them through: the app keeps the URL (the gateway routes by it) and
+    // sends the request over the binding instead of the internet.
+    ...(gatewayVars ? [{ binding: GATEWAY_BINDING, service: GATEWAY_NAME }] : []),
+    ...(app.engine ? [{ binding: ENGINE_BINDING, service: engineWorkerName(app.name) }] : []),
+  ]
+  return { vars, services }
+}
+
+export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, gatewayVars = null, supportEmail = '' }) {
   const outputDirectory = join(appDirectory, '.output')
+  const platform = platformAppBindings({ app, gatewayVars, supportEmail })
   const { config: generatedConfig, ignoredKeys } = sanitizeAppBaseConfig(baseConfig)
   if (ignoredKeys.length) {
     process.stdout.write(`Ignored generated Wrangler config keys for ${app.name}: ${ignoredKeys.join(', ')}\n`)
@@ -166,16 +239,8 @@ export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {},
         migrations_dir: resolve(appDirectory, 'src', 'app', 'db', 'migrations'),
       },
     ],
-    vars: {
-      SUGER_ACCESS_MODE: 'console',
-      ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}),
-      ...(mailUrl ? { SUGER_MAIL_URL: mailUrl } : {}),
-      // Where the app reports its usage every hour (DESIGN.md §8.6).
-      ...(metricsUrl ? { SUGER_METRICS_URL: metricsUrl } : {}),
-    },
-    // With the gateway's URLs, the binding to call them through: the app keeps the URL (the gateway routes by it) and
-    // sends the request over the binding instead of the internet.
-    ...(integrationsUrl || mailUrl || metricsUrl ? { services: [{ binding: GATEWAY_BINDING, service: GATEWAY_NAME }] } : {}),
+    vars: { SUGER_ACCESS_MODE: 'console', ...platform.vars },
+    ...(platform.services.length ? { services: platform.services } : {}),
     workers_dev: false,
     preview_urls: false,
   }
@@ -258,7 +323,8 @@ export function sanitizeAppBaseConfig(baseConfig) {
 export function buildGatewayConfig({ root, apps, settings, databaseId }) {
   const gatewayDirectory = join(root, '.github', 'hosting', 'gateway')
   // The gateway needs the permissions, public paths, scheduled path and navigation, never the names of an app's secrets.
-  const siteApps = apps.map(({ secrets: _secrets, ...app }) => ({
+  // An app's limit catalog goes to the gateway's D1 instead (writeLimitCatalogs): SITE_APPS holds at most 5 KB.
+  const siteApps = apps.map(({ secrets: _secrets, engine: _engine, engineApi: _engineApi, limits: _limits, ...app }) => ({
     ...app,
     navigation: gatewayNavigation(app.navigation),
     binding: serviceBinding(app.name),
@@ -322,18 +388,24 @@ export async function deployApps({
   dryRun = false,
   skipBuild = false,
   buildOnly = false,
+  buildEngine = false,
   gatewayOnly = false,
+  engineImage,
   only,
   out,
   spawn = spawnSync,
   fetchImpl = globalThis.fetch,
 } = {}) {
   root = resolve(root)
-  if (buildOnly) {
+  if (buildOnly || buildEngine) {
     // The workflow builds in a job that has no deploy settings, so app build scripts never see a secret.
     const { selectedApps } = await findApps(root, only)
-    buildApps(new CommandRunner({ dryRun, spawn, secrets: [] }), root, selectedApps, environment)
-    return { skipped: false, built: selectedApps.map(({ name }) => name) }
+    const runner = new CommandRunner({ dryRun, spawn, secrets: [] })
+    if (buildOnly) buildApps(runner, root, selectedApps, environment)
+    else for (const app of selectedApps.filter(({ engine }) => engine)) buildAppEngine(runner, root, app, environment)
+    // The engine's image, when the release needs it (DESIGN.md §12.1 "Images"): built here, pushed by the deploy.
+    const image = engineImage ? buildEngineImage({ runner, root, app: requireEngineApp(selectedApps, only), archive: resolve(engineImage), environment }) : null
+    return { skipped: false, built: selectedApps.map(({ name }) => name), ...(image ? { image } : {}), commands: runner.plan }
   }
 
   const deployGateway = gatewayOnly || !only
@@ -347,6 +419,10 @@ export async function deployApps({
   const release = releaseArguments(environment)
   const { apps, selectedApps } = await findApps(root, only)
   const appsToDeploy = deployAppWorkers ? selectedApps : []
+  if (engineImage && !(only && appsToDeploy[0]?.engine)) throw new Error('--engine-image needs --only and an app with an engine')
+  // The apps whose limit catalogs the gateway step writes: those this deploy put in production. A deploy of the
+  // gateway alone (deploy-release.yml's gateway job) is told which apps its run deployed.
+  const catalogApps = deployGateway ? (deployAppWorkers ? appsToDeploy : deployedApps(environment, apps)) : []
 
   const outputDirectory = out ? resolve(out) : mkdtempSync(join(tmpdir(), 'insulin-apps-deploy-'))
   if (appsToDeploy.length) mkdirSync(join(outputDirectory, 'apps'), { recursive: true })
@@ -379,6 +455,7 @@ export async function deployApps({
       ...[...appSecrets.values()].flatMap(({ values }) => Object.values(values)),
     ].filter(Boolean),
   })
+  const cloudflare = { fetchImpl, apiToken: settings.cloudflareApiToken, accountId: settings.cloudflareAccountId, siteDomain: settings.siteDomain }
 
   if (!skipBuild) buildApps(runner, root, appsToDeploy, environment)
 
@@ -391,6 +468,7 @@ export async function deployApps({
   }
 
   const baseConfigs = new Map()
+  const engines = new Map()
   for (const app of appsToDeploy) {
     const appDirectory = join(root, app.name)
     const outputExists = existsSync(join(appDirectory, '.output'))
@@ -402,13 +480,23 @@ export async function deployApps({
     if (!dryRun) {
       requirePath(join(appDirectory, 'src', 'app', 'db', 'migrations'), `the ${app.name} migrations directory`)
     }
+    if (app.engine) engines.set(app.name, prepareEngine(root, app, dryRun))
   }
 
+  const gatewayVars = appTokens.size ? gatewayUrls(`https://${settings.siteDomain}`) : null
   for (const app of appsToDeploy) {
     const appDirectory = join(root, app.name)
     const configPath = join(outputDirectory, 'apps', `${app.name}.wrangler.json`)
     const baseConfig = baseConfigs.get(app.name)
     let databaseId
+
+    // An app's engine goes first, so the app never runs against an engine that can't serve it (DESIGN.md §12.1).
+    if (app.engine) {
+      await deployEngine({
+        runner, wrangler, root, app, engine: engines.get(app.name), cloudflare, outputDirectory, release, dryRun,
+        env: childEnvironment, engineImage: engineImage ? resolve(engineImage) : null,
+      })
+    }
 
     if (dryRun) {
       recordDatabasePlan(runner, wrangler, workerName(app.name), root, childEnvironment)
@@ -416,14 +504,12 @@ export async function deployApps({
       databaseId = ensureDatabase(runner, wrangler, workerName(app.name), root, childEnvironment)
     }
 
-    const integrationsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/integrations` : null
-    const mailUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/mail` : null
-    const metricsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/metrics` : null
-    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl, mailUrl, metricsUrl }))
+    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, gatewayVars, supportEmail: settings.supportEmail }))
     runner.run(wrangler, ['d1', 'migrations', 'apply', workerName(app.name), '--remote', '--config', configPath], {
       cwd: root,
       env: childEnvironment,
     })
+    if (app.engine) await requireEngineServes({ runner, cloudflare, app, dryRun })
     const secretValues = {
       ...appSecrets.get(app.name).values,
       ...(appTokens.size ? { SUGER_APP_TOKEN: appTokens.get(app.name) } : {}),
@@ -434,18 +520,12 @@ export async function deployApps({
     } else {
       runner.run(wrangler, ['deploy', '--config', configPath, ...release], { cwd: root, env: childEnvironment })
     }
-    if (dryRun) {
-      runner.record('cloudflare-api', ['remove-and-verify-public-access', workerName(app.name)], {
-        environment: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'SITE_DOMAIN'],
-      })
-    } else {
-      await removeAppPublicAccess({
-        fetchImpl,
-        apiToken: settings.cloudflareApiToken,
-        accountId: settings.cloudflareAccountId,
-        siteDomain: settings.siteDomain,
-        worker: workerName(app.name),
-      })
+    await removePublicAccess(runner, cloudflare, workerName(app.name), dryRun)
+
+    // A deploy of apps alone writes the catalog of the version it just put in production, once the gateway's tables
+    // exist (the first release that adds them writes it in the gateway step, after the gateway's migrations).
+    if (!deployGateway && app.limits.length) {
+      await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: [app], env: childEnvironment, dryRun, onlyIfReady: true })
     }
   }
 
@@ -462,6 +542,10 @@ export async function deployApps({
       cwd: root,
       env: childEnvironment,
     })
+    // What SITE_APPS can't hold (5 KB): the limit catalogs of the apps this deploy put in production (DESIGN.md §12.2).
+    if (catalogApps.length) {
+      await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: catalogApps, env: childEnvironment, dryRun, configPath: gatewayConfigPath })
+    }
 
     // The secrets travel with the deploy itself, so no gateway version ever runs without them.
     const secretValues = {
@@ -490,6 +574,407 @@ export async function deployApps({
   writeSummary(environment.GITHUB_STEP_SUMMARY, settings.siteDomain, deployGateway ? apps : appsToDeploy)
 
   return { skipped: false, apps, selectedApps: appsToDeploy, gateway: deployGateway, outputDirectory, commands: runner.plan }
+}
+
+/** DEPLOYED_APPS, the JSON list of apps a release's run deployed (deploy-release.yml passes check-deploy's), or none. */
+function deployedApps(environment, apps) {
+  const text = environment.DEPLOYED_APPS?.trim()
+  if (!text) return []
+  let names
+  try {
+    names = JSON.parse(text)
+  } catch {
+    throw new Error('DEPLOYED_APPS must be a JSON list of app names')
+  }
+  if (!Array.isArray(names) || names.some((name) => typeof name !== 'string')) throw new Error('DEPLOYED_APPS must be a JSON list of app names')
+  const unknown = names.filter((name) => !apps.some((app) => app.name === name))
+  if (unknown.length) throw new Error(`DEPLOYED_APPS names unknown apps: ${unknown.join(', ')}`)
+  return apps.filter(({ name }) => names.includes(name))
+}
+
+function requireEngineApp(apps, only) {
+  const app = only && apps.length === 1 ? apps[0] : null
+  if (!app?.engine) throw new Error('--engine-image needs --only and an app with an engine')
+  return app
+}
+
+async function removePublicAccess(runner, cloudflare, worker, dryRun) {
+  if (dryRun) {
+    runner.record('cloudflare-api', ['remove-and-verify-public-access', worker], {
+      environment: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'SITE_DOMAIN'],
+    })
+    return
+  }
+  await removeAppPublicAccess({ ...cloudflare, worker })
+}
+
+// --- The engine (DESIGN.md §12.1) ----------------------------------------------------------------------------------
+
+/**
+ * What the deploy needs of an app's engine, read from the release's checkout and checked again, never trusted: its
+ * Wrangler config (engine.mjs's rules), the API versions it serves (which must cover the app's), the bundle the build
+ * job made, and its image's tag.
+ */
+function prepareEngine(root, app, dryRun) {
+  const directory = join(root, app.name, app.engine)
+  const config = readEngineConfig(directory)
+  const problems = engineConfigProblems({ app: app.name, engineDirectory: directory, config })
+  if (problems.length) throw new Error(`${app.name}'s engine: ${problems.join('; ')}`)
+  const serves = readServes(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')))
+  if (!servesApi(serves, app.engineApi)) {
+    throw new Error(`${app.name}'s engine serves engine API ${formatServes(serves)}, but the app calls ${app.engineApi} (insulin.engineApi)`)
+  }
+  if (existsSync(join(directory, ENGINE_OUTPUT))) {
+    verifyOutputTree(join(directory, ENGINE_OUTPUT))
+    requireFile(join(directory, ENGINE_BUNDLE), "the engine's bundled Worker")
+  } else if (!dryRun) {
+    throw new Error(`Missing ${app.name}'s engine build output: ${join(directory, ENGINE_OUTPUT)}`)
+  }
+  const image = engineImageSources(directory, config)
+  return { directory, config, serves, tag: image ? imageTag(directory, imageInputs(image)) : null }
+}
+
+/**
+ * Deploys an app's engine Worker, before the app: refuses an engine that can't serve the app version in production
+ * (the pair it would leave running until the app follows), creates its R2 buckets, pushes its image when the registry
+ * lacks it, writes its deployed config, deploys it as insulin-apps-<app>-engine and removes any public access.
+ */
+async function deployEngine({ runner, wrangler, root, app, engine, cloudflare, outputDirectory, release, dryRun, env, engineImage }) {
+  const worker = engineWorkerName(app.name)
+  if (dryRun) {
+    runner.record('cloudflare-api', ['check-engine-api-in-production', workerName(app.name), `the engine serves ${formatServes(engine.serves)}`], {
+      environment: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'],
+    })
+  } else {
+    await requireAppApiServed({ cloudflare, app, serves: engine.serves })
+  }
+  for (const { binding } of engine.config.r2_buckets ?? []) {
+    const name = engineBucketName(app.name, binding)
+    if (dryRun) runner.record('cloudflare-api', ['ensure-r2-bucket', name], { environment: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] })
+    else if (await ensureBucket({ ...cloudflare, name })) process.stdout.write(`Created R2 bucket ${name}\n`)
+  }
+  const imageReference = engine.tag ? await engineImageReference({ runner, cloudflare, app, tag: engine.tag, archive: engineImage, dryRun, env }) : null
+  const configPath = join(outputDirectory, 'apps', `${app.name}-engine.wrangler.json`)
+  writeJson(configPath, deployedEngineConfig({ app: app.name, engineDirectory: engine.directory, config: engine.config, imageReference, serves: engine.serves }))
+  runner.run(wrangler, ['deploy', '--config', configPath, ...release], { cwd: root, env })
+  await removePublicAccess(runner, cloudflare, worker, dryRun)
+}
+
+/** The engine about to be deployed must serve the engine API of every version of the app in production. */
+async function requireAppApiServed({ cloudflare, app, serves }) {
+  const running = await productionVariable({ ...cloudflare, worker: workerName(app.name), name: ENGINE_API_VAR })
+  for (const value of running ?? []) {
+    // An app version from before its engine never calls one.
+    if (value === null) continue
+    if (!/^\d+$/.test(value) || !servesApi(serves, Number(value))) {
+      throw new Error(
+        `The new ${app.name} engine serves engine API ${formatServes(serves)}, but the ${app.name} version in production calls ${value}. ` +
+          'Deploy an engine that serves both first: a breaking change ships in steps (.github/hosting/DESIGN.md §12.1).',
+      )
+    }
+  }
+}
+
+/** Before the app goes out: the engine in production, now, must serve the engine API this app calls. */
+async function requireEngineServes({ runner, cloudflare, app, dryRun }) {
+  const worker = engineWorkerName(app.name)
+  if (dryRun) {
+    runner.record('cloudflare-api', ['check-engine-in-production', worker, `serves ${app.engineApi}`], { environment: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] })
+    return
+  }
+  const running = await productionVariable({ ...cloudflare, worker, name: ENGINE_SERVES_VAR })
+  if (!running?.length) throw new Error(`${worker} isn't in production, so ${app.name}, which calls it, isn't deployed`)
+  for (const value of running) {
+    const serves = parseServes(value)
+    if (!serves || !servesApi(serves, app.engineApi)) {
+      throw new Error(`The ${app.name} engine in production serves engine API ${value ?? '(not recorded)'}, but this ${app.name} calls ${app.engineApi}, so it isn't deployed`)
+    }
+  }
+}
+
+/**
+ * The value of a variable in every version of a Worker that production runs (its latest deployment), from the
+ * Cloudflare API: null for a Worker that doesn't exist, and null in the list for a version without the variable. This
+ * is how a deploy reads the engine API versions an earlier deploy recorded (ENGINE_API_VAR, ENGINE_SERVES_VAR).
+ */
+export async function productionVariable({ fetchImpl, apiToken, accountId, worker, name }) {
+  const base = `/accounts/${encodeURIComponent(accountId)}/workers/scripts/${encodeURIComponent(worker)}`
+  const listed = await cloudflareRequest(fetchImpl, apiToken, `${base}/deployments`, { allowNotFound: true })
+  if (!listed) return null
+  const deployments = listed.result?.deployments
+  if (!Array.isArray(deployments)) throw new Error(`Cloudflare returned an invalid deployment list for ${worker}`)
+  if (!deployments.length) return null
+  const latest = [...deployments].sort((left, right) => String(right.created_on).localeCompare(String(left.created_on)))[0]
+  const versions = Array.isArray(latest?.versions) ? latest.versions.filter((version) => version?.percentage > 0) : null
+  if (!versions?.length || versions.some(({ version_id: id }) => typeof id !== 'string')) throw new Error(`Cloudflare returned an invalid deployment for ${worker}`)
+  const values = []
+  for (const { version_id: id } of versions) {
+    const bindings = (await cloudflareResult(fetchImpl, apiToken, `${base}/versions/${encodeURIComponent(id)}`))?.resources?.bindings
+    if (!Array.isArray(bindings)) throw new Error(`Cloudflare returned a version of ${worker} without its bindings`)
+    const binding = bindings.find((candidate) => candidate?.name === name)
+    values.push(binding?.type === 'plain_text' && typeof binding.text === 'string' ? binding.text : null)
+  }
+  return values
+}
+
+/** Creates an engine's R2 bucket unless it exists, and checks that it does; true when it was created. */
+export async function ensureBucket({ fetchImpl, apiToken, accountId, name }) {
+  const buckets = `/accounts/${encodeURIComponent(accountId)}/r2/buckets`
+  const path = `${buckets}/${encodeURIComponent(name)}`
+  if (await cloudflareRequest(fetchImpl, apiToken, path, { allowNotFound: true })) return false
+  await cloudflareRequest(fetchImpl, apiToken, buckets, { method: 'POST', body: { name } })
+  if (!(await cloudflareRequest(fetchImpl, apiToken, path, { allowNotFound: true }))) throw new Error(`R2 bucket ${name} is missing after its creation`)
+  return true
+}
+
+/**
+ * The engine image to deploy, by digest (§12.1 "Images"): the digest its tag resolves to in the account's registry.
+ * When the registry lacks the tag, the image this release's build job made is pushed first, with a credential that
+ * outlasts the upload; without one (the build job didn't build it, so an earlier push must have failed) the deploy
+ * stops and asks for a deploy by hand, which always builds the image.
+ */
+async function engineImageReference({ runner, cloudflare, app, tag, archive, dryRun, env }) {
+  const repository = engineImageRepository(app.name)
+  const local = `${repository}:${tag}`
+  const remote = `${REGISTRY}/${cloudflare.accountId}/${repository}`
+  if (dryRun) {
+    const environment = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']
+    runner.record('cloudflare-api', ['registry-credential', REGISTRY, `${REGISTRY_CREDENTIAL_MINUTES} minutes`, 'push', 'pull'], { environment })
+    runner.record('registry', ['resolve', local])
+    const condition = `the registry lacks ${local}`
+    if (archive) {
+      for (const args of [['load', '--input', archive], ['tag', local, `${remote}:${tag}`], ['push', `${remote}:${tag}`]]) runner.record('docker', args, { condition })
+    } else {
+      runner.record('fail', ['ask for a deploy by hand, which builds the image'], { condition })
+    }
+    // The real deploy pins the digest the tag resolves to.
+    return `${remote}:${tag}`
+  }
+  const credential = await registryCredential(cloudflare)
+  runner.secrets.push(credential.password, Buffer.from(`${credential.username}:${credential.password}`).toString('base64'))
+  const lookup = { fetchImpl: cloudflare.fetchImpl, credential, accountId: cloudflare.accountId, repository, tag }
+  let digest = await registryDigest(lookup)
+  if (digest) {
+    process.stdout.write(`The registry has ${local}: deploying it without a push\n`)
+  } else {
+    if (!archive || !existsSync(archive)) {
+      throw new Error(
+        `The registry has no ${local}, and this release built no image for it (an earlier push must have failed). ` +
+          'Run Actions → Deploy by hand with this release: a deploy by hand always builds the image.',
+      )
+    }
+    pushImage({ runner, archive, local, remote: `${remote}:${tag}`, credential, env })
+    digest = await registryDigest(lookup)
+    if (!digest) throw new Error(`The registry still has no ${local} after the push`)
+  }
+  process.stdout.write(`Engine image ${local} is ${digest}\n`)
+  return `${remote}@${digest}`
+}
+
+/** A push and pull credential for the account's registry, from the Cloudflare API, lasting REGISTRY_CREDENTIAL_MINUTES. */
+export async function registryCredential({ fetchImpl, apiToken, accountId }) {
+  const { result } = await cloudflareRequest(fetchImpl, apiToken, `/accounts/${encodeURIComponent(accountId)}/containers/registries/${REGISTRY}/credentials`, {
+    method: 'POST',
+    body: { expiration_minutes: REGISTRY_CREDENTIAL_MINUTES, permissions: ['push', 'pull'] },
+  })
+  if (!result || typeof result.password !== 'string' || !result.password) throw new Error('Cloudflare returned no registry credential')
+  return { username: typeof result.username === 'string' && result.username ? result.username : 'v1', password: result.password }
+}
+
+const MANIFEST_TYPES = [
+  'application/vnd.oci.image.index.v1+json', 'application/vnd.docker.distribution.manifest.list.v2+json',
+  'application/vnd.oci.image.manifest.v1+json', 'application/vnd.docker.distribution.manifest.v2+json',
+].join(', ')
+
+/**
+ * The digest a tag resolves to in the account's registry, or null when the registry lacks it (Docker's registry API:
+ * HEAD on the manifest). The credential goes only to the registry and to the token service it names on Cloudflare.
+ */
+export async function registryDigest({ fetchImpl, credential, accountId, repository, tag }) {
+  const url = `https://${REGISTRY}/v2/${encodeURIComponent(accountId)}/${repository}/manifests/${encodeURIComponent(tag)}`
+  const basic = `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}`
+  const head = (authorization) => fetchImpl(url, { method: 'HEAD', headers: { Authorization: authorization, Accept: MANIFEST_TYPES }, redirect: 'error' })
+  let response = await head(basic)
+  if (response.status === 401) {
+    const challenge = response.headers.get('www-authenticate') ?? ''
+    const fields = Object.fromEntries([...challenge.matchAll(/(\w+)="([^"]*)"/g)].map((match) => [match[1], match[2]]))
+    let realm
+    try {
+      realm = new URL(fields.realm)
+    } catch {
+      throw new Error('The registry asked for a token without saying where to get it')
+    }
+    if (!/^bearer\s/i.test(challenge) || realm.protocol !== 'https:' || !(realm.hostname === 'cloudflare.com' || realm.hostname.endsWith('.cloudflare.com'))) {
+      throw new Error('The registry asked for a token from somewhere other than Cloudflare')
+    }
+    for (const key of ['service', 'scope']) if (fields[key]) realm.searchParams.set(key, fields[key])
+    const tokenResponse = await fetchImpl(realm.href, { headers: { Authorization: basic }, redirect: 'error' })
+    const body = tokenResponse.ok ? await tokenResponse.json().catch(() => null) : null
+    const token = body?.token ?? body?.access_token
+    if (typeof token !== 'string' || !token) throw new Error(`The registry refused a token (${tokenResponse.status})`)
+    response = await head(`Bearer ${token}`)
+  }
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`The registry answered ${response.status} for ${repository}:${tag}`)
+  const digest = response.headers.get('docker-content-digest')
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest ?? '')) throw new Error(`The registry gave no digest for ${repository}:${tag}`)
+  return digest
+}
+
+/**
+ * Pushes the image this release's build job saved, without running it: loaded from the archive, checked to be the
+ * image this release's inputs name, tagged for the registry and pushed, with the credential in a Docker config of its
+ * own that is removed right after.
+ */
+function pushImage({ runner, archive, local, remote, credential, env }) {
+  const dockerConfig = mkdtempSync(join(tmpdir(), 'insulin-apps-docker-'))
+  try {
+    const auth = Buffer.from(`${credential.username}:${credential.password}`).toString('base64')
+    writeFileSync(join(dockerConfig, 'config.json'), `${JSON.stringify({ auths: { [REGISTRY]: { auth } } })}\n`, { mode: 0o600 })
+    const dockerEnv = { ...env, DOCKER_CONFIG: dockerConfig }
+    delete dockerEnv.CLOUDFLARE_API_TOKEN
+    runner.run('docker', ['load', '--input', archive], { env: dockerEnv })
+    runner.run('docker', ['image', 'inspect', '--format', '{{.Id}}', local], { env: dockerEnv, capture: true })
+    runner.run('docker', ['tag', local, remote], { env: dockerEnv })
+    runner.run('docker', ['push', remote], { env: dockerEnv })
+  } finally {
+    rmSync(dockerConfig, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Builds an app's engine where the app is built, without deploy settings: installs its exact lockfile without
+ * scripts, runs its build if it has one, and bundles its Worker with its own Wrangler (a dry run, from a config of
+ * its name, entry and compatibility settings only) into <engine>/.output/worker, which the deploy uploads unchanged.
+ */
+export function buildAppEngine(runner, root, app, environment) {
+  const env = { ...buildEnvironment(environment), WRANGLER_SEND_METRICS: 'false' }
+  // Its development dependencies (Wrangler among them) are what builds it: NODE_ENV=production would leave them out.
+  delete env.NODE_ENV
+  delete env.NITRO_PRESET
+  const directory = join(root, app.name, app.engine)
+  runner.run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: directory, env })
+  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'))
+  if (manifest.scripts?.build) runner.run('npm', ['run', 'build'], { cwd: directory, env })
+  const config = readEngineConfig(directory)
+  const problems = engineConfigProblems({ app: app.name, engineDirectory: directory, config })
+  if (problems.length) throw new Error(`${app.name}'s engine: ${problems.join('; ')}`)
+  const output = join(directory, ENGINE_OUTPUT)
+  if (!runner.dryRun) rmSync(output, { recursive: true, force: true })
+  const scratch = mkdtempSync(join(tmpdir(), 'insulin-apps-engine-bundle-'))
+  try {
+    const bundleConfig = join(scratch, 'wrangler.json')
+    writeFileSync(bundleConfig, `${JSON.stringify({
+      name: engineWorkerName(app.name),
+      main: resolve(directory, config.main),
+      compatibility_date: config.compatibility_date,
+      ...(config.compatibility_flags ? { compatibility_flags: config.compatibility_flags } : {}),
+    }, null, 2)}\n`)
+    runner.run(join(directory, 'node_modules', '.bin', 'wrangler'), ['deploy', '--dry-run', '--outdir', join(output, 'worker'), '--config', bundleConfig], {
+      cwd: directory,
+      env,
+    })
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Builds an app's engine image for linux/amd64 and saves it to `archive`, for the release's build job when its tag
+ * changed (§12.1 "Images"). The build context holds exactly the files the tag covers, so the image is what its tag
+ * names; it is tagged insulin-apps-<app>-engine:<tag> locally, and the deploy pushes it.
+ */
+export function buildEngineImage({ runner, root, app, archive, environment }) {
+  const directory = join(root, app.name, app.engine)
+  const image = engineImageSources(directory, readEngineConfig(directory))
+  if (!image) throw new Error(`${app.name}'s engine has no container image to build`)
+  const inputs = imageInputs(image)
+  const tag = imageTag(directory, inputs)
+  const local = `${engineImageRepository(app.name)}:${tag}`
+  const env = buildEnvironment(environment)
+  delete env.NITRO_PRESET
+  const context = mkdtempSync(join(tmpdir(), 'insulin-apps-engine-image-'))
+  try {
+    for (const file of inputs.files) {
+      mkdirSync(dirname(join(context, file)), { recursive: true })
+      copyFileSync(join(inputs.context, file), join(context, file))
+    }
+    const buildArgs = Object.entries(inputs.vars).flatMap(([name, value]) => ['--build-arg', `${name}=${value}`])
+    runner.run('docker', ['build', '--platform', 'linux/amd64', '--file', inputs.dockerfile, '--tag', local, ...buildArgs, context], { cwd: directory, env })
+    if (!runner.dryRun) mkdirSync(dirname(archive), { recursive: true })
+    runner.run('docker', ['save', '--output', archive, local], { cwd: directory, env })
+  } finally {
+    rmSync(context, { recursive: true, force: true })
+  }
+  process.stdout.write(`Built ${local} into ${archive}\n`)
+  return { tag, local, archive }
+}
+
+// --- Limit catalogs (DESIGN.md §12.2) --------------------------------------------------------------------------------
+
+/**
+ * Writes apps' limit catalogs to the gateway's D1 with the SQL the gateway's own module makes (gateway
+ * scripts/limits-catalog.mjs), so the operator console manages the limits the running apps enforce. The gateway step
+ * calls it after the gateway's migrations; a deploy of apps alone (`onlyIfReady`) first checks that the gateway's
+ * database and tables exist, and leaves the catalog to the gateway step otherwise.
+ */
+async function writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps, env, dryRun, configPath, onlyIfReady = false }) {
+  const modulePath = join(root, LIMIT_CATALOG_MODULE)
+  if (!existsSync(modulePath)) {
+    process.stdout.write(`::notice::${LIMIT_CATALOG_MODULE} is missing: limit catalogs not written\n`)
+    return
+  }
+  const catalog = await import(pathToFileURL(modulePath).href)
+  if (typeof catalog.limitsCatalogSql !== 'function') throw new Error(`${LIMIT_CATALOG_MODULE} exports no limitsCatalogSql(apps)`)
+  const table = typeof catalog.LIMIT_CATALOG_TABLE === 'string' ? catalog.LIMIT_CATALOG_TABLE : 'app_limit_catalog'
+  if (!/^[a-z_]+$/.test(table)) throw new Error(`${LIMIT_CATALOG_MODULE}'s LIMIT_CATALOG_TABLE isn't a table name`)
+  if (onlyIfReady) {
+    configPath = join(outputDirectory, 'gateway-d1.wrangler.json')
+    if (dryRun) {
+      writeJson(configPath, gatewayDatabaseConfig(null))
+      runner.run(wrangler, ['d1', 'list', '--json'], { cwd: root, env })
+      runner.run(wrangler, ['d1', 'execute', GATEWAY_NAME, '--remote', '--json', '--command', tableQuery(table), '--config', configPath], { cwd: root, env, condition: `${GATEWAY_NAME} exists` })
+    } else {
+      const database = listDatabases(runner, wrangler, root, env).find(({ name }) => name === GATEWAY_NAME)
+      if (!database?.uuid) {
+        process.stdout.write(`::notice::${GATEWAY_NAME} has no database yet: the gateway's deploy writes the limit catalogs\n`)
+        return
+      }
+      writeJson(configPath, gatewayDatabaseConfig(database.uuid))
+      const { stdout } = runner.run(wrangler, ['d1', 'execute', GATEWAY_NAME, '--remote', '--json', '--command', tableQuery(table), '--config', configPath], { cwd: root, env, capture: true })
+      if (!tableExists(stdout, table)) {
+        process.stdout.write(`::notice::${GATEWAY_NAME} has no ${table} table yet: the gateway's deploy writes the limit catalogs after its migrations\n`)
+        return
+      }
+    }
+  }
+  // The gateway's module replaces each named app's whole catalog, and refuses a malformed one before anything is written.
+  const sql = catalog.limitsCatalogSql(apps.map(({ name, limits }) => ({ name, limits })))
+  const file = join(outputDirectory, 'limit-catalogs.sql')
+  writeFileSync(file, sql)
+  runner.run(wrangler, ['d1', 'execute', GATEWAY_NAME, '--remote', '--file', file, '--config', configPath], { cwd: root, env })
+  process.stdout.write(`Wrote the limit catalogs of ${apps.map(({ name }) => name).join(', ')} to ${GATEWAY_NAME}\n`)
+}
+
+const tableQuery = (table) => `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${table}'`
+
+function tableExists(output, table) {
+  let parsed
+  try {
+    parsed = JSON.parse(output)
+  } catch {
+    throw new Error('Wrangler returned invalid JSON from d1 execute --json')
+  }
+  const results = (Array.isArray(parsed) ? parsed : [parsed]).flatMap((entry) => (Array.isArray(entry?.results) ? entry.results : []))
+  return results.some((row) => row?.name === table)
+}
+
+function gatewayDatabaseConfig(databaseId) {
+  return {
+    name: GATEWAY_NAME,
+    compatibility_date: COMPATIBILITY_DATE,
+    d1_databases: [{ binding: 'DB', database_name: GATEWAY_NAME, ...(databaseId ? { database_id: databaseId } : {}) }],
+  }
 }
 
 class CommandRunner {
@@ -583,13 +1068,20 @@ function deployWithSecrets(runner, wrangler, configPath, secretValues, { cwd, en
   }
 }
 
-function buildApps(runner, root, apps, environment) {
+/** What a build sees of the environment: none of the deploy's settings or secrets. */
+function buildEnvironment(environment) {
   const env = { ...environment, NODE_ENV: 'production', NITRO_PRESET: 'cloudflare_module' }
   for (const name of SECRET_SETTINGS) delete env[name]
+  return env
+}
+
+function buildApps(runner, root, apps, environment) {
+  const env = buildEnvironment(environment)
   for (const app of apps) {
     const cwd = join(root, app.name)
     runner.run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd, env })
     runner.run('npm', ['run', 'build'], { cwd, env })
+    if (app.engine) buildAppEngine(runner, root, app, environment)
   }
 }
 
@@ -626,6 +1118,13 @@ function listDatabases(runner, wrangler, cwd, env) {
 
 export function verifyBuildOutput(appDirectory) {
   const outputDirectory = join(appDirectory, '.output')
+  verifyOutputTree(outputDirectory)
+  requireFile(join(outputDirectory, 'server', 'index.mjs'), 'Worker entry point')
+  requireDirectory(join(outputDirectory, 'public'), 'asset directory')
+}
+
+/** A build output holds only regular files and directories, and no file hard-linked from outside it. */
+export function verifyOutputTree(outputDirectory) {
   const files = []
   const pending = [outputDirectory]
 
@@ -657,9 +1156,6 @@ export function verifyBuildOutput(appDirectory) {
       throw new Error(`Unsafe build output file has a hard link outside .output: ${path}`)
     }
   }
-
-  requireFile(join(outputDirectory, 'server', 'index.mjs'), 'Worker entry point')
-  requireDirectory(join(outputDirectory, 'public'), 'asset directory')
 }
 
 export async function removeAppPublicAccess({ fetchImpl, apiToken, accountId, siteDomain, worker }) {
@@ -712,7 +1208,7 @@ export async function removeAppPublicAccess({ fetchImpl, apiToken, accountId, si
   const remainingSubdomain = await cloudflareResult(fetchImpl, apiToken, subdomainPath)
   assertSubdomainResult(remainingSubdomain)
   if (remainingDomains.length || remainingRoutes.length || remainingSubdomain.enabled || remainingSubdomain.previews_enabled) {
-    throw new Error('App Worker still has public access after cleanup')
+    throw new Error(`Worker ${worker} still has public access after cleanup`)
   }
 }
 
@@ -754,7 +1250,8 @@ async function cloudflareResult(fetchImpl, apiToken, path) {
   return (await cloudflareRequest(fetchImpl, apiToken, path)).result
 }
 
-async function cloudflareRequest(fetchImpl, apiToken, path, { method = 'GET', body } = {}) {
+/** One Cloudflare API call; the envelope on success, or null on a 404 when `allowNotFound`. */
+async function cloudflareRequest(fetchImpl, apiToken, path, { method = 'GET', body, allowNotFound = false } = {}) {
   let response
   try {
     response = await fetchImpl(`${CLOUDFLARE_API}${path}`, {
@@ -769,6 +1266,7 @@ async function cloudflareRequest(fetchImpl, apiToken, path, { method = 'GET', bo
     throw new Error(`Cloudflare API request failed for ${method} ${path.split('?')[0]}: ${error.message}`)
   }
 
+  if (allowNotFound && response.status === 404) return null
   let envelope
   try {
     envelope = await response.json()
@@ -868,16 +1366,24 @@ export function parseArguments(args) {
     else if (argument === '--skip-build') options.skipBuild = true
     else if (argument === '--build-only') options.buildOnly = true
     else if (argument === '--gateway-only') options.gatewayOnly = true
+    else if (argument === '--build-engine') options.buildEngine = true
+    else if (argument === '--engine-image' && args[index + 1]) options.engineImage = args[(index += 1)]
+    else if (argument.startsWith('--engine-image=') && argument.length > 15) options.engineImage = argument.slice(15)
     else if (argument === '--out' && args[index + 1]) options.out = args[(index += 1)]
     else if (argument.startsWith('--out=') && argument.length > 6) options.out = argument.slice(6)
     else if (argument === '--only' && args[index + 1]) options.only = args[(index += 1)]
     else if (argument.startsWith('--only=') && argument.length > 7) options.only = argument.slice(7)
-    else throw new Error('usage: node .github/scripts/deploy-apps.mjs [--build-only | --gateway-only | --skip-build] [--dry-run] [--out <dir>] [--only <app>]')
+    else throw new Error('usage: node .github/scripts/deploy-apps.mjs [--build-only | --build-engine | --gateway-only | --skip-build] [--dry-run] [--out <dir>] [--only <app>] [--engine-image <archive>]')
   }
   if (options.out && !options.dryRun) throw new Error('--out is only available with --dry-run')
   if (options.buildOnly && options.skipBuild) throw new Error('--build-only and --skip-build cannot be combined')
   if (options.gatewayOnly && options.only) throw new Error('--gateway-only and --only cannot be combined')
   if (options.gatewayOnly && options.buildOnly) throw new Error('--gateway-only and --build-only cannot be combined')
+  if (options.buildEngine && (options.buildOnly || options.skipBuild || options.gatewayOnly)) {
+    throw new Error('--build-engine builds engines alone: it cannot be combined with --build-only, --skip-build or --gateway-only')
+  }
+  // The image to push from (a deploy) or to build into (a build): one app's.
+  if (options.engineImage && (!options.only || options.gatewayOnly)) throw new Error('--engine-image needs --only <app>')
   return options
 }
 

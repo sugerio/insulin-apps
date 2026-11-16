@@ -1,0 +1,16 @@
+{
+  "name": "fixture-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  },
+  "insulin": {
+    "serves": [1, 2]
+  }
+}

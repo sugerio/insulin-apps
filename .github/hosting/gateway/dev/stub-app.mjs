@@ -69,6 +69,12 @@ export default {
       case '/api/catalog':
         // What an app's catalog looks like (Cap Table's GET /api/catalog), for the MCP server's endpoints tool.
         return Response.json({ endpoints: [{ method: 'GET', path: '/api/echo', summary: 'Echo the request', query: null, body: null, idempotencyKey: false }] })
+      case '/api/quota':
+        // An app past one of its limits (DESIGN.md §12.2), as Knowledge answers at its hard stop.
+        return Response.json({
+          error: 'quota_exceeded', limit: 'awake_hours_month', resets_at: '2026-12-01T00:00:00Z',
+          message: 'Your organization has used its 100 awake hours this month. Contact Insulin Apps support for more.',
+        }, { status: 429 })
       case '/api/large':
         return new Response('x'.repeat(300 * 1024), { headers: { 'Content-Type': 'text/plain' } })
       case '/api/__suger/health':

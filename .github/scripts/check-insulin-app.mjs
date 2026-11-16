@@ -8,9 +8,13 @@
 // The limits mirror the platform's: at most 2,000 stored files of 1 MiB each and
 // 10 MiB in total, text files only, one npm package with an exact, registry-only
 // lockfile, and only the D1 binding and static assets at runtime.
+//
+// An app's engine (`insulin.engine`, .github/hosting/DESIGN.md §12.1) is a second Worker in
+// its own directory: it is left out of the app's rules and checked with its own (engine.mjs).
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, join, relative, resolve, sep } from 'node:path'
-import { readNavigation, readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
+import { ENGINE_BUNDLE, engineProblems } from './engine.mjs'
+import { readEngine, readLimits, readNavigation, readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
 
 const [appArg, ...flags] = process.argv.slice(2)
 if (!appArg) {
@@ -69,6 +73,22 @@ const FORBIDDEN_FILES = [
 
 const read = (path) => readFileSync(join(app, path), 'utf8')
 
+// The manifest first: it says where the engine is, which the app's own rules leave out.
+let manifest = {}
+try {
+  manifest = JSON.parse(read('package.json'))
+} catch (error) {
+  fail(`package.json is not valid JSON: ${error.message}`)
+}
+const appName = basename(resolve(app))
+let engine = null
+let engineApi = null
+try {
+  ;({ engine, engineApi } = readEngine(appName, manifest.insulin?.engine, manifest.insulin?.engineApi))
+} catch (error) {
+  fail(error.message)
+}
+
 for (const file of REQUIRED_FILES) {
   if (!existsSync(join(app, file))) fail(`missing required file ${file}`)
 }
@@ -86,7 +106,7 @@ const walk = (dir) => {
     const full = join(dir, entry.name)
     const rel = relative(app, full).split(sep).join('/')
     if (entry.isDirectory()) {
-      if (SKIPPED_DIRS.has(entry.name) || SKIPPED_PATHS.has(rel)) continue
+      if (SKIPPED_DIRS.has(entry.name) || SKIPPED_PATHS.has(rel) || rel === engine) continue
       walk(full)
       continue
     }
@@ -108,18 +128,11 @@ walk(app)
 if (fileCount > MAX_FILES) fail(`${fileCount} files; the limit is ${MAX_FILES}`)
 if (totalBytes > MAX_TOTAL_BYTES) fail(`${totalBytes} bytes in total; the limit is ${MAX_TOTAL_BYTES}`)
 
-// The manifest and its lockfile.
-let manifest = {}
-try {
-  manifest = JSON.parse(read('package.json'))
-} catch (error) {
-  fail(`package.json is not valid JSON: ${error.message}`)
-}
+// The manifest's lockfile and fields.
 if (manifest.workspaces) fail('package.json must not declare workspaces: one package per app')
-// What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §3.2, §8): checked as the deploy will check it.
-const appName = basename(resolve(app))
+// What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §3.2, §8, §12.2): checked as the deploy will check it.
 const declared = {}
-for (const [field, readField] of [['permissions', readPermissions], ['publicPaths', readPublicPaths], ['secrets', readSecretNames], ['navigation', readNavigation]]) {
+for (const [field, readField] of [['permissions', readPermissions], ['publicPaths', readPublicPaths], ['secrets', readSecretNames], ['navigation', readNavigation], ['limits', readLimits]]) {
   try {
     declared[field] = readField(appName, manifest.insulin?.[field])
   } catch (error) {
@@ -196,6 +209,14 @@ for (const rel of sourceFiles) {
   }
   if (rel.startsWith('src/') && !SERVER_ONLY.test(rel) && /from\s+['"]@fours\/app\/server['"]/.test(text)) {
     fail(`${rel} imports @fours/app/server outside server code`)
+  }
+}
+
+// The engine, with its own rules: its package, lockfile, Wrangler config and image (DESIGN.md §12.1).
+if (engine) {
+  for (const problem of engineProblems({ app: appName, appDirectory: app, engine, engineApi })) fail(problem)
+  if (built && !existsSync(join(app, engine, ENGINE_BUNDLE))) {
+    fail(`${engine}/${ENGINE_BUNDLE} is missing: bundle the engine with node .github/scripts/deploy-apps.mjs --build-only --only ${appName}`)
   }
 }
 

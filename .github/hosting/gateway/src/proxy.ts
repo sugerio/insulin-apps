@@ -15,6 +15,8 @@ import { log, logError } from './log.ts'
 import { appUnavailablePage, noAppAccessPage, rateLimitedPage } from './pages/status.tsx'
 import { allowApp, allowPublic, allowPublicChange } from './ratelimit.ts'
 import { verifyNotice } from './auth/guard.ts'
+import { noteAppUse } from './members/app-use.ts'
+import { signMemberLookup } from './members/lookup-token.ts'
 import { activeOrg, loadSession } from './auth/session.ts'
 
 export const BAR_TAG = '<script src="/__insulin/bar.js" defer></script>'
@@ -70,9 +72,12 @@ export async function proxyToApp(ctx: Context, app: HostedApp): Promise<Response
     return navigation ? rateLimitedPage(ctx) : jsonResponse({ error: 'rate_limited' }, 429, { 'Retry-After': '60' })
   }
 
+  await noteAppUse(ctx, app, org.id)
+  // The app passes this back to look up members for a sharing dialog (DESIGN.md §12.3); without the key, none.
+  const memberLookup = ctx.config.secretKey ? await signMemberLookup(ctx.config.secretKey, app.name, org.id, session.user.id, ctx.now) : null
   let upstream: Response
   try {
-    upstream = await app.service.fetch(forwardRequest(ctx.request, identityHeaders(session.user, org.id, app, access, 'browser')))
+    upstream = await app.service.fetch(forwardRequest(ctx.request, identityHeaders(session.user, org.id, app, access, 'browser', { memberLookup })))
   } catch (error) {
     logError('app_unreachable', error, { app: app.name })
     return navigation ? appUnavailablePage(ctx, 502) : jsonResponse({ error: 'bad_gateway' }, 502)

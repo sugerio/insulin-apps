@@ -66,7 +66,7 @@ export async function consumeSignIn(db: D1Database, idHash: string, bindingHash:
 export interface AuditEntry {
   operator: Operator
   action: string
-  targetType: 'org' | 'user' | null
+  targetType: 'org' | 'user' | 'app' | null
   targetId: string | null
   targetLabel: string | null
   reason: string | null
@@ -97,7 +97,7 @@ export interface AuditRow {
 }
 
 /** The audit log, newest first: everything, or one target's history. */
-export async function listAudit(db: D1Database, options: { target?: { type: 'org' | 'user'; id: string }; limit: number; before?: number }): Promise<AuditRow[]> {
+export async function listAudit(db: D1Database, options: { target?: { type: 'org' | 'user' | 'app'; id: string }; limit: number; before?: number }): Promise<AuditRow[]> {
   const { results } = await db.prepare(
     `SELECT id, at, operator_email, action, target_type, target_id, target_label, reason FROM super_audit
      WHERE (?1 IS NULL OR (target_type = ?1 AND target_id = ?2)) AND (?3 IS NULL OR id < ?3)

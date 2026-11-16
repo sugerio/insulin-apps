@@ -18,12 +18,24 @@ const ACTIONS: Record<string, string> = {
   "user.suspend": "Suspended the account",
   "user.disable": "Disabled the account",
   "user.reinstate": "Reinstated the account",
+  "app.limit_default": "Changed an app's default limit",
+  "app.limit_default_reset": "Put back an app's catalog default",
+  "org.limit_override": "Overrode a limit",
+  "org.limit_override_removed": "Removed a limit's override",
+}
+
+const TARGET_PAGES: Record<string, (id: string) => string> = {
+  org: (id) => `/super/orgs/${id}`,
+  user: (id) => `/super/users/${id}`,
+  // An app's audit records are its limits' (DESIGN.md §12.2).
+  app: (id) => `/super/apps/${id}/limits`,
 }
 
 function Target({ row }: { row: AuditRow }) {
   if (!row.target_type || !row.target_id) return <>–</>
-  const href = row.target_type === "org" ? `/super/orgs/${row.target_id}` : `/super/users/${row.target_id}`
-  return <a href={href} className="underline-offset-4 hover:underline">{row.target_label ?? row.target_id}</a>
+  const page = TARGET_PAGES[row.target_type]
+  if (!page) return <>{row.target_label ?? row.target_id}</>
+  return <a href={page(row.target_id)} className="underline-offset-4 hover:underline">{row.target_label ?? row.target_id}</a>
 }
 
 export function AuditTable({ rows, showTarget = true }: { rows: AuditRow[]; showTarget?: boolean }) {

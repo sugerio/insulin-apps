@@ -45,7 +45,12 @@ export function appsPage(ctx: Context, session: OperatorSession, apps: AppSummar
             description={entry.report
               ? `Latest report for ${when(entry.report.hour)}, received ${ago(ctx.now, entry.report.received_at).toLowerCase()}, with ${entry.report.organizations} organizations.`
               : entry.app.scheduled ? "No report in the last three days." : "No report: the app declares no scheduled path, so the platform's tick never reaches it."}
-            actions={<a href={`/super/apps/${entry.app.name}`} className="text-sm font-medium underline underline-offset-4">Organizations</a>}
+            actions={
+              <span className="flex gap-4 text-sm font-medium">
+                <a href={`/super/apps/${entry.app.name}`} className="underline underline-offset-4">Organizations</a>
+                <a href={`/super/apps/${entry.app.name}/limits`} className="underline underline-offset-4">Limits</a>
+              </span>
+            }
           >
             <div className="flex flex-col gap-6">
               <div className="flex flex-col gap-2">
@@ -90,6 +95,7 @@ export function appDetailPage(ctx: Context, session: OperatorSession, data: AppD
     title: data.app.title,
     current: "apps",
     description: data.hour === null ? "No report in the last three days." : `The latest report, for ${when(data.hour)}.`,
+    actions: <a href={`/super/apps/${data.app.name}/limits`} className="text-sm font-medium underline underline-offset-4">Limits</a>,
   }, (
     <>
       <Section title="The app as a whole">

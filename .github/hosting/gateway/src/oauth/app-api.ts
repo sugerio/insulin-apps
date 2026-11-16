@@ -9,6 +9,7 @@ import { identityHeaders, type AccessVia } from '../http/forward.ts'
 import { jsonResponse } from '../http/response.ts'
 import { markFromApp } from '../http/secure.ts'
 import { logError } from '../log.ts'
+import { noteAppUse } from '../members/app-use.ts'
 import { allowApp } from '../ratelimit.ts'
 import { CORS } from './http.ts'
 import { bearerToken, resolveBearer, type BearerIdentity } from './tokens.ts'
@@ -56,6 +57,7 @@ export async function apiCall(ctx: Context, app: HostedApp): Promise<Response> {
     return unauthorized(ctx, app, '/.well-known/oauth-protected-resource', 'invalid_token')
   }
   if (!(await allowApp(ctx, identity.serviceAccountId))) return jsonResponse({ error: 'rate_limited' }, 429, { 'Retry-After': '60' })
+  await noteAppUse(ctx, app, identity.orgId)
   const headers = new Headers()
   for (const [name, value] of ctx.request.headers) if (!BROWSER_HEADERS.test(name)) headers.set(name, value)
   for (const [name, value] of Object.entries(bearerHeaders(ctx, app, identity, 'api'))) headers.set(name, value)

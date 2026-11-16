@@ -66,9 +66,10 @@ export async function listApps(root = repositoryRoot) {
     const permissions = readPermissions(entry.name, manifest.insulin?.permissions)
     const publicPaths = readPublicPaths(entry.name, manifest.insulin?.publicPaths)
     const scheduled = readScheduled(entry.name, manifest.insulin?.scheduled, publicPaths)
+    const clientSettings = readClientSettings(entry.name, manifest.insulin?.clientSettings, publicPaths)
     const secrets = readSecretNames(entry.name, manifest.insulin?.secrets)
     const navigation = readNavigation(entry.name, manifest.insulin?.navigation)
-    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, navigation, secrets })
+    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, clientSettings, navigation, secrets })
   }
 
   checkSecretNamespaces(apps)
@@ -189,6 +190,19 @@ export function readScheduled(app, raw, publicPaths = []) {
   if (raw === undefined || raw === null) return null
   const problem = scheduledProblem(raw, publicPaths)
   if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.scheduled ${problem}`)
+  return raw
+}
+
+/**
+ * Where the gateway reads and saves the app's section for each OAuth client on its API access page, over the app's
+ * service binding, with the signed-in organization admin's identity: `insulin.clientSettings` in its package.json
+ * (DESIGN.md §5.3.1), `{path}/{service account id}`, or null when it has none. The same rule as `insulin.scheduled`:
+ * reached only through the gateway, never public.
+ */
+export function readClientSettings(app, raw, publicPaths = []) {
+  if (raw === undefined || raw === null) return null
+  const problem = scheduledProblem(raw, publicPaths)
+  if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.clientSettings ${problem}`)
   return raw
 }
 

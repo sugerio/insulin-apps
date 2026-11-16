@@ -75,7 +75,6 @@ const listFilters = {
 }
 const ownedFields = 'Each has its owner, your role in it (myRole) and your tags'
 const ORG_OWNER = ['OWNER'] as const
-const ORG_ADMIN = ['OWNER', 'ADMIN'] as const
 
 const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/me', summary: 'Who is calling: the organization, the role and its permissions', query: null, body: null, idempotencyKey: false, permission: null },
@@ -169,8 +168,6 @@ const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/members', summary: 'People Esign has seen in your organization, to share with', query: { type: 'object', properties: { q: text('Only those whose name or email contains this', 100), limit: { type: 'integer', minimum: 1, maximum: 100 } } }, body: null, idempotencyKey: false, permission: 'esign.view' },
   { method: 'GET', path: '/api/owners', summary: 'Everyone who owns templates or envelopes, with how many (organization owners)', query: null, body: null, idempotencyKey: false, permission: 'esign.manage', orgRoles: ORG_OWNER },
   { method: 'POST', path: '/api/owners/{id}/transfer', summary: 'Take over every template and envelope someone owns (organization owners)', query: null, body: null, idempotencyKey: false, permission: 'esign.manage', orgRoles: ORG_OWNER },
-  { method: 'GET', path: '/api/api-clients', summary: 'The API clients that have called Esign, and whom each one\'s documents are shared with (organization owners and admins)', query: null, body: null, idempotencyKey: false, permission: 'esign.manage', orgRoles: ORG_ADMIN },
-  { method: 'POST', path: '/api/api-clients/{id}', summary: 'Choose whom an API client\'s new documents are shared with, as admin (null: nobody); shareExisting shares those it already owns too (organization owners and admins)', query: null, body: { type: 'object', required: ['shareEmail'], additionalProperties: false, properties: { shareEmail: { type: ['string', 'null'], format: 'email' }, shareExisting: { type: 'boolean' } } }, idempotencyKey: false, permission: 'esign.manage', orgRoles: ORG_ADMIN },
   { method: 'POST', path: '/api/process-due', summary: 'Expire envelopes past a deadline, finish those left unfinished, and send signed-copy notices still owed', query: null, body: null, idempotencyKey: false, permission: 'esign.manage' },
 ];
 

@@ -25,8 +25,9 @@ seals the finished envelope and emails each signer a link to their copy.
   one check (`documentRole`, `requireRole`, `visibleIds`): a role is capped at viewer for a caller
   without `esign.manage`, and a document the caller can't see answers 404. Tags (`tags.ts`) are each
   person's own. `members.ts` records each caller as seen (Esign has no directory), names owners, lets
-  an organization owner take over what someone owns, and keeps, per API client, the person its new
-  documents are shared with as admin (`api_clients`). None of it is evidence.
+  an organization owner take over what someone owns, and keeps, per API client, the members who see
+  everything it owns as admin (`api_client_people`, read live by every visibility query; set from
+  the gateway's API access page, `insulin.clientSettings`). None of it is evidence.
 - **Public paths.** Recipients and embedded editors aren't members. `insulin.publicPaths` lists
   `/sign`, `/editor/`, `/copy`, `/assets/` and `/api/public/`; those requests carry a one-time code
   or token instead of an identity, and the management routes refuse anything the gateway marks public.
@@ -280,7 +281,7 @@ tables:
 | `document_shares` | Who else sees a template or an envelope (`ownership.ts`): one row per person, by email (`grantee_email_key`), with their role; the owner (`owner_user_id` on the template or envelope) is never a row |
 | `document_tags` | Each person's own tags on what they see (`tags.ts`), by `tag_key` (trimmed, lower-cased) |
 | `members` | The members and API clients Esign has seen (`members.ts`): kind, email, name, organization role, when first and last seen |
-| `api_clients` | Per API client, the person its new templates and envelopes are shared with as admin |
+| `api_client_people` | Per API client, the members who see everything it owns, as admin (read live, never copied into shares) |
 | `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
 | `metrics_reports` | One per UTC hour (epoch ms of its start): when a tick claimed its usage report and when it was sent; kept three days |
@@ -533,7 +534,7 @@ is enabled.
 | `POST /api/{templates,envelopes}/:id/tags`, `GET /api/tags` | Replace one's own tags on it; one's tags, most used first |
 | `GET /api/members` | Members Esign has seen, to share with |
 | `GET /api/owners`, `POST /api/owners/:id/transfer` | Organization owners: everyone who owns something; take over all of it |
-| `GET /api/api-clients`, `POST /api/api-clients/:id` | Organization owners and admins: the API clients seen, and whom each one's documents are shared with |
+| `GET`/`POST`/`DELETE /api/client-settings/:id` | The gateway, for an organization owner or admin in the browser (`insulin.clientSettings`): an API client's section on API access, who sees what it owns; saving it; forgetting a deleted client |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 

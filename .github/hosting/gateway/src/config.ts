@@ -63,6 +63,12 @@ export interface HostedApp {
    */
   scheduled: string | null
   /**
+   * Where the app keeps its section for each OAuth client on the API access page (DESIGN.md §5.3.1): the gateway
+   * reads and saves it at `{path}/{service account id}` over the service binding, as the signed-in organization admin;
+   * null for an app that has none.
+   */
+  clientSettings: string | null
+  /**
    * The app's level 1 (DESIGN.md §3.2), which the gateway renders on the app's settings pages so they read as part of
    * the app; empty for an app without a manifest (or a SITE_APPS from before it existed).
    */
@@ -504,6 +510,8 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
       publicPaths,
       scheduled: parseScheduled(item.scheduled, publicPaths, `SITE_APPS[${index}].scheduled`, problems),
+      // The same rule as the scheduled path: under /api/, never public.
+      clientSettings: parseScheduled(item.clientSettings, publicPaths, `SITE_APPS[${index}].clientSettings`, problems),
       navigation: parseNavigation(item.navigation, `SITE_APPS[${index}].navigation`, problems),
     })
   })

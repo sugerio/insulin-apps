@@ -116,8 +116,6 @@ Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLI
 | `GET /api/members` | View | People Esign has seen in your organization, to share with: `{members: [{id, email, name?}]}`. `q` and `limit` as for tags. |
 | `GET /api/owners` | Organization owners | Everyone who owns templates or envelopes: `{owners: [{id, kind, name?, email?, templates, envelopes, lastSeenAt?}]}`. |
 | `POST /api/owners/{id}/transfer` | Organization owners | Take over everything someone (a person or an API client) owns: answers `{from, to, templates, envelopes}`. Shares stay, but yours on those documents (you own them now). |
-| `GET /api/api-clients` | Organization owners and admins | The API clients that have called Esign: `{clients: [{id, name?, firstSeenAt, lastSeenAt, shareWith?: {email, name?, since}}]}`. |
-| `POST /api/api-clients/{id}` | Organization owners and admins | Whom an API client's new templates and envelopes are shared with, as Admin: `{shareEmail}` (`null` for nobody). With `shareExisting: true`, those it already owns too. Answers `{id, shareWith?, shared}`. |
 
 ## Send an envelope
 
@@ -214,9 +212,11 @@ When you create a template, an envelope or an editing session, `share` (an array
 `{organization: true, role}` for everyone) shares it with others at once; each person once, at the highest role given,
 and never with yourself.
 
-**API clients.** An API client owns what it creates, and nobody else sees it unless your organization's owners or admins
-choose, in Esign's **Ownership** page (or `POST /api/api-clients/{id}`), one person its new templates and envelopes are
-shared with as Admin. A client appears there once it has called Esign. `share` adds others.
+**API clients.** An API client owns what it creates. Your organization's owners and admins choose who else sees it, for
+each OAuth client on Esign's **API access** page (**Esign settings** › **Who sees what it creates**): the members checked
+see, as Admin, every template and envelope the client owns, those it created before included, for as long as they are
+checked. They are not shares: the documents' **Share** lists them under the client's settings, and only API access
+changes them. `share` on a create request shares with others as usual.
 
 **Taking over.** An organization owner can take over everything someone owns, for someone who left or an API client no
 longer used (`POST /api/owners/{id}/transfer`, or **Ownership** › **Owners**).

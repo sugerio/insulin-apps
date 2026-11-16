@@ -8,6 +8,32 @@ const CAP_TABLE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; 
 // tests read them at /__stub/ticks, straight from this Worker.
 const ticks = []
 
+// The settings this stand-in keeps per OAuth client (insulin.clientSettings, DESIGN.md §5.3.1), and every request the
+// gateway made for them, oldest first; the tests read the requests at /__stub/client-settings.
+const clientSettings = new Map()
+const clientSettingsRequests = []
+
+/** The stand-in's section for one client: who sees what it creates, at most two people (more is refused, for the tests). */
+async function answerClientSettings(request, url) {
+  const id = decodeURIComponent(url.pathname.slice('/api/client-settings/'.length))
+  const body = request.method === 'POST' ? await request.json() : null
+  clientSettingsRequests.push({ ...received(request), path: url.pathname, query: url.search, body })
+  if (request.method === 'DELETE') { clientSettings.delete(id); return new Response(null, { status: 204 }) }
+  if (request.method === 'POST') {
+    const people = Array.isArray(body?.values?.people) ? body.values.people : []
+    if (people.length > 2) return Response.json({ errors: { people: 'Pick at most two people.' }, message: 'Nothing was saved.' }, { status: 422 })
+    clientSettings.set(id, people)
+    return Response.json({ notice: `Saved: ${people.length} people see what it creates.` })
+  }
+  const people = clientSettings.get(id) ?? []
+  return Response.json({
+    title: 'Who sees what it creates',
+    description: 'They see and manage everything this client creates.',
+    status: people.length ? `Seen by ${people.length} people` : 'Seen by the client only',
+    fields: [{ name: 'people', type: 'members', label: 'Share with', value: people }],
+  })
+}
+
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
 function received(request) {
@@ -45,6 +71,9 @@ export default {
     if (request.headers.get('x-suger-access-via') === 'schedule') {
       ticks.push({ ...received(request), path: url.pathname, body: await request.text() })
     }
+    if (url.pathname.startsWith('/api/client-settings/')) return answerClientSettings(request, url)
+    // An app whose section isn't what the contract agreed: the gateway shows that it couldn't be loaded.
+    if (url.pathname.startsWith('/api/client-settings-broken/')) return Response.json({ title: 'Broken', fields: [{ name: 'people', type: 'html', label: '<b>x</b>' }] })
     switch (url.pathname) {
       case '/api/scheduled':
         return Response.json({ ran: true })
@@ -54,6 +83,8 @@ export default {
       case '/api/scheduled-throws':
         // An app that crashes outright.
         throw new Error('synthetic failure')
+      case '/__stub/client-settings':
+        return Response.json(clientSettingsRequests)
       case '/__stub/ticks':
         return Response.json(ticks)
       case '/api/echo':

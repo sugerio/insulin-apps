@@ -141,28 +141,36 @@ test('a template\'s menu: Edit renames it and changes its default signers, or op
   } finally { await app.unmount(); }
 });
 
-test('the Ownership page: an API client is given a person, existing documents too; an organization owner takes over someone\'s', async () => {
-  let clients: unknown[] = [{ id: 'sa-1', name: 'Host product', firstSeenAt: 1, lastSeenAt: 2 }];
+test('the Ownership page, for organization owners: taking over what someone owns; API clients\' people are set on API access', async () => {
   const app = await renderMember('/ownership', (c) => {
     if (c.path === '/api/me') return json(OWNER);
-    if (c.path === '/api/api-clients') return json({ clients });
-    if (c.path === '/api/api-clients/sa-1') { clients = [{ id: 'sa-1', name: 'Host product', firstSeenAt: 1, lastSeenAt: 2, shareWith: { email: 'sam@example.com', name: 'Sam Example', since: 3 } }]; return json({ id: 'sa-1', shareWith: { email: 'sam@example.com' }, shared: 4 }); }
     if (c.path === '/api/owners') return json({ owners: [{ id: 'u9', kind: 'person', name: 'Lee Left', email: 'lee@example.com', templates: 2, envelopes: 3 }, { id: 'sa-1', kind: 'client', name: 'Host product', templates: 1, envelopes: 0 }] });
     if (c.path === '/api/owners/u9/transfer') return json({ from: 'u9', to: 'u1', templates: 2, envelopes: 3 });
   });
   try {
-    assert.match(app.text(), /Nobody: only the client sees what it creates/);
-    await app.click(app.button('Choose someone'), 'Choose someone');
-    assert.equal(app.byId('client-sa-1-share').props.value, 'sam@example.com', 'the member is suggested first');
-    await app.click(app.button('Save'), 'Save');
-    assert.deepEqual(JSON.parse(String(app.calls.find((c) => c.path === '/api/api-clients/sa-1')!.body)), { shareEmail: 'sam@example.com', shareExisting: true });
-    assert.match(app.text(), /4 it created before were shared too/);
+    assert.match(app.text(), /set for each OAuth client on API access/);
+    assert.equal(app.byLabel('API clients'), undefined, 'no API clients here any more');
     assert.match(app.text(), /Lee Left/);
     await app.click(app.button('Take over'), 'Take over');
     await app.click(app.button('Take over all of it'), 'confirm');
     assert.match(app.text(), /You now own 2 templates and 3 envelopes that were Lee Left's/);
   } finally { await app.unmount(); }
-  // An editor is told the page isn't theirs, and asks nothing.
-  const editor = await renderMember('/ownership', (c) => c.path === '/api/me' ? json(EDITOR) : undefined);
-  try { assert.match(editor.text(), /Only your organization's owners and admins manage ownership/); } finally { await editor.unmount(); }
+  // An organization admin who isn't an owner is told the page isn't theirs, and asks nothing.
+  const admin = await renderMember('/ownership', (c) => c.path === '/api/me' ? json(me('ADMIN', ['esign.manage', 'esign.view'])) : undefined);
+  try { assert.match(admin.text(), /Only your organization's owners take over what someone owns\. Who sees what an API client creates is set for each OAuth client on API access/); } finally { await admin.unmount(); }
+});
+
+test('Who sees it: a document an API client owns shows the people its settings name, as admins', async () => {
+  const ENV = '11111111-1111-4111-8111-111111111111', CLIENT_OWNER = { id: 'sa-1', kind: 'client', name: 'Host product' };
+  const app = await renderMember(`/envelopes/${ENV}`, (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path === `/api/envelopes/${ENV}`) return json({ id: ENV, templateId: 'tpl-1', status: 'IN_PROGRESS', createdAt: 1, tasks: [], owner: CLIENT_OWNER, myRole: 'admin', tags: [] });
+    if (c.path === `/api/envelopes/${ENV}/audit`) return json({ events: [] });
+    if (c.path === `/api/envelopes/${ENV}/shares`) return json({ id: ENV, myRole: 'admin', owner: CLIENT_OWNER, client: { people: [{ email: 'sam@example.com', name: 'Sam Example' }, { email: 'pat@example.com' }] }, shares: [] });
+  });
+  try {
+    const section = visibleText(app.byLabel('From the API client\'s settings').children);
+    assert.match(section, /Admin: Sam Example \(sam@example\.com\), pat@example\.com/);
+    assert.match(section, /Change who on API access/);
+  } finally { await app.unmount(); }
 });

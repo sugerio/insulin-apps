@@ -22,7 +22,7 @@ import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
 import { contactUpserts, mountContactRoutes } from './contacts.ts';
 import { defaultSignerNames, parseDefaultSigners, storedDefaultSigners, type DefaultSigners } from './default-signers.ts';
-import { clientShare, documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKeys, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
+import { documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKeys, sharedRoleBinds, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
 import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsByDocument, tagsOf, tagWrites } from './tags.ts';
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
@@ -162,7 +162,7 @@ function listed(context: import('hono').Context<Env>, type: ResourceType, query:
     // A template list shows the live ones only: not those archived (deleted, or replaced by a new version), which are
     // otherwise as they were: read, sent from and edited by their id.
     where: `x.tenant_id = ? AND x.id IN ${visibleIds(type, query.scope)}${query.tags.length ? ` AND x.id IN ${taggedIds(type)}` : ''}${type === 'template' ? ' AND x.archived_at IS NULL' : ''}`,
-    binds: (first: unknown[]) => [shareKeys(caller), ...first, tenantId, ...visibleBinds(tenantId, caller, query.scope), ...(query.tags.length ? [tenantId, caller.userId, JSON.stringify(query.tags), query.tags.length] : [])],
+    binds: (first: unknown[]) => [...sharedRoleBinds(caller), ...first, tenantId, ...visibleBinds(tenantId, caller, query.scope), ...(query.tags.length ? [tenantId, caller.userId, JSON.stringify(query.tags), query.tags.length] : [])],
   };
 }
 
@@ -334,7 +334,7 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   // deleting it here could leave a committed template without its source. The template, its shares and
   // the caller's tags commit together; the caller owns it.
   const tenantId = context.get('tenantId'), caller = context.get('caller'), now = Date.now(), db = context.env.DB;
-  const given = sharesFor([...shares, ...[await clientShare(db, tenantId, caller)].filter((share) => share !== null)], caller);
+  const given = sharesFor(shares, caller);
   await db.batch([
     db.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json, owner_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, tenantId, key, JSON.stringify(roles), now, name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {}), caller.userId),
@@ -353,7 +353,7 @@ function jsonField<T>(raw: FormDataEntryValue | null, parse: (value: unknown) =>
 
 app.get('/api/templates/:id', async (context) => {
   const row = await context.env.DB.prepare(`SELECT x.*, ${sharedRoleColumn('template', 'x')} AS shared_role FROM templates x WHERE x.id = ? AND x.tenant_id = ?`)
-    .bind(shareKeys(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string; archived_at: number | null; created_at: number; status: string }>();
+    .bind(...sharedRoleBinds(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string; archived_at: number | null; created_at: number; status: string }>();
   if (!row || !effectiveRole(row.owner_user_id, row.shared_role, context.get('caller'))) return context.json({ error: 'not_found' }, 404);
   // The response names keep the word "positioned": hosts read them.
   let hasFields = false;
@@ -517,7 +517,7 @@ async function templateFromEnvelope(context: import('hono').Context<Env>): Promi
   const templateName = name ?? (details.documentName ? details.documentName.slice(0, 200) : null);
   const templateId = crypto.randomUUID(), key = `templates/${templateId}/source.pdf`, now = Date.now();
   if (!await context.env.ARTIFACTS.put(key, document, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } })) return context.json({ error: 'storage_conflict' }, 503);
-  const given = sharesFor([...shares, ...[await clientShare(db, tenantId, caller)].filter((share) => share !== null)], caller);
+  const given = sharesFor(shares, caller);
   await db.batch([
     db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, fields_json, created_at, name, metadata_json, default_signers_json, owner_user_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, 'active')")
       .bind(templateId, tenantId, key, JSON.stringify(roles), JSON.stringify(fields), now, templateName, JSON.stringify(defaultSigners), caller.userId),
@@ -600,7 +600,7 @@ async function saveDraft(context: import('hono').Context<Env>, body: Record<stri
   const replay = (existing: { request_sha256: string; status: string }) => existing.status === DRAFT && existing.request_sha256 === hash ? context.json({ id, status: DRAFT }, 201) : context.json({ error: 'idempotency_conflict' }, 409);
   const existing = await lookup();
   if (existing) return replay(existing);
-  const given = sharesFor([...shares, ...[await clientShare(db, tenantId, caller)].filter((share) => share !== null)], caller);
+  const given = sharesFor(shares, caller);
   const allTags = templateId === null ? tags : mergeTags(tags, await tagsOf(db, tenantId, caller.userId, 'template', templateId));
   try {
     await db.batch([
@@ -773,7 +773,7 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
   const taskIds = recipients.map(() => crypto.randomUUID());
   // The sender owns it. It is shared with whom the request names and, for an API client, its person (members.ts),
   // not with the template's people; the sender's tags are the request's and theirs on the template.
-  const given = sharesFor([...shares, ...[await clientShare(context.env.DB, tenantId, caller)].filter((share) => share !== null)], caller);
+  const given = sharesFor(shares, caller);
   const allTags = uploaded ? tags : mergeTags(tags, await tagsOf(context.env.DB, tenantId, caller.userId, 'template', input.templateId as string));
   const now = Date.now();
   // One batch: the envelope (with the request's hash, and the roles and fields it is signed with, its template's as
@@ -827,7 +827,7 @@ app.get('/api/envelopes/:id', async (context) => {
   const refused = await requireRole(context, 'envelope', id, 'viewer');
   if (refused) return refused;
   await expireIfDue(context.env.DB, id);
-  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, x.draft_json, x.roles_json, x.fields_json, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKeys(context.get('caller')), id, tenantId).first<Owned & { template_id: string | null; status: string; created_at: number; details_json: string; draft_json: string | null; roles_json: string | null; fields_json: string | null }>();
+  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, x.draft_json, x.roles_json, x.fields_json, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(...sharedRoleBinds(context.get('caller')), id, tenantId).first<Owned & { template_id: string | null; status: string; created_at: number; details_json: string; draft_json: string | null; roles_json: string | null; fields_json: string | null }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
   // invitedAt: when Esign last emailed the signer's invitation (delivery 'email').

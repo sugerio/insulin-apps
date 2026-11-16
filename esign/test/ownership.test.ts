@@ -239,35 +239,48 @@ test('tags are each person\'s own: set on anything they see, filtered by, sugges
   } finally { await h.mf.dispose(); }
 });
 
-test('an API client\'s documents are its own until Esign\'s settings name someone, who is then given them as admin', async () => {
+test('an API client\'s documents are seen, as admins, by the people its settings name, for as long as they are named', async () => {
   const h = await setup();
   try {
     const early = await h.template(h.host);
     assert.deepEqual((await h.templates(h.host))[0].owner, { id: CLIENT, kind: 'client', name: 'Host product' });
     assert.deepEqual(await h.templates(h.ana), []);
-    // The client shows up in the settings once it has called; organization owners and admins choose its person.
-    assert.equal((await h.req('/api/api-clients', h.ana)).status, 403);
-    const listed = await h.get<{ clients: { id: string; name: string; shareWith?: unknown }[] }>('/api/api-clients', h.owner);
-    assert.deepEqual(listed.clients.map(c => [c.id, c.name, c.shareWith]), [[CLIENT, 'Host product', undefined]]);
-    assert.equal((await h.post(`/api/api-clients/${CLIENT}`, h.ana, { shareEmail: 'ana@example.test' })).status, 403);
-    assert.equal((await h.post('/api/api-clients/user-ana', h.owner, { shareEmail: 'ana@example.test' })).status, 404, 'a person is not an API client');
-    assert.equal((await h.post(`/api/api-clients/${CLIENT}`, h.owner, { shareEmail: `${CLIENT}@service-accounts.invalid` })).status, 422);
-    const set = await h.post(`/api/api-clients/${CLIENT}`, h.owner, { shareEmail: 'ana@example.test' });
-    assert.deepEqual(await set.json(), { id: CLIENT, shareWith: { email: 'ana@example.test' }, shared: 0 });
-    // New documents are shared with Ana as admin; the earlier one only once asked to.
+    // The platform's API access page reads and saves them: organization owners and admins, in the browser only.
+    type Section = { title: string; status: string; fields: { name: string; type: string; value: string[] }[] };
+    const settings = (headers: Record<string, string>, id = CLIENT, name = 'Host product') => h.req(`/api/client-settings/${id}?name=${encodeURIComponent(name)}`, headers);
+    const save = (headers: Record<string, string>, people: unknown, id = CLIENT) => h.post(`/api/client-settings/${id}`, headers, { values: { people } });
+    for (const who of [h.ana, h.host]) assert.equal((await settings(who)).status, 403);
+    const section = await (await settings(h.owner)).json() as Section;
+    assert.deepEqual([section.status, section.fields], ['Seen by the client only', [{ name: 'people', type: 'members', label: 'Share with', value: [] }]]);
+    assert.equal((await settings(h.owner, 'user-ana')).status, 404, 'a person is not an API client');
+    for (const bad of [[`${CLIENT}@service-accounts.invalid`], ['not an email'], Array.from({ length: 51 }, (_, i) => `p${i}@example.test`)]) assert.equal((await save(h.owner, bad)).status, 422);
+    assert.equal((await h.post(`/api/client-settings/${CLIENT}`, h.owner, { values: { people: [], extra: 1 } })).status, 422);
+    assert.equal((await save(h.ana, ['ana@example.test'])).status, 403);
+    // Named: everything it owns, before and after, is theirs to see as admins, at once.
+    const saved = await save(h.owner, ['Ana@example.test', 'vic@example.test']);
+    assert.match((await saved.json() as { notice: string }).notice, /seen by 2 people, as admins/);
     const later = await h.template(h.host);
     const envelope = await h.envelope(h.host, later, { share: [{ email: 'bo@example.test', role: 'viewer' }] });
-    assert.deepEqual((await h.templates(h.ana)).map(t => [t.id, t.myRole]), [[later, 'admin']]);
-    assert.deepEqual((await h.get<{ shares: { email: string; role: string }[] }>(`/api/envelopes/${envelope}/shares`, h.ana)).shares.map(s => [s.email, s.role]), [['ana@example.test', 'admin'], ['bo@example.test', 'viewer']]);
-    const again = await h.post(`/api/api-clients/${CLIENT}`, h.owner, { shareEmail: 'ana@example.test', shareExisting: true });
-    assert.deepEqual((await again.json() as { shared: number }).shared, 3);
-    assert.deepEqual((await h.templates(h.ana)).map(t => t.id).sort(), [early, later].sort());
-    const client = (await h.get<{ clients: { shareWith?: { email: string; name?: string } }[] }>('/api/api-clients', h.owner)).clients[0];
-    assert.deepEqual([client.shareWith?.email, client.shareWith?.name], ['ana@example.test', 'Synthetic Member']);
-    // Nobody: new documents are the client's alone again.
-    await h.post(`/api/api-clients/${CLIENT}`, h.owner, { shareEmail: null });
-    const alone = await h.template(h.host);
-    assert.equal((await h.templates(h.ana)).some(t => t.id === alone), false);
+    assert.deepEqual((await h.templates(h.ana)).map(t => [t.id, t.myRole]).sort(), [[early, 'admin'], [later, 'admin']].sort());
+    assert.deepEqual((await h.templates(h.ana, '?scope=shared')).map(t => t.id).sort(), [early, later].sort());
+    assert.deepEqual((await h.envelopes(h.ana)).map(e => [e.id, e.myRole]), [[envelope, 'admin']]);
+    assert.equal((await h.post(`/api/envelopes/${envelope}/shares`, h.ana, { email: 'cy@example.test', role: 'viewer' })).status, 200, 'an admin shares it');
+    assert.equal((await h.templates(h.viewer)).every(t => t.myRole === 'viewer'), true, 'capped for someone who may only view');
+    // Who sees it says so; the client itself sees only what it owns.
+    const sharing = await h.get<{ client?: { people: { email: string; name?: string }[] }; shares: { email: string }[] }>(`/api/envelopes/${envelope}/shares`, h.ana);
+    assert.deepEqual([sharing.client?.people.map(p => [p.email, p.name]), sharing.shares.map(s => s.email)], [[['Ana@example.test', 'Synthetic Member'], ['vic@example.test', 'Synthetic Member']], ['bo@example.test', 'cy@example.test']]);
+    assert.deepEqual((await (await settings(h.owner)).json() as Section).fields[0]!.value, ['Ana@example.test', 'vic@example.test']);
+    // Not named any more: no longer seen, at once; documents shared by hand stay so.
+    await save(h.owner, ['vic@example.test']);
+    assert.deepEqual(await h.templates(h.ana), []);
+    assert.equal((await h.req(`/api/envelopes/${envelope}`, h.cy)).status, 200);
+    // The client deleted on the platform: its list goes.
+    assert.equal((await h.req(`/api/client-settings/${CLIENT}`, h.owner, { method: 'DELETE' })).status, 204);
+    assert.deepEqual(await h.templates(h.viewer), []);
+    // A client that hasn't called Esign yet is named as the page gives it, and can be set ahead.
+    const ahead = await (await settings(h.owner, 'sa-new', 'New program')).json() as Section;
+    assert.equal(ahead.status, 'Seen by the client only');
+    assert.equal((await save(h.owner, ['ana@example.test'], 'sa-new')).status, 200);
   } finally { await h.mf.dispose(); }
 });
 
@@ -308,9 +321,10 @@ test('the catalog lists the settings endpoints only to the organization roles th
   try {
     const paths = async (headers: Record<string, string>) => (await h.get<{ endpoints: { method: string; path: string }[] }>('/api/catalog', headers)).endpoints.map(e => `${e.method} ${e.path}`);
     const owner = await paths(h.owner), editor = await paths(h.ana), admin = await paths(h.host);
-    assert.ok(owner.includes('POST /api/owners/{id}/transfer') && owner.includes('POST /api/api-clients/{id}'));
-    assert.ok(!editor.includes('GET /api/owners') && !editor.includes('GET /api/api-clients') && editor.includes('POST /api/templates/{id}/shares'));
-    assert.ok(admin.includes('GET /api/api-clients') && !admin.includes('GET /api/owners'));
+    assert.ok(owner.includes('POST /api/owners/{id}/transfer'));
+    assert.ok(!editor.includes('GET /api/owners') && editor.includes('POST /api/templates/{id}/shares'));
+    assert.ok(!admin.includes('GET /api/owners'));
+    assert.ok(![...owner, ...admin].some(p => p.includes('/api/client-settings')), 'the platform\'s, not in the catalog');
   } finally { await h.mf.dispose(); }
 });
 

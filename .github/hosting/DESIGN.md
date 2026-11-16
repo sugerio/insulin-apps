@@ -386,6 +386,37 @@ role in that app (Admin, Editor, Viewer or a custom role).
 - **Revoked.** A client revoked on `/settings/oauth-clients` (§5.4) stays on the page, marked Revoked with the day, and
   can't be renamed, given another role or rotated; Delete still removes it.
 
+#### 5.3.1 An app's settings for each client
+
+An app can keep a few settings of its own for each of its OAuth clients, such as who in the organization sees what the
+client creates (Esign's). It declares one path in `insulin.clientSettings`, under the same rule as `insulin.scheduled`
+(§8.5: under `/api/`, never public or reserved), and the API access page shows a section of the app's under each
+live client, for the organization's owners and admins only. The app keeps the values; the gateway shows and forwards
+them and stores nothing.
+
+- **The calls.** Over the app's service binding, to `https://<app host><path>/<service account id>`, as the signed-in
+  owner or admin (the usual identity headers, §2.4, with `x-suger-access-via: browser`), each with a 2.5-second timeout:
+  - `GET ?name=<client name>`: the section. The page reads every live client's section at once when it opens. The name
+    lets the app know a client that hasn't called it yet.
+  - `POST` with `{"values": {"<field>": …}}`: saves the section. The app answers 200 with `{"notice"?}`, or 422 with
+    `{"errors"?: {"<field>": "<message>"}, "message"?}`, shown under the section, which stays open.
+  - `DELETE`: the client was deleted on this page; the app forgets its settings. Whatever it answers, the deletion
+    stands. A client deleted on `/settings/oauth-clients` (§5.4) isn't announced, so the app treats settings for a
+    client that no longer calls it as harmless leftovers.
+- **The section.** JSON, every string plain text (control characters become spaces, never HTML): `title` (≤ 80
+  characters), optional `description` (≤ 300) and `status` (≤ 200, shown under the title), and 1 to 5 `fields`, each
+  with a `name` (`[a-z][A-Za-z0-9]{0,39}`, unique), a `label` (≤ 80), an optional `hint` (≤ 200), a `type` and a
+  `value`. The only type is `members`: people of the organization, as a list of at most 50 email addresses, shown as
+  a checkbox list of the organization's members (an address that is no longer one is listed as left out). Anything
+  else, an error status or no answer in time makes the section unavailable: the page says the app's settings couldn't
+  be loaded, and the rest of it works.
+- **Saving.** The gateway reads the section again, then sends only its fields: for a members field, the addresses
+  checked that belong to the organization's members, spelled as the member's, once each, at most 50. Only the
+  organization's owners and admins save (OWNER or ADMIN re-checked, as for every write on the page), only for a live
+  client of that app in their organization.
+- **What the app checks.** It answers only `x-suger-access-via: browser` from an organization owner or admin, and
+  validates the values itself; the gateway's filtering is a courtesy, not its guard.
+
 ### 5.4 OAuth clients across the organization
 
 `insulinapps.com/settings/oauth-clients` (Settings › OAuth clients, §3.2) lists every OAuth client of the organization in
@@ -492,12 +523,13 @@ declared in the app's `package.json` under `insulin`:
   "permissions": [ … ],
   "publicPaths": ["/sign", "/api/public/", "/assets/"],
   "scheduled": "/api/scheduled",
+  "clientSettings": "/api/client-settings",
   "secrets": ["ESIGN_OTP_KEY", "ESIGN_FRAME_ANCESTORS"]
 }
 ```
 
-The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths` and
-`scheduled` again and fails closed.
+The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths`,
+`scheduled` and `clientSettings` again and fails closed.
 
 ### 8.1 Public paths
 
@@ -648,7 +680,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | Name | Kind | Notes |
 |---|---|---|
 | `GATEWAY_SECRET_KEY` | secret | 32 random bytes, base64. Encrypts TOTP secrets, stored credentials and OIDC client secrets; derives the apps' `SUGER_APP_TOKEN`. Without it MFA, stored credentials and OIDC can't be set up (the rest works) |
-| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled` | var | From each app's `package.json` (§2.3, §8.1, §8.5) |
+| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled`, `SITE_APPS[].clientSettings` | var | From each app's `package.json` (§2.3, §8.1, §8.5, §5.3.1) |
 | `RL_PUBLIC` | ratelimit | Requests to public paths that aren't GET or HEAD, per app and IP; 60 a minute suggested (§8.1) |
 | `ORG_REQUEST_EMAIL` | var | Optional: Insulin Apps support's address for requests for more organizations (§3.1). A GitHub variable, never written in the repository |
 | Cron triggers | trigger | `*/5 * * * *` (the apps' tick, §8.5, and the console's hourly work, §11.5) and `17 3 * * *` (the daily cleanup) |

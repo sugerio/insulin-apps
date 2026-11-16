@@ -10,7 +10,9 @@ import { unknownKeys } from './metadata.ts';
  * Nobody else sees it, an organization's owners and admins included, unless it is shared with them
  * (`document_shares`): by email, as admin, editor or viewer; or with everyone in the organization, as editor or viewer
  * (the row whose key is `EVERYONE`). Everyone means the organization's people: an API client sees only what it owns
- * or is shared with by email, which it never is. Someone shared both ways has the higher role.
+ * or is shared with by email, which it never is. And everything an API client owns is seen, as admin, by every person
+ * on its list (`api_client_people`, set on the platform's API access page: members.ts), for as long as they are on it:
+ * worked out each time from the list, never written per document. Someone shared several ways has the highest role.
  *
  * - viewer: sees it (its audit trail, certificate and signed PDF too) and its sharing; sends envelopes
  *   from a template; tags it for themselves (tags.ts).
@@ -55,18 +57,20 @@ export const shareableEmail = (value: unknown): value is string =>
 const TABLE: Record<ResourceType, string> = { template: 'templates', envelope: 'envelopes' };
 
 /**
- * SQL: the ids of the documents of `type` the caller sees, owned (`mine`), shared with them (`shared`: by email or with
- * everyone, but not their own) or both, as an `IN (...)` set. Each side reads its own index, so the cost is that of the
- * caller's own documents and those shared with everyone. Binds: `visibleBinds`.
+ * SQL: the ids of the documents of `type` the caller sees, owned (`mine`), shared with them (`shared`: by email, with
+ * everyone, or as a person on the list of the API client that owns them; never their own) or both, as an `IN (...)` set.
+ * Each side reads its own index (the shares by grantee, the API clients' lists by email, the documents by owner), so
+ * the cost is that of the documents the caller sees. Binds: `visibleBinds`.
  */
 export function visibleIds(type: ResourceType, scope: 'all' | 'mine' | 'shared' = 'all'): string {
   const mine = `SELECT id FROM ${TABLE[type]} WHERE tenant_id = ? AND owner_user_id = ?`;
-  const shared = `SELECT resource_id FROM document_shares WHERE tenant_id = ? AND grantee_email_key IN (SELECT value FROM json_each(?)) AND resource_type = '${type}'`;
+  const shared = `SELECT resource_id FROM document_shares WHERE tenant_id = ? AND grantee_email_key IN (SELECT value FROM json_each(?)) AND resource_type = '${type}'
+    UNION SELECT id FROM ${TABLE[type]} WHERE tenant_id = ? AND owner_user_id IN (SELECT client_user_id FROM api_client_people WHERE tenant_id = ? AND email_key = ?)`;
   return `(${scope === 'mine' ? mine : scope === 'shared' ? `${shared} EXCEPT ${mine}` : `${mine} UNION ${shared}`})`;
 }
 /** The binds of `visibleIds` for this caller and scope. */
-export function visibleBinds(tenantId: string, caller: Caller, scope: 'all' | 'mine' | 'shared' = 'all'): string[] {
-  const mine = [tenantId, caller.userId], shared = [tenantId, shareKeys(caller)];
+export function visibleBinds(tenantId: string, caller: Caller, scope: 'all' | 'mine' | 'shared' = 'all'): (string | null)[] {
+  const mine = [tenantId, caller.userId], shared = [tenantId, shareKeys(caller), tenantId, tenantId, shareKey(caller)];
   return scope === 'mine' ? mine : scope === 'shared' ? [...shared, ...mine] : [...mine, ...shared];
 }
 
@@ -78,10 +82,16 @@ export function effectiveRole(ownerId: string, sharedRole: string | null, caller
   const role = storedRole(ownerId, sharedRole, caller);
   return role && !can(caller, 'esign.manage') ? 'viewer' : role;
 }
-/** SQL: the caller's share role in the row `alias` of `type`, the higher of theirs and everyone's, as a column. Binds: `shareKeys`. */
+/**
+ * SQL: the caller's share role in the row `alias` of `type`, as a column: admin when they are on the list of the API
+ * client that owns it, else the higher of theirs and everyone's. Binds: `sharedRoleBinds`.
+ */
 export const sharedRoleColumn = (type: ResourceType, alias: string) =>
-  `(SELECT s.role FROM document_shares s WHERE s.resource_type = '${type}' AND s.resource_id = ${alias}.id AND s.grantee_email_key IN (SELECT value FROM json_each(?))
-    ORDER BY CASE s.role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 ELSE 1 END DESC LIMIT 1)`;
+  `(CASE WHEN EXISTS (SELECT 1 FROM api_client_people p WHERE p.tenant_id = ${alias}.tenant_id AND p.client_user_id = ${alias}.owner_user_id AND p.email_key = ?) THEN 'admin'
+    ELSE (SELECT s.role FROM document_shares s WHERE s.resource_type = '${type}' AND s.resource_id = ${alias}.id AND s.grantee_email_key IN (SELECT value FROM json_each(?))
+    ORDER BY CASE s.role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 ELSE 1 END DESC LIMIT 1) END)`;
+/** The binds of `sharedRoleColumn`: the caller's email key (none for an API client), then `shareKeys`. */
+export const sharedRoleBinds = (caller: Caller): (string | null)[] => [shareKey(caller), shareKeys(caller)];
 
 /**
  * The caller's role in one document of their organization, or null when they can't see it (or it doesn't exist). An
@@ -89,7 +99,7 @@ export const sharedRoleColumn = (type: ResourceType, alias: string) =>
  */
 export async function documentRole(db: D1Database, tenantId: string, caller: Caller, type: ResourceType, id: string): Promise<{ role: DocumentRole; ownerId: string } | null> {
   const row = await db.prepare(`SELECT x.owner_user_id, ${sharedRoleColumn(type, 'x')} AS shared_role FROM ${TABLE[type]} x WHERE x.id = ? AND x.tenant_id = ?`)
-    .bind(shareKeys(caller), id, tenantId).first<{ owner_user_id: string; shared_role: string | null }>();
+    .bind(...sharedRoleBinds(caller), id, tenantId).first<{ owner_user_id: string; shared_role: string | null }>();
   const role = row ? effectiveRole(row.owner_user_id, row.shared_role, caller) : null;
   return role && row ? { role, ownerId: row.owner_user_id } : null;
 }
@@ -134,13 +144,6 @@ export function parseShares(value: unknown): Share[] | 'invalid' {
   return out;
 }
 
-/** The share an API client's settings give its documents (members.ts), if any: its person, as admin. */
-export async function clientShare(db: D1Database, tenantId: string, caller: Caller): Promise<Share | null> {
-  if (!isClient(caller)) return null;
-  const row = await db.prepare('SELECT share_email FROM api_clients WHERE tenant_id = ? AND client_user_id = ?').bind(tenantId, caller.userId).first<{ share_email: string }>();
-  return row ? { email: row.share_email, role: 'admin' } : null;
-}
-
 /**
  * The shares a new document gets, from the caller: one per person and one for everyone, the highest role each is
  * given, the caller (its owner) left out.
@@ -167,8 +170,9 @@ export function shareInserts(db: D1Database, tenantId: string, type: ResourceTyp
 type ShareRow = { grantee_email_key: string; grantee_email: string; role: ShareRole; granted_at: number; name: string | null };
 
 /**
- * A document's owner (as Esign has seen them, members.ts), the people it is shared with, by name where known, and
- * `organization`, its share with everyone in the organization, when it has one.
+ * A document's owner (as Esign has seen them, members.ts), the people it is shared with, by name where known,
+ * `organization`, its share with everyone in the organization, when it has one, and `client`, the people on the list of
+ * the API client that owns it, who see it as admins.
  */
 async function sharing(db: D1Database, tenantId: string, type: ResourceType, id: string, ownerId: string) {
   const owner = await db.prepare('SELECT user_id, kind, email, name FROM members WHERE tenant_id = ? AND user_id = ?').bind(tenantId, ownerId).first<{ user_id: string; kind: string; email: string | null; name: string | null }>();
@@ -177,8 +181,13 @@ async function sharing(db: D1Database, tenantId: string, type: ResourceType, id:
       FROM document_shares s WHERE s.tenant_id = ? AND s.resource_type = ? AND s.resource_id = ? ORDER BY s.granted_at, s.grantee_email_key`)
     .bind(tenantId, type, id).all<ShareRow>();
   const everyone = results.find((row) => row.grantee_email_key === EVERYONE);
+  // Owned by an API client: the people on its list, who see it as admins (`client`).
+  const listed = owner?.kind === 'client' ? (await db.prepare(`SELECT p.email,
+      (SELECT m.name FROM members m WHERE m.tenant_id = p.tenant_id AND m.email_key = p.email_key AND m.kind = 'person' ORDER BY m.last_seen_at DESC LIMIT 1) AS name
+      FROM api_client_people p WHERE p.tenant_id = ? AND p.client_user_id = ? ORDER BY p.added_at, p.email_key`).bind(tenantId, ownerId).all<{ email: string; name: string | null }>()).results : [];
   return {
     owner: ownerSummary(ownerId, owner),
+    ...(listed.length ? { client: { people: listed.map((row) => ({ email: row.email, ...(row.name ? { name: row.name } : {}) })) } } : {}),
     ...(everyone ? { organization: { role: everyone.role, sharedAt: everyone.granted_at } } : {}),
     shares: results.filter((row) => row !== everyone).map((row) => ({ email: row.grantee_email, ...(row.name ? { name: row.name } : {}), role: row.role, sharedAt: row.granted_at })),
   };

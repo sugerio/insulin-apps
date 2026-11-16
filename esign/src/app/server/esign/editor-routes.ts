@@ -11,7 +11,7 @@ import type {Hono} from 'hono';
 import type { BlobStore } from './blob-store.ts';
 import {parseMetadata,parseTemplateName,unknownKeys} from './metadata.ts';
 import {storedDefaultSigners} from './default-signers.ts';
-import {atLeast,clientShare,documentRole,parseShares,shareInserts,sharesFor} from './ownership.ts';
+import {atLeast,documentRole,parseShares,shareInserts,sharesFor} from './ownership.ts';
 import {mergeTags,parseTags,tagsOf,tagWrites} from './tags.ts';
 import {draftRoleLabels,draftRoles,envelopeDocument} from './envelope-documents.ts';
 
@@ -75,7 +75,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   if(input.sourceTemplateId){const source=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(input.sourceTemplateId,tenant).first<{object_key:string}>();if(!source)return c.json({error:'not_found'},404);
    try{const object=await c.env.ARTIFACTS.get(source.object_key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');sourceHash=await sha256(new Uint8Array(await object.arrayBuffer()));}catch{return c.json({error:'source_unavailable'},503);}
   }
-  const given=sharesFor([...shares,...[await clientShare(c.env.DB,tenant,caller)].filter(share=>share!==null)],caller);
+  const given=sharesFor(shares,caller);
   const allTags=mergeTags(tags,input.sourceTemplateId?await tagsOf(c.env.DB,tenant,caller.userId,'template',input.sourceTemplateId as string):[]);
   let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{sourceTemplateId:(input.sourceTemplateId as string|undefined)??null,sourceSha256:sourceHash,roles:(input.roles as string[]|undefined)??[],templateName,templateMetadata,ownerUserId:caller.userId,shares:replace?[]:given,tags:replace?[]:allTags,replacesSource:replace});}catch{return c.json({error:'origin_not_allowed'},403);}
   const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;

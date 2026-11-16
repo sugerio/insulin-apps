@@ -84,6 +84,11 @@ export function SharePanel({ kind, id, me, onLeft }: { kind: 'templates' | 'enve
           ...(['', 'viewer', 'editor'] as const).map((r) => h(NativeSelectOption, { key: r || 'none', value: r }, ACCESS[r])))
           : h('span', { className: 'text-sm text-muted-foreground' }, `${ACCESS[everyone]}.`),
         h('span', { className: 'text-xs text-muted-foreground' }, everyone ? 'Everyone who signs in to Esign from your organization finds it in their lists. Someone shared below as well gets the higher role.' : 'Only its owner and the people it is shared with see it.'))),
+    // Owned by an API client: the people its settings name see it too, as admins (set on the platform's API access page).
+    sharing.client ? h('section', { 'aria-label': 'From the API client\'s settings', className: 'flex flex-col gap-1 rounded-md border p-3 text-sm' },
+      h('span', { className: 'font-medium' }, 'From the API client\'s settings'),
+      h('span', { className: 'text-muted-foreground' }, `Admin: ${sharing.client.people.map((p) => (p.name ? `${p.name} (${p.email})` : p.email)).join(', ')}`),
+      h('span', { className: 'text-xs text-muted-foreground' }, 'Everything this API client creates is theirs to see. Change who on API access, in Esign\'s settings.')) : null,
     sharing.shares.length === 0 ? h('p', { className: 'text-sm text-muted-foreground' }, 'Not shared with anyone by email.')
       : h(Table, { 'aria-label': 'Shared with' },
         h(TableHeader, null, h(TableRow, null, h(TableHead, null, 'Shared with'), h(TableHead, null, 'Role'), h(TableHead, null, h('span', { className: 'sr-only' }, 'Actions')))),

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { NAVIGATION_ICONS, listApps, navigationPathProblem, publicPathProblem, readNavigation, scheduledProblem, validateAppName } from './list-apps.mjs'
+import { NAVIGATION_ICONS, listApps, navigationPathProblem, publicPathProblem, readClientSettings, readNavigation, scheduledProblem, validateAppName } from './list-apps.mjs'
 
 const temporary = []
 after(async () => Promise.all(temporary.map((directory) => rm(directory, { recursive: true, force: true }))))
@@ -27,8 +27,8 @@ test('discovers top-level apps in stable order with their public metadata', asyn
   await mkdir(join(root, 'not-an-app'))
 
   assert.deepEqual(await listApps(root), [
-    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [], publicPaths: [], scheduled: null, navigation: [], secrets: [] },
-    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [], publicPaths: [], scheduled: null, navigation: [], secrets: [] },
+    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [], publicPaths: [], scheduled: null, clientSettings: null, navigation: [], secrets: [] },
+    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [], publicPaths: [], scheduled: null, clientSettings: null, navigation: [], secrets: [] },
   ])
 })
 
@@ -110,6 +110,20 @@ test("reads the path an app's due work runs on, which must be under /api/ and ne
   ]) {
     const broken = await repository({ broken: { insulin: { publicPaths: ['/api/public/'], scheduled } } })
     await assert.rejects(() => listApps(broken), message, String(scheduled))
+  }
+})
+
+test("reads the path of an app's section for each OAuth client, under the same rule as the scheduled path", async () => {
+  const root = await repository({ signing: { insulin: { publicPaths: ['/api/public/'], clientSettings: '/api/client-settings' } } })
+  assert.equal((await listApps(root))[0].clientSettings, '/api/client-settings')
+  assert.equal(readClientSettings('signing', undefined), null)
+  for (const [clientSettings, message] of [
+    ['/api/public/settings', /insulin\.clientSettings must not be one of the app's public paths or under one/],
+    ['/settings', /insulin\.clientSettings must be a path under \/api\//],
+    ['/api/__suger/settings', /insulin\.clientSettings must not reach \/api\/__suger/],
+  ]) {
+    const broken = await repository({ broken: { insulin: { publicPaths: ['/api/public/'], clientSettings } } })
+    await assert.rejects(() => listApps(broken), message, clientSettings)
   }
 })
 

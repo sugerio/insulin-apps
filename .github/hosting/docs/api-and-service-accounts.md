@@ -73,9 +73,21 @@ program can switch to the new one without stopping:
 
 After 24 hours the previous secret simply stops issuing tokens, and those it issued run out within the hour.
 
+### The app's own settings for a client
+
+Some apps keep settings of their own for each OAuth client. Their API access page then has a disclosure named after
+the app (**Esign settings**, say) under each client's name, for the organization's owners and admins: open it, change
+the settings and choose **Save**. The app keeps them and says whether it saved them; if it refuses, it says what to fix next to the setting.
+
+Esign's is **Who sees what it creates**: the members you check see, and manage as admins, every template and envelope
+the client creates, including those it made before. Unchecking someone takes that away at once.
+
+If the app can't be reached, the disclosure says its settings couldn't be loaded; the rest of the page works as usual.
+
 ### Delete it
 
-**Delete** removes the client at once: both its secrets and every token it holds stop working.
+**Delete** removes the client at once: both its secrets and every token it holds stop working. An app that keeps
+settings for the client is told to forget them.
 
 ## Every OAuth client of the organization
 

@@ -384,15 +384,22 @@ export const members = sqliteTable('members', {
   check('members_kind', sql`${table.kind} IN ('person', 'client')`),
 ])
 
-/** Whom an API client's templates and envelopes are shared with, as admin (members.ts): set in Esign's settings. */
-export const apiClients = sqliteTable('api_clients', {
+/**
+ * The people who see everything an API client owns, as admin, for as long as they are listed (ownership.ts): set by an
+ * organization's owners and admins on the platform's API access page (members.ts, `/api/client-settings`). Nothing is
+ * written per document: who sees a document is worked out from this list each time.
+ */
+export const apiClientPeople = sqliteTable('api_client_people', {
   tenant_id: text('tenant_id').notNull(),
   client_user_id: text('client_user_id').notNull(),
-  share_email: text('share_email').notNull(),
-  share_email_key: text('share_email_key').notNull(),
-  updated_by: text('updated_by').notNull(),
-  updated_at: integer('updated_at').notNull(),
-}, (table) => [primaryKey({ columns: [table.tenant_id, table.client_user_id] })])
+  email_key: text('email_key').notNull(),
+  email: text('email').notNull(),
+  added_by: text('added_by').notNull(),
+  added_at: integer('added_at').notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.tenant_id, table.client_user_id, table.email_key] }),
+  index('api_client_people_by_email').on(table.tenant_id, table.email_key),
+])
 
 /**
  * The hourly usage report to the platform (usage-metrics.ts): one row per UTC hour (epoch ms of its start), claimed

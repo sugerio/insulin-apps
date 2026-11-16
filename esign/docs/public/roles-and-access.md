@@ -36,19 +36,19 @@ them. A role in a template or an envelope never goes beyond your role in Esign: 
 Viewer of everything shared with you. **Share** in a template's ⋯ menu, or **Who sees it** on an envelope, shows its owner and
 the people it is shared with; its admins and owner share it there. **General access** there shares it with everyone in
 your organization, as Viewer or Editor: everyone who signs in to Esign from it finds it in their lists, at that role or
-the higher one they are shared by email. API clients are not part of everyone: they see only what they own or is shared
-with their person.
+the higher one they are shared by email. API clients are not part of everyone: they see only what they own.
 
 Your **tags** on a template or an envelope are yours alone: nobody else sees them. Lists filter by them (**Tags**),
 and by whether they are yours or shared with you (**Sender** on Envelopes, **Owner** on Templates).
 
-**Ownership**, in the navigation of organization owners and admins:
+**API clients' documents.** What an OAuth client creates is its own. On Esign's **API access** page, your organization's
+owners and admins open **Esign settings** under a client and check, under **Who sees what it creates**, the members who
+see everything it owns, as Admin. Without anyone, only the client sees it. A change applies at once, to what the client
+created before too.
 
-- **API clients**: each OAuth client that has called Esign, and the one person what it creates is shared with, as Admin.
-  Without one, only the client sees what it creates. Choosing someone can share what it already created too.
-- **Owners** (organization owners only): everyone who owns templates or envelopes. **Take over** makes you the owner of
-  everything someone owns, for someone who left or a client no longer used; the people it is shared with keep their
-  roles.
+**Ownership**, for organization owners (admins find it in their navigation, with a pointer to API access): **Owners**
+lists everyone who owns templates or envelopes. **Take over** makes you the owner of everything someone owns, for
+someone who left or a client no longer used; the people it is shared with keep their roles.
 
 ## Who can do what
 
@@ -131,8 +131,8 @@ the organization creates on Esign's **API access** tab, with a role of its own (
 role). A host uses one to send envelopes, embed the signing page and the
 field editor, follow statuses, and finish due work at once with `POST /api/process-due` when it can't wait for the
 platform's five-minute run. **Rotate secret** there keeps the previous secret working for 24 hours, so the host can
-switch over without stopping. What a client creates is its own: choose, in Esign's **Ownership** page, the person it is
-shared with. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
+switch over without stopping. What a client creates is its own: under the client on that tab, **Esign settings** › **Who
+sees what it creates** names the members who see all of it, as Admin. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ## What neither can reach
 

@@ -23,7 +23,7 @@ export type EnvelopeSummary = Owned & {
 }
 export type Share = { email: string; name?: string; role: Exclude<DocumentRole, 'owner'>; sharedAt: number }
 /** `organization`: shared with everyone in the organization, as editor or viewer. */
-export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; organization?: { role: 'editor' | 'viewer'; sharedAt: number }; shares: Share[] }
+export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; organization?: { role: 'editor' | 'viewer'; sharedAt: number }; client?: { people: { email: string; name?: string }[] }; shares: Share[] }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
 export type Envelope = Owned & { id: string; templateId: string | null; status: string; draft?: Record<string, unknown>; upload?: { document: boolean; roles: string[]; fields: { role: string; type: string; required?: boolean }[] }; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
 /** A contact (server/esign/contacts.ts): someone the organization's envelopes named, or a member added. Never evidence. */

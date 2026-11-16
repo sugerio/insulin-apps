@@ -142,8 +142,8 @@ the arrows for the next and previous pages). Each row shows:
 
 Above the list:
 
-- **Search envelopes**: the document's name, a signer's name or email, or an envelope id. While it is empty, it offers the
-  common filters below, one click each.
+- **Search envelopes**: the envelopes whose document name, or a signer's name or email, contains what you type (or whose
+  id it is), as you pause typing or press Enter.
 - **Date**: created in the last 24 hours, 7 or 30 days, 6 or 12 months.
 - **Status**: In progress (which includes the few seconds an envelope spends finishing), Completed, Declined, Voided,
   Expired. A status has its own address, such as `/envelopes?status=completed`, to bookmark or share.

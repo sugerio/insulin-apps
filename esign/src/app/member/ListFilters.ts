@@ -1,8 +1,7 @@
-// What the Envelopes and Templates lists share above and below them: a search that, while empty, offers the common
-// filters; filter buttons, each a menu of choices (Date, Sender and the page's own); Tags, the member's own, picked by
+// What the Envelopes and Templates lists share above and below them: a search by text; filter buttons, each a menu of choices (Date, Sender and the page's own); Tags, the member's own, picked by
 // clicking; a chip for each filter in use, which removes it, and Clear all; and pages (Per page, previous, next).
 import React, { useEffect, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Search, SlidersHorizontal, Tag, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Search, Tag, X } from 'lucide-react'
 import { Badge } from '../components/ui/badge.ts'
 import { Button } from '../components/ui/button.ts'
 import { DropdownMenu } from '../components/ui/dropdown-menu.ts'
@@ -60,11 +59,9 @@ export function TagsFilter({ picked, mine, what, onChange }: { picked: string[];
   })
 }
 
-export type Suggestion = { label: string; kind: string; apply: () => void }
-/** The search: applied as the member pauses typing or presses Enter; while empty and focused, the common filters. */
-export function SearchBox({ id, label, value, onSearch, suggestions }: { id: string; label: string; value: string; onSearch: (q: string) => void; suggestions: Suggestion[] }) {
+/** The search: the text typed, applied as the member pauses typing or presses Enter. */
+export function SearchBox({ id, label, placeholder, value, onSearch }: { id: string; label: string; placeholder: string; value: string; onSearch: (q: string) => void }) {
   const [typed, setTyped] = useState(value)
-  const [open, setOpen] = useState(false)
   // Cleared from outside (a chip, Clear all): the field follows.
   useEffect(() => { if (!value) setTyped('') }, [value])
   useEffect(() => {
@@ -75,17 +72,10 @@ export function SearchBox({ id, label, value, onSearch, suggestions }: { id: str
   return h('div', { className: 'relative w-full sm:w-64' },
     h(Search, { className: 'pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground', 'aria-hidden': true }),
     h(Input, {
-      id, type: 'search', 'aria-label': label, placeholder: label, className: 'pl-8', value: typed, maxLength: 100, autoComplete: 'off',
+      id, type: 'search', 'aria-label': label, placeholder, className: 'pl-8', value: typed, maxLength: 100, autoComplete: 'off',
       onChange: (e: React.ChangeEvent<HTMLInputElement>) => setTyped(e.target.value),
-      onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') { onSearch(typed.trim()); setOpen(false) } if (e.key === 'Escape') setOpen(false) },
-      onFocus: () => setOpen(true), onBlur: () => setOpen(false),
-    }),
-    open && !typed && suggestions.length ? h('div', { role: 'listbox', 'aria-label': 'Filter by', className: 'absolute z-30 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
-      h('div', { className: 'px-2 py-1.5 text-xs font-medium text-muted-foreground' }, 'Filter by'),
-      ...suggestions.map((s) => h('button', {
-        key: `${s.kind}-${s.label}`, type: 'button', role: 'option', 'aria-selected': false, className: 'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent',
-        onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => { setOpen(false); s.apply() },
-      }, h(SlidersHorizontal, { className: 'size-4 text-muted-foreground', 'aria-hidden': true }), h('span', { className: 'flex flex-col' }, s.label, h('span', { className: 'text-xs text-muted-foreground' }, s.kind))))) : null)
+      onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') onSearch(typed.trim()) },
+    }))
 }
 
 export type Chip = { label: string; clear: () => void }

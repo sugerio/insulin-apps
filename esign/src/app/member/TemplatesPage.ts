@@ -18,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
 import { allows, api, apiJson, canManage, dateTime, defaultSignersOf, describeError, listPath, MAX_PDF_BYTES, ownerName, ROLE_NAMES, type Me, type Scope, type TemplateSummary } from './api.ts'
 import { ContactField } from './ContactField.ts'
-import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, sinceOf, TagsFilter, toggled, useMyTags, usePages, type Chip, type Suggestion } from './ListFilters.ts'
+import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, sinceOf, TagsFilter, toggled, useMyTags, usePages, type Chip } from './ListFilters.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { SharePanel } from './SharePanel.ts'
@@ -87,10 +87,6 @@ export function TemplatesPage({ me }: { me: Me }) {
   const set = (change: Partial<typeof filters>) => setFilters((f) => ({ ...f, ...change }))
   const OWNERS: Record<Exclude<Scope, ''>, string> = { mine: 'Mine', shared: 'Shared with me' }
   const STATUSES: Record<'active' | 'draft', string> = { active: 'Ready to use', draft: 'Draft' }
-  const suggestions: Suggestion[] = [
-    ...Object.entries(OWNERS).map(([key, label]) => ({ label, kind: 'Owner', apply: () => set({ scope: key as Scope }) })),
-    { label: 'Draft', kind: 'Status', apply: () => set({ status: 'draft' }) },
-  ]
   const chips: Chip[] = [
     ...(filters.q ? [{ label: `Search: ${filters.q}`, clear: () => set({ q: '' }) }] : []),
     ...(filters.date ? [{ label: `Date: ${DATES[filters.date]!.label}`, clear: () => set({ date: '' }) }] : []),
@@ -356,7 +352,7 @@ export function TemplatesPage({ me }: { me: Me }) {
       ] : null),
     h('div', { className: 'flex flex-col gap-3' },
       h('div', { className: 'flex flex-wrap items-center gap-2' },
-        h(SearchBox, { id: 'template-search', label: 'Search templates', value: filters.q, onSearch: (q) => set({ q }), suggestions }),
+        h(SearchBox, { id: 'template-search', label: 'Search templates', placeholder: 'Template name', value: filters.q, onSearch: (q) => set({ q }) }),
         h(FilterButton, { name: 'Date', value: filters.date, options: dateLabels, onChange: (date) => set({ date }) }),
         h(FilterButton, { name: 'Owner', value: filters.scope, options: OWNERS, onChange: (scope) => set({ scope: scope as Scope }) }),
         h(FilterButton, { name: 'Status', value: filters.status, options: STATUSES, onChange: (status) => set({ status: status as '' | 'active' | 'draft' }) }),

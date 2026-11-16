@@ -2,7 +2,7 @@
 // is to, shows where it stands (out for signature: how many have signed and whose turn it is; else its status), its
 // owner and when it last changed, and one action that fits its state (Resend to the signer whose turn it is, Download a
 // completed one's signed PDF, else View), with the rest in its ⋯ menu (Void, Tags, Share). Above the list: a search (the
-// document, a signer's name or email, an envelope id; while empty, it offers the common filters), Date, Status, Sender
+// document, a signer's name or email, an envelope id), Date, Status, Sender
 // (theirs, or shared with them), Quick views (waiting for others, expiring soon) and Tags (the member's own, picked from
 // those they use), each shown
 // as a chip that removes it, and Clear all; below it, pages. Those who manage start new ones from New envelope: from a
@@ -17,7 +17,7 @@ import { Label } from '../components/ui/label.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { Textarea } from '../components/ui/textarea.ts'
 import { allows, api, apiJson, canManage, dateTime, describeError, envelopesPath, listPath, ownerName, saveSignedPdf, statusLabel, taskLabel, type EnvelopeSummary, type Me, type Scope } from './api.ts'
-import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, SENDERS, sinceOf, TagsFilter, toggled, useMyTags, usePages, type Chip, type Suggestion } from './ListFilters.ts'
+import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, SENDERS, sinceOf, TagsFilter, toggled, useMyTags, usePages, type Chip } from './ListFilters.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { SaveAsTemplateDialog } from './SaveAsTemplateDialog.ts'
@@ -157,12 +157,6 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     return items.filter((item): item is MenuItem => !!item)
   }
 
-  // While the search is empty and focused, the common filters, one click each.
-  const suggestions: Suggestion[] = [
-    ...Object.entries(STATUSES).map(([key, s]) => ({ label: s.label, kind: 'Status', apply: () => navigate(envelopesPath(key)) })),
-    ...Object.entries(SENDERS).map(([key, label]) => ({ label, kind: 'Sender', apply: () => set({ scope: key as Scope }) })),
-    ...Object.entries(VIEWS).map(([key, label]) => ({ label, kind: 'Quick view', apply: () => set({ view: key }) })),
-  ]
   const chips: Chip[] = [
     ...(filters.q ? [{ label: `Search: ${filters.q}`, clear: () => set({ q: '' }) }] : []),
     ...(filters.date ? [{ label: `Date: ${DATES[filters.date]!.label}`, clear: () => set({ date: '' }) }] : []),
@@ -192,7 +186,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     h(Notice, { message: opened ? '' : message.text, error: message.error }),
     h('div', { className: 'flex flex-col gap-3' },
       h('div', { className: 'flex flex-wrap items-center gap-2' },
-        h(SearchBox, { id: 'envelope-search', label: 'Search envelopes', value: filters.q, onSearch: (q) => set({ q }), suggestions }),
+        h(SearchBox, { id: 'envelope-search', label: 'Search envelopes', placeholder: 'Document, signer or email', value: filters.q, onSearch: (q) => set({ q }) }),
         h(FilterButton, { name: 'Date', value: filters.date, options: dateLabels, onChange: (date) => set({ date }) }),
         h(FilterButton, { name: 'Status', value: STATUSES[statusKey] ? statusKey : '', options: Object.fromEntries(Object.entries(STATUSES).map(([k, s]) => [k, s.label])), onChange: (key) => navigate(envelopesPath(key)) }),
         h(FilterButton, { name: 'Sender', value: filters.scope, options: SENDERS, onChange: (scope) => set({ scope: scope as Scope }) }),

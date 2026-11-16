@@ -64,11 +64,10 @@ test('the search, its suggested filters, the filter buttons, their chips and Cle
     assert.equal(app.byLabel('Next page').props.disabled, true, 'the last page');
     await app.click(app.byLabel('Previous page'), 'previous');
     assert.equal(lastQuery().get('before'), null);
-    // The empty search offers the common filters; one is a click.
-    await app.act(async () => { app.byId('envelope-search').props.onFocus(); });
-    assert.ok(app.byLabel('Filter by'));
-    await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'option' && visibleText(n.children).includes('Waiting for others'))[0], 'Waiting for others');
-    assert.equal(lastQuery().get('view'), 'waiting');
+    // The search is text only: no menu of filters while it is empty (the filter buttons are beside it).
+    await app.act(async () => { app.byId('envelope-search').props.onFocus?.(); });
+    assert.equal(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Filter by').length, 0);
+    assert.equal(app.byId('envelope-search').props.placeholder, 'Document, signer or email');
     // Typing searches, as the member presses Enter.
     await app.type(app.byId('envelope-search'), 'nda');
     await app.keyDown(app.byId('envelope-search'), 'Enter');
@@ -81,6 +80,9 @@ test('the search, its suggested filters, the filter buttons, their chips and Cle
     await app.click(app.byLabel('Sender filter'), 'Sender');
     await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitemradio' && visibleText(n.children).trim() === 'Shared with me')[0], 'shared');
     assert.equal(lastQuery().get('scope'), 'shared');
+    await app.click(app.byLabel('Quick views filter'), 'Quick views');
+    await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitemradio' && visibleText(n.children).trim() === 'Waiting for others')[0], 'waiting');
+    assert.equal(lastQuery().get('view'), 'waiting');
     // Tags: the member's own, picked by clicking; the menu stays open for another.
     await app.click(app.byLabel('Tags filter'), 'Tags');
     const tagItem = (name: string) => app.renderer.root.findAll((n: any) => n.props?.role === 'menuitemcheckbox' && visibleText(n.children).trim() === name)[0];

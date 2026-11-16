@@ -1,0 +1,81 @@
+import { DocLink, DocTable, InApp, type DocTopic } from './parts.tsx'
+
+// Docs › Limits: the free limits (package.json `insulin.limits`, their defaults) and what happens at each (design
+// section 12, src/app/server/limits.ts and tick.ts). The support address comes from the platform, never from here.
+
+export const limits: DocTopic = {
+  slug: 'limits',
+  title: 'Limits and what happens at each',
+  summary: 'Knowledge is free within limits for each organization: what they are, what happens near and at each one, and how to ask for more.',
+  group: 'background',
+  sections: [
+    {
+      id: 'the-limits',
+      title: 'The limits',
+      body: (
+        <>
+          <p>
+            Insulin Knowledge is free on insulinapps.com. To keep it free for everyone, each organization has limits, which
+            Insulin Apps sets and can raise for one organization. These are the defaults; Admins see your organization's own
+            under <b>Usage and limits</b> in <b>Rules and data</b>, with what you used beside each.
+          </p>
+          <DocTable
+            label="The limits and their defaults"
+            columns={['Limit', 'Default', 'What counts']}
+            rows={[
+              ['Collections', '20', 'Every collection, asleep or not'],
+              ['Documents', '500', 'Every file, web page and note stored, including the ones not used'],
+              ['Largest file', '25 MB', 'One file; at most 2 MB of text is learned from it'],
+              ['Stored files', '2 GB', 'The text Knowledge keeps, with hidden values removed'],
+              ['Documents learned a month', '1,000', 'Files, web pages and notes learned this month, including re-reads'],
+              ['Questions a month', '5,000', 'Questions on the site, from AI assistants and from API clients'],
+              ['Built-in answers a month', '2,000', "Answers written by Insulin Knowledge's built-in model; your organization's own model doesn't count"],
+              ['Awake hours a month', '100', 'Time collections are awake: while people ask and 10 minutes after, while learning, while exporting, and kept-ready hours'],
+              ['Collections kept ready', '1', 'Collections with a keep-ready window'],
+              ['Days of daily backups', '30', 'How long daily backups are kept; the latest is kept as long as the collection exists'],
+            ]}
+          />
+          <p>The monthly limits start again on the 1st of each month (UTC).</p>
+        </>
+      ),
+    },
+    {
+      id: 'what-happens-at-a-limit',
+      title: 'What happens at a limit',
+      body: (
+        <>
+          <ul>
+            <li><b>At 80%</b> of any limit, your organization's admins get an e-mail.</li>
+            <li><b>Collections, documents, stored files, largest file:</b> new files are refused before anything starts, saying what to remove. Nothing partial is learned. <b>Remove for good</b> frees space; <b>Stop using</b> doesn't.</li>
+            <li><b>Documents learned:</b> new files wait until the 1st; everything already learned keeps answering.</li>
+            <li><b>Questions:</b> the site, AI assistants and API clients are told your organization has used this month's questions, until the 1st.</li>
+            <li><b>Built-in answers:</b> people get the sources without a written answer. An Admin can switch to your organization's own model in Rules and data, which doesn't count.</li>
+            <li><b>Awake hours:</b> keep-ready pauses at 90%, so the rest stays for questions, and starts again on the 1st. At 100%, Knowledge stops answering until the 1st: on the site a pop-up says so and names Insulin Apps support; AI assistants and API clients get the same message.</li>
+            <li><b>Collections kept ready:</b> turn keep-ready off on another collection first.</li>
+          </ul>
+          <p>
+            Every limit message names Insulin Apps support. Assistants and programs get 429 <b>quota_exceeded</b> with the limit
+            and when it resets. See <DocLink to="ai-assistants-and-api" section="rules-every-request-follows">Rules every request follows</DocLink>.
+          </p>
+        </>
+      ),
+    },
+    {
+      id: 'ask-for-more',
+      title: 'Ask for more',
+      body: (
+        <>
+          <p>
+            <b>Ask for more</b>, in Rules and data, e-mails Insulin Apps support with your organization's usage beside each limit.
+            They reply by e-mail, and a raised limit shows in Rules and data within five minutes.
+          </p>
+          <p>
+            Need much more? Insulin Knowledge is open source under the MIT license: you can run the same code on your own
+            Cloudflare account and set your own limits.
+          </p>
+          <InApp>Rules and data › Usage and limits, and Ask for more. Admins also see the awake hours this month of each collection they have a role in.</InApp>
+        </>
+      ),
+    },
+  ],
+}

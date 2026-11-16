@@ -1,0 +1,177 @@
+import type { ImportStatus, OutboxEvent, RestorePoint } from '../../../engine/src/contract.ts'
+import { EngineClient, SERVICE_ORG } from './engine/client.ts'
+import type { Bindings } from './env.ts'
+import { logError } from './http.ts'
+import { consumeAwake, release, reservationsOf, settle } from './limits.ts'
+import { MAIL, sendMail } from './mail.ts'
+import { memberOf } from './members.ts'
+
+/**
+ * Keeping D1 in step with the engine (design section 11): the engine commits first and writes what happened to its
+ * outbox; the tick pulls it (`GET /v1/outbox?since=`) and applies each event once (table `engine_events`, written in
+ * the same batch as the event's effect, so a repeated page or an overlapping tick changes nothing):
+ *
+ * - `committed`: a history row per (collection, version), the collection's counts (ending the import's reservation of
+ *   documents and stored bytes in the same batch), its monthly use settled, and "learned" mail to whoever started it.
+ *   Changes within 5 minutes share one restore point in the engine (the earlier one folds into the new one and is no
+ *   longer listed), and going back, undo, repairs and coming back from a backup commit with no import, so the history
+ *   list is then reconciled with the engine's own (`GET /restore-points`), once per collection a page touched;
+ * - `import`: the import's state; a failed, cancelled or duplicate import's reservations released, "import failed" mail;
+ * - `usage`: running time counted against awake hours (and the collection's blocks used up);
+ * - `state`, `backup`, `deleted`: what lists and Health show.
+ */
+const NAME = 'outbox'
+const TERMINAL = new Set(['committed', 'duplicate', 'failed', 'cancelled'])
+
+export async function syncOutbox(env: Bindings, now: number, deadline: number): Promise<{ applied: number; pages: number }> {
+  if (!env.ENGINE) return { applied: 0, pages: 0 }
+  const db = env.DB
+  const engine = new EngineClient(env.ENGINE, SERVICE_ORG)
+  const state = await db.prepare(`SELECT cursor FROM sync_state WHERE name = ?`).bind(NAME).first<{ cursor: string | null }>()
+  let cursor = state?.cursor ?? null
+  let applied = 0
+  let pages = 0
+  for (; pages < 20 && Date.now() < deadline; ) {
+    const page = await engine.outbox(cursor, 200)
+    pages += 1
+    const committed = new Map<string, string>()
+    for (const event of page.events) {
+      if (await applyEngineEvent(env, event, now)) applied += 1
+      if (event.type === 'committed') committed.set(`${event.org}\u0000${event.collectionId}`, event.org)
+    }
+    for (const [key, org] of committed) await reconcileHistory(env, org, key.slice(org.length + 1)).catch((error) => logError('history_reconcile_failed', error, { org }))
+    cursor = page.cursor
+    await db.prepare(
+      `INSERT INTO sync_state (name, cursor, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (name) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at`,
+    ).bind(NAME, cursor, now).run()
+    if (!page.more) break
+  }
+  return { applied, pages }
+}
+
+/**
+ * The history list in D1 made to follow the engine's restore points: rows the engine no longer lists (folded into a
+ * later one) go, listed ones are added or updated. `points`, when the caller already has them, saves the engine call.
+ */
+export async function reconcileHistory(env: Bindings, org: string, collectionId: string, points?: RestorePoint[]): Promise<void> {
+  if (!env.ENGINE && !points) return
+  const db = env.DB
+  const collection = await db.prepare(`SELECT id FROM collections WHERE id = ? AND org_id = ? AND state = 'active'`).bind(collectionId, org).first()
+  if (!collection) return
+  const listed = points ?? (await new EngineClient(env.ENGINE!, org).restorePoints(collectionId)).restorePoints
+  const versions = listed.map((point) => point.version)
+  const statements = [
+    db.prepare(`DELETE FROM history WHERE collection_id = ?1 AND org_id = ?2 AND version NOT IN (SELECT value FROM json_each(?3))`).bind(collectionId, org, JSON.stringify(versions)),
+    ...listed.map((point) => db.prepare(
+      `INSERT INTO history (collection_id, version, org_id, created_at, summary, documents, import_id) VALUES (?, ?, ?, ?, ?, ?, NULL)
+       ON CONFLICT (collection_id, version) DO UPDATE SET created_at = excluded.created_at, summary = excluded.summary, documents = excluded.documents`,
+    ).bind(collectionId, point.version, org, Date.parse(point.createdAt) || 0, point.summary.slice(0, 500), point.documents)),
+  ]
+  await db.batch(statements)
+}
+
+/** Runs an event's statements with its mark, once: false when it was applied before. */
+async function once(db: D1Database, event: OutboxEvent, statements: D1PreparedStatement[], now: number): Promise<boolean> {
+  try {
+    await db.batch([db.prepare(`INSERT INTO engine_events (id, at) VALUES (?, ?)`).bind(event.id, now), ...statements])
+    return true
+  } catch (error) {
+    const seen = await db.prepare(`SELECT 1 AS seen FROM engine_events WHERE id = ?`).bind(event.id).first()
+    if (seen) return false
+    throw error
+  }
+}
+
+export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: number): Promise<boolean> {
+  const db = env.DB
+  const org = event.org
+  const collection = await db.prepare(`SELECT id, name, state FROM collections WHERE id = ? AND org_id = ?`).bind(event.collectionId, org).first<{ id: string; name: string; state: string }>()
+  if (!collection) return once(db, event, [], now)
+  switch (event.type) {
+    case 'committed': {
+      const at = Date.parse(event.at) || now
+      const applied = await once(db, event, [
+        db.prepare(
+          `INSERT INTO history (collection_id, version, org_id, created_at, summary, documents, import_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (collection_id, version) DO NOTHING`,
+        ).bind(collection.id, event.version, org, at, event.summary.slice(0, 500), event.counts.documents, event.importId),
+        db.prepare(
+          // A collection that has learned something is no longer empty; the engine's own `state` events say more.
+          `UPDATE collections SET version = MAX(version, ?3), documents = ?4, active_documents = ?5, bytes = ?6, facts = ?7, last_restore_point_at = ?8, updated_at = ?9,
+             engine_state = CASE WHEN engine_state = 'empty' THEN 'asleep' ELSE engine_state END
+           WHERE id = ?1 AND org_id = ?2 AND version <= ?3`,
+        ).bind(collection.id, org, event.version, event.counts.documents, event.counts.activeDocuments, event.counts.textBytes, event.counts.facts, at, now),
+        // Documents and stored bytes are counted from the collections themselves: their reservation ends with the new counts.
+        ...(event.importId ? [db.prepare(
+          `UPDATE reservations SET state = 'settled', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND period = 'all' AND state = 'held'`,
+        ).bind(org, `import:${event.importId}`, now)] : []),
+      ], now)
+      if (applied && event.importId) await finishImport(env, org, collection, event.importId, { state: 'committed', version: event.version }, now)
+      return applied
+    }
+    case 'import': {
+      const applied = await once(db, event, [], now)
+      if (applied) await finishImport(env, org, collection, event.import.importId, event.import, now)
+      return applied
+    }
+    case 'usage':
+      return once(db, event, await consumeAwake(db, org, collection.id, Math.max(0, event.seconds), Date.parse(event.at) || now), now)
+    case 'state':
+      return once(db, event, [db.prepare(`UPDATE collections SET engine_state = ?3, updated_at = ?4 WHERE id = ?1 AND org_id = ?2`).bind(collection.id, org, event.state, now)], now)
+    case 'backup':
+      return once(db, event, [db.prepare(`UPDATE collections SET last_backup_at = ?3, updated_at = ?3 WHERE id = ?1 AND org_id = ?2`).bind(collection.id, org, Date.parse(event.at) || now)], now)
+    case 'deleted':
+      return once(db, event, [db.prepare(`UPDATE collections SET state = 'deleted', engine_state = 'deleted', updated_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'deleting'`).bind(collection.id, org, now)], now)
+    default:
+      return once(db, event, [], now)
+  }
+}
+
+/**
+ * An import's new state, from the outbox or from someone asking about it: recorded once it is final, its
+ * reservations settled (committed) or released (anything else), and its starter told. Safe to call more than once.
+ */
+export async function finishImport(env: Bindings, org: string, collection: { id: string; name: string }, importId: string, status: Pick<ImportStatus, 'state'> & Partial<ImportStatus>, now: number): Promise<void> {
+  const db = env.DB
+  const row = await db.prepare(`SELECT id, created_by, kind, files, notified_at FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id)
+    .first<{ id: string; created_by: string; kind: string; files: number; notified_at: number | null }>()
+  if (!row) return
+  const failure = status.state === 'failed' ? plainFailure(status) : null
+  await db.prepare(
+    `UPDATE imports SET state = ?3, version = COALESCE(?4, version), error = COALESCE(?5, error), finished_at = CASE WHEN ?6 THEN COALESCE(finished_at, ?7) ELSE finished_at END
+     WHERE id = ?1 AND org_id = ?2 AND state NOT IN ('committed', 'duplicate', 'failed', 'cancelled')`,
+  ).bind(importId, org, status.state, status.version ?? null, failure, TERMINAL.has(status.state) ? 1 : 0, now).run()
+  if (!TERMINAL.has(status.state)) return
+  const held = await reservationsOf(db, org, `import:${importId}`)
+  if (status.state === 'committed') {
+    // Monthly use is settled now; documents and stored bytes stay reserved until the outbox's `committed` event brings
+    // the collection's new counts, so the same last unit can't be taken in between.
+    const learned = status.files ? status.files.filter((file) => file.state === 'learned').length + (status.notes ?? 0) : Math.max(1, row.files)
+    await settle(db, org, held.filter((reservation) => reservation.key === 'learned_month').map((reservation) => ({ id: reservation.id, used: learned })), now)
+  } else {
+    await release(db, org, held.map((reservation) => reservation.id), now)
+  }
+  // Mail once, whoever saw the final state first.
+  const claimed = await db.prepare(`UPDATE imports SET notified_at = ?3 WHERE id = ?1 AND org_id = ?2 AND notified_at IS NULL`).bind(importId, org, now).run()
+  if (claimed.meta.changes !== 1 || row.kind === 'correction') return
+  const starter = await memberOf(db, org, 'person', row.created_by)
+  if (!starter?.email) return
+  try {
+    if (status.state === 'committed') {
+      const files = status.files?.filter((file) => file.state === 'learned').length ?? row.files
+      await sendMail(env, org, { to: starter.email, ...MAIL.learned(collection.name, files, status.newFacts ?? null) }, 'learned')
+    } else if (status.state === 'failed') {
+      await sendMail(env, org, { to: starter.email, ...MAIL.importFailed(collection.name, failure ?? 'The import failed.') }, 'import_failed')
+    }
+  } catch (error) {
+    logError('import_mail_failed', error, { org })
+  }
+}
+
+/** What went wrong with an import, in plain words, for a person: the engine's own words about the file, or a summary. */
+export function plainFailure(status: Partial<ImportStatus>): string {
+  const file = status.files?.find((candidate) => candidate.fileId === status.failedFileId) ?? status.files?.find((candidate) => candidate.state === 'failed')
+  if (file?.reason) return file.reason
+  if (file) return `Couldn't learn “${file.name}”.`
+  return status.error?.message ?? 'The import failed.'
+}

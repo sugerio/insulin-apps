@@ -62,6 +62,14 @@
 .esign-recipient .esign-sub { color: var(--muted-foreground); margin-top: 4px; font-size: .875rem; }
 /* Embedded in a host's dialog that titles it: the heading is for screen readers only. */
 .esign-recipient.esign-embedded { padding: 4px 4px 0; height: 100vh; min-height: 0; max-width: none; }
+/*
+ * On a wide screen, opened on its own, the page scrolls the document while the side panel (Review's details, Sign's
+ * signature and fields) stays in view beside it, scrolling within itself when taller than the screen. Embedded, the
+ * page is one screen high and the document scrolls in its frame. Narrow screens stack the two (below).
+ */
+@media (min-width: 768px) {
+  .esign-recipient:not(.esign-embedded) .esign-side { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 32px); }
+}
 .esign-recipient.esign-embedded h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .esign-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 /* Stepper: numbered circles joined by lines; done steps show a check. */

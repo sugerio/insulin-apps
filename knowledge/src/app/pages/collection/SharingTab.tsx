@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button.tsx'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog.tsx'
 import { roleWhy } from '../../components/CollectionParts.tsx'
@@ -57,13 +57,24 @@ function ExportCard({ collectionId, collectionName }: { collectionId: string; co
   const [status, setStatus] = useState<ExportStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  // A check that fails (the engine busy, a dropped connection) is tried again, a little later each time, and can be
+  // tried now; the export goes on meanwhile.
+  const [failedChecks, setFailedChecks] = useState(0)
+  const [checkNow, setCheckNow] = useState(0)
+  const atOnce = useRef(false)
   useEffect(() => {
     if (!status || status.state === 'ready' || status.state === 'failed') return
+    let live = true
+    const delay = atOnce.current ? 0 : failedChecks ? Math.min(30_000, 3000 * failedChecks) : 2000
+    atOnce.current = false
     const timer = setTimeout(() => {
-      api.get<{ export: ExportStatus }>(collectionPath(collectionId, `/exports/${status.exportId}`)).then((body) => setStatus(body.export), setError)
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [collectionId, status])
+      api.get<{ export: ExportStatus }>(collectionPath(collectionId, `/exports/${status.exportId}`)).then(
+        (body) => { if (!live) return; setStatus(body.export); setError(null); setFailedChecks(0) },
+        (failure) => { if (!live) return; setError(failure); setFailedChecks((count) => count + 1) },
+      )
+    }, delay)
+    return () => { live = false; clearTimeout(timer) }
+  }, [collectionId, status, failedChecks, checkNow])
   async function start() {
     setBusy(true)
     setError(null)
@@ -88,7 +99,11 @@ function ExportCard({ collectionId, collectionName }: { collectionId: string; co
       ) : status?.state === 'failed' ? (
         <Banner kind="danger">The export didn't finish. Nothing was changed. Try again.</Banner>
       ) : status ? <Note>Preparing the export…</Note> : null}
-      <ActionError error={error} />
+      {failedChecks && status?.state !== 'ready' && status?.state !== 'failed' ? (
+        <Banner kind="warn" action={<Button type="button" size="sm" variant="outline" onClick={() => { atOnce.current = true; setCheckNow((count) => count + 1) }}>Check again now</Button>}>
+          Couldn't check on the export just now. It goes on, and this page checks again by itself.
+        </Banner>
+      ) : <ActionError error={error} />}
       <div><Button type="button" variant="outline" disabled={busy || (status !== null && status.state !== 'ready' && status.state !== 'failed')} onClick={() => void start()}>Export</Button></div>
     </Card>
   )

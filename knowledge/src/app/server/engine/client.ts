@@ -13,6 +13,7 @@ import {
   type ExportStatus,
   type Fact,
   type GoBackPreview,
+  type ImportExportRequest,
   type ImportNote,
   type ImportRequest,
   type ImportStatus,
@@ -130,6 +131,11 @@ export class EngineClient {
    */
   keepStaged(collectionId: string, request: KeepStagedRequest): Promise<{ kept: string[] }> {
     return this.json('POST', `/v1/collections/${EngineClient.id(collectionId)}/inbox/keep`, request)
+  }
+
+  /** Starts an empty collection from a Knowledge export staged in its inbox: an import like any other. */
+  importExport(collectionId: string, request: ImportExportRequest): Promise<ImportStatus> {
+    return this.json('POST', `/v1/collections/${EngineClient.id(collectionId)}/import-export`, request)
   }
 
   startImport(collectionId: string, request: ImportRequest): Promise<ImportStatus> {

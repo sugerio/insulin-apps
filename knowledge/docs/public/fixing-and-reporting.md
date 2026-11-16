@@ -10,7 +10,8 @@ who asks, and for AI agents that can correct or report.
 
 ## Fix a wrong answer once
 
-Under every answer, **Was this right?** offers **Yes** and **Not right**. For the collection's owner, admins and
+Under every answer, **Was this right?** offers **Yes** and **Not right**. **Yes** marks the answer right; each
+collection's **Overview** shows how many of its answers were marked right. For the collection's owner, admins and
 editors, **Not right** opens the fix:
 
 1. Write the right answer.
@@ -61,12 +62,13 @@ Through the API: `POST /api/collections/{id}/facts/{factId}/check` marks a fact 
 they are an owner, admin or editor:
 
 - **Files Insulin couldn't read**, with the reason and what to upload instead;
-- **values hidden before learning**: which file, and how many e-mail addresses, phone numbers or other values were
-  hidden (see [Hiding personal data](/docs/knowledge/hiding-personal-data));
+- **values hidden before learning**: which file, and how many values were hidden in all (see
+  [Hiding personal data](/docs/knowledge/hiding-personal-data));
 - **reported answers waiting**: fix the answer, or say it is right;
 - **corrections to check**: a file was read again, and the words a correction applies to now read differently. Check
-  that the correction still says the right thing (shown as Insulin learned it, with hidden values hidden); writing a
-  new correction of that file settles it.
+  that the correction still says the right thing (shown as Insulin learned it, with hidden values hidden): **Still
+  right** settles it; **Write it again** opens the correction, ready to change, and settles it once Insulin has learned
+  the new one.
 
 Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file with
 the same name is learned in that collection. Through the API: `GET /api/attention`, optionally `?collection=<id>`.

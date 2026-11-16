@@ -209,7 +209,17 @@ async function goBack(e: CollectionEngine, op: Extract<Operation, { kind: 'go_ba
     })
     return
   }
-  if (!(await startVerified(e, target))) {
+  const verified = await startVerified(e, target)
+  const still = (await e.meta()).op
+  if (still?.kind !== 'go_back' || still.startedAt !== op.startedAt) {
+    // Dropped while the container started (the organization was put on hold): nothing commits.
+    if (verified) {
+      await e.box.destroy('the go back was dropped')
+      await e.store.deleteRuntime()
+    }
+    return
+  }
+  if (!verified) {
     const failures = ((await e.state.storage.get<number>('goBackFailures')) ?? 0) + 1
     if (failures < 2) {
       await e.state.storage.put('goBackFailures', failures)
@@ -326,8 +336,8 @@ async function fromBackup(e: CollectionEngine, op: Extract<Operation, { kind: 'f
     await queueRelearn(e, op.reason)
     return
   }
-  await e.box.waitQuiescent()
   const manifest = await e.box.manifest()
+  await e.box.waitQuiescent() // after the checksum job too: nothing may be running when the snapshot is taken
   const snapshot = await e.box.snapshot(`${meta.collectionId}-from-backup-${latest.day}`)
   const state = await e.currentState(meta)
   const committed = await commitPoint(e, {

@@ -28,10 +28,11 @@ export function OverviewTab({ detail }: TabProps) {
   const zone = engine?.settings.keepReady?.timeZone
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat value={formatNumber(collection.documents)} label="documents and notes" />
         <Stat value={formatNumber(collection.facts)} label="facts learned" />
         <Stat value={formatNumber(asked)} label="questions asked" />
+        <Stat value={detail.answers?.total ? `${formatNumber(detail.answers.markedRight)} of ${formatNumber(detail.answers.total)}` : '0'} label="answers marked right" />
         <Stat value={`${formatNumber(detail.awakeHoursThisMonth)} h`} label="awake this month" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">

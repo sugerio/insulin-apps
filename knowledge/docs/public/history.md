@@ -43,6 +43,7 @@ Over the API, going back to such a version answers 409 `not_restorable`.
 
 ## Backups
 
-Besides restore points, every collection is backed up daily. Daily backups are kept 30 days, and the latest one as long
-as the collection exists, so a collection is never lost by sitting unused. Admins see each collection's last restore
+Besides restore points, every collection is backed up daily. Daily backups are kept for the organization's days of
+daily backups (30 by default; History's footer and Health say how many), and the latest one as long as the collection
+exists, so a collection is never lost by sitting unused. Admins see each collection's last restore
 point and last backup on **Health**. See [Your data](/docs/knowledge/your-data).

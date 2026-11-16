@@ -100,65 +100,73 @@ export class ZipWriter {
   }
 }
 
+/** One entry of a zip held in memory, as its central directory describes it. */
+export interface ZipEntry {
+  name: string
+  method: number // 0 stored, 8 deflated
+  crc: number
+  size: number
+  data: Uint8Array // the entry's bytes as stored (compressed)
+}
+
 /**
- * Collects pieces and stores them in R2: one object when small, otherwise a multipart upload whose parts all have
- * the same size but the last, as R2 requires.
+ * The entries of a zip held in memory, read from its central directory (no ZIP64, no encryption): null when it isn't
+ * a zip this reader can read. Nothing is inflated here.
  */
-export class R2Sink {
-  bucket: R2Bucket
-  key: string
-  partBytes: number
-  buffer: Uint8Array[] = []
-  buffered = 0
-  upload: R2MultipartUpload | null = null
-  parts: R2UploadedPart[] = []
-  options: R2PutOptions
-
-  constructor(bucket: R2Bucket, key: string, partBytes = 8 * 1024 * 1024, options: R2PutOptions = { httpMetadata: { contentType: 'application/zip' } }) {
-    this.bucket = bucket
-    this.key = key
-    this.partBytes = partBytes
-    this.options = options
-  }
-
-  write = async (chunk: Uint8Array): Promise<void> => {
-    this.buffer.push(chunk)
-    this.buffered += chunk.length
-    while (this.buffered >= this.partBytes) await this.flushPart(this.partBytes)
-  }
-
-  /** Takes the first `count` buffered bytes. */
-  take(count: number = this.buffered): Uint8Array {
-    const out = new Uint8Array(count)
-    let at = 0
-    while (at < count) {
-      const piece = this.buffer[0]
-      const used = Math.min(piece.length, count - at)
-      out.set(piece.subarray(0, used), at)
-      at += used
-      if (used === piece.length) this.buffer.shift()
-      else this.buffer[0] = piece.subarray(used)
+export function zipEntries(bytes: Uint8Array): Map<string, ZipEntry> | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  let end = -1
+  for (let at = bytes.length - 22; at >= Math.max(0, bytes.length - 22 - 0xffff); at--) {
+    if (view.getUint32(at, true) === 0x06054b50) {
+      end = at
+      break
     }
-    this.buffered -= count
-    return out
   }
-
-  async flushPart(count: number): Promise<void> {
-    this.upload ??= await this.bucket.createMultipartUpload(this.key, { httpMetadata: this.options.httpMetadata, customMetadata: this.options.customMetadata })
-    this.parts.push(await this.upload.uploadPart(this.parts.length + 1, this.take(count)))
-  }
-
-  /** Stores what was written. `sha256`, when given, is checked by R2 on a single put. */
-  async close(sha256?: string): Promise<void> {
-    if (!this.upload) {
-      await this.bucket.put(this.key, this.take(), { ...this.options, ...(sha256 ? { sha256 } : {}) })
-      return
+  if (end < 0) return null
+  const count = view.getUint16(end + 10, true)
+  let at = view.getUint32(end + 16, true)
+  const entries = new Map<string, ZipEntry>()
+  const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false })
+  try {
+    for (let i = 0; i < count; i++) {
+      if (at + 46 > bytes.length || view.getUint32(at, true) !== 0x02014b50) return null
+      const flags = view.getUint16(at + 8, true)
+      const method = view.getUint16(at + 10, true)
+      const crc = view.getUint32(at + 16, true)
+      const packed = view.getUint32(at + 20, true)
+      const size = view.getUint32(at + 24, true)
+      const nameLength = view.getUint16(at + 28, true)
+      const extra = view.getUint16(at + 30, true)
+      const comment = view.getUint16(at + 32, true)
+      const local = view.getUint32(at + 42, true)
+      const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength))
+      at += 46 + nameLength + extra + comment
+      if (flags & 0x1 || (method !== 0 && method !== 8) || entries.has(name)) return null
+      if (local + 30 > bytes.length || view.getUint32(local, true) !== 0x04034b50) return null
+      const localName = view.getUint16(local + 26, true)
+      if (decoder.decode(bytes.subarray(local + 30, local + 30 + localName)) !== name) return null
+      const start = local + 30 + localName + view.getUint16(local + 28, true)
+      if (start + packed > bytes.length) return null
+      entries.set(name, { name, method, crc, size, data: bytes.subarray(start, start + packed) })
     }
-    if (this.buffered) await this.flushPart(this.buffered)
-    await this.upload.complete(this.parts)
+  } catch {
+    return null // a name that isn't UTF-8
   }
+  return entries
+}
 
-  async abort(): Promise<void> {
-    await this.upload?.abort().catch(() => undefined)
+/** An entry's content, checked against its size and CRC; null when it is larger than `maxBytes` or damaged. */
+export async function unzipEntry(entry: ZipEntry, maxBytes: number): Promise<Uint8Array | null> {
+  if (entry.size > maxBytes) return null
+  let out: Uint8Array
+  if (entry.method === 0) out = entry.data
+  else {
+    try {
+      const stream = new Blob([entry.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+      out = new Uint8Array(await new Response(stream).arrayBuffer())
+    } catch {
+      return null
+    }
   }
+  return out.length === entry.size && crc32(out) === entry.crc ? out : null
 }

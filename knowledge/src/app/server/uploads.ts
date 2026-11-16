@@ -58,8 +58,10 @@ export class TooLargeError extends Error {
  * Passes a file through on its way to the engine, counting its bytes (and stopping past `maxBytes`) and, for a PDF,
  * noting whether it has any fonts or compressed objects: a PDF with neither has no text to learn.
  */
-export function inspect(body: ReadableStream<Uint8Array>, maxBytes: number, pdf: boolean): { stream: ReadableStream<Uint8Array>; result: () => { bytes: number; scannedPdf: boolean } } {
+export function inspect(body: ReadableStream<Uint8Array>, maxBytes: number, pdf: boolean, keep = false): { stream: ReadableStream<Uint8Array>; result: () => { bytes: number; scannedPdf: boolean; kept: Uint8Array | null } } {
   let bytes = 0
+  // A Knowledge export is read here too (its zip's directory), so its bytes are kept as they pass (it is a few MB).
+  const chunks: Uint8Array[] = []
   let tail = ''
   let fonts = false
   let objectStreams = false
@@ -77,10 +79,21 @@ export function inspect(body: ReadableStream<Uint8Array>, maxBytes: number, pdf:
         if (text.includes('/ObjStm')) objectStreams = true
         tail = text.slice(-16)
       }
+      if (keep) chunks.push(chunk.slice())
       controller.enqueue(chunk)
     },
   }))
-  return { stream, result: () => ({ bytes, scannedPdf: pdf && !fonts && !objectStreams }) }
+  const kept = () => {
+    if (!keep) return null
+    const all = new Uint8Array(bytes)
+    let at = 0
+    for (const chunk of chunks) {
+      all.set(chunk, at)
+      at += chunk.byteLength
+    }
+    return all
+  }
+  return { stream, result: () => ({ bytes, scannedPdf: pdf && !fonts && !objectStreams, kept: kept() }) }
 }
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {

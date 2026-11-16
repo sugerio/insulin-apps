@@ -4,6 +4,7 @@ import { ORG_HEADER, type CollectionStatus, type ImportStatus, type OutboxPage, 
 import { createStubEngine, STUB_MARKER } from '../../engine/src/stub/index.ts'
 import { sha256Hex } from '../../engine/src/stub/text.ts'
 import worker from '../../engine/src/stub/worker.ts'
+import { readZip, writeZip } from '../../engine/src/stub/zip.ts'
 
 // The in-memory engine against the contract (knowledge/engine/src/contract.ts): every route answers in its shapes,
 // organizations are kept apart, and it keeps the real engine's rules the app relies on.
@@ -53,7 +54,7 @@ describe('the in-memory engine', () => {
       ['DELETE', '/v1/collections/c1/documents/d1'], ['GET', '/v1/collections/c1/facts?cursor='], ['POST', '/v1/collections/c1/corrections', {}],
       ['GET', '/v1/collections/c1/restore-points'], ['GET', '/v1/collections/c1/restore-points/1/preview'], ['POST', '/v1/collections/c1/restore-points/1/go-back'],
       ['POST', '/v1/collections/c1/undo'], ['POST', '/v1/collections/c1/exports', { exportId: 'e1' }], ['GET', '/v1/collections/c1/exports/e1'],
-      ['GET', '/v1/outbox?since=&limit=10'], ['GET', '/v1/health'], ['POST', '/v1/orgs/org-a/hold', { until: null }], ['POST', '/v1/orgs/org-a/purge'], ['DELETE', '/v1/collections/c1'],
+      ['POST', '/v1/collections/c1/import-export', {}], ['GET', '/v1/outbox?since=&limit=10'], ['GET', '/v1/health'], ['POST', '/v1/orgs/org-a/hold', { until: null }], ['POST', '/v1/orgs/org-a/purge'], ['DELETE', '/v1/collections/c1'],
     ]
     for (const [method, path, body] of routes) {
       const answer = await call(method, path, body)
@@ -163,17 +164,19 @@ describe('the in-memory engine', () => {
   })
 
   it('exports, deletes, purges, and writes an outbox that pages by cursor', async () => {
-    const { call, learn } = engineFor()
+    const { call, learn, engine } = engineFor()
     await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
     await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
     await call('PUT', '/v1/collections/c3', { settings: SETTINGS }, 'org-b')
     await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Rules.md', text: 'Write to partners@example.com about discounts.' }])
     const made = await call('POST', '/v1/collections/c1/exports', { exportId: 'exp1' })
     expect(made.body).toMatchObject({ exportId: 'exp1', state: 'ready' })
-    const file = await call('GET', '/v1/collections/c1/exports/exp1?download=1')
+    const file = await engine.fetch(new Request('https://engine.test/v1/collections/c1/exports/exp1?download=1', { headers: { [ORG_HEADER]: 'org-a' } }))
     expect(file.headers.get('content-disposition')).toMatch(/attachment/)
-    expect(JSON.stringify(file.body)).toContain('[hidden]')
-    expect(JSON.stringify(file.body)).not.toContain('partners@example.com')
+    const entries = (await readZip(new Uint8Array(await file.arrayBuffer())))!
+    const texts = [...entries.values()].map((bytes) => new TextDecoder().decode(bytes)).join('\n')
+    expect(texts).toContain('[hidden]')
+    expect(texts).not.toContain('partners@example.com')
     expect((await call('DELETE', '/v1/collections/c1')).status).toBe(202)
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('deleted')
     expect((await call('POST', '/v1/collections/c1/search', { query: 'x' })).body).toMatchObject({ error: 'deleting' })
@@ -302,7 +305,7 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call<CollectionStatus>('PUT', '/v1/collections/c1', { settings: { ...SETTINGS, awakeMinutes: 50, revision: 3 } })).body.settings.awakeMinutes).toBe(50)
   })
 
-  it('holds an organization: nothing starts but removing for good, running work stops and waits, and letting go starts it again', async () => {
+  it('holds an organization as the contract says: removing for good and stop using go ahead, running work stops and waits, and letting go starts it again', async () => {
     const { call, learn, engine, advance } = engineFor({ importMs: 60_000 })
     await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
     await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'One.md', text: 'The first rule.' }])
@@ -319,6 +322,11 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call<{ status: string }>('POST', '/v1/collections/c1/search', { query: 'first rule' })).body.status).toBe('held')
     expect((await call<CollectionStatus>('POST', '/v1/collections/c1/wake')).body.state).toBe('held')
     expect((await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })).status).toBe(429)
+    expect((await call('POST', '/v1/collections/c1/undo')).status).toBe(429)
+    // Stop using needs no container: it commits at once, held or not.
+    const listed = await call<{ documents: { documentId: string }[] }>('GET', '/v1/collections/c1/documents')
+    expect((await call<ImportStatus>('PATCH', `/v1/collections/c1/documents/${listed.body.documents[0]!.documentId}`, { active: false })).body.state).toBe('committed')
+    expect((await call<ImportStatus>('PATCH', `/v1/collections/c1/documents/${listed.body.documents[0]!.documentId}`, { active: true })).body.state).toBe('committed')
     engine.control.runUntilIdle()
     expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('queued')
     const documents = await call<{ documents: { documentId: string }[] }>('GET', '/v1/collections/c1/documents')
@@ -334,6 +342,58 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('held')
     advance(2 * 60 * 60 * 1000)
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).not.toBe('held')
+  })
+
+  it('exports a zip laid out as the real engine\'s, and starts an empty collection from it with its stopped sources and corrections', async () => {
+    const { call, learn, engine, stage } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Tiers.md', text: 'Gold partners renew every March.' }, { fileId: 'file0002', name: 'Old.md', text: 'Silver partners renew every June.' }])
+    engine.control.runUntilIdle()
+    const documents = (await call<{ documents: { documentId: string; name: string }[] }>('GET', '/v1/collections/c1/documents')).body.documents
+    await call('PATCH', `/v1/collections/c1/documents/${documents.find((document) => document.name === 'Old.md')!.documentId}`, { active: false })
+    const found = await call<{ passages: { documentId: string; textHash: string }[] }>('POST', '/v1/collections/c1/search', { query: 'gold partners renew' })
+    await call('POST', '/v1/collections/c1/corrections', { importId: 'fix1', note: { noteId: 'n1', title: 'Correction', text: 'Gold partners renew every April.', outdated: [found.body.passages[0]] } })
+    engine.control.runUntilIdle()
+    await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })
+    const download = await engine.fetch(new Request('https://engine.test/v1/collections/c1/exports/e1?download=1', { headers: { [ORG_HEADER]: 'org-a' } }))
+    expect(download.headers.get('content-type')).toBe('application/zip')
+    const zip = new Uint8Array(await download.arrayBuffer())
+    const names = new TextDecoder().decode(zip)
+    for (const entry of ['README.txt', 'collection.json', 'notes.json', 'facts.json', 'corrections.json', 'history.json', `documents/${documents[0]!.documentId}.json`]) expect(names).toContain(entry)
+    // The real engine's reader takes it: the same layout, ids, notes and marks. (Loaded by its address: it is the
+    // engine's code, checked by the engine's own settings, not the app's.)
+    const reader = new URL('../../engine/src/exportfile.ts', import.meta.url).href
+    const { openExport } = (await import(/* @vite-ignore */ reader)) as { openExport: (bytes: Uint8Array) => Promise<{ documents: { info: { name: string } }[]; marks: unknown[] } | null> }
+    const real = await openExport(zip)
+    expect(real?.documents.map((document) => document.info.name).sort()).toEqual(['Correction', 'Old.md', 'Tiers.md'])
+    expect(real?.marks).toHaveLength(1)
+
+    await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
+    await call('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip', 'x-file-name': 'export.zip' })
+    const started = await call<ImportStatus>('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009' })
+    expect(started.status).toBe(202)
+    engine.control.runUntilIdle()
+    expect((await call<ImportStatus>('GET', '/v1/collections/c2/imports/restore1')).body.state).toBe('committed')
+    const shape = async (cid: string) => (await call<{ documents: { name: string; active: boolean; kind: string }[] }>('GET', `/v1/collections/${cid}/documents`)).body.documents
+      .map(({ name, active, kind }) => ({ name, active, kind })).sort((a, b) => a.name.localeCompare(b.name))
+    expect(await shape('c2')).toEqual(await shape('c1'))
+    const passages = async (cid: string) => (await call<{ passages: { text: string }[] }>('POST', `/v1/collections/${cid}/search`, { query: 'gold partners renew' })).body.passages.map((passage) => passage.text)
+    expect(await passages('c2')).toEqual(await passages('c1'))
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c2')).body.counts).toEqual((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.counts)
+    expect((await call<{ restorePoints: unknown[] }>('GET', '/v1/collections/c2/restore-points')).body.restorePoints).toHaveLength(1)
+    // Only into an empty collection, and only a Knowledge export.
+    await call('PUT', '/v1/collections/c1/inbox/file0010', zip, 'org-a', { 'content-type': 'application/zip' })
+    expect((await call<{ error: string }>('POST', '/v1/collections/c1/import-export', { importId: 'restore2', fileId: 'file0010' })).status).toBe(409)
+    await call('PUT', '/v1/collections/c3', { settings: SETTINGS })
+    await stage('c3', 'file0011', 'notes.md', '# not an export')
+    const wrong = await call<{ error: string }>('POST', '/v1/collections/c3/import-export', { importId: 'restore3', fileId: 'file0011' })
+    expect(wrong.status).toBe(409)
+    expect(wrong.body.error).toBe('bad_request')
+    // A zip with an export's files but a document id the real engine wouldn't read is refused the same way.
+    const odd = await writeZip([['README.txt', 'x'], ['collection.json', '{"collectionId":"c1","version":1}'], ['notes.json', '{"notes":[]}'], ['corrections.json', '{"corrections":[]}'],
+      ['documents/doc-1.json', '{"document":{"documentId":"doc-1","kind":"file","name":"a.md","type":"text/markdown","bytes":1,"pages":null,"sha256":"x","active":true}}'], ['documents/doc-1.txt', 'a']])
+    await call('PUT', '/v1/collections/c3/inbox/file0012', odd, 'org-a', { 'content-type': 'application/zip' })
+    expect((await call('POST', '/v1/collections/c3/import-export', { importId: 'restore4', fileId: 'file0012' })).status).toBe(409)
   })
 
   it('clears staged files nobody imported after a day, unless kept for a waiting import, at most 45 days', async () => {

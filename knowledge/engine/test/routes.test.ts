@@ -30,6 +30,7 @@ const CONTRACT = [
   'POST /v1/collections/:cid/restore-points/:version/go-back',
   'POST /v1/collections/:cid/undo',
   'POST /v1/collections/:cid/exports',
+  'POST /v1/collections/:cid/import-export',
   'GET /v1/collections/:cid/exports/:exportId',
   'DELETE /v1/collections/:cid',
   'POST /v1/orgs/:org/purge',

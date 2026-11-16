@@ -138,6 +138,8 @@ export const stagedFiles = sqliteTable('staged_files', {
   created_by: text('created_by').notNull(),
   created_at: integer('created_at').notNull(),
   import_id: text('import_id'),
+  /** JSON, for a Knowledge export uploaded to start a collection: its documents and their text's bytes, from its zip. */
+  detail: text('detail'),
 }, (table) => [
   index('staged_by_collection').on(table.org_id, table.collection_id, table.created_at),
   check('staged_state', sql`${table.state} IN ('expected', 'staged', 'refused', 'used')`),
@@ -194,6 +196,8 @@ export const questions = sqliteTable('questions', {
   /** answered, sources_only, wont_guess or waiting. */
   outcome: text('outcome').notNull(),
   model: text('model'),
+  /** "Was this right?" Yes, by whoever asked: when. Collections count answers marked right. */
+  marked_right_at: integer('marked_right_at'),
 }, (table) => [
   index('questions_by_collection').on(table.org_id, table.collection_id, table.asked_at),
   index('questions_by_answer').on(table.org_id, table.answer_id),

@@ -78,7 +78,10 @@ export interface CollectionSettings {
 // POST /v1/orgs/:org/hold: the app's hard stop on awake hours, enforced in the engine. While held (until `until`, or
 // until a call with `until: null`), the engine starts no container for the organization's collections except to remove
 // a file for good or delete a collection; running ones stop, and an interrupted import keeps nothing and waits. Answers
-// `{ held: boolean, until: string | null }`.
+// `{ held: boolean, until: string | null }`. Both engines behave the same while held: imports and corrections are
+// queued; stop using / use again commits at once (it needs no container); go back, undo and exports answer 429
+// `capacity` with `retryAfterSeconds` until the hold ends; a removal for good starts even when another operation or a
+// re-learning is pending; search answers status `held`.
 export interface OrgHoldRequest {
   until: string | null // ISO time
 }
@@ -138,6 +141,16 @@ export interface ImportNote {
 export interface KeepStagedRequest {
   fileIds: string[]
   until: string // ISO time
+}
+
+// POST /v1/collections/:cid/import-export: start an empty collection from a Knowledge export (a zip staged with
+// PUT /v1/collections/:cid/inbox/:fileId). It brings back what answers depend on: each document's redacted text and
+// page map, notes, which sources are stopped, and corrections with their outdated marks; History starts afresh with
+// one restore point. Answers ImportStatus like an import; 409 `bad_request` for a collection that isn't empty or a file
+// that isn't a Knowledge export.
+export interface ImportExportRequest {
+  importId: string
+  fileId: string
 }
 
 export interface ImportRequest {

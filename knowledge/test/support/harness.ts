@@ -113,6 +113,8 @@ export class FakeGateway {
         if (!lookup) return Response.json({ error: 'unauthorized' }, { status: 401 })
         const org = lookup.split('.')[0] ?? ''
         const q = (url.searchParams.get('q') ?? '').toLowerCase()
+        // As the gateway answers (src/members/endpoints.ts): a search names someone.
+        if (!q.trim()) return Response.json({ error: 'invalid_request' }, { status: 400 })
         const found = [...(this.members.get(org)?.entries() ?? [])]
           .filter(([, entry]) => entry.member && entry.appRole && `${entry.name ?? ''} ${entry.email ?? ''}`.toLowerCase().includes(q))
           .slice(0, 20)

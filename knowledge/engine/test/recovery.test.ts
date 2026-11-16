@@ -429,3 +429,84 @@ test('an import that loses its capacity slot stops, keeps nothing and waits for 
   await t.drain('c1')
   assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-1')).body.state, 'committed')
 })
+
+test('a lease call that fails once (the capacity guard was unreachable) does not throw away the learning', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  t.cloud.jobPolls = 4
+  await startImport(t, 'c1', 'imp-1', [doc(1)])
+  await t.drain('c1', { steps: 2 })
+  const get = t.capacity.get.bind(t.capacity)
+  let failed = false
+  t.capacity.get = (id: { name: string }) => {
+    const stub = get(id)
+    return {
+      fetch: async (input: RequestInfo, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!failed && url.endsWith('/renew')) {
+          failed = true
+          throw new Error('unreachable')
+        }
+        return stub.fetch(input, init)
+      },
+    }
+  }
+  await t.drain('c1')
+  assert.ok(failed)
+  const status = (await t.api('GET', '/v1/collections/c1/imports/imp-1')).body
+  assert.deepEqual([status.state, status.attempt], ['committed', 1])
+  assert.ok(!(await log(t, 'c1')).some((e: any) => e.event === 'lease-lost'))
+})
+
+test('a backup whose stored file is damaged is not put back: the collection learns again instead', async () => {
+  const t = await asleepWithBackup()
+  const blob = t.backups.keys().find((k) => k.includes('/blobs/') && t.backups.text(k)!.startsWith('learned'))!
+  await t.backups.put(blob, 'learned CORRUPTED')
+  await t.api('POST', '/v1/collections/c1/__test/drop-snapshot')
+  const answer = await ask(t, 'c1', 'topic number 2 gateway port')
+  for (let i = 0; i < 3 && answer.body.status !== 'ok'; i++) await settle(t, 1)
+  const entries = (await log(t, 'c1')).map((e: any) => e.event)
+  assert.ok(entries.includes('backup-checksum-mismatch'))
+  assert.ok(!entries.includes('from-backup-done'))
+  assert.ok(![...t.container('c1').data.values()].some((v) => v.includes('CORRUPTED')), 'the damaged file never reached the collection')
+  assert.equal((await ask(t, 'c1', 'topic number 2 gateway port')).body.status, 'ok')
+})
+
+test('an older backup is never put back under a newer restore point: the collection learns again', async () => {
+  const t = await asleepWithBackup() // the backup holds version 1
+  await learn(t, 'c1', 'imp-2', [doc(3)]) // version 2, never backed up
+  await t.api('POST', '/v1/collections/c1/__test/drop-snapshot')
+  await ask(t, 'c1', 'topic number 3 gateway port')
+  await settle(t, 3)
+  const entries = (await log(t, 'c1')).map((e: any) => e.event)
+  assert.ok(!entries.includes('from-backup-done'), 'the backup of version 1 was refused')
+  const answer = await ask(t, 'c1', 'topic number 3 gateway port')
+  assert.ok(answer.body.passages.some((p: any) => p.text.includes('8003')), 'version 2 is all there')
+})
+
+test('a snapshot is only taken when the container is quiet', async () => {
+  const t = makeEngine()
+  t.cloud.lingerPolls = 3 // a finished job's processes take a while to exit
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  const status = (await t.api('GET', '/v1/collections/c1/imports/imp-1')).body
+  assert.deepEqual([status.state, status.attempt], ['committed', 1])
+})
+
+test('facts whose passage a correction marked outdated are left out of What it knows', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1)])
+  const old = (await ask(t, 'c1', 'topic number 1 gateway port')).body.passages.find((p: any) => p.text.includes('8001'))
+  const before = (await t.api('GET', '/v1/collections/c1/facts')).body.facts
+  assert.ok(before.some((f: any) => f.passageId === old.passageId), 'the passage has a fact')
+  t.advance(6 * 60_000)
+  await t.api('POST', '/v1/collections/c1/corrections', {
+    importId: 'fix-1',
+    note: { noteId: 'n1', title: 'Port', text: 'Topic number 1: the gateway port is now 9001.', outdated: [{ documentId: old.documentId, textHash: old.textHash }] },
+  })
+  await t.drain('c1')
+  const after = (await t.api('GET', '/v1/collections/c1/facts')).body.facts
+  assert.ok(!after.some((f: any) => f.passageId === old.passageId), "the outdated passage's fact is gone")
+  assert.ok(after.some((f: any) => f.sentence.includes('9001')), "the note's fact is there")
+})

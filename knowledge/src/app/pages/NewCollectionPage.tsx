@@ -58,15 +58,16 @@ export function NewCollectionPage() {
         <Purpose onCreated={(created) => { setCollection(created); setStep(2); void reloadCollections() }} />
       ) : null}
       {step === 2 && collection ? (
-        <Card title="Add what you know" description="Add files, a web page, or write a few lines yourself. You can add more any time.">
-          <AddSources collectionId={collection.id} collectionName={collection.name} initialMode="files" onStarted={(status) => { setStarted(status); setStep(3) }} />
+        <Card title="Add what you know" description="Add files, a web page, or write a few lines yourself, or start from another collection's export. You can add more any time.">
+          <AddSources collectionId={collection.id} collectionName={collection.name} initialMode="files" fromExport onStarted={(status) => { setStarted(status); setStep(3) }} />
           <div className="flex flex-wrap justify-between gap-2">
             <Button type="button" variant="ghost" asChild><Link to={`/collections/${collection.id}`}>Skip for now</Link></Button>
           </div>
         </Card>
       ) : null}
       {step === 3 && collection && started ? (
-        <Learning collection={collection} started={started} onLearned={() => { void refresh(collection.id); void reloadCollections(); setStep(4) }} onRetry={() => setStep(2)} />
+        <Learning collection={collection} started={started} onLearned={() => { void refresh(collection.id); void reloadCollections(); setStep(4) }} onRetry={() => setStep(2)}
+          onContinue={() => { void reloadCollections(); setStep(5) }} />
       ) : null}
       {step === 4 && collection ? (
         <Learned collection={collection} onOpenSource={setTarget} onNext={() => setStep(5)} />
@@ -131,7 +132,7 @@ function Purpose({ onCreated }: { onCreated: (collection: CollectionSummary) => 
   )
 }
 
-function Learning({ collection, started, onLearned, onRetry }: { collection: CollectionSummary; started: ImportStatus; onLearned: () => void; onRetry: () => void }) {
+function Learning({ collection, started, onLearned, onRetry, onContinue }: { collection: CollectionSummary; started: ImportStatus; onLearned: () => void; onRetry: () => void; onContinue: () => void }) {
   const { status, error } = useImportWatch(collection.id, started, (final) => { if (final.state === 'committed' || final.state === 'duplicate') onLearned() })
   const current = status ?? started
   const failed = FINAL.has(current.state) && current.state !== 'committed' && current.state !== 'duplicate'
@@ -139,6 +140,12 @@ function Learning({ collection, started, onLearned, onRetry }: { collection: Col
     <div className="flex flex-col gap-3">
       <ImportProgress status={current} collectionName={collection.name} title="Learning your files" error={error} />
       {failed ? <div><Button type="button" variant="outline" onClick={onRetry}>Add files again</Button></div> : null}
+      {current.state === 'waiting' ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Note>Nothing to check yet: you can share it now, and it learns on the 1st by itself.</Note>
+          <Button type="button" onClick={onContinue}>Continue</Button>
+        </div>
+      ) : null}
     </div>
   )
 }

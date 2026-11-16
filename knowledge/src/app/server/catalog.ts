@@ -65,6 +65,7 @@ const ENTRIES: Entry[] = [
     idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', browserOnly: true,
     errors: [...IN_COLLECTION, 'collection_required', 'too_many_collections', QUOTA, 'browser_only'],
   },
+  { method: 'POST', path: '/api/answers/{answerId}/right', summary: '"Was this right?" Yes: marks an answer you asked for as right; collections count answers marked right', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', errors: [...COMMON, 'not_found'] },
   { method: 'GET', path: '/api/collections/{id}/sources', summary: 'The files, web pages and notes a collection holds, and whether each is used', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
   { method: 'GET', path: '/api/collections/{id}/sources/{docId}', summary: 'One source\'s text (hidden values show as [hidden]), with its pages, so a citation\'s start and end can be found', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
   { method: 'GET', path: '/api/collections/{id}/facts', summary: 'What a collection knows: facts as sentences, each with its source sentence and who checked it', query: { type: 'object', properties: { cursor: { type: 'string' } } }, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
@@ -88,7 +89,7 @@ const ENTRIES: Entry[] = [
   },
   {
     method: 'POST', path: '/api/collections/{id}/preflight', summary: 'Before adding files: which can be learned and which can\'t (with the reason), within your organization\'s limits. Gives a fileId for each file to upload.',
-    query: null, body: { type: 'object', required: ['files'], properties: { files: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', required: ['name', 'bytes'], properties: { name: str('The file name, with its extension', 255), bytes: { type: 'integer', minimum: 0, description: 'Its size; an empty file is named as such' }, type: str('Its media type', 200) } } } } },
+    query: null, body: { type: 'object', required: ['files'], properties: { files: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', required: ['name', 'bytes'], properties: { name: str('The file name, with its extension', 255), bytes: { type: 'integer', minimum: 0, description: 'Its size; an empty file is named as such' }, type: str('Its media type', 200) } } }, export: { type: 'boolean', description: 'Start an empty collection from a Knowledge export: one .zip file a collection\'s Export made' } } },
     idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, 'bad_request', QUOTA],
   },
   {
@@ -99,6 +100,16 @@ const ENTRIES: Entry[] = [
     method: 'POST', path: '/api/collections/{id}/imports', summary: 'Learn uploaded files, all or nothing. Questions to the collection wait while it learns. When the organization has learned this month\'s documents, the files wait and are learned on the 1st: `waiting` says until when, and names a file Insulin couldn\'t keep until then (listed as failed, to add again).',
     query: null, body: { type: 'object', required: ['fileIds'], additionalProperties: false, properties: { fileIds: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string' } } } },
     idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'capacity'],
+  },
+  {
+    method: 'GET', path: '/api/collections/{id}/imports', summary: 'Imports waiting for the 1st (?state=waiting): what each brings, who added it and when it starts by itself',
+    query: { type: 'object', required: ['state'], properties: { state: { type: 'string', enum: ['waiting'] } } }, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'bad_request'],
+  },
+  { method: 'DELETE', path: '/api/collections/{id}/imports/{importId}', summary: 'Cancel an import waiting for the 1st: it is never learned, and what it held of the limits is free again', query: null, body: null, idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, 'conflict (it has started or finished)'] },
+  {
+    method: 'POST', path: '/api/collections/{id}/import-export', summary: 'Start an empty collection from a Knowledge export, after preflight with "export": true and the upload: the same sources, the files it stopped using, its notes and corrections. What it holds is reserved against the limits first.',
+    query: null, body: { type: 'object', required: ['fileId'], additionalProperties: false, properties: { fileId: str('The export\'s fileId from preflight', 64) } },
+    idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'conflict (the collection isn\'t empty)'],
   },
   { method: 'GET', path: '/api/collections/{id}/imports/{importId}', summary: 'An import\'s progress: each file waiting, reading, understanding, learned or already here, and the time left', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
   {
@@ -116,6 +127,11 @@ const ENTRIES: Entry[] = [
     method: 'POST', path: '/api/collections/{id}/corrections', summary: 'Fix an answer or a fact once: a note the collection learns, marking the passages it corrects as outdated. New questions use it everywhere.',
     query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { text: str('The right answer', 20_000), question: str('The question it answers', 2000), outdated: { type: 'array', maxItems: 20, items: { type: 'object', required: ['documentId', 'textHash'], properties: { documentId: { type: 'string' }, textHash: { type: 'string' } } } }, factId: str('A fact from /facts to correct', 200), reportId: str('A report this settles, once the correction is learned', 64), notifyAuthors: { type: 'boolean', description: 'E-mail the people who added the files it corrects (a link, not the correction)' } } },
     idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA],
+  },
+  {
+    method: 'POST', path: '/api/collections/{id}/correction-checks/clear', summary: 'A correction to check (Needs attention: its file was read again) is still right: it is no longer listed',
+    query: null, body: { type: 'object', required: ['noteId', 'documentId', 'textHash'], additionalProperties: false, properties: { noteId: str('From the needs_check item', 100), documentId: str('From the needs_check item', 200), textHash: str('From the needs_check item', 64) } },
+    idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, 'bad_request'],
   },
   {
     method: 'PATCH', path: '/api/collections/{id}/reports/{reportId}', summary: 'Settle a report: fixed (with the correction) or dismissed (the answer is right)',

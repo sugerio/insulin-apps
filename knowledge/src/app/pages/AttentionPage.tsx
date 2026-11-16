@@ -51,6 +51,18 @@ function Item({ collection, item, onSettled }: { collection: AttentionCollection
   const [fixing, setFixing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  async function stillRight(check: Extract<AttentionItem, { kind: 'needs_check' }>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post(collectionPath(collection.id, '/correction-checks/clear'), { noteId: check.noteId, documentId: check.documentId, textHash: check.textHash })
+      onSettled()
+    } catch (failure) {
+      setError(failure)
+    } finally {
+      setBusy(false)
+    }
+  }
   async function dismiss(reportId: string) {
     setBusy(true)
     setError(null)
@@ -91,7 +103,12 @@ function Item({ collection, item, onSettled }: { collection: AttentionCollection
         <p>{item.documentName ? <>“{item.documentName}”</> : 'A file'} was read again, and the words your correction applies to now read differently. Check that the correction still says the right thing, and write it again if not.</p>
         {item.text ? <p className="mt-1 rounded-md bg-muted px-3 py-2">“{item.text}”</p> : null}
       </>,
-      <Button asChild variant="outline" size="sm"><Link to={`/collections/${collection.id}/sources?source=${encodeURIComponent(item.documentId)}`}>Open the file</Link></Button>)
+      <>
+        <Button type="button" size="sm" disabled={busy} onClick={() => void stillRight(item)}>Still right</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => setFixing(true)}>Write it again</Button>
+        <Button asChild variant="outline" size="sm"><Link to={`/collections/${collection.id}/sources?source=${encodeURIComponent(item.documentId)}`}>Open the file</Link></Button>
+        {fixing ? <RewriteDialog collection={collection} item={item} onClose={() => setFixing(false)} onSaved={() => { setFixing(false); onSettled() }} /> : null}
+      </>)
   }
   const who = item.reportedBy.name ?? 'Someone'
   return (
@@ -109,6 +126,51 @@ function Item({ collection, item, onSettled }: { collection: AttentionCollection
       ))}
       {fixing ? <FixReportDialog collection={collection} item={item} onClose={() => setFixing(false)} onFixed={() => { setFixing(false); onSettled() }} /> : null}
     </>
+  )
+}
+
+/**
+ * "Write it again": a new correction of the file, starting from what the correction said (as Insulin learned it,
+ * hidden values hidden). Once learned, it settles the check.
+ */
+function RewriteDialog({ collection, item, onClose, onSaved }: { collection: AttentionCollection; item: Extract<AttentionItem, { kind: 'needs_check' }>; onClose: () => void; onSaved: () => void }) {
+  const [text, setText] = useState(item.text ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  async function save(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await api.create(collectionPath(collection.id, '/corrections'), { text: text.trim(), outdated: [{ documentId: item.documentId, textHash: item.textHash }] })
+      onSaved()
+    } catch (failure) {
+      setError(failure)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent>
+        <form className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
+          <DialogHeader>
+            <DialogTitle>Write the correction again</DialogTitle>
+            <DialogDescription className="[overflow-wrap:anywhere]">{item.documentName ? `“${item.documentName}” was read again.` : 'Its file was read again.'} Say what is right now.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="rewrite-fix">What's the right answer?</Label>
+            <Textarea id="rewrite-fix" required rows={4} maxLength={20000} value={text} onChange={(event) => setText(event.target.value)} />
+          </div>
+          <Note>Saved as a new correction of that file. Once Insulin has learned it, this check is settled.</Note>
+          <ActionError error={error} />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={busy || !text.trim()}>{busy ? 'Saving…' : 'Save the correction'}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 

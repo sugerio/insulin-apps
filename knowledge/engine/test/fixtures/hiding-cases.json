@@ -901,6 +901,240 @@
       "spans": [],
       "redacted": "The billing gateway listens on port 8443 and retries 3 times.",
       "hidden": []
+    },
+    {
+      "id": "card-fullwidth-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Card: ４１１１ １１１１ １１１１ １１１１ on file",
+      "spans": [
+        {
+          "start": 6,
+          "end": 25,
+          "kind": "card"
+        }
+      ],
+      "redacted": "Card: [hidden] on file",
+      "hidden": [
+        {
+          "start": 6,
+          "end": 14,
+          "kind": "card"
+        }
+      ]
+    },
+    {
+      "id": "phone-fullwidth-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Call +４９ ３０ １２３４ ５６７８ now",
+      "spans": [
+        {
+          "start": 5,
+          "end": 21,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Call [hidden] now",
+      "hidden": [
+        {
+          "start": 5,
+          "end": 13,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "phone-arabic-indic-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Phone: ٠١٥٥ ١٢٣٤ ٥٦٧٨ (office)",
+      "spans": [
+        {
+          "start": 7,
+          "end": 21,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Phone: [hidden] (office)",
+      "hidden": [
+        {
+          "start": 7,
+          "end": 15,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "api-key-after-a-letter",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Kontoschlüssel éAKI\u0041ABCDEFGHIJKLMNOP here",
+      "spans": [],
+      "redacted": "Kontoschlüssel éAKI\u0041ABCDEFGHIJKLMNOP here",
+      "hidden": []
+    },
+    {
+      "id": "api-key-before-a-letter",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Key AKI\u0041ABCDEFGHIJKLMNOPé done",
+      "spans": [],
+      "redacted": "Key AKI\u0041ABCDEFGHIJKLMNOPé done",
+      "hidden": []
+    },
+    {
+      "id": "secret-label-inside-a-word",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "passwordé: Orchard-42 x, but passwort: Orchard-42 is not a label either",
+      "spans": [],
+      "redacted": "passwordé: Orchard-42 x, but passwort: Orchard-42 is not a label either",
+      "hidden": []
+    },
+    {
+      "id": "secret-after-unicode-space",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Login token　=　Zx9-Orchard-Wind for staging",
+      "spans": [
+        {
+          "start": 14,
+          "end": 30,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "Login token　=　[hidden] for staging",
+      "hidden": [
+        {
+          "start": 14,
+          "end": 22,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "card-in-devanagari-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "कार्ड ४१११-११११-११११-११११ से",
+      "spans": [
+        {
+          "start": 6,
+          "end": 25,
+          "kind": "card"
+        }
+      ],
+      "redacted": "कार्ड [hidden] से",
+      "hidden": [
+        {
+          "start": 6,
+          "end": 14,
+          "kind": "card"
+        }
+      ]
+    },
+    {
+      "id": "word-with-unicode-neighbours",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": [
+          "Bluewater"
+        ]
+      },
+      "input": "Bluewaterß stays, Bluewater-Süd goes, ßBluewater stays, BLUEWATER goes",
+      "spans": [
+        {
+          "start": 18,
+          "end": 27,
+          "kind": "word"
+        },
+        {
+          "start": 56,
+          "end": 65,
+          "kind": "word"
+        }
+      ],
+      "redacted": "Bluewaterß stays, [hidden]-Süd goes, ßBluewater stays, [hidden] goes",
+      "hidden": [
+        {
+          "start": 18,
+          "end": 26,
+          "kind": "word"
+        },
+        {
+          "start": 55,
+          "end": 63,
+          "kind": "word"
+        }
+      ]
+    },
+    {
+      "id": "phone-after-a-letter",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Refé+49 30 1234 5678 and x(555) 010-4477 stay",
+      "spans": [],
+      "redacted": "Refé+49 30 1234 5678 and x(555) 010-4477 stay",
+      "hidden": []
     }
   ]
 }

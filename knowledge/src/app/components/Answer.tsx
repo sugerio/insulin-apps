@@ -112,11 +112,27 @@ export function AnswerView({ question, answer, collections, onOpenSource, onAskA
   const primary = collections.find((collection) => collection.id === primaryId) ?? null
   const [panel, setPanel] = useState<'fix' | 'report' | 'write' | null>(null)
   const [reported, setReported] = useState<Report | null>(null)
+  const [right, setRight] = useState<'saving' | 'saved' | null>(null)
+  const [rightError, setRightError] = useState<unknown>(null)
+  async function markRight() {
+    if (!answer.answerId) return
+    setRight('saving')
+    setRightError(null)
+    try {
+      await api.post(`/api/answers/${encodeURIComponent(answer.answerId)}/right`)
+      setRight('saved')
+    } catch (failure) {
+      setRight(null)
+      setRightError(failure)
+    }
+  }
   const open = (source: AskSource) => onOpenSource(sourceTarget(source))
 
   useEffect(() => {
     setPanel(null)
     setReported(null)
+    setRight(null)
+    setRightError(null)
     if (!primary || (answer.outcome !== 'answered' && answer.outcome !== 'sources_only')) return
     let live = true
     api.get<{ reports: Report[] }>(collectionPath(primary.id, '/reports?status=open')).then((body) => {
@@ -173,8 +189,12 @@ export function AnswerView({ question, answer, collections, onOpenSource, onAskA
           ) : null}
           {primary && panel === null ? (
             <div className="flex flex-wrap items-center gap-2 border-t pt-3 text-sm">
-              <span className="text-muted-foreground">Is something wrong?</span>
+              <span className="text-muted-foreground">Was this right?</span>
+              {right === 'saved' ? <span className="text-emerald-700 dark:text-emerald-400" role="status">Thanks. Marked right.</span> : (
+                <Button type="button" variant="outline" size="sm" disabled={right === 'saving' || !answer.answerId} onClick={() => void markRight()}>Yes</Button>
+              )}
               <Button type="button" variant="outline" size="sm" onClick={() => setPanel(mayChange ? 'fix' : 'report')}>Not right</Button>
+              <ActionError error={rightError} />
             </div>
           ) : null}
           {panel === 'fix' && primary ? <FixPanel collection={primary} question={question} sources={answer.sources.filter((source) => source.collectionId === primary.id)} reportId={reported?.id ?? null} onCancel={() => setPanel(null)} onAskAgain={onAskAgain} /> : null}
@@ -410,6 +430,8 @@ function WriteAnswerPanel({ collection, question, onAskAgain }: { collection: Co
     const done = status?.state === 'committed'
     return done
       ? <Banner kind="ok" title="Saved and learned." action={<Button type="button" size="sm" onClick={onAskAgain}>Ask again</Button>}>New questions use your answer, cited as a note.</Banner>
+      : status?.state === 'waiting'
+        ? <Banner kind="info">Saved. Your organization has learned this month's documents, so {collection.name} learns your answer on {nextMonth()}, by itself. Until then, answers stay as they are.</Banner>
       : status && FINAL.has(status.state)
         ? <Banner kind="danger">{status.error?.message ?? "Your answer couldn't be learned."} Nothing was changed. Try again.</Banner>
         : <Banner kind="info">Learning your answer. Questions to {collection.name} wait until it finishes, about a minute.</Banner>

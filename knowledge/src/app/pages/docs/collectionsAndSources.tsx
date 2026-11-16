@@ -51,6 +51,16 @@ export const collectionsAndSources: DocTopic = {
             <li><b>Write a note</b>: a few lines in your own words, such as "Since October, partner managers approve requests up to $50,000." A note is learned like a file and cited as a note, and can be up to 20,000 characters (add a longer text as a file). Notes go ahead of files that are waiting to be learned.</li>
           </ul>
           <p>
+            A new collection can instead <b>Start from an export</b>: the .zip file a collection's <b>Export</b> made, from this
+            organization or another. It brings back the same sources, the files it stopped using, its notes and corrections, so it
+            answers the same; its history starts afresh with one restore point. Only an empty collection starts from an export, and
+            what it holds counts toward your organization's limits before anything starts.
+          </p>
+          <p>
+            What waits for the 1st (your organization has learned this month's documents) is listed on <b>Sources</b>, under
+            <b> Waiting for the 1st</b>, with who added it and when it starts; its editors can <b>Cancel</b> it, and it is never learned.
+          </p>
+          <p>
             Before Insulin reads anything, it hides e-mail addresses, phone numbers, card numbers, API keys and values labelled
             as passwords or secrets. See <DocLink to="hiding-personal-data">Hiding personal data</DocLink>.
           </p>
@@ -70,7 +80,7 @@ export const collectionsAndSources: DocTopic = {
             <li><b>A type Insulin can't read</b>, such as an Excel workbook with macros (.xlsm), an older Word or PowerPoint file (.doc, .ppt) or an image. Save it in one of the types above and add it again.</li>
             <li><b>An empty file</b>, or one <b>larger than your organization's largest file</b>. Split it, or save it in a smaller format.</li>
             <li><b>A scanned PDF</b>: a PDF that is only an image, with no text in it, is named when it is uploaded. Upload a PDF with text, or a Word file.</li>
-            <li><b>Your organization's limits</b>: if the files would go past the documents, stored files or documents learned this month, nothing starts and Knowledge says which limit. See <DocLink to="limits">Limits</DocLink>.</li>
+            <li><b>Your organization's limits</b>: if the files would go past the documents or stored files, nothing starts and Knowledge says which limit. Past this month's documents learned, they are taken and wait for the 1st. See <DocLink to="limits">Limits</DocLink>.</li>
           </ul>
         </>
       ),

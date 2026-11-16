@@ -17,7 +17,16 @@ export function nextMonth(now = Date.now()): string {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
 }
 
-/** Follows an import until it is final; `onFinal` runs once when it is. */
+/** How often an import waiting for the 1st is checked again while the page stays open (it can start sooner: a raised limit). */
+const WAITING_CHECK_MS = 10 * 60 * 1000
+/** setTimeout's longest wait. */
+const LONGEST_TIMER_MS = 2 ** 31 - 1
+
+/**
+ * Follows an import until it is final; `onFinal` runs once when it is. A newer status the caller hands over for the
+ * same import is followed too. One waiting for the 1st is checked again at the reset, every ten minutes, and whenever
+ * the page comes back into view (the limit may have been raised, or the month turned while the tab slept).
+ */
 export function useImportWatch(collectionId: string, initial: ImportStatus | null, onFinal?: (status: ImportStatus) => void): { status: ImportStatus | null; error: unknown } {
   const [status, setStatus] = useState<ImportStatus | null>(initial)
   const [error, setError] = useState<unknown>(null)
@@ -29,16 +38,21 @@ export function useImportWatch(collectionId: string, initial: ImportStatus | nul
       onFinal?.(initial)
       return
     }
-    // Waiting for the 1st: nothing changes before then, so nothing is polled.
-    if (initial.state === 'waiting') return
     let live = true
-    let timer: ReturnType<typeof setTimeout>
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let state = initial.state
+    const schedule = (ms: number) => {
+      clearTimeout(timer)
+      timer = setTimeout(() => void poll(), Math.min(ms, LONGEST_TIMER_MS))
+    }
+    const later = () => (state === 'waiting' ? Math.min(WAITING_CHECK_MS, Math.max(1000, Date.parse(resetDate()) - Date.now() + 5000)) : 1500)
     const poll = async () => {
       try {
         const body = await api.get<{ import: ImportStatus }>(collectionPath(collectionId, `/imports/${encodeURIComponent(id)}`))
         if (!live) return
         setStatus(body.import)
         setError(null)
+        state = body.import.state
         if (FINAL.has(body.import.state)) {
           onFinal?.(body.import)
           return
@@ -47,17 +61,31 @@ export function useImportWatch(collectionId: string, initial: ImportStatus | nul
         if (!live) return
         setError(failure)
       }
-      timer = setTimeout(() => void poll(), 1500)
+      schedule(later())
     }
-    timer = setTimeout(() => void poll(), 600)
+    // Back into view: a waiting import is asked about at once.
+    const back = () => {
+      if (state === 'waiting' && (typeof document === 'undefined' || document.visibilityState !== 'hidden')) schedule(0)
+    }
+    window.addEventListener('focus', back)
+    document.addEventListener('visibilitychange', back)
+    schedule(initial.state === 'waiting' ? later() : 600)
     return () => {
       live = false
       clearTimeout(timer)
+      window.removeEventListener('focus', back)
+      document.removeEventListener('visibilitychange', back)
     }
-    // The import is followed from its id; onFinal is read when it ends.
+    // The import is followed from its id, and from a newer status handed over for it; onFinal is read when it ends.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionId, id])
+  }, [collectionId, id, initial])
   return { status, error }
+}
+
+/** The 1st of next month (UTC), as an ISO time. */
+function resetDate(now = Date.now()): string {
+  const date = new Date(now)
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)).toISOString()
 }
 
 const FILE_STATE: Record<string, string> = {

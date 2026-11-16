@@ -75,6 +75,10 @@ export interface CollectionDetail {
   engine: CollectionStatus | null
   awakeHoursThisMonth: number
   questions: { browser: number; mcp: number; api: number }
+  /** Answers on the site, and how many whoever asked marked right. */
+  answers?: { total: number; markedRight: number }
+  /** Daily backups are kept this many days (the organization's backup_days). */
+  backupDays?: number
 }
 
 export interface AskSource extends Passage {
@@ -202,12 +206,14 @@ export interface Health {
   engine: { reachable: boolean; label: string | null }
   organization: { collections: number; documents: number; bytes: number; awake: number | null; learning: number | null; kept_ready: number | null }
   collections: { id: string; name: string; state: string; version: number; documents: number; lastRestorePointAt: string | null; lastBackupAt: string | null; lastUsedAt: string | null }[]
+  /** Daily backups are kept this many days (the organization's backup_days). */
+  backupDays?: number
 }
 
 export type AttentionItem =
   | { kind: 'unreadable'; id: string; at: string; files: { name: string; reason: string }[]; message: string }
   | { kind: 'hidden'; id: string; at: string; documentId: string; documentName: string; total: number }
-  | { kind: 'needs_check'; id: string; at: string; correctionId: string | null; text: string | null; documentId: string; documentName: string | null }
+  | { kind: 'needs_check'; id: string; at: string; correctionId: string | null; text: string | null; documentId: string; documentName: string | null; noteId: string; textHash: string }
   | { kind: 'reported'; id: string; at: string; question: string; note: string; answer: string; reportedBy: { id: string; name: string | null } }
 
 export interface AttentionCollection {

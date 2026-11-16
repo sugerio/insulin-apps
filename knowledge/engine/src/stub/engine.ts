@@ -41,6 +41,7 @@ import type {
 } from '../contract'
 import { applyHiding, DEFAULT_HIDING, type HidingRuleSet } from './hiding'
 import { bestSentence, COVERED_THRESHOLD, extractText, firstSentence, keywords, passagesOf, ReadError, score, sha256Hex } from './text'
+import { readZip, writeZip } from './zip'
 
 /** Found in the stub's code and nowhere else: a production build that contains it contains the stub. */
 export const STUB_MARKER = 'insulin-knowledge-in-memory-engine'
@@ -97,6 +98,8 @@ interface StoredDocument {
   words: Set<string>[]
   /** Set aside by going back to a version from before it was added: kept, not used. */
   setAside: boolean
+  /** A note's own id (the app's), for a note; null for a file. */
+  noteId: string | null
 }
 
 interface Content {
@@ -146,6 +149,8 @@ interface RunningImport {
   status: ImportStatus
   request: ImportRequest
   correction: boolean
+  /** An empty collection started from an export (POST .../import-export): what it brings back. */
+  restore?: Content
   /** Arrival order, for who goes first among equals. */
   order: number
   startedAt: number | null
@@ -163,7 +168,7 @@ interface StubCollection {
   imports: Map<string, RunningImport>
   queue: string[]
   running: string | null
-  exports: Map<string, ExportStatus & { body: string }>
+  exports: Map<string, ExportStatus & { body: Uint8Array }>
   inbox: Map<string, StagedFile>
   awakeSince: number | null
   awakeUntil: number | null
@@ -281,6 +286,16 @@ function validateKeepReady(value: unknown): CollectionSettings['keepReady'] {
   if (typeof k.start !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(k.start)) return refuse('keepReady.start must be a time such as "09:00".')
   if (!Number.isInteger(k.hours) || (k.hours as number) < 1 || (k.hours as number) > 3) return refuse('keepReady.hours must be 1, 2 or 3.')
   return { timeZone: k.timeZone!, days: [...new Set(k.days)].sort(), start: k.start, hours: k.hours as number, paused: k.paused === true }
+}
+
+/** The real engine's document ids: d_ (files) or n_ (notes) and 24 hexadecimal digits. */
+const DOCUMENT_ID = /^[dn]_[0-9a-f]{24}$/
+const HIDDEN_KINDS = new Set(['email', 'phone', 'card', 'api_key', 'secret', 'word'])
+/** The largest export a collection starts from (it is read whole). */
+const MAX_EXPORT_BYTES = 64 * 1024 * 1024
+
+function randomHex(bytes: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function randomId(prefix: string): string {
@@ -607,6 +622,10 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   }
 
   function learn(collection: StubCollection, item: RunningImport): void {
+    if (item.restore) {
+      restoreFrom(collection, item, item.restore)
+      return
+    }
     const content = copyContent(collection.content)
     const files: ImportFileStatus[] = []
     const added: StoredDocument[] = []
@@ -665,8 +684,138 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     keepAwake(collection)
   }
 
+  /** An export's content committed as the collection's first restore point. */
+  function restoreFrom(collection: StubCollection, item: RunningImport, restored: Content): void {
+    for (const file of item.request.files) collection.inbox.delete(file.fileId)
+    const content = copyContent(restored)
+    for (const document of content.documents.values()) {
+      document.info = { ...document.info, version: collection.version + 1, addedAt: new Date(now()).toISOString() }
+    }
+    const documents = [...content.documents.values()]
+    const filesAdded = documents.filter((document) => document.info.kind === 'file').length
+    commit(collection, content, 'import', { ...NO_CHANGES, files: filesAdded, notes: documents.length - filesAdded }, { importId: item.status.importId })
+    // As the real engine: the import's one file is the export's zip.
+    item.status.files = item.request.files.map((file) => ({ fileId: file.fileId, name: file.name, state: 'learned' }))
+    item.status.state = 'committed'
+    item.status.version = collection.version
+    item.status.newFacts = documents.reduce((sum, document) => sum + document.passages.length, 0)
+    finished(collection, item)
+    keepAwake(collection)
+  }
+
+  /**
+   * What an export brings back, read as the real engine reads it (exportfile.ts): README.txt and collection.json, the
+   * notes and corrections lists, each document's .json and .txt (ids shaped as the real engine's, page maps and hidden
+   * spans within the text), notes named in notes.json and marks naming documents that are there. Its texts are hidden
+   * again with this collection's rules. Null when the zip isn't a Knowledge export.
+   */
+  async function contentOfExport(bytes: Uint8Array, rules: HidingRuleSet): Promise<Content | null> {
+    const files = await readZip(bytes).catch(() => null)
+    if (!files || !files.has('README.txt') || !files.has('collection.json')) return null
+    const isInt = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
+    const text = (name: string) => new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(files.get(name)!)
+    const read = (name: string) => JSON.parse(text(name)) as any
+    const content: Content = { documents: new Map(), outdated: new Map(), corrections: 0 }
+    try {
+      const collection = read('collection.json')
+      if (typeof collection?.collectionId !== 'string' || !isInt(collection.version)) return null
+      if (!files.has('notes.json') || !files.has('corrections.json')) return null
+      const notes = read('notes.json')?.notes
+      const marks = read('corrections.json')?.corrections
+      if (!Array.isArray(notes) || !Array.isArray(marks)) return null
+      const noteIds = new Map<string, string>()
+      for (const note of notes) {
+        if (typeof note?.documentId !== 'string' || typeof note.noteId !== 'string' || !note.noteId) return null
+        noteIds.set(note.documentId, note.noteId)
+      }
+      for (const name of files.keys()) {
+        if (!name.startsWith('documents/')) continue
+        const match = /^documents\/(.+)\.(json|txt)$/.exec(name)
+        if (!match || !DOCUMENT_ID.test(match[1]!) || !files.has(`documents/${match[1]}.json`) || !files.has(`documents/${match[1]}.txt`)) return null
+        if (match[2] === 'txt') continue
+        const documentId = match[1]!
+        const meta = read(name)
+        const info = meta?.document
+        if (info?.documentId !== documentId || (info.kind !== 'file' && info.kind !== 'note')) return null
+        if (typeof info.name !== 'string' || typeof info.type !== 'string' || typeof info.active !== 'boolean') return null
+        if (!isInt(info.bytes) || !(info.pages === null || isInt(info.pages)) || typeof info.sha256 !== 'string') return null
+        const pages = meta.pages ?? []
+        const hidden = meta.hidden ?? []
+        if (!Array.isArray(pages) || !pages.every((page: any) => isInt(page?.page) && isInt(page.start) && isInt(page.end) && page.start <= page.end)) return null
+        if (!Array.isArray(hidden) || !hidden.every((span: any) => isInt(span?.start) && isInt(span.end) && span.start <= span.end && HIDDEN_KINDS.has(span.kind))) return null
+        const noteId = info.kind === 'note' ? noteIds.get(documentId) ?? null : null
+        if (info.kind === 'note' && !noteId) return null
+        const stored = text(`documents/${documentId}.txt`)
+        if (pages.some((page: any) => page.end > stored.length) || hidden.some((span: any) => span.end > stored.length)) return null
+        const again = hiddenAgain(stored, pages, hidden, rules)
+        const passages = passagesOf(again.text, again.pages).map((span, index) => ({
+          passageId: `${documentId}:${index + 1}`, documentId, documentName: info.name, kind: info.kind, page: span.page, start: span.start, end: span.end,
+          text: span.text, textHash: sha256Hex(span.text), score: 0, outdated: false,
+        }))
+        content.documents.set(documentId, {
+          info: {
+            documentId, kind: info.kind, name: info.name, type: info.type, bytes: info.bytes, textBytes: new TextEncoder().encode(again.text).byteLength, pages: info.pages,
+            sha256: info.sha256, active: info.active, hiddenValues: again.hidden.length, addedAt: new Date(now()).toISOString(), version: 0,
+          },
+          text: again.text, pages: again.pages, hidden: again.hidden, passages, words: passages.map((passage) => keywords(passage.text)), setAside: false, noteId,
+        })
+      }
+      for (const mark of marks) {
+        if (typeof mark?.documentId !== 'string' || typeof mark.textHash !== 'string' || !/^[0-9a-f]{64}$/.test(mark.textHash) || typeof mark.noteDocumentId !== 'string') return null
+        if (!content.documents.has(mark.documentId) || !content.documents.has(mark.noteDocumentId)) return null
+        content.outdated.set(`${mark.documentId}:${mark.textHash}`, content.documents.get(mark.noteDocumentId)!.noteId ?? '')
+      }
+      content.corrections = new Set(marks.map((mark: { noteDocumentId: string }) => mark.noteDocumentId)).size
+    } catch {
+      return null
+    }
+    return content
+  }
+
+  /** A stored text hidden again with these rules: what it hid before stays hidden and moves with what is hidden now. */
+  function hiddenAgain(text: string, pages: StoredDocument['pages'], hidden: HiddenSpan[], rules: HidingRuleSet): { text: string; pages: StoredDocument['pages']; hidden: HiddenSpan[] } {
+    const result = applyHiding(text, rules)
+    if (!result.found.length) return { text, pages, hidden }
+    const shift = (offset: number) => {
+      let delta = 0
+      for (const range of result.found) if (range.end <= offset) delta += 8 - (range.end - range.start)
+      return offset + delta
+    }
+    const carried = hidden.filter((mark) => !result.found.some((range) => range.start < mark.end && mark.start < range.end))
+      .map((mark) => ({ ...mark, start: shift(mark.start), end: shift(mark.end) }))
+    return {
+      text: result.text,
+      pages: pages.map((page) => ({ page: page.page, start: shift(page.start), end: shift(page.end) })),
+      hidden: [...result.hidden, ...carried].sort((a, b) => a.start - b.start),
+    }
+  }
+
+  /** A collection's export as the real engine writes it: a zip of open formats, no originals, no hidden values. */
+  async function exportZip(collection: StubCollection): Promise<Uint8Array> {
+    const documents = [...collection.content.documents.values()]
+    const noteDocument = new Map(documents.filter((document) => document.noteId).map((document) => [document.noteId!, document.info.documentId]))
+    const { words, ...hiding } = collection.settings.hiding
+    const entries: [string, string][] = [
+      ['README.txt', 'This file is an export of an Insulin Knowledge collection (made by the in-memory engine).\n'],
+      ['collection.json', JSON.stringify({ collectionId: collection.id, version: collection.version, exportedAt: new Date(now()).toISOString(), settings: { hiding: { ...hiding, words: words.length }, awakeMinutes: collection.settings.awakeMinutes }, counts: counts(collection.content) }, null, 2)],
+    ]
+    for (const document of documents) {
+      entries.push([`documents/${document.info.documentId}.txt`, document.text])
+      entries.push([`documents/${document.info.documentId}.json`, JSON.stringify({ document: document.info, pages: document.pages, hidden: document.hidden, truncated: false }, null, 2)])
+    }
+    entries.push(['notes.json', JSON.stringify({ notes: documents.filter((document) => document.info.kind === 'note').map((document) => ({ documentId: document.info.documentId, noteId: document.noteId, title: document.info.name, text: document.text })) }, null, 2)])
+    entries.push(['facts.json', JSON.stringify({ facts: facts(collection.content) }, null, 2)])
+    // A mark whose correction note or file is gone (removed for good) isn't exported: nothing could read it back.
+    const marks = [...collection.content.outdated].map(([mark, noteId]) => ({ documentId: mark.slice(0, mark.lastIndexOf(':')), textHash: mark.slice(mark.lastIndexOf(':') + 1), noteDocumentId: noteDocument.get(noteId) ?? '', needsCheck: false }))
+      .filter((mark) => mark.noteDocumentId && collection.content.documents.has(mark.documentId))
+    entries.push(['corrections.json', JSON.stringify({ corrections: marks }, null, 2)])
+    entries.push(['history.json', JSON.stringify({ restorePoints: restorePoints(collection) }, null, 2)])
+    return writeZip(entries)
+  }
+
   function buildDocument(kind: 'file' | 'note', name: string, type: string, bytes: number, sha256: string, raw: string, pages: { page: number; start: number; end: number }[], rules: HidingRuleSet, version: number, note?: ImportNote): StoredDocument {
-    const documentId = note ? `n_${note.noteId}` : randomId('d')
+    // Shaped as the real engine's ids, so an export from here reads there too: a note's comes from its own id.
+    const documentId = note ? `n_${sha256Hex(note.noteId).slice(0, 24)}` : `d_${randomHex(12)}`
     const hidden = applyHiding(raw, rules)
     // The page map moves with the text where values were hidden.
     const shift = (offset: number) => {
@@ -696,6 +845,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       passages,
       words: passages.map((passage) => keywords(passage.text)),
       setAside: false,
+      noteId: note?.noteId ?? null,
     }
   }
 
@@ -1002,6 +1152,25 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       collection.inbox.set(fileId, { bytes, name, type: request.headers.get('content-type') ?? 'application/octet-stream', sha256, stagedAt: now(), keepUntil: null })
       return json({ fileId, bytes: bytes.byteLength, sha256 })
     }
+    if (rest === '/import-export' && method === 'POST') {
+      const raw = await body<{ importId?: unknown; fileId?: unknown }>(request)
+      if (typeof raw?.importId !== 'string' || !ID.test(raw.importId) || typeof raw.fileId !== 'string' || !ID.test(raw.fileId)) throw new StubError(400, 'bad_request', 'Send an import id and the staged export\'s file id.')
+      const existing = collection.imports.get(raw.importId)
+      if (existing) return json(existing.status, 200)
+      if (collection.version > 0 || collection.content.documents.size || collection.queue.length || collection.running || collection.removals.length) {
+        throw new StubError(409, 'bad_request', 'An export starts an empty collection only: this one already has something in it.')
+      }
+      const staged = collection.inbox.get(raw.fileId)
+      if (!staged) throw new StubError(400, 'bad_request', 'The export wasn\'t received. Add it again.')
+      if (staged.bytes.byteLength > MAX_EXPORT_BYTES) throw new StubError(413, 'too_large', 'That export is too large to start a collection from.')
+      const restored = await contentOfExport(staged.bytes, collection.settings.hiding)
+      if (!restored) throw new StubError(409, 'bad_request', 'That file isn\'t a Knowledge export.')
+      const request_: ImportRequest = { importId: raw.importId, files: [{ fileId: raw.fileId, name: staged.name, type: staged.type, bytes: staged.bytes.byteLength, sha256: staged.sha256 }], notes: [], small: false }
+      const { status } = enqueue(collection, request_, false)
+      collection.imports.get(status.importId)!.restore = restored
+      pump()
+      return json(currentStatus(collection, status.importId), 202)
+    }
     if (rest === '/imports' && method === 'POST') {
       const request_ = await body<ImportRequest>(request)
       // The same import id answers the import it started, whatever the body says now.
@@ -1036,7 +1205,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       if (!stored) throw new StubError(404, 'not_found', 'There is no such document.')
       if (method === 'GET') return json({ document: stored.info, text: stored.text, pages: stored.pages, hidden: stored.hidden } satisfies DocumentText)
       if (method === 'PATCH') {
-        refuseWhileHeld(collection)
+        // Stop using needs no container: it commits at once, held or not.
         const { active } = await body<{ active: boolean }>(request)
         if (typeof active !== 'boolean') throw new StubError(400, 'bad_request', 'Say whether to use the file.')
         if (collection.removals.length) throw new StubError(409, 'busy_learning', 'A file is being removed for good; try again in a minute.')
@@ -1110,8 +1279,8 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       const existing = collection.exports.get(exportId)
       if (existing) return json(exportStatus(existing))
       refuseWhileHeld(collection)
-      const content = JSON.stringify(exportOf(collection), null, 2)
-      const status = { exportId, state: 'ready' as const, bytes: new TextEncoder().encode(content).byteLength, readyAt: new Date(now()).toISOString(), expiresAt: new Date(now() + 7 * DAY_MS).toISOString(), body: content }
+      const content = await exportZip(collection)
+      const status = { exportId, state: 'ready' as const, bytes: content.byteLength, readyAt: new Date(now()).toISOString(), expiresAt: new Date(now() + 7 * DAY_MS).toISOString(), body: content }
       collection.exports.set(exportId, status)
       return json(exportStatus(status))
     }
@@ -1120,7 +1289,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       const status = collection.exports.get(decodeURIComponent(oneExport[1]!))
       if (!status) throw new StubError(404, 'not_found', 'There is no such export.')
       if (url.searchParams.get('download') === '1' && status.state === 'ready') {
-        return new Response(status.body, { headers: { 'content-type': 'application/json', 'content-disposition': `attachment; filename="collection-${collection.id}.json"` } })
+        return new Response(status.body as Uint8Array<ArrayBuffer>, { headers: { 'content-type': 'application/zip', 'content-disposition': `attachment; filename="${collection.id}-${status.exportId}.zip"` } })
       }
       return json(exportStatus(status))
     }
@@ -1133,18 +1302,6 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
 
   function exportStatus(status: ExportStatus): ExportStatus {
     return { exportId: status.exportId, state: status.state, bytes: status.bytes, readyAt: status.readyAt, expiresAt: status.expiresAt }
-  }
-
-  function exportOf(collection: StubCollection) {
-    return {
-      format: 'insulin-knowledge-export',
-      collectionId: collection.id,
-      version: collection.version,
-      documents: [...collection.content.documents.values()].map((document) => ({ ...document.info, text: document.text, pages: document.pages })),
-      outdated: [...collection.content.outdated.keys()].map((entry): PassageRef => ({ documentId: entry.slice(0, entry.lastIndexOf(':')), textHash: entry.slice(entry.lastIndexOf(':') + 1) })),
-      facts: facts(collection.content),
-      history: restorePoints(collection),
-    }
   }
 
   function normalNote(note: ImportNote): ImportNote {

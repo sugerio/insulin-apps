@@ -37,7 +37,11 @@ export const yourData: DocTopic = {
             <li>the notes people wrote, the facts Knowledge found (each with the sentence it came from), the corrections and the history;</li>
             <li>the collection's settings and counts.</li>
           </ul>
-          <p>Original files are never part of an export: Knowledge doesn't keep them after reading them.</p>
+          <p>
+            Original files are never part of an export: Knowledge doesn't keep them after reading them. A new collection can
+            <b> Start from an export</b> (in this organization or another): it brings back the same sources, the files it stopped
+            using, its notes and corrections, so it answers the same. See <DocLink to="collections-and-sources">Collections and sources</DocLink>.
+          </p>
         </>
       ),
     },
@@ -76,7 +80,7 @@ export const yourData: DocTopic = {
               ['Original files', 'Only until they are read: then deleted'],
               ['The text learned, with hidden values removed, and the facts', 'As long as the collection exists, or until the file is removed for good'],
               ['Restore points', '30 days'],
-              ['Daily backups', '30 days; the latest as long as the collection exists'],
+              ['Daily backups', "Your organization's days of daily backups (30 by default); the latest as long as the collection exists"],
               ['Exports', '7 days'],
               ['Who may do what: sharing, the list of collections, questions asked, reports and corrections (kept as learned, with hidden values hidden)', 'In Knowledge\'s own database, for the organization only, until the collection (or the organization) is deleted'],
               ['Notes waiting for the 1st (the month\'s documents learned used up), with hidden values hidden', 'Until they are learned'],

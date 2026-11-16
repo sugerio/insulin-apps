@@ -19,16 +19,17 @@ import type {
 } from './types.ts'
 import type { CollectionCounts, HidingRules, ImportFile, ImportFileStatus, ImportNote, ImportStatus, RemoveResult } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
-import { EMPTY_STATE } from './collection.ts'
+import { EMPTY_STATE, isHeld } from './collection.ts'
 import { CAPACITY_NAME, callObject } from './env.ts'
-import { EngineFailure, fail, requireId } from './http.ts'
+import { EngineFailure, fail, failWithStatus, requireId } from './http.ts'
 import { SETTINGS, instances } from './settings.ts'
 import type { SlotAnswer } from './capacity.ts'
-import { clock, documentIdFor, errorText, iso, isSha256, plural, randomId, sha256Hex } from './util.ts'
+import { clock, documentIdFor, errorText, iso, isSha256, plural, randomId } from './util.ts'
 import * as backup from './backup.ts'
 import * as exporter from './exporter.ts'
 import { Sha256 } from './sha256.ts'
-import { R2Sink } from './zip.ts'
+import { R2Sink } from './r2sink.ts'
+import { type ExportContents, openExport, storedText } from './exportfile.ts'
 
 export const inboxKey = (meta: Meta, fileId: string) => `inbox/${meta.org}/${meta.collectionId}/${fileId}`
 export const textKey = (meta: Meta, documentId: string) => `text/${meta.org}/${meta.collectionId}/docs/${documentId}.json`
@@ -256,9 +257,85 @@ async function create(e: CollectionEngine, importId: string, kind: ImportKind, s
 }
 
 function fileStatus(f: ImportRecord['files'][number]): ImportFileStatus {
-  return f.duplicateOf
-    ? { fileId: f.fileId, name: f.name, state: 'already_here', reason: 'The same content is already in this collection.', documentId: f.duplicateOf }
-    : { fileId: f.fileId, name: f.name, state: 'waiting', documentId: f.documentId }
+  if (f.duplicateOf) return { fileId: f.fileId, name: f.name, state: 'already_here', reason: 'The same content is already in this collection.', documentId: f.duplicateOf }
+  // An export's zip is not a document of its own.
+  return f.documentId ? { fileId: f.fileId, name: f.name, state: 'waiting', documentId: f.documentId } : { fileId: f.fileId, name: f.name, state: 'waiting' }
+}
+
+// ==================================================================== starting from an export
+
+/**
+ * POST .../import-export: an empty collection starts from a Knowledge export staged in its inbox. The zip is checked
+ * now (409 `bad_request` when it isn't an export, or the collection isn't empty) and learned like any import: its
+ * texts are hidden again with this collection's rules, and one restore point holds the documents, which of them are
+ * stopped, the notes and the corrections with their outdated marks.
+ */
+export async function submitExportImport(e: CollectionEngine, body: { importId?: unknown; fileId?: unknown }): Promise<{ status: number; record: ImportRecord }> {
+  const importId = requireId(body.importId, 'importId')
+  const existing = await e.store.getImport(importId)
+  if (existing) return { status: 200, record: existing }
+  const fileId = requireId(body.fileId, 'fileId')
+  const meta = await e.meta()
+  if (meta.version > 0 || meta.queue.length || meta.active || meta.removals.length || meta.op) {
+    return failWithStatus(409, 'bad_request', 'An export starts an empty collection only: this one already has something in it.')
+  }
+  const staged = await e.store.getStaged(fileId)
+  if (!staged) return fail('bad_request', 'The export was not staged; upload it to the inbox first.')
+  if (staged.bytes > SETTINGS.maxExportImportBytes) return fail('too_large', 'That export is too large to start a collection from.')
+  const contents = await readStagedExport(e, meta, fileId)
+  if (!contents) return failWithStatus(409, 'bad_request', "That file isn't a Knowledge export.")
+  const record = baseRecord(importId, 'export', {
+    importId,
+    state: 'queued',
+    attempt: 1,
+    queuePosition: null,
+    waitingFor: null,
+    files: [],
+    notes: 0,
+    version: null,
+    newFacts: null,
+    failedFileId: null,
+    error: null,
+    etaSeconds: null,
+    createdAt: iso(),
+    finishedAt: null,
+  })
+  record.files = [{ fileId, name: staged.name, type: staged.type, bytes: staged.bytes, sha256: staged.sha256, documentId: '', duplicateOf: null }]
+  record.status.files = record.files.map((f) => fileStatus(f))
+  record.rereadDocumentIds = contents.documents.map((d) => d.info.documentId) // its time limit counts them
+  record.hiding = meta.settings.hiding
+  record.fromExport = contents.from
+  await e.store.putImport(record)
+  await enqueue(e, record)
+  await e.store.log('import-queued', { importId, kind: 'export', documents: contents.documents.length, marks: contents.marks.length })
+  await e.state.storage.setAlarm(clock.now())
+  return { status: 202, record }
+}
+
+async function readStagedExport(e: CollectionEngine, meta: Meta, fileId: string): Promise<ExportContents | null> {
+  const object = await e.env.FILES.get(inboxKey(meta, fileId))
+  return object ? openExport(new Uint8Array(await object.arrayBuffer())) : null
+}
+
+/** The export's documents and marks, as this collection's records (version and sizes are set at the commit). */
+async function exportedState(e: CollectionEngine, meta: Meta, record: ImportRecord): Promise<{ contents: ExportContents; state: AnswerState }> {
+  const zip = record.files[0]
+  const contents = zip ? await readStagedExport(e, meta, zip.fileId) : null
+  if (!contents) throw new AttemptFailure('The export is no longer waiting to be learned; add it again.', zip?.fileId ?? null, true, 'bad_request')
+  const importId = record.status.importId
+  const documents: DocRecord[] = contents.documents.map((d) => ({
+    ...d.info,
+    textBytes: 0,
+    addedAt: iso(),
+    version: 0,
+    importId,
+    textKey: textKey(meta, d.info.documentId),
+    truncated: d.truncated,
+    noteId: d.noteId,
+    hiddenCount: d.hidden.length,
+  }))
+  const marks: OutdatedMark[] = contents.marks.map((m) => ({ ...m, correctionImportId: importId }))
+  return { contents, state: { ...EMPTY_STATE, documents, marks } }
 }
 
 /** Queue order: removals for good and re-learning first, then small imports (notes, corrections), then the rest. */
@@ -370,7 +447,8 @@ export async function setActive(e: CollectionEngine, documentId: string, body: {
   if (typeof body.active !== 'boolean') return fail('bad_request', 'active must be true or false.')
   const meta = await e.meta()
   if (meta.removals.length) return fail('busy_learning', 'A file is being removed for good; try again in a minute.')
-  if (meta.op) return fail('busy_learning', 'The collection is going back to an earlier version; try again in a minute.')
+  // While held a pending wake from a backup or repair waits for the hold to end; this needs no container, so it doesn't.
+  if (meta.op && !isHeld(meta)) return fail('busy_learning', 'The collection is going back to an earlier version; try again in a minute.')
   const current = await e.currentState(meta)
   const doc = current.documents.find((d) => d.documentId === documentId)
   if (!doc) return fail('not_found', 'No such document.')
@@ -422,7 +500,8 @@ export async function removeForGood(e: CollectionEngine, documentId: string): Pr
     const blocked = (await e.store.listPoints()).filter((p) => p.blocked === 'removed_for_good').map((p) => p.version)
     return { version: pending.version, blockedRestorePoints: blocked }
   }
-  if (meta.op) return fail('busy_learning', 'The collection is going back to an earlier version; try again in a minute.')
+  // While held the removal goes ahead of a pending wake from a backup or repair (it brings the files back itself).
+  if (meta.op && !isHeld(meta)) return fail('busy_learning', 'The collection is going back to an earlier version; try again in a minute.')
   const current = await e.currentState(meta)
   const doc = current.documents.find((d) => d.documentId === documentId)
   if (!doc) return fail('not_found', 'No such document.')
@@ -579,10 +658,10 @@ function baseRecord(importId: string, kind: ImportKind, status: ImportStatus): I
 
 // ==================================================================== the queue and the capacity guard
 
-/** Starts the import at the head of the queue when the capacity guard gives it a slot. True if it started. */
-export async function startNext(e: CollectionEngine): Promise<boolean> {
+/** Starts the import at the head of the queue (or the one named) when the capacity guard gives it a slot. True if it started. */
+export async function startNext(e: CollectionEngine, importId?: string): Promise<boolean> {
   const meta = await e.meta()
-  const importId = meta.queue[0]
+  importId ??= meta.queue[0]
   const record = await e.store.getImport(importId)
   if (!record || record.phase === 'done') {
     await e.updateMeta((m) => {
@@ -629,9 +708,14 @@ export async function advance(e: CollectionEngine, record: ImportRecord): Promis
   if (record.retryAt && record.retryAt > clock.now()) return
   if (record.capacity === 'granted') {
     // A slot that lapsed may have gone to another import: this one stops, keeps nothing and waits for a new one.
+    // Only the guard's answer that the slot is gone counts: a call that failed (the guard unreachable for a moment)
+    // is tried again on the next step.
     const renewed = await callObject<{ renewed: boolean }>(e.env.CAPACITY, CAPACITY_NAME, '/renew', {
       body: { org: meta.org, collectionId: meta.collectionId, importId: record.status.importId, small: record.small },
-    }).catch(() => ({ renewed: false }))
+    }).catch(async (error) => {
+      await e.store.log('lease-renew-unreachable', { importId: record.status.importId, error: errorText(error) })
+      return { renewed: true }
+    })
     if (!renewed.renewed && !record.snapshotTaken) {
       await e.store.log('lease-lost', { importId: record.status.importId })
       return preempt(e, record)
@@ -693,7 +777,7 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
  */
 async function learningContainer(e: CollectionEngine, record: ImportRecord): Promise<Runtime> {
   const meta = await e.meta()
-  if (record.kind === 'relearn' || record.rebuild) return e.startContainer(null, 'learning')
+  if (record.kind === 'relearn' || record.kind === 'export' || record.rebuild) return e.startContainer(null, 'learning')
   const current = await e.currentSnapshot(meta)
   if (current.unusable) {
     const runtime = await e.startContainer(null, 'learning', true)
@@ -777,6 +861,9 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   if (record.kind === 'relearn' && record.restoreFrom === null && !(await e.currentSnapshot(before)).unusable) {
     return finishUnchanged(e, record) // something else brought the restore point back meanwhile
   }
+  if (record.kind === 'export' && before.version > 0) {
+    throw new AttemptFailure("Something was added to the collection first, so the export can't start it.", null, true, 'bad_request')
+  }
   const runtime = await learningContainer(e, record)
   const meta = await e.meta()
   // Hidden with the rules in force now, not those of when the import was queued.
@@ -814,6 +901,15 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
       documentIds: state.documents.map((d) => d.documentId),
       marks: state.marks.map((m) => ({ documentId: m.documentId, textHash: m.textHash })),
     }
+  } else if (record.kind === 'export') {
+    // Each text as the export holds it, hidden again with this collection's rules as it is learned.
+    const { contents } = await exportedState(e, meta, record)
+    for (const doc of contents.documents) {
+      const stored = await storedText(doc)
+      if (!stored) throw new AttemptFailure(`The export's text of “${doc.info.name}” is damaged.`, record.files[0].fileId, true, 'bad_request')
+      await e.box.putInbox(importId, `${doc.info.documentId}.json`, JSON.stringify(stored))
+    }
+    batch = { importId, kind: 'relearn', hiding: record.hiding, documents: contents.documents.map((d) => ({ documentId: d.info.documentId, kind: d.info.kind, name: d.info.name })) }
   } else if (record.kind === 'relearn') {
     const { current, extra } = await relearnDocuments(e, record, meta)
     const docs = [...current.documents, ...extra]
@@ -891,7 +987,7 @@ async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
       return state && f.state !== 'already_here' ? { ...f, state: state === 'failed' ? 'reading' : state } : f
     })
   }
-  if (record.status.files.some((f) => f.state === 'understanding' || f.state === 'learned') || (!record.files.length && job.progress?.done)) {
+  if (record.status.files.some((f) => f.state === 'understanding' || f.state === 'learned') || ((!record.files.length || record.kind === 'export') && job.progress?.done)) {
     record.status.state = 'learning'
   }
   if (job.state === 'running' && job.progress?.read && !record.textsSaved && (record.kind === 'import' || record.kind === 'correction')) {
@@ -1034,12 +1130,23 @@ async function commitImport(
   const current = await e.currentState(meta)
   const result = (record.result ?? {}) as IngestResult
   const version = Math.max(meta.nextVersion, record.reserveVersion ?? 0)
-  const extra = record.kind === 'relearn' && record.restoreFrom !== null ? ((await e.store.getState(record.restoreFrom)) ?? null) : null
+  const extra =
+    record.kind === 'relearn' && record.restoreFrom !== null
+      ? ((await e.store.getState(record.restoreFrom)) ?? null)
+      : record.kind === 'export'
+        ? (await exportedState(e, meta, record)).state
+        : null
   const next = applyResult(meta, current, record, result, version, facts, stats, extra)
   const changes = emptyChanges()
   changes.files = record.files.filter((f) => !f.duplicateOf).length
   changes.notes = record.kind === 'correction' ? 0 : record.notes.length
   changes.corrections = record.kind === 'correction' ? record.notes.length : 0
+  if (record.kind === 'export') {
+    const corrections = new Set(next.marks.map((m) => m.noteDocumentId))
+    changes.files = next.documents.filter((d) => d.kind === 'file').length
+    changes.notes = next.documents.filter((d) => d.kind === 'note' && !corrections.has(d.documentId)).length
+    changes.corrections = corrections.size
+  }
   changes.removed = record.removeDocumentIds.length
   changes.reread = record.kind === 'reread' ? (result.changed ?? []).length : 0
   const pointKind = record.kind === 'remove' ? 'remove' : record.kind === 'reread' ? 'reread' : record.kind === 'relearn' ? 'from_backup' : 'import'
@@ -1053,6 +1160,7 @@ async function commitImport(
     newFacts: result.newFacts ?? null,
     changedDocumentIds: result.changed ?? [],
     ...(record.kind === 'relearn' ? { summary: 'Learned everything again from its saved text' } : {}),
+    ...(record.kind === 'export' ? { summary: `Started from an export (${describe(changes).toLowerCase()})` } : {}),
     needsCheck: (result.marks ?? []).filter((m) => m.changed || m.newTextHash === null),
   })
 }
@@ -1138,6 +1246,17 @@ function applyResult(
       const moved = remap.get(key)
       return moved ? { ...m, textHash: moved, needsCheck: m.needsCheck || changed.has(key) } : { ...m, needsCheck: true }
     })
+  } else if (record.kind === 'export') {
+    // An empty collection started from an export: its documents as learned now, stopped ones still stopped, and the
+    // corrections' marks on them.
+    documents = (extra?.documents ?? [])
+      .filter((d) => byId.has(d.documentId))
+      .map((d) => {
+        const learned = byId.get(d.documentId)!
+        return { ...d, textBytes: learned.textBytes, hiddenCount: learned.hidden ?? d.hiddenCount, pages: learned.pages ?? d.pages, addedAt: now, version }
+      })
+    const kept = new Set(documents.map((d) => d.documentId))
+    marks = (extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId))
   } else if (record.kind === 'relearn' && record.restoreFrom !== null) {
     // A repair's re-learning also brings back the documents of the version that failed its check.
     const learned = new Set((result.documents ?? []).map((d) => d.documentId))
@@ -1288,6 +1407,9 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
     meta.backupDue = true
     meta.removals = meta.removals.filter((r) => !c.record.removeDocumentIds.includes(r.documentId))
     if (c.record.kind === 'reread') meta.hidingAppliedAt = now
+    // A removal that ran during a hold, ahead of a pending wake from a backup or a repair, brought the files back
+    // itself into a new snapshot: that operation has nothing left to do.
+    if (c.record.kind === 'remove' && c.snapshot && meta.op && meta.op.kind !== 'go_back') meta.op = null
     await txn.put('meta', meta)
     if (c.record.kind === 'remove') {
       const owed = (await txn.get<string[]>('removalCleanup')) ?? []
@@ -1334,6 +1456,7 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   await step('outbox', () => e.flushOutbox())
   if (c.record.capacity === 'granted') await step('capacity', () => e.releaseCapacity(c.record))
   await deleteOriginals(e, c.record.files.map((f) => f.fileId))
+  if (c.changedDocumentIds?.length) await step('facts', () => dropUnusedFacts(e))
   if (c.record.kind === 'remove') {
     // Facts files and backups written while the removal waited may still hold the file: they go too (tried again
     // from the alarm until they have), and the latest backup is written again without it.
@@ -1494,6 +1617,27 @@ export async function dropFacts(e: CollectionEngine, documentIds: string[]): Pro
         await e.env.FILES.put(key, JSON.stringify({ ...stored, facts: kept }), { httpMetadata: { contentType: 'application/json' } })
       }
     }
+    cursor = listed.truncated ? listed.cursor : undefined
+  } while (cursor)
+}
+
+/**
+ * Stricter hiding: facts files that only restore points that can no longer be restored use hold text that is hidden
+ * now. They are deleted; the current facts and those of restorable points stay.
+ */
+export async function dropUnusedFacts(e: CollectionEngine): Promise<void> {
+  const meta = await e.meta()
+  const used = new Set<string>()
+  for (const point of await e.store.listPoints()) {
+    if (point.version !== meta.version && (point.folded || point.blocked)) continue
+    const state = await e.store.getState(point.version)
+    if (state?.factsKey) used.add(state.factsKey)
+  }
+  let cursor: string | undefined
+  do {
+    const listed = await e.env.FILES.list({ prefix: `text/${meta.org}/${meta.collectionId}/facts/`, cursor })
+    const unused = listed.objects.map((o) => o.key).filter((key) => !used.has(key))
+    if (unused.length) await e.env.FILES.delete(unused)
     cursor = listed.truncated ? listed.cursor : undefined
   } while (cursor)
 }

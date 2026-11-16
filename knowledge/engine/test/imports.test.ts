@@ -423,6 +423,7 @@ test('uploads stream to R2 in parts, checked against their SHA-256, without hold
   SETTINGS.uploadPartBytes = 1024
   try {
     const t = makeEngine()
+    t.files.minPartBytes = 1024
     await createCollection(t)
     const big = new Uint8Array(5000).map((_, i) => 65 + (i % 26))
     const staged = await stageFile(t, 'c1', { fileId: 'big', name: 'big.txt', text: new TextDecoder().decode(big), type: 'text/plain' })
@@ -456,4 +457,18 @@ test('the daily clean-up never deletes a staged file that a keep request has jus
     assert.ok(await t.storage('c1').get('staged:f1'), 'reported kept, so it is still staged')
     assert.deepEqual(t.files.keys(`inbox/${ORG}/c1/`), [`inbox/${ORG}/c1/f1`])
   }
+})
+
+test("upload and export parts meet R2's 5 MiB minimum, so a real multipart upload completes", async () => {
+  const { SETTINGS } = await import('../src/settings.ts')
+  const { R2Sink } = await import('../src/r2sink.ts')
+  const t = makeEngine() // the fake R2 refuses smaller parts but the last, as R2 does
+  assert.ok(SETTINGS.uploadPartBytes >= 5 * 1024 * 1024)
+  const sink = new R2Sink(t.env.FILES, 'exports/big.zip')
+  assert.ok(sink.partBytes >= 5 * 1024 * 1024)
+  const piece = new Uint8Array(3 * 1024 * 1024).fill(7)
+  for (let i = 0; i < 4; i++) await sink.write(piece)
+  await sink.close()
+  assert.equal(t.files.objects.get('exports/big.zip')!.body.length, 12 * 1024 * 1024)
+  assert.ok(t.files.multipart >= 1)
 })

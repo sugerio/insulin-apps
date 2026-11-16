@@ -254,7 +254,7 @@ async function startWaiting(env: Bindings, row: WaitingRow, now: number): Promis
   // Nothing starts at the awake-hours stop; it waits, holding nothing more.
   if ((await atAwakeStop(db, org, now)).stopped) return 'stopped'
   const request = JSON.parse(row.request ?? '{"files":[],"notes":[]}') as WaitingRequest
-  const amount = request.files.length + request.notes.length
+  const amount = request.export ? request.export.documents : request.files.length + request.notes.length
   const limit = await effectiveLimit(db, org, 'learned_month', now)
   const period = periodOf(now)
   const [, claim] = await db.batch([

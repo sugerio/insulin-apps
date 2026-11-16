@@ -72,9 +72,9 @@ And from the design:
 - **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
   the correction keeps applying and a `needs_check` event asks a person to check it.
 - **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
-  failed its check twice (`damaged`), the collection comes back from its latest backup if that holds the same files
-  (matched by their checksum list, not the version) in the running image's database format
-  (`KNOWLEDGE_DATA_FORMAT`). Otherwise every document is learned again from its saved text; an import waiting
+  failed its check twice (`damaged`), the collection comes back from its latest backup if that backup was taken from
+  the same snapshot (matched by snapshot id, not the version) in the running image's database format
+  (`KNOWLEDGE_DATA_FORMAT`); the files put back must then match the backup's manifest. Otherwise every document is learned again from its saved text; an import waiting
   meanwhile gives way to that and isn't charged a try, and a removal for good learns the other documents itself.
   A repair that answers from an earlier restore point then learns everything again, bringing back the files added
   after it.
@@ -94,11 +94,22 @@ And from the design:
 - **The organization hold** (`POST /v1/orgs/:org/hold`, the app's hard stop on awake hours): while held, the engine
   starts no container for the organization's collections except to remove a file for good or delete; running
   containers stop, an import in progress stops, keeps nothing and waits, questions answer `held`, and the collection's
-  state is `held`. The hold lifts at its `until` time or with `until: null`. A collection made while held is held.
-- **Imports hold their capacity slot or stop**: an import whose slot lapsed (its renewal failed or was refused) stops,
-  keeps nothing and waits for a new slot, so no more than the allowed imports ever run.
+  state is `held`. Imports and corrections are queued; stop using / use again commits at once (it needs no
+  container); go back, undo and new exports answer 429 `capacity` with `retryAfterSeconds` until the hold ends; a go
+  back asked for before the hold is dropped (a `state` event says `held`). A removal for good starts wherever it
+  waits in the queue, ahead of a re-learning and of a pending wake from a backup or repair (it brings the files back
+  itself). The hold lifts at its `until` time or with `until: null`. A collection made while held is held. The
+  registry keeps the hold and tells every collection; one it can't reach is told again every minute until it has.
+- **Imports hold their capacity slot or stop**: an import whose slot the capacity guard says has lapsed stops, keeps
+  nothing and waits for a new slot, so no more than the allowed imports ever run. A renewal call that fails (the
+  guard unreachable for a moment) is tried again on the next step.
 - **Settings carry the app's revision**: a PUT with a lower revision than the engine holds answers 409
   `stale_settings` and changes nothing; the same revision again changes nothing.
+- **An export starts a new collection** (`POST .../import-export`, DEL-03): an empty collection learns a Knowledge
+  export staged in its inbox like an import. Each document's redacted text and page map come back under the same
+  document id, hidden again with the new collection's rules; stopped sources stay stopped; notes and corrections come
+  back with their outdated marks. Facts are found again as it learns, and History starts with one restore point. A
+  collection that isn't empty, or a file that isn't an export, answers 409 `bad_request`; an export over 64 MB, 413.
 
 ## Service settings
 
@@ -168,8 +179,11 @@ uv pip compile requirements.in --python-version 3.12 --python-platform x86_64-ma
   --index-strategy unsafe-best-match --exclude-newer 2026-11-13 --generate-hashes -o requirements.lock
 ```
 
-The models (GLiNER for the graph, fastembed `BAAI/bge-small-en-v1.5` for passages) are downloaded at build time by
-`warmup.py`; from then on the image never touches the network. A changed image makes the engine's snapshots
+The models (GLiNER `fastino/gliner2.5-base-v1` for the graph; fastembed's quantized `BAAI/bge-small-en-v1.5`,
+`Qdrant/bge-small-en-v1.5-onnx-Q`, for passages) are pinned in `container/models.py`: each repo at one commit, every
+file by SHA-256. The build fetches those commits, warms up with the hub offline so Cognee's loaders find only them,
+and fails if the cache differs from the pins or if `KNOWLEDGE_DATA_FORMAT` doesn't name the embedding model's pin
+(backups hold vectors from that model). From then on the image never touches the network. A changed image makes the engine's snapshots
 unusable; collections move from their backups on their next wake (HIS-03), and History marks the older restore
 points as unavailable.
 

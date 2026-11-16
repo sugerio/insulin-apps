@@ -16,7 +16,8 @@ export const fixingAndReporting: DocTopic = {
       body: (
         <>
           <p>
-            Under every answer, <b>Was this right?</b> offers <b>Yes</b> and <b>Not right</b>. If you are the collection's
+            Under every answer, <b>Was this right?</b> offers <b>Yes</b> and <b>Not right</b>. <b>Yes</b> marks the answer right;
+            each collection's <b>Overview</b> shows how many of its answers were marked right. If you are the collection's
             owner, an admin or an editor, <b>Not right</b> opens the fix:
           </p>
           <ol>
@@ -85,9 +86,9 @@ export const fixingAndReporting: DocTopic = {
           </p>
           <ul>
             <li><b>Files Insulin couldn't read</b>, with the reason and what to upload instead.</li>
-            <li><b>Values hidden before learning</b>: which file, and how many e-mail addresses, phone numbers or other values were hidden. Open the file to see where. See <DocLink to="hiding-personal-data">Hiding personal data</DocLink>.</li>
+            <li><b>Values hidden before learning</b>: which file, and how many values were hidden in all. Open the file to see where. See <DocLink to="hiding-personal-data">Hiding personal data</DocLink>.</li>
             <li><b>Reported answers waiting</b>: fix the answer, or say it is right.</li>
-            <li><b>Corrections to check</b>: a file was read again, and the words a correction applies to now read differently. Check that the correction still says the right thing (shown as Insulin learned it, with hidden values hidden); writing a new correction of that file settles it.</li>
+            <li><b>Corrections to check</b>: a file was read again, and the words a correction applies to now read differently. Check that the correction still says the right thing (shown as Insulin learned it, with hidden values hidden): <b>Still right</b> settles it; <b>Write it again</b> opens the correction, ready to change, and settles it once Insulin has learned the new one.</li>
           </ul>
           <p>
             Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file

@@ -7,8 +7,9 @@ import type { AppEnv, Bindings } from '../env.ts'
 import { ApiError, badRequest, notFound, readJson } from '../http.ts'
 import { idempotent, stableId } from '../idempotency.ts'
 import type { Caller } from '../identity.ts'
-import { effectiveLimit, ensureAwakeBlock, quotaExceeded, release, reservationsOf, reserve, resetsAt, supportSentence, usageOf, type LimitKey } from '../limits.ts'
+import { effectiveLimit, ensureAwakeBlock, formatBytes, quotaExceeded, release, reservationsOf, reserve, resetsAt, supportSentence, usageOf, type LimitKey } from '../limits.ts'
 import { finishImport } from '../outbox.ts'
+import { exportContents, type ExportContents } from '../export-zip.ts'
 import { hiddenNote } from '../kept.ts'
 import { readOrgSettings } from '../settings.ts'
 import { FILE_ID, inspect, sha256Hex, TooLargeError, verdictOf } from '../uploads.ts'
@@ -51,7 +52,24 @@ export function noteBound(note: { title: string; text: string }, rules: Pick<Hid
   return hidingGrowth(rules) * new TextEncoder().encode(`${note.title}\n\n${note.text}`).byteLength
 }
 
-export type ImportRequestBody = { files: ImportFile[]; notes: { noteId: string; title: string; text: string; outdated: { documentId: string; textHash: string }[] }[] }
+/**
+ * What an import sends. `export`: an empty collection started from a Knowledge export, its one file the export's zip;
+ * its documents and their text's bytes (read from the zip when it was uploaded) are what it reserves.
+ */
+export type ImportRequestBody = { files: ImportFile[]; notes: { noteId: string; title: string; text: string; outdated: { documentId: string; textHash: string }[] }[]; export?: ExportContents }
+
+/** The type preflight records for a Knowledge export uploaded to start a collection; the engine stages it as a zip. */
+export const EXPORT_TYPE = 'application/vnd.insulin-knowledge.export+zip'
+const notAnExport = (name: string) => `“${name}” isn't a Knowledge export: start from the .zip file a collection's Export made.`
+
+/** Whether a collection is still empty: nothing learned, nothing on its way. Only an empty one starts from an export. */
+async function emptyCollection(db: D1Database, collection: CollectionRow, except: string | null = null): Promise<boolean> {
+  if (collection.documents > 0 || collection.version > 0) return false
+  const busy = await db.prepare(`SELECT 1 FROM imports WHERE org_id = ? AND collection_id = ? AND state NOT IN ('failed', 'cancelled', 'duplicate') AND id IS NOT ? LIMIT 1`)
+    .bind(collection.org_id, collection.id, except).first()
+  return !busy
+}
+const NOT_EMPTY = 'Starting from an export works in a new, empty collection only: this one already has something in it. Start a new collection for the export.'
 export type ImportKind = 'files' | 'web_page' | 'note' | 'correction'
 
 /**
@@ -156,9 +174,12 @@ export async function startImport(
   }
   if (!existing) {
     await ensureAwakeBlock(env, org, collection.id, at)
-    const documents = request.files.length + request.notes.length
     const { hiding } = await readOrgSettings(db, org, at)
-    const stored = request.files.reduce((sum, file) => sum + storedBound(file, hiding), 0) + request.notes.reduce((sum, note) => sum + noteBound(note, hiding), 0)
+    // An export brings back its documents, their text already read: hidden again with the organization's rules.
+    const documents = request.export ? request.export.documents : request.files.length + request.notes.length
+    const stored = request.export
+      ? hidingGrowth(hiding) * request.export.textBytes
+      : request.files.reduce((sum, file) => sum + storedBound(file, hiding), 0) + request.notes.reduce((sum, note) => sum + noteBound(note, hiding), 0)
     const ref = `import:${importId}`
     const standing = await reserve(env, org, [{ key: 'documents', amount: documents }, { key: 'storage_bytes', amount: stored }], ref, at)
     const detail = JSON.stringify({ files: request.files.map((file) => file.name) })
@@ -208,9 +229,11 @@ export async function submitImport(env: Bindings, engine: EngineClient, org: str
   let status: ImportStatus
   try {
     const small = kind === 'note' || kind === 'correction'
-    status = kind === 'correction'
-      ? await engine.correct(collection.id, { importId, note: request.notes[0]! })
-      : await engine.startImport(collection.id, { importId, files: request.files, notes: request.notes, small })
+    status = request.export
+      ? await engine.importExport(collection.id, { importId, fileId: request.files[0]!.fileId })
+      : kind === 'correction'
+        ? await engine.correct(collection.id, { importId, note: request.notes[0]! })
+        : await engine.startImport(collection.id, { importId, files: request.files, notes: request.notes, small })
   } catch (error) {
     if (refused(error) && options.onRefused === 'fail') {
       await failWaiting(env, org, collection, importId, request.files, at)
@@ -239,11 +262,27 @@ export function sourceRoutes() {
     const caller = callerOf(c)
     const body = await readJson(c, z.object({
       files: z.array(z.object({ name: z.string().trim().min(1).max(255), bytes: z.number().int().min(0), type: z.string().max(200).optional() })).min(1).max(100),
+      /** Start an empty collection from a Knowledge export: one .zip file, and nothing else. */
+      export: z.boolean().optional(),
     }))
     const db = c.env.DB
     const at = now(c)
     const { collection } = await authorize(db, caller, param(c, 'id'), 'change')
     const fileLimit = await effectiveLimit(db, caller.organizationId, 'file_bytes', at)
+    if (body.export) {
+      if (body.files.length !== 1) throw badRequest('Start from one export: the .zip file a collection\'s Export made.')
+      if (!(await emptyCollection(db, collection))) throw new ApiError('conflict', NOT_EMPTY)
+      const [file] = body.files
+      const reason = !/\.zip$/i.test(file!.name) ? notAnExport(file!.name)
+        : file!.bytes <= 0 ? `“${file!.name}” is empty.`
+          : fileLimit !== null && file!.bytes > fileLimit ? `“${file!.name}” is ${formatBytes(file!.bytes)}; the largest file your organization can add is ${formatBytes(fileLimit)}.` : null
+      if (reason) return json(c, { files: [{ name: file!.name, bytes: file!.bytes, accepted: false, reason }], accepted: 0, refused: 1 })
+      // What it brings back is counted against the limits when it starts, once its zip has been read.
+      const fileId = crypto.randomUUID().replace(/-/g, '')
+      await db.prepare(`INSERT INTO staged_files (id, org_id, collection_id, name, type, bytes, state, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 'expected', ?, ?)`)
+        .bind(fileId, caller.organizationId, collection.id, file!.name, EXPORT_TYPE, file!.bytes, caller.id, at).run()
+      return json(c, { files: [{ name: file!.name, bytes: file!.bytes, accepted: true, fileId }], accepted: 1, refused: 0 })
+    }
     const { hiding } = await readOrgSettings(db, caller.organizationId, at)
     const verdicts = body.files.map((file) => ({ file, verdict: verdictOf(file.name, file.bytes, fileLimit) }))
     const accepted = verdicts.filter((entry) => entry.verdict.ok)
@@ -293,22 +332,26 @@ export function sourceRoutes() {
     if (Number(c.req.header('content-length') ?? 0) > fileLimit) throw quotaExceeded(c.env, 'file_bytes', fileLimit, at)
     const engine = engineFor(c)
     const pdf = staged.type === 'application/pdf'
+    const isExport = staged.type === EXPORT_TYPE
     const declared = c.req.header('x-file-sha256')?.trim().toLowerCase()
     let result: { fileId: string; bytes: number; sha256: string }
     let scannedPdf = false
+    let contents: ExportContents | null = null
     // Streamed on to the engine, which computes the SHA-256 (and checks the one sent, when there is one).
-    const watched = inspect(c.req.raw.body, fileLimit, pdf)
+    const watched = inspect(c.req.raw.body, fileLimit, pdf, isExport)
     try {
-      result = await engine.stage(collection.id, fileId, watched.stream, { name: staged.name, type: staged.type, ...(declared && /^[0-9a-f]{64}$/.test(declared) ? { sha256: declared } : {}) })
-      scannedPdf = watched.result().scannedPdf
+      result = await engine.stage(collection.id, fileId, watched.stream, { name: staged.name, type: isExport ? 'application/zip' : staged.type, ...(declared && /^[0-9a-f]{64}$/.test(declared) ? { sha256: declared } : {}) })
+      const read = watched.result()
+      scannedPdf = read.scannedPdf
+      if (isExport) contents = exportContents(read.kept!)
     } catch (error) {
       // Past the limit the stream stops on its way, and the engine sees a broken body: the limit is what to say.
       if (error instanceof TooLargeError || watched.result().bytes > fileLimit) throw quotaExceeded(c.env, 'file_bytes', fileLimit, at)
       throw error
     }
-    const reason = scannedPdf ? `“${staged.name}” is a scanned image with no text. Upload a PDF with text, or a Word file.` : null
-    await db.prepare(`UPDATE staged_files SET state = ?, reason = ?, sha256 = ?, bytes = ? WHERE id = ? AND org_id = ?`)
-      .bind(reason ? 'refused' : 'staged', reason, result.sha256, result.bytes, fileId, caller.organizationId).run()
+    const reason = scannedPdf ? `“${staged.name}” is a scanned image with no text. Upload a PDF with text, or a Word file.` : isExport && !contents ? notAnExport(staged.name) : null
+    await db.prepare(`UPDATE staged_files SET state = ?, reason = ?, sha256 = ?, bytes = ?, detail = ? WHERE id = ? AND org_id = ?`)
+      .bind(reason ? 'refused' : 'staged', reason, result.sha256, result.bytes, contents ? JSON.stringify(contents) : null, fileId, caller.organizationId).run()
     return json(c, { fileId, bytes: result.bytes, sha256: result.sha256, accepted: !reason, reason })
   })
 
@@ -332,6 +375,7 @@ export function sourceRoutes() {
         if (file.state === 'refused') throw badRequest(file.reason ?? `“${file.name}” can't be learned.`, { fileId: id })
         if (file.state === 'expected') throw badRequest(`“${file.name}” hasn't been uploaded yet.`, { fileId: id })
         if (file.state === 'used' && file.import_id !== importId) throw badRequest(`“${file.name}” was already added. Upload it again to add it again.`, { fileId: id })
+        if (file.type === EXPORT_TYPE) throw badRequest(`“${file.name}” is an export: it starts a new collection (Start from an export), and isn't learned as a file.`, { fileId: id })
       }
       const engine = engineFor(c)
       const files: ImportFile[] = results.map((file) => ({ fileId: file.id, name: file.name, type: file.type, bytes: file.bytes, sha256: file.sha256 ?? '' }))
@@ -340,6 +384,72 @@ export function sourceRoutes() {
         .bind(importId, caller.organizationId, collection.id, JSON.stringify(ids)).run()
       return json(c, { import: status, waiting }, 202)
     })
+  })
+
+  // Start an empty collection from a Knowledge export uploaded for it (preflight with `export: true`, then the upload):
+  // what it brings back is reserved from the export's contents, then the engine restores it, as one import.
+  app.post('/:id/import-export', async (c) => {
+    const caller = callerOf(c)
+    const body = await readJson(c, z.object({ fileId: z.string().regex(FILE_ID) }).strict())
+    const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
+    return idempotent(c, body, true, async () => {
+      const db = c.env.DB
+      const at = now(c)
+      const importId = await stableId(c)
+      const file = await db.prepare(`SELECT id, name, type, bytes, sha256, state, reason, import_id, detail FROM staged_files WHERE id = ? AND org_id = ? AND collection_id = ?`)
+        .bind(body.fileId, caller.organizationId, collection.id).first<{ id: string; name: string; type: string; bytes: number; sha256: string | null; state: string; reason: string | null; import_id: string | null; detail: string | null }>()
+      if (!file || file.type !== EXPORT_TYPE) throw notFound('There is no such export to start from. Upload it first.')
+      if (file.state === 'refused') throw badRequest(file.reason ?? notAnExport(file.name))
+      if (file.state === 'expected' || !file.detail) throw badRequest(`“${file.name}” hasn't been uploaded yet.`)
+      if (file.state === 'used' && file.import_id !== importId) throw badRequest(`“${file.name}” was already used. Upload it again to start another collection.`)
+      if (!(await emptyCollection(db, collection, importId))) throw new ApiError('conflict', NOT_EMPTY)
+      const contents = JSON.parse(file.detail) as ExportContents
+      const { status, waiting } = await startImport(c.env, engineFor(c), caller, collection, 'files', {
+        files: [{ fileId: file.id, name: file.name, type: 'application/zip', bytes: file.bytes, sha256: file.sha256 ?? '' }], notes: [], export: contents,
+      }, at, importId)
+      await db.prepare(`UPDATE staged_files SET state = 'used', import_id = ? WHERE id = ? AND org_id = ?`).bind(importId, file.id, caller.organizationId).run()
+      return json(c, { import: status, waiting }, 202)
+    })
+  })
+
+  // The collection's imports waiting for the 1st (the month's documents learned used up): what each brings, who added
+  // it and when it starts by itself.
+  app.get('/:id/imports', async (c) => {
+    const caller = callerOf(c)
+    const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'read')
+    if (c.req.query('state') !== 'waiting') throw badRequest('List the imports waiting for the 1st: ?state=waiting.')
+    const { results } = await c.env.DB.prepare(
+      `SELECT i.id, i.kind, i.created_at, i.created_by, i.request, COALESCE(m.name, m.email) AS name FROM imports i
+       LEFT JOIN members m ON m.org_id = i.org_id AND m.principal_type = 'person' AND m.principal_id = i.created_by
+       WHERE i.org_id = ? AND i.collection_id = ? AND i.state = 'waiting' ORDER BY i.created_at, i.rowid LIMIT 100`,
+    ).bind(caller.organizationId, collection.id).all<{ id: string; kind: string; created_at: number; created_by: string; request: string | null; name: string | null }>()
+    return json(c, {
+      imports: results.map((row) => {
+        const request = JSON.parse(row.request ?? '{"files":[],"notes":[]}') as WaitingRequest
+        return {
+          importId: row.id, kind: row.kind, createdAt: new Date(row.created_at).toISOString(), createdBy: { id: row.created_by, name: row.name },
+          files: request.files.map((file) => file.name), notes: request.notes.length, titles: request.notes.map((note) => note.title).filter(Boolean), waitsFor: request.waitsFor ?? resetsAt(now(c)),
+        }
+      }),
+    })
+  })
+
+  // Cancel an import waiting for the 1st: it is never learned, and what it held of the limits is free again.
+  app.delete('/:id/imports/:importId', async (c) => {
+    const caller = callerOf(c)
+    const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
+    const db = c.env.DB
+    const at = now(c)
+    const importId = param(c, 'importId')
+    const row = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id).first<{ state: string }>()
+    if (!row) throw notFound('There is no such import in this collection.')
+    const [cancelled] = await db.batch([
+      db.prepare(`UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting'`).bind(importId, caller.organizationId, at),
+      db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND state = 'held' AND EXISTS (SELECT 1 FROM imports WHERE id = ?4 AND state = 'cancelled')`)
+        .bind(caller.organizationId, `import:${importId}`, at, importId),
+    ])
+    if (cancelled?.meta.changes !== 1) throw new ApiError('conflict', 'Only an import waiting for the 1st can be cancelled; this one has started or finished.')
+    return json(c, { import: { importId, state: 'cancelled' } })
   })
 
   app.get('/:id/imports/:importId', async (c) => {

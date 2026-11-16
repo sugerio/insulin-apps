@@ -15,6 +15,7 @@ export interface RegistryEntry {
 }
 
 const PURGE_RETRY_MS = 5 * 60 * 1000
+const HOLD_RETRY_MS = 60 * 1000
 
 export class Registry {
   storage: DurableObjectStorage
@@ -43,24 +44,47 @@ export class Registry {
 
   /**
    * The organization's hold: no container starts for its collections (but to remove a file for good or delete)
-   * until `until`, or until it is lifted with null. Every collection is told now; a new one asks when it is made.
+   * until `until`, or until it is lifted with null. The hold is kept here and every collection is told now; one
+   * that can't be reached is told again from the alarm until it has been, and a new one asks when it is made.
    */
   async hold(org: string, until: string | null): Promise<{ held: boolean; until: string | null }> {
     if (until && Date.parse(until) > clock.now()) await this.storage.put(`hold:${org}`, until)
     else await this.storage.delete(`hold:${org}`)
     const kept = until && Date.parse(until) > clock.now() ? until : null
-    for (const entry of (await this.entries(org)).filter((e) => e.state === 'live')) {
+    const live = (await this.entries(org)).filter((e) => e.state === 'live').map((e) => e.collectionId)
+    await this.tellHold(org, live)
+    return { held: kept !== null, until: kept }
+  }
+
+  /** Tells collections the organization's current hold; those not reached are kept to be told again. */
+  async tellHold(org: string, collectionIds: string[]): Promise<void> {
+    const until = await this.holdOf(org)
+    const missed: string[] = []
+    for (const collectionId of collectionIds) {
       try {
-        await stub(this.env.COLLECTIONS, collectionName(org, entry.collectionId)).fetch('https://engine.internal/internal/hold', {
+        const response = await stub(this.env.COLLECTIONS, collectionName(org, collectionId)).fetch('https://engine.internal/internal/hold', {
           method: 'POST',
           headers: { 'x-knowledge-org': org, 'content-type': 'application/json' },
-          body: JSON.stringify({ until: kept }),
+          body: JSON.stringify({ until }),
         })
+        if (!response.ok) throw new Error(`the collection answered ${response.status}`)
       } catch (error) {
-        console.warn('registry: a collection could not be told of its hold', String(error))
+        console.warn('registry: a collection could not be told of its hold; will retry', String(error))
+        missed.push(collectionId)
       }
     }
-    return { held: kept !== null, until: kept }
+    // A newer call tells every collection again, so what it missed replaces what an older one missed.
+    if (missed.length) {
+      await this.storage.put(`holdTodo:${org}`, missed)
+      await this.alarmBy(clock.now() + HOLD_RETRY_MS)
+    } else {
+      await this.storage.delete(`holdTodo:${org}`)
+    }
+  }
+
+  async alarmBy(at: number): Promise<void> {
+    const current = await this.storage.getAlarm()
+    if (current === null || current > at) await this.storage.setAlarm(at)
   }
 
   async holdOf(org: string): Promise<string | null> {
@@ -108,7 +132,7 @@ export class Registry {
     }
     const purges = (await this.storage.get<string[]>('purges')) ?? []
     if (open.length && !purges.includes(org)) await this.storage.put('purges', [...purges, org])
-    if (open.length && (await this.storage.getAlarm()) === null) await this.storage.setAlarm(clock.now() + PURGE_RETRY_MS)
+    if (open.length) await this.alarmBy(clock.now() + PURGE_RETRY_MS)
     return { collections: open.length, remaining: open.length }
   }
 
@@ -123,7 +147,16 @@ export class Registry {
       }
     }
     await this.storage.put('purges', still)
-    if (still.length) await this.storage.setAlarm(clock.now() + PURGE_RETRY_MS)
+    for (const [key, collectionIds] of await this.storage.list<string[]>({ prefix: 'holdTodo:' })) {
+      const org = key.slice('holdTodo:'.length)
+      const live = new Set((await this.entries(org)).filter((e) => e.state === 'live').map((e) => e.collectionId))
+      await this.tellHold(org, collectionIds.filter((id) => live.has(id)))
+    }
+    // Set outright: while this handler runs, the alarm being handled may still read as the one scheduled.
+    const next: number[] = []
+    if (still.length) next.push(clock.now() + PURGE_RETRY_MS)
+    if ((await this.storage.list({ prefix: 'holdTodo:', limit: 1 })).size) next.push(clock.now() + HOLD_RETRY_MS)
+    if (next.length) await this.storage.setAlarm(Math.min(...next))
   }
 }
 

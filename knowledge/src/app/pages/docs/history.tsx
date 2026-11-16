@@ -84,8 +84,9 @@ export const history: DocTopic = {
       body: (
         <>
           <p>
-            Besides restore points, every collection is backed up daily. Daily backups are kept 30 days, and the latest one as
-            long as the collection exists, so a collection is never lost by sitting unused. See <DocLink to="your-data">Your data</DocLink>.
+            Besides restore points, every collection is backed up daily. Daily backups are kept for your organization's days of
+            daily backups (30 by default; History's footer and Health say how many), and the latest one as long as the collection
+            exists, so a collection is never lost by sitting unused. See <DocLink to="your-data">Your data</DocLink>.
           </p>
           <InApp>A collection › History: Go back to this version, then Undo. Admins see each collection's last restore point and last backup on Health.</InApp>
         </>

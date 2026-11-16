@@ -26,7 +26,7 @@ const MAX_COLLECTIONS = 20
 export type AttentionItem =
   | { kind: 'unreadable'; id: string; at: string; files: { name: string; reason: string }[]; message: string }
   | { kind: 'hidden'; id: string; at: string; documentId: string; documentName: string; total: number }
-  | { kind: 'needs_check'; id: string; at: string; correctionId: string | null; text: string | null; documentId: string; documentName: string | null }
+  | { kind: 'needs_check'; id: string; at: string; correctionId: string | null; text: string | null; documentId: string; documentName: string | null; noteId: string; textHash: string }
   | { kind: 'reported'; id: string; at: string; question: string; note: string; answer: string; reportedBy: { id: string; name: string | null } }
 
 /** Collections the caller can change, by name: their own, general access and shares, after the Viewer cap. */
@@ -121,6 +121,7 @@ async function itemsOf(c: Ctx, collection: CollectionRow, at: number): Promise<A
       for (const row of checks.results) {
         items.push({
           kind: 'needs_check', id: `check:${row.note_id}:${row.document_id}:${row.text_hash}`, at: iso(row.at)!, correctionId: row.correction_id, text: row.text,
+          noteId: row.note_id, textHash: row.text_hash,
           documentId: row.document_id, documentName: documents.find((document) => document.documentId === row.document_id)?.name ?? null,
         })
       }

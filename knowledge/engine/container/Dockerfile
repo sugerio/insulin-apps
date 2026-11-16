@@ -26,8 +26,9 @@ RUN pip install --require-hashes --no-deps \
 # Cognee's state: the three databases (SQLite, LanceDB, the Ladybug graph) under /data/system/databases, the
 # documents it stored under /data/documents. The engine's own files sit beside them: /data/text (redacted texts and
 # page maps), /data/passages (where each passage is in its text), /data/facts.json and /data/ledger.json.
-# KNOWLEDGE_DATA_FORMAT names the database format: when it changes, collections are learned again from their
-# stored text instead of copying an old backup's database files.
+# KNOWLEDGE_DATA_FORMAT names the database format, the embedding model whose vectors the databases hold included
+# (models.py checks it names the pinned one): when it changes, collections are learned again from their stored text
+# instead of copying an old backup's database files.
 ENV DATA_ROOT_DIRECTORY=/data/documents \
     SYSTEM_ROOT_DIRECTORY=/data/system \
     CACHE_ROOT_DIRECTORY=/data/cache \
@@ -40,18 +41,24 @@ ENV DATA_ROOT_DIRECTORY=/data/documents \
     HF_HOME=/opt/models/hf \
     TIKTOKEN_CACHE_DIR=/opt/models/tiktoken \
     KNOWLEDGE_DATASET=knowledge \
-    KNOWLEDGE_DATA_FORMAT=cognee-1.6.8+knowledge-1 \
+    KNOWLEDGE_DATA_FORMAT=cognee-1.6.8+bge-small-en-v1.5-onnx-Q@aa8f8b0+knowledge-1 \
     KNOWLEDGE_INBOX=/var/lib/knowledge/inbox \
     KNOWLEDGE_RUN=/var/lib/knowledge/run \
     KNOWLEDGE_WORK=/var/lib/knowledge/work
 
-# Download and load the local extraction (GLiNER) and embedding (fastembed) models through Cognee's own loaders.
-# No database is opened at build time. Only the model cache under /opt/models survives into the image.
-COPY warmup.py extract.py hide.py offsets.py passages.py rank.py facts.py /app/
-RUN DATA_ROOT_DIRECTORY=/tmp/warmup/documents \
+# The local extraction (GLiNER) and embedding (fastembed) models: models.py fetches each at its pinned commit, the
+# warm-up loads them through Cognee's own loaders with the hub offline (so a name resolves to the pinned commit, never
+# to whatever the repo holds today), and models.py checks every file against its pinned checksum. No database is
+# opened at build time. Only the model cache under /opt/models survives into the image.
+COPY models.py warmup.py extract.py hide.py offsets.py passages.py rank.py facts.py /app/
+RUN python /app/models.py fetch \
+ && DATA_ROOT_DIRECTORY=/tmp/warmup/documents \
     SYSTEM_ROOT_DIRECTORY=/tmp/warmup/system \
     CACHE_ROOT_DIRECTORY=/tmp/warmup/cache \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
     python /app/warmup.py \
+ && python /app/models.py verify \
  && rm -rf /tmp/warmup /var/log/cognee /root/.cognee /root/.cache/pip
 
 # From here on, never touch the network. With enableInternet: false every DNS lookup times out, so anything that

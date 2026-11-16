@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useId, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
@@ -24,10 +24,18 @@ export function MemberSearch({ onPick, label, filter, placeholder = 'Search peop
   filter?: (member: Member) => boolean
   placeholder?: string
 }) {
+  // Each picker its own id: the sharing and transfer pickers can be on the page together.
+  const inputId = useId()
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Member[] | null>(null)
   const [error, setError] = useState<unknown>(null)
   useEffect(() => {
+    // A search names someone: nothing is asked before a name or an address is typed.
+    if (!q.trim()) {
+      setFound(null)
+      setError(null)
+      return
+    }
     let live = true
     const timer = setTimeout(() => {
       api.get<{ members: Member[] }>(`/api/members?q=${encodeURIComponent(q.trim())}`).then(
@@ -40,8 +48,9 @@ export function MemberSearch({ onPick, label, filter, placeholder = 'Search peop
   const list = (found ?? []).filter((member) => (filter ? filter(member) : true))
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor="member-search">{label}</Label>
-      <Input id="member-search" type="search" autoComplete="off" placeholder={placeholder} value={q} onChange={(event) => setQ(event.target.value)} />
+      <Label htmlFor={inputId}>{label}</Label>
+      <Input id={inputId} type="search" autoComplete="off" placeholder={placeholder} value={q} onChange={(event) => setQ(event.target.value)} />
+      {!q.trim() ? <Note>Type a name or an e-mail address to find someone.</Note> : null}
       {error ? <ActionError error={error} kept={null} /> : null}
       {found && list.length === 0 ? <Note>No one found who can use Knowledge. People are invited on insulinapps.com, in Settings › People.</Note> : null}
       {list.length ? (
@@ -174,6 +183,7 @@ function ShareRow({ entry, canShare, busy, onRole, onRemove }: { entry: Share; c
         {entry.email ? <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{entry.email}</span> : null}
         {entry.actsAsViewer ? <Badge tone="grey">Acts as Viewer: their role in Knowledge is Viewer, so they can only read</Badge> : null}
         {entry.status === 'on_hold' ? <Badge tone="amber">On hold: not in your organization right now; it comes back if they return</Badge> : null}
+        {entry.status === 'checking' ? <Badge tone="grey">Checking: Knowledge is making sure they are still in your organization; until then they can't open it</Badge> : null}
       </span>
       {canShare ? (
         <span className="flex shrink-0 items-center gap-2">

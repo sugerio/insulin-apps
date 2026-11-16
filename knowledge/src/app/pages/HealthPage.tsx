@@ -116,6 +116,7 @@ export function HealthPage() {
               {plural(data.organization.collections, 'collection')} · {plural(data.organization.documents, 'document')} · {formatBytes(data.organization.bytes)} stored ·{' '}
               {plural(data.organization.awake ?? 0, 'collection')} awake now · {plural(data.organization.learning ?? 0, 'collection')} learning · {plural(data.organization.kept_ready ?? 0, 'collection')} kept ready
             </p>
+            <p className="text-sm text-muted-foreground">Daily backups are kept {plural(data.backupDays ?? 30, 'day')}, and each collection's latest one as long as the collection exists.</p>
             <Note>Totals only: Health shows nothing of collections you have no role in.</Note>
           </Card>
           {engineTerms ? (
@@ -124,7 +125,7 @@ export function HealthPage() {
                 <dt className="text-muted-foreground">Engine</dt><dd className="font-mono text-xs">{data.engine.reachable ? data.engine.label ?? 'answering' : 'not answering'}</dd>
                 <dt className="text-muted-foreground">Collection</dt><dd>One Durable Object and container per collection, with its own Cognee dataset</dd>
                 <dt className="text-muted-foreground">Restore point</dt><dd>Container snapshot and Durable Object checkpoint, written in one transaction</dd>
-                <dt className="text-muted-foreground">Backup</dt><dd>A daily export of the collection to R2, kept 30 days; the latest kept as long as the collection exists</dd>
+                <dt className="text-muted-foreground">Backup</dt><dd>A daily export of the collection to R2, kept {plural(data.backupDays ?? 30, 'day')} (backup_days); the latest kept as long as the collection exists</dd>
                 <dt className="text-muted-foreground">Awake now</dt><dd>{plural(data.organization.awake ?? 0, 'container')} running</dd>
               </dl>
             </Card>

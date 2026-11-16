@@ -29,6 +29,13 @@
       "when": 1794863906381,
       "tag": "0003_tick_and_races",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794866869931,
+      "tag": "0004_answers_and_exports",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button.tsx'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog.tsx'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.tsx'
@@ -8,7 +8,7 @@ import { ActionError, Badge, Banner, ErrorState, Loading, Note } from '../../com
 import { ImportProgress, useImportWatch } from '../../components/ImportProgress.tsx'
 import { Card } from '../../components/Page.tsx'
 import { api, collectionPath } from '../../lib/api.ts'
-import { formatBytes, formatDay, plural, sourceKind } from '../../lib/format.ts'
+import { formatBytes, formatDay, formatWhen, plural, sourceKind } from '../../lib/format.ts'
 import type { DocumentInfo, ImportStatus } from '../../lib/types.ts'
 import { useResource } from '../../lib/useResource.ts'
 import type { TabProps } from './CollectionPage.tsx'
@@ -113,6 +113,7 @@ export function SourcesTab({ detail, reload, openSource }: TabProps) {
         <Banner kind="info">Your role here is Viewer: you can read this list and open every source. The collection's owner, admins and editors add or remove sources.</Banner>
       )}
       {watch.status ? <ImportProgress status={watch.status} collectionName={collection.name} error={watch.error} /> : null}
+      <WaitingImports collectionId={collection.id} editor={editor} refresh={started} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
       {notice ? <Banner kind="ok">{notice}</Banner> : null}
       <ActionError error={error} />
       {sources.loading ? <Loading /> : sources.error ? <ErrorState error={sources.error} onRetry={() => void sources.reload()} /> : (
@@ -178,5 +179,67 @@ function RemoveDialog({ collectionId, collectionName, document, onClose, onRemov
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+interface WaitingImport {
+  importId: string
+  kind: 'files' | 'web_page' | 'note' | 'correction'
+  createdAt: string
+  createdBy: { id: string; name: string | null }
+  files: string[]
+  notes: number
+  titles: string[]
+  waitsFor: string
+}
+
+/** What a waiting import brings, in plain words: its files' names, or its notes' titles. */
+function waitingWhat(entry: WaitingImport): string {
+  if (entry.files.length) return entry.files.length === 1 ? `“${entry.files[0]}”` : plural(entry.files.length, 'file')
+  if (entry.kind === 'correction') return 'a correction'
+  if (entry.titles.length === 1) return `the note “${entry.titles[0]}”`
+  return entry.notes === 1 ? 'a note' : plural(entry.notes, 'note')
+}
+
+/**
+ * The collection's imports waiting for the 1st (its organization has learned this month's documents): each with what
+ * it brings, who added it and when it starts by itself; its editors can cancel one, and it is never learned.
+ */
+function WaitingImports({ collectionId, editor, refresh, onCancelled }: { collectionId: string; editor: boolean; refresh: unknown; onCancelled: (what: string) => void }) {
+  const waiting = useResource<{ imports: WaitingImport[] }>(collectionPath(collectionId, '/imports?state=waiting'))
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const { reload } = waiting
+  useEffect(() => { if (refresh) void reload() }, [refresh, reload])
+  const list = waiting.data?.imports ?? []
+  if (!list.length) return null
+  async function cancel(entry: WaitingImport) {
+    setBusy(entry.importId)
+    setError(null)
+    try {
+      await api.delete(collectionPath(collectionId, `/imports/${encodeURIComponent(entry.importId)}`))
+      onCancelled(waitingWhat(entry))
+      await reload()
+    } catch (failure) {
+      setError(failure)
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <Card title="Waiting for the 1st" description="Your organization has learned this month's documents. These are learned on the 1st, by themselves; everything already learned keeps answering.">
+      <ul className="flex flex-col divide-y rounded-lg border" aria-label="Waiting for the 1st">
+        {list.map((entry) => (
+          <li key={entry.importId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm" data-waiting-import={entry.importId}>
+            <span className="min-w-0 grow basis-48 [overflow-wrap:anywhere]">
+              <b>{waitingWhat(entry)}</b>
+              <span className="block text-xs text-muted-foreground">Added by {entry.createdBy.name ?? 'someone'} {formatWhen(entry.createdAt)} · starts {formatDay(entry.waitsFor)}</span>
+            </span>
+            {editor ? <Button type="button" variant="outline" size="sm" disabled={busy === entry.importId} onClick={() => void cancel(entry)}>Cancel</Button> : null}
+          </li>
+        ))}
+      </ul>
+      <ActionError error={error} />
+    </Card>
   )
 }

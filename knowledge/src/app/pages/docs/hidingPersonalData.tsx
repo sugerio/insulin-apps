@@ -40,7 +40,7 @@ export const hidingPersonalData: DocTopic = {
       body: (
         <ul>
           <li>In a source, a hidden value shows as <b>hidden</b>, in place.</li>
-          <li><b>Needs attention</b> lists recent files where values were hidden before learning, and how many of each kind, for the collection's owner, admins and editors. Open the file to see where. See <DocLink to="fixing-and-reporting" section="needs-attention">Needs attention</DocLink>.</li>
+          <li><b>Needs attention</b> lists recent files where values were hidden before learning, and how many values in all, for the collection's owner, admins and editors. Open the file to see where. See <DocLink to="fixing-and-reporting" section="needs-attention">Needs attention</DocLink>.</li>
           <li>Original files aren't kept after they are read: only the text with its hidden values removed.</li>
           <li>Corrections, and notes waiting for the 1st, are kept the same way, with hidden values hidden; Needs attention shows a correction as Insulin learned it.</li>
         </ul>
@@ -60,8 +60,9 @@ export const hidingPersonalData: DocTopic = {
             rules Insulin applies to files.
           </p>
           <p>
-            A new or stricter rule also re-reads the files learned before, in the background, which counts as learning, and hides
-            what Knowledge keeps of corrections and waiting notes. Earlier restore points that still hold the newly hidden text
+            A new or stricter rule also re-reads the files learned before, in the background, and hides what Knowledge keeps of
+            corrections and waiting notes. Re-reading doesn't count toward documents learned; the time it takes counts toward
+            awake hours. Earlier restore points that still hold the newly hidden text
             can't be brought back.
           </p>
           <InApp>Rules and data › Hide before learning, with the Try it box.</InApp>

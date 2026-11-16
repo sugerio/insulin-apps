@@ -37,43 +37,72 @@ export const HIDDEN = '[hidden]'
 export const DEFAULT_HIDING: HidingRuleSet = { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: [] }
 
 // The detectors of container/hide.py, the same patterns in the same order: a test runs both against
-// engine/test/fixtures/hiding-cases.json, so a change to one is a change to the other.
-const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}(?![A-Za-z0-9-])/g
+// engine/test/fixtures/hiding-cases.json, so a change to one is a change to the other. Python's `re` is Unicode-aware
+// on text: \d is any decimal digit (Nd), \w any letter, number or underscore, \s Python's whitespace, \b a boundary
+// between them, and IGNORECASE folds case as Unicode does. The patterns below spell those out (the `u` flag; WORD,
+// DIGIT and SPACE), so full-width, Arabic-Indic or Devanagari digits and accented letters are read the same here.
+
+/** Python's \w: a letter, a number or an underscore. */
+const WORD = '[\\p{L}\\p{N}_]'
+/** Python's \d: a decimal digit of any script. */
+const DIGIT = '\\p{Nd}'
+/** Python's \s on text: str.isspace(). */
+const SPACE = '[\\t\\n\\v\\f\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]'
+/** Python's \b before and after a word character. */
+const START = `(?<!${WORD})`
+const END = `(?!${WORD})`
+const re = (source: string, flags = 'gu') => new RegExp(source, flags)
+
+const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}(?![A-Za-z0-9-])/gu
 const API_KEYS = [
-  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, // AWS access key ids
-  /\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b/g, // GitHub
-  /\bxox[abposr]-[A-Za-z0-9-]{10,}/g, // Slack
-  /\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}\b/g, // Stripe secret and restricted keys
-  /\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g, // Google API keys
-  /\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])/g, // OpenAI and Anthropic style
-  /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, // JSON Web Tokens
-  /-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-{5}[\s\S]*?-{5}END (?:[A-Z0-9]+ )*PRIVATE KEY-{5}/g, // PEM private keys
+  re(`${START}(?:AKIA|ASIA)[0-9A-Z]{16}${END}`), // AWS access key ids
+  re(`${START}(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})${END}`), // GitHub
+  re(`${START}xox[abposr]-[A-Za-z0-9-]{10,}`), // Slack
+  re(`${START}[sr]k_(?:live|test)_[A-Za-z0-9]{16,}${END}`), // Stripe secret and restricted keys
+  re(`${START}AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])`), // Google API keys
+  re(`${START}sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])`), // OpenAI and Anthropic style
+  re(`${START}eyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}`), // JSON Web Tokens
+  re('-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-{5}[\\s\\S]*?-{5}END (?:[A-Z0-9]+ )*PRIVATE KEY-{5}'), // PEM private keys
 ]
-const BEARER = /\b[Bb]earer\s+([A-Za-z0-9._~+/-]{20,}=*)/g
+const BEARER = re(`${START}[Bb]earer${SPACE}+([A-Za-z0-9._~+/-]{20,}=*)`)
 // A label, then ":" or "=" (or "is" and something that looks like a secret), then the value.
-const SECRET = new RegExp(
-  '\\b(?:password|passwd|pwd|passphrase|passcode|pin code|secret(?:[ _-]?key)?|client[ _-]?secret|api[ _-]?key'
-    + '|access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|private[ _-]?key|token)\\b'
-    + '(?<sep>\\s*(?::|=>|=)\\s*|\\s+is\\s+)["\'`]?(?<value>[^\\s"\'`<>]{4,200})',
-  'gi',
+const SECRET = re(
+  `${START}(?:password|passwd|pwd|passphrase|passcode|pin code|secret(?:[ _-]?key)?|client[ _-]?secret|api[ _-]?key`
+    + `|access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|private[ _-]?key|token)${END}`
+    + `(?<sep>${SPACE}*(?::|=>|=)${SPACE}*|${SPACE}+is${SPACE}+)["'\`]?(?<value>[^\\t\\n\\v\\f\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000"'\`<>]{4,200})`,
+  'giu',
 )
 const NOT_SECRETS = new Set(['none', 'null', 'required', 'optional', 'true', 'false', 'n/a', 'tbd', 'redacted', 'hidden', '[hidden]', 'unset', 'empty'])
-const CARD = /(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])/g
+const CARD = re(`(?<![${DIGIT}-])(?:${DIGIT}[ -]?){12,18}${DIGIT}(?![${DIGIT}-])`)
 const PHONES = [
-  /(?<![\w+])\+\d{1,3}(?:[ .-]?\(?\d{1,4}\)?){2,5}(?![\w])/g, // +49 30 1234 5678, +1 (555) 010-4477
-  /(?<![\w(])\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}(?![\w])/g, // (555) 010-4477, 555-010-4477
+  re(`(?<![\\p{L}\\p{N}_+])\\+${DIGIT}{1,3}(?:[ .-]?\\(?${DIGIT}{1,4}\\)?){2,5}(?!${WORD})`), // +49 30 1234 5678, +1 (555) 010-4477
+  re(`(?<![\\p{L}\\p{N}_(])\\(?${DIGIT}{3}\\)?[ .-]${DIGIT}{3}[ .-]${DIGIT}{4}(?!${WORD})`), // (555) 010-4477, 555-010-4477
 ]
-const LABELLED_PHONE = /\b(?:phone|tel|telephone|mobile|cell|fax)\b\.?(?:\s*(?:number|no\.?))?\s*[:#]?\s*(?<value>\+?\d[\d ().-]{5,}\d)/gi
+const LABELLED_PHONE = re(
+  `${START}(?:phone|tel|telephone|mobile|cell|fax)${END}\\.?(?:${SPACE}*(?:number|no\\.?))?${SPACE}*[:#]?${SPACE}*(?<value>\\+?${DIGIT}[${DIGIT} ().-]{5,}${DIGIT})`,
+  'giu',
+)
 /** Earlier kinds win when two finds overlap at the same start. */
 const ORDER: HiddenKind[] = ['api_key', 'secret', 'email', 'card', 'phone', 'word']
+const IS_DIGIT_CHAR = /^\p{Nd}$/u
 
-/** Whether a run of digits passes the Luhn checksum that card numbers carry. */
+/** A decimal digit's value, in any script, as Python's int() reads it: digits come in runs of ten, 0 to 9. */
+function digitValue(char: string): number {
+  const code = char.codePointAt(0)!
+  if (code >= 48 && code <= 57) return code - 48
+  let start = code
+  while (start > 0 && IS_DIGIT_CHAR.test(String.fromCodePoint(start - 1))) start -= 1
+  return (code - start) % 10
+}
+
+/** Whether a run of digits (of any script) passes the Luhn checksum that card numbers carry. */
 export function luhn(digits: string): boolean {
   let sum = 0
   let double = false
-  for (let index = digits.length - 1; index >= 0; index -= 1) {
-    let value = digits.charCodeAt(index) - 48
-    if (value < 0 || value > 9) return false
+  const list = [...digits]
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    if (!IS_DIGIT_CHAR.test(list[index]!)) return false
+    let value = digitValue(list[index]!)
     if (double) {
       value *= 2
       if (value > 9) value -= 9
@@ -84,12 +113,16 @@ export function luhn(digits: string): boolean {
   return sum % 10 === 0
 }
 
-const digitsOf = (value: string) => value.replace(/\D/g, '')
+const digitsOf = (value: string) => value.replace(/\P{Nd}/gu, '')
+/** Python's len(): code points, not UTF-16 units. */
+const lengthOf = (value: string) => [...value].length
+/** Python's str.isdigit(): decimal digits, and the superscript, subscript and circled digits. */
+const IS_DIGIT = /[\p{Nd}\u00b2-\u00b3\u00b9\u1369-\u1371\u19da\u2070\u2074-\u2079\u2080-\u2089\u2460-\u2468\u2474-\u247c\u2488-\u2490\u24ea\u24f5-\u24fd\u24ff\u2776-\u277e\u2780-\u2788\u278a-\u2792\u{10a40}-\u{10a43}\u{10e60}-\u{10e68}\u{11052}-\u{1105a}\u{1f100}-\u{1f10a}]/u
 
 /** A value after "… is" counts only when it looks like a secret: 6 characters or more, with a digit, a symbol or a capital. */
 function looksSecret(value: string): boolean {
-  const rest = value.slice(1)
-  return value.length >= 6 && (/\d/.test(value) || /[^\p{L}\p{N}]/u.test(value) || rest !== rest.toLowerCase())
+  const rest = [...value].slice(1).join('')
+  return lengthOf(value) >= 6 && (IS_DIGIT.test(value) || /[^\p{L}\p{N}]/u.test(value) || rest !== rest.toLowerCase())
 }
 
 function escapeRegExp(text: string): string {
@@ -124,20 +157,21 @@ function* emails(text: string): Generator<Found> {
 function* cards(text: string): Generator<Found> {
   for (const match of text.matchAll(CARD)) {
     const digits = digitsOf(match[0])
-    if (digits.length >= 13 && digits.length <= 19 && luhn(digits) && new Set(digits).size > 1) yield [match.index, match.index + match[0].length]
+    const count = lengthOf(digits)
+    if (count >= 13 && count <= 19 && luhn(digits) && new Set(digits).size > 1) yield [match.index, match.index + match[0].length]
   }
 }
 
 function* phones(text: string): Generator<Found> {
   for (const pattern of PHONES) {
     for (const match of text.matchAll(pattern)) {
-      const count = digitsOf(match[0]).length
+      const count = lengthOf(digitsOf(match[0]))
       if (count >= 8 && count <= 15) yield [match.index, match.index + match[0].length]
     }
   }
   for (const match of text.matchAll(LABELLED_PHONE)) {
     const value = match.groups!.value!
-    const count = digitsOf(value).length
+    const count = lengthOf(digitsOf(value))
     const start = match.index + match[0].length - value.length
     if (count >= 7 && count <= 15) yield [start, start + value.length]
   }

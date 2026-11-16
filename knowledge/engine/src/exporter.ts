@@ -10,7 +10,8 @@ import { fail, json, requireId } from './http.ts'
 import { SETTINGS } from './settings.ts'
 import type { ExportRecord } from './types.ts'
 import { clock, errorText, iso } from './util.ts'
-import { R2Sink, ZipWriter } from './zip.ts'
+import { R2Sink } from './r2sink.ts'
+import { ZipWriter } from './zip.ts'
 import * as history from './history.ts'
 
 const README = `This file is an export of an Insulin Knowledge collection.
@@ -32,6 +33,7 @@ export async function start(e: CollectionEngine, body: { exportId?: unknown }): 
   const existing = await e.store.getExport(exportId)
   if (existing) return existing.status
   const meta = await e.meta()
+  e.refuseWhileHeld(meta)
   const record: ExportRecord = {
     status: { exportId, state: 'queued', bytes: null, readyAt: null, expiresAt: null },
     key: `exports/${meta.org}/${meta.collectionId}/${exportId}.zip`,

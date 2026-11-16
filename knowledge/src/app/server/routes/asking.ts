@@ -62,6 +62,17 @@ export function askingRoutes() {
     })
   })
 
+  // "Was this right?" Yes: whoever asked marks their answer right (again is the same). Collections count them.
+  app.post('/answers/:answerId/right', async (c) => {
+    const caller = callerOf(c)
+    const answerId = c.req.param('answerId')
+    if (!/^[0-9a-f-]{36}$/.test(answerId)) throw new ApiError('not_found', 'There is no such answer.')
+    const marked = await c.env.DB.prepare(`UPDATE questions SET marked_right_at = COALESCE(marked_right_at, ?) WHERE answer_id = ? AND org_id = ? AND asked_by = ?`)
+      .bind(now(c), answerId, caller.organizationId, caller.id).run()
+    if (marked.meta.changes < 1) throw new ApiError('not_found', 'There is no such answer of yours.')
+    return json(c, { markedRight: true })
+  })
+
   // AI assistants and API clients (and the site): passages with their file, page and position, and `covered`.
   app.post('/search', async (c) => {
     const caller = callerOf(c)

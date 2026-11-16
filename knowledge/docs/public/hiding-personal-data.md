@@ -26,7 +26,7 @@ rather than something unhidden.
 ## Where people see it
 
 - In a source, a hidden value shows as hidden, in place.
-- **Needs attention** lists recent files where values were hidden before learning, and how many of each kind, for the
+- **Needs attention** lists recent files where values were hidden before learning, and how many values in all, for the
   collection's owner, admins and editors.
 - Original files aren't kept after they are read: only the text with its hidden values removed.
 - Corrections, and notes waiting for the 1st, are kept the same way, with hidden values hidden; Needs attention shows
@@ -40,6 +40,7 @@ rules apply to every collection in the organization.
 **Try it** shows what the rules would hide in a text you paste, before anything changes. It uses the same rules
 Insulin applies to files (`POST /api/rules/hiding-preview` does the same through the API).
 
-A new or stricter rule also re-reads the files learned before, in the background, which counts as learning, and hides
-what Knowledge keeps of corrections and waiting notes. Earlier restore points that still hold the newly hidden text
+A new or stricter rule also re-reads the files learned before, in the background, and hides what Knowledge keeps of
+corrections and waiting notes. Re-reading doesn't count toward documents learned; the time it takes counts toward awake
+hours. Earlier restore points that still hold the newly hidden text
 can't be brought back.

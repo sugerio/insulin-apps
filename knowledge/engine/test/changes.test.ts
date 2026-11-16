@@ -146,7 +146,8 @@ test('a large export is stored in equal parts', async () => {
   await createCollection(t)
   const big = Array.from({ length: 4000 }, (_, i) => `Line ${i} ${Math.random().toString(36).repeat(8)}`).join('\n\n')
   await learn(t, 'c1', 'imp-1', [{ fileId: 'big', name: 'big.txt', text: big, type: 'text/plain' }])
-  const { R2Sink } = await import('../src/zip.ts')
+  const { R2Sink } = await import('../src/r2sink.ts')
+  t.files.minPartBytes = 1024
   const sink = new R2Sink(t.env.FILES, 'exports/test.zip', 1024)
   for (let i = 0; i < 10; i++) await sink.write(new Uint8Array(700).fill(i))
   await sink.close()

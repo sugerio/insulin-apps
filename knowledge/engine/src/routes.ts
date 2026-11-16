@@ -33,6 +33,7 @@ export const ROUTES: Route[] = [
   { name: 'goBack', method: 'POST', path: '/v1/collections/:cid/restore-points/:version/go-back', scope: 'collection', orgHeader: true },
   { name: 'undo', method: 'POST', path: '/v1/collections/:cid/undo', scope: 'collection', orgHeader: true },
   { name: 'startExport', method: 'POST', path: '/v1/collections/:cid/exports', scope: 'collection', orgHeader: true },
+  { name: 'importExport', method: 'POST', path: '/v1/collections/:cid/import-export', scope: 'collection', orgHeader: true },
   { name: 'getExport', method: 'GET', path: '/v1/collections/:cid/exports/:exportId', scope: 'collection', orgHeader: true },
   { name: 'deleteCollection', method: 'DELETE', path: '/v1/collections/:cid', scope: 'collection', orgHeader: true },
   { name: 'purgeOrg', method: 'POST', path: '/v1/orgs/:org/purge', scope: 'org', orgHeader: true },

@@ -22,7 +22,10 @@ An export is a zip file in open formats, with:
   history;
 - the collection's settings and counts.
 
-Original files are never part of an export: Knowledge doesn't keep them after reading them.
+Original files are never part of an export: Knowledge doesn't keep them after reading them. A new collection can
+**Start from an export** (in this organization or another): it brings back the same sources, the files it stopped
+using, its notes and corrections, so it answers the same. See
+[Collections and sources](/docs/knowledge/collections-and-sources).
 
 ## Delete a collection
 
@@ -45,7 +48,7 @@ it is deleted too, the activity log included: only a note that its data was remo
 | Original files | Only until they are read: then deleted |
 | The text learned, with hidden values removed, and the facts | As long as the collection exists, or until the file is removed for good |
 | Restore points | 30 days |
-| Daily backups | 30 days; the latest as long as the collection exists |
+| Daily backups | The organization's days of daily backups (30 by default); the latest as long as the collection exists |
 | Exports | 7 days |
 | Who may do what: sharing, the list of collections, questions asked, reports and corrections (kept as learned, with hidden values hidden) | In Knowledge's own database, for the organization only, until the collection (or the organization) is deleted |
 | Notes waiting for the 1st (the month's documents learned used up), with hidden values hidden | Until they are learned |

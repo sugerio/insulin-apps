@@ -147,6 +147,8 @@ export function sharingRoutes() {
     const caller = callerOf(c)
     if (!can(caller, 'knowledge.collections.share')) throw forbidden("Your role in Knowledge can't share collections.")
     const q = (c.req.query('q') ?? '').trim().slice(0, 100)
+    // A search names someone: an empty one finds no one (the platform refuses it, so it isn't asked).
+    if (!q) return json(c, { members: [] })
     const found = await lookupMembers(c.env, caller, q, c.req.header('x-suger-member-lookup') ?? null, now(c))
     if (found) return json(c, { members: found })
     if (c.env.SUGER_MEMBERS_URL) throw new ApiError('not_configured', "The list of people isn't available right now. Try again in a minute.")

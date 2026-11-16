@@ -14,7 +14,9 @@ export function useAsk() {
 
   const ask = useCallback(async (collections: string[], text: string) => {
     const call = (latest.current += 1)
+    // The previous answer goes with the previous question: a new question never shows it (or lets it be reported).
     setQuestion(text)
+    setAnswer(null)
     setBusy(true)
     setError(null)
     try {

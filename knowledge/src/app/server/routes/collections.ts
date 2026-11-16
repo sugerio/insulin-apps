@@ -161,6 +161,11 @@ export function collectionRoutes() {
     }
     const awake = await c.env.DB.prepare(`SELECT awake_seconds FROM collection_usage WHERE collection_id = ? AND period = ?`).bind(collection.id, new Date(now(c)).toISOString().slice(0, 7)).first<{ awake_seconds: number }>()
     const asked = await c.env.DB.prepare(`SELECT via, COUNT(*) AS n FROM questions WHERE org_id = ? AND collection_id = ? GROUP BY via`).bind(collection.org_id, collection.id).all<{ via: string; n: number }>()
+    // Answers on the site, and how many whoever asked marked right ("Was this right?" Yes).
+    const answers = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total, COUNT(marked_right_at) AS marked FROM questions WHERE org_id = ? AND collection_id = ? AND outcome IN ('answered', 'sources_only')`,
+    ).bind(collection.org_id, collection.id).first<{ total: number; marked: number }>()
+    const settings = await readOrgSettings(c.env.DB, collection.org_id, now(c))
     return json(c, {
       collection: await summaryOf(c.env.DB, caller, collection),
       role,
@@ -168,6 +173,9 @@ export function collectionRoutes() {
       engine,
       awakeHoursThisMonth: Math.round(((awake?.awake_seconds ?? 0) / SECONDS_PER_HOUR) * 100) / 100,
       questions: Object.fromEntries(['browser', 'mcp', 'api'].map((via) => [via, asked.results.find((row) => row.via === via)?.n ?? 0])),
+      answers: { total: answers?.total ?? 0, markedRight: answers?.marked ?? 0 },
+      // Daily backups are kept this many days: the organization's backup_days.
+      backupDays: settings.backupDays,
     })
   })
 

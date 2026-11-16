@@ -164,6 +164,7 @@ function objectBody(key: string, stored: Stored) {
 export class FakeR2 {
   objects = new Map<string, Stored>()
   multipart = 0
+  minPartBytes = 5 * 1024 * 1024 // R2: every part but the last is at least 5 MiB (tests that use small parts lower it)
 
   async put(key: string, value: unknown, options: { sha256?: string; httpMetadata?: any; customMetadata?: any } = {}) {
     const body = await bytesOf(value)
@@ -206,6 +207,7 @@ export class FakeR2 {
       complete: async (uploaded: { partNumber: number }[]) => {
         const sizes = uploaded.map((p) => parts.get(p.partNumber)!.length)
         if (sizes.slice(0, -1).some((s) => s !== sizes[0])) throw new Error('R2 needs parts of one size but the last')
+        if (sizes.slice(0, -1).some((s) => s < this.minPartBytes)) throw new Error('R2 needs parts of at least 5 MiB but the last')
         const all = new Uint8Array(sizes.reduce((a, b) => a + b, 0))
         let at = 0
         for (const p of uploaded) {
@@ -257,6 +259,7 @@ export class FakeCloud {
   hangJobs: string[] = [] // jobs of these ops never finish
   onStart: (() => void) | null = null // e.g. move the fake clock: starting takes time
   openWrites = false // the query process writes under /data when it opens (as databases may): /data no longer equals the snapshot
+  lingerPolls = 1 // after a job, /quiesce reports a process still exiting this many times
   calls: { collection: string; method: string; path: string; detail?: string }[] = []
 }
 
@@ -288,6 +291,7 @@ export class FakeContainer {
     earlyOpen: false,
   }
   exited: (() => void) | null = null
+  lingering = 0 // a finished job's processes still exiting
   env: Record<string, string> = {}
   bootSnapshot: string | null = null
 
@@ -342,6 +346,9 @@ export class FakeContainer {
 
   async snapshotContainer(options: { name?: string } = {}) {
     if (!this.running) throw new Error('not running')
+    // As the engine's rule 2 asks: never while a job, a lingering process, the query process or a staged file is there.
+    const busy = (this.active && this.jobs.get(this.active)?.state === 'running') || this.lingering > 0 || this.query.state !== 'stopped' || this.inbox.size > 0
+    if (busy) throw new Error('snapshot refused: the container is not quiet')
     const id = `snap-${this.cloud.nextSnapshot++}`
     this.cloud.snapshots.set(id, new Map(this.data))
     return { id, size: [...this.data.values()].reduce((s, v) => s + v.length, 0), name: options.name }
@@ -403,7 +410,8 @@ export class FakeContainer {
     }
     if (method === 'GET' && url.pathname === '/quiesce') {
       const running = this.active && this.jobs.get(this.active)?.state === 'running'
-      const quiescent = !running && this.query.state === 'stopped' && this.inbox.size === 0
+      const quiescent = !running && this.lingering === 0 && this.query.state === 'stopped' && this.inbox.size === 0
+      if (!running && this.lingering > 0) this.lingering -= 1
       return json({ quiescent, activeJob: running ? this.active : null, query: this.query.state, strayProcesses: [], openDataFiles: [], inboxFiles: this.inbox.size })
     }
     if (method === 'POST' && url.pathname === '/cleanup') {
@@ -490,6 +498,7 @@ export class FakeContainer {
 
   finish(job: FakeJob) {
     if (this.cloud.hangJobs.includes(job.op)) return
+    this.lingering = this.cloud.lingerPolls
     try {
       job.result = this.run(job)
       job.state = 'succeeded'
@@ -633,13 +642,14 @@ export class FakeContainer {
   }
 
   rebuildFacts() {
+    // One fact per passage, from its first sentence, so a correction's outdated passage has a fact to hide.
     const facts: any[] = []
     for (const [key, value] of this.data) {
       if (!key.startsWith('passages/')) continue
-      const first = JSON.parse(value)[0]
-      if (!first) continue
-      const sentence = first.text.split(/(?<=\.)\s/)[0]
-      facts.push({ factId: `f_${first.passageId}`, sentence, documentId: first.documentId, passageId: first.passageId, sourceSentence: sentence, textHash: first.textHash })
+      for (const passage of JSON.parse(value)) {
+        const sentence = passage.text.split(/(?<=\.)\s/)[0]
+        facts.push({ factId: `f_${passage.passageId}`, sentence, documentId: passage.documentId, passageId: passage.passageId, sourceSentence: sentence, textHash: passage.textHash })
+      }
     }
     this.data.set('facts.json', JSON.stringify({ facts }))
     return facts.length

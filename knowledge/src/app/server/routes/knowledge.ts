@@ -154,6 +154,17 @@ export function knowledgeRoutes() {
     })
   })
 
+  // "Still right": a correction to check (its file was read again) still says the right thing; Needs attention lets go.
+  app.post('/:id/correction-checks/clear', async (c) => {
+    const caller = callerOf(c)
+    const body = await readJson(c, z.object({ noteId: z.string().min(1).max(100), documentId: z.string().min(1).max(200), textHash: z.string().regex(/^[0-9a-f]{64}$/) }).strict())
+    const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
+    const cleared = await c.env.DB.prepare(`DELETE FROM correction_checks WHERE collection_id = ? AND org_id = ? AND note_id = ? AND document_id = ? AND text_hash = ?`)
+      .bind(collection.id, collection.org_id, body.noteId, body.documentId, body.textHash).run()
+    if (cleared.meta.changes !== 1) throw notFound('There is no such correction to check in this collection.')
+    return json(c, { cleared: true })
+  })
+
   // "This answer is wrong": anyone who can ask; the owner and the collection's admins get an e-mail.
   app.post('/:id/reports', async (c) => {
     const caller = callerOf(c)

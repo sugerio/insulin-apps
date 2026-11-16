@@ -39,6 +39,13 @@ export const fail = (code: EngineErrorCode, message: string, retryAfterSeconds?:
   throw new EngineFailure(code, message, retryAfterSeconds)
 }
 
+/** An error answered with another status than its code's usual one, where the contract says so. */
+export const failWithStatus = (status: number, code: EngineErrorCode, message: string): never => {
+  const failure = new EngineFailure(code, message)
+  failure.status = status
+  throw failure
+}
+
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,

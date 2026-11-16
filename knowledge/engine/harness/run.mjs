@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inflateRawSync } from 'node:zlib'
 
@@ -322,24 +322,34 @@ plan('IMP-03', 'All or nothing', async () => {
 })
 
 plan('ASK-01', 'Answerable questions and paraphrases', async () => {
+  // Each question must be answered from a passage that holds its fact, and the answer must cite one: an answer
+  // with no citations, one that cited outside the passages given (dropped), or one that cites only other passages fails.
   const rows = []
   for (const item of [...questions('answerable.json'), ...questions('paraphrases.json')]) {
     const result = await search(MAIN, item.query, { topK: 5 })
     const g = grade(item, result.passages)
-    let citationsInside = true
+    const row = { id: item.id, query: item.query, ...g, answered: false, citations: [], dropped: null, citesTheFact: false }
     if (result.passages.length) {
       const answer = await api('POST', '/v1/answer', { question: item.query, passages: result.passages.map(({ passageId, documentName, page, text }) => ({ passageId, documentName, page, text })) })
-      citationsInside = answer.status === 200 && answer.body.citations.every((n) => n >= 1 && n <= result.passages.length)
-      g.answer = answer.body?.text
-      g.citations = answer.body?.citations
+      const citations = answer.body?.citations ?? []
+      row.answered = answer.status === 200
+      row.answer = answer.body?.text
+      row.citations = citations
+      row.dropped = answer.body?.dropped ?? null
+      row.citesTheFact = citations.some((n) => {
+        const p = result.passages[n - 1]
+        return p && p.documentName.replace(/\.[a-z]+$/, '') === item.expectDoc && p.text.includes(item.expectFact)
+      })
     }
-    rows.push({ id: item.id, query: item.query, ...g, citationsInside })
+    rows.push(row)
   }
   const checks = {
-    expectedDocumentCitedWithFact: rows.every((r) => r.pass),
-    citationsOnlyToGivenPassages: rows.every((r) => r.citationsInside),
+    expectedDocumentRetrievedWithFact: rows.every((r) => r.pass),
+    everyAnswerCites: rows.every((r) => r.answered && r.citations.length > 0),
+    noCitationDropped: rows.every((r) => r.dropped === 0),
+    aCitedPassageHoldsTheFact: rows.every((r) => r.citesTheFact),
   }
-  return { checks, evidence: { failed: rows.filter((r) => !r.pass || !r.citationsInside), rows } }
+  return { checks, evidence: { failed: rows.filter((r) => !r.pass || !r.answered || !r.citations.length || r.dropped !== 0 || !r.citesTheFact), rows } }
 })
 
 plan('ASK-02', '"I won\'t guess"', async () => {
@@ -447,8 +457,9 @@ plan('ASK-07', 'Answer time when awake', async () => {
 
 plan('FIX-01', 'Fix once: corrections reach new questions within 2 minutes', async () => {
   const runs = Number(option('fix-runs', '3'))
-  const items = questions('answerable.json').slice(10, 10 + runs)
   const paraphraseOf = Object.fromEntries(questions('paraphrases.json').map((p) => [p.of, p]))
+  // Corrected questions that have a paraphrase: the paraphrase must reach the correction too.
+  const items = questions('answerable.json').filter((q) => paraphraseOf[q.id]).slice(0, runs)
   const timings = []
   const rows = []
   for (const [i, item] of items.entries()) {
@@ -470,7 +481,11 @@ plan('FIX-01', 'Fix once: corrections reach new questions within 2 minutes', asy
     rows.push({ id: item.id, ms: Date.now() - started, noteFirst: first?.kind === 'note', oldLeftOut: !(await search(MAIN, item.query)).passages.some((p) => p.textHash === old.textHash), paraphraseNoteFirst: para ? para.kind === 'note' : null })
   }
   return {
-    checks: { p90Within2Minutes: percentile(timings, 90) <= 120_000, noteAnswers: rows.every((r) => r.noteFirst && r.oldLeftOut), paraphrases: rows.every((r) => r.paraphraseNoteFirst !== false) },
+    checks: {
+      p90Within2Minutes: rows.length === items.length && percentile(timings, 90) <= 120_000,
+      noteAnswers: rows.length === items.length && rows.every((r) => r.noteFirst && r.oldLeftOut),
+      paraphrases: rows.length > 0 && rows.every((r) => r.paraphraseNoteFirst === true),
+    },
     evidence: { p90: percentile(timings, 90), rows },
   }
 })
@@ -573,13 +588,16 @@ plan('HIS-02', 'Waking from the backup', async () => {
   const after = []
   for (const item of items) after.push((await search(MAIN, item.query)).passages.map((p) => p.textHash))
   const now = await status(MAIN)
+  const events = (await state(MAIN)).log.map((e) => e.event)
+  const summary = (await points(MAIN))[0].summary
   return {
     checks: {
       answersIdentical: JSON.stringify(after) === JSON.stringify(before),
       countsEqual: JSON.stringify(now.counts) === JSON.stringify(counts),
-      newRestorePoint: now.version > version && /Came back from its backup|Learned everything again/.test((await points(MAIN))[0].summary),
+      // From the backup, not by learning everything again (that would pass the other checks too).
+      cameBackFromTheBackup: now.version > version && /^Came back from its backup/.test(summary) && events.includes('from-backup-done') && !events.includes('from-backup-relearn'),
     },
-    evidence: { summary: (await points(MAIN))[0].summary },
+    evidence: { summary },
   }
 })
 
@@ -694,38 +712,61 @@ plan('HIS-07', 'Remove for good', async () => {
 })
 
 plan('DEL-03', 'Export and import again', async () => {
-  const exportId = `exp-main-${stamp}`
-  await must('POST', `/v1/collections/${MAIN}/exports`, { exportId })
+  // A collection of its own with a stopped source and a correction, exported and started again from the export in
+  // an empty collection (POST .../import-export): the copy answers the same, passage for passage.
+  const source = `e2e-${stamp}-exp`
+  await createCollection(source)
+  await learn(source, 'files', corpus('batch-001'))
+  const asked = questions('answerable.json').filter((q) => corpus('batch-001').some((f) => f.name.startsWith(q.expectDoc)))
+  const corrected = asked[0]
+  const old = (await search(source, corrected.query)).passages.find((p) => p.text.includes(corrected.expectFact))
+  if (!old) throw new Error('no passage holds the fact to correct')
+  await must('POST', `/v1/collections/${source}/corrections`, {
+    importId: 'fix', note: { noteId: 'fix-note', title: 'Correction', text: `Correction: ${corrected.query} The answer changed.`, outdated: [{ documentId: old.documentId, textHash: old.textHash }] },
+  }, [202])
+  await waitIdle(source)
+  const stoppedItem = asked[1]
+  const stopped = (await documents(source)).find((d) => d.name.startsWith(stoppedItem.expectDoc))
+  await must('PATCH', `/v1/collections/${source}/documents/${stopped.documentId}`, { active: false })
+  await waitIdle(source)
+
+  const exportId = `exp-${stamp}`
+  await must('POST', `/v1/collections/${source}/exports`, { exportId })
   let exp
   do {
     await sleep(2000)
-    exp = await must('GET', `/v1/collections/${MAIN}/exports/${exportId}`)
+    exp = await must('GET', `/v1/collections/${source}/exports/${exportId}`)
   } while (exp.state === 'queued' || exp.state === 'running')
-  const zip = unzip((await api('GET', `/v1/collections/${MAIN}/exports/${exportId}?download=1`)).bytes)
-  const names = [...zip.keys()]
+  const bytes = (await api('GET', `/v1/collections/${source}/exports/${exportId}?download=1`)).bytes
+  const names = [...unzip(bytes).keys()]
   const copy = `e2e-${stamp}-copy`
   await createCollection(copy)
-  const texts = names.filter((n) => n.startsWith('documents/') && n.endsWith('.txt'))
-  const files = texts.map((n) => {
-    const info = JSON.parse(zip.get(n.replace(/\.txt$/, '.json'))).document
-    return { fileId: basename(n, '.txt'), name: `${info.name}.txt`, type: 'text/plain', text: zip.get(n) }
-  })
-  for (let i = 0; i < files.length; i += 50) await learn(copy, `copy-${i}`, files.slice(i, i + 50))
+  await stage(copy, { fileId: 'export', name: 'knowledge-export.zip', type: 'application/zip', bytes })
+  await must('POST', `/v1/collections/${copy}/import-export`, { importId: 'from-export', fileId: 'export' }, [202])
+  const restored = await waitImport(copy, 'from-export')
+  // The same passages with the same scores; passages that tie may come in either order.
+  const answer = async (cid, query) =>
+    (await search(cid, query)).passages.map((p) => `${p.score.toFixed(3)} ${p.documentId} ${p.kind} ${p.textHash} ${p.outdated}`).sort().reverse()
   const same = []
-  for (const item of questions('answerable.json').slice(0, 10)) {
-    const a = (await search(MAIN, item.query)).passages[0]?.documentName.replace(/\.[a-z]+$/, '')
-    const b = (await search(copy, item.query)).passages[0]?.documentName.replace(/\.[a-z]+(\.txt)?$/, '')
-    same.push(a === b)
+  for (const item of asked) {
+    const [a, b] = [await answer(source, item.query), await answer(copy, item.query)]
+    same.push(JSON.stringify(a) === JSON.stringify(b) ? { id: item.id, same: true } : { id: item.id, same: false, source: a, copy: b })
   }
+  const fixed = (await search(copy, corrected.query)).passages
+  const copyDocs = await documents(copy)
   const required = ['README.txt', 'collection.json', 'notes.json', 'facts.json', 'corrections.json', 'history.json']
   return {
     checks: {
       holdsEverything: required.every((r) => names.includes(r)),
       noOriginals: !names.some((n) => /\.(pdf|docx|pptx|xlsx|html)$/.test(n)),
-      sameCounts: (await status(copy)).counts.documents === (await status(MAIN)).counts.documents,
-      answersMatch: same.every(Boolean),
+      startedWithOneRestorePoint: restored.state === 'committed' && (await points(copy)).length === 1,
+      sameCounts: JSON.stringify((await status(copy)).counts) === JSON.stringify((await status(source)).counts),
+      answersMatch: same.every((s) => s.same),
+      correctionKept: fixed[0]?.kind === 'note' && !fixed.some((p) => p.textHash === old.textHash),
+      stoppedSourceKept: copyDocs.find((d) => d.documentId === stopped.documentId)?.active === false,
+      refusedWhenNotEmpty: (await api('POST', `/v1/collections/${source}/import-export`, { importId: 'again', fileId: 'none' })).status === 409,
     },
-    evidence: { files: names.length, same },
+    evidence: { files: names.length, same, restored },
   }
 })
 

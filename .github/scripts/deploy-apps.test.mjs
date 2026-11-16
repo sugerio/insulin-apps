@@ -826,11 +826,17 @@ function engineCloudflareMock({ workers = {}, buckets = [], registry = {}, domai
       }
       const script = url.pathname.match(/\/workers\/scripts\/([^/]+)\/(deployments|versions\/([^/]+))$/)
       if (method === 'GET' && script) {
-        const vars = state.workers[decodeURIComponent(script[1])]
-        if (!vars) return response({ success: false, errors: [{ code: 10007, message: 'This Worker does not exist on your account.' }], result: null }, 404)
+        // A Worker's variables: one version at 100%, or a list of { percentage, vars } sharing its latest deployment.
+        const entry = state.workers[decodeURIComponent(script[1])]
+        if (!entry) return response({ success: false, errors: [{ code: 10007, message: 'This Worker does not exist on your account.' }], result: null }, 404)
+        const versions = Array.isArray(entry) ? entry : [{ percentage: 100, vars: entry }]
         if (script[2] === 'deployments') {
-          return response({ success: true, errors: [], result: { deployments: [{ id: 'deployment', created_on: '2026-11-01T00:00:00Z', versions: [{ version_id: `${script[1]}-version`, percentage: 100 }] }] } })
+          return response({ success: true, errors: [], result: { deployments: [
+            { id: 'older', created_on: '2026-10-01T00:00:00Z', versions: [{ version_id: `${script[1]}-retired`, percentage: 100 }] },
+            { id: 'latest', created_on: '2026-11-01T00:00:00Z', versions: versions.map(({ percentage }, index) => ({ version_id: `${script[1]}-version-${index}`, percentage })) },
+          ] } })
         }
+        const { vars } = versions[Number(script[3].split('-').pop())]
         return response({ success: true, errors: [], result: { id: script[3], resources: { bindings: Object.entries(vars).map(([name, text]) => ({ type: 'plain_text', name, text })) } } })
       }
       const bucket = url.pathname.match(/^\/client\/v4\/accounts\/dummy-account\/r2\/buckets(?:\/([^/]+))?$/)
@@ -1208,12 +1214,53 @@ test("PLT-04: the release's build job builds the image from exactly the files it
   await assert.rejects(() => deployApps({ root, environment: {}, buildEngine: true, only: 'beta', engineImage: archive, spawn }), /--engine-image needs --only and an app with an engine/)
 })
 
-test("reads what production runs: a Worker's variable in each version of its latest deployment, or nothing for a Worker that doesn't exist", async () => {
-  const api = engineCloudflareMock({ workers: { 'insulin-apps-alpha': { SUGER_ENGINE_API: '2' }, 'insulin-apps-beta': {} } })
+test("reads what production runs: a Worker's variable in each live version of its latest deployment, or nothing for a Worker that doesn't exist", async () => {
+  const api = engineCloudflareMock({
+    workers: {
+      'insulin-apps-alpha': { SUGER_ENGINE_API: '2' },
+      'insulin-apps-beta': {},
+      // A gradual deployment: two versions share the traffic, and one that no longer gets any is left out.
+      'insulin-apps-gamma': [{ percentage: 60, vars: { SUGER_ENGINE_API: '1' } }, { percentage: 40, vars: {} }, { percentage: 0, vars: { SUGER_ENGINE_API: '9' } }],
+    },
+  })
   const read = (worker) => productionVariable({ fetchImpl: api.fetch, apiToken: 'dummy-api-token-value', accountId: 'dummy-account', worker, name: 'SUGER_ENGINE_API' })
   assert.deepEqual(await read('insulin-apps-alpha'), ['2'])
   assert.deepEqual(await read('insulin-apps-beta'), [null])
+  assert.deepEqual(await read('insulin-apps-gamma'), ['1', null], 'every live version of the latest deployment, in order')
   assert.equal(await read('insulin-apps-missing'), null)
+})
+
+test('versions: every live version in production counts, not the first alone: a second one the pair can\'t serve stops the deploy before any migration', async () => {
+  // Before the engine: the app runs two versions, one calling engine API 1 and one calling 2; the new engine serves
+  // only 1, so the second would break.
+  const root = await engineRepository({ engineApi: 1 })
+  await writeFile(join(root, 'alpha', 'engine', 'package.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(engineFixture, 'package.json'), 'utf8')), insulin: { serves: [1, 1] } }))
+  const split = engineCloudflareMock({
+    workers: { 'insulin-apps-alpha': [{ percentage: 50, vars: { SUGER_ENGINE_API: '1' } }, { percentage: 50, vars: { SUGER_ENGINE_API: '2' } }] },
+    buckets: ['insulin-apps-alpha-engine-files', 'insulin-apps-alpha-engine-backups'],
+  })
+  const before = engineSpawn(split)
+  await assert.rejects(() => deployApps({ root, environment: settings(), skipBuild: true, only: 'alpha', spawn: before.spawn, fetchImpl: split.fetch }),
+    /The new alpha engine serves engine API 1-1, but the alpha version in production calls 2/)
+  assert.deepEqual(before.calls.filter(({ args }) => args[0] === 'deploy' || args[0] === 'd1'), [], 'neither Worker deployed, no database touched')
+
+  // Before the app: once the engine is out, two engine versions share the traffic, one serving 1-2 and one only 1;
+  // the app calls 2, so it isn't deployed, and its migrations aren't applied.
+  const app = await engineRepository({ engineApi: 2 })
+  const tag = engineImageTag(join(app, 'alpha', 'engine'))
+  const engines = engineCloudflareMock({ buckets: ['insulin-apps-alpha-engine-files', 'insulin-apps-alpha-engine-backups'], registry: { [tag]: DIGEST } })
+  const { spawn, calls } = engineSpawn(engines)
+  const sharing = (command, args, options) => {
+    const result = spawn(command, args, options)
+    if (args[0] === 'deploy' && basename(args[2]) === 'alpha-engine.wrangler.json') {
+      engines.state.workers['insulin-apps-alpha-engine'] = [{ percentage: 90, vars: { SUGER_ENGINE_SERVES: '1-2' } }, { percentage: 10, vars: { SUGER_ENGINE_SERVES: '1-1' } }]
+    }
+    return result
+  }
+  await assert.rejects(() => deployApps({ root: app, environment: settings(), skipBuild: true, only: 'alpha', spawn: sharing, fetchImpl: engines.fetch }),
+    /The alpha engine in production serves engine API 1-1, but this alpha calls 2, so it isn't deployed/)
+  assert.deepEqual(deploys(calls), ['alpha-engine.wrangler.json'], 'the engine went, the app did not')
+  assert.deepEqual(calls.filter(({ args }) => args[0] === 'd1' && args.includes('insulin-apps-alpha')), [], "nor the app's database or migrations")
 })
 
 test('the registry: a tag resolves to its digest through the token step, a missing one is null, and credentials go only to Cloudflare', async () => {

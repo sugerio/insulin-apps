@@ -82,6 +82,7 @@ export class CollectionEngine {
             m.heldUntil = until
           })
           await this.store.log(until ? 'held' : 'hold-lifted', { until })
+          if (isHeld(await this.meta())) await this.dropGoBackForHold()
           await this.state.storage.setAlarm(clock.now())
         }
         return json({ ok: true })
@@ -144,6 +145,10 @@ export class CollectionEngine {
         const { status, record } = await imports.submitCorrection(this, await readJson(request))
         return json(await imports.view(this, record), status)
       }
+      case 'importExport': {
+        const { status, record } = await imports.submitExportImport(this, await readJson(request))
+        return json(await imports.view(this, record), status)
+      }
       case 'search':
         return json(await this.search(await readJson(request)))
       case 'setDocumentActive':
@@ -151,9 +156,11 @@ export class CollectionEngine {
       case 'removeDocument':
         return json(await imports.removeForGood(this, requireId(params.docId, 'The document id')))
       case 'goBack':
+        this.refuseWhileHeld(meta)
         await history.requestGoBack(this, versionParam(params.version), false)
         return json(await this.status())
       case 'undo':
+        this.refuseWhileHeld(meta)
         await history.requestUndo(this)
         return json(await this.status())
       case 'startExport':
@@ -446,6 +453,14 @@ export class CollectionEngine {
     // Exports need no container: they are built from the stored texts, facts and history.
     await exporter.runPending(this)
     meta = await this.meta()
+    if (meta.heldUntil && !isHeld(meta)) {
+      // The hold's time has passed: it ends by itself.
+      await this.updateMeta((m) => {
+        m.heldUntil = null
+      })
+      await this.store.log('hold-ended', { until: meta.heldUntil })
+      meta = await this.meta()
+    }
     if (isHeld(meta)) return this.whileHeld(meta)
     if (meta.op) return history.runOperation(this)
     if (meta.active) {
@@ -460,15 +475,17 @@ export class CollectionEngine {
   }
 
   /**
-   * The organization is on hold (the app's hard stop on awake hours): only a removal for good runs; any other import
-   * stops, keeps nothing and waits; a container left running is stopped; nothing else starts.
+   * The organization is on hold (the app's hard stop on awake hours): only a removal for good runs, wherever it waits
+   * in the queue and whatever operation is pending; any other import stops, keeps nothing and waits; a container left
+   * running is stopped; nothing else starts. Waking from a backup or a repair waits for the hold to end.
    */
   async whileHeld(meta: Meta): Promise<void> {
+    await this.dropGoBackForHold()
     const active = meta.active ? await this.store.getImport(meta.active) : undefined
     if (active && active.kind !== 'remove') return imports.stopForHold(this, active)
     if (active) return imports.advance(this, active)
-    const head = meta.queue[0] ? await this.store.getImport(meta.queue[0]) : undefined
-    if (head?.kind === 'remove' && (await imports.startNext(this))) return
+    const removal = meta.removals.find((r) => meta.queue.includes(r.importId))
+    if (removal && (await imports.startNext(this, removal.importId))) return
     if (this.box.running || (await this.store.getRuntime())) {
       await this.box.destroy('the organization is on hold')
       await this.store.deleteRuntime()
@@ -482,21 +499,46 @@ export class CollectionEngine {
     }
   }
 
+  /**
+   * A go back or undo asked for before the hold landed doesn't wait days to happen by surprise: it is dropped, as one
+   * asked for during the hold is refused, and the app hears the collection is held.
+   */
+  async dropGoBackForHold(): Promise<void> {
+    const meta = await this.meta()
+    if (meta.op?.kind !== 'go_back') return
+    const op = meta.op
+    await this.updateMeta((m) => {
+      m.op = null
+    })
+    await this.store.log('go-back-dropped-for-hold', { to: op.target, undo: op.undo })
+    await this.event(`state:${meta.version}:held:${iso()}`, { type: 'state', state: 'held', version: meta.version })
+  }
+
+  /** Work that needs a container, refused while the organization is on hold: 429 `capacity` until it ends. */
+  refuseWhileHeld(meta: Meta): void {
+    if (!isHeld(meta)) return
+    const seconds = Math.max(1, Math.ceil((Date.parse(meta.heldUntil!) - clock.now()) / 1000))
+    fail('capacity', 'This organization has used its awake hours, so this waits until the hold ends.', seconds)
+  }
+
   /** The next time the alarm must run. */
   async schedule(): Promise<void> {
     const meta = await this.meta()
     const now = clock.now()
     const runtime = await this.store.getRuntime()
     const times: number[] = [now + 24 * 60 * 60 * 1000]
-    if (meta.heldUntil) times.push(Math.max(now, Date.parse(meta.heldUntil)))
-    if (meta.op) times.push(now + SETTINGS.wakePollMs)
+    // While held only a removal runs: nothing else polls, and the alarm comes back when the hold ends (never in the
+    // past, which would run it again at once, forever).
+    const held = isHeld(meta)
+    if (held) times.push(Date.parse(meta.heldUntil!))
+    if (meta.op && !held) times.push(now + SETTINGS.wakePollMs)
     if (meta.active) {
       const record = await this.store.getImport(meta.active)
       if (record?.retryAt) times.push(record.retryAt)
       else times.push(record?.phase === 'running' ? now + SETTINGS.pollMs : now)
     }
-    if (meta.queue.length) times.push(now + SETTINGS.capacityRetryMs)
-    if (meta.wakeRequested) times.push(now + SETTINGS.wakePollMs)
+    if (meta.queue.length && (!held || meta.removals.length)) times.push(now + SETTINGS.capacityRetryMs)
+    if (meta.wakeRequested && !held) times.push(now + SETTINGS.wakePollMs)
     if (runtime && this.box.running) {
       // After a commit the query process starts again at once; while waking, poll.
       if (runtime.phase === 'busy' && !meta.active && !meta.op) times.push(now)

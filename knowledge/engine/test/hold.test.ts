@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ORG, OTHER_ORG, ask, createCollection, doc, learn, makeEngine, outboxEvents, startImport } from './helpers.ts'
+import { ORG, OTHER_ORG, ask, createCollection, doc, learn, log, makeEngine, outboxEvents, startImport } from './helpers.ts'
 
 const DAY = 24 * 60 * 60_000
 
@@ -69,6 +69,15 @@ test('a hold stops an import mid-way without keeping anything, and lifts by itse
   await t.drain('c1')
   assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-2')).body.state, 'committed')
   assert.equal((await t.api('GET', '/v1/collections/c2')).body.state, 'empty')
+  // Once lifted, the alarm doesn't keep firing: for an asleep collection, the next one is a while away.
+  t.advance(30 * 60_000)
+  for (const cid of ['c1', 'c2']) {
+    const steps = await t.drain(cid, { steps: 200 })
+    assert.ok(steps < 50, `${cid}: ${steps} alarms in a row`)
+    const alarm = t.storage(cid).alarm
+    assert.ok(alarm === null || alarm > t.now() + 60_000, `${cid}: next alarm ${alarm === null ? null : alarm - t.now()} ms away`)
+  }
+  assert.ok(!(await t.storage('c1').get<any>('meta')).heldUntil, 'the passed hold is cleared')
 })
 
 test('settings carry a revision: an older one is refused with 409 stale_settings, the same one changes nothing', async () => {
@@ -84,4 +93,129 @@ test('settings carry a revision: an older one is refused with 409 stale_settings
   const now = (await t.api('GET', '/v1/collections/c1')).body.settings
   assert.deepEqual([now.awakeMinutes, now.revision], [20, 5])
   assert.ok(!(await outboxEvents(t)).some((e) => e.type === 'import'), 'nothing was queued')
+})
+
+const DAY_MS = 24 * 60 * 60_000
+const holdFor = (t: any, days = 14) => t.api('POST', `/v1/orgs/${ORG}/hold`, { until: new Date(t.now() + days * DAY_MS).toISOString() })
+
+async function twoVersions() {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  t.advance(6 * 60_000)
+  await learn(t, 'c1', 'imp-2', [doc(3)])
+  t.advance(11 * 60_000)
+  await t.drain('c1') // asleep, with a backup
+  return t
+}
+
+for (const pending of ['going back', 'waking from backup'] as const) {
+  test(`while held, a removal for good starts though ${pending} is pending, and stop using commits at once`, async () => {
+    const t = await twoVersions()
+    if (pending === 'going back') await t.api('POST', '/v1/collections/c1/restore-points/1/go-back')
+    else {
+      await t.api('POST', '/v1/collections/c1/__test/drop-snapshot')
+      await t.api('POST', '/v1/collections/c1/search', { query: 'topic' })
+      await t.drain('c1', { steps: 1 })
+    }
+    await holdFor(t)
+    await t.drain('c1')
+    const docs = (await t.api('GET', '/v1/collections/c1/documents')).body.documents
+    const stop = await t.api('PATCH', `/v1/collections/c1/documents/${docs[1].documentId}`, { active: false })
+    assert.deepEqual([stop.status, stop.body.state], [200, 'committed'])
+    const removed = await t.api('DELETE', `/v1/collections/c1/documents/${docs[0].documentId}`)
+    assert.equal(removed.status, 200)
+    for (let i = 0; i < 10; i++) {
+      await t.drain('c1', { steps: 50 })
+      t.advance(60_000)
+    }
+    const status = (await t.api('GET', '/v1/collections/c1')).body
+    assert.ok(!(await t.api('GET', '/v1/collections/c1/documents')).body.documents.some((d: any) => d.documentId === docs[0].documentId))
+    assert.equal(status.state, 'held')
+    assert.ok((await log(t, 'c1')).some((e: any) => e.event === 'committed' && e.kind === 'remove'))
+  })
+}
+
+test('while held, a removal for good goes ahead of a queued re-learning', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  t.advance(11 * 60_000)
+  await t.drain('c1')
+  t.cloud.image = 'registry.example/engine@2'
+  t.cloud.dataFormat = 'fmt-2'
+  t.cloud.jobPolls = 100000
+  for (const cid of ['c2', 'c3']) {
+    await createCollection(t, cid)
+    await startImport(t, cid, `big-${cid}`, [doc(5)])
+    await t.drain(cid, { steps: 3 })
+  }
+  await t.api('POST', '/v1/collections/c1/search', { query: 'topic' })
+  await t.drain('c1', { steps: 5 })
+  assert.ok((await t.storage('c1').get<any>('meta')).queue.length, 'a re-learning waits')
+  await holdFor(t)
+  t.cloud.jobPolls = 1
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents[0]
+  const removed = await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+  // The hold stops the two big imports elsewhere, freeing the organization's slots.
+  for (let i = 0; i < 30; i++) {
+    await t.drain(undefined, { steps: 20 })
+    t.advance(60_000)
+  }
+  const status = (await t.api('GET', '/v1/collections/c1')).body
+  assert.deepEqual([status.version, status.counts.documents], [removed.body.version, 1])
+})
+
+test("the hold reaches a collection that didn't answer at first: the registry tries again", async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1)])
+  const get = t.collections.get.bind(t.collections)
+  let refused = false
+  t.collections.get = (id: { name: string }) => {
+    const stub = get(id)
+    return {
+      fetch: async (input: RequestInfo, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!refused && url.endsWith('/internal/hold')) {
+          refused = true
+          throw new Error('the collection is restarting')
+        }
+        return stub.fetch(input, init)
+      },
+    }
+  }
+  const answer = await holdFor(t, 1)
+  assert.equal(answer.body.held, true)
+  assert.ok(refused)
+  await t.drain(undefined, { horizonMs: 10 * 60_000 })
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.state, 'held')
+})
+
+test('while held: imports and corrections wait, stop using commits, go back, undo and exports answer 429 capacity', async () => {
+  const t = await twoVersions()
+  await holdFor(t, 2)
+  await t.drain('c1')
+  const imported = await startImport(t, 'c1', 'imp-3', [doc(4)])
+  assert.deepEqual([imported.status, imported.body.state], [202, 'queued'])
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents[0]
+  const corrected = await t.api('POST', '/v1/collections/c1/corrections', {
+    importId: 'fix-1',
+    note: { noteId: 'n1', title: 'Fix', text: 'Corrected.', outdated: [{ documentId: target.documentId, textHash: 'a'.repeat(64) }] },
+  })
+  assert.deepEqual([corrected.status, corrected.body.state], [202, 'queued'])
+  const stop = await t.api('PATCH', `/v1/collections/c1/documents/${target.documentId}`, { active: false })
+  assert.deepEqual([stop.status, stop.body.state], [200, 'committed'])
+  for (const [method, path, body] of [
+    ['POST', '/v1/collections/c1/restore-points/1/go-back', undefined],
+    ['POST', '/v1/collections/c1/undo', undefined],
+    ['POST', '/v1/collections/c1/exports', { exportId: 'e1' }],
+  ] as const) {
+    const res = await t.api(method, path, body)
+    assert.deepEqual([res.status, res.body.error], [429, 'capacity'], path)
+    assert.ok(res.body.retryAfterSeconds > 0 && res.body.retryAfterSeconds <= 2 * 24 * 3600, path)
+  }
+  assert.equal((await t.api('POST', '/v1/collections/c1/search', { query: 'topic' })).body.status, 'held')
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-3')).body.state, 'queued', 'it waits for the hold to end')
 })

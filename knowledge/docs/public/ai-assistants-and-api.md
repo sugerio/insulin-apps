@@ -115,6 +115,9 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 | `PUT /api/collections/{id}/uploads/{fileId}` | Editor | Upload a file preflight accepted (raw bytes; optionally `x-file-sha256`) |
 | `POST /api/collections/{id}/imports` | Editor | Learn uploaded files, all or nothing |
 | `GET /api/collections/{id}/imports/{importId}` | Viewer | An import's progress, file by file, with the time left |
+| `GET /api/collections/{id}/imports?state=waiting` | Viewer | Imports waiting for the 1st: what each brings, who added it, when it starts |
+| `DELETE /api/collections/{id}/imports/{importId}` | Editor | Cancel an import waiting for the 1st: it is never learned |
+| `POST /api/collections/{id}/import-export` | Editor | Start an empty collection from a Knowledge export (`{ fileId }`, after preflight with `"export": true` and the upload) |
 | `POST /api/collections/{id}/notes` | Editor | Add a note |
 | `POST /api/collections/{id}/web-pages` | Editor | Add a public web page; add it again to read it again |
 | `PATCH /api/collections/{id}/sources/{docId}` | Editor | Stop using a file (`{ "active": false }`) or use it again |
@@ -130,6 +133,8 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 | `POST /api/collections/{id}/reports` | Viewer | Report that an answer may be wrong |
 | `GET /api/collections/{id}/reports` | Viewer | Reports, open, fixed or dismissed |
 | `PATCH /api/collections/{id}/reports/{reportId}` | Editor | Settle a report |
+| `POST /api/collections/{id}/correction-checks/clear` | Editor | A correction to check is still right (`{ noteId, documentId, textHash }` from Needs attention) |
+| `POST /api/answers/{answerId}/right` | – | "Was this right?" Yes, for an answer you asked for |
 
 ### Needs attention
 
@@ -138,9 +143,10 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 | `GET /api/attention` | Editor | Files Insulin couldn't read, values hidden before learning, reported answers waiting and corrections to check, in the collections you can change (`?collection=<id>` for one). Needs permission to change content. |
 
 Its items are `unreadable` (an import that failed, or a file refused at upload, in the last 30 days, until a file with
-the same name is learned), `hidden` (a recent file or note in which values were hidden, with how many of each kind,
-never the values) and `reported` (open reports). Assistants and API clients see only collections whose switch for them
-is on.
+the same name is learned), `hidden` (a recent file or note in which values were hidden, with how many in all as
+`total`, never the values), `reported` (open reports) and `needs_check` (a correction whose file was read again: its
+text as learned, the file, and the `noteId`, `documentId` and `textHash` that clear it). Assistants and API clients see
+only collections whose switch for them is on.
 
 ### History
 

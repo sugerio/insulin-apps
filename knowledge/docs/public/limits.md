@@ -19,12 +19,12 @@ what was used beside each; a raised limit shows there within five minutes.
 | Documents | `documents` | 500 | Every file, web page and note stored, including the ones not used |
 | Largest file | `file_bytes` | 25 MB | One file; at most 2 MB of text is learned from it |
 | Stored files | `storage_bytes` | 2 GB | The text Knowledge keeps, with hidden values removed |
-| Documents learned a month | `learned_month` | 1,000 | Files, web pages and notes learned this month, including re-reads |
+| Documents learned a month | `learned_month` | 1,000 | Files, web pages, notes and corrections learned this month (not re-reads after a hiding rule changes) |
 | Questions a month | `questions_month` | 5,000 | Questions on the site, from AI assistants and from API clients |
 | Built-in answers a month | `answers_month` | 2,000 | Answers written by the built-in model; the organization's own model doesn't count |
 | Awake hours a month | `awake_hours_month` | 100 | Time collections are awake: while people ask and 10 minutes after, while learning, while exporting, and kept-ready hours |
 | Collections kept ready | `ready_collections` | 1 | Collections with a keep-ready window |
-| Days of daily backups | `backup_days` | 30 | How long daily backups are kept (at least a day, at most ten years); the latest is kept as long as the collection exists |
+| Days of daily backups | `backup_days` | 30 | How long daily backups are kept (at least a day, at most ten years); the latest is kept as long as the collection exists. History and Health show it |
 
 The monthly limits start again on the 1st of each month (UTC).
 
@@ -48,7 +48,8 @@ The monthly limits start again on the 1st of each month (UTC).
 - **Awake hours:** keep-ready pauses at 90%, so the rest stays for questions, and starts again on the 1st. At 100%,
   Knowledge stops until the 1st: it doesn't answer, refuses what would wake a collection to work (adding files and
   notes, going back, exporting), and stops what is running: learning that was under way keeps nothing and starts again
-  then, and collections show **Stopped until the 1st**. Removing a file for good still works. On the site a pop-up says
+  then, going back that was under way is stopped and changes nothing (History says so), and collections show **Stopped
+  until the 1st**. Removing a file for good still works. On the site a pop-up says
   so and names Insulin Apps support; AI assistants and API clients get 429 `quota_exceeded` with the same message, and
   search answers `status: "held"`. If Insulin Apps raises the limit, everything goes on within minutes.
 - **Collections kept ready:** turn keep-ready off on another collection first.

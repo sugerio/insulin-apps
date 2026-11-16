@@ -183,6 +183,7 @@ export function rulesRoutes() {
     return json(c, {
       engine,
       organization: totals,
+      backupDays: (await readOrgSettings(db, caller.organizationId)).backupDays,
       collections: collections.map((collection) => ({
         id: collection.id,
         name: collection.name,

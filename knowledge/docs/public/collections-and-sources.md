@@ -44,6 +44,14 @@ On a collection's **Sources** tab, its owner, admins and editors can add three k
 Before Insulin reads anything, it hides e-mail addresses, phone numbers, card numbers, API keys and values labelled as
 passwords or secrets. See [Hiding personal data](/docs/knowledge/hiding-personal-data).
 
+A new collection can instead **Start from an export**: the `.zip` file a collection's **Export** made, from this
+organization or another. It brings back the same sources, the files it stopped using, its notes and corrections, so it
+answers the same; its history starts afresh with one restore point. Only an empty collection starts from an export,
+and what it holds counts toward the organization's limits before anything starts.
+
+What waits for the 1st (the organization has learned this month's documents) is listed on **Sources**, under
+**Waiting for the 1st**, with who added it and when it starts; its editors can **Cancel** it, and it is never learned.
+
 ## Files that can't be learned
 
 Before anything starts, Knowledge checks every file and names the ones it can't learn, with the reason and what to do
@@ -53,8 +61,9 @@ instead. Only the others are learned:
   (`.doc`, `.ppt`) or an image. Save it in one of the types above and add it again.
 - **An empty file**, or one **larger than the organization's largest file**. Split it, or save it smaller.
 - **A scanned PDF**: a PDF that is only an image, with no text, is named when it is uploaded, before learning.
-- **The organization's limits**: if the files would go past its documents, stored files or documents learned this
-  month, nothing starts and Knowledge says which limit. See [Limits](/docs/knowledge/limits).
+- **The organization's limits**: if the files would go past its documents or stored files, nothing starts and
+  Knowledge says which limit. Past this month's documents learned, they are taken and wait for the 1st. See
+  [Limits](/docs/knowledge/limits).
 
 ## Learning
 

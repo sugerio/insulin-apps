@@ -26,7 +26,8 @@ and while kept ready. Each organization has a limit a month.
 
 ## B
 
-**Backup.** A daily copy of a collection, kept 30 days; the latest is kept as long as the collection exists.
+**Backup.** A daily copy of a collection, kept for the organization's days of daily backups (30 by default); the
+latest is kept as long as the collection exists.
 
 ## C
 
@@ -69,7 +70,7 @@ can be undone.
 ## N
 
 **Needs attention.** What only a person can settle: files Insulin couldn't read, values hidden before learning,
-reported answers.
+reported answers, corrections to check.
 
 **Note.** A few lines someone writes themselves, learned like a file and cited as a note.
 

@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { FileUp, Globe, NotebookPen } from 'lucide-react'
+import { Archive, FileUp, Globe, NotebookPen } from 'lucide-react'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
@@ -22,27 +22,34 @@ interface PreflightFile {
   reason?: string
 }
 
-type Mode = 'files' | 'web' | 'note' | null
+type Mode = 'files' | 'web' | 'note' | 'export' | null
 
 export const ACCEPT = '.pdf,.docx,.pptx,.xlsx,.md,.markdown,.txt,.html,.htm'
 
-export function AddSources({ collectionId, collectionName, onStarted, initialMode = null }: {
+export function AddSources({ collectionId, collectionName, onStarted, initialMode = null, fromExport = false }: {
   collectionId: string
   collectionName: string
-  onStarted: (status: ImportStatus, kind: 'files' | 'web' | 'note') => void
+  onStarted: (status: ImportStatus, kind: 'files' | 'web' | 'note' | 'export') => void
   initialMode?: Mode
+  /** A new, empty collection: it can start from a Knowledge export instead. */
+  fromExport?: boolean
 }) {
   const [mode, setMode] = useState<Mode>(initialMode)
   return (
     <div className="flex flex-col gap-4" data-add-sources="">
-      <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Add">
+      <div className={`grid gap-2 ${fromExport ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`} role="group" aria-label="Add">
         <WayButton active={mode === 'files'} onClick={() => setMode(mode === 'files' ? null : 'files')} icon={<FileUp aria-hidden="true" />} title="Upload files"
           sub="PDF, Word, PowerPoint, Excel, Markdown, text or web page files" />
         <WayButton active={mode === 'web'} onClick={() => setMode(mode === 'web' ? null : 'web')} icon={<Globe aria-hidden="true" />} title="Add a web page"
           sub="A public page, such as a help-center article" />
         <WayButton active={mode === 'note'} onClick={() => setMode(mode === 'note' ? null : 'note')} icon={<NotebookPen aria-hidden="true" />} title="Write a note"
           sub="A few lines in your own words" />
+        {fromExport ? (
+          <WayButton active={mode === 'export'} onClick={() => setMode(mode === 'export' ? null : 'export')} icon={<Archive aria-hidden="true" />} title="Start from an export"
+            sub="The .zip file a collection's Export made" />
+        ) : null}
       </div>
+      {mode === 'export' ? <StartFromExport collectionId={collectionId} onStarted={(status) => { setMode(null); onStarted(status, 'export') }} onCancel={() => setMode(null)} /> : null}
       {mode === 'files' ? <UploadFiles collectionId={collectionId} collectionName={collectionName} onStarted={(status) => { setMode(null); onStarted(status, 'files') }} onCancel={() => setMode(null)} /> : null}
       {mode === 'web' ? <AddWebPage collectionId={collectionId} onStarted={(status) => { setMode(null); onStarted(status, 'web') }} onCancel={() => setMode(null)} /> : null}
       {mode === 'note' ? <WriteNote collectionId={collectionId} onStarted={(status) => { setMode(null); onStarted(status, 'note') }} onCancel={() => setMode(null)} /> : null}
@@ -61,6 +68,58 @@ function WayButton({ active, onClick, icon, title, sub }: { active: boolean; onC
         <span className="text-xs text-muted-foreground">{sub}</span>
       </span>
     </button>
+  )
+}
+
+/**
+ * A new collection from a Knowledge export (design DEL-03): the .zip file a collection's Export made, uploaded and read
+ * (preflight with `export: true`, then the upload, which reads what it holds), then brought back as one import: the
+ * same sources, the files it stopped using, its notes and corrections. What it holds counts against the limits first.
+ */
+function StartFromExport({ collectionId, onStarted, onCancel }: { collectionId: string; onStarted: (status: ImportStatus) => void; onCancel: () => void }) {
+  const [phase, setPhase] = useState<'pick' | 'working'>('pick')
+  const [refused, setRefused] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const { stopIfAwakeHours } = useLimitStop()
+
+  async function start(file: File | undefined) {
+    if (!file) return
+    setPhase('working')
+    setRefused(null)
+    setError(null)
+    try {
+      const preflight = await api.post<{ files: PreflightFile[] }>(collectionPath(collectionId, '/preflight'), { files: [{ name: file.name, bytes: file.size }], export: true })
+      const entry = preflight.files[0]
+      if (!entry?.accepted || !entry.fileId) {
+        setRefused(entry?.reason ?? `“${file.name}” can't be used.`)
+        setPhase('pick')
+        return
+      }
+      const uploaded = await api.upload<{ accepted: boolean; reason: string | null }>(collectionPath(collectionId, `/uploads/${entry.fileId}`), file, file.name)
+      if (!uploaded.accepted) {
+        setRefused(uploaded.reason ?? `“${file.name}” isn't a Knowledge export.`)
+        setPhase('pick')
+        return
+      }
+      const body = await api.create<{ import: ImportStatus }>(collectionPath(collectionId, '/import-export'), { fileId: entry.fileId })
+      onStarted(body.import)
+    } catch (failure) {
+      stopIfAwakeHours(failure)
+      setError(failure)
+      setPhase('pick')
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <Label htmlFor="start-from-export">The export to start from</Label>
+      <Input id="start-from-export" type="file" accept=".zip,application/zip" disabled={phase === 'working'} onChange={(event) => void start(event.currentTarget.files?.[0])} />
+      <Note>The .zip file a collection's Export made, in this organization or another. It brings back the same sources, the files it stopped using, its notes and corrections; its history starts afresh. Its documents count toward your organization's limits.</Note>
+      {phase === 'working' ? <p className="text-sm text-muted-foreground" role="status">Uploading and reading the export…</p> : null}
+      {refused ? <Banner kind="warn">{refused}</Banner> : null}
+      <ActionError error={error} />
+      <div><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button></div>
+    </div>
   )
 }
 

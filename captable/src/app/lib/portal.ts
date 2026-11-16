@@ -44,6 +44,21 @@ export function unitOf(security: Pick<Security, "family">): "options" | "shares"
   return security.family === "EQUITY_COMPENSATION" ? "options" : "shares";
 }
 
+/**
+ * The holder's own signature is still missing: nothing of the grant can be exercised until they sign. A grant awaiting
+ * only the company's countersignature can be exercised.
+ */
+export function awaitingHolderSignature(security: Pick<Security, "executionPending">): boolean {
+  return security.executionPending === "pending_holder" || security.executionPending === "pending_both";
+}
+
+/** Whose signature a security awaits, in the holder's words. */
+export const EXECUTION_PENDING_LABELS: Record<NonNullable<Security["executionPending"]>, string> = {
+  pending_holder: "Awaiting your signature",
+  pending_company: "Awaiting the company's signature",
+  pending_both: "Awaiting signatures",
+};
+
 /** Outstanding options that have vested (outstanding minus unvested), never below zero. */
 export function vestedUnexercised(security: Security): string {
   return decOf(security.numbers.outstanding).sub(decOf(security.numbers.unvested)).clampZero().toString();
@@ -108,36 +123,45 @@ export function isoDeadlineState(security: Pick<Security, "isoDeadline" | "contr
   return iso < today ? { kind: "passed", date: iso } : { kind: "upcoming", date: iso };
 }
 
-/** One exit-window statement: grants that share both deadlines, so their exercisable options add up exactly. */
+/** One exit-window statement: grants that share both deadlines, so their options add up exactly. */
 export interface ExitWindow {
   /** The contractual deadline every grant here shares. */
   deadline: string;
   iso: IsoDeadlineState;
-  /** Vested options of these grants the holder can still exercise. */
-  exercisable: string;
+  /**
+   * The grant awaits the holder's own signature: nothing of it is exercisable until they sign, while its window
+   * runs all the same. Such a window holds that one grant.
+   */
+  awaitingSignature: boolean;
+  /** Vested options of these grants the holder can still exercise: now, or once they have signed. */
+  quantity: string;
   grants: Security[];
 }
 
 /**
  * A former holder's open exercise windows (the overview banner): outstanding options with something
  * exercisable and a contractual deadline (set only for terminated holders) that hasn't passed. Grants are grouped by
- * their contractual and ISO deadlines, so a sum never borrows another grant's date; earliest deadline first.
+ * their contractual and ISO deadlines, so a sum never borrows another grant's date; earliest deadline first. A grant
+ * awaiting the holder's signature has nothing exercisable, but its deadline is shown all the same, on its own.
  */
 export function exitWindows(securities: readonly Security[], today: string): ExitWindow[] {
   const groups = new Map<string, ExitWindow>();
   for (const security of securities) {
     const deadline = security.contractualDeadline;
     if (security.family !== "EQUITY_COMPENSATION" || security.status !== "OUTSTANDING" || deadline === null || deadline < today) continue;
-    if (!isPositive(security.numbers.exercisable)) continue;
+    const awaitingSignature = awaitingHolderSignature(security);
+    const quantity = awaitingSignature ? vestedUnexercised(security) : security.numbers.exercisable;
+    if (!isPositive(quantity)) continue;
     const iso = isoDeadlineState(security, today);
-    const key = `${deadline}|${iso.kind === "none" ? "" : iso.date}`;
-    const group = groups.get(key) ?? { deadline, iso, exercisable: "0", grants: [] };
-    group.exercisable = sum([group.exercisable, security.numbers.exercisable]);
+    const key = awaitingSignature ? `signature|${security.id}` : `${deadline}|${iso.kind === "none" ? "" : iso.date}`;
+    const group = groups.get(key) ?? { deadline, iso, awaitingSignature, quantity: "0", grants: [] };
+    group.quantity = sum([group.quantity, quantity]);
     group.grants.push(security);
     groups.set(key, group);
   }
   const isoDate = (window: ExitWindow) => (window.iso.kind === "none" ? "" : window.iso.date);
-  return [...groups.values()].sort((a, b) => a.deadline.localeCompare(b.deadline) || isoDate(a).localeCompare(isoDate(b)));
+  return [...groups.values()].sort((a, b) => a.deadline.localeCompare(b.deadline) || isoDate(a).localeCompare(isoDate(b))
+    || Number(a.awaitingSignature) - Number(b.awaitingSignature));
 }
 
 export interface UpcomingVest {
@@ -168,6 +192,21 @@ export function paymentReference(format: string, grantDisplayId: string | null, 
   let reference = format.replace(/<\s*(holder\s+)?initials\s*>/gi, initials(holderName));
   if (grantDisplayId) reference = reference.replace(/<\s*grant\s*>/gi, grantDisplayId);
   return reference;
+}
+
+/** The most a holder can ask to exercise: whole options only, never more than is exercisable. */
+export function maxWholeOptions(exercisable: string | null): string {
+  return decOf(exercisable).roundTo(0, "FLOOR").toString();
+}
+
+/** A typed number of options to exercise: whole, at least one, at most `maxWholeOptions`; or what is wrong with it. */
+export function exerciseQuantity(input: string, exercisable: string | null): { quantity: string } | { problem: "not_whole" | "none" | "too_many" } {
+  const text = input.trim().replace(/,/g, "");
+  if (!/^\d+$/.test(text)) return { problem: "not_whole" };
+  const quantity = engine.Dec.from(text);
+  if (!quantity.isPositive()) return { problem: "none" };
+  if (quantity.gt(maxWholeOptions(exercisable))) return { problem: "too_many" };
+  return { quantity: quantity.toString() };
 }
 
 /** Exercise cost = strike × quantity: an exact product (its scale is the sum of theirs, so no digit is ever lost). */

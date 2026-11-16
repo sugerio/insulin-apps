@@ -31,7 +31,7 @@ export function HolderLink({ id, name, state }: { id: string; name: string; stat
   const { href } = useWorkspace();
   return (
     <>
-      <Link className="cell-link" to={href(`stakeholders/${id}`)}>{name}</Link>
+      <Link className="font-medium underline-offset-4 hover:underline" to={href(`stakeholders/${id}`)}>{name}</Link>
       {state && state.status !== "active" ? <> <TerminationBadge state={state} /></> : null}
     </>
   );
@@ -39,5 +39,5 @@ export function HolderLink({ id, name, state }: { id: string; name: string; stat
 
 export function SecurityLink({ id, family, displayId }: { id: string; family: api.SecurityFamily; displayId: string }) {
   const { href } = useWorkspace();
-  return <Link className="cell-link id" to={href(securityHref({ id, family }))}>{displayId}</Link>;
+  return <Link className="font-medium whitespace-nowrap tabular-nums underline-offset-4 hover:underline" to={href(securityHref({ id, family }))}>{displayId}</Link>;
 }

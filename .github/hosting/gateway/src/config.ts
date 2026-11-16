@@ -3,6 +3,7 @@
 import type { Env } from './env.ts'
 import { log } from './log.ts'
 import { isNavIconName, type NavIconName } from './nav-icons.ts'
+import { parseCertificates } from './sso/saml.ts'
 import { cleanText, normalizeEmail, truncate } from './validate.ts'
 
 /** One entry of an app's permission catalog (its package.json `insulin.permissions`, DESIGN.md §2.3). */
@@ -68,6 +69,27 @@ export interface HostedApp {
   navigation: NavigationItem[]
 }
 
+/**
+ * The operator console at /super (DESIGN.md §11): the platform's own Google Workspace SAML app, the group whose members
+ * may sign in, and the admins among them. Set together, or the console isn't there.
+ */
+export interface SuperConfig {
+  idp: { entityId: string; ssoUrl: string; certificates: string[] }
+  /**
+   * The Google group the assertion's `groups` attribute must list, lower case: its name, which is what Google's group
+   * membership mapping sends (not its address).
+   */
+  group: string
+  /** Operators who may also suspend, disable, reinstate and create organizations: SUPER_ADMIN_EMAILS, lower case. */
+  admins: ReadonlySet<string>
+}
+
+/** A read-only Cloudflare API token for the console's resource snapshot (DESIGN.md §11.5), with its account. */
+export interface CloudflareConfig {
+  accountId: string
+  apiToken: string
+}
+
 export interface Config {
   domain: string
   /** `auth.<domain>`, where sign-in used to live: it now redirects every request to the apex. */
@@ -99,6 +121,10 @@ export interface Config {
   rlPublic: RateLimit
   /** GATEWAY_SECRET_KEY's 32 bytes, or null: features that encrypt or derive secrets then say they aren't set up. */
   secretKey: Uint8Array | null
+  /** The operator console, or null when it isn't configured (its paths are then 404). */
+  super: SuperConfig | null
+  /** The console's Cloudflare snapshot, or null when it isn't configured (the console says so). */
+  cloudflare: CloudflareConfig | null
 }
 
 export type ConfigResult = { ok: true; config: Config } | { ok: false; problems: string[] }
@@ -107,7 +133,7 @@ export const RESERVED_APP_NAMES = new Set([
   'auth', 'www', 'api', 'admin', 'app', 'apps', 'mail', 'email', 'cf-bounce', 'gateway', 'static', 'assets',
   'status', 'docs', 'help', 'support',
   // An app's secrets are named <APP>_*; these would collide with the platform's own settings (DESIGN.md §8.3).
-  'cloudflare', 'google', 'turnstile', 'github', 'site', 'suger', 'actions', 'runner',
+  'cloudflare', 'google', 'turnstile', 'github', 'site', 'suger', 'super', 'actions', 'runner',
 ])
 
 const DEFAULT_SENDER_NAME = 'Insulin Apps'
@@ -383,6 +409,51 @@ export function parseSecretKey(value: unknown): Uint8Array | null {
   }
 }
 
+/**
+ * The operator console's settings (DESIGN.md §11): all four SAML and group settings, or none. Set in part, or with a
+ * value that can't be used, the console stays off and the names are logged; the rest of the site is unaffected, since
+ * nothing a customer uses depends on it. SUPER_ADMIN_EMAILS is a list of addresses (commas or whitespace); an entry
+ * that isn't one is ignored and logged.
+ */
+export function readSuperConfig(env: Env): SuperConfig | null {
+  const entityId = text(env.SUPER_SAML_IDP_ENTITY_ID)
+  const ssoUrl = httpsUrl(text(env.SUPER_SAML_IDP_SSO_URL))
+  const certificates = parseCertificates(text(env.SUPER_SAML_IDP_CERT))
+  // A group's name as Google sends it, compared without regard to case (super/auth.ts).
+  const group = truncate(cleanText(env.SUPER_GOOGLE_GROUP), 200).toLowerCase()
+  const given = [env.SUPER_SAML_IDP_ENTITY_ID, env.SUPER_SAML_IDP_SSO_URL, env.SUPER_SAML_IDP_CERT, env.SUPER_GOOGLE_GROUP].some((value) => text(value))
+  if (!given) return null
+  const problems = [
+    entityId && entityId.length <= 1024 ? null : 'SUPER_SAML_IDP_ENTITY_ID',
+    ssoUrl ? null : 'SUPER_SAML_IDP_SSO_URL',
+    certificates ? null : 'SUPER_SAML_IDP_CERT',
+    group ? null : 'SUPER_GOOGLE_GROUP',
+  ].filter((name): name is string => name !== null)
+  if (problems.length) {
+    log('config_super_off', { problems: problems.join(', ') })
+    return null
+  }
+  const admins = new Set<string>()
+  for (const entry of text(env.SUPER_ADMIN_EMAILS).split(/[\s,]+/).filter(Boolean)) {
+    const email = normalizeEmail(entry)
+    if (email) admins.add(email)
+    else log('config_super_admin_ignored')
+  }
+  return { idp: { entityId, ssoUrl: ssoUrl!, certificates: certificates! }, group, admins }
+}
+
+/** The console's Cloudflare token and account: both, or neither (set in part, it is off and logged). */
+export function readCloudflareConfig(env: Env): CloudflareConfig | null {
+  const accountId = text(env.SUPER_CLOUDFLARE_ACCOUNT_ID).toLowerCase()
+  const apiToken = text(env.SUPER_CLOUDFLARE_API_TOKEN)
+  if (!accountId && !apiToken) return null
+  if (!/^[0-9a-f]{32}$/.test(accountId) || !/^[\x21-\x7e]{20,200}$/.test(apiToken)) {
+    log('config_cloudflare_off')
+    return null
+  }
+  return { accountId, apiToken }
+}
+
 function hasMethod(value: unknown, method: string): boolean {
   return typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>)[method] === 'function'
 }
@@ -502,6 +573,8 @@ export function readConfig(env: Env): ConfigResult {
       rlApp: env.RL_APP!,
       rlPublic: env.RL_PUBLIC!,
       secretKey: gatewayKey,
+      super: readSuperConfig(env),
+      cloudflare: readCloudflareConfig(env),
     },
   }
 }

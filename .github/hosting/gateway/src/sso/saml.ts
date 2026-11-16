@@ -226,6 +226,8 @@ export interface SamlIdentity {
   inResponseTo: string
   email: string
   name: string | null
+  /** Every attribute of the signed assertion, by lower-cased name (the operator console reads `groups`). */
+  attributes: Map<string, string[]>
 }
 
 function decode(samlResponse: string): string {
@@ -438,6 +440,6 @@ export function validateResponse(options: { samlResponse: string; idp: IdentityP
     const given = first(attributes, GIVEN_NAME_ATTRIBUTES)
     const surname = first(attributes, SURNAME_ATTRIBUTES)
     const name = first(attributes, NAME_ATTRIBUTES) ?? ([given, surname].filter(Boolean).join(' ') || null)
-    return { inResponseTo, email, name }
+    return { inResponseTo, email, name, attributes }
   })
 }

@@ -193,13 +193,14 @@ may touch the caller's own holdings (403 `self_dealing`).
 
 | Command | What it records |
 |---|---|
-| `grant-equity-compensation` | A signed option grant |
+| `grant-equity-compensation` | An approved option grant: executed (`executedAgreement`, signed by both parties) or recorded at board approval awaiting signatures (`awaitingSignatures`: whose signature is missing) |
 | `exercise-option` | An exercise the holder reported (vested options only) |
 | `terminate-stakeholder` | A termination: unvested awards cancelled at the vesting stop, accelerations and extensions |
 | `schedule-termination` | A future termination, applied when due items are processed on the date |
 | `cancel-scheduled-termination` | Cancels a scheduled termination |
 | `cancel-security` | Cancels an option or warrant (holder waiver, not executed, mutual agreement, forfeiture) |
-| `mark-executed` | Marks a grant executed, with the agreement signed by both parties |
+| `record-repurchase` | A completed repurchase, paid outside the app, of every unvested share of a terminated holder's restricted lot, with the notice to the holder; the vested rest becomes a new lot. After the repurchase deadline, or with none recorded, it needs counsel's authority |
+| `mark-executed` | Marks a grant executed with the agreement signed by both parties, or records one party's signature on a grant awaiting both (`signed`: `both`, `holder` or `company`) |
 | `record-leave-of-absence` | A leave of absence (it can move the ISO deadline) |
 | `extend-exercise-deadline` | Extends an exercise deadline, with a counsel-approved document |
 | `set-plan-terms` | A plan's return-to-pool rules, exit-window defaults and status (no screen in the app) |
@@ -394,5 +395,8 @@ holdings once they have an Insulin Apps account with that address and the Viewer
 
 ## Other endpoints
 
-`GET /api/health` answers without any identity, for monitoring. The platform's own paths (`/api/__suger/*`) are never
-reachable with a token.
+`GET /api/health` answers without any identity, for monitoring. `POST /api/scheduled` is the platform's own call every
+five minutes, which sends the hourly usage counts (see
+[How it works](/docs/captable/how-it-works#usage-counts-sent-to-insulin-apps)); it refuses any request that carries an
+identity, so no agent or OAuth client can call it, and it isn't in the catalog. The platform's own paths
+(`/api/__suger/*`) are never reachable with a token.

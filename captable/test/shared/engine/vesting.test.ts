@@ -15,8 +15,10 @@ import {
   toEpochDay,
   upcomingEvents,
   vestedAt,
+  vestingSummary,
   vestingTimeline,
   type ScheduleDefinition,
+  type SummaryEvent,
   type VestingInputs,
 } from "../../../src/app/shared/engine/index.ts";
 import { monthlyEvents } from "./fixtures/builder.ts";
@@ -281,5 +283,51 @@ describe("the vesting timeline", SLOW, () => {
     expect(vestedAt(open, "2099-01-01").toString()).toBe("16000");
     const twice = inputs({ pauses: [{ from: "2027-06-01", to: "2027-06-11" }, { from: "2027-01-01", to: "2027-01-02" }] });
     expect(vestingTimeline(twice)[0]!.date).toBe("2027-02-01");
+  });
+});
+
+describe("the vesting summary", () => {
+  const summaryEvents = (timeline: readonly { date: string; quantity: Dec; state: "ACTIVE" | "CANCELLED" }[]): SummaryEvent[] =>
+    timeline.map((event) => ({ date: event.date, quantity: event.quantity, cancelled: event.state === "CANCELLED" }));
+
+  it("names a cliff only when the schedule's own events show a first gap longer than their period", () => {
+    // VS-1 from Jan 31: the month-12 cliff, then monthly on the clamped day; fully vested at month 48.
+    const cliff = vestingSummary(summaryEvents(vestingTimeline(inputs())), "2026-01-31")!;
+    expect({ ...cliff, first: { ...cliff.first!, quantity: cliff.first!.quantity.toString() } }).toEqual({
+      start: "2026-01-31", first: { date: "2027-01-31", quantity: "12000", cliff: true }, stopped: false, last: "2030-01-31",
+    });
+    // Monthly from the start: the first vest is one period away, so it is no cliff.
+    const monthly = vestingSummary(summaryEvents(vestingTimeline(inputs({ events: generateSchedule(NO_CLIFF, "48000", "2026-01-31") }))), "2026-01-31")!;
+    expect(monthly.first).toMatchObject({ date: "2026-02-28", cliff: false });
+    expect(monthly.first!.quantity.toString()).toBe("1000");
+    // Annual tranches, the first a year out: one period away, no cliff.
+    const annual = vestingSummary(["2027-03-01", "2028-03-01", "2029-03-01"].map((date) => ({ date, quantity: "100", cancelled: false })), "2026-03-01")!;
+    expect(annual.first!.cliff).toBe(false);
+  });
+
+  it("never infers a cadence from irregular events or without a start date", () => {
+    const irregular = [
+      { date: "2025-06-15", quantity: "500", cancelled: false },
+      { date: "2025-08-01", quantity: "250", cancelled: false },
+      { date: "2025-11-20", quantity: "250", cancelled: false },
+    ];
+    expect(vestingSummary(irregular, "2024-06-15")!.first).toMatchObject({ date: "2025-06-15", cliff: false });
+    // Regular events off the start's day of the month are not whole months from it.
+    const offDay = [{ date: "2025-01-10", quantity: "12", cancelled: false }, { date: "2025-02-10", quantity: "1", cancelled: false }, { date: "2025-03-10", quantity: "1", cancelled: false }];
+    expect(vestingSummary(offDay, "2024-01-01")!.first!.cliff).toBe(false);
+    expect(vestingSummary(offDay, "2024-01-10")!.first!.cliff).toBe(true);
+    expect(vestingSummary(offDay, null)).toMatchObject({ start: null, first: { cliff: false } });
+    // An acceleration among the events breaks their regularity: no cliff is claimed.
+    const accelerated = vestingTimeline(inputs({ stopDate: "2027-03-15", accelerations: [{ date: "2027-03-15", quantity: Dec.from(3000), alreadyApplied: false }] }));
+    expect(vestingSummary(summaryEvents(accelerated), "2026-01-31")!.first!.cliff).toBe(false);
+    expect(vestingSummary([], "2026-01-31")).toBeNull();
+  });
+
+  it("ends with the last vest once vesting stopped, or says none vested", () => {
+    // Stopped on Mar 15, 2027: m13 (Feb 28) was the last vest; the rest is cancelled.
+    const stopped = vestingSummary(summaryEvents(vestingTimeline(inputs({ stopDate: "2027-03-15" }))), "2026-01-31")!;
+    expect(stopped).toMatchObject({ stopped: true, last: "2027-02-28", first: { date: "2027-01-31", cliff: true } });
+    const beforeCliff = vestingSummary(summaryEvents(vestingTimeline(inputs({ stopDate: "2026-12-31" }))), "2026-01-31")!;
+    expect(beforeCliff).toEqual({ start: "2026-01-31", first: null, stopped: true, last: null });
   });
 });

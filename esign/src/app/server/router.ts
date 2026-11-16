@@ -12,7 +12,10 @@ import { waitUntilOf } from './wait-until.ts'
 const PREVIEW_OTP_KEY = 'local-preview-otp-pepper-not-for-real-documents'
 const PREVIEW_SEAL_KEY = 'local-preview-hmac-seal-key-not-for-real-documents'
 
-/** What Esign runs with, from the platform: the D1 binding, the ESIGN_* secrets, the seal key and the mail relay. */
+/**
+ * What Esign runs with, from the platform: the D1 binding, the ESIGN_* secrets, the seal key, the mail relay and the
+ * usage reports.
+ */
 async function bindings(request: Request): Promise<Bindings> {
   const db = (await openAppD1()) as unknown as D1Database
   const dev = import.meta.env.DEV && readAppEnv('SUGER_ACCESS_MODE') !== 'console'
@@ -36,9 +39,12 @@ async function bindings(request: Request): Promise<Bindings> {
     SEAL_KEY: dev ? undefined : sealKeyOf(request),
     SEAL_KEYS,
     SUGER_MAIL_URL: secret('SUGER_MAIL_URL'),
+    // Where the hourly usage report goes (usage-metrics.ts); without it, nothing is reported.
+    SUGER_METRICS_URL: secret('SUGER_METRICS_URL'),
     SUGER_APP_TOKEN: secret('SUGER_APP_TOKEN'),
-    // The relay is called through the gateway's service binding when the deploy gave the app one (gateway-fetch.ts).
-    ...(gatewayFetch ? { MAIL_FETCH: gatewayFetch } : {}),
+    // The relay and the usage reports are called through the gateway's service binding when the deploy gave the app
+    // one (gateway-fetch.ts).
+    ...(gatewayFetch ? { MAIL_FETCH: gatewayFetch, METRICS_FETCH: gatewayFetch } : {}),
   }
 }
 

@@ -19,6 +19,7 @@ import {
   NEEDS_ATTENTION_KINDS,
   optionTypeSchema,
   paymentMethodSchema,
+  PENDING_SIGNER_SIDES,
   relationshipSchema,
   REPURCHASE_WINDOW_STATUSES,
   securityFamilySchema,
@@ -91,7 +92,7 @@ export const securitySchema = z.object({
   displayId: displayIdSchema,
   issueDate: isoDateSchema,
   status: securityStatusSchema,
-  executionStatus: executionStatusSchema, // pending while migrated signatures are open
+  executionStatus: executionStatusSchema, // pending while a signature is missing (migrated, or a grant recorded awaiting signatures)
   parentSecurityId: uuidSchema.nullable(),
   originCommandId: uuidSchema,
   terms: z.record(z.string(), z.unknown()), // per family, from the issuance payload and later modifications
@@ -377,6 +378,8 @@ export const needsAttentionSchema = z.object({
   count: z.number().int().nonnegative(),
   dueDate: isoDateSchema.nullable(),
   href: z.string().startsWith("/"),
+  // EXECUTION_PENDING only: the count by security family ("6 option grants, 2 share issuances"), families with none left out.
+  byFamily: z.array(z.object({ family: securityFamilySchema, count: z.number().int().positive() })).optional(),
 });
 export type NeedsAttention = z.infer<typeof needsAttentionSchema>;
 
@@ -404,9 +407,14 @@ export const securitiesStatusSchema = z.object({
       securityId: uuidSchema,
       displayId: displayIdSchema,
       stakeholderId: uuidSchema,
+      family: securityFamilySchema,
       issueDate: isoDateSchema,
       missing: z.enum(EXECUTION_MISSING_PARTIES),
       signatureRequestIds: z.array(uuidSchema),
+      // Who the ledger says still has to sign, with the signer's name where a pending signature request records it;
+      // never the signer's e-mail. A missing party with no request (a grant recorded in the app before every signature
+      // was in) has no name.
+      pendingSigners: z.array(z.object({ role: z.enum(PENDING_SIGNER_SIDES), name: z.string().nullable() })),
     }),
   ),
   scheduledTerminations: z.array(
@@ -439,6 +447,7 @@ export const securitiesStatusSchema = z.object({
       contractualDaysLeft: z.number().int(),
       isoDeadline: isoDateSchema.nullable(),
       isoDaysLeft: z.number().int().nullable(),
+      executionStatus: executionStatusSchema, // a pending grant shows whose signature it awaits beside the deadline
     }),
   ),
   expiringWithin90Days: z.array(z.object({ securityId: uuidSchema, displayId: displayIdSchema, expirationDate: isoDateSchema })),

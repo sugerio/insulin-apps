@@ -38,11 +38,16 @@ export function mediaTypeSchema<T extends z.ZodType<string, string>>(allowed: T)
     .pipe(allowed);
 }
 
-/** `X-Filename` carries the URL-encoded name (the API contract); this decodes it and checks the stored length (1–255). */
+/**
+ * `X-Filename` carries the URL-encoded name (the API contract); this decodes it and checks the length the Worker
+ * accepts: 1–255 UTF-16 units, so a character beyond U+FFFF (most emoji) counts as two, where zod's `max` counts it as
+ * one. Encoded, a unit takes up to nine (three UTF-8 bytes as %XX; such a character's two take twelve), so any name of
+ * 255 fits.
+ */
 export const encodedFilenameSchema = z
   .string()
   .min(1)
-  .max(1024)
+  .max(255 * 9)
   .transform((value, ctx) => {
     try {
       return decodeURIComponent(value);
@@ -51,7 +56,14 @@ export const encodedFilenameSchema = z
       return z.NEVER;
     }
   })
-  .pipe(z.string().min(1).max(255).refine((name) => !/[\u0000-\u001f\u007f/\\]/.test(name), "No path or control characters"));
+  .pipe(
+    z
+      .string()
+      .min(1)
+      .max(255)
+      .refine((name) => name.length <= 255, "At most 255 characters, counting one beyond U+FFFF, such as most emoji, as two")
+      .refine((name) => !/[\u0000-\u001f\u007f/\\]/.test(name), "No path or control characters"),
+  );
 
 /**
  * Headers that describe a raw document upload (`POST …/documents`, `POST …/documents/:id/versions`). The three link

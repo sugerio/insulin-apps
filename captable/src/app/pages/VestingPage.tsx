@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "#shared";
+import { Field, FieldLabel } from "@/components/ui/field.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { DataTable, byNumber, byText } from "../components/DataTable.tsx";
 import { DescriptionList } from "../components/DescriptionList.tsx";
@@ -68,7 +71,7 @@ export function VestingPage() {
               search={(terms) => terms.name}
               empty="No vesting schedules yet."
               columns={[
-                { key: "name", label: "Name", render: (terms) => <Link className="cell-link" to={href(`vesting/schedules/${terms.id}`)}>{terms.name}</Link>, compare: byText((terms) => terms.name) },
+                { key: "name", label: "Name", render: (terms) => <Link className="font-medium underline-offset-4 hover:underline" to={href(`vesting/schedules/${terms.id}`)}>{terms.name}</Link>, compare: byText((terms) => terms.name) },
                 { key: "pct", label: "Vesting Percentage", render: (terms) => vestingPercentage(terms.definition) },
                 { key: "cliff", label: "Cliff (months)", numeric: true, render: (terms) => (terms.definition.type === "SCHEDULE" && terms.definition.cliff ? String(terms.definition.cliff.months) : DASH), compare: byNumber((terms) => (terms.definition.type === "SCHEDULE" ? terms.definition.cliff?.months : null)) },
                 { key: "occurs", label: "Vesting Occurs", render: (terms) => vestingOccurs(terms.definition) },
@@ -82,7 +85,7 @@ export function VestingPage() {
         </ResourceView>
       </Card>
       <Card>
-        <p className="small muted">
+        <p className="text-xs text-muted-foreground">
           Acceleration terms stay on each grant as data (for example "Double trigger 100% — qualifying termination within 12 months after a change of control"). There is no milestone or pause vesting: termination stops vesting on the stop date, shown as <b>Stopped</b>.
         </p>
       </Card>
@@ -127,43 +130,41 @@ function ScheduleBody({ terms }: { terms: api.VestingTerms }) {
       {definition.type === "SCHEDULE" ? (
         <>
           <SectionTitle>Preview for 10,000 shares</SectionTitle>
-          <label className="asof">
-            Start date
-            <input type="date" className="inp" value={start} onChange={(event) => setStart(event.target.value)} />
-          </label>
+          <Field className="max-w-48">
+            <FieldLabel htmlFor="vesting-preview-start">Start date</FieldLabel>
+            <Input id="vesting-preview-start" type="date" value={start} onChange={(event) => setStart(event.target.value)} />
+          </Field>
           {preview.data ? (
-            <div className="tbl-scroll mt-8" style={{ maxHeight: 340, overflow: "auto" }}>
-              <table className="tbl dense" aria-label="Vesting preview">
-                <thead><tr><th scope="col">Date</th><th scope="col" className="num">Tranche</th><th scope="col" className="num">Cumulative</th></tr></thead>
-                <tbody>
+            <div className="max-h-85 overflow-auto rounded-lg border">
+            <Table aria-label="Vesting preview">
+                <TableHeader><TableRow><TableHead scope="col">Date</TableHead><TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Tranche</TableHead><TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Cumulative</TableHead></TableRow></TableHeader>
+                <TableBody>
                   {preview.data.events.map((event, index) => (
-                    <tr key={`${event.date}-${index}`}>
-                      <td>{formatDate(event.date)}{event.kind === "CLIFF" ? <> <Badge tone="teal">Cliff</Badge></> : null}</td>
-                      <td className="num">{format.shares(event.quantity)}</td>
-                      <td className="num">{format.shares(event.cumulative)}</td>
-                    </tr>
+                    <TableRow key={`${event.date}-${index}`}>
+                      <TableCell>{formatDate(event.date)}{event.kind === "CLIFF" ? <> <Badge tone="teal">Cliff</Badge></> : null}</TableCell>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(event.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(event.cumulative)}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ) : !valid ? (
-            <p className="muted small">Enter a start date to preview the tranches.</p>
+            <p className="text-xs text-muted-foreground">Enter a start date to preview the tranches.</p>
           ) : preview.error !== undefined ? (
             <InlineError what="the preview" error={preview.error} onRetry={preview.reload} />
           ) : (
-            <p className="muted small" role="status">Computing the preview…</p>
+            <p className="text-xs text-muted-foreground" role="status">Computing the preview…</p>
           )}
-          <p className="small muted mt-8">Tranches fall on the start day of month (clamped to the month end); cumulative-floor rounding; the final tranche absorbs remainders.</p>
+          <p className="text-xs text-muted-foreground">Tranches fall on the start day of month (clamped to the month end); cumulative-floor rounding; the final tranche absorbs remainders.</p>
         </>
       ) : (
         <>
           <SectionTitle>Tranches</SectionTitle>
-          <div className="tbl-scroll">
-            <table className="tbl dense" aria-label="Tranches">
-              <thead><tr><th scope="col">Date</th><th scope="col" className="num">Quantity</th></tr></thead>
-              <tbody>{definition.events.map((event, index) => <tr key={index}><td>{formatDate(event.date)}</td><td className="num">{format.shares(event.quantity)}</td></tr>)}</tbody>
-            </table>
-          </div>
+          <Table aria-label="Tranches">
+              <TableHeader><TableRow><TableHead scope="col">Date</TableHead><TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Quantity</TableHead></TableRow></TableHeader>
+              <TableBody>{definition.events.map((event, index) => <TableRow key={index}><TableCell>{formatDate(event.date)}</TableCell><TableCell className="text-right tabular-nums whitespace-nowrap">{format.shares(event.quantity)}</TableCell></TableRow>)}</TableBody>
+            </Table>
         </>
       )}
     </Card>

@@ -7,6 +7,7 @@ import { afterPost } from '../pages/status.tsx'
 import { ssoRequired, ssoRequiredResponse } from '../sso/required.ts'
 import { mfaEnabled, startChallenge } from './mfa.ts'
 import { startSession } from './session.ts'
+import { unavailable } from './standing.ts'
 
 export type SignInMethod = 'password' | 'google' | 'reset' | 'verify' | 'sso'
 
@@ -25,11 +26,12 @@ export type SignInMethod = 'password' | 'google' | 'reset' | 'verify' | 'sso'
  * active one (single sign-on signs in to its organization).
  */
 export async function finishSignIn(ctx: Context, user: { id: string; credential_version: number }, method: SignInMethod, next: string, changed: () => Response, activeOrgId: string | null = null): Promise<Response> {
-  if (method !== 'sso') {
-    const account = await findUserById(ctx.config.db, user.id)
-    if (account && await ssoRequired(ctx, account.email)) return ssoRequiredResponse(ctx, account.email, null)
-  }
+  const account = await findUserById(ctx.config.db, user.id)
+  const refused = unavailable(ctx, account)
+  if (refused) return refused
+  if (method !== 'sso' && account && await ssoRequired(ctx, account.email)) return ssoRequiredResponse(ctx, account.email, null)
   if (await mfaEnabled(ctx.config.db, user.id)) return startChallenge(ctx, user, method, next, activeOrgId)
   if (!(await startSession(ctx, user, activeOrgId))) return changed()
   return ctx.request.method === 'GET' ? redirect(next, 302) : afterPost(ctx, next)
 }
+

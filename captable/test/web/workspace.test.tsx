@@ -19,7 +19,7 @@ describe("sidebar navigation", () => {
     const primary = await screen.findByRole("navigation", { name: "Primary" });
     const cap = within(primary).getByRole("link", { name: "Cap Table" });
     expect(cap.getAttribute("aria-current")).toBe("true");
-    expect(cap.className).toContain("active");
+    expect(cap.getAttribute("data-active")).toBe("true");
     const section = screen.getByRole("navigation", { name: "Section" });
     expect(within(section).getAllByRole("link").map((link) => link.textContent)).toEqual(["Cap Table", "Share Classes", "Equity Plans", "Securities Status", "Vesting"]);
     expect(within(section).getByRole("link", { name: "Share Classes" }).getAttribute("aria-current")).toBe("page");
@@ -86,13 +86,14 @@ describe("keyboard and focus", () => {
     const menu = await screen.findByRole("menu", { name: "Actions" });
     const items = within(menu).getAllByRole("menuitem");
     await waitFor(() => expect(document.activeElement).toBe(items[0]));
-    fireEvent.keyDown(menu, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(items[1]);
-    fireEvent.keyDown(menu, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(items[0]);
-    fireEvent.keyDown(menu, { key: "Escape" });
+    // Keys go to the focused item, as a keyboard sends them; the list wraps around.
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(items[1]));
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(items[0]));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(document.activeElement).toBe(button);
+    await waitFor(() => expect(document.activeElement).toBe(button));
   });
 
   it("moves between URL tabs with the arrow keys", async () => {
@@ -103,8 +104,10 @@ describe("keyboard and focus", () => {
     expect(ownership.getAttribute("tabindex")).toBe("0");
     fireEvent.keyDown(ownership, { key: "ArrowRight" });
     await waitFor(() => expect(router.state.location.search).toBe("?tab=shares"));
+    await waitFor(() => expect(document.activeElement).toBe(within(tabs).getByRole("tab", { name: /^Shares/ })));
     fireEvent.keyDown(within(tabs).getByRole("tab", { name: /^Shares/ }), { key: "End" });
     await waitFor(() => expect(router.state.location.search).toBe("?tab=warrants"));
+    await waitFor(() => expect(document.activeElement).toBe(within(tabs).getByRole("tab", { name: /^Warrants/ })));
   });
 
   it("opens an audit row with Enter and gives focus back when the drawer closes", async () => {
@@ -125,7 +128,7 @@ describe("keyboard and focus", () => {
     const density = screen.getByRole("button", { name: "Compact rows" });
     fireEvent.click(density);
     expect(density.getAttribute("aria-pressed")).toBe("true");
-    expect(table.className).toContain("dense");
+    expect(table.getAttribute("data-density")).toBe("compact");
     fireEvent.change(screen.getByRole("combobox", { name: "Rows" }), { target: { value: "25" } });
     const saved = Object.keys(window.localStorage).find((key) => key.endsWith(".stakeholders"));
     expect(saved && JSON.parse(window.localStorage.getItem(saved)!)).toMatchObject({ dense: true, pageSize: 25 });
@@ -135,7 +138,7 @@ describe("keyboard and focus", () => {
 describe("the read-only admin experience", () => {
   it("shows the role, no + New, and no write controls anywhere on the queues", async () => {
     renderPage("securities-status", [mock(api.routes.getSecuritiesStatus, securitiesStatus()), mock(api.routes.listSecurities, securityList()), mock(api.routes.listStakeholders, stakeholderList())], { role: "admin_ro" });
-    await screen.findByRole("table", { name: "Execution pending (migrated)" });
+    await screen.findByRole("table", { name: "Execution pending" });
     expect(screen.getAllByText("Custom role").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /New/ })).toBeNull();
     expect(screen.getByText("Read-only")).toBeTruthy();

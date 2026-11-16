@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
 import { apiRequest } from "../../api/request.ts";
 import {
   activeLinks, HOLDER_TARGETS, kindOptions, LINK_ROLE_LABELS, linkedHolders, PICKABLE_TARGETS, portalUseOf, TARGET_TYPE_LABELS,
@@ -16,6 +17,7 @@ import { SelectField, TextAreaField, TextField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
 import { FlowDialog } from "./FlowDialog.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // The document writes, owners and admins: details, the folder, links, new
 // versions and archiving. Each write sends the version it read and is reviewed first; a lost answer is settled by
@@ -108,11 +110,11 @@ export function UploadDocumentDialog({ title = "Upload a document", folders = []
   return (
     <Modal title={title} onClose={close} footer={<>
       {stored ? null : <DismissButton onClick={onClose}>Cancel</DismissButton>}
-      <button type="button" className="btn btn-primary" disabled={!stored} onClick={() => done(stored!)}>Done</button>
+      <Button type="button" disabled={!stored} onClick={() => done(stored!)}>Done</Button>
     </>}>
       <ErrorFocus>
-        <div className="form">
-          <div className="form-grid">
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <SelectField label="Type" value={kind} onChange={(value) => setKind(value as api.DocumentKind)} options={kindOptions()} disabled={stored !== null} />
             {folders.length ? (
               <SelectField label="Folder" value={folderId} onChange={setFolderId} disabled={stored !== null}
@@ -123,7 +125,7 @@ export function UploadDocumentDialog({ title = "Upload a document", folders = []
           <DocumentUpload label="File" kind={kind} required value={stored ? { id: stored.id, filename: stored.filename, byteSize: stored.byteSize, sha256: stored.sha256 } : null}
             collectionId={folderId || null} link={link ? { target: link.target, role, label: link.label } : undefined}
             onChange={(document) => { if (!document) setStored(null); }} onStored={setStored} />
-          <p className="small muted">
+          <p className="text-xs text-muted-foreground">
             The type and folder go with the file; the type can be changed later.
             {link ? <> It is linked to <b>{link.label}</b> in the same request{link.holderLabel ? ", and agreements, notices of exercise and certificates are shown to the holder" : ""}.</> : null}
           </p>
@@ -189,7 +191,7 @@ export function EditDocumentDialog({ document, onClose, onDone }: DocumentDialog
   const changes = flow.request ? Object.keys(flow.request).filter((key) => key !== "version").map((key) => DETAIL_LABELS[key]) : [];
   return (
     <FlowDialog title="Edit document details" flow={flow as never} onClose={onClose} onReview={review} confirmLabel="Save details"
-      review={<div className="review-panel" aria-label="Review"><p>Save {changes.join(", ")} of <b>{document.filename}</b>.</p></div>}>
+      review={<ReviewPanel><p>Save {changes.join(", ")} of <b>{document.filename}</b>.</p></ReviewPanel>}>
       <TextField label="File name" required value={filename} onChange={(value) => set("filename", () => setFilename(value))} error={errorOf("filename")} />
       <SelectField label="Type" value={kind} onChange={(value) => setKind(value as api.DocumentKind)} options={kindOptions()} error={errorOf("kind")} />
       <TextAreaField label="Description" value={description} onChange={(value) => set("description", () => setDescription(value))} error={errorOf("description")} />
@@ -222,7 +224,7 @@ export function MoveDocumentDialog({ document, onClose, onDone }: DocumentDialog
   const unchanged = folderId === (document.collectionId ?? "");
   return (
     <FlowDialog title="Move to a folder" flow={flow as never} onClose={onClose} onReview={() => void flow.review()} confirmLabel="Move" confirmReady={!unchanged}
-      review={<div className="review-panel" aria-label="Review"><p>{unchanged ? "It is already there: nothing to move." : <>Move <b>{document.filename}</b> from <b>{name(document.collectionId ?? "")}</b> to <b>{name(folderId)}</b>.</>}</p></div>}>
+      review={<ReviewPanel><p>{unchanged ? "It is already there: nothing to move." : <>Move <b>{document.filename}</b> from <b>{name(document.collectionId ?? "")}</b> to <b>{name(folderId)}</b>.</>}</p></ReviewPanel>}>
       {collections.error !== undefined ? <InlineError what="the folders" error={collections.error} onRetry={collections.reload} /> : (
         <SelectField label="Folder" value={folderId} onChange={setFolderId} disabled={!collections.data}
           options={[["", collections.data ? "No folder" : "Loading…"], ...folders.filter((folder) => folder.kind === "FOLDER" && (folder.archivedAt === null || folder.id === document.collectionId)).map((folder) => [folder.id, folder.name] as const)]} />
@@ -253,10 +255,10 @@ export function ArchiveDocumentDialog({ document, onClose, onDone }: DocumentDia
   return (
     <FlowDialog title={archive ? "Archive the document" : "Restore the document"} flow={flow as never} onClose={onClose} onReview={() => void flow.review()} confirmLabel={archive ? "Archive" : "Restore"} danger={archive}
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>{archive ? <>Archive <b>{document.filename}</b>: it leaves the lists and the portal but is never deleted; restore it any time.</> : <>Restore <b>{document.filename}</b> to the lists{document.holderVisible ? " and the portal" : ""}.</>}</p>
-          {use ? <p className="small"><b>The portal settings use it as {use}.</b> Holders lose it until another one is picked in Stakeholder portal settings.</p> : null}
-        </div>
+          {use ? <p className="text-xs"><b>The portal settings use it as {use}.</b> Holders lose it until another one is picked in Stakeholder portal settings.</p> : null}
+        </ReviewPanel>
       }>
       <p>{archive ? "Archived documents stay stored with their checksum and links." : "The document comes back with its links and visibility."}</p>
     </FlowDialog>
@@ -331,8 +333,8 @@ export function AddLinkDialog({ document, holderOfSecurity, onClose, onDone }: D
   };
   return (
     <FlowDialog title="Link to a record" flow={flow as never} onClose={onClose} onReview={review} confirmLabel="Add link"
-      review={<div className="review-panel" aria-label="Review"><p>Link <b>{document.filename}</b> to {transaction ? "the transaction" : TARGET_TYPE_LABELS[type].toLowerCase()} <b>{label}</b> as <b>{LINK_ROLE_LABELS[role]}</b>. A link can be revoked later, once, with a reason.{holdersAfter && holdersAfter.size > 1 ? " It will then be linked to two or more holders, so no holder will see it in the portal." : ""}</p></div>}>
-      <div className="form-grid">
+      review={<ReviewPanel><p>Link <b>{document.filename}</b> to {transaction ? "the transaction" : TARGET_TYPE_LABELS[type].toLowerCase()} <b>{label}</b> as <b>{LINK_ROLE_LABELS[role]}</b>. A link can be revoked later, once, with a reason.{holdersAfter && holdersAfter.size > 1 ? " It will then be linked to two or more holders, so no holder will see it in the portal." : ""}</p></ReviewPanel>}>
+      <div className="grid gap-4 sm:grid-cols-2">
         <SelectField label="Record type" value={type} onChange={(value) => { setType(value as api.LinkTargetType); setTargetId(""); setSecurityId(""); setError(undefined); }} options={PICKABLE_TARGETS.map((item) => [item, TARGET_TYPE_LABELS[item]] as const)} />
         {targets.error !== undefined ? <InlineError what="the records" error={targets.error} onRetry={targets.reload} /> : transaction ? (
           <>
@@ -377,7 +379,7 @@ export function RevokeLinkDialog({ document, link, targetLabel, onClose, onDone 
   };
   return (
     <FlowDialog title="Revoke the link" flow={flow as never} onClose={onClose} onReview={review} confirmLabel="Revoke link" danger
-      review={<div className="review-panel" aria-label="Review"><p>Revoke the link to <b>{targetLabel}</b> ({LINK_ROLE_LABELS[link.role]}): “{reason.trim()}”. A link is revoked once and stays in the history.{document.holderVisible && HOLDER_TARGETS.has(link.targetType) ? " If no holder link is left, the document is hidden from the portal." : ""}</p></div>}>
+      review={<ReviewPanel><p>Revoke the link to <b>{targetLabel}</b> ({LINK_ROLE_LABELS[link.role]}): “{reason.trim()}”. A link is revoked once and stays in the history.{document.holderVisible && HOLDER_TARGETS.has(link.targetType) ? " If no holder link is left, the document is hidden from the portal." : ""}</p></ReviewPanel>}>
       <TextAreaField label="Reason" required value={reason} onChange={(value) => { setReason(value); setError(undefined); }} placeholder="e.g. Linked to the wrong grant" error={error ?? fieldProblem(flow.problem, "reason")} />
     </FlowDialog>
   );
@@ -421,17 +423,17 @@ export function VisibilityDialog({ document, next, scope, holderLabel = "the hol
   return (
     <FlowDialog title={heading} flow={flow as never} onClose={onClose} onReview={() => void flow.review()} confirmLabel={confirm}
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>{what}</p>
-          {use ? <p className="small"><b>The portal settings use it as {use}.</b> Choose another one in Stakeholder portal settings.</p> : null}
-        </div>
+          {use ? <p className="text-xs"><b>The portal settings use it as {use}.</b> Choose another one in Stakeholder portal settings.</p> : null}
+        </ReviewPanel>
       }>
-      <p className="small">
+      <p className="text-xs text-muted-foreground">
         {scope === "company"
           ? "A company resource has no holder link. Linking it to a holder later needs it hidden first."
           : next ? "Only the holder it is linked to sees it; a document linked to two or more holders is never visible." : "Admins keep seeing it."}
       </p>
-      {placed ? <div className="err-inline" role="alert">{placed}</div> : null}
+      {placed ? <p className="text-sm font-medium text-destructive" role="alert">{placed}</p> : null}
     </FlowDialog>
   );
 }
@@ -443,11 +445,11 @@ export function NewVersionDialog({ document, onClose, onDone }: { document: api.
   return (
     <Modal title="Upload a new version" onClose={onClose} footer={<>
       <DismissButton onClick={onClose}>{stored ? "Close" : "Cancel"}</DismissButton>
-      <button type="button" className="btn btn-primary" disabled={!stored} onClick={() => { toast({ message: `New version of ${document.filename} stored; the previous version is kept` }); onDone(stored!); }}>Open the new version</button>
+      <Button type="button" disabled={!stored} onClick={() => { toast({ message: `New version of ${document.filename} stored; the previous version is kept` }); onDone(stored!); }}>Open the new version</Button>
     </>}>
       <ErrorFocus>
-        <div className="form">
-          <p className="small">The new file supersedes <b>{document.filename}</b> ({documentKindLabel(document.kind)}). The previous version stays, with its links and checksum; the new one starts without links.</p>
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-muted-foreground">The new file supersedes <b>{document.filename}</b> ({documentKindLabel(document.kind)}). The previous version stays, with its links and checksum; the new one starts without links.</p>
           <DocumentUpload label="New version" kind={document.kind} required value={stored} onChange={setStored} versionOf={document.id} collectionId={document.collectionId} />
         </div>
       </ErrorFocus>
@@ -480,7 +482,7 @@ export function CreateFolderDialog({ parent, onClose, onDone }: { parent: api.Do
   };
   return (
     <FlowDialog title="Create folder" flow={flow as never} onClose={onClose} onReview={review} confirmLabel="Create folder"
-      review={<div className="review-panel" aria-label="Review"><p>Create the folder <b>{name.trim()}</b>{parent ? <> inside <b>{parent.name}</b></> : " under Your documents"}.</p></div>}>
+      review={<ReviewPanel><p>Create the folder <b>{name.trim()}</b>{parent ? <> inside <b>{parent.name}</b></> : " under Your documents"}.</p></ReviewPanel>}>
       <TextField label="Folder name" required value={name} onChange={(value) => { setName(value); setError(undefined); }} error={error ?? fieldProblem(flow.problem, "name")} />
     </FlowDialog>
   );
@@ -517,7 +519,7 @@ export function EditFolderDialog({ folder, archive, onClose, onDone }: { folder:
   return (
     <FlowDialog title={archive ? (archiving ? "Archive the folder" : "Restore the folder") : "Rename the folder"} flow={flow as never} onClose={onClose} onReview={review}
       confirmLabel={archive ? (archiving ? "Archive folder" : "Restore folder") : "Rename"} danger={archive && archiving}
-      review={<div className="review-panel" aria-label="Review"><p>{archive ? (archiving ? <>Archive <b>{folder.name}</b>. Its documents stay stored, filed in it, with their links.</> : <>Restore <b>{folder.name}</b>.</>) : <>Rename <b>{folder.name}</b> to <b>{name.trim()}</b>.</>}</p></div>}>
+      review={<ReviewPanel><p>{archive ? (archiving ? <>Archive <b>{folder.name}</b>. Its documents stay stored, filed in it, with their links.</> : <>Restore <b>{folder.name}</b>.</>) : <>Rename <b>{folder.name}</b> to <b>{name.trim()}</b>.</>}</p></ReviewPanel>}>
       {archive ? <p>Nothing is deleted in the app.</p> : <TextField label="Folder name" required value={name} onChange={(value) => { setName(value); setError(undefined); }} error={error ?? fieldProblem(flow.problem, "name")} />}
     </FlowDialog>
   );

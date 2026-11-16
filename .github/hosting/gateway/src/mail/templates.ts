@@ -193,3 +193,24 @@ export function orgRequestMail(request: {
     ]),
   }
 }
+
+/**
+ * Insulin Apps support created an organization for someone past their owner domain's limit (the operator console,
+ * DESIGN.md §11.4), usually after they asked for one: it says so, without naming the operator.
+ */
+export function orgCreatedForYouMail(name: string, orgName: string, link: string): MailContent {
+  return {
+    subject: `${PRODUCT} created ${orgName} for you`,
+    text: textBody([
+      `Hi ${name},`,
+      `${PRODUCT} support created the organization ${orgName} for you, with you as its owner. Open it here:`,
+      link,
+      'If you didn\'t ask for it, you can delete it under Settings, Organization.',
+    ]),
+    html: htmlBody([
+      html`Hi ${name},`,
+      html`${PRODUCT} support created the organization ${orgName} for you, with you as its owner.`,
+      html`If you didn't ask for it, you can delete it under Settings, Organization.`,
+    ], { label: `Open ${orgName}`, url: link }),
+  }
+}

@@ -210,6 +210,41 @@ from sign-in mail so it can never crowd that out: ten messages an hour per recip
 organization and app, and 5,000 a day per app. The relay answers `202 { "status": "sent" }`, or an error such as
 `429 rate_limited`. Logs carry the app, the organization and the kind of message, never an address or the text.
 
+## Usage reports
+
+Insulin Apps watches its own usage, to keep the service fair and to add capacity before it runs out, without reading
+any app's data. Each app reports a few numbers instead, once an hour, from its scheduled work: `POST
+https://insulinapps.com/__insulin/metrics` with its platform token, holding gauges for the app as a whole (its
+database's size) and for each organization (how many records of each kind, how many bytes of files):
+
+```json
+{ "hour": "2026-01-01T10:00:00Z",
+  "app": { "database_bytes": 123456, "organizations": 3 },
+  "organizations": [ { "id": "<organization id>", "metrics": { "envelopes": 12, "storage_bytes": 2048 } } ] }
+```
+
+Counts and sizes only: never a name, an address, an amount or a document. At most 20 numbers per organization and 500
+organizations a request; a report sent twice changes nothing. Each app's own docs list what it sends.
+
+## The operator console
+
+A few Insulin Apps staff use an operator console at `insulinapps.com/super`, separate from everything customers use.
+They sign in through Insulin Apps' own company Google account, and only members of one group get in; everything they
+do is recorded with the reason they give.
+
+- **What they see:** each organization's name, when it was created and last active, its owner domain, its members
+  (name, e-mail address, role, when they joined and were last active, to within an hour) and counts such as pending
+  invitations and connected AI agents; each app's usage reports; and the Cloudflare resources the platform runs on.
+- **What they never see:** what anyone enters in an app (the console has no way into an app's database), passwords,
+  tokens, stored credentials or what any e-mail said.
+- **What they can do:** suspend an organization or account that breaks the terms (access paused, everything kept),
+  disable it (access ended, with an account's sessions and AI agents, or an organization's AI agents, API clients,
+  invitations and SCIM tokens), lift either, and create an organization for someone whose e-mail domain has used its
+  two.
+- **What suspension does:** a suspended or disabled account can't sign in and is signed out everywhere. Nobody can use a
+  suspended or disabled organization in any way: apps, settings, AI agents, API clients, single sign-on and SCIM all
+  stop, and its members' home page says so. Data is kept.
+
 ## Integrations and secrets
 
 - **Stored credentials** for outside services are kept encrypted by the gateway and added to the app's requests through
@@ -235,7 +270,8 @@ organization and app, and 5,000 a day per app. The relay answers `202 { "status"
 ## Data
 
 - The gateway's database holds accounts, sessions, organizations, memberships, roles, invitations, AI agent grants,
-  OAuth clients (hashed secrets), stored credentials (encrypted), single sign-on settings and a short mail log.
+  OAuth clients (hashed secrets), stored credentials (encrypted), single sign-on settings, a short mail log, when each
+  account and organization was last active, the apps' usage reports and the operator console's audit log.
 - Each app's database holds what you enter in that app, for every organization, each organization's rows marked with its
   id.
 - Nothing is reset. Data stays until you delete it. Deleting an organization removes it from sign-in; the apps keep its

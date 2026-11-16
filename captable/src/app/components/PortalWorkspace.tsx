@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Outlet, useParams } from "react-router";
+import { EyeIcon } from "lucide-react";
 import { api } from "#shared";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import { apiRequest } from "../api/request.ts";
 import { useAuth } from "../auth/AuthProvider.tsx";
 import { isApiError } from "../lib/errors.ts";
@@ -8,7 +11,6 @@ import { createFormatter } from "../lib/format.ts";
 import { useResource, type Resource } from "../lib/useResource.ts";
 import { DisplayContext, type Display } from "./Display.tsx";
 import { Loading, ResourceView } from "./Feedback.tsx";
-import { Icon } from "./Icon.tsx";
 import { CrumbSlotContext, Page } from "./Page.tsx";
 import { OutsideWorkspace, useWorkspace } from "./OrgWorkspace.tsx";
 
@@ -65,13 +67,13 @@ export function PortalWorkspace() {
   // The portal answers 404 to a caller it doesn't serve. Whether that is a loss of access or a page the
   // server can't serve right now is for /api/me to say: see PortalNotServed.
   if (overview.data === undefined && isApiError(overview.error, "not_found")) {
-    return <section className="page"><PortalNotServed what="Your portfolio" onRetry={overview.reload} /></section>;
+    return <section className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col gap-4 px-4 pt-6 pb-14 md:px-8"><PortalNotServed what="Your portfolio" onRetry={overview.reload} /></section>;
   }
   return (
     <ResourceView resource={overview}>
       {(data) => {
         const holdings = data.holdings.filter((holding) => holding.orgId === orgId);
-        if (holdings.length === 0) return <section className="page"><PortalNotServed what="Your portfolio" onRetry={overview.reload} /></section>;
+        if (holdings.length === 0) return <section className="mx-auto flex w-full max-w-[1480px] min-w-0 flex-col gap-4 px-4 pt-6 pb-14 md:px-8"><PortalNotServed what="Your portfolio" onRetry={overview.reload} /></section>;
         return (
           <PortalFrame
             scope={{
@@ -117,15 +119,20 @@ export function PreviewWorkspace() {
           const holdings = data.holdings.filter((holding) => holding.orgId === orgId && holding.stakeholderId === stakeholderId);
           return (
             <>
-              <div className="preview-banner" role="note">
-                <Icon name="eye" />
-                <div>
-                  You are previewing the portal as <b>{name}</b>. Every portal action is disabled.{" "}
-                  <Link to={base}>Portfolio</Link> · <Link to={`${base}/how-to-exercise`}>How to exercise</Link> · <Link to={`${base}/documents`}>Documents</Link>
-                </div>
-              </div>
+              <Alert role="note" className="border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-100">
+                <EyeIcon aria-hidden="true" />
+                <AlertDescription className="text-current">
+                  <p>
+                    You are previewing the portal as <b>{name}</b>. It shows this one stakeholder record: a holder whose sign-in address is on
+                    other records too sees their holdings as well. Every portal action is disabled.{" "}
+                    <Link className="font-medium underline underline-offset-4" to={base}>Portfolio</Link> ·{" "}
+                    <Link className="font-medium underline underline-offset-4" to={`${base}/how-to-exercise`}>How to exercise</Link> ·{" "}
+                    <Link className="font-medium underline underline-offset-4" to={`${base}/documents`}>Documents</Link>
+                  </p>
+                </AlertDescription>
+              </Alert>
               {/* The holder's page as it shows below the holder's header: the shell's header has the admin's breadcrumb. */}
-              <div className="preview-frame"><CrumbSlotContext value="hidden">
+              <div data-preview-frame="" className="rounded-xl border border-dashed bg-background p-4"><CrumbSlotContext value="hidden">
                 <PortalFrame
                   scope={{
                     orgId,
@@ -181,10 +188,12 @@ export function PortalNotServed({ what, onRetry }: { what: string; onRetry: () =
   }, [refresh]);
   if (!checked) return <Loading label="Checking your access…" />;
   return (
-    <div className="card error-state" role="alert">
-      <p className="b-title">{what} isn't available right now</p>
-      <p>Your access hasn't changed, but Cap Table couldn't show this page. Try again in a moment; if it keeps happening, contact your company's equity team.</p>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onRetry}>Try again</button>
-    </div>
+    <Alert role="alert">
+      <AlertTitle>{what} isn't available right now</AlertTitle>
+      <AlertDescription>
+        <p>Your access hasn't changed, but Cap Table couldn't show this page. Try again in a moment; if it keeps happening, contact your company's equity team.</p>
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetry}>Try again</Button>
+      </AlertDescription>
+    </Alert>
   );
 }

@@ -66,7 +66,12 @@ describe("409A valuations", () => {
     const detail = { ...valuation({ events: [event(), event({ id: uuid(21, 2), kind: "REVIEW_CLEARED", eventDate: "2026-10-15", description: "Provider confirmed the value holds" })] }), documents: [{ id: IDS.doc1, filename: "Nov 2025 Valuation.pdf", kind: "VALUATION_REPORT" as const }], grants: [{ securityId: IDS.opt49, displayId: "OPT-49", stakeholderId: IDS.daniel, grantDate: "2026-09-04", exercisePrice: "0.95" }, { securityId: uuid(6, 150), displayId: "OPT-50", stakeholderId: IDS.daniel, grantDate: "2026-09-04", exercisePrice: "0.9" }] };
     renderPage(`compliance/409a/${IDS.v5}`, [mock(api.routes.getValuation, detail), classes, mock(api.routes.listStakeholders, stakeholderList())]);
     expect(await screen.findByRole("heading", { name: /Nov 2025 Valuation/, level: 1 })).toBeTruthy();
-    expect(await screen.findByText("Not valued")).toBeTruthy();
+    // The report prices common only: that class is listed with its FMV, the rest in one muted line.
+    const fmv = await screen.findByLabelText("FMV per class");
+    expect(within(fmv).getByText("Common Stock")).toBeTruthy();
+    expect(within(fmv).getByText("$0.95")).toBeTruthy();
+    expect(within(fmv).queryByText("Series Seed Preferred")).toBeNull();
+    expect(screen.getByText("Not valued in this report: Series Seed Preferred")).toBeTruthy();
     const history = screen.getByRole("list", { name: "Status history" });
     expect(within(history).getByText("Review required — Series B term sheet signed")).toBeTruthy();
     expect(within(history).getByText("Review cleared — Provider confirmed the value holds")).toBeTruthy();

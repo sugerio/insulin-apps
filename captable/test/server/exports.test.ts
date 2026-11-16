@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { api } from '../../src/app/shared/index.ts'
-import { holderIdentity, readHarness, recordCommittedImport, type ReadHarness } from '../support/read-helpers.ts'
+import { ACME_NOW, addStakeholder, holderIdentity, readHarness, recordCommittedImport, type ReadHarness } from '../support/read-helpers.ts'
 
 let harness: ReadHarness | undefined
 afterEach(async () => { await harness?.close(); harness = undefined })
@@ -22,6 +22,24 @@ function storedZipEntries(bytes: Uint8Array): Map<string, string> {
     offset = dataStart + size
   }
   return entries
+}
+
+/** One sheet of a workbook the app wrote (stored entries, shared strings), as rows of cell text; blank cells are "". */
+function sheetRows(files: Map<string, string>, sheet: number): string[][] {
+  const decode = (text: string) => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+  const strings = [...(files.get('xl/sharedStrings.xml') ?? '').matchAll(/<si><t[^>]*>([\s\S]*?)<\/t><\/si>/g)].map((match) => decode(match[1]!))
+  return [...files.get(`xl/worksheets/sheet${sheet}.xml`)!.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)].map((row) => (
+    [...row[1]!.matchAll(/<c r="[A-Z]+\d+"([^>]*?)(?:\/>|>(?:<v>([\s\S]*?)<\/v>)?<\/c>)/g)].map((cell) => {
+      if (cell[2] === undefined) return ''
+      return /t="s"/.test(cell[1]!) ? strings[Number(cell[2])]! : cell[2]
+    })
+  ))
+}
+
+async function ownershipSheet(): Promise<string[][]> {
+  const response = await harness!.api('GET', harness!.path('/reports/cap-table?format=xlsx'), harness!.owner)
+  expect(response.status).toBe(200)
+  return sheetRows(storedZipEntries(new Uint8Array(await response.arrayBuffer())), 1)
 }
 
 function csvRows(value: string): string[][] {
@@ -56,6 +74,44 @@ describe('the six retained exports', () => {
     expect(files.get('xl/sharedStrings.xml')).toContain('24312120')
   })
 
+  it('lists a stakeholder who never held a security on the Ownership sheet, with zeros', async () => {
+    harness = await readHarness()
+    await addStakeholder(harness.db, harness.orgId, 'S41', 'employee')
+    const rows = await ownershipSheet()
+    const row = rows.find((cells) => cells[1] === 'Synthetic Holder S41')!
+    expect(row.slice(0, 3)).toEqual(['', 'Synthetic Holder S41', 'employee'])
+    expect(row.slice(3).every((cell) => cell === '0')).toBe(true)
+    expect(rows.find((cells) => cells[1] === 'Totals')).toContain('24312120')
+  })
+
+  it("orders the workbook's class columns as the cap table read does, whatever order the classes were added in", async () => {
+    harness = await readHarness()
+    const add = (id: string, name: string, classType: 'COMMON' | 'PREFERRED') => harness!.db.prepare(
+      `INSERT INTO stock_classes (id, org_id, name, class_type, default_id_prefix, par_value, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, '0.0001', ?, ?)`,
+    ).bind(id, harness!.orgId, name, classType, classType === 'COMMON' ? 'CB' : 'PX', ACME_NOW, ACME_NOW).run()
+    await add('00000000-0000-4000-8000-000000000001', 'Series A-10 Preferred', 'PREFERRED')
+    await add('ffffffff-0000-4000-8000-000000000003', 'Class B Common Stock', 'COMMON')
+    expect((await ownershipSheet())[0]!.slice(3, 9)).toEqual([
+      'Class B Common Stock', 'Common Stock', 'Series A-1 Preferred', 'Series A-2 Preferred', 'Series A-10 Preferred', 'Series Seed Preferred',
+    ])
+  })
+
+  it('exports the 83(b) record in force by supersession, whatever order the records were written in', async () => {
+    harness = await readHarness()
+    const election = (id: string, status: string, createdAt: number, supersedesId: string | null, filedDate: string | null = null) => harness!.db.prepare(
+      `INSERT INTO election_83b_records (id, org_id, security_id, status, transfer_date, filed_date, supersedes_id, created_at)
+       VALUES (?, ?, ?, ?, '2024-09-01', ?, ?, ?)`,
+    ).bind(id, harness!.orgId, harness!.id('CS-4'), status, filedDate, supersedesId, createdAt).run()
+    // The correction (FILED) supersedes the imported record but carries an earlier timestamp and a smaller id.
+    await election('ffffffff-0000-4000-8000-0000000000e1', 'UNCONFIRMED_DEADLINE_PASSED', ACME_NOW, null)
+    await election('00000000-0000-4000-8000-0000000000e2', 'FILED', ACME_NOW - 60_000, 'ffffffff-0000-4000-8000-0000000000e1', '2024-09-20')
+    const rows = csvRows(await (await harness.api('GET', harness.path('/reports/raw-cap-table?format=csv'), harness.owner)).text())
+    const column = rows[0]!.indexOf('83(b) Status')
+    expect(column).toBeGreaterThan(-1)
+    expect(rows.find((row) => row[0] === 'CS-4')![column]).toBe('FILED')
+  })
+
   it('exports formula-safe raw cap table CSV and gates migration provenance by role', async () => {
     harness = await readHarness()
     await recordCommittedImport(harness.db, harness.orgId, 'template')
@@ -66,6 +122,12 @@ describe('the six retained exports', () => {
     const option = ownerRows.find((row) => row[0] === 'OPT-1')!
     expect(option.slice(9, 17)).toEqual(['300000', '250000', '268750', '31250', '50000', '0', '', '0.1'])
     expect(option[3]).toBe("'=FORMULA()")
+    // Leading spaces don't smuggle a formula past the guard, and a leading tab is neutralized too.
+    await harness.db.prepare("UPDATE stakeholders SET display_name = '  @SUM(A1)', version = version + 1 WHERE id = ?").bind(harness.id('S05')).run()
+    await harness.db.prepare("UPDATE stakeholders SET display_name = '\tTabbed', version = version + 1 WHERE id = ?").bind(harness.id('S01')).run()
+    const guarded = csvRows(await (await harness.api('GET', harness.path('/reports/raw-cap-table?format=csv'), harness.owner)).text())
+    expect(guarded.find((row) => row[3] === "'  @SUM(A1)")).toBeDefined()
+    expect(guarded.find((row) => row[3] === "'\tTabbed")).toBeDefined()
     expect(option[47]).toBe('syn-OPT-1')
     const editorRows = csvRows(await (await harness.api('GET', harness.path('/reports/raw-cap-table?format=csv'), harness.reader)).text())
     expect(editorRows.find((row) => row[0] === 'OPT-1')![47]).toBe('')

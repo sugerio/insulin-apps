@@ -34,14 +34,32 @@ describe("dashboard", () => {
   it("lists what needs attention, in-progress counts, reminders and recent activity", async () => {
     renderPage("dashboard", handlers());
     const attention = await screen.findByRole("list", { name: "Needs attention" });
-    expect(within(attention).getByText("6 grants awaiting signatures")).toBeTruthy();
+    expect(within(attention).getByText("6 securities awaiting signatures (6 option grants)")).toBeTruthy();
     expect(within(attention).getByText("1 termination scheduled · next Dec 4, 2026")).toBeTruthy();
     expect(within(attention).getByText("Presumptively valid until Nov 5, 2026 (15 days)")).toBeTruthy();
-    expect(within(attention).getByRole("link", { name: /Execution pending \(migrated\)/ }).getAttribute("href")).toBe(`${base}/securities-status#exec`);
+    expect(within(attention).getByRole("link", { name: /^Execution pending/ }).getAttribute("href")).toBe(`${base}/securities-status#exec`);
+    expect(within(attention).getByRole("link", { name: /Repurchase windows closing within 30 days/ }).textContent).toContain("1 window, closes Dec 14, 2026");
+    expect(screen.getByRole("link", { name: /Unvested shares from terminated holders/ }).textContent).toContain("1");
     expect(screen.getByRole("link", { name: /Options from terminated holders — open windows/ }).textContent).toContain("2");
     expect(screen.getByRole("link", { name: "409A expires in 15 days (Nov 5, 2026) — record the new provider's report" })).toBeTruthy();
     expect(screen.getByText("OPT-56 recorded — 40,000 options for Omar Haddad-Lewis")).toBeTruthy();
     expect(screen.getByText(/Morgan Ellis · Today 8:40am/)).toBeTruthy();
+  });
+
+  it("counts securities awaiting signatures by family, and lapsed or unrecorded repurchase windows on their own line", async () => {
+    const needsAttention = dashboard().needsAttention.map((item) => (item.kind === "EXECUTION_PENDING"
+      ? { ...item, count: 8, byFamily: [{ family: "EQUITY_COMPENSATION" as const, count: 6 }, { family: "STOCK" as const, count: 2 }] }
+      : item.kind === "REPURCHASE_WINDOW_CLOSING" ? { ...item, count: 0, dueDate: null } : item));
+    renderPage("dashboard", handlers({ needsAttention: [...needsAttention, { kind: "REPURCHASE_UNRESOLVED", count: 2, dueDate: null, href: "/securities-status#rep" }] }));
+    const attention = await screen.findByRole("list", { name: "Needs attention" });
+    expect(within(attention).getByText("8 securities awaiting signatures (6 option grants, 2 share issuances)")).toBeTruthy();
+    expect(within(attention).queryByText(/grants awaiting signatures/)).toBeNull();
+    expect(within(attention).getByRole("link", { name: /Repurchase windows closing within 30 days/ }).textContent).toContain("None");
+    const unresolved = within(attention).getByRole("link", { name: /Repurchase windows lapsed or not recorded/ });
+    expect(unresolved.textContent).toContain("2 holdings of unvested shares from terminated holders");
+    expect(unresolved.getAttribute("href")).toBe(`${base}/securities-status#rep`);
+    // The reminder of a window closing soon is gone with it.
+    expect(screen.queryByText(/repurchase window.* closing/)).toBeNull();
   });
 
   it("shows a review-required 409A", async () => {

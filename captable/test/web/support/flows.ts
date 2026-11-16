@@ -83,7 +83,7 @@ export function choose(label: string | RegExp, value: string) {
 export function errorOf(label: string | RegExp): string {
   const input = field(label);
   const ids = input.getAttribute("aria-describedby")?.split(" ") ?? [];
-  const error = ids.map((id) => document_(id)).find((element) => element?.className.includes("err"));
+  const error = ids.map((id) => document_(id)).find((element) => element?.dataset.slot === "field-error");
   return error?.textContent ?? "";
 }
 

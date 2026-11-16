@@ -45,7 +45,7 @@ export interface GrantInput {
  * for that app is ADMIN. Parameter numbers are substituted by `appAdmin`.
  */
 export function appAdmin(org: string, actor: string, app: string): string {
-  return `EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor}
+  return `EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ${org} AND a.user_id = ${actor}
     AND (a.role IN ('OWNER', 'ADMIN') OR (a.role = 'APPS' AND EXISTS (SELECT 1 FROM app_grants ag
       WHERE ag.org_id = ${org} AND ag.user_id = ${actor} AND ag.app = ${app} AND ag.role = 'ADMIN'))))`
 }
@@ -55,12 +55,14 @@ export function appAdmin(org: string, actor: string, app: string): string {
  * access (DESIGN.md §5.3) are the organization's to manage.
  */
 export function orgAdmin(org: string, actor: string): string {
-  return `EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor} AND a.role IN ('OWNER', 'ADMIN'))`
+  return `EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active'
+    WHERE a.org_id = ${org} AND a.user_id = ${actor} AND a.role IN ('OWNER', 'ADMIN'))`
 }
 
 /** The actor (?A) is still an OWNER of organization ?O. */
 export function owner(org: string, actor: string): string {
-  return `EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor} AND a.role = 'OWNER')`
+  return `EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active'
+    WHERE a.org_id = ${org} AND a.user_id = ${actor} AND a.role = 'OWNER')`
 }
 
 const GRANT_SELECT = `SELECT g.user_id, g.app, g.role, g.custom_role_id, c.name AS custom_role_name
@@ -82,12 +84,17 @@ export async function listUserGrants(db: D1Database, orgId: string, userId: stri
   return results
 }
 
-/** The member's role and, for app ?3, their grant and its custom role; null when they aren't a member. */
+/**
+ * The member's role and, for app ?3, their grant and its custom role; null when they aren't a member, or the
+ * organization or their account isn't active (DESIGN.md §11.3): every way into an app (access.ts) ends with nothing.
+ */
 export function findAccessRow(db: D1Database, orgId: string, userId: string, app: string): Promise<AccessRow | null> {
   return db.prepare(
     `SELECT m.role AS member_role, g.role AS grant_role, g.custom_role_id, c.name AS custom_role_name,
        c.permissions AS custom_permissions
      FROM memberships m
+     JOIN orgs o ON o.id = m.org_id AND o.status = 'active'
+     JOIN users u ON u.id = m.user_id AND u.status = 'active'
      LEFT JOIN app_grants g ON g.org_id = m.org_id AND g.user_id = m.user_id AND g.app = ?3
      LEFT JOIN custom_roles c ON c.id = g.custom_role_id
      WHERE m.org_id = ?1 AND m.user_id = ?2`,

@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { RecordActivity } from "../components/Activity.tsx";
 import { Meter } from "../components/Charts.tsx";
@@ -10,6 +13,7 @@ import { Badge, Pending, ResourceView } from "../components/Feedback.tsx";
 import { HolderLink, SecurityLink } from "../components/Links.tsx";
 import { useWorkspace } from "../components/OrgWorkspace.tsx";
 import { Card, Page, PageHead, SectionTitle } from "../components/Page.tsx";
+import { SharesCalculatorDialog } from "../components/SharesCalculatorDialog.tsx";
 import { formatFractionPercent, fractionOf, isPositive, subtractDecimals, sumDecimals } from "../lib/decimal.ts";
 import { DASH, daysBetween, formatDate } from "../lib/format.ts";
 import { SECURITY_STATUS_LABELS, SECURITY_STATUS_TONES, TERMINATION_WINDOW_LABELS, isExecutionPending, periodLabel } from "../lib/labels.ts";
@@ -48,10 +52,16 @@ export function EquityPlansPage() {
   const { orgId, format, href } = useWorkspace();
   const plans = useResource((signal) => apiRequest(api.routes.listStockPlans, { params: { orgId }, signal }), [orgId]);
   const capTable = useResource((signal) => apiRequest(api.routes.getCapTable, { params: { orgId }, query: { tab: "ownership" }, signal }), [orgId]);
+  const [calculator, setCalculator] = useState(false);
   return (
     <Page title="Equity Plans" crumbs={[["Cap Table", href("captable")], ["Equity Plans"]]}>
       <Card>
-        <PageHead title="Equity Plans" sub="View only. Plans come in with the import; the app has no form to amend them." />
+        <PageHead
+          title="Equity Plans"
+          sub="View only. Plans come in with the import; the app has no form to amend them."
+          // The calculator works from today's fully diluted total: it opens once the cap table is in.
+          actions={capTable.data ? <Button type="button" variant="ghost" size="sm" onClick={() => setCalculator(true)}>% shares calculator</Button> : null}
+        />
         {/* "% of FD" comes from the cap table: the list waits for it rather than showing a blank share. */}
         <ResourceView resource={allOf(plans, capTable)}>
           {([data, capTableData]) => {
@@ -69,12 +79,12 @@ export function EquityPlansPage() {
                 search={(plan) => plan.name}
                 empty="No equity plans yet."
                 columns={[
-                  { key: "name", label: "Name", render: (plan) => <Link className="cell-link" to={href(`equity-plans/${plan.id}`)}>{plan.name}</Link>, compare: byText((plan) => plan.name) },
+                  { key: "name", label: "Name", render: (plan) => <Link className="font-medium underline-offset-4 hover:underline" to={href(`equity-plans/${plan.id}`)}>{plan.name}</Link>, compare: byText((plan) => plan.name) },
                   { key: "status", label: "Status", render: (plan) => <Badge tone={plan.status === "active" ? "green" : "grey"}>{plan.status === "active" ? "Active" : "Terminated"}</Badge> },
                   { key: "board", label: "Board approval", render: (plan) => formatDate(plan.boardApprovalDate), compare: byText((plan) => plan.boardApprovalDate) },
                   {
                     key: "size", label: "Plan size", numeric: true,
-                    render: (plan) => <>{format.shares(plan.poolSize)}<div className="small muted">{format.shares(plan.availableToGrant)} available</div></>,
+                    render: (plan) => <>{format.shares(plan.poolSize)}<div className="text-xs text-muted-foreground">{format.shares(plan.availableToGrant)} available</div></>,
                     compare: byDecimal((plan) => plan.poolSize),
                   },
                   { key: "term", label: "Term", render: termLabel },
@@ -90,6 +100,7 @@ export function EquityPlansPage() {
           }}
         </ResourceView>
       </Card>
+      {calculator && capTable.data ? <SharesCalculatorDialog fullyDiluted={capTable.data.metrics.fullyDiluted} onClose={() => setCalculator(false)} /> : null}
     </Page>
   );
 }
@@ -116,6 +127,9 @@ function EquityPlanBody({ plan }: { plan: api.StockPlanDetail }) {
   const used = subtractDecimals(plan.poolSize, plan.availableToGrant);
   const windows = new Map(plan.defaultTerminationWindows.map((window) => [window.reason, window]));
   const confirmation = plan.returnRulesConfirmation;
+  const reserves = plan.amendments.filter((amendment) => amendment.kind !== "terms");
+  const initial = reserves[0]?.kind === "initial" ? 1 : 0;
+  const termsChanges = plan.amendments.filter((amendment) => amendment.kind === "terms");
   return (
     <Card>
       <PageHead title={plan.name} after={<Badge tone={plan.status === "active" ? "green" : "grey"}>{plan.status === "active" ? "Active" : "Terminated"}</Badge>} />
@@ -125,14 +139,14 @@ function EquityPlanBody({ plan }: { plan: api.StockPlanDetail }) {
           ["Plan size", format.shares(plan.poolSize)],
           ["Available to grant", format.shares(plan.availableToGrant)],
           ["Equity outstanding", awards !== null && fromExercises !== null
-            ? <>{format.shares(plan.equityOutstanding)} <span className="muted small">({format.shares(awards)} outstanding options + {format.shares(isPositive(fromExercises) ? fromExercises : "0")} shares issued from exercises)</span></>
+            ? <>{format.shares(plan.equityOutstanding)} <span className="text-xs text-muted-foreground">({format.shares(awards)} outstanding options + {format.shares(isPositive(fromExercises) ? fromExercises : "0")} shares issued from exercises)</span></>
             : format.shares(plan.equityOutstanding)],
           ["Equity retired", format.shares(plan.equityRetired)],
         ]}
       />
-      <div className="mt-12">
+      <div>
         <Meter used={used} size={plan.poolSize} label="Plan used" />
-        <div className="small muted mt-4">{formatFractionPercent(fractionOf(used, plan.poolSize))} used</div>
+        <div className="mt-1 text-xs text-muted-foreground">{formatFractionPercent(fractionOf(used, plan.poolSize))} used</div>
       </div>
       <SectionTitle>Additional Information</SectionTitle>
       <DescriptionList
@@ -148,7 +162,7 @@ function EquityPlanBody({ plan }: { plan: api.StockPlanDetail }) {
       <DescriptionList rows={WINDOW_ORDER.map((reason) => [TERMINATION_WINDOW_LABELS[reason], periodLabel(windows.get(reason))] as const)} />
       <SectionTitle>Return-to-pool rules</SectionTitle>
       <DescriptionList rows={RULES.map(([key, label]) => [label, <Badge tone={plan.returnRules[key] === "RETURN" ? "teal" : "grey"}>{plan.returnRules[key] === "RETURN" ? "Return" : "Retire"}</Badge>] as const)} />
-      <p className="small muted">Confirmed against the plan document by {confirmation.confirmedBy} on {formatDate(format.localDate(confirmation.confirmedAt))}, effective {formatDate(confirmation.effectiveDate)}.</p>
+      <p className="text-xs text-muted-foreground">Confirmed against the plan document by {confirmation.confirmedBy} on {formatDate(format.localDate(confirmation.confirmedAt))}, effective {formatDate(confirmation.effectiveDate)}.</p>
       <SectionTitle>Shares and Options Issued</SectionTitle>
       <Pending resource={securities} what="the shares and options issued">
         {() => (
@@ -173,20 +187,35 @@ function EquityPlanBody({ plan }: { plan: api.StockPlanDetail }) {
         )}
       </Pending>
       <SectionTitle>Amendments</SectionTitle>
-      {plan.amendments.length ? (
-        <div className="tbl-scroll">
-          <table className="tbl" aria-label="Plan amendments">
-            <thead><tr><th scope="col">#</th><th scope="col" className="num">Plan size after</th><th scope="col">Effective</th></tr></thead>
-            <tbody>
-              {plan.amendments.map((amendment, index) => (
-                <tr key={amendment.transactionId}><td>{index + 1}</td><td className="num">{amendment.poolSize ? format.shares(amendment.poolSize) : DASH}</td><td>{formatDate(amendment.effectiveDate)}</td></tr>
+      {/* Only a change of the share reserve is an amendment of the plan's size: the pool set with the plan, when it had
+          one, is the initial reserve, the rest are numbered. Recordings of the plan's terms (return rules, exit windows)
+          are listed apart. */}
+      {reserves.length ? (
+        <Table aria-label="Plan amendments">
+            <TableHeader><TableRow><TableHead scope="col">Amendment</TableHead><TableHead scope="col" className="text-right tabular-nums whitespace-nowrap">Plan size after</TableHead><TableHead scope="col">Effective</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {reserves.map((amendment, index) => (
+                <TableRow key={amendment.transactionId}>
+                  <TableCell>{amendment.kind === "initial" ? "Initial reserve" : `#${index + 1 - initial}`}</TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">{amendment.poolSize ? format.shares(amendment.poolSize) : DASH}</TableCell>
+                  <TableCell>{formatDate(amendment.effectiveDate)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
       ) : (
-        <p className="muted">No amendments.</p>
+        <p className="text-sm text-muted-foreground">No amendments.</p>
       )}
+      {termsChanges.length ? (
+        <>
+          <SectionTitle>Plan terms recorded</SectionTitle>
+          <ul className="list-disc space-y-1 pl-5 text-xs" aria-label="Plan terms recorded">
+            {termsChanges.map((change) => (
+              <li key={change.transactionId}>Plan terms (return-to-pool rules, exit-window and repurchase defaults) recorded, effective {formatDate(change.effectiveDate)}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       <SectionTitle>Documents</SectionTitle>
       <LinkedDocuments targetType="stock_plan" targetId={plan.id} />
       <SectionTitle>Activity</SectionTitle>

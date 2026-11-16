@@ -7,11 +7,11 @@ over a service binding with the console identity headers. The apps need no hosti
 
 | Host | What it serves |
 |---|---|
-| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; `/robots.txt`, `/sitemap.xml`, `/llms.txt` and `/llms-full.txt`; the public docs at `/docs/` (every page, `/docs/llms.txt`, `/docs/llms-full.txt`, each page's `.md`, the images at `/docs/assets/*`, the search at `/docs/search` and `/docs/search.json`, and the docs' MCP server at `/docs/mcp`); sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`, `/settings/oauth-clients`; each app's `/apps/<app>/settings/users`, `/apps/<app>/settings/integrations`, `/apps/<app>/settings/api` (API access) and `/apps/<app>/settings/connect-ai` (Connect AI); invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); `/favicon.ico`, `/apple-touch-icon.png` |
+| `SITE_DOMAIN` (e.g. `insulinapps.com`) | `/` (the landing page, public and indexable, or the home page once signed in), `/privacy`, `/terms`; `/robots.txt`, `/sitemap.xml`, `/llms.txt` and `/llms-full.txt`; the public docs at `/docs/` (every page, `/docs/llms.txt`, `/docs/llms-full.txt`, each page's `.md`, the images at `/docs/assets/*`, the search at `/docs/search` and `/docs/search.json`, and the docs' MCP server at `/docs/mcp`); sign-up, sign-in and `/login/mfa`; the account, `/account/security`, `/account/agents`; organizations, `/settings/users`, `/settings/roles`, `/settings/organization`, `/settings/oauth-clients`; each app's `/apps/<app>/settings/users`, `/apps/<app>/settings/integrations`, `/apps/<app>/settings/api` (API access) and `/apps/<app>/settings/connect-ai` (Connect AI); invitations; the OAuth authorization server (`/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`); the operator console at `/super` for Insulin Apps staff (DESIGN.md §11; a 404 unless configured); `/favicon.ico`, `/apple-touch-icon.png` |
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
 | `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*` and the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*`, the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) and their hourly usage reports `/__insulin/metrics` (DESIGN.md §8.6) |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
 app) is `.github/hosting/README.md`. This file is for developers.
@@ -36,13 +36,15 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/crypto.ts` | random tokens and ids, SHA-256, PBKDF2 hashes, constant-time comparison |
 | `src/http/` | cookies, security headers, request parsing, responses, `return_to`, what is forwarded to apps |
 | `src/db/` | D1 queries, one module per table group; every race-sensitive rule is a single statement or batch |
-| `src/auth/` | sessions, email and password accounts, Google sign-in, the account page; `sign-in.ts`, where every sign-in becomes a session; `totp.ts` (RFC 6238 codes, recovery codes), `mfa.ts` (the second step at `/login/mfa`) and `security.ts` (Account → Security at `/account/security`) |
+| `src/auth/` | sessions, email and password accounts, Google sign-in, the account page; `sign-in.ts`, where every sign-in becomes a session; `standing.ts`, which refuses an account the operators suspended or disabled; `totp.ts` (RFC 6238 codes, recovery codes), `mfa.ts` (the second step at `/login/mfa`) and `security.ts` (Account → Security at `/account/security`) |
 | `src/roles.ts` | organization roles, app roles, permissions and who may give what |
 | `src/owner-domain.ts` | owner domains (registrable domain, or a provider address in Gmail's form), the public mail providers, and the strict check `allow-orgs.mjs` and the request to support apply; pure, so the script imports it too |
 | `src/access.ts` | someone's role and permissions in one app, from their organization role or their grant; every way into an app ends here |
 | `src/orgs/` | organizations and the settings pages (`orgs.ts`), invitations, custom roles (`custom-roles.ts`), an app's people page (`app-users.ts`), every OAuth client of the organization (`oauth-clients.ts`), access in forms and words (`access-forms.ts`) |
 | `src/proxy.ts` | the app proxy: identity headers, header and cookie stripping, the account bar on HTML |
 | `src/scheduled.ts` | the crons: the apps' five-minute tick to their `insulin.scheduled` path, and which cron runs the daily cleanup |
+| `src/metrics/report.ts`, `src/db/metrics.ts` | the apps' hourly usage reports (`POST /__insulin/metrics`, DESIGN.md §8.6): checking them, storing them hourly and daily, and reading them back for the console |
+| `src/super/` | the operator console (DESIGN.md §11): its routes and actions (`routes.ts`), its Google Workspace SAML sign-in and session (`auth.ts`), its queries, standings and audit log (`db.ts`), the Cloudflare snapshot (`cloudflare.ts`) and the hourly job that takes it (`jobs.ts`); its pages are in `src/pages/super/` |
 | `src/oauth/` | the authorization server: metadata, registration, authorize and consent, token, revoke; token formats and lifetimes, `resolveBearer`, and calls to an app with a token (`app-api.ts`) |
 | `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
 | `src/mcp/docs.ts` | the docs' MCP server at `/docs/mcp` on the apex: public, no sign-in, tools `search_docs`, `read_doc`, `list_docs` |
@@ -95,6 +97,9 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `ORG_REQUEST_EMAIL` | var | optional; Insulin Apps support's address, which gets requests for more organizations (DESIGN.md §3.1) with Reply-To the requester. Empty: the page at the limit shows the contact above instead. An unusable value is ignored and logged by name |
 | `GATEWAY_SECRET_KEY` | secret | optional, base64 of 32 random bytes; seals stored secrets (AES-256-GCM, a key per purpose) and derives per-app secrets. A value that isn't 32 bytes fails closed |
 | `SITE_ENV` | var | **local development and tests only**: `test` captures mail and relaxes cookies on `http://*.localhost`. Any non-empty value is a configuration error unless it is `test` and `SITE_DOMAIN` ends in `.localhost` |
+| `SUPER_SAML_IDP_ENTITY_ID`, `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_CERT`, `SUPER_GOOGLE_GROUP` | var | optional; the operator console's Google Workspace SAML app (entity id, sign-in URL, signing certificate as PEM) and the group whose members may sign in, by its name as Google sends it (DESIGN.md §11.1). All four, or the console is off: set in part or unusable, it stays off and the names are logged, and the rest of the site is unaffected |
+| `SUPER_ADMIN_EMAILS` | var | optional; the console's admins, addresses separated by commas or whitespace; an entry that isn't an address is ignored and logged |
+| `SUPER_CLOUDFLARE_API_TOKEN`, `SUPER_CLOUDFLARE_ACCOUNT_ID` | secret, var | optional; a Cloudflare API token with Workers Scripts: Read and Account Analytics: Read only (never D1, which could query the apps' databases) and the 32-hex account it reads, for the console's hourly resource snapshot (DESIGN.md §11.5). Both, or none |
 
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
@@ -366,9 +371,37 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
 - **Local https.** With `SITE_ENV=test` on `*.localhost`, origins keep the port over https too, so a local run behind
   `wrangler dev --local-protocol https` (the docs' screenshots) passes the Origin check; production origins never
   carry a port.
+- **The operator console** (DESIGN.md §11) lives at `/super` on the apex and is a 404 until configured. It signs in
+  only through the platform's own Google Workspace SAML app, with the same SAML checks as enterprise SSO
+  (`sso/saml.ts`, which now also returns the signed assertion's attributes) and the operators' group in its `groups`
+  attribute; its ACS is the console's one cross-site form, bound to a `__Host-insulin_super_flow` cookie. Its session
+  is its own (`__Host-insulin_super`, host-only, eight hours, never renewed, `super_sessions`), so a customer's session
+  opens nothing there and its own opens nothing elsewhere. Admins are `SUPER_ADMIN_EMAILS`, read at every request.
+  Every action takes a reason and writes its audit record in the same batch, conditional on the change itself, so a
+  repeated or stale request records nothing.
+- **Suspended and disabled** (DESIGN.md §11.3). `users.status` and `orgs.status` are checked where access is decided,
+  so nothing downstream needs to know: the session lookup and insert (an account), `findMembership`,
+  `listMemberships` and the session's active organization (an organization's members), `findAccessRow` (every way into
+  an app), `findAccessToken`, `redeemRefresh`, `issueServiceToken`, `insertGrantWithCode` and `redeemCode` (tokens and
+  consent), `useScimToken`, the invitation acceptance, `joinOrg`, `findIntegrationSecret`, and the actor check every
+  organization change repeats (`orgAdmin`, `appAdmin`, `owner` and the inline ones in `db/orgs.ts` and
+  `db/invitations.ts`), which counts a membership only in an active organization. Sign-in pages say so (`auth/standing.ts`); the mail relay answers 403.
+- **Last active**, to within an hour: the hourly session touch, the sign-in's session insert and the hourly touches of
+  an agent's grant and an API client write `users.last_active_at` and `orgs.last_active_at` in the same batch, so
+  activity costs no extra write per request.
+- **Usage reports** (DESIGN.md §8.6) are stored in a few statements however many organizations they carry: the
+  organizations go as one JSON parameter that `json_each` unpacks, so a report of 500 never meets D1's limits on
+  statements per invocation or parameters per statement, and only organizations the gateway knows are stored. Each
+  report also prunes up to 1,000 of its app's expired rows per table, more than it can add.
+- **The Cloudflare snapshot** (DESIGN.md §11.5) is the five-minute tick's: the first tick of each hour to claim the
+  run in `super_jobs` reads the account (`api.cloudflare.com` only, no redirects, a 20-second timeout, the token never
+  logged), keeps whatever parts it could read and names the rest. It finds each Worker's D1 database in the Worker's
+  settings and the database's size in the analytics, so its token needs no D1 permission.
 - **Logs** carry event names, ids, error class names and identifier-like codes; never exception messages.
-- **Retention.** Expired sessions, used or expired links and mail-log rows older than two days are deleted in batches
-  of at most 200 per table after each POST (`src/housekeeping.ts`). The daily cron (`17 3 * * *`) runs the same
+- **Retention.** Expired sessions, used or expired links, mail-log rows older than two days, apps' hourly usage
+  reports past three days and daily ones past 400, and the console's expired sessions and sign-ins, job records past
+  a week and Cloudflare snapshots past 90 days are deleted in batches of at most 200 per table after each POST
+  (`src/housekeeping.ts`); the console's audit log is kept. The daily cron (`17 3 * * *`) runs the same
   cleanup in bigger batches.
 
 ## shadcn/ui

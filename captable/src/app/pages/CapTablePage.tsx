@@ -1,10 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { TableCell, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { ActionsMenu } from "../components/Actions.tsx";
 import { CapTableDownloadButton } from "../components/CapTableDownload.tsx";
-import { DataTable, byDecimal, byDisplayId, byRatio, byText, type Column, type Filter } from "../components/DataTable.tsx";
+import { DataTable, byDecimal, byDisplayId, byRatio, byText, columnCellClassName, type Column, type Filter } from "../components/DataTable.tsx";
 import { Badge, Banner, ResourceView } from "../components/Feedback.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { LinkTabs } from "../components/LinkTabs.tsx";
@@ -15,7 +20,7 @@ import { usePii } from "../components/Pii.tsx";
 import { Tiles, type Tile } from "../components/Tiles.tsx";
 import { BulkCancelDialog } from "../components/flows/BulkCancelDialog.tsx";
 import { formatFractionPercent, fractionOf, isPositive, multiplyDecimals, sumDecimals } from "../lib/decimal.ts";
-import { DASH, formatDate, sharesOrDash } from "../lib/format.ts";
+import { DASH, formatDate, plural, sharesOrDash } from "../lib/format.ts";
 import {
   EXECUTION_LABELS,
   FEDERAL_EXEMPTION_LABELS,
@@ -106,11 +111,11 @@ export function CapTablePage() {
           title="Cap Table"
           actions={
             <>
-              <label className="asof" title="Recompute every number as of this date">
+              <label className="flex items-center gap-2 text-sm font-medium" title="Recompute every number as of this date">
                 As of
-                <input type="date" className="inp" value={asOf} max={today} aria-label="Cap table as-of date" onChange={(event) => setAsOf(event.target.value)} />
+                <Input type="date" className="w-auto" value={asOf} max={today} aria-label="Cap table as-of date" onChange={(event) => setAsOf(event.target.value)} />
               </label>
-              {asOf !== today ? <Link className="small" to={linkFor(tab, null)}>Today</Link> : null}
+              {asOf !== today ? <Button asChild variant="link" size="sm"><Link to={linkFor(tab, null)}>Today</Link></Button> : null}
               <CapTableDownloadButton asOf={asOf} />
               <ActionsMenu items={actions} />
             </>
@@ -202,7 +207,17 @@ function OwnershipTab({ context }: { context: Context }) {
   const { format } = workspace;
   const pii = usePii();
   const { capTable } = context;
-  const rows = capTable.ownership ?? [];
+  const all = capTable.ownership ?? [];
+  // A stakeholder who holds nothing on this date (every figure zero, no outstanding security such as a SAFE) is hidden
+  // until asked for; the totals don't change, and the export keeps every row.
+  const [showEmpty, setShowEmpty] = useState(false);
+  const holding = new Set(context.securities
+    .filter((security) => security.status === "OUTSTANDING" && security.issueDate <= context.asOf).map((security) => security.stakeholderId));
+  const holds = (row: OwnershipRow) => holding.has(row.stakeholderId) || [
+    row.issuedAndOutstanding, row.awardsOutsidePlans, row.warrants, row.fullyDiluted, ...Object.values(row.byClass), ...Object.values(row.planAwards),
+  ].some(isPositive);
+  const empty = all.filter((row) => !holds(row));
+  const rows = showEmpty ? all : all.filter(holds);
   const options = context.securities.filter((security) => security.family === "EQUITY_COMPENSATION" && security.status === "OUTSTANDING");
   const optionSums = (stakeholderId: string, pick: (numbers: api.SecurityNumbers, security: api.Security) => string | null) =>
     sumDecimals(options.filter((security) => security.stakeholderId === stakeholderId && security.numbers).map((security) => pick(security.numbers!, security)));
@@ -272,10 +287,10 @@ function OwnershipTab({ context }: { context: Context }) {
     ...classTiles(capTable, format),
     ...capTable.plans.map((plan) => ({
       label: `${plan.name} outstanding`,
-      value: format.shares(sumDecimals(rows.map((row) => row.planAwards[plan.stockPlanId]))),
+      value: format.shares(sumDecimals(all.map((row) => row.planAwards[plan.stockPlanId]))),
       sub: `${format.shares(plan.available)} available`,
     })),
-    { label: "Warrants", value: format.shares(sumDecimals(rows.map((row) => row.warrants))) },
+    { label: "Warrants", value: format.shares(sumDecimals(all.map((row) => row.warrants))) },
     safeTile(context.securities, format),
   ];
 
@@ -293,22 +308,28 @@ function OwnershipTab({ context }: { context: Context }) {
         filters={filters}
         search={(row) => `${row.name} ${row.issuerAssignedId ?? ""} ${pii.canSeePii ? (emailOf(row) ?? "") : ""}`}
         searchPlaceholder="Search stakeholders…"
+        toolbarExtra={empty.length ? (
+          <div className="flex items-center gap-2">
+            <Checkbox id="cap-own-show-empty" checked={showEmpty} onCheckedChange={(checked) => setShowEmpty(checked === true)} />
+            <Label htmlFor="cap-own-show-empty" className="text-xs font-normal whitespace-nowrap">Show {plural(empty.length, "stakeholder")} with no holdings</Label>
+          </div>
+        ) : null}
         empty="No stakeholders hold securities on this date."
         pinned={({ columns: visible, rows: shown, filtered }) => {
           const pool = filtered ? null : (
-            <tr className="pool">
+            <TableRow className="bg-muted/40 hover:bg-muted/40" data-row="pool">
               {visible.map((column) => {
                 let value: ReactNode = "";
                 if (column.key === "name") value = "Available pool";
                 else if (column.key.startsWith("p_")) value = format.shares(capTable.plans.find((plan) => plan.stockPlanId === column.key.slice(2))?.available ?? null);
                 else if (column.key === "fd") value = format.shares(capTable.availablePool.fullyDiluted);
                 else if (column.key === "fdPct") value = format.percent(capTable.availablePool.fullyDilutedPct);
-                return <td key={column.key} className={[column.numeric ? "num" : "", column.sticky ? "sticky-col" : ""].join(" ").trim() || undefined}>{value}</td>;
+                return <TableCell key={column.key} className={columnCellClassName(column)}>{value}</TableCell>;
               })}
-            </tr>
+            </TableRow>
           );
           const totals = (
-            <tr className="totals">
+            <TableRow className="border-t-2 font-semibold hover:bg-transparent" data-row="totals">
               {visible.map((column) => {
                 let value: ReactNode = "";
                 if (column.key === "name") value = filtered ? `Totals (${shown.length} shown)` : "Totals";
@@ -318,9 +339,9 @@ function OwnershipTab({ context }: { context: Context }) {
                 else if (column.key === "issuedPct") value = filtered ? formatFractionPercent(fractionOf(sumOf(shown, "issued"), capTable.totals.issuedAndOutstanding)) : "100.00%";
                 else if (column.key === "capital") value = format.money(sumOf(shown, "capital"));
                 else if (column.numeric) value = format.shares(sumOf(shown, column.key));
-                return <td key={column.key} className={[column.numeric ? "num" : "", column.sticky ? "sticky-col" : ""].join(" ").trim() || undefined}>{value}</td>;
+                return <TableCell key={column.key} className={columnCellClassName(column)}>{value}</TableCell>;
               })}
-            </tr>
+            </TableRow>
           );
           return <>{pool}{totals}</>;
         }}
@@ -357,7 +378,7 @@ function InstrumentTab({ tab, context }: { tab: "shares" | "options" | "warrants
         <>
           <SecurityLink id={security.id} family={security.family} displayId={security.displayId} />
           {pendingRow(security) ? <> <Badge tone="amber">Execution pending</Badge></> : null}
-          {opening.has(security.id) ? <span className="faint" title={`Opening balance: earlier history was not provable from ${api.importSourceName(workspace.org.importSource)}`}> <Icon name="info" /></span> : null}
+          {opening.has(security.id) ? <span className="text-muted-foreground" title={`Opening balance: earlier history was not provable from ${api.importSourceName(workspace.org.importSource)}`}> <Icon name="info" /></span> : null}
         </>
       ),
       compare: byDisplayId((security) => security.displayId),
@@ -435,10 +456,14 @@ function InstrumentTab({ tab, context }: { tab: "shares" | "options" | "warrants
       { key: "nonus", label: "Non-US", options: [["yes", "Non-US grants only"]], test: (security) => security.exemption.federal === "NON_US" },
       { key: "early", label: "Early exercise allowed", options: [["yes", "Early exercise allowed"]], test: (security) => terms.earlyExercisable(security.terms) === true },
     ];
+    // Vested and Unvested split the same outstanding grants, so they add up to Options outstanding; Exercisable now is
+    // the part of Vested a holder could exercise today.
+    const sumOutstanding = (key: keyof api.SecurityNumbers) => format.shares(sumDecimals(outstandingRows.map((security) => number(security, key))));
     tiles = [
-      { label: "Options outstanding", value: format.shares(sumDecimals(outstandingRows.map((security) => number(security, "outstanding")))) },
-      { label: "Vested & unexercised", value: format.shares(sumDecimals(rows.map((security) => number(security, "exercisable")))) },
-      { label: "Unvested", value: format.shares(sumDecimals(rows.map((security) => number(security, "unvested")))) },
+      { label: "Options outstanding", value: sumOutstanding("outstanding") },
+      { label: "Vested", value: sumOutstanding("vestedOutstanding") },
+      { label: "Unvested", value: sumOutstanding("unvested") },
+      { label: "Exercisable now", value: sumOutstanding("exercisable"), sub: "excludes grants awaiting the holder's signature or past a deadline" },
       { label: "Execution pending", value: String(rows.filter(pendingRow).length), sub: "grants (counted in FD)" },
       ...capTable.plans.map((plan) => ({ label: `${plan.name} available`, value: format.shares(plan.available), sub: `of ${format.shares(plan.poolSize)}` })),
     ];

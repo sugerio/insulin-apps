@@ -23,6 +23,34 @@ interface MergeRow {
 
 interface BlockingItem { type: string; id: string; label: string; code: string }
 
+/** Relationships of someone the company employs: a record with one of them, hired after the other's termination, is a rehire. */
+const EMPLOYED: ReadonlySet<engine.Relationship> = new Set(["employee", "officer"]);
+
+/**
+ * A rehire keeps two records: exactly one record is terminated, and the other is an active employee or officer
+ * hired after that termination, or holds a lot issued after it (an original issuance: an exercise's shares follow
+ * their option). Merging would apply the old termination to the new employment, so it is refused, in either
+ * direction. A scheduled termination isn't a termination yet.
+ */
+function rehireBlocker(state: engine.LedgerState, rows: readonly MergeRow[]): BlockingItem | null {
+  const terminated = rows.filter((row) => (state.stakeholders.get(row.id)?.terminations.length ?? 0) > 0);
+  if (terminated.length !== 1) return null;
+  const former = terminated[0]!;
+  const other = rows.find((row) => row.id !== former.id);
+  if (!other) return null;
+  const termination = state.stakeholders.get(former.id)!.terminations.at(-1)!;
+  const hiredAfter = EMPLOYED.has(other.relationship) && other.hire_date !== null && other.hire_date > termination.date;
+  const laterLot = (state.securitiesByStakeholder.get(other.id) ?? []).find((security) => (
+    security.identity.parentSecurityId === null && security.issueDate !== null && security.issueDate > termination.date
+  ));
+  if (!hiredAfter && !laterLot) return null;
+  const evidence = hiredAfter ? `was hired on ${other.hire_date}` : `holds ${laterLot!.identity.displayId}, issued on ${laterLot!.issueDate}`;
+  return {
+    type: "rehire", id: other.id, code: "STAKEHOLDER_MERGE_REHIRE",
+    label: `${other.display_name} ${evidence}, after ${former.display_name}'s termination on ${termination.date}: a rehire keeps two records`,
+  };
+}
+
 function totals(state: engine.LedgerState, stakeholderId: string) {
   const holder = engine.computeMetrics(state).holders.find((row) => row.stakeholderId === stakeholderId);
   return {
@@ -75,6 +103,8 @@ export async function planStakeholderMerge(
       code: "STAKEHOLDER_TERMINATION_CONFLICT",
     });
   }
+  const rehire = rehireBlocker(state, [merged, survivor]);
+  if (rehire) blockers.push(rehire);
 
   // Pulley's signature rows are migrated evidence that never changes, so they can't be "resolved" and
   // don't block: they stay with their securities, which follow the merged identity.
@@ -182,6 +212,20 @@ export async function planStakeholderMerge(
     documentLinks: ((reviewedDocumentRows!.results ?? []) as { id: string; document_id: string; role: string }[])
       .map((row) => ({ id: row.id, documentId: row.document_id, role: row.role })),
   });
+  // Both records as read: the blockers above used their profiles (the rehire check their relationship and hire date),
+  // and a profile edit appends nothing to the ledger, so the head check can't see it.
+  for (const row of [merged, survivor]) {
+    plan.workflow.push(stmt(
+      "INSERT INTO batch_assertions (ok) SELECT EXISTS (SELECT 1 FROM stakeholders WHERE org_id = ? AND id = ? AND version = ?)",
+      ctx.org.id, row.id, row.version,
+    ));
+  }
+  // Nor a termination scheduled for the merged record since it was read: scheduling one moves neither the ledger nor a
+  // version, and an archived record's scheduled termination could never be applied.
+  plan.workflow.push(stmt(
+    "INSERT INTO batch_assertions (ok) SELECT NOT EXISTS (SELECT 1 FROM scheduled_terminations WHERE org_id = ? AND stakeholder_id = ? AND status = 'SCHEDULED')",
+    ctx.org.id, merged.id,
+  ));
   plan.workflow.push(stmt(
     `UPDATE stakeholders SET archived_at = ?, merged_into_id = ?, merged_at = ?, merged_by_command_id = ?, version = version + 1, updated_at = ?
      WHERE org_id = ? AND id = ? AND archived_at IS NULL AND merged_into_id IS NULL`,

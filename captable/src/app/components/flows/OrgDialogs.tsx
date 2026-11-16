@@ -11,6 +11,7 @@ import { DateField, SelectField, TextField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { useToast } from "../Toast.tsx";
 import { FlowDialog } from "./FlowDialog.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // Company › Profile & Settings writes: owners and admins. Every one is
 // `PATCH /api/orgs/:orgId` with the version read, reviewed before it is sent. A settings section replaces its section
@@ -91,32 +92,32 @@ export function OrgProfileDialog({ org, onClose, onDone }: OrgDialogProps) {
       review={
         <>
           {serverChanges.length ? (
-            <div className="review-panel mb-8" aria-label="Changed on the server">
-              <h3>Changed by someone else while you were editing</h3>
+            <ReviewPanel label="Changed on the server" className="mb-2">
+              <h3 className="font-medium">Changed by someone else while you were editing</h3>
               {serverChanges.map((change) => (
-                <div className="change-row" key={change.field}>
-                  <span>{ORG_FIELD_LABELS[change.field]}</span>
-                  <span className="cv">{shown(change.field, change.before)}<span className="arrow" aria-label="became">→</span><b>{shown(change.field, change.after)}</b>{change.conflict ? <span className="small"> · you edited this too: your value replaces it if you save</span> : null}</span>
+                <div className="grid grid-cols-[minmax(8rem,auto)_1fr] gap-x-4 gap-y-1 py-1" key={change.field}>
+                  <span className="text-muted-foreground">{ORG_FIELD_LABELS[change.field]}</span>
+                  <span>{shown(change.field, change.before)}<span className="px-1.5 text-muted-foreground" aria-label="became">→</span><b>{shown(change.field, change.after)}</b>{change.conflict ? <span className="text-xs"> · you edited this too: your value replaces it if you save</span> : null}</span>
                 </div>
               ))}
-            </div>
+            </ReviewPanel>
           ) : null}
-          <div className="review-panel" aria-label="Review">
+          <ReviewPanel>
             {nothingLeft ? <p>Nothing left to save: the company profile already has these values.</p> : (
               <div aria-label="Changes">
                 {changed.map((key) => (
-                  <div className="change-row" key={key}>
-                    <span>{ORG_FIELD_LABELS[key]}</span>
-                    <span className="cv">{shown(key, before[key])}<span className="arrow" aria-label="becomes">→</span><b>{shown(key, values[key].trim())}</b></span>
+                  <div className="grid grid-cols-[minmax(8rem,auto)_1fr] gap-x-4 gap-y-1 py-1" key={key}>
+                    <span className="text-muted-foreground">{ORG_FIELD_LABELS[key]}</span>
+                    <span>{shown(key, before[key])}<span className="px-1.5 text-muted-foreground" aria-label="becomes">→</span><b>{shown(key, values[key].trim())}</b></span>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </ReviewPanel>
         </>
       }
     >
-      <div className="form-grid">
+      <div className="grid gap-4 sm:grid-cols-2">
         <TextField label="Company name" required value={values.displayName} onChange={(value) => set("displayName", value)} error={errorOf("displayName")} />
         <TextField label="Legal name" required value={values.legalName} onChange={(value) => set("legalName", value)} error={errorOf("legalName")} />
         <SelectField label="State of incorporation" value={values.jurisdiction} onChange={(value) => set("jurisdiction", value)} error={errorOf("jurisdiction")}
@@ -129,9 +130,9 @@ export function OrgProfileDialog({ org, onClose, onDone }: OrgDialogProps) {
         <TextField label="Share unit" value={values.shareUnit} onChange={(value) => set("shareUnit", value)} disabled={base.shareUnitFrozen} error={errorOf("shareUnit")}
           hint={base.shareUnitFrozen ? "Frozen: the ledger already has transactions, so the smallest share quantity can't change." : "The smallest share quantity, e.g. 1 for whole shares. It can change only while the ledger is empty."} />
       </div>
-      <h3>Address</h3>
-      <div className="form-grid">
-        <TextField className="full" label="Address" value={values.line1} onChange={(value) => set("line1", value)} placeholder="Street and number" error={errorOf("line1")} />
+      <h3 className="text-sm font-medium">Address</h3>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField className="sm:col-span-2" label="Address" value={values.line1} onChange={(value) => set("line1", value)} placeholder="Street and number" error={errorOf("line1")} />
         <TextField label="Address line 2" value={values.line2} onChange={(value) => set("line2", value)} />
         <TextField label="City" value={values.city} onChange={(value) => set("city", value)} error={errorOf("city")} />
         <TextField label="State or region" value={values.region} onChange={(value) => set("region", value)} />
@@ -187,9 +188,9 @@ export function CompanyContactDialog({ org, onClose, onDone }: OrgDialogProps) {
       onReview={review}
       confirmLabel="Save contact"
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>Holders see <b>{name.trim()}</b> · <b>{email.trim()}</b> in the portal{current ? ` (instead of ${current.name} · ${current.email})` : ""}.</p>
-        </div>
+        </ReviewPanel>
       }
     >
       <TextField label="Name" required value={name} onChange={(value) => { setName(value); setErrors((previous) => ({ ...previous, name: undefined })); }} placeholder="e.g. Equity team" error={errorOf("name")} />
@@ -227,14 +228,14 @@ export function DisplayDialog({ org, onClose, onDone }: OrgDialogProps) {
       confirmLabel="Save display"
       confirmReady={!unchanged}
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           {unchanged ? <p>Nothing to save: these are the current decimals.</p> : (
             <p>Share quantities with <b>{shareDecimals}</b> decimal{shareDecimals === "1" ? "" : "s"}, prices with <b>{priceDecimals}</b>. Every page and export shows figures this way; nothing on the ledger changes.</p>
           )}
-        </div>
+        </ReviewPanel>
       }
     >
-      <div className="form-grid">
+      <div className="grid gap-4 sm:grid-cols-2">
         <SelectField label="Share quantity decimals" value={shareDecimals} onChange={setShareDecimals} options={["0", "1", "2", "3", "4"].map((value) => [value, value] as const)} />
         <SelectField label="Price decimals" value={priceDecimals} onChange={setPriceDecimals} options={["2", "3", "4", "5", "6"].map((value) => [value, value] as const)} />
       </div>

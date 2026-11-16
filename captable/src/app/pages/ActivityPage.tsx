@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest, saveFile } from "../api/request.ts";
 import { fileStem } from "../components/CapTableDownload.tsx";
 import { DataTable, byNumber, byText, type Column } from "../components/DataTable.tsx";
@@ -61,7 +63,7 @@ function ActivityLog() {
   const columns: Column<api.AuditEvent>[] = [
     { key: "at", label: "Date & time", minWidth: 150, render: (event) => format.dateTime(event.occurredAt), compare: byNumber((event) => event.occurredAt) },
     {
-      key: "description", label: "Description", className: "wrap",
+      key: "description", label: "Description", className: "whitespace-normal",
       render: (event) => {
         const changes = auditChanges(event);
         return (
@@ -71,7 +73,7 @@ function ActivityLog() {
               {event.result !== "success" ? <> <Badge tone={event.result === "denied" ? "amber" : "red"}>{event.result}</Badge></> : null}
             </div>
             {changes.length ? (
-              <div className="small muted">
+              <div className="text-xs text-muted-foreground">
                 {changes.slice(0, 3).map((change, index) => <div key={index}>{change.field}: {change.old} → {change.new}</div>)}
                 {changes.length > 3 ? <div>+{changes.length - 3} more</div> : null}
               </div>
@@ -94,7 +96,7 @@ function ActivityLog() {
     <Page title="Recent Activity" crumbs={[["Company"], ["Recent Activity"]]}>
       <Card>
         <PageHead title="Recent Activity" sub="Append-only audit log. Click a row for the field-level diff and the command id." />
-        {notice ? <p className="err-inline" role="alert">{notice}</p> : null}
+        {notice ? <p className="text-sm font-medium text-destructive" role="alert">{notice}</p> : null}
         {!log.loaded && log.error !== undefined ? (
           <ErrorState error={log.error} onRetry={log.reload} />
         ) : !log.loaded ? (
@@ -112,7 +114,7 @@ function ActivityLog() {
               searchPlaceholder="Search activity…"
               onRowClick={setOpen}
               rowLabel={(event) => `${auditDescription(event)}, ${format.dateTime(event.occurredAt)}`}
-              toolbarExtra={<button type="button" className="btn btn-ghost btn-sm" onClick={() => void download()}><Icon name="download" /> CSV</button>}
+              toolbarExtra={<Button type="button" variant="ghost" size="sm" onClick={() => void download()}><Icon name="download" /> CSV</Button>}
               filters={[
                 { key: "date", label: "Date range", type: "daterange", test: (event, range) => { const day = format.localDate(event.occurredAt); return (!range.from || day >= range.from) && (!range.to || day <= range.to); } },
                 { key: "actor", label: "Actor", options: actors.map((value) => [value, value] as const), test: (event, value) => actor(event) === value },
@@ -123,11 +125,11 @@ function ActivityLog() {
               empty="No activity yet."
             />
             {log.nextCursor !== null ? (
-              <div className="row mt-12">
-                <button type="button" className="btn btn-ghost btn-sm" disabled={log.loadingMore} onClick={() => void log.loadMore()}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="ghost" size="sm" disabled={log.loadingMore} onClick={() => void log.loadMore()}>
                   {log.loadingMore ? "Loading…" : log.moreError !== undefined ? "Try again" : "Load older activity"}
-                </button>
-                {log.moreError !== undefined ? <span className="err-inline" role="alert">Couldn't load older activity. {describeError(log.moreError)}</span> : null}
+                </Button>
+                {log.moreError !== undefined ? <span className="text-sm font-medium text-destructive" role="alert">Couldn't load older activity. {describeError(log.moreError)}</span> : null}
               </div>
             ) : null}
           </>
@@ -151,23 +153,23 @@ function AuditDrawer({ event, actorLabel, onClose }: { event: api.AuditEvent; ac
           ["Action by", actorLabel],
           ["Actor type", ACTOR_KIND_LABELS[event.actor.kind]],
           ["Object", event.targetType ? `${event.targetType.replace(/_/g, " ")} ${event.targetId ?? ""}`.trim() : DASH],
-          ["Action", <span className="mono">{event.action}</span>],
+          ["Action", <span className="font-mono text-xs">{event.action}</span>],
           ["Result", event.result],
           event.reason ? ["Reason / note", event.reason] : null,
-          ["Command id", detail("commandId") ? <span className="mono">{detail("commandId")}</span> : DASH],
-          ["Request id", detail("requestId") ? <span className="mono">{detail("requestId")}</span> : DASH],
+          ["Command id", detail("commandId") ? <span className="font-mono text-xs">{detail("commandId")}</span> : DASH],
+          ["Request id", detail("requestId") ? <span className="font-mono text-xs">{detail("requestId")}</span> : DASH],
         ]}
       />
       {changes.length ? (
         <>
-          <h4 className="mt-16">Changes</h4>
-          <table className="tbl dense" aria-label="Changes">
-            <thead><tr><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
-            <tbody>{changes.map((change, index) => <tr key={index}><td>{change.field}</td><td>{change.old}</td><td>{change.new}</td></tr>)}</tbody>
-          </table>
+          <h4 className="text-sm font-semibold">Changes</h4>
+          <Table aria-label="Changes">
+            <TableHeader><TableRow><TableHead scope="col">Field</TableHead><TableHead scope="col">Before</TableHead><TableHead scope="col">After</TableHead></TableRow></TableHeader>
+            <TableBody>{changes.map((change, index) => <TableRow key={index}><TableCell>{change.field}</TableCell><TableCell>{change.old}</TableCell><TableCell>{change.new}</TableCell></TableRow>)}</TableBody>
+          </Table>
         </>
       ) : (
-        <p className="muted small">No field-level changes.</p>
+        <p className="text-xs text-muted-foreground">No field-level changes.</p>
       )}
     </Drawer>
   );

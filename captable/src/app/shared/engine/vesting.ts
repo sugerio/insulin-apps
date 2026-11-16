@@ -1,6 +1,6 @@
 import "./zod-config.ts";
 import { z } from "zod";
-import { addDays, addMonths, daysBetween, type IsoDate } from "./dates.ts";
+import { addDays, addMonths, daysBetween, parseIsoDate, type IsoDate } from "./dates.ts";
 import { Dec, type DecInput } from "./decimal.ts";
 import { EngineError } from "./errors.ts";
 import { Rational, type RationalInput } from "./rational.ts";
@@ -307,6 +307,68 @@ export function vestedAt(inputs: VestingInputs, date: IsoDate): Dec {
     if (!acceleration.alreadyApplied && acceleration.date <= date) total = total.add(acceleration.quantity);
   }
   return Dec.min(inputs.quantity, total);
+}
+
+/** One event of a schedule as `vestingSummary` reads it: the timeline's, or the holder portal's copy of it. */
+export interface SummaryEvent {
+  date: IsoDate;
+  quantity: DecInput;
+  /** It will never vest: cancelled at a termination's vesting stop. */
+  cancelled: boolean;
+}
+
+/** A schedule in one line (the portal's vesting summary): start, first vest, the end. */
+export interface VestingSummary {
+  /** The vesting start date, when one is recorded. */
+  start: IsoDate | null;
+  /**
+   * The first event that vests (null: none did before vesting stopped). `cliff` only when the schedule's own events show
+   * one: every event a whole number of months after the start, the later ones all the same number of months apart, and
+   * the first further from the start than that. Irregular events are never given a cadence.
+   */
+  first: { date: IsoDate; quantity: Dec; cliff: boolean } | null;
+  /** Events were cancelled: vesting stopped (a termination), so the grant never vests in full. */
+  stopped: boolean;
+  /** The last event that vests: the date it is fully vested on or, once stopped, the last vest (null: none did). */
+  last: IsoDate | null;
+}
+
+/** The whole months from `start` to `date` on the generator's day rule (same day, clamped), or null when it isn't one. */
+function wholeMonthsAfter(start: IsoDate, date: IsoDate): number | null {
+  const from = parseIsoDate(start);
+  const to = parseIsoDate(date);
+  const months = (to.year - from.year) * 12 + (to.month - from.month);
+  return months > 0 && addMonths(start, months) === date ? months : null;
+}
+
+function hasCliff(events: readonly SummaryEvent[], start: IsoDate | null): boolean {
+  if (start === null || events.length < 2) return false;
+  const offsets = events.map((event) => wholeMonthsAfter(start, event.date));
+  if (offsets.some((offset) => offset === null)) return false;
+  const months = offsets as number[];
+  const period = months[1]! - months[0]!;
+  for (let index = 2; index < months.length; index += 1) {
+    if (months[index]! - months[index - 1]! !== period) return false;
+  }
+  return period > 0 && months[0]! > period;
+}
+
+/**
+ * Summarizes a schedule's events (the portal's line above the vesting chart): the start, the first vest (a cliff only
+ * when the events themselves show one) and the last vest, or that vesting stopped. Null without events. It reads only
+ * the events, as recorded: an imported grant's own events, never a cadence inferred from them.
+ */
+export function vestingSummary(events: readonly SummaryEvent[], start: IsoDate | null): VestingSummary | null {
+  if (events.length === 0) return null;
+  const ordered = [...events].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const vesting = ordered.filter((event) => !event.cancelled);
+  const first = vesting[0];
+  return {
+    start,
+    first: first ? { date: first.date, quantity: Dec.from(first.quantity), cliff: first === ordered[0] && hasCliff(ordered, start) } : null,
+    stopped: vesting.length < ordered.length,
+    last: vesting.at(-1)?.date ?? null,
+  };
 }
 
 /**

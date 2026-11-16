@@ -28,6 +28,7 @@ export const RESERVED_APP_NAMES = new Set([
   'github',
   'site',
   'suger',
+  'super',
   'actions',
   'runner',
 ])
@@ -83,7 +84,8 @@ export const PLATFORM_SETTING_NAMES = new Set([
   'TURNSTILE_SECRET_KEY', 'EMAIL_FROM', 'SUPPORT_EMAIL', 'ORG_REQUEST_EMAIL', 'SITE_DOMAIN', 'GATEWAY_SECRET_KEY',
   'GITHUB_TOKEN',
 ])
-const PLATFORM_SETTING_PREFIXES = ['SUGER_', 'GITHUB_', 'ACTIONS_', 'RUNNER_']
+// The operator console's settings are all SUPER_* (DESIGN.md §11), so no app is named `super` either.
+const PLATFORM_SETTING_PREFIXES = ['SUGER_', 'SUPER_', 'GITHUB_', 'ACTIONS_', 'RUNNER_']
 
 /**
  * One app's secret names never fall in another app's namespace: `esign` may not declare `ESIGN_PRO_KEY` when an app

@@ -2,6 +2,7 @@ import type { AppRole } from '@fours/app/server'
 import type { api } from '#shared'
 import type { AppConfig } from './lib/config.ts'
 import type { PortalMatch, ResolvedOrg } from './lib/access/resolve.ts'
+import type { MetricsEnv } from './lib/usage-metrics.ts'
 
 export interface AuthContext {
   user: { id: string; email: string | null; displayName: string | null }
@@ -26,7 +27,8 @@ export interface AppDeps {
 }
 
 export type AppEnv = {
-  Bindings: { DB: D1Database }
+  /** The D1 database, and where the hourly usage report goes (router.ts): absent in the local preview and in tests. */
+  Bindings: { DB: D1Database } & MetricsEnv
   Variables: {
     config: AppConfig
     auth: AuthContext

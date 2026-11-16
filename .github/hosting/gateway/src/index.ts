@@ -10,6 +10,7 @@ import { secure } from './http/secure.ts'
 import { log, logError } from './log.ts'
 import { handleRequest } from './router.ts'
 import { HOUSEKEEPING_CRON, tickApps } from './scheduled.ts'
+import { runHourlyJobs } from './super/jobs.ts'
 
 export default {
   /**
@@ -31,7 +32,8 @@ export default {
   /**
    * The daily cron (HOUSEKEEPING_CRON) runs the retention cleanup in larger batches and reconciles owner domains
    * (db/orgs.ts); every other trigger, the
-   * five-minute one (TICK_CRON), ticks the apps that declare a scheduled path (scheduled.ts, DESIGN.md §8.5).
+   * five-minute one (TICK_CRON), ticks the apps that declare a scheduled path (scheduled.ts, DESIGN.md §8.5) and runs
+   * the operator console's hourly work when the hour's run is still unclaimed (super/jobs.ts, DESIGN.md §11.5).
    */
   async scheduled(controller, env, ctx): Promise<void> {
     const loaded = loadConfig(env)
@@ -45,5 +47,6 @@ export default {
       return
     }
     tickApps(loaded.config, (work) => ctx.waitUntil(work))
+    ctx.waitUntil(runHourlyJobs(loaded.config, Date.now()).catch((error) => logError('hourly_jobs_failed', error)))
   },
 } satisfies ExportedHandler<Env>

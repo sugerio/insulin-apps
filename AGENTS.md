@@ -132,6 +132,14 @@ the platform for the rest in `package.json` under `insulin`:
   `x-suger-access-via: schedule`, an empty body and a 25-second timeout. Refuse the route unless `x-suger-access-via` is
   exactly `schedule` and no identity is present, treat a request marked `schedule` as nobody on every other route,
   keep it out of `/api/catalog`, and do every organization's due work there, idempotent and bounded per tick.
+- **Usage reports** are required of every app (DESIGN.md §8.6): Insulin Apps' operator console never reads an app's
+  database, so each app declares `insulin.scheduled` and, on the first tick of each UTC hour, `POST`s its gauges to
+  `SUGER_METRICS_URL` with `SUGER_APP_TOKEN` over the `SUGER_GATEWAY` binding: app-wide ones (`database_bytes`) and
+  per organization (counts of its main records, `storage_bytes`), at most 500 organizations a request. Counts and
+  sizes only, never a name, an address, an amount or content. Claim the hour in the app's own D1 with one conditional
+  statement, mark it sent after every 202 and release it otherwise; skip silently without the URL or the token. Say
+  in the app's Docs which numbers it sends. Cap Table (`src/app/server/lib/usage-metrics.ts`) and Esign
+  (`src/app/server/esign/usage-metrics.ts`) are the reference.
 
 **One deployment, many organizations.** Scope every query by `getCurrentUser().organizationId`, so one organization
 never reads another's data.
@@ -142,7 +150,8 @@ never reads another's data.
   when it bundles third-party material, the in-app Docs, and its public docs in `docs/public/` (the docs build fails
   for an app without them).
 - Its roles mapped to the app's functions (what Admin, Editor and Viewer may do there), a permission catalog in
-  `package.json` if it should support custom roles, and `GET /api/catalog` for AI agents.
+  `package.json` if it should support custom roles, `GET /api/catalog` for AI agents, and its hourly usage report
+  (above).
 - A row in the app table of the root `README.md`.
 - A `.github/workflows/<app>.yml` file copied from `captable.yml`, with its name (the app's directory name), paths and
   `app` input changed, and that name added to the `workflows` list in `.github/workflows/release.yml`. The shared

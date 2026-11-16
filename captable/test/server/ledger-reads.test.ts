@@ -2,11 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { api, engine } from '../../src/app/shared/index.ts'
 import { ByteBoundedLru } from '../../src/app/server/lib/read/cache.ts'
 import { ledgerCache, LEDGER_CACHE_BYTES } from '../../src/app/server/lib/read/ledger.ts'
+import { withImportedRestrictedShares, withRestrictedShares } from '../support/ledger-helpers.ts'
 import {
   ACME_NOW,
   addDocument,
+  addStakeholder,
   commit,
   getJson,
+  holderName,
   readHarness,
   recordCommittedImport,
   SEED_USER_ID,
@@ -33,6 +36,7 @@ describe('read endpoints on the synthetic Acme ledger', () => {
       ['EXECUTION_PENDING', 6], ['SCHEDULED_TERMINATION', 0], ['ISO_DEADLINE_SOON', 0],
       ['REPURCHASE_WINDOW_CLOSING', 0], ['VALUATION_STATUS', 1],
     ])
+    expect(dashboard.needsAttention[0]!.byFamily).toEqual([{ family: 'EQUITY_COMPENSATION', count: 6 }])
 
     const table = await getJson<api.CapTableResponse>(harness, harness.owner, '/cap-table')
     expect(table).toMatchObject({
@@ -53,7 +57,10 @@ describe('read endpoints on the synthetic Acme ledger', () => {
 
     const status = await getJson<api.SecuritiesStatus>(harness, harness.owner, '/securities-status')
     expect(status.executionPending.map((row) => row.displayId).sort()).toEqual(['OPT-49', 'OPT-50', 'OPT-51', 'OPT-53', 'OPT-55', 'OPT-56'])
-    expect(status.optionsFromTerminated.map((row) => row.securityId)).toEqual([harness.id('OPT-26'), harness.id('OPT-20')])
+    expect(status.optionsFromTerminated.map((row) => [row.securityId, row.executionStatus])).toEqual([
+      [harness.id('OPT-26'), 'executed'], [harness.id('OPT-20'), 'executed'],
+    ])
+    expect(status.unvestedSharesFromTerminated).toEqual([expect.objectContaining({ securityId: harness.id('CS-4'), unvested: '34500', lastRepurchaseDate: '2026-12-14', status: 'open' })])
     expect(await getJson<api.Org>(harness, harness.reader, '')).toMatchObject({
       id: harness.orgId, legalName: 'Acme Robotics, Inc.', ledgerSeq: harness.acme.b.headSeq,
       shareUnitFrozen: true, settings: { expiry: { mode: 'report_only' } },
@@ -111,6 +118,12 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     })
     const plan = await getJson<api.StockPlanDetail>(harness, harness.owner, `/stock-plans/${harness.id('plan:P1')}`)
     expect(plan.returnRules).toMatchObject({ cancelledUnvestedAwards: 'RETURN', repurchasedVestedShares: 'RETIRE' })
+    // A terms record is told apart from a change of the reserve: it has no size and isn't numbered as an amendment.
+    expect(plan.amendments.filter((amendment) => amendment.kind !== 'terms').map((amendment) => amendment.poolSize)).toEqual(['2000000', '3000000', '4500000'])
+    expect(plan.amendments.filter((amendment) => amendment.kind === 'terms')
+      .every((amendment) => amendment.type === 'X_STOCK_PLAN_TERMS' && amendment.poolSize === null)).toBe(true)
+    // The pool set with the plan is its initial reserve; the amendments after it are reserve changes.
+    expect(plan.amendments.map((amendment) => amendment.kind)).toEqual(['terms', 'initial', 'reserve', 'reserve'])
     expect((await getJson<api.VestingTermsList>(harness, harness.owner, '/vesting-terms?templates=true')).items.map((entry) => entry.id))
       .toEqual([VS1_TEMPLATE_ID])
     const response = await harness.api('POST', harness.path('/vesting-terms/preview'), harness.reader, {
@@ -188,6 +201,150 @@ describe('read endpoints on the synthetic Acme ledger', () => {
     const before = await getJson<api.CapTableResponse>(harness, harness.owner, `/cap-table?asKnownAt=${head}`)
     expect(BigInt(before.metrics.fullyDiluted) - BigInt(current.metrics.fullyDiluted)).toBe(60000n)
     expect(before).toMatchObject({ asKnownAt: head, ledgerSeq: head + 1 })
+  })
+})
+
+describe('read changes for pending signatures, repurchase windows, class order and ownership', () => {
+  it('gives every stakeholder not merged away an Ownership row, with zeros for one who never held a security and the totals unchanged', async () => {
+    harness = await readHarness()
+    const before = await getJson<api.CapTableResponse>(harness, harness.owner, '/cap-table')
+    const newcomer = await addStakeholder(harness.db, harness.orgId, 'S41', 'employee')
+    const duplicate = await addStakeholder(harness.db, harness.orgId, 'S42', 'employee')
+    await commit(harness, harness.owner, 'merge-stakeholders', {
+      mergedStakeholderId: duplicate, survivingStakeholderId: newcomer, reason: 'Entered twice', confirmation: holderName('S42'),
+    })
+    const table = await getJson<api.CapTableResponse>(harness, harness.owner, '/cap-table')
+    expect(table.ownership!.find((row) => row.stakeholderId === newcomer)).toEqual({
+      stakeholderId: newcomer, name: 'Synthetic Holder S41', relationship: 'employee', issuerAssignedId: null, status: 'active',
+      byClass: {}, issuedAndOutstanding: '0', issuedAndOutstandingPct: '0', planAwards: {}, awardsOutsidePlans: '0', warrants: '0',
+      fullyDiluted: '0', fullyDilutedPct: '0',
+    })
+    expect(table.ownership!.some((row) => row.stakeholderId === duplicate)).toBe(false)
+    expect(table.ownership).toHaveLength(before.ownership!.length + 1)
+    expect(table.metrics).toEqual(before.metrics)
+    expect(table.totals).toEqual(before.totals)
+  })
+
+  it('names who each pending security waits for, never by e-mail, and counts them by family', async () => {
+    harness = await readHarness({
+      extend: (acme) => {
+        acme.b.command('pending:CS-2', (c) => { c.tx('X_EXECUTION_STATUS', '2026-10-01', { security_id: acme.id('CS-2'), status: 'pending_holder' }) })
+      },
+    })
+    let created = ACME_NOW
+    const pending = (security: string, role: api.SignatureRequest['signerRole'], name: string) => harness!.db.prepare(
+      `INSERT INTO signature_requests (id, org_id, security_id, signer_role, signer_name, signer_email, status, created_at, updated_at, pulley_id)
+       VALUES (?, ?, ?, ?, ?, 'signer@example.test', 'PENDING', ?, ?, ?)`,
+    ).bind(crypto.randomUUID(), harness!.orgId, harness!.id(security), role, name, ++created, created, `syn-sig-${created}`).run()
+    // OPT-50 waits for the company only: the imported holder request still reads pending, but the ledger says it isn't missing.
+    await pending('OPT-50', 'COMPANY_SIGNATORY', 'Synthetic Signatory')
+    await pending('OPT-50', 'HOLDER', 'Synthetic Holder S12')
+    // OPT-49 waits for both: an approver signs for the company, a spouse with the holder.
+    await pending('OPT-49', 'HOLDER', 'Synthetic Holder S18')
+    await pending('OPT-49', 'APPROVER', 'Synthetic Approver')
+    await pending('OPT-49', 'SPOUSE', 'Synthetic Spouse')
+
+    const status = await getJson<api.SecuritiesStatus>(harness, harness.reader, '/securities-status')
+    const row = (displayId: string) => status.executionPending.find((item) => item.displayId === displayId)!
+    expect(row('OPT-50')).toMatchObject({
+      family: 'EQUITY_COMPENSATION', missing: 'company_signatory', pendingSigners: [{ role: 'company', name: 'Synthetic Signatory' }],
+    })
+    expect(row('OPT-50').signatureRequestIds).toHaveLength(2)
+    expect(row('OPT-49').pendingSigners).toEqual([
+      { role: 'company', name: 'Synthetic Approver' },
+      { role: 'holder', name: 'Synthetic Holder S18' },
+      { role: 'holder', name: 'Synthetic Spouse' },
+    ])
+    // No request names the waiting party: the side alone, from the ledger.
+    expect(row('OPT-51').pendingSigners).toEqual([{ role: 'company', name: null }])
+    expect(row('CS-2')).toMatchObject({ family: 'STOCK', missing: 'holder', pendingSigners: [{ role: 'holder', name: null }] })
+    expect(JSON.stringify(status)).not.toContain('example.test')
+    expect(api.securitiesStatusSchema.safeParse(status).success).toBe(true)
+
+    const dashboard = await getJson<api.DashboardResponse>(harness, harness.owner, '/dashboard')
+    expect(dashboard.needsAttention.find((item) => item.kind === 'EXECUTION_PENDING')).toMatchObject({
+      count: 7, byFamily: [{ family: 'EQUITY_COMPENSATION', count: 6 }, { family: 'STOCK', count: 1 }],
+    })
+  })
+
+  it('gives lapsed and unrecorded repurchase windows their own dashboard line, apart from those closing soon', async () => {
+    // A week after CS-4's window closed on Dec 14, 2026.
+    harness = await readHarness({ now: Date.UTC(2026, 11, 21, 20) })
+    const status = await getJson<api.SecuritiesStatus>(harness, harness.owner, '/securities-status')
+    expect(status.unvestedSharesFromTerminated).toEqual([expect.objectContaining({ securityId: harness.id('CS-4'), lastRepurchaseDate: '2026-12-14', status: 'lapsed' })])
+    const dashboard = await getJson<api.DashboardResponse>(harness, harness.owner, '/dashboard')
+    const kinds = dashboard.needsAttention.map((item) => [item.kind, item.count])
+    expect(kinds).toContainEqual(['REPURCHASE_WINDOW_CLOSING', 0])
+    expect(kinds).toContainEqual(['REPURCHASE_UNRESOLVED', 1])
+    expect(dashboard.needsAttention.find((item) => item.kind === 'REPURCHASE_UNRESOLVED')).toMatchObject({ dueDate: null, href: '/securities-status#rep' })
+    expect(dashboard.inProgress.unvestedSharesFromTerminated).toBe(1)
+  })
+
+  it("says when a lot's agreement sets no repurchase deadline, and keeps it off the unresolved line", async () => {
+    harness = await readHarness({ extend: (acme) => { withRestrictedShares(acme); withImportedRestrictedShares(acme) } })
+    const status = await getJson<api.SecuritiesStatus>(harness, harness.owner, '/securities-status')
+    const row = (label: string) => status.unvestedSharesFromTerminated.find((item) => item.securityId === harness!.id(label))
+    // RS-3's agreement sets none (a recorded term); RS-2 has no deadline recorded anywhere.
+    expect(row('RS-3')).toMatchObject({ unvested: '500', repurchasePrice: '0.01', lastRepurchaseDate: null, status: 'no_deadline' })
+    expect(row('RS-2')).toMatchObject({ lastRepurchaseDate: null, status: 'not_recorded' })
+    const dashboard = await getJson<api.DashboardResponse>(harness, harness.owner, '/dashboard')
+    // CS-4's window is open; RS-4's 90 days from Aug 1 close within 30 days; only RS-2 is unresolved.
+    expect(dashboard.needsAttention.find((item) => item.kind === 'REPURCHASE_UNRESOLVED')).toMatchObject({ count: 1 })
+  })
+
+  it('orders share classes the same way everywhere: Common first, then preferred in natural name order', async () => {
+    harness = await readHarness()
+    // Inserted out of order, with ids that sort against their names.
+    const add = (id: string, name: string, classType: 'COMMON' | 'PREFERRED') => harness!.db.prepare(
+      `INSERT INTO stock_classes (id, org_id, name, class_type, default_id_prefix, par_value, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, '0.0001', ?, ?)`,
+    ).bind(id, harness!.orgId, name, classType, classType === 'COMMON' ? 'CB' : 'PX', ACME_NOW, ACME_NOW).run()
+    await add('00000000-0000-4000-8000-000000000001', 'Series A-10 Preferred', 'PREFERRED')
+    await add('00000000-0000-4000-8000-000000000002', 'Series B Preferred', 'PREFERRED')
+    await add('ffffffff-0000-4000-8000-000000000003', 'Class B Common Stock', 'COMMON')
+    const expected = ['Class B Common Stock', 'Common Stock', 'Series A-1 Preferred', 'Series A-2 Preferred', 'Series A-10 Preferred', 'Series B Preferred', 'Series Seed Preferred']
+    const table = await getJson<api.CapTableResponse>(harness, harness.owner, '/cap-table')
+    expect(table.classes.map((c) => c.name)).toEqual(expected)
+    expect((await getJson<api.StockClassList>(harness, harness.owner, '/stock-classes')).items.map((c) => c.name)).toEqual(expected)
+  })
+
+  it('gives a plan set up without a pool no initial reserve: its first pool change is an amendment', async () => {
+    harness = await readHarness({
+      extend: ({ b, cls }) => {
+        const plan = b.plan('plan:P2', cls.CS, '2025 Advisor Plan')
+        b.command('plan:adopt-p2', (c) => {
+          c.tx('X_STOCK_PLAN_TERMS', '2025-01-15', {
+            stock_plan_id: plan,
+            return_rules: { cancelled_unvested_awards: 'RETURN', expired_vested_options: 'RETURN', repurchased_unvested_shares: 'RETURN', repurchased_vested_shares: 'RETIRE', shares_withheld_for_tax: 'RETIRE' },
+            default_termination_windows: [],
+            default_repurchase_window: null,
+            status: 'active',
+            pour_over_plan_id: null,
+          })
+        })
+        b.command('plan:p2-amendment-1', (c) => {
+          c.tx('TX_STOCK_PLAN_POOL_ADJUSTMENT', '2025-03-01', { stock_plan_id: plan, shares_reserved: '100000', board_approval_date: '2025-03-01' })
+        })
+      },
+    })
+    const plan = await getJson<api.StockPlanDetail>(harness, harness.owner, `/stock-plans/${harness.id('plan:P2')}`)
+    expect(plan.amendments.map((amendment) => [amendment.kind, amendment.poolSize])).toEqual([['terms', null], ['reserve', '100000']])
+  })
+
+  it('takes an imported exercise payment method from the request it completed, and none without one', async () => {
+    harness = await readHarness()
+    const exercises = await getJson<{ items: api.ExerciseRecord[] }>(harness, harness.owner, '/exercises')
+    // Imported exercises carry no payment of their own.
+    expect(exercises.items.every((exercise) => exercise.paymentMethod === null)).toBe(true)
+    const opt3 = exercises.items.find((exercise) => exercise.grantDisplayId === 'OPT-3')!
+    await harness.db.prepare(
+      `INSERT INTO exercise_requests (id, org_id, request_number, security_id, stakeholder_id, quantity, iso_quantity, exercise_price, total_cost,
+         payment_method, status, pulley_status, exercise_date, completed_command_id, created_at, updated_at, pulley_id)
+       VALUES (?, ?, 1, ?, ?, ?, ?, '0.1', '6000', 'ACH', 'EXERCISED', 'EXERCISED', ?, ?, ?, ?, 'syn-request-1')`,
+    ).bind(crypto.randomUUID(), harness.orgId, opt3.securityId, opt3.stakeholderId, opt3.quantity, opt3.quantity, opt3.exerciseDate, opt3.commandId, ACME_NOW, ACME_NOW).run()
+    const withRequest = await getJson<{ items: api.ExerciseRecord[] }>(harness, harness.owner, '/exercises')
+    expect(withRequest.items.find((exercise) => exercise.grantDisplayId === 'OPT-3')).toMatchObject({ paymentMethod: 'ACH', source: { kind: 'request', requestNumber: 1 } })
+    expect(withRequest.items.find((exercise) => exercise.grantDisplayId === 'OPT-1')).toMatchObject({ paymentMethod: null })
   })
 })
 

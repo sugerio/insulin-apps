@@ -1,12 +1,15 @@
-import { createContext, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { ChevronDownIcon } from "lucide-react";
+import { Button } from "@/components/ui/button.tsx";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.tsx";
 import { showsWrite, type WriteAccess } from "../lib/permissions.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { useWorkspace } from "./OrgWorkspace.tsx";
 
-// The page's Actions menu and inline write buttons. Write items are hidden from editors; every item leads to its flow
-// (`onSelect` or `to`, `onClick` or `to`), and one disabled for a reason of its own shows that reason (see
-// lib/permissions.ts).
+// The page's Actions menu (shadcn/ui's DropdownMenu) and inline write buttons. Write items are hidden from editors;
+// every item leads to its flow (`onSelect` or `to`, `onClick` or `to`), and one disabled for a reason of its own shows
+// that reason (see lib/permissions.ts).
 
 const OwnRecordContext = createContext(false);
 
@@ -69,111 +72,72 @@ function useVisible(entries: readonly ActionEntry[]): (ResolvedItem | "separator
 export function ActionsMenu({ items, label = "Actions" }: { items: readonly ActionEntry[]; label?: string }) {
   const visible = useVisible(items);
   const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-
+  // Radix opens the menu on a primary pointerdown (and on Enter, Space or ArrowDown); a click that follows a pointerdown
+  // it already handled is ignored, and a click with no pointerdown before it (assistive technology) toggles it.
+  const pointerHandled = useRef(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   if (visible.length === 0) return null;
-  const focusable = () => [...(root.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
-  const focusItem = (index: number) => {
-    const elements = focusable();
-    elements[(index + elements.length) % elements.length]?.focus();
-  };
-  const openAndFocus = (index: number) => {
-    setOpen(true);
-    requestAnimationFrame(() => focusItem(index));
-  };
-  const close = (refocus = true) => {
-    setOpen(false);
-    if (refocus) button.current?.focus();
-  };
-  const onButtonKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openAndFocus(0);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      openAndFocus(-1);
-    }
-  };
-  const onMenuKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    const elements = focusable();
-    const index = elements.indexOf(document.activeElement as HTMLElement);
-    if (event.key === "ArrowDown") focusItem(index + 1);
-    else if (event.key === "ArrowUp") focusItem(index - 1);
-    else if (event.key === "Home") focusItem(0);
-    else if (event.key === "End") focusItem(elements.length - 1);
-    else if (event.key === "Escape") close();
-    else if (event.key === "Tab") close(false);
-    else return;
-    if (event.key !== "Tab") event.preventDefault();
-  };
   return (
-    <div className={open ? "menu open" : "menu"} ref={root}>
-      <button
-        ref={button}
-        type="button"
-        className="btn btn-primary"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={menuId}
-        onClick={() => (open ? close(false) : setOpen(true))}
-        onKeyDown={onButtonKey}
-      >
-        {label} <Icon name="chevDown" />
-      </button>
-      {open ? (
-        <div className="menu-pop" role="menu" id={menuId} aria-label={label} onKeyDown={onMenuKey}>
-          {visible.map((item, index) => {
-            if (item === "separator") return <div className="menu-sep" role="separator" key={`sep-${index}`} />;
-            const content = (
-              <>
-                {item.icon ? <Icon name={item.icon} /> : null}
-                <span>
-                  {item.label}
-                  {item.sub ? <span className="mi-sub">{item.sub}</span> : null}
-                  {item.reason ? <span className="mi-sub">{item.reason}</span> : null}
-                </span>
-              </>
-            );
-            const className = item.danger ? "menu-item danger" : "menu-item";
-            if (item.to && !item.disabled) {
-              return (
-                <Link key={item.label} role="menuitem" className={className} to={item.to} onClick={() => setOpen(false)}>
-                  {content}
-                </Link>
-              );
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          ref={trigger}
+          type="button"
+          onPointerDown={(event) => {
+            pointerHandled.current = event.button === 0 && !event.ctrlKey;
+          }}
+          onClick={() => {
+            if (pointerHandled.current) {
+              pointerHandled.current = false;
+              return;
             }
+            setOpen((value) => !value);
+          }}
+        >
+          {label} <ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" loop className="w-72">
+        {visible.map((item, index) => {
+          if (item === "separator") return <DropdownMenuSeparator key={`sep-${index}`} />;
+          const content = (
+            <>
+              {item.icon ? <Icon name={item.icon} /> : null}
+              <span className="min-w-0 flex-1">
+                {item.label}
+                {item.sub ? <span className="block text-xs text-muted-foreground">{item.sub}</span> : null}
+                {item.reason ? <span className="block text-xs text-muted-foreground">{item.reason}</span> : null}
+              </span>
+            </>
+          );
+          const variant = item.danger ? "destructive" : "default";
+          if (item.to && !item.disabled) {
             return (
-              <button
-                key={item.label}
-                type="button"
-                role="menuitem"
-                className={className}
-                aria-disabled={item.disabled || undefined}
-                title={item.reason}
-                onClick={() => {
-                  if (item.disabled) return;
-                  close();
-                  item.onSelect?.();
-                }}
-              >
-                {content}
-              </button>
+              <DropdownMenuItem key={item.label} variant={variant} asChild>
+                <Link to={item.to}>{content}</Link>
+              </DropdownMenuItem>
             );
-          })}
-        </div>
-      ) : null}
-    </div>
+          }
+          return (
+            <DropdownMenuItem
+              key={item.label}
+              variant={variant}
+              disabled={item.disabled}
+              title={item.reason}
+              className="items-start"
+              onSelect={() => {
+                // The dialog an item opens takes what has focus as the place to return to when it closes: the menu
+                // button, not the item, which is gone once the menu closes.
+                trigger.current?.focus();
+                item.onSelect?.();
+              }}
+            >
+              {content}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -192,16 +156,24 @@ type WriteButtonProps = {
   | { to: string; onClick?: undefined }
 );
 
+const BUTTON_VARIANTS = { primary: "default", secondary: "outline", ghost: "ghost", danger: "destructive" } as const;
+
 /** An inline write button (Mark executed, Upload): hidden from those who can't use it. */
 export function WriteButton({ label, icon, kind = "ghost", size, disabledReason, onClick, to, ariaLabel }: WriteButtonProps) {
   const access = useWriteAccess();
   if (!showsWrite(access)) return null;
-  const className = `btn btn-${kind}${size ? ` btn-${size}` : ""}`;
+  const variant = BUTTON_VARIANTS[kind];
   const content = <>{icon ? <Icon name={icon} /> : null}{label}</>;
-  if (to && disabledReason === undefined) return <Link className={className} to={to} aria-label={ariaLabel}>{content}</Link>;
+  if (to && disabledReason === undefined) {
+    return (
+      <Button asChild variant={variant} size={size}>
+        <Link to={to} aria-label={ariaLabel}>{content}</Link>
+      </Button>
+    );
+  }
   return (
-    <button type="button" className={className} disabled={disabledReason !== undefined} title={disabledReason} aria-label={ariaLabel} onClick={onClick}>
+    <Button type="button" variant={variant} size={size} disabled={disabledReason !== undefined} title={disabledReason} aria-label={ariaLabel} onClick={onClick}>
       {content}
-    </button>
+    </Button>
   );
 }

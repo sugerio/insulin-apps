@@ -71,6 +71,15 @@ an outage), expires envelopes past their deadline and retries completion notices
 organization. Hosts no longer need to schedule anything: `POST /api/process-due` stays, for a
 manager or a host's service account to finish their own organization's due work at once.
 
+**Esign reports its usage every hour.** After the due work, the first tick of each hour sends the
+platform that hour's usage (`usage-metrics.ts`): for each organization, its envelopes in all and by
+status, its templates and signatures, and the bytes its documents take in storage; for the app, the
+size of its database and how many organizations have data. Counts and sizes only, never names, email
+addresses, document titles or contents. It goes to `SUGER_METRICS_URL` with `SUGER_APP_TOKEN`, over
+the `SUGER_GATEWAY` binding; without them nothing is reported. One tick claims each hour in
+`metrics_reports`, so the report is sent once, and a report the platform refused is sent again by
+the next tick.
+
 ## For developers
 
 ### Run it locally

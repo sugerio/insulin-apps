@@ -325,6 +325,23 @@ describe("record exercise", () => {
     expect(real.body).toMatchObject({ lots: [{ portion: "NSO", quantity: "30000" }], lotReason: "Holder asked to exercise the NSO portion first", resultingShares: [{ portion: "NSO", displayId: "CS-9" }] });
   }, 60_000);
 
+  it("records an exercise of a grant awaiting only the company signatory, with its warning acknowledged", async () => {
+    const companyPending = { [IDS.opt1]: { ...DETAILS[IDS.opt1]!, executionStatus: "pending_company" as const } };
+    const warned = preview({ warnings: [{ code: "EXECUTION_PENDING_COMPANY", message: "The grant still awaits the company signatory's signature; it can be exercised meanwhile", details: { securityId: IDS.opt1 } }] });
+    const exercise = commandRoute(api.routes.exerciseOption, { preview: warned, commit: recorded });
+    const { callsTo, router } = renderPage(`securities/${IDS.opt1}/exercise`, handlers(exercise, companyPending), { role: "admin_rw" });
+    await fillExercise();
+    expect(screen.getByText("Awaiting the company signatory's signature")).toBeTruthy();
+    click("Review");
+    const record = await screen.findByRole("button", { name: "Record exercise" }) as HTMLButtonElement;
+    expect(record.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(/still awaits the company signatory's signature/));
+    expect(record.disabled).toBe(false);
+    click("Record exercise");
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base}/securities/${IDS.opt1}`));
+    expect(realCalls(callsTo(api.routes.exerciseOption))[0]!.body).toMatchObject({ acknowledge: ["EXECUTION_PENDING_COMPANY"] });
+  }, 60_000);
+
   it("is closed to read-only admins, on the admin's own option, and for a grant awaiting signatures", async () => {
     const exercise = commandRoute(api.routes.exerciseOption, { preview: preview() });
     renderPage(`securities/${IDS.opt1}/exercise`, handlers(exercise), { role: "admin_ro" });
@@ -333,6 +350,7 @@ describe("record exercise", () => {
     expect(await screen.findByText("This is your own record")).toBeTruthy();
     renderPage(`securities/${IDS.opt49}/exercise`, handlers(exercise), { role: "admin_rw" });
     expect(await screen.findByText("This grant cannot be exercised until it is marked executed.")).toBeTruthy();
+    expect(screen.getByText("Awaiting the holder's signature")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Review" })).toBeNull();
   }, 60_000);
 });

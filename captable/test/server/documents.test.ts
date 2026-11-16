@@ -139,6 +139,19 @@ describe('D1 document bytes', () => {
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(bytes)
   }, 20_000)
 
+  it('accepts any name of up to 255 characters however long it is encoded, counting one beyond U+FFFF as two', async () => {
+    const company = await setupCompany()
+    // Each of these takes three UTF-8 bytes, nine characters URL-encoded: 2,263 encoded for 255 characters.
+    const wide = `${'\u8d26'.repeat(251)}.pdf`
+    const accepted = await upload(company.id, encodeURIComponent(wide))
+    expect(accepted.status, await accepted.clone().text()).toBe(201)
+    expect((await accepted.json() as { filename: string }).filename).toBe(wide)
+    // 126 emoji are 252 UTF-16 units, 256 with ".pdf": one too many, though only 130 characters.
+    const emoji = await upload(company.id, encodeURIComponent(`${'\u{1F600}'.repeat(126)}.pdf`))
+    expect(emoji.status).toBe(400)
+    expect(await upload(company.id, encodeURIComponent(`${'\u8d26'.repeat(252)}.pdf`))).toMatchObject({ status: 400 })
+  }, 20_000)
+
   it('does not audit or load bytes for HEAD, and returns 404 when bytes are missing', async () => {
     const company = await setupCompany()
     const bytes = new TextEncoder().encode('%PDF-1.4\nhead request\n%%EOF')

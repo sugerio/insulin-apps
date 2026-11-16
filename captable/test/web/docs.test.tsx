@@ -163,7 +163,7 @@ describe("the topics", () => {
   it("puts the general-information note on the equity topics", async () => {
     renderPage("docs/equity-basics", []);
     await title("Equity basics");
-    const note = screen.getByText("General information, not advice").closest(".banner") as HTMLElement;
+    const note = screen.getByText("General information, not advice").closest("[role='note']") as HTMLElement;
     expect(note.getAttribute("role")).toBe("note");
     expect(note.textContent).toContain("It isn't legal, tax or financial advice.");
     expect(note.textContent).toContain("Rules differ from country to country and change over time");
@@ -214,6 +214,10 @@ describe("the topics", () => {
     for (const permission of ["Record changes", "View the cap table", "See own holdings"]) expect(gettingStarted).toContain(permission);
     expect(gettingStarted).toContain("Cap Table shows \"Custom role\" under the person's name");
     expect(gettingStarted).toContain("An AI agent acts with the role and permissions of the person who connected it");
+    // The hourly usage counts: what they are, and what never leaves the app.
+    expect(gettingStarted).toContain("Cap Table sends Insulin Apps a few counts every hour");
+    expect(gettingStarted).toContain("stakeholders, share classes, equity plans, securities, ledger transactions, documents, valuations and exercise requests");
+    expect(gettingStarted).toContain("Cap Table never sends names, e-mail addresses, share numbers, prices or other amounts, or documents.");
     expect(gettingStarted).not.toMatch(/captable\.|portfolio\.|admin_r[ow]/);
     expect(textOf("glossary")).toContain("It acts with that person's role and permissions, and no more.");
     const stakeholders = textOf("for-stakeholders");
@@ -356,7 +360,8 @@ describe("the content", () => {
       }
       // Plain language: no codes from the API, no addresses of other sites.
       expect(article.textContent).not.toMatch(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/);
-      expect(article.innerHTML).not.toMatch(/https?:/);
+      // An icon's SVG namespace is the one web address allowed in the markup.
+      expect(article.innerHTML.replaceAll('xmlns="http://www.w3.org/2000/svg"', "")).not.toMatch(/https?:/);
       cleanup();
     }
     expect(links.length).toBeGreaterThan(50);

@@ -36,6 +36,13 @@
       "when": 1793218956286,
       "tag": "0004_require_company_sequences",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794591517615,
+      "tag": "0005_metrics_reports",
+      "breakpoints": true
     }
   ]
 }

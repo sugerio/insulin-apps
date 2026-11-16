@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
 import { apiRequest } from "../api/request.ts";
 import { DataTable, byDecimal, byDisplayId, byText } from "../components/DataTable.tsx";
 import { DescriptionList } from "../components/DescriptionList.tsx";
@@ -24,9 +25,11 @@ function Subnav({ active }: { active: "certificates" | "legends" | "terms" }) {
   const { href } = useWorkspace();
   const items = [["certificates", "Certificates", "certificates"], ["legends", "Legends", "certificates/legends"], ["terms", "Terms", "certificates/terms"]] as const;
   return (
-    <nav className="subnav" aria-label="Certificates">
+    <nav className="flex flex-wrap gap-1.5" aria-label="Certificates">
       {items.map(([key, label, path]) => (
-        <Link key={key} to={href(path)} className={key === active ? "active" : undefined} aria-current={key === active ? "page" : undefined}>{label}</Link>
+        <Button key={key} asChild variant={key === active ? "secondary" : "ghost"} size="sm" className="rounded-full">
+          <Link to={href(path)} aria-current={key === active ? "page" : undefined}>{label}</Link>
+        </Button>
       ))}
     </nav>
   );
@@ -37,10 +40,10 @@ function CertificateDownload({ certificate }: { certificate: api.Certificate }) 
   if (!certificate.documentId) return <>{DASH}</>;
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-xs" disabled={busy === certificate.documentId} onClick={() => void download(certificate.documentId!, `${certificate.certificateNumber}_certificate_unsigned.pdf`)}>
+      <Button type="button" variant="ghost" size="xs" disabled={busy === certificate.documentId} onClick={() => void download(certificate.documentId!, `${certificate.certificateNumber}_certificate_unsigned.pdf`)}>
         Download <span className="sr-only">certificate {certificate.certificateNumber}</span>
-      </button>
-      {error ? <div className="err-inline" role="alert">{error}</div> : null}
+      </Button>
+      {error ? <div className="text-xs font-medium text-destructive" role="alert">{error}</div> : null}
     </>
   );
 }
@@ -91,7 +94,7 @@ export function CertificatesPage() {
             );
           }}
         </ResourceView>
-        <p className="small muted mt-12">The app doesn't generate, sign or send certificates. <Link to={href("share-classes")}>Share classes</Link></p>
+        <p className="text-xs text-muted-foreground">The app doesn't generate, sign or send certificates. <Link className="font-medium underline underline-offset-4" to={href("share-classes")}>Share classes</Link></p>
       </Card>
     </Page>
   );
@@ -117,7 +120,7 @@ export function LegendsPage() {
               empty="No legends were migrated."
               columns={[
                 { key: "name", label: "Name", render: (legend) => legend.name, compare: byText((legend) => legend.name) },
-                { key: "text", label: "Text", className: "wrap", render: (legend) => legend.text },
+                { key: "text", label: "Text", className: "whitespace-normal", render: (legend) => legend.text },
                 { key: "status", label: "Status", render: (legend) => (legend.archivedAt === null ? <Badge tone="green">Active</Badge> : <Badge tone="grey">Archived</Badge>) },
               ]}
             />
@@ -141,12 +144,12 @@ export function CertificateTermsPage() {
         <ResourceView resource={terms}>
           {(data) => {
             const items = data.items;
-            if (!items.length) return <p className="muted">No certificate terms were migrated.</p>;
+            if (!items.length) return <p className="text-sm text-muted-foreground">No certificate terms were migrated.</p>;
             return items.map((item) => (
-              <div key={item.id} className="mt-16">
-                <DescriptionList rows={[["Name", item.name], ["Front text", <span className="mono small">{item.text}</span>]]} />
-                <div className="cert mt-12" aria-label={`Preview of ${item.name}`}>
-                  <div className="c-co">{legalName}</div>
+              <div key={item.id} className="flex flex-col gap-3">
+                <DescriptionList rows={[["Name", item.name], ["Front text", <span className="font-mono text-xs">{item.text}</span>]]} />
+                <div className="rounded-md border-[6px] border-double border-primary bg-card px-8 py-6 text-sm" aria-label={`Preview of ${item.name}`}>
+                  <div className="mt-1.5 mb-0.5 text-center text-xl font-bold">{legalName}</div>
                   <p>{Object.entries(SAMPLE).reduce((text, [field, value]) => text.replaceAll(field, value), item.text)}</p>
                 </div>
               </div>

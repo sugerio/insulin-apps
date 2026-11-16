@@ -1,13 +1,25 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
+import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsUpDownIcon, Columns3Icon, FilterIcon, Rows3Icon, SearchIcon, XIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
+import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
+import { Toggle } from "@/components/ui/toggle.tsx";
+import { cn } from "@/lib/utils.ts";
 import { useAuth } from "../auth/AuthProvider.tsx";
 import { compareDecimals, compareRatios } from "../lib/decimal.ts";
 import { formatDate } from "../lib/format.ts";
-import { Icon } from "./Icon.tsx";
 
-// The list table: a search box, Filters (a popover; active filters show as removable
-// chips), Columns (a checkbox list with per-table defaults, remembered per user), a density toggle, sortable headers,
-// and "Showing a to b of N results" with Previous/Next and a page-size menu. Lists come whole from the API, so all
-// of this runs in the browser.
+// The list table, on shadcn/ui's Table: a search box, Filters (a popover; active filters show as removable chips),
+// Columns (a checkbox list with per-table defaults, remembered per user), a density toggle, sortable headers, and
+// "Showing a to b of N results" with Previous/Next and a page-size menu. Lists come whole from the API, so all of this
+// runs in the browser.
 
 export interface Column<T> {
   key: string;
@@ -107,46 +119,52 @@ function isActive(value: FilterState[string]): boolean {
   return true;
 }
 
-function Popover({ label, count, icon, children }: { label: string; count?: number; icon: "filter" | "columns"; children: ReactNode }) {
+/**
+ * The classes of a column's cells, for rows a caller draws itself (the cap table's pinned "Available pool" and
+ * "Totals"): numbers right-aligned in tabular figures, sticky columns kept in view while the table scrolls sideways.
+ */
+export function columnCellClassName<T>(column: Pick<Column<T>, "numeric" | "sticky" | "stickyRight" | "className">): string {
+  return cn(
+    column.numeric && "text-right tabular-nums",
+    column.sticky && "sticky left-0 z-10 bg-background",
+    column.stickyRight && "sticky right-0 z-10 bg-background",
+    column.className,
+  );
+}
+
+/** A toolbar popover (Filters, Columns): it closes with Done, Escape or a click outside, and gives focus back. */
+function ToolbarPopover({ label, count, icon, children }: { label: string; count?: number; icon: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const id = useId();
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
   return (
-    <div className="menu" ref={root}>
-      <button ref={button} type="button" className="btn btn-ghost btn-sm" aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)}>
-        <Icon name={icon} /> {label}
-        {count ? <span className="sb-count">{count}</span> : null}
-      </button>
-      {open ? (
-        <div
-          className="pop"
-          id={id}
-          role="group"
-          aria-label={label}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              setOpen(false);
-              button.current?.focus();
-            }
-          }}
-        >
-          {children}
-          <div className="row mt-8">
-            <span className="spacer" />
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => { setOpen(false); button.current?.focus(); }}>Done</button>
-          </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" size="sm">
+          {icon} {label}
+          {count ? <Badge variant="secondary">{count}</Badge> : null}
+        </Button>
+      </PopoverTrigger>
+      {/* A long list of filters scrolls inside the room the window has, so Done stays reachable on a short screen. */}
+      <PopoverContent align="end" aria-label={label} className="max-h-(--radix-popover-content-available-height) w-72 overflow-y-auto">
+        <PopoverHeader>
+          <PopoverTitle>{label}</PopoverTitle>
+        </PopoverHeader>
+        {children}
+        <div className="flex justify-end">
+          <Button type="button" size="sm" onClick={() => setOpen(false)}>Done</Button>
         </div>
-      ) : null}
-    </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** A labelled checkbox of a toolbar popover's list. */
+function CheckItem({ label, checked, onChange }: { label: ReactNode; checked: boolean; onChange: (checked: boolean) => void }) {
+  const id = useId();
+  return (
+    <Field orientation="horizontal">
+      <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
+      <FieldLabel htmlFor={id} className="font-normal">{label}</FieldLabel>
+    </Field>
   );
 }
 
@@ -167,6 +185,7 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
   const [filterState, setFilterState] = useState<FilterState>({});
   const [sort, setSort] = useState<readonly [string, "asc" | "desc"] | null>(defaultSort ?? null);
   const [page, setPage] = useState(0);
+  const rowsId = useId();
   const pageSize = paginate ? prefs.pageSize ?? props.pageSize ?? 10 : Number.POSITIVE_INFINITY;
 
   const updatePrefs = (next: Prefs) => {
@@ -209,6 +228,10 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
     setFilterState((previous) => ({ ...previous, [key]: value }));
     setPage(0);
   };
+  const clearFilters = () => {
+    setFilterState({});
+    setPage(0);
+  };
 
   const chips = filters.flatMap((filter) => {
     const value = filterState[filter.key];
@@ -222,25 +245,27 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
       text = values.map((item) => filter.options.find(([key]) => key === item)?.[1] ?? item).join(", ");
     }
     return [
-      <span className="chip" key={filter.key}>
+      <Badge variant="secondary" className="h-6 gap-1 pr-1" key={filter.key}>
         {filter.label}: {text}
-        <button type="button" aria-label={`Remove filter ${filter.label}`} onClick={() => setFilter(filter.key, undefined)}>
-          <Icon name="x" />
-        </button>
-      </span>,
+        <Button type="button" variant="ghost" size="icon-xs" className="size-4 rounded-full" aria-label={`Remove filter ${filter.label}`} onClick={() => setFilter(filter.key, undefined)}>
+          <XIcon />
+        </Button>
+      </Badge>,
     ];
   });
 
   return (
-    <div className="dt">
+    <div className="flex flex-col gap-3">
       {toolbar ? (
-        <div className="dt-toolbar">
+        <div className="flex flex-wrap items-center gap-2">
           {search ? (
-            <label className="dt-search">
-              <Icon name="search" />
-              <span className="sr-only">Search {label.toLowerCase()}</span>
-              <input
+            <InputGroup className="w-full sm:max-w-xs">
+              <InputGroupAddon>
+                <SearchIcon />
+              </InputGroupAddon>
+              <InputGroupInput
                 type="search"
+                aria-label={`Search ${label.toLowerCase()}`}
                 value={query}
                 placeholder={props.searchPlaceholder ?? "Search…"}
                 autoComplete="off"
@@ -249,98 +274,104 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
                   setPage(0);
                 }}
               />
-            </label>
-          ) : (
-            <div className="spacer" />
-          )}
+            </InputGroup>
+          ) : null}
+          <div className="flex-1" />
           {props.toolbarExtra}
           {filters.length ? (
-            <Popover label="Filters" icon="filter" count={Object.values(filterState).filter(isActive).length}>
-              <h4>Filters</h4>
-              {filters.map((filter) => (
-                <FilterControl key={filter.key} filter={filter} value={filterState[filter.key]} onChange={(value) => setFilter(filter.key, value)} />
-              ))}
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setFilterState({}); setPage(0); }}>Clear</button>
-            </Popover>
+            <ToolbarPopover label="Filters" icon={<FilterIcon />} count={Object.values(filterState).filter(isActive).length}>
+              <FieldGroup className="gap-4">
+                {filters.map((filter) => (
+                  <FilterControl key={filter.key} filter={filter} value={filterState[filter.key]} onChange={(value) => setFilter(filter.key, value)} />
+                ))}
+              </FieldGroup>
+              <Button type="button" variant="ghost" size="sm" className="self-start" onClick={clearFilters}>Clear</Button>
+            </ToolbarPopover>
           ) : null}
           {hasOptional ? (
-            <Popover label="Columns" icon="columns">
-              <h4>Columns</h4>
-              <div className="checks">
+            <ToolbarPopover label="Columns" icon={<Columns3Icon />}>
+              <FieldGroup className="gap-2">
                 {choosable.map((column) => (
-                  <label key={column.key}>
-                    <input
-                      type="checkbox"
-                      className="cb"
-                      checked={visibleColumns.includes(column)}
-                      onChange={(event) => updatePrefs({ ...prefs, columns: { ...prefs.columns, [column.key]: event.target.checked } })}
-                    />{" "}
-                    {column.label}
-                  </label>
+                  <CheckItem
+                    key={column.key}
+                    label={column.label}
+                    checked={visibleColumns.includes(column)}
+                    onChange={(checked) => updatePrefs({ ...prefs, columns: { ...prefs.columns, [column.key]: checked } })}
+                  />
                 ))}
-              </div>
-              <button type="button" className="btn-link small" onClick={() => updatePrefs({ ...prefs, columns: {} })}>Reset to default</button>
-            </Popover>
+              </FieldGroup>
+              <Button type="button" variant="link" size="sm" className="self-start px-0" onClick={() => updatePrefs({ ...prefs, columns: {} })}>Reset to default</Button>
+            </ToolbarPopover>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm btn-icon"
+          <Toggle
+            variant="outline"
+            size="sm"
             aria-label="Compact rows"
-            aria-pressed={Boolean(prefs.dense)}
             title="Toggle row density"
-            onClick={() => updatePrefs({ ...prefs, dense: !prefs.dense })}
+            pressed={Boolean(prefs.dense)}
+            onPressedChange={(pressed) => updatePrefs({ ...prefs, dense: pressed })}
           >
-            <Icon name="rows" />
-          </button>
+            <Rows3Icon />
+          </Toggle>
         </div>
       ) : null}
       {chips.length ? (
-        <div className="dt-chips">
+        <div className="flex flex-wrap items-center gap-2">
           {chips}
-          <button type="button" className="btn-link small" onClick={() => { setFilterState({}); setPage(0); }}>Clear all</button>
+          <Button type="button" variant="link" size="sm" className="px-0" onClick={clearFilters}>Clear all</Button>
         </div>
       ) : null}
-      <div className="tbl-scroll">
-        <table className={prefs.dense ? "tbl dense" : "tbl"} aria-label={label}>
-          <thead>
-            <tr>
+      <div className="overflow-hidden rounded-lg border">
+        <Table aria-label={label} data-density={prefs.dense ? "compact" : "comfortable"} className={cn(prefs.dense && "[&_td]:py-1 [&_th]:h-8")}>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
               {visibleColumns.map((column) => {
                 const active = sort?.[0] === column.key;
-                const classes = [column.numeric ? "num" : "", column.compare ? "sortable" : "", column.sticky ? "sticky-col" : "", column.stickyRight ? "sticky-r" : "", column.headerClassName ?? ""].filter(Boolean).join(" ");
                 return (
-                  <th
+                  <TableHead
                     key={column.key}
                     scope="col"
-                    className={classes || undefined}
+                    className={cn(
+                      column.numeric && "text-right",
+                      column.sticky && "sticky left-0 z-10 bg-muted",
+                      column.stickyRight && "sticky right-0 z-10 bg-muted",
+                      column.headerClassName,
+                    )}
                     aria-sort={column.compare ? (active ? (sort?.[1] === "asc" ? "ascending" : "descending") : "none") : undefined}
                     style={column.minWidth ? { minWidth: column.minWidth } : undefined}
                   >
                     {column.compare ? (
-                      <button
+                      <Button
                         type="button"
-                        className="th-sort"
+                        variant="ghost"
+                        size="xs"
+                        className={cn("-mx-2 font-medium text-inherit hover:text-foreground", column.numeric && "flex-row-reverse")}
                         onClick={() => {
                           setSort(active && sort?.[1] === "asc" ? [column.key, "desc"] : active ? [column.key, "asc"] : [column.key, column.numeric ? "desc" : "asc"]);
                           setPage(0);
                         }}
                       >
                         {column.label}
-                        <span className="sort" aria-hidden="true">{active ? (sort?.[1] === "asc" ? "▲" : "▼") : ""}</span>
-                      </button>
+                        {active ? (
+                          sort?.[1] === "asc" ? <ArrowUpIcon className="size-3.5" /> : <ArrowDownIcon className="size-3.5" />
+                        ) : (
+                          <ChevronsUpDownIcon className="size-3.5 text-muted-foreground/60" />
+                        )}
+                      </Button>
                     ) : (
                       column.label || <span className="sr-only">Actions</span>
                     )}
-                  </th>
+                  </TableHead>
                 );
               })}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {pageRows.length ? (
               pageRows.map((row) => (
-                <tr
+                <TableRow
                   key={rowKey(row)}
-                  className={onRowClick ? "row-click" : undefined}
+                  className={onRowClick ? "cursor-pointer outline-none focus-visible:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50" : undefined}
                   tabIndex={onRowClick ? 0 : undefined}
                   aria-label={onRowClick && props.rowLabel ? props.rowLabel(row) : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
@@ -352,43 +383,50 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
                   } : undefined}
                 >
                   {visibleColumns.map((column) => (
-                    <td key={column.key} className={[column.numeric ? "num" : "", column.sticky ? "sticky-col" : "", column.stickyRight ? "sticky-r" : "", column.className ?? ""].filter(Boolean).join(" ") || undefined}>
+                    <TableCell key={column.key} className={columnCellClassName(column) || undefined}>
                       {column.render(row)}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))
             ) : (
-              <tr>
-                <td colSpan={visibleColumns.length}>
-                  <div className="dt-empty">{filtered ? "No results match." : props.empty ?? "No results match."}</div>
-                </td>
-              </tr>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={visibleColumns.length} className="h-24 text-center whitespace-normal text-muted-foreground">
+                  {filtered ? "No results match." : props.empty ?? "No results match."}
+                </TableCell>
+              </TableRow>
             )}
             {pinned ? pinned({ columns: visibleColumns, rows: shown, filtered }) : null}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       {paginate ? (
-        <div className="dt-pager">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>
-            Showing <b>{total ? start + 1 : 0}</b> to <b>{Math.min(start + pageSize, total)}</b> of <b>{total}</b> results
+            Showing <b className="font-medium text-foreground">{total ? start + 1 : 0}</b> to <b className="font-medium text-foreground">{Math.min(start + pageSize, total)}</b> of{" "}
+            <b className="font-medium text-foreground">{total}</b> results
           </span>
-          <span className="spacer" />
-          <label className="small muted">
-            Rows{" "}
-            <select
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <Label htmlFor={rowsId} className="font-normal text-muted-foreground">Rows</Label>
+            <NativeSelect
+              id={rowsId}
+              size="sm"
               value={pageSize}
               onChange={(event) => {
                 updatePrefs({ ...prefs, pageSize: Number(event.target.value) });
                 setPage(0);
               }}
             >
-              {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
-            </select>
-          </label>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={current <= 0} onClick={() => setPage(current - 1)}>Previous</button>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>Next</button>
+              {PAGE_SIZES.map((size) => <NativeSelectOption key={size} value={size}>{size}</NativeSelectOption>)}
+            </NativeSelect>
+          </div>
+          <Button type="button" variant="outline" size="sm" disabled={current <= 0} onClick={() => setPage(current - 1)}>
+            <ChevronLeftIcon /> Previous
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>
+            Next <ChevronRightIcon />
+          </Button>
         </div>
       ) : null}
     </div>
@@ -396,48 +434,44 @@ function TableState<T>(props: DataTableProps<T> & { storageKey: string }) {
 }
 
 function FilterControl<T>({ filter, value, onChange }: { filter: Filter<T>; value: FilterState[string]; onChange: (value: FilterState[string]) => void }) {
+  const id = useId();
   if (filter.type === "multi") {
     const values = Array.isArray(value) ? value : [];
     return (
-      <fieldset className="fld">
-        <legend className="lbl">{filter.label}</legend>
-        <div className="checks">
+      <FieldSet className="gap-2">
+        <FieldLegend variant="label">{filter.label}</FieldLegend>
+        <FieldGroup className="gap-2">
           {filter.options.map(([key, text]) => (
-            <label key={key}>
-              <input
-                type="checkbox"
-                className="cb"
-                checked={values.includes(key)}
-                onChange={(event) => onChange(event.target.checked ? [...values, key] : values.filter((item) => item !== key))}
-              />{" "}
-              {text}
-            </label>
+            <CheckItem
+              key={key}
+              label={text}
+              checked={values.includes(key)}
+              onChange={(checked) => onChange(checked ? [...values, key] : values.filter((item) => item !== key))}
+            />
           ))}
-        </div>
-      </fieldset>
+        </FieldGroup>
+      </FieldSet>
     );
   }
   if (filter.type === "daterange") {
     const range = value && typeof value === "object" && !Array.isArray(value) ? value : {};
     return (
-      <fieldset className="fld">
-        <legend className="lbl">{filter.label}</legend>
-        <div className="row">
-          <input type="date" className="inp" aria-label={`${filter.label} from`} value={range.from ?? ""} onChange={(event) => onChange({ ...range, from: event.target.value || undefined })} />
-          <input type="date" className="inp" aria-label={`${filter.label} to`} value={range.to ?? ""} onChange={(event) => onChange({ ...range, to: event.target.value || undefined })} />
+      <FieldSet className="gap-2">
+        <FieldLegend variant="label">{filter.label}</FieldLegend>
+        <div className="grid grid-cols-2 gap-2">
+          <Input type="date" aria-label={`${filter.label} from`} value={range.from ?? ""} onChange={(event) => onChange({ ...range, from: event.target.value || undefined })} />
+          <Input type="date" aria-label={`${filter.label} to`} value={range.to ?? ""} onChange={(event) => onChange({ ...range, to: event.target.value || undefined })} />
         </div>
-      </fieldset>
+      </FieldSet>
     );
   }
   return (
-    <div className="fld">
-      <label>
-        {filter.label}
-        <select className="inp" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
-          <option value="">Any</option>
-          {filter.options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}
-        </select>
-      </label>
-    </div>
+    <Field>
+      <FieldLabel htmlFor={id}>{filter.label}</FieldLabel>
+      <NativeSelect id={id} className="w-full" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
+        <NativeSelectOption value="">Any</NativeSelectOption>
+        {filter.options.map(([key, text]) => <NativeSelectOption key={key} value={key}>{text}</NativeSelectOption>)}
+      </NativeSelect>
+    </Field>
   );
 }

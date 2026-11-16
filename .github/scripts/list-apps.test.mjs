@@ -123,13 +123,16 @@ test("reads an app's secret names, which carry its own prefix", async () => {
 })
 
 test("never hands an app the platform's own settings, or a name in another app's namespace", async () => {
-  for (const name of ['cloudflare', 'google', 'turnstile', 'github', 'site', 'suger']) {
+  for (const name of ['cloudflare', 'google', 'turnstile', 'github', 'site', 'suger', 'super']) {
     const reserved = await repository({ [name]: { insulin: { secrets: [`${name.toUpperCase()}_API_TOKEN`] } } })
     await assert.rejects(() => listApps(reserved), /is reserved/, name)
   }
   // An app named after a word in a platform setting can't claim that setting: ORG_REQUEST_EMAIL is the gateway's.
   const org = await repository({ org: { insulin: { secrets: ['ORG_REQUEST_EMAIL'] } } })
   await assert.rejects(() => listApps(org), /insulin\.secrets\[0\] names a setting of the platform itself/)
+  // The operator console's settings are all SUPER_*: an app whose name starts with super- can't claim one either.
+  const superAdmin = await repository({ 'super-admin': { insulin: { secrets: ['SUPER_ADMIN_API_TOKEN'] } } })
+  await assert.rejects(() => listApps(superAdmin), /insulin\.secrets\[0\] names a setting of the platform itself/)
   const both = await repository({ esign: { insulin: { secrets: ['ESIGN_PRO_KEY'] } }, 'esign-pro': { insulin: { secrets: ['ESIGN_PRO_KEY'] } } })
   await assert.rejects(() => listApps(both), /ESIGN_PRO_KEY belongs to app "esign-pro"/)
   const percent = await repository({ app1: { insulin: { publicPaths: ['/%5f%5finsulin/'] } } })

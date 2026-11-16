@@ -14,12 +14,15 @@ and publish it. It brings its own database and needs no other service.
 - **Set up by import.** Import Pulley's standard reports, or fill in the Cap Table spreadsheet template; check a
   plain-language preview; import your cap table in one step.
 - **Stakeholders.** Founders, employees, advisors, investors and institutions, with their details and e-mail addresses.
-- **Option grants and vesting.** Record a signed ISO or NSO grant from a plan, with its vesting schedule and exercise
-  price. Vesting, what can be exercised, and every deadline are worked out for you.
+- **Option grants and vesting.** Record an approved ISO or NSO grant from a plan, signed or still awaiting signatures,
+  with its vesting schedule and exercise price. Vesting, what can be exercised, and every deadline are worked out for
+  you.
 - **Exercises.** Record an exercise a holder reports, with the payment, the fair market value and the tax details. The
   app creates the resulting shares.
 - **Terminations.** Stop vesting when someone leaves, today or on a future date. The app shows what is cancelled, what
   goes back to the pool, and how long the person has to exercise.
+- **Repurchases.** Record a repurchase of a leaver's unvested restricted shares once it is done and paid outside the
+  app, with the notice to the holder.
 - **409A valuations.** Record each valuation. The app tracks when it expires or needs review, and won't price a new
   grant without a valid one (or counsel's memo).
 - **Documents.** Keep agreements, board consents, certificates and valuation reports with the records they belong to,
@@ -43,13 +46,18 @@ holdings.
 
 - **Classes, plans and holdings come in with the import.** Share classes, equity plans, issued shares, option grants,
   warrants and SAFEs are set up by importing Pulley's reports or the spreadsheet template into a new company. After
-  that, the app records new option grants, exercises, terminations and cancellations; it has no forms to add share
+  that, the app records new option grants, exercises, terminations, repurchases and cancellations; it has no forms to add share
   classes or plans, or to issue shares.
 - **No e-mail.** The app doesn't send messages; tell people yourself when something changes for them.
 - **No signatures or payments.** Agreements are signed elsewhere and uploaded; payments happen outside the app and are
   recorded in it.
-- **No background jobs.** Scheduled terminations and option expiries take effect when an owner, admin or editor opens
-  the dashboard, or chooses **Process due items** there.
+- **No background jobs for the cap table.** Scheduled terminations and option expiries take effect when an owner, admin
+  or editor opens the dashboard, or chooses **Process due items** there.
+- **Hourly usage counts.** On insulinapps.com, the platform calls Cap Table every five minutes, and once an hour Cap
+  Table sends it counts for each organization (whether its company is set up; its stakeholders, share classes, equity
+  plans, securities, ledger transactions, documents, valuations and exercise requests; the size of its documents) and
+  the database's size, so that Insulin Apps can watch usage and plan capacity. Never names, e-mail addresses, amounts or
+  documents.
 - **Not a valuation, tax or legal service.** It records 409A valuations but doesn't perform them, and it doesn't file tax
   forms or give advice.
 - **One company per Insulin organization.** Switching organizations in the Insulin console switches the company Cap
@@ -213,6 +221,7 @@ src/app/                           Cap Table itself
   pages/, components/, lib/        the React app; api/ and auth/ hold its API client and the console identity
   pages/docs/                      the in-app Docs: one topic per file, as static TSX
   server/router.ts                 handleAppRequest(request): hands every app request to the Hono API in server/
+  server/lib/usage-metrics.ts      the hourly usage report the platform's tick sends (POST /api/scheduled)
   db/                              the Drizzle schema, migrations and README
   shared/                          contracts (zod) and the cap table engine, imported as #shared
   import/                          the import core: Pulley's reports and the spreadsheet template to a preview and a plan

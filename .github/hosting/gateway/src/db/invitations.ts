@@ -37,7 +37,7 @@ export interface InvitationGrantRow {
  * role other than OWNER; or, with an app, that app's admin for a specific-apps invitation to that app alone.
  */
 function mayHandle(org: string, actor: string, app: string): string {
-  return `(EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor}
+  return `(EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ${org} AND a.user_id = ${actor}
       AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND invitations.role <> 'OWNER')))
     OR (${app} IS NOT NULL AND invitations.role = 'APPS'
       AND NOT EXISTS (SELECT 1 FROM invitation_grants og WHERE og.invitation_id = invitations.id AND og.app <> ${app})
@@ -52,7 +52,7 @@ function mayHandle(org: string, actor: string, app: string): string {
 function mayInvite(appName: string | null, org: string, role: string, actor: string, app: string): string {
   return appName
     ? `(${role} = 'APPS' AND ${appAdmin(org, actor, app)})`
-    : `(${app} IS NULL AND EXISTS (SELECT 1 FROM memberships a WHERE a.org_id = ${org} AND a.user_id = ${actor}
+    : `(${app} IS NULL AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ${org} AND a.user_id = ${actor}
         AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ${role} <> 'OWNER'))))`
 }
 
@@ -195,6 +195,7 @@ export async function acceptInvitation(db: D1Database, id: string, userId: strin
        WHERE i.id = ?1 AND i.status = 'pending' AND i.expires_at > ?3 AND i.email = ?4
          AND (SELECT COUNT(*) FROM memberships m WHERE m.org_id = i.org_id) < ?5
          AND ${invitableDomain('i.org_id', '?6')}
+         AND EXISTS (SELECT 1 FROM orgs io WHERE io.id = i.org_id AND io.status = 'active')
        ON CONFLICT DO NOTHING`,
     ).bind(id, userId, now, email, memberLimit, domainOf(email)),
     db.prepare(
@@ -203,6 +204,7 @@ export async function acceptInvitation(db: D1Database, id: string, userId: strin
        FROM invitation_grants g JOIN invitations i ON i.id = g.invitation_id AND i.org_id = g.org_id
        WHERE g.invitation_id = ?1 AND i.status = 'pending' AND i.expires_at > ?3 AND i.email = ?4 AND i.role = 'APPS'
          AND (SELECT m.role FROM memberships m WHERE m.org_id = i.org_id AND m.user_id = ?2) = 'APPS'
+         AND EXISTS (SELECT 1 FROM orgs io WHERE io.id = i.org_id AND io.status = 'active')
        ON CONFLICT DO NOTHING`,
     ).bind(id, userId, now, email),
     db.prepare(

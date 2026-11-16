@@ -172,6 +172,10 @@ export const paymentMethodSchema = z.enum(PAYMENT_METHODS);
 export const EXERCISE_PAYMENT_METHODS = ["ACH", "WIRE", "CHECK", "CASH"] as const;
 export const exercisePaymentMethodSchema = z.enum(EXERCISE_PAYMENT_METHODS);
 
+/** How the company paid a repurchase recorded with record-repurchase (the payment itself is off-platform). */
+export const REPURCHASE_PAYMENT_METHODS = ["CASH", "CHECK", "WIRE", "ACH", "OTHER"] as const;
+export const repurchasePaymentMethodSchema = z.enum(REPURCHASE_PAYMENT_METHODS);
+
 export const TAX_TREATMENTS = ["W2", "FORM_1099_NEC", "NON_US"] as const;
 export const taxTreatmentSchema = z.enum(TAX_TREATMENTS);
 
@@ -268,6 +272,7 @@ export const COMMAND_NAMES = [
   "exercise-option",
   "grant-equity-compensation",
   "cancel-security",
+  "record-repurchase",
   "mark-executed",
   "record-leave-of-absence",
   "extend-exercise-deadline",
@@ -477,14 +482,20 @@ export const SCHEDULED_TERMINATION_STATUSES = ["SCHEDULED", "APPLIED", "CANCELLE
 export const ELECTION_83B_STATUSES = ["PENDING", "FILED", "NOT_REQUIRED", "UNCONFIRMED_DEADLINE_PASSED", "PROOF_MISSING"] as const;
 /** Why a grant is execution pending: whose signature is missing (Securities Status). */
 export const EXECUTION_MISSING_PARTIES = ["company_signatory", "holder", "both"] as const;
-/** The repurchase window of unvested shares held by a terminated holder. */
-export const REPURCHASE_WINDOW_STATUSES = ["open", "closing_soon", "lapsed", "not_recorded"] as const;
+/** The side a pending signer signs for (Securities Status "Waiting on"): a company signatory or approver, or the holder. */
+export const PENDING_SIGNER_SIDES = ["company", "holder"] as const;
+/**
+ * The repurchase window of unvested shares held by a terminated holder. `no_deadline`: the lot's agreement sets none
+ * (a recorded term, `x_repurchase_right.x_no_deadline`); `not_recorded`: no deadline is known.
+ */
+export const REPURCHASE_WINDOW_STATUSES = ["open", "closing_soon", "lapsed", "no_deadline", "not_recorded"] as const;
 /** Dashboard "Needs attention" items (the API contract). */
 export const NEEDS_ATTENTION_KINDS = [
   "EXECUTION_PENDING",
   "SCHEDULED_TERMINATION",
   "ISO_DEADLINE_SOON",
   "REPURCHASE_WINDOW_CLOSING",
+  "REPURCHASE_UNRESOLVED",
   "VALUATION_STATUS",
   "EXPIRY_RUN_TO_CONFIRM",
 ] as const;

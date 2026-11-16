@@ -19,9 +19,10 @@ export async function loadEdges(db: D1Database, orgId: string, dependsOn?: reado
 }
 
 /**
- * Reversible commands: an exercise with its resulting shares, a grant, a termination
- * (an applied scheduled one included), a cancellation, Mark executed and stakeholder merge. Leaves, extensions, plan terms and expiries are
- * facts are corrected by recording them again, never by reversal; a reversal can't be reversed and imported history isn't
+ * Reversible commands: an exercise with its resulting shares, a grant, a termination (an applied scheduled one
+ * included), a cancellation, a recorded repurchase with its balance lot, Mark executed and stakeholder merge. Leaves,
+ * extensions, plan terms and expiries are facts corrected by recording them again, never by reversal; a reversal
+ * can't be reversed and imported history isn't
  * reversible in the app (their own refusals).
  */
 export const REVERSIBLE_COMMAND_TYPES: ReadonlySet<string> = new Set([
@@ -29,6 +30,7 @@ export const REVERSIBLE_COMMAND_TYPES: ReadonlySet<string> = new Set([
   "grant-equity-compensation",
   "terminate-stakeholder",
   "cancel-security",
+  "record-repurchase",
   "mark-executed",
   "merge-stakeholders",
 ]);
@@ -101,7 +103,7 @@ export async function planReversal(
     if (refusal === "not_reversible") {
       throw invariantViolation([{
         code: "COMMAND_NOT_REVERSIBLE",
-        message: `A ${target.type} command can't be reversed in the app: only an exercise, a grant, a termination, a cancellation, Mark executed or stakeholder merge can`,
+        message: `A ${target.type} command can't be reversed in the app: only an exercise, a grant, a termination, a cancellation, a repurchase, Mark executed or stakeholder merge can`,
       }]);
     }
     if (refusal === "dependents_exist") {

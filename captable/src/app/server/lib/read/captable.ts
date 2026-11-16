@@ -2,7 +2,8 @@ import { api, engine } from "#shared";
 import { dec, decOrNull, echo, ratio, type ReadContext } from "./context.ts";
 import { pendingExpiryRuns } from "./expiry-runs.ts";
 import { describeAudit, ActorLabels } from "./records.ts";
-import { securityList, securityLookups } from "./securities.ts";
+import { repurchaseWindow, securityList, securityLookups } from "./securities.ts";
+import { compareStockClasses } from "./structure.ts";
 import { loadValuations } from "./valuations.ts";
 
 /**
@@ -21,8 +22,10 @@ async function scheduledStakeholders(ctx: ReadContext): Promise<Set<string>> {
   return new Set(results.map((row) => row.stakeholder_id));
 }
 
+/** The classes in the one order of every read and export (`compareStockClasses`): the cap table's columns and tiles. */
 function classesJson(metrics: engine.CapTableMetrics): api.CapTableResponse["classes"] {
-  return metrics.classes.map((stockClass) => ({
+  const ordered = [...metrics.classes].sort((a, b) => compareStockClasses({ id: a.stockClassId, name: a.name, classType: a.classType }, { id: b.stockClassId, name: b.name, classType: b.classType }));
+  return ordered.map((stockClass) => ({
     stockClassId: stockClass.stockClassId,
     name: stockClass.name,
     authorized: dec(stockClass.authorized),
@@ -47,6 +50,24 @@ function decRecord(record: Record<string, engine.Dec>): Record<string, string> {
   return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, dec(value)]));
 }
 
+/**
+ * The Ownership rows: the metrics' holders, who were each issued a security, then every other stakeholder not merged
+ * away, with zeros, so the screen can show them on request and the export lists every stakeholder (the API contract).
+ */
+function ownershipHolders(state: engine.LedgerState, metrics: engine.CapTableMetrics): engine.HolderMetrics[] {
+  const listed = new Set(metrics.holders.map((holder) => holder.stakeholderId));
+  const empty = [...state.stakeholders.keys()]
+    .filter((id) => !listed.has(id) && engine.resolveStakeholderId(state, id) === id)
+    .sort()
+    .map((id): engine.HolderMetrics => ({
+      stakeholderId: id, relationship: engine.relationshipAsOf(state, id), byClass: {}, stockOutstanding: engine.Dec.ZERO, planAwards: {},
+      awardsOutsidePlans: engine.Dec.ZERO, warrants: engine.Dec.ZERO, convertiblesOutstanding: engine.Dec.ZERO, fullyDiluted: engine.Dec.ZERO,
+      issuedAndOutstandingPct: engine.Rational.ZERO, fullyDilutedPct: engine.Rational.ZERO, capitalContribution: engine.Dec.ZERO,
+      vestedOptions: engine.Dec.ZERO, unvestedOptions: engine.Dec.ZERO, executionPending: engine.Dec.ZERO,
+    }));
+  return [...metrics.holders, ...empty];
+}
+
 export async function capTable(ctx: ReadContext, state: engine.LedgerState, tab: "ownership" | "shares" | "options" | "safes" | "warrants"): Promise<api.CapTableResponse> {
   const metrics = engine.computeMetrics(state);
   const response: api.CapTableResponse = {
@@ -67,7 +88,7 @@ export async function capTable(ctx: ReadContext, state: engine.LedgerState, tab:
   if (tab === "ownership") {
     const rows = await namesAndRows(ctx);
     const scheduled = await scheduledStakeholders(ctx);
-    response.ownership = metrics.holders.map((holder) => {
+    response.ownership = ownershipHolders(state, metrics).map((holder) => {
       const row = rows.get(holder.stakeholderId);
       const terminated = (state.stakeholders.get(holder.stakeholderId)?.terminations.length ?? 0) > 0;
       return {
@@ -123,14 +144,54 @@ const MISSING: Record<string, "company_signatory" | "holder" | "both"> = {
   pending_both: "both",
 };
 
+type Side = (typeof api.PENDING_SIGNER_SIDES)[number];
+
+/** The sides whose signature an execution status still waits for, company first. */
+const MISSING_SIDES: Record<string, readonly Side[]> = {
+  pending_company: ["company"],
+  pending_holder: ["holder"],
+  pending_both: ["company", "holder"],
+};
+
+/** The side a signature request's signer signs for: an approver signs for the company, a spouse with the holder. */
+const SIGNER_SIDE: Record<api.SignatureRequest["signerRole"], Side> = {
+  COMPANY_SIGNATORY: "company",
+  APPROVER: "company",
+  HOLDER: "holder",
+  SPOUSE: "holder",
+};
+
+interface PendingSignatureRow {
+  id: string;
+  security_id: string;
+  signer_role: api.SignatureRequest["signerRole"];
+  signer_name: string | null;
+}
+
+/**
+ * Who still has to sign, by the ledger's execution status (Securities Status "Waiting on"): each missing side's pending
+ * signature requests with the signer's name, or the side alone when no request names it (a grant
+ * recorded in the app before every signature was in). A request for a side the ledger no longer waits for is left out,
+ * so the list always agrees with "Missing". Never the signer's e-mail.
+ */
+function pendingSigners(status: string, rows: readonly PendingSignatureRow[]): api.SecuritiesStatus["executionPending"][number]["pendingSigners"] {
+  return (MISSING_SIDES[status] ?? []).flatMap((side) => {
+    const signers = rows.filter((row) => SIGNER_SIDE[row.signer_role] === side);
+    return signers.length
+      ? signers.map((row) => ({ role: side, name: row.signer_name }))
+      : [{ role: side, name: null }];
+  });
+}
+
 export async function securitiesStatus(ctx: ReadContext, state: engine.LedgerState): Promise<api.SecuritiesStatus> {
-  const { results: signatureRows } = await ctx.db.prepare("SELECT id, security_id FROM signature_requests WHERE org_id = ? AND status = 'PENDING' AND security_id IS NOT NULL")
-    .bind(ctx.org.id).all<{ id: string; security_id: string }>();
+  const { results: signatureRows } = await ctx.db.prepare(
+    "SELECT id, security_id, signer_role, signer_name FROM signature_requests WHERE org_id = ? AND status = 'PENDING' AND security_id IS NOT NULL ORDER BY created_at, id",
+  ).bind(ctx.org.id).all<PendingSignatureRow>();
   const { results: scheduledRows } = await ctx.db.prepare(
     "SELECT id, stakeholder_id, termination_date, termination_type, vesting_stop_date, version FROM scheduled_terminations WHERE org_id = ? AND status = 'SCHEDULED' ORDER BY termination_date, id",
   ).bind(ctx.org.id).all<{ id: string; stakeholder_id: string; termination_date: string; termination_type: engine.TerminationType; vesting_stop_date: string; version: number }>();
-  const pendingSignatures = new Map<string, string[]>();
-  for (const row of signatureRows) pendingSignatures.set(row.security_id, [...(pendingSignatures.get(row.security_id) ?? []), row.id]);
+  const pendingSignatures = new Map<string, PendingSignatureRow[]>();
+  for (const row of signatureRows) pendingSignatures.set(row.security_id, [...(pendingSignatures.get(row.security_id) ?? []), row]);
   const executionPending: api.SecuritiesStatus["executionPending"] = [];
   const unvestedShares: api.SecuritiesStatus["unvestedSharesFromTerminated"] = [];
   const optionsFromTerminated: api.SecuritiesStatus["optionsFromTerminated"] = [];
@@ -139,30 +200,32 @@ export async function securitiesStatus(ctx: ReadContext, state: engine.LedgerSta
   for (const security of state.securities.values()) {
     if (!security.issued || !security.outstanding.isPositive()) continue;
     const id = security.identity.id;
+    const family = security.identity.family;
     const missing = MISSING[security.executionStatus];
     if (missing) {
+      const requests = pendingSignatures.get(id) ?? [];
       executionPending.push({
         securityId: id,
         displayId: security.identity.displayId,
         stakeholderId: security.identity.stakeholderId,
+        family,
         issueDate: security.issueDate!,
         missing,
-        signatureRequestIds: pendingSignatures.get(id) ?? [],
+        signatureRequestIds: requests.map((row) => row.id),
+        pendingSigners: pendingSigners(security.executionStatus, requests),
       });
     }
-    const family = security.identity.family;
     if (security.termination !== null && family === "STOCK" && engine.hasVestingSchedule(security)) {
       const position = engine.positionAt(state, security, state.asOf);
       if (position.unvestedOutstanding.isPositive()) {
-        const deadline = engine.repurchaseDeadline(state, security);
-        const status = deadline === null ? "not_recorded" : ctx.today > deadline ? "lapsed" : engine.daysBetween(ctx.today, deadline) <= 30 ? "closing_soon" : "open";
+        const window = repurchaseWindow(state, security, ctx.today);
         unvestedShares.push({
           securityId: id,
           stakeholderId: security.identity.stakeholderId,
           unvested: dec(position.unvestedOutstanding),
           repurchasePrice: decOrNull(security.repurchaseRight?.pricePerShare ?? null),
-          lastRepurchaseDate: deadline,
-          status,
+          lastRepurchaseDate: window.lastDate,
+          status: window.status,
         });
       }
     }
@@ -179,6 +242,7 @@ export async function securitiesStatus(ctx: ReadContext, state: engine.LedgerSta
           contractualDaysLeft: engine.daysBetween(ctx.today, contractual.date),
           isoDeadline: iso?.date ?? null,
           isoDaysLeft: iso?.date ? engine.daysBetween(ctx.today, iso.date) : null,
+          executionStatus: security.executionStatus,
         });
       }
     }
@@ -230,12 +294,22 @@ export async function dashboard(ctx: ReadContext, state: engine.LedgerState): Pr
   const expiryRunsPending = await pendingExpiryRuns(ctx);
   const isoSoon = status.optionsFromTerminated.filter((row) => row.isoDaysLeft !== null && row.isoDaysLeft >= 0 && row.isoDaysLeft <= 30);
   const repurchaseSoon = status.unvestedSharesFromTerminated.filter((row) => row.status === "closing_soon");
+  // A window that lapsed or was never recorded needs counsel's answer, not a countdown: its own line, while there is one.
+  // A lot whose agreement sets no deadline has its terms recorded, so it isn't unresolved.
+  const repurchaseUnresolved = status.unvestedSharesFromTerminated.filter((row) => row.status === "lapsed" || row.status === "not_recorded");
   const earliest = (dates: (string | null)[]) => dates.filter((d): d is string => d !== null).sort()[0] ?? null;
+  const pendingByFamily = (["EQUITY_COMPENSATION", "STOCK", "WARRANT", "CONVERTIBLE"] as const)
+    .map((family) => ({ family, count: status.executionPending.filter((row) => row.family === family).length }))
+    .filter((entry) => entry.count > 0);
   const needsAttention: api.DashboardResponse["needsAttention"] = [
-    { kind: "EXECUTION_PENDING", count: status.executionPending.length, dueDate: null, href: "/securities-status#exec" },
+    { kind: "EXECUTION_PENDING", count: status.executionPending.length, dueDate: null, href: "/securities-status#exec", byFamily: pendingByFamily },
     { kind: "SCHEDULED_TERMINATION", count: status.scheduledTerminations.length, dueDate: earliest(status.scheduledTerminations.map((r) => r.terminationDate)), href: "/securities-status#sched" },
     { kind: "ISO_DEADLINE_SOON", count: isoSoon.length, dueDate: earliest(isoSoon.map((r) => r.isoDeadline)), href: "/securities-status#term" },
     { kind: "REPURCHASE_WINDOW_CLOSING", count: repurchaseSoon.length, dueDate: earliest(repurchaseSoon.map((r) => r.lastRepurchaseDate)), href: "/securities-status#rep" },
+    // Only while there is one.
+    ...(repurchaseUnresolved.length > 0
+      ? [{ kind: "REPURCHASE_UNRESOLVED" as const, count: repurchaseUnresolved.length, dueDate: null, href: "/securities-status#rep" }]
+      : []),
     {
       kind: "VALUATION_STATUS",
       count: valuationStatus === null || valuationStatus !== "presumptively_valid" ? 1 : 0,

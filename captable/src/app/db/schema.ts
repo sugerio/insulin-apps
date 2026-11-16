@@ -1553,3 +1553,14 @@ export const stakeholderMergeLinkMoves = sqliteTable(
     foreignKey({ columns: [t.orgId, t.commandId], foreignColumns: [commands.orgId, commands.id] }),
   ],
 )
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The hourly usage report to the platform (server/lib/usage-metrics.ts): one row per UTC hour (`hour`, epoch
+// milliseconds of its start) that a tick of the platform claimed, and when every part of its report was accepted. Not
+// company data, so no org_id. A claim that was never sent is released or, when its tick died, retaken after a while;
+// rows older than a few days are deleted.
+export const metricsReports = sqliteTable('metrics_reports', {
+  hour: integer('hour').primaryKey(),
+  startedAt: integer('started_at').notNull(),
+  sentAt: integer('sent_at'),
+})

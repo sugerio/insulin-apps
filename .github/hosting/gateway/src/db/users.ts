@@ -12,9 +12,14 @@ export interface UserRow {
   orgs_created: number
   /** Raised by every password set, change or reset and other security changes; sessions must match it. */
   credential_version: number
+  /** Set by the operator console (DESIGN.md §11.3): a suspended or disabled account can't sign in or act. */
+  status: AccountStatus
+  last_active_at: number | null
   created_at: number
   updated_at: number
 }
+
+export type AccountStatus = 'active' | 'suspended' | 'disabled'
 
 export function findUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
   return db.prepare('SELECT * FROM users WHERE email = ?1').bind(email).first<UserRow>()
@@ -140,12 +145,14 @@ export async function orgsBlockingDeletion(db: D1Database, userId: string): Prom
 
 /**
  * Deletes the account, and with it every organization where the user is the only member, unless an organization
- * would be left without an OWNER (checked inside the same transaction). Sessions, tokens and memberships cascade.
+ * would be left without an OWNER (checked inside the same transaction). Sessions, tokens and memberships cascade. An
+ * organization the operators suspended or disabled stays, still counting for its owner domain (DESIGN.md §11.3), so
+ * deleting its only member's account can't clear it away or free its place.
  */
 export async function deleteAccount(db: D1Database, userId: string): Promise<boolean> {
   const [, deleted] = await db.batch([
     db.prepare(
-      `DELETE FROM orgs WHERE id IN (
+      `DELETE FROM orgs WHERE status = 'active' AND id IN (
          SELECT m.org_id FROM memberships m WHERE m.user_id = ?1
            AND NOT EXISTS (SELECT 1 FROM memberships o WHERE o.org_id = m.org_id AND o.user_id <> ?1))
        AND NOT EXISTS (${BLOCKING_ORGS})`,

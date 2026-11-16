@@ -331,3 +331,9 @@ CREATE INDEX `templates_by_owner` ON `templates` (`tenant_id`,`owner_user_id`,`c
 CREATE INDEX `templates_by_tenant` ON `templates` (`tenant_id`,`created_at`);
 --> statement-breakpoint
 CREATE UNIQUE INDEX `templates_object_key_unique` ON `templates` (`object_key`);
+--> statement-breakpoint
+CREATE TABLE `metrics_reports` (
+	`hour` integer PRIMARY KEY NOT NULL,
+	`started_at` integer NOT NULL,
+	`sent_at` integer
+);

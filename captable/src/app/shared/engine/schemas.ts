@@ -88,6 +88,15 @@ export type TerminationType = z.infer<typeof TerminationType>;
 export const ExecutionStatus = z.enum(["executed", "pending_company", "pending_holder", "pending_both", "not_required"]);
 export type ExecutionStatus = z.infer<typeof ExecutionStatus>;
 
+/**
+ * Whether an execution status blocks exercise (since engine 1.1.0): only a missing holder-side signature
+ * does. A grant awaiting only the company signatory's signature can be exercised, and its exit window runs as any
+ * other's; it stays execution pending (a workflow count) until Mark executed records the signature.
+ */
+export function blocksExercise(status: ExecutionStatus): boolean {
+  return status === "pending_holder" || status === "pending_both";
+}
+
 export const FederalExemption = z.enum(["RULE_701", "SECTION_4A2", "REG_D_506B", "REG_D_506C", "REG_S", "NON_US", "NONE", "OTHER"]);
 export type FederalExemption = z.infer<typeof FederalExemption>;
 

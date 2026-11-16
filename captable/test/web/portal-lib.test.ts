@@ -1,8 +1,8 @@
 import "./setup.ts";
 import { describe, expect, it } from "vitest";
 import {
-  discountLabel, exerciseCost, exitWindows, formatComputedMoney, formatRecordedMoney, initials, isoDeadlineState, paymentReference, summarize,
-  upcomingVests, vestedUnexercised,
+  awaitingHolderSignature, discountLabel, exerciseCost, exerciseQuantity, exitWindows, formatComputedMoney, formatRecordedMoney, initials,
+  isoDeadlineState, maxWholeOptions, paymentReference, summarize, upcomingVests, vestedUnexercised,
 } from "../../src/app/lib/portal.ts";
 import { TODAY, uuid } from "./support/acme.ts";
 import { DANIEL, DANIEL_OPTION, MARCUS, NADIA_OPTION, portalSecurity } from "./support/portal.ts";
@@ -35,7 +35,7 @@ describe("portal figures", () => {
 describe("exit windows", () => {
   it("finds a former holder's open exit window with its deadlines", () => {
     expect(exitWindows([NADIA_OPTION], TODAY)).toEqual([
-      { deadline: "2027-02-28", iso: { kind: "upcoming", date: "2026-11-30" }, exercisable: "60000", grants: [NADIA_OPTION] },
+      { deadline: "2027-02-28", iso: { kind: "upcoming", date: "2026-11-30" }, awaitingSignature: false, quantity: "60000", grants: [NADIA_OPTION] },
     ]);
     expect(exitWindows([NADIA_OPTION], "2027-03-01")).toEqual([]);
     expect(exitWindows([DANIEL_OPTION], TODAY)).toEqual([]);
@@ -47,17 +47,37 @@ describe("exit windows", () => {
     const early = portalSecurity({ ...NADIA_OPTION, id: uuid(6, 125), displayId: "OPT-25", optionType: "NSO", contractualDeadline: "2027-01-08", isoDeadline: null, numbers: { ...NADIA_OPTION.numbers, exercisable: "10000" } });
     const sameDates = portalSecurity({ ...NADIA_OPTION, id: uuid(6, 126), displayId: "OPT-26", numbers: { ...NADIA_OPTION.numbers, exercisable: "5000" } });
     const windows = exitWindows([NADIA_OPTION, early, sameDates], TODAY);
-    expect(windows.map((window) => [window.deadline, window.iso, window.exercisable, window.grants.map((grant) => grant.displayId)])).toEqual([
+    expect(windows.map((window) => [window.deadline, window.iso, window.quantity, window.grants.map((grant) => grant.displayId)])).toEqual([
       ["2027-01-08", { kind: "none" }, "10000", ["OPT-25"]],
       // Only grants sharing both dates are added up.
       ["2027-02-28", { kind: "upcoming", date: "2026-11-30" }, "65000", ["OPT-20", "OPT-26"]],
     ]);
   });
 
+  it("keeps the deadline of a grant awaiting the holder's signature in view, on its own, never as exercisable", () => {
+    const blocked = (executionPending: "pending_holder" | "pending_both", id: number, displayId: string) => portalSecurity({
+      ...NADIA_OPTION, id: uuid(6, id), displayId, executionPending, numbers: { ...NADIA_OPTION.numbers, exercisable: "0" },
+    });
+    const holder = blocked("pending_holder", 140, "OPT-40");
+    const both = blocked("pending_both", 141, "OPT-41");
+    expect(exitWindows([NADIA_OPTION, holder, both], TODAY)).toEqual([
+      { deadline: "2027-02-28", iso: { kind: "upcoming", date: "2026-11-30" }, awaitingSignature: false, quantity: "60000", grants: [NADIA_OPTION] },
+      { deadline: "2027-02-28", iso: { kind: "upcoming", date: "2026-11-30" }, awaitingSignature: true, quantity: "60000", grants: [holder] },
+      { deadline: "2027-02-28", iso: { kind: "upcoming", date: "2026-11-30" }, awaitingSignature: true, quantity: "60000", grants: [both] },
+    ]);
+    // Awaiting only the company's countersignature: exercisable as any other grant.
+    const company = portalSecurity({ ...NADIA_OPTION, executionPending: "pending_company" });
+    expect(exitWindows([company], TODAY)).toEqual([expect.objectContaining({ awaitingSignature: false, quantity: "60000", grants: [company] })]);
+    expect([holder, both, company, NADIA_OPTION].map(awaitingHolderSignature)).toEqual([true, true, false, false]);
+    // Nothing vested left to sign for, or a deadline already passed: no statement.
+    expect(exitWindows([{ ...holder, numbers: { ...holder.numbers, outstanding: "0", vested: "0" } }], TODAY)).toEqual([]);
+    expect(exitWindows([holder], "2027-03-01")).toEqual([]);
+  });
+
   it("keeps a passed ISO deadline, which makes every later exercise an NSO, until the contractual deadline", () => {
     expect(isoDeadlineState(NADIA_OPTION, "2026-12-15")).toEqual({ kind: "passed", date: "2026-11-30" });
     expect(exitWindows([NADIA_OPTION], "2026-12-15")).toEqual([
-      { deadline: "2027-02-28", iso: { kind: "passed", date: "2026-11-30" }, exercisable: "60000", grants: [NADIA_OPTION] },
+      { deadline: "2027-02-28", iso: { kind: "passed", date: "2026-11-30" }, awaitingSignature: false, quantity: "60000", grants: [NADIA_OPTION] },
     ]);
     // An ISO deadline capped at the contractual deadline changes nothing before it.
     expect(isoDeadlineState({ isoDeadline: "2027-02-28", contractualDeadline: "2027-02-28" }, TODAY)).toEqual({ kind: "none" });
@@ -92,6 +112,21 @@ describe("money", () => {
     expect(exerciseCost("0.000000000001", "0.000000000001").toString()).toBe("0.000000000000000000000001");
     expect(exerciseCost("999999999999.999999999999", "999999999999.999999999999").toString()).toBe("999999999999999999999998.000000000000000000000001");
     expect(exerciseCost("0.5", "0.010000000001").toString()).toBe("0.0050000000005");
+  });
+
+  it("takes a number of options to exercise only as whole options, from one up to what is exercisable", () => {
+    expect(maxWholeOptions("60000")).toBe("60000");
+    expect(maxWholeOptions("833.75")).toBe("833");
+    expect(maxWholeOptions(null)).toBe("0");
+    expect(exerciseQuantity("1500", "60000")).toEqual({ quantity: "1500" });
+    expect(exerciseQuantity(" 60,000 ", "60000")).toEqual({ quantity: "60000" });
+    expect(exerciseQuantity("007", "60000")).toEqual({ quantity: "7" });
+    expect(exerciseQuantity("833", "833.75")).toEqual({ quantity: "833" });
+    expect(exerciseQuantity("834", "833.75")).toEqual({ problem: "too_many" });
+    expect(exerciseQuantity("60001", "60000")).toEqual({ problem: "too_many" });
+    expect(exerciseQuantity("99999999999999999999999999999", "60000")).toEqual({ problem: "too_many" });
+    expect(exerciseQuantity("0", "60000")).toEqual({ problem: "none" });
+    for (const input of ["", "12.5", "-3", "1e3", "ten"]) expect(exerciseQuantity(input, "60000"), input).toEqual({ problem: "not_whole" });
   });
 
   it("shows computed money HALF_EVEN to the cent and says when it rounded", () => {

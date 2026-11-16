@@ -130,7 +130,7 @@ function pick(files: File[], label: RegExp = /^Choose (files|a file)$/) {
 }
 function chosen(): string[] {
   const list = screen.queryByRole("list", { name: "Chosen files" });
-  return list ? within(list).getAllByRole("listitem").map((item) => item.querySelector(".fl-name")?.textContent ?? "") : [];
+  return list ? within(list).getAllByRole("listitem").map((item) => item.querySelector("[data-file-name]")?.textContent ?? "") : [];
 }
 function currentStep(): string | null | undefined {
   return screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent;
@@ -242,7 +242,10 @@ describe("uploading", () => {
     const input = await screen.findByLabelText("Choose files");
     input.focus();
     expect(document.activeElement).toBe(input);
-    expect(input.closest("label")?.classList.contains("btn")).toBe(true);
+    // The label is drawn as a button (shadcn/ui's Button on the label) and rings while the input inside has focus.
+    const label = input.closest("label");
+    expect(label?.dataset.slot).toBe("button");
+    expect(label?.className).toMatch(/\bfocus-within:ring-3\b/);
   });
 
   it("says how much the files may add up to, honestly", async () => {

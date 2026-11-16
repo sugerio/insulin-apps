@@ -55,6 +55,14 @@ export function formatDaysLeft(today: string, deadline: string): string {
   return days < 0 ? "passed" : `${days} day${days === 1 ? "" : "s"}`;
 }
 
+/** "in 15 days", "in 1 day", "today", "1 day ago", "3 days ago": a date relative to today. */
+export function formatDaysRelative(today: string, date: string): string {
+  const days = daysBetween(today, date);
+  if (days === 0) return "today";
+  const span = `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"}`;
+  return days > 0 ? `in ${span}` : `${span} ago`;
+}
+
 export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 }

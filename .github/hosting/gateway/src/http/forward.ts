@@ -10,6 +10,8 @@ export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([
   SESSION_COOKIE, 'insulin_oauth', '__host-insulin_oauth', 'insulin_mfa', '__host-insulin_mfa', 'insulin_sso', '__host-insulin_sso',
   // The navigation's collapse state (navigation.ts): host-only on the apex, so an app never sees it, nor sets it.
   'insulin_nav',
+  // The operator console's session and sign-in (super/auth.ts): host-only on the apex too.
+  'insulin_super', '__host-insulin_super', 'insulin_super_flow', '__host-insulin_super_flow',
 ])
 
 /**

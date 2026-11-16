@@ -8,6 +8,7 @@ import {
   clearCodeFailures, consumeRecoveryCode, consumeStep, countAttempt, findChallenge, findMfa, insertChallenge, recordCodeFailure,
   takeChallenge, type ChallengeRow, type MfaRow,
 } from '../db/mfa.ts'
+import { findUserById } from '../db/users.ts'
 import { cookieValues, serializeCookie } from '../http/cookies.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
@@ -20,6 +21,7 @@ import { afterPost, credentialsChangedPage, home } from '../pages/status.tsx'
 import { allowAuth } from '../ratelimit.ts'
 import { ssoRequired, ssoRequiredResponse } from '../sso/required.ts'
 import { startSession } from './session.ts'
+import { unavailable } from './standing.ts'
 import { codeDigits, matchTotp, normalizeRecoveryCode } from './totp.ts'
 
 export const CHALLENGE_TTL_MS = 10 * 60 * 1000
@@ -168,6 +170,9 @@ export async function mfaVerify(ctx: Context): Promise<Response> {
   closeChallenge(ctx)
   // "Require SSO" may have been turned on while the challenge waited: every way but single sign-on stops here too.
   if (challenge.method !== 'sso' && await ssoRequired(ctx, mfa.email)) return ssoRequiredResponse(ctx, mfa.email, null)
+  // Suspended or disabled while the challenge waited (DESIGN.md §11.3): no session.
+  const refused = unavailable(ctx, await findUserById(ctx.config.db, challenge.user_id))
+  if (refused) return refused
   if (!(await startSession(ctx, { id: challenge.user_id, credential_version: challenge.credential_version }, challenge.active_org_id))) {
     return credentialsChangedPage(ctx)
   }

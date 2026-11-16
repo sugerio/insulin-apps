@@ -84,13 +84,20 @@ Employees, former employees, advisors and investors open Cap Table like everyone
 With the Viewer role (or a custom role with **See own holdings**), they see:
 
 - **Portfolio:** a summary of their shares, options, warrants and SAFEs, vesting status and upcoming vesting dates, a
-  table of their grants and shares, and the company resources. Each SAFE shows its status and, once converted, the
-  shares it became.
+  short explanation of vesting and exercising, a table of their grants and shares with what each can exercise now and a
+  **How to exercise** link, and the company resources. Each SAFE shows its status and, once converted, the shares it
+  became. A grant not yet signed says whose signature is missing (theirs, the company's, or both).
 - **A grant's page:** granted, vested, unvested, exercised and exercisable now, the exercise price, ISO or NSO, the
-  expiration date, a vesting timeline, the ISO/NSO split, the exercise windows after leaving, the exercise history and
-  the grant's documents.
-- **How to exercise:** the company's instructions, the notice of exercise form, who to send it to and how to pay.
-- **Documents:** their own documents and the company resources.
+  expiration date, the board approval date and acceleration terms, a one-line vesting summary and a vesting timeline,
+  the ISO/NSO split, the exercise windows after leaving, the exercise history and the grant's documents.
+- **A share lot's page:** the price paid, the holding start date, how the shares are held (most are book entries),
+  legends, the 83(b) election ("Not recorded" for shares that vest over time without one on record) and any repurchase
+  right, with its deadline.
+- **How to exercise:** the company's instructions, the notice of exercise form, who to send it to, a calculator of the
+  exact cost for a number of options (or the most they can exercise), and how to pay once the equity team has confirmed
+  the amount due.
+- **Documents:** their own documents, newest first and searchable, each with the grants or shares it belongs to, and the
+  company resources.
 - **Docs:** what they see and how to read it, how exercising works, and the basics of equity.
 
 ![The holder view of a fictional employee: their options, vesting progress and upcoming vesting dates](/docs/assets/screenshots/captable-holder-view.png "What a Viewer sees: their own holdings, and nothing else")

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { api } from "#shared";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../../api/request.ts";
 import { fieldProblem, useWriteFlow, type FieldMap } from "../../lib/flow.ts";
 import { emailKindLabel } from "../../lib/stakeholders.ts";
 import { DocumentUpload, type UploadedDocument } from "../DocumentUpload.tsx";
+import { Banner } from "../Feedback.tsx";
 import { SelectField, TextAreaField, TextField } from "../Form.tsx";
 import { useWorkspace } from "../OrgWorkspace.tsx";
 import { usePii } from "../Pii.tsx";
@@ -11,6 +13,7 @@ import { useToast } from "../Toast.tsx";
 import { CommandPreview, confirmationMatches, TypedConfirmation } from "../FlowParts.tsx";
 import { useResource } from "../../lib/useResource.ts";
 import { FlowDialog } from "./FlowDialog.tsx";
+import { ReviewPanel } from "./ReviewPanel.tsx";
 
 // A stakeholder's e-mail addresses and the merge of two stakeholder records. An address is added or removed, never
 // edited. No admin changes these on their own record (403 self_dealing).
@@ -79,16 +82,16 @@ export function AddEmailDialog({ stakeholder, onClose, onDone }: { stakeholder: 
       onReview={review}
       confirmLabel="Add e-mail"
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>Add <b>{email.trim().toLowerCase()}</b> ({emailKindLabel({ kind }).toLowerCase()}{kind !== "self" && contactName.trim() ? `: ${contactName.trim()}` : ""}) to {endSentence(stakeholder.displayName)}</p>
-          {kind === "self" ? <p className="small">A console user with this e-mail sees {stakeholder.displayName}'s holdings.</p> : null}
-        </div>
+          {kind === "self" ? <p className="text-xs">A console user with this e-mail sees {stakeholder.displayName}'s holdings.</p> : null}
+        </ReviewPanel>
       }
     >
       <TextField label="E-mail" type="email" required value={email} onChange={(value) => { setEmail(value); clear("email"); }} placeholder="name@mailbox.example" error={errorOf("email")} />
       <SelectField label="Whose address" value={kind} onChange={(value) => setKind(value as api.StakeholderEmail["kind"])} options={KIND_OPTIONS} />
       {kind !== "self" ? (
-        <div className="form-grid">
+        <div className="grid gap-4 sm:grid-cols-2">
           <TextField label={kind === "representative" ? "Representative's name" : "Contact name"} required value={contactName} onChange={(value) => { setContactName(value); clear("contactName"); }} error={errorOf("contactName")} />
           <TextField label="Role" value={contactRole} onChange={setContactRole} error={errorOf("contactRole")} />
         </div>
@@ -127,9 +130,9 @@ export function RemoveEmailDialog({ stakeholder, email, onClose, onDone }: { sta
       confirmLabel="Remove e-mail"
       danger
       review={
-        <div className="review-panel" aria-label="Review">
+        <ReviewPanel>
           <p>Remove <b>{pii.email(email.email)}</b> from {endSentence(stakeholder.displayName)}{email.kind === "self" ? " A console user with this e-mail no longer sees these holdings." : ""}</p>
-        </div>
+        </ReviewPanel>
       }
     >
       <TextAreaField label="Reason (optional)" value={reason} onChange={setReason} placeholder="e.g. The holder changed address" error={fieldProblem(flow.problem, "reason")} />
@@ -202,35 +205,39 @@ export function MergeStakeholderDialog({ stakeholder, onClose, onDone }: MergePr
       confirmReady={!!preview && !blocked && confirmationMatches(typed, preview.confirmation)}
       danger
       review={preview ? (
-        <div className="review-panel" aria-label="Merge preview">
+        <ReviewPanel label="Merge preview">
           <p><b>{preview.merged.displayName}</b> will disappear from lists and all ledger holdings and history will be attributed to <b>{preview.survivor.displayName}</b>.</p>
-          <table className="tbl" aria-label="Holdings before and after merge">
-            <thead><tr><th>Record</th><th className="right">Securities</th><th className="right">Issued &amp; outstanding</th><th className="right">Fully diluted</th></tr></thead>
-            <tbody>
-              <tr><td>{preview.survivor.displayName} before</td><td className="right">{preview.holdings.survivorBefore.securityCount}</td><td className="right">{format.shares(preview.holdings.survivorBefore.issuedAndOutstanding)}</td><td className="right">{format.shares(preview.holdings.survivorBefore.fullyDiluted)}</td></tr>
-              <tr><td>{preview.merged.displayName} before</td><td className="right">{preview.holdings.mergedBefore.securityCount}</td><td className="right">{format.shares(preview.holdings.mergedBefore.issuedAndOutstanding)}</td><td className="right">{format.shares(preview.holdings.mergedBefore.fullyDiluted)}</td></tr>
-              <tr><td><b>{preview.survivor.displayName} after</b></td><td className="right"><b>{preview.holdings.survivorAfter.securityCount}</b></td><td className="right"><b>{format.shares(preview.holdings.survivorAfter.issuedAndOutstanding)}</b></td><td className="right"><b>{format.shares(preview.holdings.survivorAfter.fullyDiluted)}</b></td></tr>
-            </tbody>
-          </table>
-          <p className="small"><b>E-mails:</b> {preview.addresses.length ? preview.addresses.map((item) => `${item.email} (${item.action})`).join(", ") : "None"}</p>
+          <Table aria-label="Holdings before and after merge" className="bg-background">
+            <TableHeader><TableRow><TableHead>Record</TableHead><TableHead className="text-right tabular-nums">Securities</TableHead><TableHead className="text-right tabular-nums">Issued &amp; outstanding</TableHead><TableHead className="text-right tabular-nums">Fully diluted</TableHead></TableRow></TableHeader>
+            <TableBody>
+              <TableRow><TableCell>{preview.survivor.displayName} before</TableCell><TableCell className="text-right tabular-nums">{preview.holdings.survivorBefore.securityCount}</TableCell><TableCell className="text-right tabular-nums">{format.shares(preview.holdings.survivorBefore.issuedAndOutstanding)}</TableCell><TableCell className="text-right tabular-nums">{format.shares(preview.holdings.survivorBefore.fullyDiluted)}</TableCell></TableRow>
+              <TableRow><TableCell>{preview.merged.displayName} before</TableCell><TableCell className="text-right tabular-nums">{preview.holdings.mergedBefore.securityCount}</TableCell><TableCell className="text-right tabular-nums">{format.shares(preview.holdings.mergedBefore.issuedAndOutstanding)}</TableCell><TableCell className="text-right tabular-nums">{format.shares(preview.holdings.mergedBefore.fullyDiluted)}</TableCell></TableRow>
+              <TableRow className="font-semibold"><TableCell>{preview.survivor.displayName} after</TableCell><TableCell className="text-right tabular-nums">{preview.holdings.survivorAfter.securityCount}</TableCell><TableCell className="text-right tabular-nums">{format.shares(preview.holdings.survivorAfter.issuedAndOutstanding)}</TableCell><TableCell className="text-right tabular-nums">{format.shares(preview.holdings.survivorAfter.fullyDiluted)}</TableCell></TableRow>
+            </TableBody>
+          </Table>
+          <p className="text-xs"><b>E-mails:</b> {preview.addresses.length ? preview.addresses.map((item) => `${item.email} (${item.action})`).join(", ") : "None"}</p>
           {preview.profileDifferences.length ? (
-            <div className="small"><b>Profile differences kept on the archived record:</b>
-              <ul>{preview.profileDifferences.map((item) => (
+            <div className="text-xs"><b>Profile differences kept on the archived record:</b>
+              <ul className="mt-1 list-disc pl-5">{preview.profileDifferences.map((item) => (
                 <li key={item.field}>{item.field}: survivor “{previewValue(item.survivorValue)}”; merged record “{previewValue(item.mergedValue)}”</li>
               ))}</ul>
               <p>Edit the survivor afterwards if needed.</p>
             </div>
           ) : null}
-          {economicChanges.length ? <CommandPreview changes={economicChanges} title="Economic changes" /> : <p className="small"><b>Economic changes:</b> None</p>}
-          {blocked ? <div className="banner banner-warn"><b>Resolve these blockers first:</b><ul>{preview.blockingItems.map((item) => <li key={`${item.type}:${item.id}`}>{item.label}</li>)}</ul></div> : null}
+          {economicChanges.length ? <CommandPreview changes={economicChanges} title="Economic changes" /> : <p className="text-xs"><b>Economic changes:</b> None</p>}
+          {blocked ? (
+            <Banner kind="warn" title="Resolve these blockers first:">
+              <ul className="list-disc pl-5">{preview.blockingItems.map((item) => <li key={`${item.type}:${item.id}`}>{item.label}</li>)}</ul>
+            </Banner>
+          ) : null}
           <TypedConfirmation expected={preview.confirmation} value={typed} onChange={setTyped} disabled={flow.busy || flow.locked || blocked} />
-        </div>
+        </ReviewPanel>
       ) : null}
     >
       <SelectField label="Surviving record" required value={survivorId} onChange={(value) => { setSurvivorId(value); setErrors((current) => ({ ...current, survivor: undefined })); }}
         options={[["", candidates.data ? "Choose a stakeholder" : "Loading stakeholders…"], ...available.map((item) => [item.id, item.displayName] as const)]} error={errors.survivor} />
       <TextAreaField label="Reason" required value={reason} onChange={(value) => { setReason(value); setErrors((current) => ({ ...current, reason: undefined })); }} error={errors.reason} />
-      <p className="small muted">The survivor keeps its own profile fields. Holdings and ledger history are combined for every as-of date. An unmerge leaves moved e-mails on the survivor.</p>
+      <p className="text-xs text-muted-foreground">The survivor keeps its own profile fields. Holdings and ledger history are combined for every as-of date. An unmerge leaves moved e-mails on the survivor.</p>
     </FlowDialog>
   );
 }

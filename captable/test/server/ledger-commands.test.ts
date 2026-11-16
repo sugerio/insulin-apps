@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { api } from '../../src/app/shared/index.ts'
+import type { Acme } from '../shared/engine/fixtures/acme.ts'
+import { seedOrg } from '../support/read-helpers.ts'
 import {
   ADMIN_EMAIL,
   ADMIN_USER_ID,
@@ -7,6 +9,8 @@ import {
   addDocument,
   addEmail,
   addStakeholder,
+  batchIncludesSql,
+  batchRaceInjector,
   commit,
   count,
   errorOf,
@@ -16,14 +20,17 @@ import {
   linkAdmin,
   runCommand,
   VS1_TEMPLATE_ID,
+  withImportedRestrictedShares,
+  withRestrictedShares,
   withRsuAndSar,
   type LedgerHarness,
 } from '../support/ledger-helpers.ts'
+import { appRequestWithDatabase } from '../support/server-harness.ts'
 
 /** The command routes that refuse an administrator's own holdings (403 self_dealing), each proven live below. */
 const LEDGER_SELF_DEALING_ROUTE_IDS = [
   'terminateStakeholder', 'scheduleTermination', 'exerciseOption', 'grantEquityCompensation', 'cancelSecurity',
-  'markExecuted', 'recordLeaveOfAbsence', 'extendExerciseDeadline', 'setPlanTerms', 'mergeStakeholders', 'reverseCommand',
+  'recordRepurchase', 'markExecuted', 'recordLeaveOfAbsence', 'extendExerciseDeadline', 'setPlanTerms', 'mergeStakeholders', 'reverseCommand',
 ] as const
 
 /**
@@ -123,6 +130,10 @@ describe('terminate-stakeholder', () => {
     const command = await getJson<api.CommandDetail>(l, l.sa, `/commands/${result.commandId}`)
     expect(command).toMatchObject({ type: 'terminate-stakeholder', actorKind: 'user' })
     expect(await count(l.db, "SELECT COUNT(*) AS n FROM audit_events WHERE action = 'command.terminate-stakeholder' AND target_id = ?", l.id('S10'))).toBe(1)
+    // The relationship the termination set changes only by reversing it.
+    const relationship = await l.api('PATCH', l.path(`/stakeholders/${l.id('S10')}`), l.rw, { version: 2, relationship: 'employee' })
+    expect(relationship.status).toBe(409)
+    expect(errorOf(await relationship.json())).toMatchObject({ code: 'conflict', reason: 'state_changed' })
     const patchedResponse = await l.api('PATCH', l.path(`/stakeholders/${l.id('S10')}`), l.rw, {
       version: 2, displayName: 'Synthetic Former Holder S10',
     })
@@ -158,6 +169,29 @@ describe('terminate-stakeholder', () => {
     expect((await dryRun(l, l.rw, 'terminate-stakeholder', terminationBody(l, 'S10', { futureAccessEmail: 's10.home@example.test' }))).status).toBe(400)
     expect(await headSeq(l)).toBe(before)
     expect(await count(l.db, "SELECT COUNT(*) AS n FROM commands WHERE org_id = ? AND actor_kind = 'user' AND created_at >= ?", l.orgId, l.clock.time)).toBe(0)
+  })
+
+  it("needs a restricted lot's repurchase deadline unless its agreement sets none", async () => {
+    // Planless restricted lots (no plan default): one whose recorded right has no deadline, one with no terms at all.
+    const restricted = (acme: Acme, label: string, holder: string, right: Record<string, unknown> | null) => {
+      const { b, id, cls } = acme
+      b.stakeholder(holder, 'employee', { countryOfResidence: 'US' })
+      const vt = b.vestingTerms(`vt:${label}`, { type: 'EXPLICIT', events: [{ date: '2026-03-01', quantity: '500' }, { date: '2027-03-01', quantity: '500' }] })
+      b.command(`issue:${label}`, (c) => {
+        const lot = c.security(label, { family: 'STOCK', subtype: 'COMMON', stakeholderId: id(holder), stockClassId: cls.CS, stockPlanId: null, parentSecurityId: null })
+        c.tx('TX_STOCK_ISSUANCE', '2025-03-01', {
+          security_id: lot, custom_id: label, stakeholder_id: id(holder), stock_class_id: cls.CS, share_price: { amount: '0.01', currency: 'USD' },
+          quantity: '1000', x_origin: 'PURCHASE', vesting_terms_id: vt.id, x_definition_sha256: vt.sha, ...(right ? { x_repurchase_right: right } : {}),
+        })
+      })
+    }
+    const l = await ledgerHarness({ extend: (acme) => {
+      restricted(acme, 'CS-90', 'S44', { price_per_share: { amount: '0.01', currency: 'USD' }, window: null, x_no_deadline: true })
+      restricted(acme, 'CS-91', 'S45', null)
+    } })
+    const dry = await dryRun(l, l.rw, 'terminate-stakeholder', terminationBody(l, 'S44'))
+    expect(dry.status, JSON.stringify(dry.body)).toBe(200)
+    expect(await violations(l, l.rw, 'terminate-stakeholder', terminationBody(l, 'S45'))).toContain('REPURCHASE_DEADLINE_NOT_RECORDED')
   })
 
   it('replays a retried key and refuses the key for a different request', async () => {
@@ -214,6 +248,56 @@ describe('terminate-stakeholder', () => {
     const dry = await l.api('POST', l.path('/commands/terminate-stakeholder?dryRun=true'), l.rw, body, noKey)
     expect(dry.status).toBe(200)
     expect((await dry.json() as api.CommandResult).commandId).toBeNull()
+  })
+})
+
+describe("correcting an ex-employee's relationship", () => {
+  it('lets a record imported as an ex-employee without a termination be corrected, and refuses it once a termination is scheduled', async () => {
+    const l = await ledgerHarness()
+    // As an import leaves a holder listed as an ex-employee without a termination date.
+    await l.db.prepare("UPDATE stakeholders SET relationship = 'ex_employee', version = version + 1 WHERE id = ?").bind(l.id('S10')).run()
+    const version = (await l.db.prepare('SELECT version FROM stakeholders WHERE id = ?').bind(l.id('S10')).first<number>('version'))!
+    const corrected = await l.api('PATCH', l.path(`/stakeholders/${l.id('S10')}`), l.rw, { version, relationship: 'employee' })
+    expect(corrected.status, await corrected.clone().text()).toBe(200)
+    expect(await corrected.json()).toMatchObject({ relationship: 'employee', version: version + 1 })
+    const audit = await l.db.prepare("SELECT details FROM audit_events WHERE action = 'stakeholder.updated' AND target_id = ?").bind(l.id('S10')).first<string>('details')
+    expect(JSON.parse(audit!)).toMatchObject({ fields: ['relationship'] })
+    // Still never set to ex_employee here: a termination does that.
+    expect((await l.api('PATCH', l.path(`/stakeholders/${l.id('S10')}`), l.rw, { version: version + 1, relationship: 'ex_employee' })).status).toBe(400)
+
+    // A scheduled termination locks the ex-employee relationship (a recorded one does too: see terminate-stakeholder).
+    await l.db.prepare("UPDATE stakeholders SET relationship = 'ex_employee', version = version + 1 WHERE id = ?").bind(l.id('S14')).run()
+    await l.db.prepare(
+      `INSERT INTO scheduled_terminations
+       (id, org_id, stakeholder_id, termination_date, termination_type, vesting_stop_date, request, request_sha256, status, version, created_at, updated_at)
+       VALUES (?, ?, ?, '2026-12-31', 'voluntary', '2026-12-31', '{}', ?, 'SCHEDULED', 1, ?, ?)`,
+    ).bind(crypto.randomUUID(), l.orgId, l.id('S14'), 'ab'.repeat(32), l.clock.time, l.clock.time).run()
+    const s14 = (await l.db.prepare('SELECT version FROM stakeholders WHERE id = ?').bind(l.id('S14')).first<number>('version'))!
+    const locked = await l.api('PATCH', l.path(`/stakeholders/${l.id('S14')}`), l.rw, { version: s14, relationship: 'employee' })
+    expect(locked.status).toBe(409)
+    expect(errorOf(await locked.json())).toMatchObject({ code: 'conflict', reason: 'state_changed' })
+    // Other fields of such a record still change.
+    expect((await l.api('PATCH', l.path(`/stakeholders/${l.id('S14')}`), l.rw, { version: s14, displayName: 'Synthetic Holder S14 (leaving)' })).status).toBe(200)
+  })
+
+  it('answers stale_version, as any stale edit, when the record is edited between the correction\'s read and its commit', async () => {
+    const l = await ledgerHarness()
+    await l.db.prepare("UPDATE stakeholders SET relationship = 'ex_employee', version = version + 1 WHERE id = ?").bind(l.id('S10')).run()
+    const version = (await l.db.prepare('SELECT version FROM stakeholders WHERE id = ?').bind(l.id('S10')).first<number>('version'))!
+    const path = l.path(`/stakeholders/${l.id('S10')}`)
+    const race = batchRaceInjector(l.db)
+    let edited: Response | undefined
+    race.arm(async () => {
+      edited = await l.api('PATCH', path, l.sa, { version, displayName: 'Synthetic Holder S10 (renamed)' })
+    }, (statements) => batchIncludesSql(statements, 'UPDATE stakeholders SET kind'))
+    const corrected = await appRequestWithDatabase(race.binding, path, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ version, relationship: 'employee' }),
+    }, l.rw)
+    expect(race.injections()).toBe(1)
+    expect(edited?.status).toBe(200)
+    expect(corrected.status).toBe(409)
+    expect(errorOf(await corrected.json())).toMatchObject({ code: 'conflict', reason: 'stale_version' })
+    expect(await l.db.prepare('SELECT relationship FROM stakeholders WHERE id = ?').bind(l.id('S10')).first('relationship')).toBe('ex_employee')
   })
 })
 
@@ -284,6 +368,31 @@ describe('exercise-option', () => {
       l.id('OPT-1'), (body.notice as { documentId: string }).documentId)).toBe(1)
     const option = await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('OPT-1')}`)
     expect(option.numbers!.exercised).toBe('60000')
+  })
+
+  it('records an exercise of a grant awaiting only the company signatory, once its warning is acknowledged', async () => {
+    const l = await ledgerHarness({
+      extend: (acme) => {
+        acme.b.command('pending:OPT-2', (c) => { c.tx('X_EXECUTION_STATUS', '2026-10-01', { security_id: acme.id('OPT-2'), status: 'pending_company' }) })
+      },
+    })
+    const pending = await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('OPT-2')}`)
+    expect(pending.executionStatus).toBe('pending_company')
+    expect(pending.numbers!.exercisable).not.toBe('0')
+    const body = await exerciseBody(l, { securityId: l.id('OPT-2') })
+    const preview = await dryRun(l, l.rw, 'exercise-option', body)
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200)
+    expect((preview.body as api.CommandResult).warnings).toEqual([
+      expect.objectContaining({ code: 'EXECUTION_PENDING_COMPANY', details: expect.objectContaining({ securityId: l.id('OPT-2') }) }),
+    ])
+    // The warning must be acknowledged like any other.
+    const unacknowledged = await runCommand(l, l.rw, 'exercise-option', body, { acknowledge: [] })
+    expect(unacknowledged.response.status).toBe(422)
+    expect(errorOf(unacknowledged.body).code).toBe('warnings_unacknowledged')
+    const result = await commit(l, l.rw, 'exercise-option', await exerciseBody(l, { securityId: l.id('OPT-2') }))
+    expect(result.transactions.map((tx) => tx.type)).toEqual(['TX_EQUITY_COMPENSATION_EXERCISE', 'TX_STOCK_ISSUANCE'])
+    // Still awaiting the company signatory: Mark executed completes it later.
+    expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('OPT-2')}`)).executionStatus).toBe('pending_company')
   })
 
   it('refuses each rule of a reported exercise', async () => {
@@ -379,6 +488,78 @@ describe('grant-equity-compensation', () => {
     expect(vesting.events.map((event) => [event.date, event.quantity])).toEqual([['2027-10-20', '600'], ['2028-10-20', '600']])
   })
 
+  it('records a grant awaiting signatures as execution pending, the partly signed agreement as evidence', async () => {
+    const l = await ledgerHarness()
+    // An NSO vested at grant, so its exercise shows what the pending status allows.
+    const vestedAtGrant = { terms: { explicit: [{ date: '2026-10-20', quantity: '1200' }] }, vestingStartDate: '2026-10-20', earlyExercisable: false, accelerationTerms: { kind: 'NONE' }, matchesSignedAgreement: true }
+    const nso = { quantity: '1200', optionType: 'NSO', isoAttestations: undefined, vesting: vestedAtGrant, executedAgreement: undefined }
+    const holderSigned = await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT')
+    const result = await commit(l, l.rw, 'grant-equity-compensation', await grantBody(l, {
+      ...nso, displayId: 'OPT-70', awaitingSignatures: { missing: 'company', agreementDocumentId: holderSigned },
+    }))
+    expect(result.transactions.map((tx) => [tx.type, tx.effectiveDate])).toEqual([
+      ['TX_EQUITY_COMPENSATION_ISSUANCE', '2026-10-20'], ['TX_VESTING_START', '2026-10-20'], ['X_EXECUTION_STATUS', '2026-10-20'],
+    ])
+    const companyPending = result.created.securityIds[0]!
+    expect(await getJson<api.SecurityDetail>(l, l.sa, `/securities/${companyPending}`)).toMatchObject({ executionStatus: 'pending_company', numbers: { exercisable: '1200' } })
+    // Evidence on the security and on the execution status, never the grant's agreement.
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_links WHERE document_id = ? AND role = 'EVIDENCE' AND security_id = ?", holderSigned, companyPending)).toBe(1)
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_links WHERE document_id = ? AND role = 'AGREEMENT'", holderSigned)).toBe(0)
+    const payloads = (await l.db.prepare('SELECT type, payload FROM transactions WHERE command_id = ? ORDER BY seq').bind(result.commandId).all<{ type: string, payload: string }>()).results
+    const issuance = JSON.parse(payloads[0]!.payload) as { x_documents: { id: string, role: string }[] }
+    expect(issuance.x_documents.map((document) => document.role)).toEqual(['CONSENT'])
+    expect(JSON.parse(payloads[2]!.payload)).toMatchObject({ security_id: companyPending, status: 'pending_company', attestation: 'Recorded before all signatures', document: { id: holderSigned } })
+    // Awaiting only the company signatory, it can be exercised (with the warning acknowledged).
+    const exercise = (securityId: string) => exerciseBody(l, {
+      securityId, quantity: '1200', payment: { amount: '1140', receivedOn: '2026-10-20', method: 'ACH', reference: 'EX-OPT-70' }, resultingShares: [{ portion: 'NSO' }],
+    })
+    const exercised = await commit(l, l.rw, 'exercise-option', await exercise(companyPending))
+    expect(exercised.warnings.map((warning) => warning.code)).toEqual(['EXECUTION_PENDING_COMPANY'])
+
+    // Awaiting the holder (or both), it is blocked until Mark executed records the signatures; no agreement is needed yet.
+    const pendingIds: string[] = []
+    for (const [displayId, missing, status] of [['OPT-71', 'holder', 'pending_holder'], ['OPT-72', 'both', 'pending_both']] as const) {
+      const pending = await commit(l, l.rw, 'grant-equity-compensation', await grantBody(l, { ...nso, displayId, awaitingSignatures: { missing } }))
+      expect(pending.transactions.map((tx) => tx.type)).toEqual(['TX_EQUITY_COMPENSATION_ISSUANCE', 'TX_VESTING_START', 'X_EXECUTION_STATUS'])
+      const id = pending.created.securityIds[0]!
+      pendingIds.push(id)
+      expect(await getJson<api.SecurityDetail>(l, l.sa, `/securities/${id}`)).toMatchObject({ executionStatus: status, numbers: { exercisable: '0' } })
+      expect(await violations(l, l.rw, 'exercise-option', await exercise(id))).toContain('EXECUTION_PENDING')
+    }
+    const signed = await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT')
+    await commit(l, l.rw, 'mark-executed', { securityId: pendingIds[0], executedAgreementDocumentId: signed, signatureDates: { holder: '2026-10-21' }, attestation: 'This PDF bears both signatures', confirmation: 'OPT-71' })
+    expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${pendingIds[0]}`)).executionStatus).toBe('executed')
+    await commit(l, l.rw, 'exercise-option', await exercise(pendingIds[0]!).then((body) => ({ ...body, notice: { ...body.notice, receivedOn: '2026-10-21' }, payment: { ...body.payment, receivedOn: '2026-10-21' }, exerciseDate: '2026-10-21' })))
+  })
+
+  it("warns of a grant dated before the company's incorporation, without blocking it", async () => {
+    const l = await ledgerHarness()
+    const warnings = async () => ((await dryRun(l, l.rw, 'grant-equity-compensation', await grantBody(l))).body as api.CommandResult).warnings
+    expect(await warnings()).toEqual([])
+    await l.db.prepare("UPDATE orgs SET incorporation_date = '2026-10-21', version = version + 1 WHERE id = ?").bind(l.orgId).run()
+    expect(await warnings()).toEqual([{ code: 'GRANT_BEFORE_INCORPORATION', message: "The grant date 2026-10-20 is before the company's incorporation on 2026-10-21", details: { incorporationDate: '2026-10-21' } }])
+    // Acknowledged, it records.
+    const result = await commit(l, l.rw, 'grant-equity-compensation', await grantBody(l))
+    expect(result.warnings.map((warning) => warning.code)).toEqual(['GRANT_BEFORE_INCORPORATION'])
+    await l.db.prepare("UPDATE orgs SET incorporation_date = '2026-10-20', version = version + 1 WHERE id = ?").bind(l.orgId).run()
+    expect(await warnings()).toEqual([])
+  })
+
+  it('needs exactly one of the executed agreement and the signatures awaited, and the holder-signed agreement when only the company signs later', async () => {
+    const l = await ledgerHarness()
+    const status = async (extra: Record<string, unknown>) => (await dryRun(l, l.rw, 'grant-equity-compensation', await grantBody(l, extra))).status
+    expect(await status({ executedAgreement: undefined })).toBe(400)
+    expect(await status({ awaitingSignatures: { missing: 'both' } })).toBe(400)
+    expect(await status({ executedAgreement: undefined, awaitingSignatures: { missing: 'company' } })).toBe(400)
+    expect(await status({ executedAgreement: undefined, awaitingSignatures: { missing: 'both' } })).toBe(200)
+    // The board consent, the 409A and the plan's availability still block a grant awaiting signatures.
+    const awaiting = { executedAgreement: undefined, awaitingSignatures: { missing: 'holder' } }
+    expect(await violations(l, l.rw, 'grant-equity-compensation', await grantBody(l, { ...awaiting, valuationId: l.id('V4') }))).toContain('NO_PRESUMPTIVELY_VALID_409A')
+    expect(await violations(l, l.rw, 'grant-equity-compensation', await grantBody(l, { ...awaiting, quantity: '500000' }))).toContain('EXCEEDS_PLAN_AVAILABLE')
+    expect(await violations(l, l.rw, 'grant-equity-compensation', await grantBody(l, { ...awaiting, stakeholderId: l.id('S28') }))).toContain('ISO_NOT_EMPLOYEE')
+    expect((await dryRun(l, l.rw, 'grant-equity-compensation', await grantBody(l, { executedAgreement: undefined, awaitingSignatures: { missing: 'company', agreementDocumentId: l.id('doc:none') } }))).status).toBe(404)
+  })
+
   it("refuses each grant rule, and lets a write administrator override a missing 409A only with counsel's memo", async () => {
     const l = await ledgerHarness()
     const v = async (extra: Record<string, unknown>, identity = l.rw) => violations(l, identity, 'grant-equity-compensation', await grantBody(l, extra))
@@ -439,6 +620,273 @@ describe('cancel-security', () => {
   })
 })
 
+/** The unvested quantity Securities Status shows for a terminated holder's restricted lot (the engine's figure). */
+async function unvestedOf(l: LedgerHarness, label: string): Promise<string> {
+  const status = await getJson<api.SecuritiesStatus>(l, l.sa, '/securities-status')
+  return status.unvestedSharesFromTerminated.find((row) => row.securityId === l.id(label))!.unvested
+}
+
+async function repurchaseBody(l: LedgerHarness, label: string, extra: Record<string, unknown> = {}) {
+  return {
+    securityId: l.id(label),
+    effectiveDate: '2026-10-20',
+    quantity: label === 'CS-4' ? '34500' : '1000',
+    pricePerShare: label === 'CS-4' ? '0.31' : '0.5',
+    consideration: { method: 'CHECK', paidDate: '2026-10-20', reference: 'Check 1042' },
+    noticeDocumentId: await addDocument(l.db, l.orgId, 'OTHER'),
+    confirmation: label,
+    ...extra,
+  }
+}
+
+describe('record-repurchase', () => {
+  it('repurchases every unvested share of CS-4 and moves the vested remainder to a balance lot, with the gross capital unchanged', async () => {
+    const l = await ledgerHarness()
+    // CS-4: 72,000 early-exercised shares vesting from 2024-08-15; S24 left on 2026-09-15 with 37,500 vested.
+    expect(await unvestedOf(l, 'CS-4')).toBe('34500')
+    const before = await getJson<api.CapTableResponse>(l, l.sa, '/cap-table')
+    const body = await repurchaseBody(l, 'CS-4')
+    const result = await commit(l, l.rw, 'record-repurchase', body, { key: 'repurchase-cs-4' })
+    expect(result.transactions).toMatchObject([
+      { type: 'TX_STOCK_REPURCHASE', effectiveDate: '2026-10-20', securityId: l.id('CS-4'), quantity: '34500' },
+      { type: 'TX_STOCK_ISSUANCE', effectiveDate: '2026-10-20', quantity: '37500' },
+    ])
+    expect(result.warnings).toEqual([])
+    // It relies on the lot, and on the termination that opened the window.
+    expect(result.dependencies).toEqual(expect.arrayContaining([
+      { commandId: l.id('command:exercise:OPT-17'), kind: 'consumes_security' },
+      { commandId: l.id('command:terminate:S24'), kind: 'relies_on_deadline' },
+    ]))
+    const [balanceId] = result.created.securityIds
+    const source = await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('CS-4')}`)
+    expect(source).toMatchObject({ status: 'REPURCHASED', numbers: { outstanding: '0', repurchased: '34500' } })
+    expect(source.lineage.children).toContainEqual({ id: balanceId, displayId: 'CS-9', transactionType: 'TX_STOCK_REPURCHASE' })
+    const balance = await getJson<api.SecurityDetail>(l, l.sa, `/securities/${balanceId}`)
+    expect(balance).toMatchObject({ displayId: 'CS-9', status: 'OUTSTANDING', stakeholderId: l.id('S24'), stockPlanId: l.id('plan:P1'), parentSecurityId: l.id('CS-4') })
+    expect(balance.numbers).toMatchObject({ outstanding: '37500', vested: '37500', unvested: '0' })
+    // The lot's price and holding start, and nothing of its economics: no vesting, repurchase right or contribution.
+    expect(balance.terms).toEqual({
+      security_id: balanceId, custom_id: 'CS-9', stakeholder_id: l.id('S24'), stock_class_id: l.id('class:CS'), stock_plan_id: l.id('plan:P1'),
+      share_price: { amount: '0.31', currency: 'USD' }, quantity: '37500', x_holding_start_date: '2024-09-01', x_origin: 'BALANCE',
+      x_source_security_id: l.id('CS-4'),
+    })
+    const after = await getJson<api.CapTableResponse>(l, l.sa, '/cap-table')
+    expect(after.metrics.capitalContribution).toBe(before.metrics.capitalContribution)
+    expect(after.metrics.issuedAndOutstanding).toBe(String(BigInt(before.metrics.issuedAndOutstanding) - 34500n))
+    // Plan stock repurchased unvested returns to the pool (the plan's rule).
+    expect(BigInt(after.metrics.planAvailable) - BigInt(before.metrics.planAvailable)).toBe(34500n)
+    // The payment and the notice are on the chain, with the notice's hash; the notice is linked to the lot.
+    const tx = (await getJson<{ items: api.Transaction[] }>(l, l.sa, `/transactions?securityId=${l.id('CS-4')}`)).items.find((item) => item.type === 'TX_STOCK_REPURCHASE')!
+    const notice = await l.db.prepare('SELECT sha256 FROM documents WHERE id = ?').bind(body.noticeDocumentId).first<string>('sha256')
+    expect(tx.payload).toMatchObject({
+      price: { amount: '0.31', currency: 'USD' }, x_kind: 'UNVESTED', x_consideration: { amount: '10695', currency: 'USD' }, balance_security_id: balanceId,
+      x_payment: { method: 'CHECK', paid_date: '2026-10-20', reference: 'Check 1042' }, x_notice: { id: body.noticeDocumentId, sha256: notice },
+    })
+    expect('x_authority_document' in tx.payload).toBe(false)
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_links WHERE document_id = ? AND role = 'NOTICE' AND security_id = ?", body.noticeDocumentId, l.id('CS-4'))).toBe(1)
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM audit_events WHERE action = 'command.record-repurchase' AND target_id = ?", l.id('CS-4'))).toBe(1)
+    expect((await getJson<api.SecuritiesStatus>(l, l.sa, '/securities-status')).unvestedSharesFromTerminated.map((row) => row.securityId)).not.toContain(l.id('CS-4'))
+    const timeline = await getJson<{ items: api.TimelineEntry[] }>(l, l.sa, `/securities/${l.id('CS-4')}/timeline`)
+    expect(timeline.items.map((entry) => entry.summary)).toEqual(expect.arrayContaining(['Shares repurchased (34500)', 'Shares issued (37500)']))
+    // The same intent again replays the recorded answer.
+    const replay = await l.api('POST', l.path('/commands/record-repurchase'), l.rw, {
+      ...body, expectedLedgerSeq: result.ledgerSeq - 2, expectedDiffSha256: result.diffSha256, acknowledge: [],
+    }, { 'Idempotency-Key': 'repurchase-cs-4' })
+    expect(replay.headers.get('Idempotent-Replay')).toBe('true')
+  })
+
+  it("carries the lot's descriptive terms to the balance lot, and leaves none when nothing vested", async () => {
+    const l = await ledgerHarness({ extend: withRestrictedShares })
+    await commit(l, l.rw, 'terminate-stakeholder', { stakeholderId: l.id('S41'), terminationDate: '2026-08-01', terminationType: 'voluntary' })
+    // RS-1 vested 1,200 at the cliff and 100 a month after it: 1,900 on 2026-08-01.
+    expect(await unvestedOf(l, 'RS-1')).toBe('2900')
+    const rs1 = await commit(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'RS-1', { effectiveDate: '2026-09-15', quantity: '2900', pricePerShare: '1' }))
+    const balance = await getJson<api.SecurityDetail>(l, l.sa, `/securities/${rs1.created.securityIds[0]}`)
+    expect(balance.terms).toMatchObject({
+      quantity: '1900', share_price: { amount: '1', currency: 'USD' }, stock_legend_ids: [l.id('legend:RS-1')], issuance_type: 'RSA',
+      board_approval_date: '2024-12-20', x_exemption: { federal: 'RULE_701' }, x_holding_start_date: '2024-12-31', x_origin: 'BALANCE',
+    })
+    for (const key of ['vesting_terms_id', 'x_definition_sha256', 'x_repurchase_right', 'x_capital_contribution', 'stock_plan_id']) expect(key in balance.terms, key).toBe(false)
+    expect(balance).toMatchObject({ boardApprovalDate: '2024-12-20', exemption: { federal: 'RULE_701' } })
+
+    // RS-2 vested nothing before S42 left: all 1,000 shares go and no balance lot is made. With no deadline recorded,
+    // it is recorded on counsel's authority.
+    const rs2 = await commit(l, l.sa, 'record-repurchase', await repurchaseBody(l, 'RS-2', { authorityDocumentId: await addDocument(l.db, l.orgId, 'COUNSEL_MEMO') }))
+    expect(rs2.transactions.map((tx) => tx.type)).toEqual(['TX_STOCK_REPURCHASE'])
+    expect(rs2.created.securityIds).toEqual([])
+    expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('RS-2')}`))).toMatchObject({ status: 'REPURCHASED', numbers: { outstanding: '0' } })
+  })
+
+  it('refuses a price whose total for the unvested shares needs more than 12 decimal places, saying so', async () => {
+    // A company counting tenths of a share: RS-6 leaves 500.5 shares unvested when S49 leaves on 2026-08-01.
+    const l = await ledgerHarness({ shareUnit: '0.1', extend: (acme) => {
+      const { b, id, cls } = acme
+      b.stakeholder('S49', 'employee', { countryOfResidence: 'US' })
+      const vt = b.vestingTerms('vt:RS-6', { type: 'EXPLICIT', events: [{ date: '2026-03-01', quantity: '500' }, { date: '2027-03-01', quantity: '500.5' }] })
+      b.command('issue:RS-6', (c) => {
+        const lot = c.security('RS-6', { family: 'STOCK', subtype: 'COMMON', stakeholderId: id('S49'), stockClassId: cls.CS, stockPlanId: null, parentSecurityId: null })
+        c.tx('TX_STOCK_ISSUANCE', '2025-03-01', {
+          security_id: lot, custom_id: 'RS-6', stakeholder_id: id('S49'), stock_class_id: cls.CS, share_price: { amount: '0.01', currency: 'USD' }, quantity: '1000.5',
+          x_origin: 'RSA', vesting_terms_id: vt.id, x_definition_sha256: vt.sha,
+        })
+      })
+      b.command('terminate:S49', (c) => {
+        c.tx('X_STAKEHOLDER_TERMINATION', '2026-08-01', {
+          stakeholder_id: id('S49'), termination_date: '2026-08-01', termination_type: 'voluntary', vesting_stop_date: '2026-08-01',
+          relationship_before: 'employee', relationship_after: 'ex_employee',
+        })
+      }, { type: 'terminate-stakeholder' })
+    } })
+    expect(await unvestedOf(l, 'RS-6')).toBe('500.5')
+    // 500.5 × 0.123456789013 has 13 decimal places; one fewer in the price fits.
+    const body = await repurchaseBody(l, 'RS-6', { quantity: '500.5', pricePerShare: '0.123456789013', authorityDocumentId: await addDocument(l.db, l.orgId, 'COUNSEL_MEMO') })
+    expect(await violations(l, l.sa, 'record-repurchase', body)).toContain('REPURCHASE_TOTAL_TOO_PRECISE')
+    expect((await dryRun(l, l.sa, 'record-repurchase', { ...body, pricePerShare: '0.12345678901' })).status).toBe(200)
+  })
+
+  it("refuses a partial or excess quantity, a holder not terminated by the date, and a lot that isn't restricted shares", async () => {
+    const l = await ledgerHarness({ extend: withRestrictedShares })
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { quantity: '34499' }))).toEqual(['REPURCHASE_NOT_ALL_UNVESTED'])
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { quantity: '34501' }))).toContain('REPURCHASE_NOT_ALL_UNVESTED')
+    // S24 left on 2026-09-15: a repurchase is dated on or after it; S41 hasn't left.
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { effectiveDate: '2026-09-14' }))).toContain('REPURCHASE_BEFORE_TERMINATION')
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'RS-1', { quantity: '2900', pricePerShare: '1' }))).toContain('HOLDER_NOT_TERMINATED')
+    // Exercise shares without vesting, an option, and a founder lot fully vested before anyone left.
+    for (const label of ['CS-7', 'OPT-1', 'PS-9']) {
+      expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, label)), label).toEqual(['NOT_RESTRICTED_STOCK'])
+    }
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-1'))).toEqual(expect.arrayContaining(['HOLDER_NOT_TERMINATED', 'NO_UNVESTED_SHARES']))
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { effectiveDate: '2026-11-01', consideration: { method: 'WIRE', paidDate: '2026-11-01' } })))
+      .toEqual(expect.arrayContaining(['EFFECTIVE_DATE_IN_FUTURE', 'PAID_DATE_IN_FUTURE']))
+    const wrong = await runCommand(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { confirmation: 'CS-5' }))
+    expect(wrong.response.status).toBe(400)
+    expect(errorOf(wrong.body).code).toBe('validation_failed')
+    // A read-only role records nothing.
+    expect((await dryRun(l, l.ro, 'record-repurchase', await repurchaseBody(l, 'CS-4'))).status).toBe(403)
+  })
+
+  it("needs counsel's authority after the deadline, a document of its own, and a warning acknowledged for it", async () => {
+    const l = await ledgerHarness({ extend: withRestrictedShares })
+    await commit(l, l.rw, 'terminate-stakeholder', { stakeholderId: l.id('S41'), terminationDate: '2026-08-01', terminationType: 'voluntary' })
+    // RS-1's 60-day right ended on 2026-09-30.
+    const late = await repurchaseBody(l, 'RS-1', { effectiveDate: '2026-10-15', quantity: '2900', pricePerShare: '1' })
+    const authority = await addDocument(l.db, l.orgId, 'COUNSEL_MEMO')
+    // Without the authority it is refused, and the violation says what is needed; the engine refuses the late repurchase too.
+    const refused = await dryRun(l, l.rw, 'record-repurchase', late)
+    expect(refused.status).toBe(422)
+    expect(errorOf(refused.body).violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'REPURCHASE_AUTHORITY_REQUIRED', securityId: l.id('RS-1'), override: { role: 'admin_rw', requires: ['authorityDocumentId'] } }),
+    ]))
+    expect(await violations(l, l.sa, 'record-repurchase', late)).toEqual(expect.arrayContaining(['REPURCHASE_AUTHORITY_REQUIRED', 'REPURCHASE_AFTER_DEADLINE']))
+    // The notice doesn't stand for counsel's authority: that is a document of its own.
+    const notice = await dryRun(l, l.sa, 'record-repurchase', { ...late, authorityDocumentId: late.noticeDocumentId })
+    expect(notice.status).toBe(422)
+    expect(errorOf(notice.body).violations).toEqual([
+      expect.objectContaining({ code: 'REPURCHASE_AUTHORITY_REQUIRED', message: expect.stringContaining('not the repurchase notice') }),
+    ])
+    // Within the window it needs no authority.
+    expect((await dryRun(l, l.rw, 'record-repurchase', { ...late, effectiveDate: '2026-09-30' })).status).toBe(200)
+    // Anyone who records changes (full access) records it late with the authority, once the warning is acknowledged.
+    const shown = await dryRun(l, l.rw, 'record-repurchase', { ...late, authorityDocumentId: authority })
+    expect(shown.status, JSON.stringify(shown.body)).toBe(200)
+    expect((shown.body as api.CommandResult).warnings.map((warning) => warning.code)).toEqual(['REPURCHASE_AFTER_DEADLINE'])
+    const unacknowledged = await l.api('POST', l.path('/commands/record-repurchase'), l.rw, {
+      ...late, authorityDocumentId: authority, expectedLedgerSeq: (shown.body as api.CommandResult).ledgerSeq, expectedDiffSha256: (shown.body as api.CommandResult).diffSha256,
+    }, { 'Idempotency-Key': 'late-repurchase-unacknowledged' })
+    expect(errorOf(await unacknowledged.json()).code).toBe('warnings_unacknowledged')
+    const result = await commit(l, l.rw, 'record-repurchase', { ...late, authorityDocumentId: authority })
+    const tx = (await getJson<{ items: api.Transaction[] }>(l, l.sa, `/transactions?securityId=${l.id('RS-1')}`)).items.find((item) => item.type === 'TX_STOCK_REPURCHASE')!
+    expect(tx.payload.x_authority_document).toEqual({ id: authority, sha256: expect.any(String) })
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_links WHERE document_id = ? AND role = 'EVIDENCE' AND security_id = ?", authority, l.id('RS-1'))).toBe(1)
+    expect(result.commandId).toBeTruthy()
+  })
+
+  it("needs counsel's authority when no deadline is recorded", async () => {
+    const l = await ledgerHarness({ extend: withRestrictedShares })
+    const body = await repurchaseBody(l, 'RS-2')
+    const authority = await addDocument(l.db, l.orgId, 'COUNSEL_MEMO')
+    expect(await violations(l, l.rw, 'record-repurchase', body)).toEqual(['REPURCHASE_AUTHORITY_REQUIRED'])
+    expect(await violations(l, l.sa, 'record-repurchase', body)).toEqual(['REPURCHASE_AUTHORITY_REQUIRED'])
+    const shown = await dryRun(l, l.rw, 'record-repurchase', { ...body, authorityDocumentId: authority })
+    expect(shown.status, JSON.stringify(shown.body)).toBe(200)
+    expect((shown.body as api.CommandResult).warnings.map((warning) => warning.code)).toEqual(['REPURCHASE_WITHOUT_DEADLINE'])
+  })
+
+  it("records a lot whose agreement sets no deadline without counsel's authority", async () => {
+    const l = await ledgerHarness({ extend: withImportedRestrictedShares })
+    const body = await repurchaseBody(l, 'RS-3', { quantity: '500', pricePerShare: '0.01' })
+    const shown = await dryRun(l, l.rw, 'record-repurchase', body)
+    expect(shown.status, JSON.stringify(shown.body)).toBe(200)
+    expect((shown.body as api.CommandResult).warnings).toEqual([])
+    const result = await commit(l, l.rw, 'record-repurchase', body)
+    expect(result.transactions.map((tx) => tx.type)).toEqual(['TX_STOCK_REPURCHASE', 'TX_STOCK_ISSUANCE'])
+  })
+
+  it("shows an imported lot's legends and missing board approval on its balance lot, which can't carry them", async () => {
+    const l = await ledgerHarness({ extend: withImportedRestrictedShares, emails: { S47: 's47.holder@example.test' } })
+    const result = await commit(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'RS-4', { quantity: '500', pricePerShare: '0.01' }))
+    const [balanceId] = result.created.securityIds
+    // The ledger is unchanged: the balance lot's own issuance has neither field.
+    const balance = await getJson<api.SecurityDetail>(l, l.sa, `/securities/${balanceId}`)
+    for (const key of ['x_legends', 'x_board_approval_not_recorded_in_pulley', 'board_approval_date']) expect(key in balance.terms, key).toBe(false)
+    // Read, it follows the lot it was split from: the legend snapshot, and "not recorded in the import".
+    expect(balance).toMatchObject({ parentSecurityId: l.id('RS-4'), boardApprovalDate: null, boardApprovalNotRecordedInPulley: true })
+    expect(balance.legends).toEqual([{ id: l.id('legend:RS-4'), name: 'Synthetic restriction legend' }])
+    // So the securities list (which Compliance's checks read) puts it on the ratification list with its parent.
+    const listed = (await getJson<{ items: api.Security[] }>(l, l.sa, '/securities')).items.filter((item) => item.boardApprovalNotRecordedInPulley).map((item) => item.id)
+    expect(listed).toEqual(expect.arrayContaining([l.id('RS-4'), balanceId]))
+    // The holder's share detail (as the admin previews it) names the legend too.
+    const preview = await getJson<api.PortalSecurityDetail>(l, l.sa, `/stakeholders/${l.id('S47')}/preview/securities/${balanceId}`)
+    expect(preview.detail).toMatchObject({ family: 'STOCK', legends: ['Synthetic restriction legend'] })
+    // An imported balance lot shows what the import recorded for it.
+    expect(await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('RS-5')}`)).toMatchObject({ boardApprovalDate: '2025-02-20' })
+    expect(await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('RS-5B')}`)).toMatchObject({ parentSecurityId: l.id('RS-5'), boardApprovalDate: null, boardApprovalNotRecordedInPulley: false })
+  })
+
+  it("warns when the price differs from the lot's recorded repurchase price", async () => {
+    const l = await ledgerHarness()
+    const shown = await dryRun(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { pricePerShare: '0.25' }))
+    expect(shown.status).toBe(200)
+    expect((shown.body as api.CommandResult).warnings).toEqual([expect.objectContaining({ code: 'REPURCHASE_PRICE_DIFFERS', details: expect.objectContaining({ recorded: '0.31', entered: '0.25' }) })])
+  })
+
+  it("refuses another company's document and an archived one", async () => {
+    const l = await ledgerHarness()
+    const otherOrg = '00000000-0000-4000-8000-0000000000b2'
+    await seedOrg(l.db, otherOrg, 'other-co', 'active', 'console-org-other')
+    const foreign = await addDocument(l.db, otherOrg, 'OTHER')
+    expect((await dryRun(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { noticeDocumentId: foreign }))).status).toBe(404)
+    expect((await dryRun(l, l.sa, 'record-repurchase', await repurchaseBody(l, 'CS-4', { authorityDocumentId: foreign }))).status).toBe(404)
+    const archived = await addDocument(l.db, l.orgId, 'OTHER')
+    await l.db.prepare('UPDATE documents SET archived_at = ?, version = version + 1 WHERE id = ?').bind(l.clock.time, archived).run()
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { noticeDocumentId: archived }))).toEqual(['DOCUMENT_ARCHIVED'])
+  })
+
+  it('judges a backdated repurchase on the ledger of its date, and refuses one before a later fact on the lot', async () => {
+    const l = await ledgerHarness({
+      extend: (acme) => {
+        // Counsel's later reading of S24's agreement, recorded on 2026-10-10: the right lasts until 2026-11-30.
+        acme.b.command('deadline:CS-4', (c) => {
+          c.tx('X_SECURITY_MODIFICATION', '2026-10-10', { kind: 'REPURCHASE_DEADLINE', security_id: acme.id('CS-4'), last_repurchase_date: '2026-11-30' })
+        })
+      },
+    })
+    // Before the recorded deadline change, the lot is closed by the repurchase: the later change would act on a closed lot.
+    expect(await violations(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { effectiveDate: '2026-10-01', consideration: { method: 'ACH', paidDate: '2026-10-01' } }))).toContain('SECURITY_NOT_OUTSTANDING')
+    // Plan terms recorded since: repurchased unvested shares are now retired. A repurchase dated before them follows the
+    // rule in force on its date and returns the shares to the pool.
+    await commit(l, l.sa, 'set-plan-terms', await planTermsBody(l, {
+      returnRules: { cancelledUnvestedAwards: 'RETURN', expiredVestedOptions: 'RETURN', repurchasedUnvestedShares: 'RETIRE', repurchasedVestedShares: 'RETIRE', sharesWithheldForTax: 'RETIRE' },
+    }))
+    const before = await getJson<api.CapTableResponse>(l, l.sa, '/cap-table')
+    const backdated = await commit(l, l.rw, 'record-repurchase', await repurchaseBody(l, 'CS-4', { effectiveDate: '2026-10-15', consideration: { method: 'ACH', paidDate: '2026-10-16' } }))
+    expect(backdated.transactions[0]).toMatchObject({ type: 'TX_STOCK_REPURCHASE', effectiveDate: '2026-10-15', quantity: '34500' })
+    const after = await getJson<api.CapTableResponse>(l, l.sa, '/cap-table')
+    expect(BigInt(after.metrics.planAvailable) - BigInt(before.metrics.planAvailable)).toBe(34500n)
+    expect(backdated.dependencies).toContainEqual({ commandId: l.id('command:deadline:CS-4'), kind: 'relies_on_deadline' })
+  })
+})
+
 describe("award types outside the options and warrants", () => {
   it("refuses to cancel or extend an RSU or a SAR, and a termination's extension of a share lot", async () => {
     const l = await ledgerHarness({ extend: withRsuAndSar })
@@ -458,7 +906,7 @@ describe('mark-executed', () => {
   it('marks a pending grant executed, which unblocks its exercise', async () => {
     const l = await ledgerHarness({
       extend: (acme) => {
-        acme.b.command('pending:OPT-2', (c) => { c.tx('X_EXECUTION_STATUS', '2026-10-01', { security_id: acme.id('OPT-2'), status: 'pending_company' }) })
+        acme.b.command('pending:OPT-2', (c) => { c.tx('X_EXECUTION_STATUS', '2026-10-01', { security_id: acme.id('OPT-2'), status: 'pending_holder' }) })
       },
     })
     const exercise = await exerciseBody(l, { securityId: l.id('OPT-2') })
@@ -469,6 +917,52 @@ describe('mark-executed', () => {
     expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_links WHERE document_id = ? AND role = 'AGREEMENT'", document)).toBe(1)
     const executed = await commit(l, l.rw, 'exercise-option', await exerciseBody(l, { securityId: l.id('OPT-2') }))
     expect(executed.dependencies).toContainEqual({ commandId: result.commandId, kind: 'relies_on_terms' })
+  })
+
+  it("records one party's signature on a grant awaiting both, then the other's, each from its own date", async () => {
+    const l = await ledgerHarness({
+      extend: (acme) => {
+        acme.b.command('pending:OPT-2', (c) => { c.tx('X_EXECUTION_STATUS', '2026-10-01', { security_id: acme.id('OPT-2'), status: 'pending_both' }) })
+      },
+    })
+    const body = async (signed: string, signatureDates: Record<string, string>, attestation: string) => ({
+      securityId: l.id('OPT-2'), signed, executedAgreementDocumentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'), signatureDates, attestation, confirmation: 'OPT-2',
+    })
+    const holderSigned = await body('holder', { holder: '2026-10-10' }, "This PDF bears the holder's signature")
+    const first = await commit(l, l.rw, 'mark-executed', holderSigned)
+    expect(first.transactions).toMatchObject([{ type: 'X_EXECUTION_STATUS', effectiveDate: '2026-10-10' }])
+    expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('OPT-2')}`)).executionStatus).toBe('pending_company')
+    // Signed so far, not executed: the agreement is evidence, not the grant's agreement.
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_links WHERE document_id = ? AND role = 'EVIDENCE'", holderSigned.executedAgreementDocumentId)).toBe(1)
+    expect(await count(l.db, "SELECT COUNT(*) AS n FROM document_links WHERE document_id = ? AND role = 'AGREEMENT'", holderSigned.executedAgreementDocumentId)).toBe(0)
+    // The holder can't sign twice; the company's signature now completes it and is recorded as both.
+    expect(await violations(l, l.rw, 'mark-executed', await body('holder', { holder: '2026-10-12' }, "This PDF bears the holder's signature"))).toEqual(['SIGNATURE_NOT_PENDING'])
+    expect(await violations(l, l.rw, 'mark-executed', await body('company', { company: '2026-10-12' }, "This PDF bears the company signatory's signature"))).toEqual(['SIGNATURE_COMPLETES_EXECUTION'])
+    // Not before the status it follows.
+    expect(await violations(l, l.rw, 'mark-executed', await body('both', { company: '2026-10-05', holder: '2026-10-08' }, 'This PDF bears both signatures'))).toEqual(['SIGNATURE_DATE_BEFORE_STATUS'])
+    const done = await commit(l, l.rw, 'mark-executed', await body('both', { company: '2026-10-15', holder: '2026-10-10' }, 'This PDF bears both signatures'))
+    expect(done.transactions).toMatchObject([{ type: 'X_EXECUTION_STATUS', effectiveDate: '2026-10-15' }])
+    expect(done.dependencies.map((edge) => edge.commandId)).toContain(first.commandId)
+    expect((await getJson<api.SecurityDetail>(l, l.sa, `/securities/${l.id('OPT-2')}`)).executionStatus).toBe('executed')
+  })
+
+  it("refuses one party's signature a grant isn't awaiting, a mismatched attestation and the other party's date", async () => {
+    const l = await ledgerHarness({
+      extend: (acme) => {
+        acme.b.command('pending:OPT-2', (c) => { c.tx('X_EXECUTION_STATUS', '2026-10-01', { security_id: acme.id('OPT-2'), status: 'pending_holder' }) })
+      },
+    })
+    const document = await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT')
+    const body = { securityId: l.id('OPT-2'), executedAgreementDocumentId: document, signatureDates: {}, confirmation: 'OPT-2' }
+    // Awaiting only the holder: the company has signed already, and the holder's signature completes execution.
+    expect(await violations(l, l.rw, 'mark-executed', { ...body, signed: 'company', attestation: "This PDF bears the company signatory's signature" })).toEqual(['SIGNATURE_NOT_PENDING'])
+    expect(await violations(l, l.rw, 'mark-executed', { ...body, signed: 'holder', attestation: "This PDF bears the holder's signature" })).toEqual(['SIGNATURE_COMPLETES_EXECUTION'])
+    expect(await violations(l, l.rw, 'mark-executed', { ...body, signatureDates: { holder: '2026-09-01' }, attestation: 'This PDF bears both signatures' })).toEqual(['SIGNATURE_DATE_BEFORE_STATUS'])
+    expect(await violations(l, l.rw, 'mark-executed', { ...body, signatureDates: { holder: '2023-01-02' }, attestation: 'This PDF bears both signatures' })).toEqual(['SIGNATURE_DATE_BEFORE_ISSUE'])
+    expect((await dryRun(l, l.rw, 'mark-executed', { ...body, signed: 'holder', attestation: 'This PDF bears both signatures' })).status).toBe(400)
+    expect((await dryRun(l, l.rw, 'mark-executed', { ...body, signed: 'holder', signatureDates: { company: '2026-10-10' }, attestation: "This PDF bears the holder's signature" })).status).toBe(400)
+    // A body without `signed` still means both.
+    expect((await dryRun(l, l.rw, 'mark-executed', { ...body, attestation: 'This PDF bears both signatures' })).status).toBe(200)
   })
 
   it("refuses a grant that isn't pending and a wrong confirmation", async () => {
@@ -570,6 +1064,7 @@ describe('authorization of the commands', () => {
       case 'exerciseOption': holder = 'S04'; body = await exerciseBody(l); break
       case 'grantEquityCompensation': holder = 'S04'; body = await grantBody(l); break
       case 'cancelSecurity': holder = 'S11'; body = await cancelBody(l, 'OPT-55'); break
+      case 'recordRepurchase': holder = 'S24'; body = await repurchaseBody(l, 'CS-4'); break
       case 'markExecuted': holder = 'S12'; body = { securityId: l.id('OPT-50'), executedAgreementDocumentId: await addDocument(l.db, l.orgId, 'GRANT_AGREEMENT'), signatureDates: {}, attestation: 'This PDF bears both signatures', confirmation: 'OPT-50' }; break
       case 'recordLeaveOfAbsence': holder = 'S05'; body = { stakeholderId: l.id('S05'), startDate: '2026-10-01', endDate: null, returnGuaranteed: true }; break
       case 'extendExerciseDeadline': holder = 'S27'; body = { securityId: l.id('OPT-26'), newContractualDeadline: '2027-04-01', documentId: await addDocument(l.db, l.orgId, 'COUNSEL_MEMO'), note: 'x', confirmation: 'OPT-26' }; break

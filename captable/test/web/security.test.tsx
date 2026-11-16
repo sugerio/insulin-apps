@@ -1,9 +1,15 @@
 import "./setup.ts";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { api, engine } from "#shared";
+import { blocksExercise } from "../../src/app/lib/labels.ts";
 import { IDS, uuid } from "./support/acme.ts";
-import { securityHandlers as handlers } from "./support/securities.ts";
+import { uploads } from "./support/flows.ts";
+import { mock, type MockRequest } from "./support/mockApi.ts";
+import { DETAILS, securityHandlers as handlers } from "./support/securities.ts";
 import { base, renderPage } from "./support/render.tsx";
+
+const withoutElections = handlers.filter((handler) => handler.route !== api.routes.listElections83b);
 
 function definitionOf(label: string): HTMLElement {
   const term = screen.getAllByRole("term").find((item) => item.textContent === label);
@@ -24,8 +30,9 @@ describe("option detail", () => {
     expect(definitionOf("Expiration date").textContent).toBe("Apr 14, 2033");
     expect(await screen.findByText(/268,750 of the total 300,000 options \(89\.6%\) have vested\. Next: 6,250 on Nov 1, 2026\./)).toBeTruthy();
     expect(screen.getByRole("img", { name: "Cumulative vested options over time for OPT-1" })).toBeTruthy();
-    expect(screen.getByText("Full vesting schedule (37 events)")).toBeTruthy();
-    const schedule = screen.getByRole("table", { name: "Vesting schedule" });
+    // The full schedule opens on demand.
+    fireEvent.click(screen.getByRole("button", { name: "Full vesting schedule (37 events)" }));
+    const schedule = await screen.findByRole("table", { name: "Vesting schedule" });
     expect(within(schedule).getAllByText("from Pulley")).toHaveLength(37);
     expect(within(schedule).getByText(/Mar 1, 2024 · cliff/)).toBeTruthy();
     expect(definitionOf("Schedule").textContent).toBe("4 years monthly, 1-year cliff (25%)");
@@ -42,7 +49,7 @@ describe("option detail", () => {
     expect(definitionOf("With cause").textContent).toBe("0 days inherited from the plan");
     expect(await screen.findByText("Exercised 50,000 ISO → CS-7 · Check")).toBeTruthy();
     expect(screen.getByRole("button", { name: "OPT-1 Option Agreement.pdf" })).toBeTruthy();
-    expect(screen.getByText("Imported from Pulley", { selector: "summary" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Imported from Pulley" })).toBeTruthy();
   }, 60_000); // the largest page test: give it room on a busy machine
 
   it("shows the deadlines of a terminated holder's option and its non-US exemption", async () => {
@@ -73,6 +80,22 @@ describe("option detail", () => {
     for (const item of items) expect(item.getAttribute("aria-disabled")).toBeNull();
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("offers Record exercise and Mark executed on a grant awaiting only the company signatory", async () => {
+    const companyPending = { ...DETAILS[IDS.opt1]!, executionStatus: "pending_company" as const };
+    renderPage(`securities/${IDS.opt1}`, [
+      mock(api.routes.getSecurity, (request: MockRequest) => (request.params.id === IDS.opt1 ? companyPending : DETAILS[request.params.id!])),
+      ...handlers.filter((handler) => handler.route !== api.routes.getSecurity),
+    ], { role: "admin_rw" });
+    await screen.findByRole("heading", { name: "OPT-1 Options", level: 1 });
+    expect(screen.getAllByText("Execution pending").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    const labels = within(screen.getByRole("menu")).getAllByRole("menuitem").map((item) => item.textContent ?? "");
+    expect(labels.some((label) => label.startsWith("Record exercise"))).toBe(true);
+    expect(labels.some((label) => label.startsWith("Mark executed"))).toBe(true);
+    // The page's rule is the engine's.
+    for (const status of api.EXECUTION_STATUSES) expect(blocksExercise(status), status).toBe(engine.blocksExercise(status));
   });
 
   it("gives owners Reverse last transaction", async () => {
@@ -113,6 +136,41 @@ describe("share, warrant and SAFE detail", () => {
     expect(definitionOf("Rule 144 date").textContent).toBe("Feb 15, 2022");
     expect(definitionOf("Legends").textContent).toBe("L1 · Securities Act legend, L2 · Transfer restrictions");
     expect(await screen.findByText("Filed on Mar 1, 2021 (proof on file)")).toBeTruthy();
+  });
+
+  it("says a repurchase right whose agreement sets no deadline has none, whatever window sits beside it", async () => {
+    const right = { price_per_share: { amount: "0.0001", currency: "USD" }, window: { period: 90, period_type: "DAYS" }, x_no_deadline: true };
+    const noDeadline = { ...DETAILS[IDS.cs1]!, terms: { ...DETAILS[IDS.cs1]!.terms, x_repurchase_right: right } };
+    renderPage(`securities/${IDS.cs1}`, [
+      mock(api.routes.getSecurity, (request: MockRequest) => (request.params.id === IDS.cs1 ? noDeadline : DETAILS[request.params.id!])),
+      ...handlers.filter((handler) => handler.route !== api.routes.getSecurity),
+    ]);
+    await screen.findByRole("heading", { name: "CS-1 Shares", level: 1 });
+    expect(definitionOf("Repurchase right").textContent).toBe(
+      "If the holder leaves before vesting, the company may buy back unvested shares at $0.0001 — no deadline (per agreement)",
+    );
+  });
+
+  it("says a restricted share's 83(b) is not recorded when no record exists, never that none was required", async () => {
+    renderPage(`securities/${IDS.cs1}`, [...withoutElections, mock(api.routes.listElections83b, { items: [] })]);
+    await screen.findByRole("heading", { name: "CS-1 Shares", level: 1 });
+    await waitFor(() => expect(definitionOf("83(b)").textContent).toBe("Not recorded"));
+  });
+
+  it("shows the 83(b) record in force by supersession, not the last one listed", async () => {
+    const record = (n: number, overrides: Partial<api.Election83b>): api.Election83b => ({
+      id: uuid(20, n), securityId: IDS.cs1, status: "UNCONFIRMED_DEADLINE_PASSED", transferDate: "2021-02-15", dueDate: "2021-03-17", filedDate: null,
+      proofDocumentId: null, supersedesId: null, importedFromPulley: true, createdAt: 1, ...overrides,
+    });
+    // The correction supersedes the migrated record but is listed first (an earlier timestamp).
+    const items = [
+      record(2, { status: "FILED", filedDate: "2021-03-01", supersedesId: uuid(20, 1), importedFromPulley: false, createdAt: 1 }),
+      record(1, { createdAt: 2 }),
+    ];
+    renderPage(`securities/${IDS.cs1}`, [...withoutElections, mock(api.routes.listElections83b, { items })]);
+    await screen.findByRole("heading", { name: "CS-1 Shares", level: 1 });
+    expect(await screen.findByText("Filed on Mar 1, 2021")).toBeTruthy();
+    expect(screen.queryByText("Unconfirmed — deadline passed")).toBeNull();
   });
 
   it("shows where exercise shares came from", async () => {
@@ -158,5 +216,23 @@ describe("share, warrant and SAFE detail", () => {
     renderPage(`securities/${uuid(6, 999)}`, handlers);
     expect(await screen.findByText("This security does not exist.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to dashboard" })).toBeTruthy();
+  });
+});
+
+describe("focus after a dialog the Actions menu opened", () => {
+  it("goes back to the Actions button when the dialog closes", async () => {
+    renderPage(`securities/${IDS.opt1}`, [...handlers, uploads()], { role: "admin_rw" });
+    await screen.findByRole("heading", { name: "OPT-1 Options", level: 1 });
+    const actions = screen.getByRole("button", { name: "Actions" });
+    actions.focus();
+    fireEvent.keyDown(actions, { key: "ArrowDown" });
+    const item = within(await screen.findByRole("menu")).getByRole("menuitem", { name: /^Cancel/ });
+    item.focus();
+    fireEvent.keyDown(item, { key: "Enter" });
+    const dialog = await screen.findByRole("dialog", { name: "Cancel OPT-1" });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(actions));
   });
 });

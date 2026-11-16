@@ -39,6 +39,8 @@ const PAGES: readonly [name: string, path: string][] = [
   ["exercise request", `exercise-requests/${REQUEST_ID}`],
   ["409A valuations", "compliance/409a"],
   ["409A valuation", `compliance/409a/${IDS.v5}`],
+  ["83(b) elections", "compliance/83b"],
+  ["compliance checks", "compliance/checks"],
   ["certificates", "certificates"],
   ["legends", "certificates/legends"],
   ["certificate terms", "certificates/terms"],
@@ -141,12 +143,15 @@ describe("every admin page with a missing dependency", () => {
 });
 
 describe("plain-language admin copy", () => {
-  it.each(PAGES)("%s shows no raw codes", async (_name, path) => {
+  it.each(PAGES)("%s shows no raw, decision or section codes", async (_name, path) => {
     const page = show(path, allRoutes());
     await settle(() => page.calls.length);
     await waitFor(() => expect(document.querySelectorAll('#main [role="status"]')).toHaveLength(0));
+    const text = document.getElementById("main")?.textContent ?? "";
     // Codes such as TX_STOCK_ISSUANCE or SECURITY_NOT_OUTSTANDING are the API's: the page says what they mean.
-    expect(document.getElementById("main")?.textContent ?? "").not.toMatch(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/);
+    expect(text).not.toMatch(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/);
+    // Nor a design decision (D9, OD-5), a release or roadmap item (R2) or a specification section (§).
+    expect(text).not.toMatch(/\bR\d(?:-\d)?\b|\bO?D-?\d{1,2}\b|§/);
     page.unmount();
   }, 30_000);
 });

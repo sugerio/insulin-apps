@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { apiRequest } from "../api/request.ts";
 import { ActionsMenu, OwnRecordScope, WriteButton } from "../components/Actions.tsx";
 import { DescriptionList } from "../components/DescriptionList.tsx";
@@ -93,7 +95,7 @@ function DocumentBody({ document, onChanged }: { document: api.DocumentDetail; o
           }
           actions={
             <>
-              {canDownload ? <button type="button" className="btn btn-ghost" disabled={busy === document.id} onClick={() => void download(document.id, document.filename)}>Download</button> : null}
+              {canDownload ? <Button type="button" variant="ghost" disabled={busy === document.id} onClick={() => void download(document.id, document.filename)}>Download</Button> : null}
               {actions}
             </>
           }
@@ -101,8 +103,8 @@ function DocumentBody({ document, onChanged }: { document: api.DocumentDetail; o
         <DownloadError error={error} />
         {own && workspace.canWrite ? <Banner kind="info" title="About your own holdings">Admins never record writes on their own holdings — another admin must.</Banner> : null}
         {archived ? <Banner kind="info" title={`Archived on ${format.date(format.localDate(document.archivedAt!))}`}>It is out of the lists and the portal, and still stored with its checksum and links. Restore it to bring it back.</Banner> : null}
-        <div className="grid-detail">
-          <div>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+          <div className="flex min-w-0 flex-col gap-3">
             <SectionTitle>Details</SectionTitle>
             <DescriptionList
               split
@@ -112,11 +114,11 @@ function DocumentBody({ document, onChanged }: { document: api.DocumentDetail; o
                 ["Version label", document.versionLabel ?? DASH],
                 ["Folder", document.collectionId ? (
                   <Pending resource={collections} what="the folder" inline>
-                    {(data) => <Link to={`${href("documents")}?folder=${document.collectionId}`}>{data.items.find((folder) => folder.id === document.collectionId)?.name ?? "A folder"}</Link>}
+                    {(data) => <Link className="font-medium underline-offset-4 hover:underline" to={`${href("documents")}?folder=${document.collectionId}`}>{data.items.find((folder) => folder.id === document.collectionId)?.name ?? "A folder"}</Link>}
                   </Pending>
                 ) : "No folder"],
                 ["Size", formatBytes(document.byteSize)],
-                ["SHA-256", <span className="mono small">{document.sha256}</span>],
+                ["SHA-256", <span className="font-mono text-xs break-all">{document.sha256}</span>],
                 ["Uploaded", `${format.dateTime(document.createdAt)}${document.importedFromPulley ? ` · ${api.importSourceLabel(org.importSource).toLowerCase()}` : document.uploadedBy ? ` by ${document.uploadedBy}` : ""}`],
                 document.sourceCreatedAt !== null ? [`Created in ${api.importSourceName(org.importSource)}`, format.dateTime(document.sourceCreatedAt)] : null,
                 document.supersedesDocumentId ? ["Supersedes", <Link to={href(`documents/${document.supersedesDocumentId}`)}>The previous version</Link>] : null,
@@ -125,67 +127,65 @@ function DocumentBody({ document, onChanged }: { document: api.DocumentDetail; o
             <SectionTitle>Links</SectionTitle>
             {document.links.length ? <TargetLabelsState labels={labels} /> : null}
             {document.links.length ? (
-              <div className="tbl-scroll">
-                <table className="tbl" aria-label="Links">
-                  <thead><tr><th scope="col">Record</th><th scope="col">Role</th><th scope="col">Added</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-                  <tbody>
+              <Table aria-label="Links">
+                  <TableHeader><TableRow><TableHead scope="col">Record</TableHead><TableHead scope="col">Role</TableHead><TableHead scope="col">Added</TableHead><TableHead scope="col">Status</TableHead><TableHead scope="col"><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+                  <TableBody>
                     {document.links.map((link) => {
                       const label = labels.label(link.targetType, link.targetId);
                       const to = labels.to(link.targetType, link.targetId);
                       return (
-                        <tr key={link.id}>
-                          <td>{to ? <Link to={to}>{label}</Link> : label} <span className="small muted">{TARGET_TYPE_LABELS[link.targetType]}</span></td>
-                          <td>{LINK_ROLE_LABELS[link.role]}</td>
-                          <td>{format.date(format.localDate(link.createdAt))}{link.createdBy ? <span className="small muted"> · {link.createdBy}</span> : null}</td>
-                          <td>
+                        <TableRow key={link.id}>
+                          <TableCell>{to ? <Link className="font-medium underline-offset-4 hover:underline" to={to}>{label}</Link> : label} <span className="text-xs text-muted-foreground">{TARGET_TYPE_LABELS[link.targetType]}</span></TableCell>
+                          <TableCell>{LINK_ROLE_LABELS[link.role]}</TableCell>
+                          <TableCell>{format.date(format.localDate(link.createdAt))}{link.createdBy ? <span className="text-xs text-muted-foreground"> · {link.createdBy}</span> : null}</TableCell>
+                          <TableCell>
                             {link.revokedAt !== null ? <>Revoked on {format.date(format.localDate(link.revokedAt))}{link.revokeReason ? `: ${link.revokeReason}` : ""}</>
                               : "Active"}
-                          </td>
-                          <td className="right">
+                          </TableCell>
+                          <TableCell className="text-right">
                             {link.revokedAt === null ? (
                               <WriteButton label="Revoke" size="xs" ariaLabel={`Revoke the link to ${label}`} onClick={() => setDialog({ kind: "revoke", link, label })} />
                             ) : null}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            ) : <p className="muted small">Not linked to any record yet.</p>}
+                  </TableBody>
+                </Table>
+            ) : <p className="text-xs text-muted-foreground">Not linked to any record yet.</p>}
           </div>
-          <div>
+          <div className="flex min-w-0 flex-col gap-3">
             <SectionTitle>Visible in the portal</SectionTitle>
-            <p><b>{visibilityLabel(document)}</b></p>
-            {archived ? <p className="small muted">Archived documents aren't shown in the portal.</p> : null}
+            <p className="text-sm font-semibold">{visibilityLabel(document)}</p>
+            {archived ? <p className="text-xs text-muted-foreground">Archived documents aren't shown in the portal.</p> : null}
             {rule.kind === "holder" ? (
               <>
-                <p className="small">Linked to one holder: {holderLabel}. {document.holderVisible ? "They see it under Documents in their portal." : "Only admins see it now."}</p>
+                <p className="text-xs">Linked to one holder: {holderLabel}. {document.holderVisible ? "They see it under Documents in their portal." : "Only admins see it now."}</p>
                 <WriteButton label={document.holderVisible ? `Hide from ${holderLabel}` : `Show to ${holderLabel}`} size="sm"
                   onClick={() => setDialog({ kind: "visibility", next: !document.holderVisible, holderLabel })} />
               </>
             ) : rule.kind === "several" ? (
               <>
-                <p className="small">Linked to {rule.count} holders: a document linked to two or more holders is never shown in the portal.</p>
+                <p className="text-xs">Linked to {rule.count} holders: a document linked to two or more holders is never shown in the portal.</p>
                 {document.holderVisible ? <WriteButton label="Hide from the portal" size="sm" onClick={() => setDialog({ kind: "visibility", next: false, holderLabel: "the holders" })} /> : null}
               </>
             ) : (
-              <p className="small">
+              <p className="text-xs">
                 No holder link{document.holderVisible && document.visibilityScope === "all_holders" ? ": a company resource every holder sees" : ""}{use ? `, used as ${use}` : ""}.{" "}
-                Company resources are published from <Link to={href("stakeholder-portal")}>Stakeholder portal settings</Link>.
+                Company resources are published from <Link className="font-medium underline underline-offset-4" to={href("stakeholder-portal")}>Stakeholder portal settings</Link>.
               </p>
             )}
             <SectionTitle>Versions</SectionTitle>
             {document.versions.length > 1 ? (
-              <ul className="plain">
+              <ul className="flex flex-col gap-1 text-sm">
                 {document.versions.map((version) => (
                   <li key={version.id}>
                     {version.id === document.id ? <b>This version</b> : <Link to={href(`documents/${version.id}`)}>{version.versionLabel ?? "Another version"}</Link>}
-                    {version.versionLabel && version.id === document.id ? ` (${version.versionLabel})` : ""} <span className="small muted">· {format.date(format.localDate(version.createdAt))}</span>
+                    {version.versionLabel && version.id === document.id ? ` (${version.versionLabel})` : ""} <span className="text-xs text-muted-foreground">· {format.date(format.localDate(version.createdAt))}</span>
                   </li>
                 ))}
               </ul>
-            ) : <p className="muted small">Only this version. "Upload new version" keeps this one and its links.</p>}
+            ) : <p className="text-xs text-muted-foreground">Only this version. "Upload new version" keeps this one and its links.</p>}
           </div>
         </div>
       </Card>

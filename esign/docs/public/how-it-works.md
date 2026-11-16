@@ -1,6 +1,6 @@
 ---
 title: How Esign works
-description: The signing lifecycle, the hash chain, codes and sessions, the seal key and RFC 3161 seal, the certificate of completion, what is stored, and known limits.
+description: The signing lifecycle, the hash chain, codes and sessions, the seal key and RFC 3161 seal, the certificate of completion, what is stored, the usage Esign reports to Insulin Apps, and known limits.
 order: 8
 ---
 
@@ -152,6 +152,27 @@ Everything is in Esign's one database, scoped to your organization:
 
 There is no retention policy yet: nothing is deleted automatically, and there is no endpoint to delete templates or
 envelopes.
+
+## What Esign reports to Insulin Apps every hour
+
+Once an hour, Esign sends Insulin Apps a few numbers for each organization, so that Insulin Apps can watch usage and plan
+capacity. They are counts and sizes only:
+
+| Number | What it counts, for the organization |
+| --- | --- |
+| `envelopes` | Its envelopes, in every status |
+| `envelopes_in_progress`, `envelopes_finalizing`, `envelopes_completed`, `envelopes_declined`, `envelopes_expired`, `envelopes_voided` | Its envelopes in each status: out for signature, finishing, completed, declined, expired and voided |
+| `templates` | Its templates |
+| `signatures` | The signatures recorded in its envelopes |
+| `storage_bytes` | The bytes its documents take in Esign's storage: template PDFs (and PDFs waiting in the field editor), each envelope's PDFs, drawn signatures and seals |
+
+For the whole deployment, Esign adds the size of its database (`database_bytes`) and how many organizations have data in
+it (`organizations`). Each number is the total when it is measured, not what happened during the hour. Esign never sends
+names, email addresses, document titles, document contents or anything a signer entered.
+
+The report goes to the platform with Esign's own token, on the platform's five-minute run: the first run of each hour
+sends it, and if the platform doesn't accept it, the next run tries again. A deployment the platform hasn't set up for it
+sends nothing.
 
 ## Known limitations
 

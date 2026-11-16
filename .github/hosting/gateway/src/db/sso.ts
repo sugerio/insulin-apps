@@ -227,11 +227,14 @@ export async function revokeScimToken(db: D1Database, orgId: string, id: string,
   return result.meta.changes > 0
 }
 
-/** The organization a SCIM token belongs to, noting its use (at most once a minute). */
+/**
+ * The organization a SCIM token belongs to, noting its use (at most once a minute); null for an organization that isn't
+ * active (DESIGN.md §11.3), whose identity provider then gets 401.
+ */
 export async function useScimToken(db: D1Database, tokenHash: string, now: number): Promise<string | null> {
   const row = await db.prepare(
     `UPDATE scim_tokens SET last_used_at = CASE WHEN last_used_at IS NULL OR ?2 - last_used_at >= 60000 THEN ?2 ELSE last_used_at END
-     WHERE token_hash = ?1 RETURNING org_id`,
+     WHERE token_hash = ?1 AND EXISTS (SELECT 1 FROM orgs o WHERE o.id = scim_tokens.org_id AND o.status = 'active') RETURNING org_id`,
   ).bind(tokenHash, now).first<{ org_id: string }>()
   return row?.org_id ?? null
 }
@@ -245,6 +248,7 @@ export async function joinOrg(db: D1Database, orgId: string, userId: string, rol
     db.prepare(
       `INSERT INTO memberships (org_id, user_id, role, created_at, updated_at)
        SELECT ?1, ?2, ?3, ?4, ?4 WHERE (SELECT COUNT(*) FROM memberships m WHERE m.org_id = ?1) < ?5
+         AND EXISTS (SELECT 1 FROM orgs o WHERE o.id = ?1 AND o.status = 'active')
        ON CONFLICT DO NOTHING`,
     ).bind(orgId, userId, role, now, limit),
     db.prepare('SELECT 1 AS found FROM memberships WHERE org_id = ?1 AND user_id = ?2').bind(orgId, userId),
@@ -262,6 +266,7 @@ export async function joinOrgByScim(db: D1Database, orgId: string, userId: strin
     db.prepare(
       `INSERT INTO memberships (org_id, user_id, role, created_at, updated_at)
        SELECT ?1, ?2, ?3, ?4, ?4 WHERE (SELECT COUNT(*) FROM memberships m WHERE m.org_id = ?1) < ?5
+         AND EXISTS (SELECT 1 FROM orgs o WHERE o.id = ?1 AND o.status = 'active')
          AND EXISTS (SELECT 1 FROM users u JOIN sso_domains d ON d.org_id = ?1 AND d.verified_at IS NOT NULL
            AND d.domain = substr(u.email, instr(u.email, '@') + 1) WHERE u.id = ?2)
        ON CONFLICT DO NOTHING`,

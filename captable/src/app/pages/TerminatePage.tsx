@@ -1,6 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, engine } from "#shared";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
+import { cn } from "@/lib/utils.ts";
 import { apiRequest } from "../api/request.ts";
 import { DocumentUpload, type UploadedDocument } from "../components/DocumentUpload.tsx";
 import { Banner, InlineError, ResourceView } from "../components/Feedback.tsx";
@@ -79,7 +83,7 @@ export function TerminatePage() {
                     ? "An admin can reverse it from the stakeholder page; changing the date means reverse, then record again."
                     : "An admin can reverse the termination from the stakeholder page."}
                 </Banner>
-                <div className="row mt-12"><Link className="btn btn-ghost" to={back}>Back to the stakeholder</Link></div>
+                <div className="flex flex-wrap items-center gap-2"><Button asChild variant="ghost"><Link to={back}>Back to the stakeholder</Link></Button></div>
               </Card>
             ) : <TerminateWizard stakeholder={data} back={back} />}
           </WriteGate>
@@ -295,12 +299,12 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
     body = (
       <>
         <Card>
-          <h1 className="mb-8">Terminate {stakeholder.displayName}</h1>
-          <p className="muted">{RELATIONSHIP_LABELS[stakeholder.relationship]}. A future date records a <b>scheduled termination</b>: vesting continues until then.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Terminate {stakeholder.displayName}</h1>
+          <p className="text-sm text-muted-foreground">{RELATIONSHIP_LABELS[stakeholder.relationship]}. A future date records a <b>scheduled termination</b>: vesting continues until then.</p>
         </Card>
         <Card>
-          <h2 className="mb-12">1. Termination details</h2>
-          <div className="form" style={{ maxWidth: 560 }}>
+          <h2 className="text-lg font-semibold">1. Termination details</h2>
+          <div className="flex max-w-140 flex-col gap-4">
             <DateField label="Termination date" required value={details.date} onChange={(value) => setDetail("date", value)} hint="Today, a past date, or a future date (scheduled)." error={errorOf("date")} />
             <SelectField label="Termination type" required value={details.type} onChange={(value) => setDetail("type", value as api.TerminationType)} options={TYPES} error={errorOf("type")} />
             {details.type === "disability" ? (
@@ -316,20 +320,19 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
   } else if (step === 2) {
     body = (
       <Card>
-        <h2 className="mb-8">2. Vesting outcome</h2>
-        <p className="muted">Vested as of the stop date ({formatDate(stop)}){scheduled ? " — applied on the termination date" : ""}; the unvested remainder is cancelled and returns to the pool per the plan's rules. A manual acceleration needs its authorizing document.</p>
+        <h2 className="text-lg font-semibold">2. Vesting outcome</h2>
+        <p className="text-sm text-muted-foreground">Vested as of the stop date ({formatDate(stop)}){scheduled ? " — applied on the termination date" : ""}; the unvested remainder is cancelled and returns to the pool per the plan's rules. A manual acceleration needs its authorizing document.</p>
         {holdings.error !== undefined ? <InlineError what="the holdings" error={holdings.error} onRetry={holdings.reload} />
           : previews.error !== undefined ? <InlineError what="the termination preview" error={previews.error} onRetry={previews.reload} />
-            : !previews.data ? <p className="muted small" role="status">Computing the vesting outcome…</p>
-              : previews.data.length === 0 ? <p className="muted">No outstanding options or restricted shares.</p> : (
-                <div className="tbl-scroll">
-                  <table className="tbl" aria-label="Vesting outcome">
-                    <thead><tr><th scope="col">Security</th><th scope="col" className="num">Vested at stop</th><th scope="col" className="num">Unvested to cancel</th><th scope="col">Acceleration</th><th scope="col" className="num">Result (vested)</th></tr></thead>
-                    <tbody>
+            : !previews.data ? <p className="text-xs text-muted-foreground" role="status">Computing the vesting outcome…</p>
+              : previews.data.length === 0 ? <p className="text-sm text-muted-foreground">No outstanding options or restricted shares.</p> : (
+                <Table aria-label="Vesting outcome">
+                    <TableHeader><TableRow><TableHead scope="col">Security</TableHead><TableHead scope="col" className="text-right">Vested at stop</TableHead><TableHead scope="col" className="text-right">Unvested to cancel</TableHead><TableHead scope="col">Acceleration</TableHead><TableHead scope="col" className="text-right">Result (vested)</TableHead></TableRow></TableHeader>
+                    <TableBody>
                       {previews.data.map((row) => {
                         const id = row.security.id;
                         if (row.security.family === "STOCK") {
-                          return <tr key={id}><td>{row.security.displayId} (restricted shares)</td><td className="num">{format.shares(row.preview.vested)}</td><td className="num">{format.shares(row.preview.repurchaseable)} <span className="small muted">repurchasable</span></td><td className="muted small">—</td><td className="num">{format.shares(row.preview.vested)}</td></tr>;
+                          return <TableRow key={id}><TableCell>{row.security.displayId} (restricted shares)</TableCell><TableCell className="text-right tabular-nums">{format.shares(row.preview.vested)}</TableCell><TableCell className="text-right tabular-nums">{format.shares(row.preview.repurchaseable)} <span className="text-xs text-muted-foreground">repurchasable</span></TableCell><TableCell className="text-xs text-muted-foreground">—</TableCell><TableCell className="text-right tabular-nums">{format.shares(row.preview.vested)}</TableCell></TableRow>;
                         }
                         const item = accelerations[id] ?? { manual: false, quantity: "", reason: "", document: null };
                         const accelerated = item.manual ? amountOf(item.quantity, { positive: true }) : null;
@@ -337,45 +340,43 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
                         const update = (patch: Partial<Acceleration>) => setAccelerations((current) => ({ ...current, [id]: { ...item, ...patch } }));
                         const rowError = errorOf(`row:${id}`);
                         return (
-                          <tr key={id}>
-                            <td>{row.security.displayId} <span className="muted small">{optionType(row.security.subtype)}</span>{rowError ? <div className="err-inline">{rowError}</div> : null}</td>
-                            <td className="num">{format.shares(row.preview.vested)}</td>
-                            <td className="num"><b>{format.shares(row.preview.unvested)}</b>{!engine.Dec.parse(row.preview.vested).isPositive() && engine.Dec.parse(row.preview.unvested).isPositive() ? <span className="small muted"> (whole grant)</span> : null}</td>
-                            <td>
+                          <TableRow key={id}>
+                            <TableCell className="align-top">{row.security.displayId} <span className="text-xs text-muted-foreground">{optionType(row.security.subtype)}</span>{rowError ? <div className="text-sm font-medium text-destructive">{rowError}</div> : null}</TableCell>
+                            <TableCell className="text-right align-top tabular-nums">{format.shares(row.preview.vested)}</TableCell>
+                            <TableCell className="text-right align-top tabular-nums"><b>{format.shares(row.preview.unvested)}</b>{!engine.Dec.parse(row.preview.vested).isPositive() && engine.Dec.parse(row.preview.unvested).isPositive() ? <span className="text-xs text-muted-foreground"> (whole grant)</span> : null}</TableCell>
+                            <TableCell className="min-w-56 align-top whitespace-normal">
                               <SelectField label={<span className="sr-only">Acceleration for {row.security.displayId}</span>} value={item.manual ? "manual" : "none"} onChange={(value) => update({ manual: value === "manual" })} options={[["none", "None"], ["manual", "Manual quantity"]]} />
                               {item.manual ? (
-                                <div className="stack mt-8" style={{ gap: 8 }}>
+                                <div className="mt-2 flex flex-col gap-2">
                                   <AmountField label={`Quantity to accelerate (${row.security.displayId})`} value={item.quantity} onChange={(value) => update({ quantity: value })} />
                                   <TextField label={`Reason (${row.security.displayId})`} value={item.reason} onChange={(value) => update({ reason: value })} />
                                   <DocumentUpload label={`Acceleration document (${row.security.displayId})`} kind="BOARD_CONSENT" value={item.document} onChange={(document) => update({ document })} />
                                 </div>
                               ) : null}
-                              {errorOf(`accel:${id}`) ? <div className="err-inline">{errorOf(`accel:${id}`)}</div> : null}
-                            </td>
-                            <td className="num">{format.shares(result)}{accelerated ? <span className="badge b-teal"> +{format.shares(accelerated)}</span> : null}</td>
-                          </tr>
+                              {errorOf(`accel:${id}`) ? <div className="text-sm font-medium text-destructive">{errorOf(`accel:${id}`)}</div> : null}
+                            </TableCell>
+                            <TableCell className="text-right align-top tabular-nums">{format.shares(result)}{accelerated ? <> <Badge className="bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200">+{format.shares(accelerated)}</Badge></> : null}</TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
-                </div>
+                    </TableBody>
+                  </Table>
               )}
       </Card>
     );
   } else if (step === 3) {
     body = (
       <Card>
-        <h2 className="mb-8">3. Exercise and repurchase windows</h2>
-        <p className="muted">Each option carries two dates: the <b>contractual deadline</b> (the grant's or plan's window for a {TERMINATION_TYPE_LABELS[details.type].toLowerCase()} termination; editable only with an extension document) and the <b>ISO deadline</b> (computed: 3 months, 12 months for an attested Internal Revenue Code section 22(e)(3) disability, none after death).</p>
-        {!previews.data ? <p className="muted small" role="status">Computing the windows…</p> : (
-          <div className="tbl-scroll">
-            <table className="tbl" aria-label="Windows">
-              <thead><tr><th scope="col">Security</th><th scope="col" className="num">Vested and unexercised</th><th scope="col">Contractual deadline</th><th scope="col">ISO deadline</th><th scope="col">Note</th></tr></thead>
-              <tbody>
+        <h2 className="text-lg font-semibold">3. Exercise and repurchase windows</h2>
+        <p className="text-sm text-muted-foreground">Each option carries two dates: the <b>contractual deadline</b> (the grant's or plan's window for a {TERMINATION_TYPE_LABELS[details.type].toLowerCase()} termination; editable only with an extension document) and the <b>ISO deadline</b> (computed: 3 months, 12 months for an attested Internal Revenue Code section 22(e)(3) disability, none after death).</p>
+        {!previews.data ? <p className="text-xs text-muted-foreground" role="status">Computing the windows…</p> : (
+          <Table aria-label="Windows">
+              <TableHeader><TableRow><TableHead scope="col">Security</TableHead><TableHead scope="col" className="text-right">Vested and unexercised</TableHead><TableHead scope="col">Contractual deadline</TableHead><TableHead scope="col">ISO deadline</TableHead><TableHead scope="col">Note</TableHead></TableRow></TableHeader>
+              <TableBody>
                 {options.map((row) => {
                   const id = row.security.id;
                   if (!engine.Dec.parse(row.preview.exercisable).isPositive()) {
-                    return <tr key={id}><td>{row.security.displayId}</td><td className="num">0</td><td>—</td><td>—</td><td className="small muted">Cancelled in full</td></tr>;
+                    return <TableRow key={id}><TableCell>{row.security.displayId}</TableCell><TableCell className="text-right tabular-nums">0</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell className="text-xs text-muted-foreground">Cancelled in full</TableCell></TableRow>;
                   }
                   const item = extensions[id] ?? { deadline: row.preview.contractualDeadline ?? "", document: null };
                   const changed = item.deadline !== "" && item.deadline !== row.preview.contractualDeadline;
@@ -383,17 +384,17 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
                   const differs = iso !== null && iso !== (changed ? item.deadline : row.preview.contractualDeadline);
                   const update = (patch: Partial<Extension>) => setExtensions((current) => ({ ...current, [id]: { ...item, ...patch } }));
                   return (
-                    <tr key={id}>
-                      <td>{row.security.displayId} <span className="muted small">{optionType(row.security.subtype)}</span></td>
-                      <td className="num">{format.shares(row.preview.exercisable)}</td>
-                      <td>
+                    <TableRow key={id}>
+                      <TableCell className="align-top">{row.security.displayId} <span className="text-xs text-muted-foreground">{optionType(row.security.subtype)}</span></TableCell>
+                      <TableCell className="text-right align-top tabular-nums">{format.shares(row.preview.exercisable)}</TableCell>
+                      <TableCell className="min-w-56 align-top whitespace-normal">
                         <DateField label={<span className="sr-only">Contractual deadline {row.security.displayId}</span>} value={item.deadline} max={terms.expirationDate(row.security.terms) ?? undefined} onChange={(value) => update({ deadline: value })} hint={windowWhy(row)} />
-                        {changed ? <div className="mt-4"><DocumentUpload label={`Extension document (${row.security.displayId})`} kind="SEPARATION_AGREEMENT" value={item.document} onChange={(document) => update({ document })} /></div> : null}
-                        {errorOf(`deadline:${id}`) ? <div className="err-inline">{errorOf(`deadline:${id}`)}</div> : null}
-                      </td>
-                      <td>{iso ? formatDate(iso) : optionType(row.security.subtype) === "NSO" ? "— (NSO)" : DASH}<div className="small muted">{iso ? isoWhy : ""}</div></td>
-                      <td className="small" style={differs ? { color: "var(--warning-text)" } : undefined}>{differs ? `Exercises after ${formatDate(iso)} are taxed as NSOs and excluded from Form 3921` : iso ? "Same date" : ""}</td>
-                    </tr>
+                        {changed ? <div className="mt-1"><DocumentUpload label={`Extension document (${row.security.displayId})`} kind="SEPARATION_AGREEMENT" value={item.document} onChange={(document) => update({ document })} /></div> : null}
+                        {errorOf(`deadline:${id}`) ? <div className="text-sm font-medium text-destructive">{errorOf(`deadline:${id}`)}</div> : null}
+                      </TableCell>
+                      <TableCell className="align-top">{iso ? formatDate(iso) : optionType(row.security.subtype) === "NSO" ? "— (NSO)" : DASH}<div className="text-xs text-muted-foreground">{iso ? isoWhy : ""}</div></TableCell>
+                      <TableCell className={cn("align-top text-xs whitespace-normal", differs && "text-amber-700 dark:text-amber-300")}>{differs ? `Exercises after ${formatDate(iso)} are taxed as NSOs and excluded from Form 3921` : iso ? "Same date" : ""}</TableCell>
+                    </TableRow>
                   );
                 })}
                 {shares.filter((row) => engine.Dec.parse(row.preview.repurchaseable).isPositive()).map((row) => {
@@ -401,21 +402,20 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
                   const item = repurchases[id] ?? { deadline: "", document: null };
                   const update = (patch: Partial<Extension>) => setRepurchases((current) => ({ ...current, [id]: { ...item, ...patch } }));
                   return (
-                    <tr key={id}>
-                      <td>{row.security.displayId}</td>
-                      <td className="num">{format.shares(row.preview.repurchaseable)} unvested shares</td>
-                      <td colSpan={2}>
+                    <TableRow key={id}>
+                      <TableCell className="align-top">{row.security.displayId}</TableCell>
+                      <TableCell className="text-right align-top tabular-nums">{format.shares(row.preview.repurchaseable)} unvested shares</TableCell>
+                      <TableCell colSpan={2} className="min-w-56 align-top whitespace-normal">
                         <DateField label={`Last date to repurchase (${row.security.displayId})`} value={item.deadline} onChange={(value) => update({ deadline: value })} hint="Only when the date isn't on record: from the stock purchase agreement." />
-                        {item.deadline ? <div className="mt-4"><DocumentUpload label={`Repurchase agreement (${row.security.displayId})`} kind="STOCK_PURCHASE_AGREEMENT" value={item.document} onChange={(document) => update({ document })} /></div> : null}
-                        {errorOf(`repurchase:${id}`) ? <div className="err-inline">{errorOf(`repurchase:${id}`)}</div> : null}
-                      </td>
-                      <td className="small muted">Cap Table doesn't record the repurchase itself: counsel papers it offline</td>
-                    </tr>
+                        {item.deadline ? <div className="mt-1"><DocumentUpload label={`Repurchase agreement (${row.security.displayId})`} kind="STOCK_PURCHASE_AGREEMENT" value={item.document} onChange={(document) => update({ document })} /></div> : null}
+                        {errorOf(`repurchase:${id}`) ? <div className="text-sm font-medium text-destructive">{errorOf(`repurchase:${id}`)}</div> : null}
+                      </TableCell>
+                      <TableCell className="align-top text-xs whitespace-normal text-muted-foreground">Once the company has repurchased and paid, record it on Securities Status</TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+          </Table>
         )}
       </Card>
     );
@@ -423,14 +423,14 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
     const result = flow.preview?.result ?? null;
     body = (
       <Card>
-        <h2 className="mb-8">4. Review</h2>
+        <h2 className="text-lg font-semibold">4. Review</h2>
         {scheduled ? (
           <Banner kind="info" title={`Scheduled termination — ${formatDate(details.date)}`}>
             {stakeholder.displayName} shows TERMINATING {formatDate(details.date)}. Vesting continues and fully diluted is unchanged until then; the effects below are recorded once that date arrives, the next time an admin opens Cap Table (or uses Process due items on the dashboard).
           </Banner>
         ) : null}
         <FlowProblemBanner problem={flow.problem} onRetry={flow.phase === "edit" ? () => void flow.review() : () => void flow.commit()} onCheck={flow.canCheck ? () => void flow.check() : undefined} busy={flow.busy} />
-        {flow.phase === "previewing" && !result ? <p className="muted" role="status">The server is checking the termination…</p> : null}
+        {flow.phase === "previewing" && !result ? <p className="text-sm text-muted-foreground" role="status">The server is checking the termination…</p> : null}
         {result ? (
           <CommandPreview
             transactions={result.transactions}
@@ -445,29 +445,45 @@ function TerminateWizard({ stakeholder, back }: { stakeholder: api.StakeholderDe
   }
 
   const footer = (
-    <div className="wiz-foot">
-      {step > 1 ? <button type="button" className="btn btn-ghost" onClick={() => go(-1)} disabled={flow.busy || flow.locked}>Back</button> : null}
+    <div className="flex flex-wrap justify-end gap-2">
+      {step > 1 ? <Button type="button" variant="ghost" onClick={() => go(-1)} disabled={flow.busy || flow.locked}>Back</Button> : null}
       {step < 4 ? (
-        <button type="button" className="btn btn-primary" onClick={() => go(1)}>Next</button>
+        <Button type="button" onClick={() => go(1)}>Next</Button>
       ) : (
-        <button type="button" className="btn btn-danger" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.preview || !flow.acknowledgedAll}>
+        <Button type="button" variant="destructive" onClick={() => void flow.commit()} disabled={flow.busy || flow.locked || !flow.preview || !flow.acknowledgedAll}>
           {flow.phase === "committing" ? "Recording…" : scheduled ? "Schedule termination" : "Terminate"}
-        </button>
+        </Button>
       )}
     </div>
   );
 
   return (
-    <div className="wiz-body rail">
-      <ol className="steps-rail" aria-label="Steps">
-        <li className="small mb-12" style={{ listStyle: "none", marginBottom: 14 }}><Link to={back}>← Exit termination</Link></li>
+    <div className="grid items-start gap-8 lg:grid-cols-[13rem_minmax(0,55rem)]">
+      <ol className="flex flex-wrap gap-3 lg:sticky lg:top-4 lg:flex-col lg:gap-0" aria-label="Steps">
+        <li className="mb-3.5 w-full text-xs"><Link className="underline-offset-4 hover:underline" to={back}>← Exit termination</Link></li>
         {STEPS.map((label, index) => (
-          <li key={label} className={`st ${index + 1 < step ? "done" : index + 1 === step ? "cur" : ""}`} aria-current={index + 1 === step ? "step" : undefined}>
-            <span className="o" aria-hidden="true" /><span>{index + 1}. {label}</span>
+          <li
+            key={label}
+            className={cn(
+              "relative flex items-start gap-2.5 text-sm text-muted-foreground lg:pb-4.5 lg:last:pb-0",
+              "lg:before:absolute lg:before:top-4 lg:before:bottom-0 lg:before:left-1.5 lg:before:w-px lg:before:bg-border lg:last:before:hidden",
+              index + 1 === step && "font-semibold text-foreground",
+            )}
+            aria-current={index + 1 === step ? "step" : undefined}
+          >
+            <span
+              className={cn(
+                "relative z-10 mt-0.75 size-3.25 flex-none rounded-full border-2 border-border bg-background",
+                index + 1 < step && "border-primary bg-primary",
+                index + 1 === step && "border-primary",
+              )}
+              aria-hidden="true"
+            />
+            <span>{index + 1}. {label}</span>
           </li>
         ))}
       </ol>
-      <div className="stack" aria-label={`Step ${step}: ${STEPS[step - 1]}`}>
+      <div className="flex min-w-0 flex-col gap-4" aria-label={`Step ${step}: ${STEPS[step - 1]}`}>
         {step < 4 && flow.problem && flow.phase === "edit" ? <FlowProblemBanner problem={flow.problem} /> : null}
         {body}
         {footer}

@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { Link } from "react-router";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 
 // The pieces the in-app Docs are written with. Each topic is static TSX: a title, a one-line summary and sections of
 // ordinary markup, with no parser and no data from the server, so the same pages serve owners, editors and holders.
@@ -42,7 +43,7 @@ export function useDocHref(): (topic: TopicSlug, section?: string) => string {
 /** A link to another topic of the docs, or to a section of one. */
 export function DocLink({ to, section, children }: { to: TopicSlug; section?: string; children: ReactNode }) {
   const href = useDocHref();
-  return <Link to={href(to, section)}>{children}</Link>;
+  return <Link className="font-medium underline underline-offset-4 hover:text-primary" to={href(to, section)}>{children}</Link>;
 }
 
 /** An id for a heading or a glossary term: "Fully diluted" → "fully-diluted", "83(b) election" → "83b-election". */
@@ -52,14 +53,14 @@ export function anchorId(text: string): string {
 
 /** How a general idea shows up in Cap Table, at the end of an equity section. */
 export function InApp({ children }: { children: ReactNode }) {
-  return <p className="docs-inapp"><b>In Cap Table:</b> {children}</p>;
+  return <p className="mt-1.5 rounded-lg bg-muted px-4 py-3"><b>In Cap Table:</b> {children}</p>;
 }
 
 /** A worked example, set apart from the text around it. */
 export function Example({ title = "Example", children }: { title?: string; children: ReactNode }) {
   return (
-    <div className="docs-example">
-      <p className="docs-example-t">{title}</p>
+    <div className="my-1 mb-3.5 rounded-r-lg border-l-4 border-primary bg-muted/50 px-4 py-3.5 [&>p:last-child]:mb-0">
+      <p className="mb-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</p>
       {children}
     </div>
   );
@@ -68,19 +69,21 @@ export function Example({ title = "Example", children }: { title?: string; child
 /** A small table: the first cell of each row heads it. */
 export function DocTable({ label, columns, rows }: { label: string; columns: readonly string[]; rows: readonly (readonly ReactNode[])[] }) {
   return (
-    <div className="tbl-scroll docs-table">
-      <table className="tbl" aria-label={label}>
-        <thead>
-          <tr>{columns.map((column) => <th key={column} scope="col">{column}</th>)}</tr>
-        </thead>
-        <tbody>
+    <div className="my-1 mb-3.5 overflow-hidden rounded-lg border bg-card">
+      <Table aria-label={label}>
+        <TableHeader className="bg-muted/50">
+          <TableRow>{columns.map((column) => <TableHead key={column} scope="col" className="h-auto px-3.5 py-2.5 text-xs text-muted-foreground">{column}</TableHead>)}</TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((row, index) => (
-            <tr key={index}>
-              {row.map((cell, column) => (column === 0 ? <th key={column} scope="row">{cell}</th> : <td key={column}>{cell}</td>))}
-            </tr>
+            <TableRow key={index} className="hover:bg-transparent">
+              {row.map((cell, column) => (column === 0
+                ? <TableHead key={column} scope="row" className="h-auto px-3.5 py-2.5 align-top whitespace-normal">{cell}</TableHead>
+                : <TableCell key={column} className="px-3.5 py-2.5 align-top whitespace-normal">{cell}</TableCell>))}
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -1,5 +1,11 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import type { api } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { Field, FieldLabel } from "@/components/ui/field.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { describeChanges, transactionLabel, type Change } from "../lib/changes.ts";
 import { DASH, formatDate } from "../lib/format.ts";
 import type { FlowProblem, WriteFlow } from "../lib/flow.ts";
@@ -20,6 +26,35 @@ interface PreviewProps {
   title?: ReactNode;
 }
 
+/** A vesting schedule in the preview: folded to its summary until opened. */
+function ScheduleChange({ title, events, format }: { title: string; events: NonNullable<ReturnType<typeof describeChanges>[number]["vesting"]>; format: (value: string) => string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="-ml-2 h-auto py-1 font-normal">
+          <ChevronRight className={open ? "rotate-90 transition-transform" : "transition-transform"} aria-hidden="true" />
+          Vesting schedule ({events.length} events{events.length ? `, ${formatDate(events[0]!.date)} to ${formatDate(events.at(-1)!.date)}` : ""})
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 max-h-60 overflow-auto rounded-md border bg-background">
+        <Table aria-label={`${title} schedule`}>
+          <TableHeader><TableRow><TableHead>Date</TableHead><TableHead className="text-right">Tranche</TableHead><TableHead className="text-right">Cumulative</TableHead></TableRow></TableHeader>
+          <TableBody>
+            {events.map((event, index) => (
+              <TableRow key={`${event.date}-${index}`}>
+                <TableCell>{formatDate(event.date)}{event.kind === "CLIFF" ? " · cliff" : ""}</TableCell>
+                <TableCell className="text-right tabular-nums">{format(event.quantity)}</TableCell>
+                <TableCell className="text-right tabular-nums">{format(event.cumulative)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 /** The server's preview, figure for figure ("Review" → Confirm). */
 export function CommandPreview({ transactions, changes, names = new Map(), title = "What the ledger will record" }: PreviewProps) {
   const { format } = useWorkspace();
@@ -29,60 +64,44 @@ export function CommandPreview({ transactions, changes, names = new Map(), title
     return groups.find((group) => group.entity === "security" && group.id === id)?.title ?? names.get(id) ?? DASH;
   };
   return (
-    <section className="review-panel" aria-label="Server preview">
-      <h3>{title}</h3>
+    <section className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-4" aria-label="Server preview">
+      <h3 className="text-sm font-semibold">{title}</h3>
       {transactions && transactions.length ? (
-        <div className="tbl-scroll mb-8">
-          <table className="tbl dense" aria-label="Transactions">
-            <thead><tr><th scope="col">Transaction</th><th scope="col">Effective</th><th scope="col">Security</th><th scope="col" className="num">Quantity</th></tr></thead>
-            <tbody>
+        <div className="rounded-md border bg-background">
+          <Table aria-label="Transactions">
+            <TableHeader><TableRow><TableHead>Transaction</TableHead><TableHead>Effective</TableHead><TableHead>Security</TableHead><TableHead className="text-right">Quantity</TableHead></TableRow></TableHeader>
+            <TableBody>
               {transactions.map((transaction, index) => (
-                <tr key={`${transaction.type}-${index}`}>
-                  <td>{transactionLabel(transaction.type)}</td>
-                  <td>{formatDate(transaction.effectiveDate)}</td>
-                  <td>{securityName(transaction.securityId)}</td>
-                  <td className="num">{transaction.quantity === null ? DASH : format.shares(transaction.quantity)}</td>
-                </tr>
+                <TableRow key={`${transaction.type}-${index}`}>
+                  <TableCell>{transactionLabel(transaction.type)}</TableCell>
+                  <TableCell>{formatDate(transaction.effectiveDate)}</TableCell>
+                  <TableCell>{securityName(transaction.securityId)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{transaction.quantity === null ? DASH : format.shares(transaction.quantity)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : null}
       {groups.length ? (
-        <div aria-label="Changes">
+        <div className="flex flex-col gap-3" aria-label="Changes">
           {groups.map((group) => (
-            <section className="change-group" key={`${group.entity}-${group.id}`} aria-label={group.title}>
-              <h4>{group.title}</h4>
+            <section className="flex flex-col gap-1" key={`${group.entity}-${group.id}`} aria-label={group.title}>
+              <h4 className="text-sm font-medium">{group.title}</h4>
               {group.vesting ? (
-                <details className="adv mt-8">
-                  <summary>Vesting schedule ({group.vesting.length} events{group.vesting.length ? `, ${formatDate(group.vesting[0]!.date)} to ${formatDate(group.vesting.at(-1)!.date)}` : ""})</summary>
-                  <div className="adv-b tbl-scroll" style={{ maxHeight: 240, overflow: "auto" }}>
-                    <table className="tbl dense" aria-label={`${group.title} schedule`}>
-                      <thead><tr><th scope="col">Date</th><th scope="col" className="num">Tranche</th><th scope="col" className="num">Cumulative</th></tr></thead>
-                      <tbody>
-                        {group.vesting.map((event, index) => (
-                          <tr key={`${event.date}-${index}`}>
-                            <td>{formatDate(event.date)}{event.kind === "CLIFF" ? " · cliff" : ""}</td>
-                            <td className="num">{format.shares(event.quantity)}</td>
-                            <td className="num">{format.shares(event.cumulative)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
+                <ScheduleChange title={group.title} events={group.vesting} format={(value) => format.shares(value)} />
               ) : group.rows.length ? (
                 group.rows.map((row) => (
-                  <div className="change-row" key={row.key}>
-                    <span>{row.label}</span>
-                    <span className="cv">{row.before}<span className="arrow" aria-label="becomes">→</span><b>{row.after}</b></span>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm" key={row.key}>
+                    <span className="text-muted-foreground">{row.label}</span>
+                    <span className="tabular-nums">{row.before}<span className="px-1.5 text-muted-foreground" aria-label="becomes">→</span><b className="font-semibold">{row.after}</b></span>
                   </div>
                 ))
-              ) : <p className="small muted">No change.</p>}
+              ) : <p className="text-xs text-muted-foreground">No change.</p>}
             </section>
           ))}
         </div>
-      ) : <p className="small muted">The server reports no change to holdings.</p>}
+      ) : <p className="text-xs text-muted-foreground">The server reports no change to holdings.</p>}
     </section>
   );
 }
@@ -91,18 +110,16 @@ export function CommandPreview({ transactions, changes, names = new Map(), title
 export function WarningsToAcknowledge({ flow }: { flow: WriteFlow<unknown, unknown, unknown> }) {
   if (!flow.warnings.length) return null;
   return (
-    <div className="mt-12" aria-label="Warnings">
-      <h4>Warnings to acknowledge</h4>
-      <div className="warn-list mt-8">
+    <div className="flex flex-col gap-2" aria-label="Warnings">
+      <h4 className="text-sm font-semibold">Warnings to acknowledge</h4>
+      <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
         {flow.warnings.map((warning) => (
-          <div className="warn-item" key={warning.code}>
-            <CheckLine checked={flow.acknowledged.has(warning.code)} onChange={(accepted) => flow.acknowledge(warning.code, accepted)} disabled={flow.busy || flow.locked}>
-              {warning.message} <span className="mono small">({warning.code})</span>
-            </CheckLine>
-          </div>
+          <CheckLine key={warning.code} checked={flow.acknowledged.has(warning.code)} onChange={(accepted) => flow.acknowledge(warning.code, accepted)} disabled={flow.busy || flow.locked}>
+            {warning.message} <span className="font-mono text-xs">({warning.code})</span>
+          </CheckLine>
         ))}
       </div>
-      {!flow.acknowledgedAll ? <p className="small muted mt-8">Acknowledge each warning to continue.</p> : null}
+      {!flow.acknowledgedAll ? <p className="text-xs text-muted-foreground">Acknowledge each warning to continue.</p> : null}
     </div>
   );
 }
@@ -111,15 +128,20 @@ export function WarningsToAcknowledge({ flow }: { flow: WriteFlow<unknown, unkno
 export function TypedConfirmation({ expected, value, onChange, disabled }: { expected: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
   const id = useId();
   return (
-    <div className="fld typed-confirm">
-      <label htmlFor={id}>Type <b className="mono">{expected}</b> to confirm</label>
-      <input id={id} className="inp" autoComplete="off" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
-    </div>
+    <Field>
+      <FieldLabel htmlFor={id} className="inline">Type <b className="font-mono">{expected}</b> to confirm</FieldLabel>
+      <Input id={id} autoComplete="off" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+    </Field>
   );
 }
 
 export function confirmationMatches(typed: string, expected: string): boolean {
   return typed.trim() === expected;
+}
+
+/** A small outline Button in a banner. */
+function BannerButton({ onClick, busy, children }: { onClick: () => void; busy?: boolean; children: ReactNode }) {
+  return <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onClick}>{children}</Button>;
 }
 
 /** What went wrong with the dry run or the real call, and what to do about it. */
@@ -128,9 +150,9 @@ export function FlowProblemBanner({ problem, onRetry, onCheck, busy }: { problem
   switch (problem.kind) {
     case "invalid":
       return (
-        <div className="mb-8">
+        <div className="flex flex-col gap-2">
           <Banner kind="danger" title={problem.message} />
-          {problem.unplaced.length ? <div className="mt-8"><BlockList items={problem.unplaced} /></div> : null}
+          {problem.unplaced.length ? <BlockList items={problem.unplaced} /> : null}
         </div>
       );
     case "warnings":
@@ -139,7 +161,7 @@ export function FlowProblemBanner({ problem, onRetry, onCheck, busy }: { problem
       return <Banner kind="warn" title="Review again">{problem.message}</Banner>;
     case "changed":
       return (
-        <Banner kind="warn" title="Review again" action={onRetry ? <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={onRetry}>Review again</button> : undefined}>
+        <Banner kind="warn" title="Review again" action={onRetry ? <BannerButton busy={busy} onClick={onRetry}>Review again</BannerButton> : undefined}>
           {problem.message}
         </Banner>
       );
@@ -148,15 +170,15 @@ export function FlowProblemBanner({ problem, onRetry, onCheck, busy }: { problem
         <Banner kind="danger" title="This can't be recorded">
           {problem.message}
           {problem.dependents?.length ? (
-            <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }} aria-label="Commands to reverse first">
-              {problem.dependents.map((dependent) => <li key={dependent.commandId}>{commandLabel(dependent.type)} <span className="mono">{dependent.commandId.slice(0, 8)}</span></li>)}
+            <ul className="mt-1.5 list-disc pl-5 text-xs" aria-label="Commands to reverse first">
+              {problem.dependents.map((dependent) => <li key={dependent.commandId}>{commandLabel(dependent.type)} <span className="font-mono">{dependent.commandId.slice(0, 8)}</span></li>)}
             </ul>
           ) : null}
         </Banner>
       );
     case "failed":
       return (
-        <Banner kind="danger" title="Nothing was confirmed" action={problem.retry && onRetry ? <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={onRetry}>Try again</button> : undefined}>
+        <Banner kind="danger" title="Nothing was confirmed" action={problem.retry && onRetry ? <BannerButton busy={busy} onClick={onRetry}>Try again</BannerButton> : undefined}>
           {problem.message} Trying again can never record it twice.
         </Banner>
       );
@@ -166,10 +188,10 @@ export function FlowProblemBanner({ problem, onRetry, onCheck, busy }: { problem
           kind="danger"
           title="The answer was lost — the outcome is unknown"
           action={
-            <span className="row nowrap" style={{ gap: 6 }}>
-              {onRetry ? <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={onRetry}>Try again</button> : null}
-              {onCheck ? <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={onCheck}>Check what was recorded</button> : null}
-            </span>
+            <>
+              {onRetry ? <BannerButton busy={busy} onClick={onRetry}>Try again</BannerButton> : null}
+              {onCheck ? <BannerButton busy={busy} onClick={onCheck}>Check what was recorded</BannerButton> : null}
+            </>
           }
         >
           {problem.message}

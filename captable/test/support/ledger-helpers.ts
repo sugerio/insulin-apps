@@ -14,7 +14,7 @@ import {
 import type { Actor } from '../../src/app/server/lib/ledger/types.ts'
 import { ledgerCache } from '../../src/app/server/lib/read/ledger.ts'
 import { buildAcme, VALUATIONS, VS_1, type Acme } from '../shared/engine/fixtures/acme.ts'
-import { uuid, type LedgerBuilder } from '../shared/engine/fixtures/builder.ts'
+import { monthlyEvents, usd, uuid, type LedgerBuilder } from '../shared/engine/fixtures/builder.ts'
 import {
   appRequest, consoleHeaders, CONSOLE_ORGANIZATION_ID, createTestDatabase, type ConsoleIdentity,
 } from './server-harness.ts'
@@ -292,14 +292,17 @@ export interface AcmeSeed {
  */
 export async function seedAcme(
   db: D1Database,
-  options: { extend?: (acme: Acme) => void; emails?: Record<string, string>; settings?: Record<string, unknown>; edges?: boolean } = {},
+  options: { extend?: (acme: Acme) => void; emails?: Record<string, string>; settings?: Record<string, unknown>; edges?: boolean; shareUnit?: string } = {},
 ): Promise<AcmeSeed> {
   ledgerCache().clear()
   const acme = buildAcme()
+  if (options.shareUnit) acme.b.reference.shareUnit = options.shareUnit
   options.extend?.(acme)
   const { b } = acme
   const orgId = b.orgId
   const { created } = await seedReferences(db, b)
+  // The share unit is frozen once the company has transactions, so it is set before any.
+  if (options.shareUnit) await db.prepare('UPDATE orgs SET share_unit = ?, version = version + 1 WHERE id = ?').bind(options.shareUnit, orgId).run()
   if (options.settings) {
     await db.prepare('UPDATE orgs SET settings = json_patch(settings, ?), version = version + 1 WHERE id = ?').bind(JSON.stringify(options.settings), orgId).run()
   }
@@ -394,6 +397,88 @@ export function withRsuAndSar(acme: Acme): void {
     c.tx('TX_EQUITY_COMPENSATION_ISSUANCE', '2025-01-15', {
       security_id: lot, custom_id: 'SAR-1', stakeholder_id: id('S43'), stock_plan_id: plan, stock_class_id: cls.CS, compensation_type: 'SSAR',
       quantity: '1000', base_price: { amount: '0.44', currency: 'USD' }, expiration_date: '2035-01-15', termination_exercise_windows: [],
+    })
+  })
+}
+
+/**
+ * Restricted share lots for record-repurchase, imported as a ledger would hold them. S41's RS-1 is an RSA of 4,800
+ * shares vesting monthly over 48 months from 2025-01-01 after a 12-month cliff, with a 60-day repurchase right at $1 and
+ * every descriptive term a balance lot carries; S41 isn't terminated. S42's RS-2 (1,000 shares from 2026-06-01, same
+ * schedule) belongs to a holder terminated on 2026-08-01 before anything vested, with no repurchase deadline recorded
+ * anywhere: no lot right, no plan.
+ */
+export function withRestrictedShares(acme: Acme): void {
+  const { b, id, cls } = acme
+  b.stakeholder('S41', 'employee', { countryOfResidence: 'US' })
+  b.stakeholder('S42', 'employee', { countryOfResidence: 'US' })
+  b.command('issue:RS-1', (c) => {
+    const lot = c.security('RS-1', { family: 'STOCK', subtype: 'COMMON', stakeholderId: id('S41'), stockClassId: cls.CS, stockPlanId: null, parentSecurityId: null })
+    const vt = b.vestingTerms('vt:RS-1', { type: 'EXPLICIT', events: monthlyEvents(4800n, '2025-01-01', 48, 12) })
+    c.tx('TX_STOCK_ISSUANCE', '2025-01-01', {
+      security_id: lot, custom_id: 'RS-1', stakeholder_id: id('S41'), stock_class_id: cls.CS, share_price: usd('1'), quantity: '4800',
+      stock_legend_ids: [uuid('legend:RS-1')], issuance_type: 'RSA', board_approval_date: '2024-12-20',
+      vesting_terms_id: vt.id, x_definition_sha256: vt.sha, x_origin: 'RSA',
+      x_repurchase_right: { price_per_share: usd('1'), window: { period: 60, period_type: 'DAYS' } },
+      x_holding_start_date: '2024-12-31', x_exemption: { federal: 'RULE_701' },
+    })
+  })
+  b.command('issue:RS-2', (c) => {
+    const lot = c.security('RS-2', { family: 'STOCK', subtype: 'COMMON', stakeholderId: id('S42'), stockClassId: cls.CS, stockPlanId: null, parentSecurityId: null })
+    const vt = b.vestingTerms('vt:RS-2', { type: 'EXPLICIT', events: monthlyEvents(1000n, '2026-06-01', 48, 12) })
+    c.tx('TX_STOCK_ISSUANCE', '2026-06-01', {
+      security_id: lot, custom_id: 'RS-2', stakeholder_id: id('S42'), stock_class_id: cls.CS, share_price: usd('0.5'), quantity: '1000',
+      vesting_terms_id: vt.id, x_definition_sha256: vt.sha, x_origin: 'RSA',
+    })
+  })
+  b.command('terminate:S42', (c) => {
+    c.tx('X_STAKEHOLDER_TERMINATION', '2026-08-01', {
+      stakeholder_id: id('S42'), termination_date: '2026-08-01', termination_type: 'voluntary', vesting_stop_date: '2026-08-01',
+      relationship_before: 'employee', relationship_after: 'ex_employee',
+    })
+  }, { type: 'terminate-stakeholder' })
+}
+
+/**
+ * Restricted share lots as an import leaves them, each of 1,000 shares vesting 500 on 2026-03-01 and 500 on 2027-03-01,
+ * held by employees who left on 2026-08-01 with 500 unvested. S46's RS-3 carries its agreement's terms: no repurchase
+ * deadline (`x_no_deadline`). S47's RS-4 has a 90-day right, the import's legend snapshot and no board approval date in
+ * the import (import-only fields an app-written lot can't carry). S48's RS-5, board-approved, was repurchased before
+ * the import on 2026-09-01, its vested 500 shares left on an imported balance lot RS-5B that has no board approval date
+ * of its own.
+ */
+export function withImportedRestrictedShares(acme: Acme): void {
+  const { b, id, cls } = acme
+  const lot = (label: string, holder: string, terms: Record<string, unknown>) => {
+    b.stakeholder(holder, 'employee', { countryOfResidence: 'US' })
+    const vt = b.vestingTerms(`vt:${label}`, { type: 'EXPLICIT', events: [{ date: '2026-03-01', quantity: '500' }, { date: '2027-03-01', quantity: '500' }] })
+    b.command(`issue:${label}`, (c) => {
+      const security = c.security(label, { family: 'STOCK', subtype: 'COMMON', stakeholderId: id(holder), stockClassId: cls.CS, stockPlanId: null, parentSecurityId: null })
+      c.tx('TX_STOCK_ISSUANCE', '2025-03-01', {
+        security_id: security, custom_id: label, stakeholder_id: id(holder), stock_class_id: cls.CS, share_price: usd('0.01'), quantity: '1000',
+        x_origin: 'RSA', vesting_terms_id: vt.id, x_definition_sha256: vt.sha, ...terms,
+      })
+    })
+    b.command(`terminate:${holder}`, (c) => {
+      c.tx('X_STAKEHOLDER_TERMINATION', '2026-08-01', {
+        stakeholder_id: id(holder), termination_date: '2026-08-01', termination_type: 'voluntary', vesting_stop_date: '2026-08-01',
+        relationship_before: 'employee', relationship_after: 'ex_employee',
+      })
+    }, { type: 'terminate-stakeholder' })
+  }
+  lot('RS-3', 'S46', { x_repurchase_right: { price_per_share: usd('0.01'), window: null, terms_text: 'Synthetic terms: no deadline', x_no_deadline: true } })
+  lot('RS-4', 'S47', {
+    x_repurchase_right: { price_per_share: usd('0.01'), window: { period: 90, period_type: 'DAYS' } },
+    x_legends: [{ legend_id: uuid('legend:RS-4'), name: 'Synthetic restriction legend', text: 'Synthetic legend text for the imported test lot.' }],
+    x_board_approval_not_recorded_in_pulley: true,
+  })
+  lot('RS-5', 'S48', { x_repurchase_right: { price_per_share: usd('0.01'), window: { period: 90, period_type: 'DAYS' } }, board_approval_date: '2025-02-20' })
+  b.command('repurchase:RS-5', (c) => {
+    const balance = c.security('RS-5B', { family: 'STOCK', subtype: 'COMMON', stakeholderId: id('S48'), stockClassId: cls.CS, stockPlanId: null, parentSecurityId: id('RS-5') })
+    c.tx('TX_STOCK_REPURCHASE', '2026-09-01', { security_id: id('RS-5'), quantity: '500', price: usd('0.01'), balance_security_id: balance, x_kind: 'UNVESTED' })
+    c.tx('TX_STOCK_ISSUANCE', '2026-09-01', {
+      security_id: balance, custom_id: 'RS-5B', stakeholder_id: id('S48'), stock_class_id: cls.CS, share_price: usd('0.01'), quantity: '500',
+      x_origin: 'BALANCE', x_source_security_id: id('RS-5'),
     })
   })
 }

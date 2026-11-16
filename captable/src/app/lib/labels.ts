@@ -1,4 +1,4 @@
-import type { api } from "#shared";
+import { api } from "#shared";
 
 type FederalExemption = (typeof api.FEDERAL_EXEMPTIONS)[number];
 type PaymentMethod = (typeof api.PAYMENT_METHODS)[number];
@@ -55,16 +55,17 @@ export function ownershipCategory(relationship: string): OwnershipCategory {
   }
 }
 
+/** The theme's chart colours (app.css), light and dark; unallocated and unknown shares in neutral tones. */
 export const CATEGORY_COLORS: Record<OwnershipCategory, string> = {
-  Founders: "var(--s1)",
-  Investors: "var(--s2)",
-  Employees: "var(--s3)",
-  "Former employees": "var(--s4)",
-  Advisors: "var(--s5)",
-  Consultants: "var(--s5)",
-  Other: "var(--s6)",
-  Unknown: "var(--hatch)",
-  Available: "var(--s-pool)",
+  Founders: "var(--chart-1)",
+  Investors: "var(--chart-2)",
+  Employees: "var(--chart-3)",
+  "Former employees": "var(--chart-4)",
+  Advisors: "var(--chart-5)",
+  Consultants: "var(--chart-5)",
+  Other: "color-mix(in oklab, var(--chart-3) 45%, var(--background))",
+  Unknown: "var(--muted-foreground)",
+  Available: "var(--muted)",
 };
 
 export const TERMINATION_TYPE_LABELS: Record<api.TerminationType, string> = {
@@ -95,6 +96,14 @@ export const EXECUTION_LABELS: Record<api.ExecutionStatus, string> = {
 
 export function isExecutionPending(status: api.ExecutionStatus): boolean {
   return status.startsWith("pending");
+}
+
+/**
+ * Whether the status blocks exercise, the engine's `blocksExercise`: only a missing holder-side signature does.
+ * A grant awaiting only the company signatory's signature is still execution pending, and exercisable.
+ */
+export function blocksExercise(status: api.ExecutionStatus): boolean {
+  return status === "pending_holder" || status === "pending_both";
 }
 
 export const MISSING_LABELS: Record<"company_signatory" | "holder" | "both", string> = {
@@ -155,6 +164,12 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   MANUAL_UNSPECIFIED: "Manual (method not recorded)",
   OTHER: "Other",
 };
+
+/** How an exercise was paid: an imported exercise whose source named no method says so, not a blank. */
+export function exercisePaymentLabel(exercise: Pick<api.ExerciseRecord, "paymentMethod" | "source">, source: api.ImportSource | null | undefined = null): string {
+  if (exercise.paymentMethod) return PAYMENT_METHOD_LABELS[exercise.paymentMethod];
+  return exercise.source.kind === "migrated" ? `Not recorded in ${api.importSourceName(source)}` : "—";
+}
 
 export const TAX_TREATMENT_LABELS: Record<TaxTreatment, string> = {
   W2: "W-2",

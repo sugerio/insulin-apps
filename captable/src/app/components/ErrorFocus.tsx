@@ -19,11 +19,11 @@ function labelOf(control: HTMLElement): string {
 
 function errorOf(control: HTMLElement): string {
   const ids = control.getAttribute("aria-describedby")?.split(" ") ?? [];
-  const error = ids.map((id) => control.ownerDocument.getElementById(id)).find((element) => element?.className.includes("err"));
+  const error = ids.map((id) => control.ownerDocument.getElementById(id)).find((element) => element?.dataset.slot === "field-error");
   return error?.textContent?.trim() ?? "";
 }
 
-/** Wraps a form, a wizard or a dialog body; it adds no box of its own (display: contents). */
+/** Wraps a form, a wizard or a dialog body; it adds no box of its own (`contents`). */
 export function ErrorFocus({ children }: { children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
   const [summary, setSummary] = useState("");
@@ -50,7 +50,7 @@ export function ErrorFocus({ children }: { children: ReactNode }) {
     return () => observer.disconnect();
   }, []);
   return (
-    <div ref={root} style={{ display: "contents" }}>
+    <div ref={root} className="contents">
       {summary ? <div className="sr-only" role="alert" data-error-summary="">{summary}</div> : null}
       {children}
     </div>

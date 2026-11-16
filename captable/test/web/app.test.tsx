@@ -89,13 +89,14 @@ describe("the shell", () => {
     const primary = await screen.findByRole("navigation", { name: "Primary" });
     expect(within(primary).getByText("Essentials")).toBeTruthy();
     // Served without Insulin Apps around it (the console's frame): the switcher names the company, with nothing to switch.
-    expect(document.querySelector(".org-switcher")?.textContent).toBe("Acme RoboticsCap Table");
+    expect(document.querySelector("[data-org-switcher]")?.textContent).toBe("Acme RoboticsCap Table");
     const person = screen.getByRole("button", { name: /Rachel Ostrowski/ });
     expect(person.textContent).toContain("Owner");
     expect(await screen.findByRole("button", { name: /New/ })).toBeTruthy();
     await waitFor(() => expect(calls.some((call) => call.url.pathname === "/__insulin/me")).toBe(true));
-    fireEvent.click(person);
-    expect(screen.getByRole("button", { name: "Switch theme" })).toBeTruthy();
+    // A shadcn/ui (Radix) menu opens on pointerdown or a key, not on click.
+    fireEvent.keyDown(person, { key: "Enter" });
+    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Switch theme" })).toBeTruthy();
     expect(screen.queryByText(/sign (in|out)/i)).toBeNull();
     expect(screen.queryByRole("link", { name: "Account" })).toBeNull();
   });

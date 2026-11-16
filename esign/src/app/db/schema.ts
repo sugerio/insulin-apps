@@ -388,3 +388,13 @@ export const apiClients = sqliteTable('api_clients', {
   updated_by: text('updated_by').notNull(),
   updated_at: integer('updated_at').notNull(),
 }, (table) => [primaryKey({ columns: [table.tenant_id, table.client_user_id] })])
+
+/**
+ * The hourly usage report to the platform (usage-metrics.ts): one row per UTC hour (epoch ms of its start), claimed
+ * by the tick that sends it and marked sent once the platform accepted it. Rows older than a few days are pruned.
+ */
+export const metricsReports = sqliteTable('metrics_reports', {
+  hour: integer('hour').primaryKey().notNull(),
+  started_at: integer('started_at').notNull(),
+  sent_at: integer('sent_at'),
+})

@@ -1,7 +1,7 @@
 import { addDays, addMonths, addPeriod, minDate, type IsoDate } from "./dates.ts";
 import { Dec } from "./decimal.ts";
 import { hasVestingSchedule, positionAt, vestingInputsFor } from "./positions.ts";
-import type { OcfPeriodType, Period, TerminationType, TerminationWindow, TerminationWindowReason } from "./schemas.ts";
+import { blocksExercise, type OcfPeriodType, type Period, type TerminationType, type TerminationWindow, type TerminationWindowReason } from "./schemas.ts";
 import type { LeaveRecord, LedgerState, PlanTermsState, SecurityState, StakeholderState, TxRef } from "./state.ts";
 import { vestedAt } from "./vesting.ts";
 
@@ -224,12 +224,15 @@ export interface Exercisability {
 
 const EXERCISABLE_SUBTYPES = new Set(["OPTION_ISO", "OPTION_NSO", "SAR", "WARRANT"]);
 
-/** Exercisable(D) (the ledger rules): 0 if not outstanding, execution-pending or past the deadline; else vested outstanding. */
+/**
+ * Exercisable(D) (the ledger rules): 0 if not outstanding, awaiting the holder's signature (a grant awaiting only the
+ * company signatory's is exercisable) or past the deadline; else vested outstanding.
+ */
 export function exercisability(state: LedgerState, security: SecurityState, date: IsoDate = state.asOf): Exercisability {
   const none = (blockedBy: ExercisabilityBlock): Exercisability => ({ exercisable: Dec.ZERO, exercisableIncludingUnvested: Dec.ZERO, blockedBy });
   if (!EXERCISABLE_SUBTYPES.has(security.identity.subtype)) return none("not_exercisable_type");
   if (!security.issued || !security.outstanding.isPositive()) return none("not_outstanding");
-  if (security.executionStatus.startsWith("pending")) return none("execution_pending");
+  if (blocksExercise(security.executionStatus)) return none("execution_pending");
   if (security.expirationDate !== null && date > security.expirationDate) return none("past_expiration");
   const contractual = contractualDeadline(security);
   if (contractual !== null && date > contractual.date) return none("past_contractual_deadline");
@@ -287,17 +290,20 @@ export function expiryCandidates(state: LedgerState, date: IsoDate = state.asOf)
 /**
  * The last day the company can repurchase a terminated holder's unvested shares and where it comes from: a recorded
  * date, else termination + the lot's own window, else + the plan default in force at termination (`terms`, named
- * also when it has no default window).
+ * also when it has no default window). A lot whose own right sets no deadline (`noDeadline`: its agreement's terms,
+ * `x_repurchase_right.x_no_deadline`) has no date and never takes the plan's default: its null date is a documented
+ * term, not a missing one.
  */
-export function repurchaseDeadlineSource(state: LedgerState, security: SecurityState): { date: IsoDate | null; terms: PlanTermsState | null } {
-  if (security.identity.family !== "STOCK") return { date: null, terms: null };
-  if (security.lastRepurchaseDate !== null) return { date: security.lastRepurchaseDate.deadline, terms: null };
-  if (security.termination === null) return { date: null, terms: null };
+export function repurchaseDeadlineSource(state: LedgerState, security: SecurityState): { date: IsoDate | null; terms: PlanTermsState | null; noDeadline: boolean } {
+  if (security.identity.family !== "STOCK") return { date: null, terms: null, noDeadline: false };
+  if (security.lastRepurchaseDate !== null) return { date: security.lastRepurchaseDate.deadline, terms: null, noDeadline: false };
+  const noDeadline = security.repurchaseRight?.noDeadline === true;
+  if (security.termination === null || noDeadline) return { date: null, terms: null, noDeadline };
   const own = security.repurchaseRight?.window ?? null;
-  if (own !== null) return { date: windowEnd(security.termination.date, own), terms: null };
+  if (own !== null) return { date: windowEnd(security.termination.date, own), terms: null, noDeadline: false };
   const terms = planTermsOn(state, security.identity.stockPlanId, security.termination.date);
   const window = terms?.defaultRepurchaseWindow ?? null;
-  return { date: window === null ? null : windowEnd(security.termination.date, window), terms };
+  return { date: window === null ? null : windowEnd(security.termination.date, window), terms, noDeadline: false };
 }
 
 /** The last day the company can repurchase a terminated holder's unvested shares (recorded, else termination + window). */

@@ -44,12 +44,6 @@ function AppCards({ ctx, apps, level = 3 }: { ctx: Context; apps: HostedApp[]; l
               ) : (
                 <Badge variant="secondary">Not available right now</Badge>
               )}
-              {app.source ? (
-                <a className={buttonVariants({ variant: "outline", size: "sm" })} href={app.source}>
-                  <GitHubMark />
-                  Source
-                </a>
-              ) : null}
             </CardFooter>
           </Card>
         )

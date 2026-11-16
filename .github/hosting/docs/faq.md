@@ -165,4 +165,5 @@ support.
 
 ### Is the source code available?
 
-Yes. The gateway and every app are open source under the MIT License, and each app's card links to its source.
+Yes. The gateway and every app are open source under the MIT License, and **Source code** in the footer of every page
+links to the repository.

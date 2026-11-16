@@ -51,7 +51,7 @@ test('a template\'s menu: its owner shares it by email and role, and tags it; th
     await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitemradio' && visibleText(n.children).trim() === 'Shared with me')[0], 'shared');
     await app.click(app.byLabel('Tags filter'), 'Tags');
     await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitemcheckbox' && visibleText(n.children).trim() === 'NDA')[0], 'NDA');
-    assert.ok(app.calls.some((c) => c.path === '/api/templates?scope=shared&tag=NDA&limit=25'), app.calls.map((c) => c.path).join('\n'));
+    assert.ok(app.calls.some((c) => c.path === '/api/templates?status=all&scope=shared&tag=NDA&limit=25'), app.calls.map((c) => c.path).join('\n'));
     assert.ok(app.byLabel('Remove Owner: Shared with me') && app.byLabel('Remove Tag: NDA'), 'each filter as a chip');
   } finally { await app.unmount(); }
 });

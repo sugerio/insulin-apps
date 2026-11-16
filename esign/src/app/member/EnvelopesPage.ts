@@ -7,7 +7,7 @@
 // those they use), each shown
 // as a chip that removes it, and Clear all; below it, pages. Those who manage send new ones and run the due work.
 import React, { useEffect, useRef, useState } from 'react'
-import { Ban, Download, Ellipsis, Eye, Mail, Plus, RefreshCw, Tag, Users } from 'lucide-react'
+import { Ban, Download, Ellipsis, Eye, Mail, Pencil, Plus, RefreshCw, Tag, Trash2, Users } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent } from '../components/ui/card.ts'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog.ts'
@@ -25,7 +25,7 @@ import { TagList, TagsField } from './TagsField.ts'
 const h = React.createElement
 /** The Status filter, from the address: out for signature includes the seconds an envelope spends finishing. */
 const STATUSES: Record<string, { label: string; query: string }> = {
-  IN_PROGRESS: { label: 'In progress', query: 'IN_PROGRESS,FINALIZING' }, COMPLETED: { label: 'Completed', query: 'COMPLETED' },
+  DRAFT: { label: 'Draft', query: 'DRAFT' }, IN_PROGRESS: { label: 'In progress', query: 'IN_PROGRESS,FINALIZING' }, COMPLETED: { label: 'Completed', query: 'COMPLETED' },
   DECLINED: { label: 'Declined', query: 'DECLINED' }, VOIDED: { label: 'Voided', query: 'VOIDED' }, EXPIRED: { label: 'Expired', query: 'EXPIRED' },
 }
 const VIEWS: Record<string, string> = { waiting: 'Waiting for others', expiring: 'Expiring soon' }
@@ -129,7 +129,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
       setOpened(null)
       setReason('')
       await load()
-      setMessage({ text: `${name(e)} is voided. Nobody can sign it any more.`, error: false })
+      setMessage({ text: e.status === 'DRAFT' ? `The draft ${name(e)} is discarded.` : `${name(e)} is voided. Nobody can sign it any more.`, error: false })
     })
   }
   function saveTags(e: EnvelopeSummary, tags: string[]) {
@@ -141,6 +141,8 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
   /** The one action that fits the envelope's state, for those its role allows. */
   const canResend = (e: EnvelopeSummary) => manage && allows(e.myRole, 'editor') && e.status === 'IN_PROGRESS' && e.current?.delivery === 'email'
   function primary(e: EnvelopeSummary) {
+    // A draft: finish and send it.
+    if (e.status === 'DRAFT' && manage && allows(e.myRole, 'editor')) return h(Link, { to: `/envelopes/new?draft=${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Pencil, { 'aria-hidden': true }), 'Edit')
     if (canResend(e)) return h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => resend(e) }, h(Mail, { 'aria-hidden': true }), 'Resend')
     if (e.status === 'COMPLETED') return h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => download(e) }, h(Download, { 'aria-hidden': true }), 'Download')
     return h(Link, { to: `/envelopes/${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Eye, { 'aria-hidden': true }), 'View')
@@ -149,6 +151,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     const items: (MenuItem | false)[] = [
       { label: 'View', icon: Eye, onSelect: () => navigate(`/envelopes/${e.id}`) },
       manage && allows(e.myRole, 'editor') && e.status === 'IN_PROGRESS' && { label: 'Void', icon: Ban, destructive: true, onSelect: () => { setReason(''); setOpened({ kind: 'void', envelope: e }) } },
+      manage && allows(e.myRole, 'editor') && e.status === 'DRAFT' && { label: 'Discard', icon: Trash2, destructive: true, onSelect: () => { setReason(''); setOpened({ kind: 'void', envelope: e }) } },
       { label: 'Tags', icon: Tag, onSelect: () => setOpened({ kind: 'tags', envelope: e }) },
       manage && allows(e.myRole, 'admin') && { label: 'Share', icon: Users, onSelect: () => setOpened({ kind: 'share', envelope: e }) },
     ]
@@ -212,8 +215,16 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
                 primary(e),
                 h(DropdownMenu, { label: `More for ${name(e)}`, items: menu(e), trigger: (props) => h(Button, { ...props, variant: 'ghost', size: 'icon-sm' }, h(Ellipsis, { 'aria-hidden': true })) }))))))))),
     h(Pager, { id: 'envelope', page: pager.page, pageSize, hasNext: pager.next !== undefined, busy: envelopes === null, onPageSize: setPageSize, onTurn: turn }),
-    h(Dialog, { open: opened?.kind === 'void', onOpenChange: (o) => { if (!o) setOpened(null) }, label: 'Void envelope', dismissible: !busy },
-      current && opened?.kind === 'void' ? [
+    h(Dialog, { open: opened?.kind === 'void' && current?.status === 'DRAFT', onOpenChange: (o) => { if (!o) setOpened(null) }, label: 'Discard draft', dismissible: !busy },
+      current && opened?.kind === 'void' && current.status === 'DRAFT' ? [
+        h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Discard the draft ${name(current)}?`), h(DialogDescription, null, 'It was never sent: nobody was asked to sign it. This can\'t be undone.')),
+        h(Notice, { key: 'notice', message: message.text, error: message.error }),
+        h(DialogFooter, { key: 'footer' },
+          h(Button, { variant: 'outline', disabled: busy, onClick: () => setOpened(null) }, 'Keep it'),
+          h(Button, { variant: 'destructive', disabled: busy, onClick: () => voidEnvelope(current) }, busy ? 'Discarding…' : 'Discard draft')),
+      ] : null),
+    h(Dialog, { open: opened?.kind === 'void' && current?.status !== 'DRAFT', onOpenChange: (o) => { if (!o) setOpened(null) }, label: 'Void envelope', dismissible: !busy },
+      current && opened?.kind === 'void' && current.status !== 'DRAFT' ? [
         h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Void ${name(current)}?`), h(DialogDescription, null, 'Signers who haven\'t signed can no longer open, verify or sign it. This can\'t be undone.')),
         h(Notice, { key: 'notice', message: message.text, error: message.error }),
         h('div', { key: 'reason', className: 'flex flex-col gap-2' },

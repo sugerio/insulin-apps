@@ -18,7 +18,8 @@ work and contacts. It is for people who send and for AI agents acting for them.
 
 ## Send an envelope
 
-1. On **Envelopes**, choose **New envelope**. Or, on **Templates**, choose **Send** next to a template.
+1. On **Envelopes**, choose **New envelope**. Or, on **Templates**, choose **Use** next to a template (a draft template
+   can't be used until it is saved as ready).
 2. Under **Template**, choose the template.
 3. Under **Signers**, fill in one block for each role, numbered in signing order (for example **1. partner**,
    **2. seller**). **Name** and **Email** are required; a role with a
@@ -33,6 +34,11 @@ The envelope's page opens. It is **Out for signature**, and the first signer is 
 
 If sending fails, for example because the connection drops, choose **Send for signature** again. The retry carries the
 same request key, so the envelope is never sent twice.
+
+**Save draft** keeps the form as it is, unfinished even, to send later: nobody is asked to sign, and no contact is added,
+until it is sent. The page becomes the draft's (**Draft envelope**); **Save draft** saves it again, and **Send for
+signature** checks it as any envelope and sends it. Drafts appear on **Envelopes** under **Status**: **Draft**, each with
+**Edit** to go on with it and, in its **⋯** menu, **Discard**, which deletes it after asking.
 
 ### Signer fields
 
@@ -118,6 +124,7 @@ Each filter in use shows as a chip under them, which removes it; **Clear all** r
 
 | Status | API value | What it means |
 | --- | --- | --- |
+| **Draft** | `DRAFT` | Saved, not sent: it has no signers' tasks yet. Listed only under **Status**: **Draft**. |
 | **Out for signature** | `IN_PROGRESS` | Signers are signing in turn. The only status in which anyone can sign, decline or void. |
 | **Finishing** | `FINALIZING` | Everyone has signed, and Esign is sealing the signed PDF. This usually takes seconds. |
 | **Completed** | `COMPLETED` | Sealed. The signed PDF and the certificate can be downloaded, and each signer is sent a link to their copy. |

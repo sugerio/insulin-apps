@@ -14,7 +14,7 @@ export type DefaultSigner = { name?: string; email?: string }
 export type Owner = { id: string; kind: 'person' | 'client'; name?: string; email?: string }
 export type DocumentRole = 'owner' | 'admin' | 'editor' | 'viewer'
 export type Owned = { owner?: Owner; myRole?: DocumentRole; tags?: string[] }
-export type TemplateSummary = Owned & { id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
+export type TemplateSummary = Owned & { id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number; status?: 'active' | 'draft' }
 /** A list's envelope: its signers in order, how many have signed, whose turn it is (and how they are invited), and when it last changed. */
 export type EnvelopeSummary = Owned & {
   id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata
@@ -25,7 +25,7 @@ export type Share = { email: string; name?: string; role: Exclude<DocumentRole, 
 /** `organization`: shared with everyone in the organization, as editor or viewer. */
 export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; organization?: { role: 'editor' | 'viewer'; sharedAt: number }; shares: Share[] }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
-export type Envelope = Owned & { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
+export type Envelope = Owned & { id: string; templateId: string; status: string; draft?: Record<string, unknown>; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
 /** A contact (server/esign/contacts.ts): someone the organization's envelopes named, or a member added. Never evidence. */
 export type Contact = { id: string; email: string; name: string; title?: string; company?: string; envelopeCount: number; lastUsedAt?: number; createdAt: number; updatedAt: number }
 export type ContactEnvelope = { id: string; status: string; createdAt: number; documentName?: string; role: string; taskStatus: string }
@@ -64,6 +64,7 @@ export function describeError(error: unknown): string {
     if (error.status === 403) return 'Your role in Esign doesn\'t allow that.'
     if (error.status === 404 && error.code === 'signing_disabled') return 'Signing isn\'t set up on this deployment yet.'
     if (error.status === 404) return 'That isn\'t here any more, or belongs to another organization.'
+    if (error.status === 409 && error.code === 'template_draft') return 'That template is a draft: save it as ready in the field editor before using it.'
     if (error.status === 409) return 'That changed meanwhile. Reload and try again.'
     if (error.status === 422 || error.status === 400) return `The request wasn't accepted (${error.code || 'invalid'}). Check the values and try again.`
     return `Request failed (${error.message}).`
@@ -170,12 +171,38 @@ export function envelopeRequest(templateId: string, roles: string[], people: Sig
   }
 }
 
+/**
+ * The New envelope form, from a draft's request (`envelopeRequest`'s, as saved): each role's signer, the document, the
+ * sign-by day (from the first signer's deadline, in the member's time zone), the message to everyone or to each signer,
+ * and the tags. What the request doesn't have is left empty.
+ */
+export function formFromRequest(request: Record<string, unknown>, roles: string[]): { signers: Signer[]; doc: DocumentFacts; signBy: string; note: EnvelopeMessage; perSigner: boolean; tags: string[] } {
+  const text = (v: unknown) => (typeof v === 'string' ? v : '')
+  const object = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {})
+  const day = (iso: string) => { const at = new Date(iso); return iso && !Number.isNaN(at.getTime()) ? `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}` : '' }
+  const recipients = Array.isArray(request.recipients) ? request.recipients.map(object) : []
+  const signers = roles.map((role): Signer => {
+    const r = recipients.find((x) => x.role === role) ?? {}
+    const message = object(r.message)
+    return { name: text(r.name), email: text(r.email), title: text(r.title), company: text(r.onBehalfOf), after: Array.isArray(r.afterSigning) ? r.afterSigning.map(text).join('\n') : '', delivery: r.delivery === 'host' ? 'host' : 'email', subject: text(message.subject), body: text(message.body) }
+  })
+  const version = object(request.documentVersion), sender = object(request.sender), message = object(request.message)
+  return {
+    signers,
+    doc: { name: text(request.documentName), version: text(version.label), published: text(version.publishedAt).slice(0, 10), senderName: text(sender.name), senderCompany: text(sender.organization) },
+    signBy: day(text(recipients[0]?.expiresAt)),
+    note: { subject: text(message.subject), body: text(message.body) },
+    perSigner: recipients.some((r) => Object.keys(object(r.message)).length > 0),
+    tags: Array.isArray(request.tags) ? request.tags.filter((t): t is string => typeof t === 'string') : [],
+  }
+}
+
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const MAX_PDF_BYTES = 5 * 1024 * 1024
 
 /** Envelope statuses in plain words, and how a badge shows them. */
 export const STATUS_LABELS: Record<string, string> = {
-  IN_PROGRESS: 'Out for signature', FINALIZING: 'Finishing', COMPLETED: 'Completed', VOIDED: 'Voided', DECLINED: 'Declined', EXPIRED: 'Expired',
+  DRAFT: 'Draft', IN_PROGRESS: 'Out for signature', FINALIZING: 'Finishing', COMPLETED: 'Completed', VOIDED: 'Voided', DECLINED: 'Declined', EXPIRED: 'Expired',
 }
 export const TASK_LABELS: Record<string, string> = {
   PENDING: 'Waiting for an earlier signer', ACTIVE: 'Asked to sign', SIGNED: 'Signed', DECLINED: 'Declined', EXPIRED: 'Expired', VOIDED: 'Voided',

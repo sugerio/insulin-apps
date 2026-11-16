@@ -32,9 +32,10 @@ export function useSearch(): string {
   return React.useSyncExternalStore(subscribe, currentSearch, () => '')
 }
 
-export function navigate(path: string): void {
+/** Goes to `path`; with `replace`, in place of the current address (the back button skips it). */
+export function navigate(path: string, { replace = false }: { replace?: boolean } = {}): void {
   if (typeof window === 'undefined') return
-  try { window.history.pushState(null, '', path) } catch { /* a test window without history */ }
+  try { if (replace && window.history.replaceState) window.history.replaceState(null, '', path); else window.history.pushState(null, '', path) } catch { /* a test window without history */ }
   try { window.dispatchEvent(new Event(CHANGE)) } catch { /* a test window without events */ }
   // A new page starts at its top; a link to a section (#id) scrolls to it once it has rendered.
   const hash = path.includes('#') ? path.slice(path.indexOf('#') + 1) : ''

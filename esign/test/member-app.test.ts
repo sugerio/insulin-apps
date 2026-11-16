@@ -50,7 +50,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   assert.equal(me.headers.authorization,undefined,'no key: the session is the platform\'s');
   assert.equal(editor.session.map.size+editor.local.map.size,0,'nothing is stored in the browser');
   await editor.click(editor.link('Templates'),'Templates');
-  assert.ok(editor.button('New template'),'New template opens its dialog');assert.ok(editor.link('Send'));
+  assert.ok(editor.button('New template'),'New template opens its dialog');assert.ok(editor.link('Use'));
   await editor.click(editor.byLabel('More for tpl-1'),'the row\'s menu');
   assert.deepEqual(editor.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['View','Edit','Tags','Share','Delete'],'its owner may do everything');
   await editor.click(editor.link('Envelopes'),'Envelopes');
@@ -65,7 +65,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   assert.match(viewer.text(),/Asked to sign/);
   assert.equal(viewer.button('Void envelope'),undefined);assert.equal(viewer.button("Open Ana's signing page"),undefined);
   await viewer.click(viewer.link('Templates'),'Templates');
-  assert.equal(viewer.button('New template'),undefined);assert.equal(viewer.link('Send'),undefined);
+  assert.equal(viewer.button('New template'),undefined);assert.equal(viewer.link('Use'),undefined);
   await viewer.click(viewer.byLabel('More for tpl-1'),'the row\'s menu');
   assert.deepEqual(viewer.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['View','Tags'],'someone who only views sees and tags it, and nothing else');
   assert.match(viewer.text(),/Your role can see templates but not change them/);
@@ -204,17 +204,17 @@ test('placing fields opens the editor on this origin, ignores other frames, and 
   assert.equal(app.calls.find(c=>c.path.endsWith('/source'))!.headers['content-type'],'application/pdf');
   const frame=app.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signature field editor');
   assert.equal(frame.props.src,`${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}`);
-  assert.equal(app.button('Save fields').props.disabled,true,'until the editor is ready');
+  assert.equal(app.button('Save').props.disabled,true,'until the editor is ready');
   await app.dispatch({origin:'https://other.example.test',source:app.frameWindow,data:{type:'esign.editor.ready'}});
-  assert.equal(app.button('Save fields').props.disabled,true,'another origin is ignored');
+  assert.equal(app.button('Save').props.disabled,true,'another origin is ignored');
   await app.dispatch({origin:ORIGIN,source:{},data:{type:'esign.editor.ready'}});
-  assert.equal(app.button('Save fields').props.disabled,true,'another frame is ignored');
+  assert.equal(app.button('Save').props.disabled,true,'another frame is ignored');
   await app.dispatch({origin:ORIGIN,source:app.frameWindow,data:{type:'esign.editor.ready'}});
-  await app.click(app.button('Save fields'),'Save fields');
+  await app.click(app.button('Save'),'Save');
   const request=app.posted[0] as {type:string;requestId:string};assert.equal(request.type,'esign.editor.save');
   templates=[{id:SAVED,roles:['partner'],fields:[{type:'Signature',role:'partner',page:1}],createdAt:0}];
   await app.dispatch({origin:ORIGIN,source:app.frameWindow,data:{type:'esign.editor.saved',requestId:request.requestId,templateId:SAVED}});
-  assert.match(app.text(),/Fields saved as a new template/);
+  assert.match(app.text(),/Saved: the template is ready to use/);
   assert.match(app.text(),/1 placed field/);
   // The default signers are set on the saved template, for the roles it kept.
   assert.deepEqual(JSON.parse(String(app.calls.find(c=>c.path===`/api/templates/${SAVED}/default-signers`)!.body)),{defaultSigners:{partner:{email:'pat@partner.example'}}});

@@ -12,8 +12,9 @@ const MAX_FIELDS=20;
 const defaultRoles=['First signer','Second signer'];
 
 export type EditorSaveResult = {ok:true;templateId:string}|{ok:false;message:string};
-export type EditorHandle = { save:()=>Promise<EditorSaveResult> };
-type EditorProps = {embedded?:boolean;initialRoles?:string[];initialFile?:File|null;initialFields?:Field[];editingSource?:boolean;onSave?:(file:File|null,roles:string[],fields:Field[])=>Promise<string|void>};
+/** `save(true)`: as a draft, which needn't be ready yet and leaves the editor open to save again. */
+export type EditorHandle = { save:(draft?:boolean)=>Promise<EditorSaveResult> };
+type EditorProps = {embedded?:boolean;initialRoles?:string[];initialFile?:File|null;initialFields?:Field[];editingSource?:boolean;onSave?:(file:File|null,roles:string[],fields:Field[],draft?:boolean)=>Promise<string|void>};
 export const FieldEditor=React.forwardRef<EditorHandle,EditorProps>(function FieldEditor({initialRoles=defaultRoles,initialFile=null,initialFields=[],editingSource=false,embedded=false,onSave},ref) {
   const container=useRef<HTMLDivElement>(null),lockedRef=useRef(false),inFlightRef=useRef(false),savedRef=useRef(false),readyRef=useRef(false),previewVersion=useRef(0),dragOffset=useRef<{id:string;x:number;y:number}|null>(null);
   const toolDrag=useRef<{type:string;preview:HTMLElement;image:HTMLElement}|null>(null);
@@ -40,12 +41,19 @@ export const FieldEditor=React.forwardRef<EditorHandle,EditorProps>(function Fie
     if(delta[e.key]){e.preventDefault();const [dx,dy]=delta[e.key];setFields(old=>old.map(f=>f.id!==field.id?f:{...f,rect:{...f.rect,x:Math.max(0,Math.min(1-f.rect.width,Number((f.rect.x+dx).toFixed(4)))),y:Math.max(0,Math.min(1-f.rect.height,Number((f.rect.y+dy).toFixed(4))))}}));}
     else if(e.key==='PageDown'||e.key==='PageUp'){e.preventDefault();const page=Math.max(1,Math.min(pages.length,field.page+(e.key==='PageDown'?1:-1)));try{const size=sizeOnPage(field.rect,pageSize(field.page-1),pageSize(page-1));setFields(old=>old.map(f=>f.id===field.id?{...f,page,rect:{...f.rect,...size,x:Math.min(f.rect.x,1-size.width),y:Math.min(f.rect.y,1-size.height)}}:f));}catch{setError('This page is too small for the field.');}}
   }
-  async function save():Promise<EditorSaveResult>{
+  async function save(draft=false):Promise<EditorSaveResult>{
     const fail=(message:string):EditorSaveResult=>{setError(message);return {ok:false,message};};
     if(!onSave||inFlightRef.current||savedRef.current)return fail('Saving is unavailable or already in progress. Check the host for the saved result.');
     if(!readyRef.current)return fail('Upload a PDF and wait for the preview before saving.');
     if(fields.length>MAX_FIELDS)return fail(`Place at most ${MAX_FIELDS} fields in all.`);
-    for(const r of roles){const owned=fields.filter(f=>f.role===r);if(owned.some(f=>!types.includes(f.type)))return fail(`Role ${r}: remove unsupported fields.`);if(!owned.some(f=>f.type==='Signature'))return fail(`Role ${r}: add a Signature field.`);if(!owned.some(f=>f.type==='Signature'&&f.required))return fail(`Role ${r}: make at least one Signature field required.`);}
+    for(const r of roles){const owned=fields.filter(f=>f.role===r);if(owned.some(f=>!types.includes(f.type)))return fail(`Role ${r}: remove unsupported fields.`);if(draft)continue;if(!owned.some(f=>f.type==='Signature'))return fail(`Role ${r}: add a Signature field.`);if(!owned.some(f=>f.type==='Signature'&&f.required))return fail(`Role ${r}: make at least one Signature field required.`);}
+    // A draft is saved as it is now, and again later in place: retrying it is safe, and the editor stays open.
+    if(draft){
+      inFlightRef.current=true;setSaving(true);setError('');
+      try{const templateId=await onSave(editingSource?null:file,[...roles],fields.map(f=>({...f,rect:{...f.rect}})),true);return typeof templateId==='string'?{ok:true,templateId}:fail('Draft saved. Check the host for the confirmed result.');}
+      catch(error){return fail(error instanceof Error&&error.message==='draft_not_allowed'?'A template in use is saved as a new version, not as a draft.':'The draft could not be saved. Try again.');}
+      finally{inFlightRef.current=false;setSaving(false);}
+    }
     snapshot.current ??= {file:editingSource?null:file,roles:[...roles],fields:fields.map(f=>({...f,rect:{...f.rect}}))};
     lockedRef.current=true;inFlightRef.current=true;setSaving(true);setError('');try{const templateId=await onSave(snapshot.current.file,snapshot.current.roles,snapshot.current.fields);savedRef.current=true;setSaved(true);return typeof templateId==='string'?{ok:true,templateId}:{ok:false,message:'Saved. Check the host for the confirmed result.'};}catch{setUncertain(true);return fail('Save result is unknown. Retry the same snapshot or ask the host to check the session. Editing remains locked.');}finally{inFlightRef.current=false;setSaving(false);}
   }

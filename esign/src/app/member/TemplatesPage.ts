@@ -30,7 +30,7 @@ const ROLE = /^[A-Za-z0-9_-]{1,64}$/
  * `defaultSigners`: who usually signs as each role of a new PDF, set on the template once the editor has saved it.
  * `replacing`: the template whose fields are being edited, which the saved version replaces.
  */
-type Editor = { sessionId: string; url: string; ready: boolean; requestId: string; defaultSigners?: Record<string, { name?: string; email?: string }> | null; replacing?: string }
+type Editor = { sessionId: string; url: string; ready: boolean; requestId: string; defaultSigners?: Record<string, { name?: string; email?: string }> | null; replacing?: string; replacingDraft?: boolean; asDraft?: boolean; savedDraft?: string }
 /** What a row's menu opened: editing it (its details or its fields), the member's tags on it, its sharing, or deleting it. */
 type Open = { kind: 'edit'; id: string; tab: 'details' | 'fields' } | { kind: 'tags' | 'share' | 'delete'; id: string }
 type Draft = { name: string; people: { name: string; email: string }[] }
@@ -58,7 +58,7 @@ export function TemplatesPage({ me }: { me: Me }) {
   // The new template's tags; the list's filters; the template whose sharing and tags are open.
   const [newTags, setNewTags] = useState<string[]>([])
   // The list's search and filters (Owner: the member's own, or shared with them), its pages, the member's own tags.
-  const [filters, setFilters] = useState<{ q: string; date: string; scope: Scope; tags: string[] }>({ q: '', date: '', scope: '', tags: [] })
+  const [filters, setFilters] = useState<{ q: string; date: string; scope: Scope; tags: string[]; status: '' | 'active' | 'draft' }>({ q: '', date: '', scope: '', tags: [], status: '' })
   const [pageSize, setPageSize] = useState(25)
   const pager = usePages()
   const [myTags, reloadTags] = useMyTags()
@@ -74,21 +74,26 @@ export function TemplatesPage({ me }: { me: Me }) {
   async function load(at: { before: number | undefined } = { before: pager.before }) {
     const ask = ++latest.current
     try {
-      const data = await apiJson<{ templates: TemplateSummary[]; next?: number }>(listPath('/api/templates', { q: filters.q, scope: filters.scope, tags: filters.tags, ...sinceOf(filters.date), limit: pageSize, before: at.before }))
+      const data = await apiJson<{ templates: TemplateSummary[]; next?: number }>(listPath('/api/templates', { status: filters.status || 'all', q: filters.q, scope: filters.scope, tags: filters.tags, ...sinceOf(filters.date), limit: pageSize, before: at.before }))
       if (ask !== latest.current) return
       setTemplates(data.templates)
       pager.setNext(data.next)
     } catch (error) { if (ask === latest.current) setMessage({ text: describeError(error), error: true }) }
   }
   // A new filter or page size starts again on page 1.
-  useEffect(() => { pager.reset(); setTemplates(null); void load({ before: undefined }) }, [filters.q, filters.date, filters.scope, filters.tags.join('\n'), pageSize])
+  useEffect(() => { pager.reset(); setTemplates(null); void load({ before: undefined }) }, [filters.q, filters.date, filters.scope, filters.status, filters.tags.join('\n'), pageSize])
   const set = (change: Partial<typeof filters>) => setFilters((f) => ({ ...f, ...change }))
   const OWNERS: Record<Exclude<Scope, ''>, string> = { mine: 'Mine', shared: 'Shared with me' }
-  const suggestions: Suggestion[] = Object.entries(OWNERS).map(([key, label]) => ({ label, kind: 'Owner', apply: () => set({ scope: key as Scope }) }))
+  const STATUSES: Record<'active' | 'draft', string> = { active: 'Ready to use', draft: 'Draft' }
+  const suggestions: Suggestion[] = [
+    ...Object.entries(OWNERS).map(([key, label]) => ({ label, kind: 'Owner', apply: () => set({ scope: key as Scope }) })),
+    { label: 'Draft', kind: 'Status', apply: () => set({ status: 'draft' }) },
+  ]
   const chips: Chip[] = [
     ...(filters.q ? [{ label: `Search: ${filters.q}`, clear: () => set({ q: '' }) }] : []),
     ...(filters.date ? [{ label: `Date: ${DATES[filters.date]!.label}`, clear: () => set({ date: '' }) }] : []),
     ...(filters.scope ? [{ label: `Owner: ${OWNERS[filters.scope]}`, clear: () => set({ scope: '' }) }] : []),
+    ...(filters.status ? [{ label: `Status: ${STATUSES[filters.status]}`, clear: () => set({ status: '' }) }] : []),
     ...filters.tags.map((tag) => ({ label: `Tag: ${tag}`, clear: () => set({ tags: toggled(filters.tags, tag) }) })),
   ]
   function turn(to: 'next' | 'previous') {
@@ -126,7 +131,8 @@ export function TemplatesPage({ me }: { me: Me }) {
       const url = new URL(session.url)
       if (url.origin !== window.location.origin || url.pathname !== `/editor/page/${session.sessionId}`) throw new Error('Unexpected editor address.')
       if ('file' in source) await api(`/api/template-editing-sessions/${session.sessionId}/source`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: source.file })
-      setEditor({ sessionId: session.sessionId, url: url.href, ready: false, requestId: '', defaultSigners: 'defaultSigners' in source ? source.defaultSigners : null, ...('templateId' in source ? { replacing: source.templateId } : {}) })
+      const replacingDraft = 'templateId' in source && templates?.find((t) => t.id === source.templateId)?.status === 'draft'
+      setEditor({ sessionId: session.sessionId, url: url.href, ready: false, requestId: '', defaultSigners: 'defaultSigners' in source ? source.defaultSigners : null, ...('templateId' in source ? { replacing: source.templateId, replacingDraft } : {}) })
       setCreating(false)
     })
   }
@@ -135,13 +141,16 @@ export function TemplatesPage({ me }: { me: Me }) {
     if (invalid) { setMessage({ text: invalid, error: true }); return }
     openEditor({ file: file!, roles: roles.map((r) => r.trim()), defaultSigners: defaultSigners() })
   }
-  function saveFields() {
+  /** Asks the editor to save: as a draft (the editor stays open), or as ready to use. */
+  function saveFields(asDraft = false) {
     if (!editor || !editor.ready || editor.requestId || !editorFrame.current?.contentWindow) return
     const requestId = crypto.randomUUID()
-    setEditor({ ...editor, requestId })
-    setMessage({ text: 'Saving the fields…', error: false })
-    editorFrame.current.contentWindow.postMessage({ type: 'esign.editor.save', requestId }, window.location.origin)
+    setEditor({ ...editor, requestId, asDraft })
+    setMessage({ text: asDraft ? 'Saving the draft…' : 'Saving the fields…', error: false })
+    editorFrame.current.contentWindow.postMessage({ type: 'esign.editor.save', requestId, ...(asDraft ? { draft: true } : {}) }, window.location.origin)
   }
+  /** Whether the template being edited may be saved as a draft: a new one, or a draft; never one in use. */
+  const draftable = !!editor && (!editor.replacing || !!editor.replacingDraft)
   useEffect(() => {
     if (!editor) return
     const listen = (event: MessageEvent) => {
@@ -155,12 +164,24 @@ export function TemplatesPage({ me }: { me: Me }) {
       void run(async () => {
         const saved = await apiJson<{ templateId: string | null }>(`/api/template-editing-sessions/${editor.sessionId}`)
         if (saved.templateId !== result.templateId) throw new Error('The editor and the server disagree on the saved template; open the editor again.')
-        // A new PDF's default signers, for the roles the editor kept.
-        const savedRoles = editor.defaultSigners ? (await apiJson<TemplateSummary>(`/api/templates/${saved.templateId}`)).roles : []
+        // A new PDF's default signers, for the roles the editor kept: once, at its first save.
+        const savedRoles = editor.defaultSigners && !editor.savedDraft ? (await apiJson<TemplateSummary>(`/api/templates/${saved.templateId}`)).roles : []
         const kept = Object.fromEntries(Object.entries(editor.defaultSigners ?? {}).filter(([role]) => savedRoles.includes(role)))
         if (Object.keys(kept).length) await apiJson(`/api/templates/${saved.templateId}/default-signers`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ defaultSigners: kept }) })
+        // A draft: the editor stays open, to go on placing fields and save again.
+        if (editor.asDraft) {
+          setEditor((old) => old && { ...old, requestId: '', asDraft: false, savedDraft: saved.templateId! })
+          await load()
+          setMessage({ text: 'Draft saved. It can\'t be used to send envelopes until you save it as ready.', error: false })
+          return
+        }
         setEditor(null)
         await load()
+        if (editor.replacingDraft) {
+          setOpened(null)
+          setMessage({ text: 'Saved: the template is ready to use.', error: false })
+          return
+        }
         if (editor.replacing) {
           setOpened(null)
           setMessage({ text: 'The fields are saved: the template is a new version now. Envelopes already sent keep the earlier one.', error: false })
@@ -170,7 +191,7 @@ export function TemplatesPage({ me }: { me: Me }) {
         setTemplateName('')
         setNewTags([])
         setPeople((old) => old.map(() => ({ name: '', email: '' })))
-        setMessage({ text: 'Fields saved as a new template. Send an envelope from it.', error: false })
+        setMessage({ text: 'Saved: the template is ready to use. Choose Use to send an envelope from it.', error: false })
       })
     }
     window.addEventListener('message', listen)
@@ -268,17 +289,18 @@ export function TemplatesPage({ me }: { me: Me }) {
         h(Button, { disabled: busy, onClick: placeFields }, h(SquarePen, { 'aria-hidden': true }), 'Upload and place fields'))),
     h(Dialog, { open: !!editor && !editor.replacing, onOpenChange: (open) => { if (!open) setEditor(null) }, label: 'Field editor', dismissible: !editor?.requestId, className: 'sm:max-w-6xl' },
       h(DialogHeader, null, h(DialogTitle, null, 'Place the fields'),
-        h(DialogDescription, null, 'Give each role one Signature field, and Title or Date signed fields where you want them; then save. Saving makes a new template.')),
+        h(DialogDescription, null, 'Give each role a Signature field, and Title or Date signed fields where you want them. Save draft keeps your work to finish later; Save makes the template ready to use.')),
       notice,
       editor && !editor.replacing ? h('iframe', { ref: editorFrame, title: 'Signature field editor', src: editor.url, className: 'h-[70vh] w-full rounded-md border' }) : null,
       h(DialogFooter, null,
         h(Button, { variant: 'outline', disabled: !!editor?.requestId, onClick: () => setEditor(null) }, 'Close the editor'),
-        h(Button, { disabled: !editor?.ready || !!editor?.requestId, onClick: saveFields }, editor?.requestId ? 'Saving…' : 'Save fields'))),
+        h(Button, { variant: 'outline', disabled: !editor?.ready || !!editor?.requestId, onClick: () => saveFields(true) }, editor?.requestId && editor.asDraft ? 'Saving…' : 'Save draft'),
+        h(Button, { disabled: !editor?.ready || !!editor?.requestId, onClick: () => saveFields() }, editor?.requestId && !editor.asDraft ? 'Saving…' : 'Save'))),
     // Edit: Details (name, default signers) or Fields (a new version, in the editor).
     h(Dialog, { open: opened?.kind === 'edit' && !!current, onOpenChange: (o) => { if (!o) close() }, label: 'Edit template', dismissible: !busy && !editor?.requestId, className: opened?.kind === 'edit' && opened.tab === 'fields' ? 'sm:max-w-6xl' : 'sm:max-w-3xl' },
       current && opened?.kind === 'edit' ? [
         h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Edit ${label(current)}`),
-          h(DialogDescription, null, opened.tab === 'fields' ? 'Saving the fields makes a new version of the template, which takes its place with the same name, people and tags. Envelopes already sent keep the earlier one.' : 'Its name and who usually signs as each role. Envelopes already sent keep what they were sent with.')),
+          h(DialogDescription, null, opened.tab === 'fields' ? (current.status === 'draft' ? 'A draft: Save draft keeps your changes to finish later; Save makes it ready to use.' : 'Saving the fields makes a new version of the template, which takes its place with the same name, people and tags. Envelopes already sent keep the earlier one.') : 'Its name and who usually signs as each role. Envelopes already sent keep what they were sent with.')),
         h('div', { key: 'tabs', role: 'tablist', 'aria-label': 'Edit', className: 'inline-flex w-fit items-center rounded-lg bg-muted p-[3px] text-muted-foreground' },
           ...(['details', 'fields'] as const).map((t) => h('button', {
             key: t, type: 'button', role: 'tab', 'aria-selected': opened.tab === t, disabled: !!editor?.requestId,
@@ -301,7 +323,9 @@ export function TemplatesPage({ me }: { me: Me }) {
           h(Button, { variant: 'outline', disabled: busy || !!editor?.requestId, onClick: close }, 'Cancel'),
           opened.tab === 'details'
             ? h(Button, { disabled: busy, onClick: () => saveDetails(current) }, busy ? 'Saving…' : 'Save')
-            : h(Button, { disabled: !editor?.ready || !!editor?.requestId, onClick: saveFields }, editor?.requestId ? 'Saving…' : 'Save fields')),
+            : h(React.Fragment, null,
+              draftable ? h(Button, { variant: 'outline', disabled: !editor?.ready || !!editor?.requestId, onClick: () => saveFields(true) }, editor?.requestId && editor.asDraft ? 'Saving…' : 'Save draft') : null,
+              h(Button, { disabled: !editor?.ready || !!editor?.requestId, onClick: () => saveFields() }, editor?.requestId && !editor.asDraft ? 'Saving…' : 'Save'))),
       ] : null),
     h(Dialog, { open: opened?.kind === 'tags' && !!current, onOpenChange: (o) => { if (!o) close() }, label: 'Your tags', className: 'sm:max-w-lg' },
       current && opened?.kind === 'tags' ? [
@@ -331,8 +355,9 @@ export function TemplatesPage({ me }: { me: Me }) {
         h(SearchBox, { id: 'template-search', label: 'Search templates', value: filters.q, onSearch: (q) => set({ q }), suggestions }),
         h(FilterButton, { name: 'Date', value: filters.date, options: dateLabels, onChange: (date) => set({ date }) }),
         h(FilterButton, { name: 'Owner', value: filters.scope, options: OWNERS, onChange: (scope) => set({ scope: scope as Scope }) }),
+        h(FilterButton, { name: 'Status', value: filters.status, options: STATUSES, onChange: (status) => set({ status: status as '' | 'active' | 'draft' }) }),
         h(TagsFilter, { picked: filters.tags, mine: myTags, what: 'templates', onChange: (tags) => set({ tags }) }),
-        chips.length ? h(Button, { variant: 'ghost', onClick: () => setFilters({ q: '', date: '', scope: '', tags: [] }) }, 'Clear all') : null),
+        chips.length ? h(Button, { variant: 'ghost', onClick: () => setFilters({ q: '', date: '', scope: '', tags: [], status: '' }) }, 'Clear all') : null),
       h(FilterChips, { chips })),
     h(Card, { className: 'py-0' }, h(CardContent, { className: 'px-0' },
       templates === null ? h('p', { role: 'status', className: 'p-6 text-sm text-muted-foreground' }, 'Loading templates…')
@@ -342,16 +367,18 @@ export function TemplatesPage({ me }: { me: Me }) {
             h(TableBody, null, ...templates.map((t) => h(TableRow, { key: t.id },
               h(TableCell, { className: 'pl-6 whitespace-normal' },
                 h(Link, { to: `/templates/${t.id}`, 'aria-label': `View ${t.name ?? t.id}`, className: 'flex flex-col hover:underline underline-offset-4' },
-                  t.name ? h('span', { className: 'font-medium' }, t.name) : null, h('span', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id)),
+                  t.name || t.status === 'draft' ? h('span', { className: 'flex items-center gap-2 font-medium' }, t.name ?? null, t.status === 'draft' ? h(Badge, { variant: 'outline', className: 'font-normal' }, 'Draft') : null) : null, h('span', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id)),
                 h(TagList, { tags: t.tags })),
               h(TableCell, { className: 'whitespace-normal' }, t.roles.map((role) => { const d = t.defaultSigners?.[role]; return d ? `${role} (${d.name ?? d.email})` : role }).join(', ')),
-              h(TableCell, null, t.fields.length ? `${t.fields.length} placed ${t.fields.length === 1 ? 'field' : 'fields'}` : 'A signature page'),
+              h(TableCell, null, t.fields.length ? `${t.fields.length} placed ${t.fields.length === 1 ? 'field' : 'fields'}` : t.status === 'draft' ? 'No fields yet' : 'A signature page'),
               h(TableCell, { className: 'text-muted-foreground' }, ownerName(t.owner, me)),
               // Whether someone shared it with the member, and as what; theirs says nothing.
               h(TableCell, null, t.myRole && t.myRole !== 'owner' ? h(Badge, { variant: 'secondary' }, `Shared with you · ${ROLE_NAMES[t.myRole]}`) : null),
               h(TableCell, { className: 'text-muted-foreground' }, dateTime(t.createdAt)),
               h(TableCell, { className: 'pr-6 text-right' }, h('div', { className: 'flex items-center justify-end gap-2' },
-                manage ? h(Link, { to: `/envelopes/new?template=${encodeURIComponent(t.id)}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Send, { 'aria-hidden': true }), 'Send') : null,
+                // Ready: Use it to send an envelope. A draft: finish its fields first.
+                manage && t.status === 'draft' ? (allows(t.myRole, 'editor') ? h(Button, { size: 'sm', variant: 'outline', disabled: !!editor, onClick: () => { open({ kind: 'edit', id: t.id, tab: 'fields' }); openEditor({ templateId: t.id }) } }, h(Pencil, { 'aria-hidden': true }), 'Edit') : null)
+                  : manage ? h(Link, { to: `/envelopes/new?template=${encodeURIComponent(t.id)}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Send, { 'aria-hidden': true }), 'Use') : null,
                 h(DropdownMenu, { label: `More for ${t.name ?? t.id}`, items: menu(t), trigger: (props) => h(Button, { ...props, variant: 'ghost', size: 'icon-sm', disabled: !!editor }, h(Ellipsis, { 'aria-hidden': true })) }))))))))),
     h(Pager, { id: 'template', page: pager.page, pageSize, hasNext: pager.next !== undefined, busy: templates === null, onPageSize: setPageSize, onTurn: turn }),
     !manage ? h('p', { className: 'text-sm text-muted-foreground' }, 'Your role can see templates but not change them. ', h('a', { href: '/docs/roles', onClick: (e: React.MouseEvent) => { e.preventDefault(); navigate('/docs/roles') }, className: 'font-medium text-foreground underline underline-offset-4' }, 'Roles and permissions')) : null)

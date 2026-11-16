@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { AUDIT, requestFacts } from './audit.ts';
 import { expireDueEnvelopes, expireIfDue, parseDeadline } from './task-expiry.ts';
-import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedBy, parseSender, parseSignerFacts, type SignerFacts } from './signer-facts.ts';
+import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedBy, parseSender, parseSignerFacts, sha256Hex, type SignerFacts } from './signer-facts.ts';
 import { envelopeDetails, taskDetails, type EnvelopeDetails, type TaskDetails } from './details.ts';
 import { parseMetadata, parseTemplateName, storedMetadata, unknownKeys, type Metadata } from './metadata.ts';
 import { PDFDocument } from 'pdf-lib';
@@ -175,23 +175,25 @@ function searchQuery(context: import('hono').Context<Env>): { q: string; since: 
 }
 
 // The templates the caller sees, newest first. Filters: `q` (its name contains it, or it is its id), `since` (uploaded at
-// or after, epoch ms), and the lists' `scope` and `tag`; `next` is the `before` of the following page, when there may be one.
+// or after, epoch ms), `status` (`active`, the default: those envelopes are sent from; `draft`; or `all`), and the lists'
+// `scope` and `tag`; `next` is the `before` of the following page, when there may be one.
 app.get('/api/templates', async (context) => {
-  const query = listQuery(context), search = searchQuery(context);
-  if (!query || search === 'invalid') return context.json({ error: 'invalid_query' }, 400);
+  const query = listQuery(context), search = searchQuery(context), status = context.req.query('status') ?? 'active';
+  if (!query || search === 'invalid' || !['active', 'draft', 'all'].includes(status)) return context.json({ error: 'invalid_query' }, 400);
   const list = listed(context, 'template', query);
   const where: string[] = [], binds: unknown[] = [];
+  if (status !== 'all') { where.push('x.status = ?'); binds.push(status); }
   if (search.q) { where.push(`(x.id = ? OR lower(x.name) LIKE ? ESCAPE '\\')`); binds.push(search.q, likeContaining(search.q.toLowerCase())); }
   if (search.since !== null) { where.push('x.created_at >= ?'); binds.push(search.since); }
-  const { results } = await context.env.DB.prepare(`SELECT x.id, x.roles_json, x.fields_json, x.created_at, x.name, x.metadata_json, x.default_signers_json, x.owner_user_id, ${list.sharedRole}
+  const { results } = await context.env.DB.prepare(`SELECT x.id, x.roles_json, x.fields_json, x.created_at, x.name, x.metadata_json, x.default_signers_json, x.owner_user_id, x.status, ${list.sharedRole}
       FROM templates x WHERE ${list.where} AND x.created_at < ?${where.map((w) => ` AND ${w}`).join('')} ORDER BY x.created_at DESC, x.id LIMIT ?`)
-    .bind(...list.binds([]), query.before, ...binds, query.limit).all<Owned & { roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string }>();
+    .bind(...list.binds([]), query.before, ...binds, query.limit).all<Owned & { roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string; status: string }>();
   const owned = await ownership(context, 'template', results);
   const last = results.length === query.limit ? results[results.length - 1] : undefined;
-  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at, ...owned.get(row.id) })), ...(last ? { next: last.created_at } : {}) });
+  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at, status: row.status, ...owned.get(row.id) })), ...(last ? { next: last.created_at } : {}) });
 });
 
-const ENVELOPE_STATUSES = new Set(['IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED']);
+const ENVELOPE_STATUSES = new Set(['DRAFT', 'IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED']);
 
 /** How soon an active signer's sign-by deadline makes an envelope "expiring soon" (`view=expiring`). */
 const EXPIRING_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -214,7 +216,9 @@ app.get('/api/envelopes', async (context) => {
   const list = listed(context, 'envelope', query);
   const caller = context.get('caller'), now = Date.now();
   const where: string[] = [], binds: unknown[] = [];
+  // Drafts only when asked for (`status=DRAFT`): a list is of envelopes sent, as it always was.
   if (statuses.length) { where.push(`x.status IN (SELECT value FROM json_each(?))`); binds.push(JSON.stringify(statuses)); }
+  else where.push(`x.status <> '${DRAFT}'`);
   if (since !== null) { where.push('x.created_at >= ?'); binds.push(since); }
   if (q) {
     const pattern = likeContaining(q.toLowerCase());
@@ -224,9 +228,9 @@ app.get('/api/envelopes', async (context) => {
   }
   if (view === 'waiting') { where.push(`x.status = 'IN_PROGRESS' AND x.owner_user_id = ?`); binds.push(caller.userId); }
   if (view === 'expiring') { where.push(`x.status = 'IN_PROGRESS' AND EXISTS (SELECT 1 FROM tasks et WHERE et.envelope_id = x.id AND et.status = 'ACTIVE' AND et.expires_at IS NOT NULL AND et.expires_at BETWEEN ? AND ?)`); binds.push(now, now + EXPIRING_WITHIN_MS); }
-  const { results } = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, ${list.sharedRole} FROM envelopes x
+  const { results } = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, x.draft_json, ${list.sharedRole} FROM envelopes x
       WHERE ${list.where} AND x.created_at < ?${where.map((w) => ` AND ${w}`).join('')} ORDER BY x.created_at DESC, x.id LIMIT ?`)
-    .bind(...list.binds([]), query.before, ...binds, query.limit).all<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
+    .bind(...list.binds([]), query.before, ...binds, query.limit).all<Owned & { template_id: string; status: string; created_at: number; details_json: string; draft_json: string | null }>();
   const ids = JSON.stringify(results.map((row) => row.id));
   const [owned, tasks, changes] = await Promise.all([
     ownership(context, 'envelope', results),
@@ -242,7 +246,8 @@ app.get('/api/envelopes', async (context) => {
   return context.json({
     envelopes: results.map((row) => {
       const details = envelopeDetails(row.details_json);
-      const signers = signersOf.get(row.id) ?? [];
+      // A draft has no tasks yet: its signers are those its request names so far.
+      const signers = row.status === DRAFT ? draftSigners(row.draft_json) : signersOf.get(row.id) ?? [];
       // Whose turn it is, while it is out for signature (voiding or declining leaves the task as it was).
       const active = row.status === 'IN_PROGRESS' ? signers.find((task) => task.status === 'ACTIVE') : undefined;
       return {
@@ -335,7 +340,7 @@ function jsonField<T>(raw: FormDataEntryValue | null, parse: (value: unknown) =>
 
 app.get('/api/templates/:id', async (context) => {
   const row = await context.env.DB.prepare(`SELECT x.*, ${sharedRoleColumn('template', 'x')} AS shared_role FROM templates x WHERE x.id = ? AND x.tenant_id = ?`)
-    .bind(shareKeys(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string; archived_at: number | null; created_at: number }>();
+    .bind(shareKeys(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string; archived_at: number | null; created_at: number; status: string }>();
   if (!row || !effectiveRole(row.owner_user_id, row.shared_role, context.get('caller'))) return context.json({ error: 'not_found' }, 404);
   // The response names keep the word "positioned": hosts read them.
   let hasFields = false;
@@ -349,7 +354,7 @@ app.get('/api/templates/:id', async (context) => {
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
     const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);fieldsSupported=true;
   }catch{fieldsSupported=false;}}
-  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json, true), createdAt: row.created_at, ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }), ...(await ownership(context, 'template', [row])).get(row.id) });
+  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json, true), createdAt: row.created_at, status: row.status, ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }), ...(await ownership(context, 'template', [row])).get(row.id) });
 });
 
 // The template's PDF as uploaded, to read: anyone who sees the template (Viewer). Signers sign a copy of it.
@@ -452,15 +457,100 @@ const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBeha
 
 /** A created envelope starts IN_PROGRESS: its first signer's task is active. */
 const CREATED_STATUS = 'IN_PROGRESS';
+/** A draft envelope's status (saveDraft): saved, not sent; it has no tasks yet. */
+const DRAFT = 'DRAFT';
 /** The response to POST /api/envelopes, for the first creation and for every retry of it alike. */
 const createdResponse = (id: string) => ({ id, status: CREATED_STATUS });
 
 app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   const key = context.req.header('idempotency-key') ?? '';
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(key)) return context.json({ error: 'idempotency_key_required' }, 400);
+  const request = await envelopeBody(context);
+  if (request instanceof Response) return request;
+  return request.draft ? saveDraft(context, request.body, { key }) : sendEnvelope(context, request.body, { key });
+});
+
+// A draft (status DRAFT, saveDraft below): changed, with `draft: true`, or sent, without it, by its editors, admins
+// and owner. The body is a creation's, without an Idempotency-Key: the envelope is this one.
+app.post('/api/envelopes/:id', bodyLimit({ maxSize: 32768 }), async (context) => {
+  const id = context.req.param('id');
+  const refused = await requireRole(context, 'envelope', id, 'editor');
+  if (refused) return refused;
+  const request = await envelopeBody(context);
+  if (request instanceof Response) return request;
+  const found = await context.env.DB.prepare('SELECT status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, context.get('tenantId')).first<{ status: string }>();
+  if (found?.status !== DRAFT) return context.json({ error: 'not_draft' }, 409);
+  return request.draft ? saveDraft(context, request.body, { draftId: id }) : sendEnvelope(context, request.body, { draftId: id });
+});
+
+/** A creation's JSON body, and whether it asks for a draft (`draft: true`), or the answer refusing it. */
+async function envelopeBody(context: import('hono').Context<Env>): Promise<{ body: Record<string, unknown>; draft: boolean } | Response> {
   let body: unknown;
   try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
+  const { draft, ...rest } = body as Record<string, unknown>;
+  if (draft !== undefined && typeof draft !== 'boolean') return context.json({ error: 'invalid_envelope' }, 422);
+  return { body: rest, draft: draft === true };
+}
+
+/**
+ * Saves a draft: a new one (`key`, its Idempotency-Key), or changes one (`draftId`). Its request is kept as given
+ * (`draft_json`), to be checked as a new envelope's when it is sent: only its shape is checked now (fields Esign knows,
+ * a template the caller sees, its tags and shares). It has no tasks: nobody is invited, no contact is added and nothing
+ * is stored for signing until it is sent. Its document name, when valid, is its details', for the lists.
+ */
+async function saveDraft(context: import('hono').Context<Env>, body: Record<string, unknown>, target: { key: string } | { draftId: string }): Promise<Response> {
+  const db = context.env.DB, tenantId = context.get('tenantId'), caller = context.get('caller');
+  const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
+  const recipients = body.recipients;
+  if (recipients !== undefined && (!Array.isArray(recipients) || recipients.length > 20 || recipients.some((r) => !r || typeof r !== 'object' || Array.isArray(r)))) return context.json({ error: 'invalid_envelope' }, 422);
+  for (const recipient of (recipients ?? []) as object[]) unknownFields.push(...unknownKeys(recipient, RECIPIENT_FIELDS).map((field) => `recipients[].${field}`));
+  if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
+  const tags = parseTags(body.tags), shares = parseShares(body.share);
+  if (typeof body.templateId !== 'string' || tags === 'invalid' || shares === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (!await documentRole(db, tenantId, caller, 'template', body.templateId)) return context.json({ error: 'not_found' }, 404);
+  const documentName = parseDocumentName(body.documentName);
+  const details = JSON.stringify(documentName && documentName !== 'invalid' ? { documentName } : {});
+  const draft = JSON.stringify(body), now = Date.now();
+  if ('draftId' in target) {
+    const id = target.draftId;
+    const [updated] = await db.batch([
+      db.prepare(`UPDATE envelopes SET template_id = ?, details_json = ?, draft_json = ? WHERE id = ? AND tenant_id = ? AND status = '${DRAFT}'`).bind(body.templateId, details, draft, id, tenantId),
+      // The caller's tags, as the form has them now; whom else it is shared with, added.
+      ...(body.tags === undefined ? [] : tagWrites(db, tenantId, caller.userId, 'envelope', id, tags)),
+      ...shareInserts(db, tenantId, 'envelope', id, sharesFor(shares, caller), caller.userId, now),
+    ]);
+    if (updated!.meta.changes !== 1) return context.json({ error: 'not_draft' }, 409);
+    return context.json({ id, status: DRAFT });
+  }
+  // A new draft: idempotent by its key, as a new envelope is.
+  const id = await envelopeIdFor(tenantId, target.key);
+  const hash = await sha256Hex(draft);
+  const lookup = () => db.prepare('SELECT request_sha256, status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ request_sha256: string; status: string }>();
+  const replay = (existing: { request_sha256: string; status: string }) => existing.status === DRAFT && existing.request_sha256 === hash ? context.json({ id, status: DRAFT }, 201) : context.json({ error: 'idempotency_conflict' }, 409);
+  const existing = await lookup();
+  if (existing) return replay(existing);
+  const given = sharesFor([...shares, ...[await clientShare(db, tenantId, caller)].filter((share) => share !== null)], caller);
+  const allTags = mergeTags(tags, await tagsOf(db, tenantId, caller.userId, 'template', body.templateId));
+  try {
+    await db.batch([
+      db.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, details_json, draft_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, body.templateId, DRAFT, now, hash, caller.userId, details, draft),
+      ...shareInserts(db, tenantId, 'envelope', id, given, caller.userId, now),
+      ...tagWrites(db, tenantId, caller.userId, 'envelope', id, allTags),
+    ]);
+  } catch (error) {
+    const raced = await lookup();
+    if (raced) return replay(raced);
+    throw error;
+  }
+  return context.json({ id, status: DRAFT }, 201);
+}
+
+/**
+ * Sends an envelope: a new one (`key`, its Idempotency-Key), or a draft (`draftId`), which becomes this envelope as it
+ * is sent. Everything is checked here, a draft's request as a new one's.
+ */
+async function sendEnvelope(context: import('hono').Context<Env>, body: Record<string, unknown>, target: { key: string } | { draftId: string }): Promise<Response> {
   // Every field must be one Esign knows: a misspelled one is refused rather than lost.
   const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
   for (const [name, allowed] of [['documentVersion', ['label', 'publishedAt']], ['sender', ['name', 'email', 'organization']], ['message', ['subject', 'body']]] as const) {
@@ -537,17 +627,23 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   // it keeps the hash of the request that created it. A retry of that request gets the response a
   // first creation returns (always IN_PROGRESS, whatever the envelope's status is now), and the
   // same key with another request is a conflict.
-  const id = await envelopeIdFor(tenantId, key);
-  const lookup = () => context.env.DB.prepare('SELECT request_sha256 FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ request_sha256: string }>();
-  const replay = (existing: { request_sha256: string }) => existing.request_sha256 === hash ? context.json(createdResponse(id), 201) : context.json({ error: 'idempotency_conflict' }, 409);
-  const existing = await lookup();
+  // A draft being sent is already this envelope: no key, no replay; it is sent once, when it is still a draft.
+  const fromDraft = 'draftId' in target;
+  const id = fromDraft ? target.draftId : await envelopeIdFor(tenantId, target.key);
+  const lookup = () => context.env.DB.prepare('SELECT request_sha256, status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ request_sha256: string; status: string }>();
+  const replay = (existing: { request_sha256: string; status: string }) => fromDraft ? context.json({ error: existing.status === DRAFT ? 'send_failed' : 'not_draft' }, 409)
+    : existing.status === DRAFT ? context.json({ error: 'idempotency_conflict' }, 409)
+    : existing.request_sha256 === hash ? context.json(createdResponse(id), 201) : context.json({ error: 'idempotency_conflict' }, 409);
+  const existing = fromDraft ? null : await lookup();
   if (existing) return replay(existing);
   // Anyone who sees the template sends from it (ownership.ts), an archived one too (archiving only takes it off the
   // lists: a host that keeps its id goes on using it); one they can't see doesn't exist for them.
   const caller = context.get('caller');
   if (!await documentRole(context.env.DB, tenantId, caller, 'template', input.templateId)) return context.json({ error: 'not_found' }, 404);
-  const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string }>();
+  const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string; status: string }>();
   if (!template) return context.json({ error: 'not_found' }, 404);
+  // A draft template isn't ready: it is saved as active in the field editor first.
+  if (template.status === 'draft') return context.json({ error: 'template_draft' }, 409);
   const roles = JSON.parse(template.roles_json) as string[];
   if (template.fields_json !== undefined) {
     try {
@@ -591,7 +687,11 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   // tags commit together or not at all.
   const statements = [
     // The certificate layout this envelope is made with is fixed for good (src/delivery-pdf.ts).
-    context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
+    fromDraft
+      // A draft becomes the envelope sent, in this batch, only while it is a draft: otherwise its status would be null,
+      // which the table refuses, and nothing in the batch is written.
+      ? context.env.DB.prepare(`UPDATE envelopes SET status = CASE WHEN status = '${DRAFT}' THEN ? ELSE NULL END, template_id = ?, created_at = ?, request_sha256 = ?, details_json = ?, draft_json = NULL WHERE id = ? AND tenant_id = ?`).bind(CREATED_STATUS, input.templateId, now, hash, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails), id, tenantId)
+      : context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
     ...people.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
     context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
     // The organization's contacts (contacts.ts): each signer added or refreshed, with the envelope only.
@@ -601,9 +701,11 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   ];
   try { await context.env.DB.batch(statements); }
   catch (error) {
-    // A concurrent creation with this key committed first (the envelope id is the primary key).
+    // A concurrent creation with this key committed first (the envelope id is the primary key), or the draft was sent
+    // or discarded meanwhile.
     const raced = await lookup();
-    if (raced) return replay(raced);
+    if (raced && (!fromDraft || raced.status !== DRAFT)) return replay(raced);
+    if (fromDraft && !raced) return context.json({ error: 'not_draft' }, 409);
     throw error;
   }
   // The first signer's invitation, when Esign invites them: after the response, where the platform allows.
@@ -612,8 +714,17 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
     if (context.env.WAIT_UNTIL) context.env.WAIT_UNTIL(invite);
     else await invite;
   }
-  return context.json(createdResponse(id), 201);
-});
+  return context.json(createdResponse(id), fromDraft ? 200 : 201);
+}
+
+/** The signers a draft's request names so far, as a list shows them (status DRAFT). */
+function draftSigners(raw: string | null): { id: string; role: string; recipient_name: string; recipient_email: string; status: string; details_json: string }[] {
+  let request: { recipients?: unknown } = {};
+  try { request = JSON.parse(raw ?? '{}') as { recipients?: unknown }; } catch { return []; }
+  if (!Array.isArray(request.recipients)) return [];
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+  return request.recipients.map((r: Record<string, unknown>, i) => ({ id: `draft-${i}`, role: text(r?.role), recipient_name: text(r?.name), recipient_email: text(r?.email), status: DRAFT, details_json: '{}' }));
+}
 
 app.get('/api/envelopes/:id', async (context) => {
   const id = context.req.param('id');
@@ -622,7 +733,7 @@ app.get('/api/envelopes/:id', async (context) => {
   const refused = await requireRole(context, 'envelope', id, 'viewer');
   if (refused) return refused;
   await expireIfDue(context.env.DB, id);
-  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKeys(context.get('caller')), id, tenantId).first<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
+  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, x.draft_json, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKeys(context.get('caller')), id, tenantId).first<Owned & { template_id: string; status: string; created_at: number; details_json: string; draft_json: string | null }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
   // invitedAt: when Esign last emailed the signer's invitation (delivery 'email').
@@ -631,7 +742,10 @@ app.get('/api/envelopes/:id', async (context) => {
       (SELECT i.sent_at FROM invitations i WHERE i.task_id = t.id) AS invited_at
     FROM tasks t WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; details_json: string; opened_at: number | null; invited_at: number | null }>();
   const details = envelopeDetails(envelope.details_json);
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
+  // A draft: its request as saved (`draft`), to go on with it; it has no tasks yet.
+  let draft: unknown;
+  if (envelope.status === DRAFT) { try { draft = JSON.parse(envelope.draft_json ?? '{}'); } catch { draft = {}; } }
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(draft === undefined ? {} : { draft }), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
 });
 
 /**
@@ -693,6 +807,16 @@ app.post('/api/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context
   const read = () => db.prepare('SELECT status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ status: string }>();
   const envelope = await read();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
+  // A draft was never sent: voiding it discards it, its shares and tags with it.
+  if (envelope.status === DRAFT) {
+    const [discarded] = await db.batch([
+      db.prepare(`DELETE FROM envelopes WHERE id = ? AND tenant_id = ? AND status = '${DRAFT}'`).bind(id, tenantId),
+      db.prepare("DELETE FROM document_shares WHERE tenant_id = ? AND resource_type = 'envelope' AND resource_id = ? AND NOT EXISTS (SELECT 1 FROM envelopes WHERE id = ?)").bind(tenantId, id, id),
+      db.prepare("DELETE FROM document_tags WHERE tenant_id = ? AND resource_type = 'envelope' AND resource_id = ? AND NOT EXISTS (SELECT 1 FROM envelopes WHERE id = ?)").bind(tenantId, id, id),
+    ]);
+    if (discarded!.meta.changes !== 1) return context.json({ error: 'envelope_not_voidable' }, 409);
+    return context.json({ id, status: 'DISCARDED' });
+  }
   if (envelope.status !== 'VOIDED') {
     const { ip, userAgent } = requestFacts(context.req.raw);
     // One batch: the status change and its audit event commit together, once.

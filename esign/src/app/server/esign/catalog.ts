@@ -82,7 +82,7 @@ const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/catalog', summary: 'The endpoints the caller may use, with their query and body schemas', query: null, body: null, idempotencyKey: false, permission: null },
   {
     method: 'GET', path: '/api/templates', summary: `The templates you own or that are shared with you, newest first; next is the following page's before. ${ownedFields}`,
-    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only templates created before this time (epoch ms), for the next page' }, q: text('Only those whose name contains this, or whose id it is', 100), since: { type: 'integer', description: 'Only those uploaded at or after this time (epoch ms)' }, ...listFilters } },
+    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only templates created before this time (epoch ms), for the next page' }, q: text('Only those whose name contains this, or whose id it is', 100), since: { type: 'integer', description: 'Only those uploaded at or after this time (epoch ms)' }, status: { type: 'string', enum: ['active', 'draft', 'all'], description: 'active (the default): ready to send from; draft: saved from the field editor before it is ready' }, ...listFilters } },
     body: null, idempotencyKey: false, permission: 'esign.view',
   },
   {
@@ -105,11 +105,11 @@ const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/template-editing-sessions/{id}', summary: 'The template an editing session saved, once it has', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   {
     method: 'GET', path: '/api/envelopes', summary: `The envelopes you own or that are shared with you, newest first, with their status, signers, progress (signed of total), whose turn it is (current) and last change; next is the following page's before. ${ownedFields}`,
-    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only envelopes created before this time (epoch ms), for the next page' }, status: { type: 'string', description: 'One or more of IN_PROGRESS, FINALIZING, COMPLETED, VOIDED, DECLINED, EXPIRED, comma-separated or repeated' }, q: text('Only those whose document name, or a signer\'s name or email, contains this; or whose id it is', 100), since: { type: 'integer', description: 'Only those created at or after this time (epoch ms)' }, view: { type: 'string', enum: ['waiting', 'expiring'], description: 'waiting: yours, out for signature; expiring: out for signature, the active signer\'s deadline within 7 days' }, ...listFilters } },
+    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100 }, before: { type: 'integer', description: 'Only envelopes created before this time (epoch ms), for the next page' }, status: { type: 'string', description: 'One or more of DRAFT, IN_PROGRESS, FINALIZING, COMPLETED, VOIDED, DECLINED, EXPIRED, comma-separated or repeated; drafts are listed only when asked for' }, q: text('Only those whose document name, or a signer\'s name or email, contains this; or whose id it is', 100), since: { type: 'integer', description: 'Only those created at or after this time (epoch ms)' }, view: { type: 'string', enum: ['waiting', 'expiring'], description: 'waiting: yours, out for signature; expiring: out for signature, the active signer\'s deadline within 7 days' }, ...listFilters } },
     body: null, idempotencyKey: false, permission: 'esign.view',
   },
   {
-    method: 'POST', path: '/api/envelopes', summary: 'Send a template for signature: one recipient per role, who sign in order. The first signer\'s task is active at once',
+    method: 'POST', path: '/api/envelopes', summary: 'Send a template for signature: one recipient per role, who sign in order. The first signer\'s task is active at once. With draft: true, save a draft instead (unchecked but for its shape; nobody is asked to sign)',
     query: null,
     body: {
       type: 'object', required: ['templateId', 'recipients'], additionalProperties: false,
@@ -123,9 +123,15 @@ const ENTRIES: Entry[] = [
         message: message('The sender\'s message to every signer'),
         tags: { ...tags, description: 'Your tags for it, with yours on the template' },
         share,
+        draft: { type: 'boolean', description: 'true: save a draft, as it is (status DRAFT); send it later with POST /api/envelopes/{id}' },
       },
     },
     idempotencyKey: true, permission: 'esign.manage',
+  },
+  {
+    method: 'POST', path: '/api/envelopes/{id}', summary: 'A draft: changed (with draft: true) or sent (without it: checked and sent as a new envelope, once); its editors, admins and owner. Not a draft: 409 not_draft',
+    query: null, body: { type: 'object', description: 'The body of POST /api/envelopes', additionalProperties: true },
+    idempotencyKey: false, permission: 'esign.manage',
   },
   { method: 'GET', path: '/api/envelopes/{id}', summary: 'An envelope: its status and each signer\'s task, in order', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },
   { method: 'GET', path: '/api/envelopes/{id}/audit', summary: 'The envelope\'s audit trail, in order', query: null, body: null, idempotencyKey: false, permission: 'esign.view' },

@@ -17,7 +17,7 @@ const h = React.createElement
 type PlacedField = { type: string; role: string; page: number; required?: boolean; rect: { x: number; y: number; width: number; height: number } }
 export type TemplateDetails = Owned & {
   id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]
-  fields: PlacedField[]; createdAt?: number; archivedAt?: number
+  fields: PlacedField[]; createdAt?: number; archivedAt?: number; status?: 'active' | 'draft'
 }
 
 /**
@@ -78,7 +78,7 @@ export function TemplatePage({ me, id }: { me: Me; id: string }) {
   const back = h(Link, { to: '/templates', className: 'inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground' }, h(ArrowLeft, { className: 'size-4', 'aria-hidden': true }), 'All templates')
   if (!template) return h('div', { className: 'flex flex-col gap-4' }, back, message.text ? h(Notice, { message: message.text, error: message.error }) : h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading the template…'))
 
-  const archived = template.archivedAt !== undefined
+  const archived = template.archivedAt !== undefined, draft = template.status === 'draft'
   const metadata = Object.entries(template.metadata ?? {})
   return h('div', { className: 'flex flex-col gap-6' },
     back,
@@ -86,10 +86,12 @@ export function TemplatePage({ me, id }: { me: Me; id: string }) {
       title: template.name ?? 'Template',
       description: h('span', { className: 'flex flex-wrap items-center gap-2' },
         archived ? h(Badge, { variant: 'secondary' }, 'Archived') : null,
+        draft ? h(Badge, { variant: 'outline' }, 'Draft') : null,
         template.myRole && template.myRole !== 'owner' ? h(Badge, { variant: 'secondary' }, `Shared with you · ${ROLE_NAMES[template.myRole]}`) : null,
         h('span', { className: 'font-mono text-xs' }, template.id)),
-      actions: canManage(me) && !archived ? h(Link, { to: `/envelopes/new?template=${encodeURIComponent(template.id)}`, className: buttonVariants({ variant: 'default' }) }, h(Send, { 'aria-hidden': true }), 'Send') : null,
+      actions: canManage(me) && !archived && !draft ? h(Link, { to: `/envelopes/new?template=${encodeURIComponent(template.id)}`, className: buttonVariants({ variant: 'default' }) }, h(Send, { 'aria-hidden': true }), 'Use') : null,
     }),
+    draft && !archived ? h(Notice, { message: 'A draft: it can\'t be used to send envelopes until its owner or an editor saves it as ready in the field editor (Edit in the Templates list).' }) : null,
     archived ? h(Notice, { message: `Archived ${dateTime(template.archivedAt)}: deleted, or replaced by a new version. It is no longer listed and starts no envelope; envelopes sent from it are signed as before.` }) : null,
     h(Card, { 'aria-label': 'Details' },
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Details')), h(CardDescription, null, 'Read only. Its owner and editors change it from the Templates list.')),
@@ -110,12 +112,12 @@ export function TemplatePage({ me, id }: { me: Me; id: string }) {
                   h('span', { className: 'text-xs text-muted-foreground' }, d ? `Usually ${[d.name, d.email].filter(Boolean).join(', ')}` : 'No default signer'),
                   template.fields.length ? h('span', { className: 'text-xs text-muted-foreground' }, fieldsOf(template.fields, role)) : null))
             }))),
-          h(Detail, { term: 'Signed on' }, template.fields.length ? `${template.fields.length} placed ${template.fields.length === 1 ? 'field' : 'fields'}` : 'A signature page added at the end'),
+          h(Detail, { term: 'Signed on' }, template.fields.length ? `${template.fields.length} placed ${template.fields.length === 1 ? 'field' : 'fields'}` : draft ? 'No fields yet' : 'A signature page added at the end'),
           h(Detail, { term: 'Your tags' }, template.tags?.length ? h(TagList, { tags: template.tags }) : h('span', { className: 'text-muted-foreground' }, 'None')),
           ...metadata.map(([key, value]) => h(Detail, { key, term: key }, value))))),
     h(Card, { 'aria-label': 'Document' },
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Document')),
-        h(CardDescription, null, template.fields.length ? 'The PDF as uploaded, read only, with where each role signs or fills in.' : 'The PDF as uploaded, read only. Each signer signs on a page added at the end.')),
+        h(CardDescription, null, template.fields.length ? 'The PDF as uploaded, read only, with where each role signs or fills in.' : draft ? 'The PDF as uploaded, read only. No fields are placed yet.' : 'The PDF as uploaded, read only. Each signer signs on a page added at the end.')),
       h(CardContent, null, h(DocumentView, { id: template.id, roles: template.roles, fields: template.fields }))))
 }
 

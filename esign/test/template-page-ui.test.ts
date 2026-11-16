@@ -46,7 +46,7 @@ test('a template\'s page: its details, read only, and its PDF below them; its na
     assert.deepEqual(drawn, [PDF], 'its PDF, drawn once');
     assert.ok(app.byLabel('Roles on the document'), 'a key to the roles\' colours');
     assert.equal(app.renderer.root.findAll((n: any) => n.type === 'input' || n.type === 'textarea' || n.type === 'select').length, 0, 'nothing to change');
-    assert.ok(app.link('Send'), 'those who manage send from it');
+    assert.ok(app.link('Use'), 'those who manage send from it');
     await app.click(app.link('All templates'), 'back');
     assert.equal(app.location.pathname, '/templates');
   } finally { pdfView.render = render; await app.unmount(); }
@@ -64,7 +64,7 @@ test('a template\'s page: View in its menu; without placed fields, a signature p
     assert.match(app.text(), /Each signer signs on a page added at the end/);
     assert.equal(app.byLabel('Roles on the document'), undefined);
     assert.match(app.text(), /Archived Nov 5, 2026/);
-    assert.equal(app.link('Send'), undefined);
+    assert.equal(app.link('Use'), undefined);
   } finally { pdfView.render = render; await app.unmount(); }
 });
 

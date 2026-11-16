@@ -1,14 +1,15 @@
 // New envelope: a template and one signer per role, in its signing order, with what the signers see about the document
 // and who sent it. Sending creates the envelope and asks the first signer; a retry of the same send reuses its
-// idempotency key, so a lost response never sends twice.
+// idempotency key, so a lost response never sends twice. Save draft keeps the form as it is, unfinished even, to send
+// later: `/envelopes/new?draft=<id>` opens it again, and sending it sends that envelope.
 import React, { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, Save, Send } from 'lucide-react'
 import { Button } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { checkClass, Input } from '../components/ui/input.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
 import { Textarea } from '../components/ui/textarea.ts'
-import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, signByTime, type Contact, type DocumentFacts, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
+import { apiJson, canManage, dateTime, describeError, EMAIL, envelopeRequest, formFromRequest, signByTime, type Contact, type DocumentFacts, type Envelope, type EnvelopeMessage, type Me, type Signer, type TemplateSummary } from './api.ts'
 import { ContactField } from './ContactField.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
@@ -36,6 +37,20 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
   const attempt = useRef<{ body: string; key: string } | null>(null)
+  // The draft this form is (`?draft=<id>`, or once Save draft has saved it), and its request until the form has it.
+  const [draftId, setDraftId] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('draft') ?? '' } catch { return '' }
+  })
+  const [saved, setSaved] = useState<Record<string, unknown> | null>(null)
+  useEffect(() => {
+    if (!draftId || saved) return
+    apiJson<Envelope>(`/api/envelopes/${draftId}`).then((envelope) => {
+      // Sent meanwhile: its own page.
+      if (envelope.status !== 'DRAFT') { navigate(`/envelopes/${envelope.id}`, { replace: true }); return }
+      setTemplateId(envelope.templateId)
+      setSaved(envelope.draft ?? {})
+    }).catch((error) => setMessage({ text: describeError(error), error: true }))
+  }, [])
 
   useEffect(() => {
     apiJson<{ templates: TemplateSummary[] }>('/api/templates').then((data) => setTemplates(data.templates)).catch((error) => setMessage({ text: describeError(error), error: true }))
@@ -51,6 +66,14 @@ export function NewEnvelopePage({ me }: { me: Me }) {
       return { ...(old[i] ?? EMPTY_SIGNER), name: d?.name ?? '', email: d?.email ?? '', fromTemplate: !!d }
     }))
   }, [template?.id])
+  // A draft fills the form in, once its template is here.
+  const filled = useRef(false)
+  useEffect(() => {
+    if (!saved || !template || filled.current) return
+    filled.current = true
+    const form = formFromRequest(saved, template.roles)
+    setSigners(form.signers); setDoc(form.doc); setSignBy(form.signBy); setNote(form.note); setPerSigner(form.perSigner); setTags(form.tags)
+  }, [saved, template?.id])
 
   if (!canManage(me)) {
     return h('div', { className: 'flex flex-col gap-4' }, h(PageHeader, { title: 'New envelope' }), h(Notice, { message: 'Your role can see envelopes but not send them. Ask an admin of your organization for the Editor role, or a custom role that sends and manages envelopes.' }))
@@ -59,6 +82,26 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   const setSigner = (i: number, key: keyof Signer, value: string) => setSigners((old) => old.map((s, j) => j === i ? { ...s, [key]: value, ...(key === 'name' || key === 'email' ? { fromTemplate: false } : {}) } : s))
   // A contact fills in the signer's name, email, title and company.
   const chooseContact = (i: number, c: Contact) => setSigners((old) => old.map((s, j) => j === i ? { ...s, name: c.name, email: c.email, title: c.title ?? '', company: c.company ?? '', fromTemplate: false } : s))
+  /** The request the form makes: what is typed, each signer's own message or the one for everybody, never both. */
+  function request() {
+    const people = perSigner ? signers : signers.map((s) => ({ ...s, subject: '', body: '' }))
+    return { ...envelopeRequest(templateId, template?.roles ?? [], people, doc, signBy, perSigner ? { subject: '', body: '' } : note), ...(tags.length ? { tags } : {}) }
+  }
+  /** Saves the form as a draft, as it is: the first time a new one (then this page is its address), later in place. */
+  function saveDraft() {
+    if (!templateId) { setMessage({ text: 'Choose a template.', error: true }); return }
+    setBusy(true)
+    setMessage({ text: '', error: false })
+    const body = JSON.stringify({ ...request(), draft: true })
+    if (!draftId && (!attempt.current || attempt.current.body !== body)) attempt.current = { body, key: crypto.randomUUID() }
+    const saving = draftId ? apiJson<{ id: string }>(`/api/envelopes/${draftId}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
+      : apiJson<{ id: string }>('/api/envelopes', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': attempt.current!.key }, body })
+    saving.then(({ id }) => {
+      attempt.current = null
+      if (!draftId) { setDraftId(id); navigate(`/envelopes/new?draft=${id}`, { replace: true }) }
+      setMessage({ text: 'Draft saved. Nobody is asked to sign until you send it.', error: false })
+    }).catch((error) => setMessage({ text: describeError(error), error: true })).finally(() => setBusy(false))
+  }
   function send() {
     if (!template) { setMessage({ text: 'Choose a template.', error: true }); return }
     if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) { setMessage({ text: 'Enter a name and an email address for each signer.', error: true }); return }
@@ -69,11 +112,12 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     }
     setBusy(true)
     setMessage({ text: '', error: false })
-    // Each signer's own message, or the one for everybody: never both.
-    const people = perSigner ? signers : signers.map((s) => ({ ...s, subject: '', body: '' }))
-    const body = JSON.stringify({ ...envelopeRequest(template.id, template.roles, people, doc, signBy, perSigner ? { subject: '', body: '' } : note), ...(tags.length ? { tags } : {}) })
+    const body = JSON.stringify(request())
     if (!attempt.current || attempt.current.body !== body) attempt.current = { body, key: crypto.randomUUID() }
-    apiJson<{ id: string }>('/api/envelopes', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': attempt.current.key }, body })
+    // A draft is sent as itself; a new envelope by its idempotency key.
+    const sent = draftId ? apiJson<{ id: string }>(`/api/envelopes/${draftId}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
+      : apiJson<{ id: string }>('/api/envelopes', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': attempt.current.key }, body })
+    sent
       .then(({ id }) => { attempt.current = null; navigate(`/envelopes/${id}`) })
       .catch((error) => setMessage({ text: describeError(error), error: true }))
       .finally(() => setBusy(false))
@@ -84,7 +128,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
 
   return h('div', { className: 'flex flex-col gap-6' },
     h(Link, { to: '/', className: 'inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground' }, h(ArrowLeft, { className: 'size-4', 'aria-hidden': true }), 'All envelopes'),
-    h(PageHeader, { title: 'New envelope', description: 'Send a template for signature. The signers sign in this order, each when the one before has signed.' }),
+    h(PageHeader, { title: draftId ? 'Draft envelope' : 'New envelope', description: draftId ? 'Saved, not sent: finish it and send it, or save it again for later. The signers sign in this order, each when the one before has signed.' : 'Send a template for signature. The signers sign in this order, each when the one before has signed. Save draft keeps it to finish later.' }),
     h(Notice, { message: message.text, error: message.error }),
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Template'))),
@@ -128,5 +172,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
           h(Field, { key: 'message-body', label: 'Message to the signers (optional)', htmlFor: 'message-body' },
             h(Textarea, { id: 'message-body', rows: 4, maxLength: 10000, value: note.body, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setNote((m) => ({ ...m, body: e.target.value })) })),
         ])),
-      h(CardFooter, null, h(Button, { disabled: busy, onClick: send }, h(Send, { 'aria-hidden': true }), busy ? 'Sending…' : 'Send for signature'))) : null)
+      h(CardFooter, { className: 'flex flex-wrap gap-2' },
+        h(Button, { variant: 'outline', disabled: busy, onClick: saveDraft }, h(Save, { 'aria-hidden': true }), 'Save draft'),
+        h(Button, { disabled: busy, onClick: send }, h(Send, { 'aria-hidden': true }), busy ? 'Sending…' : 'Send for signature'))) : null)
 }

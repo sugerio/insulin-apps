@@ -86,9 +86,27 @@ export function mountEditorRoutes(app:Hono<Env>){
  app.get('/api/public/editor/current',async c=>{let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}if(!session.sourceTemplateId)return c.json({roles:session.roles,fields:[],sourceTemplateId:null,hasStagedSource:!!session.stagedObjectKey,parentOrigin:session.parentOrigin});const row=await c.env.DB.prepare('SELECT roles_json,fields_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{roles_json:string;fields_json:string}>();if(!row)return c.json({error:'not_found'},404);return c.json({roles:JSON.parse(row.roles_json),fields:JSON.parse(row.fields_json),sourceTemplateId:session.sourceTemplateId,parentOrigin:session.parentOrigin});});
  app.get('/api/public/editor/pdf',async c=>{let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}if(session.stagedObjectKey&&session.stagedSha256){try{return new Response(await stagedBytes(c.env.ARTIFACTS,session.stagedObjectKey,session.stagedSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}}if(!session.sourceTemplateId)return c.json({error:'not_found'},404);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string}>();if(!row)throw new Error('Source unavailable');return new Response(await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}});
  app.post('/api/public/editor/save',bodyLimit({maxSize:limit+65536}),async c=>{
-  let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}if(session.resultTemplateId)return c.json({error:'already_saved'},409);
+  let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}
   if(!c.req.header('content-type')?.startsWith('multipart/form-data;'))return c.json({error:'multipart_required'},400);
   let form:FormData;try{form=await c.req.formData();}catch{return c.json({error:'invalid_multipart'},400);}
+  // `draft`: saved as a draft (templates.status), which starts no envelope and needn't be ready: no Signature field is
+  // required yet. A draft is saved again, or saved as active, in place: by the session that saved it, or by one opened
+  // to replace it. Nothing was sent from it, so its fields may change. An active template is never a draft again: a
+  // new version of one is saved as active only.
+  const draftField=form.get('draft');if(draftField!==null&&draftField!=='true'&&draftField!=='false')return c.json({error:'invalid_definition'},422);
+  const draft=draftField==='true',status=draft?'draft':'active';
+  let target:string|null=null;
+  if(session.resultTemplateId){
+   // Saved by this session already: again only while that is a draft.
+   const saved=await c.env.DB.prepare('SELECT status FROM templates WHERE id=? AND tenant_id=?').bind(session.resultTemplateId,session.tenantId).first<{status:string}>();
+   if(saved?.status!=='draft')return c.json({error:'already_saved'},409);
+   target=session.resultTemplateId;
+  }
+  else if(session.replacesSource&&session.sourceTemplateId){
+   const source=await c.env.DB.prepare('SELECT status FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{status:string}>();
+   if(source?.status==='draft')target=session.sourceTemplateId;
+   else if(draft)return c.json({error:'draft_not_allowed'},422);
+  }
   let roles:unknown,fields:unknown;try{roles=JSON.parse(String(form.get('roles')));fields=JSON.parse(String(form.get('fields')));}catch{return c.json({error:'invalid_definition'},422);}if(!rolesValid(roles,true))return c.json({error:'invalid_roles'},422);
   if(new Set(roles.map(role=>role.toLowerCase())).size!==roles.length){
    if(!session.sourceTemplateId)return c.json({error:'invalid_roles'},422);
@@ -96,9 +114,26 @@ export function mountEditorRoutes(app:Hono<Env>){
    let sourceRoles:unknown;try{sourceRoles=JSON.parse(source?.roles_json??'null');}catch{return c.json({error:'invalid_roles'},422);}
    if(!Array.isArray(sourceRoles)||!roles.every((role,index)=>roles.slice(0,index).every(previous=>previous.toLowerCase()!==role.toLowerCase()||(sourceRoles.includes(previous)&&sourceRoles.includes(role)))))return c.json({error:'invalid_roles'},422);
   }
-  let bytes:Uint8Array;if(session.stagedObjectKey&&session.stagedSha256){if(form.has('file'))return c.json({error:'source_immutable'},422);try{bytes=await stagedBytes(c.env.ARTIFACTS,session.stagedObjectKey,session.stagedSha256);}catch{return c.json({error:'source_unavailable'},409);}}else if(session.sourceTemplateId){if(form.has('file'))return c.json({error:'source_immutable'},422);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string}>();if(!row)throw new Error('Source unavailable');bytes=await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256);}catch{return c.json({error:'source_unavailable'},409);}}else{const file=form.get('file');if(!(file instanceof File)||file.size<1||file.size>limit)return c.json({error:'invalid_file'},422);bytes=new Uint8Array(await file.arrayBuffer());}
+  // A draft saved in place keeps its PDF: its fields are checked against it.
+  let bytes:Uint8Array;if(target){if(form.has('file'))return c.json({error:'source_immutable'},422);const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(target,session.tenantId).first<{object_key:string}>();const object=row&&await c.env.ARTIFACTS.get(row.object_key);if(!object||object.size>limit)return c.json({error:'source_unavailable'},409);bytes=new Uint8Array(await object.arrayBuffer());}
+  else if(session.stagedObjectKey&&session.stagedSha256){if(form.has('file'))return c.json({error:'source_immutable'},422);try{bytes=await stagedBytes(c.env.ARTIFACTS,session.stagedObjectKey,session.stagedSha256);}catch{return c.json({error:'source_unavailable'},409);}}else if(session.sourceTemplateId){if(form.has('file'))return c.json({error:'source_immutable'},422);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string}>();if(!row)throw new Error('Source unavailable');bytes=await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256);}catch{return c.json({error:'source_unavailable'},409);}}else{const file=form.get('file');if(!(file instanceof File)||file.size<1||file.size>limit)return c.json({error:'invalid_file'},422);bytes=new Uint8Array(await file.arrayBuffer());}
   try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./fields.ts').TemplateField[]);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
-  try{assertEditorSigningFields(fields as import('./fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
+  if(!draft)try{assertEditorSigningFields(fields as import('./fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
+  if(target){
+   const row=await c.env.DB.prepare('SELECT status,default_signers_json FROM templates WHERE id=? AND tenant_id=?').bind(target,session.tenantId).first<{status:string;default_signers_json:string}>();
+   if(row?.status!=='draft')return c.json({error:'already_saved'},409);
+   // The draft as edited: its roles and fields, its default signers for the roles it keeps, and its status. Only while
+   // it is a draft, and while this session's editor token is live.
+   const live=`EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND (x.result_template_id IS NULL OR x.result_template_id=?) AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`;
+   const now=Date.now();
+   let updated:D1Result;
+   try{[updated]=await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE templates SET roles_json=?,fields_json=?,default_signers_json=?,status=? WHERE id=? AND tenant_id=? AND status='draft' AND ${live}`).bind(JSON.stringify(roles),JSON.stringify(fields),JSON.stringify(storedDefaultSigners(row.default_signers_json,roles)),status,target,session.tenantId,session.pageId,session.tenantId,target,session.tokenHash,now),
+    c.env.DB.prepare('UPDATE editor_sessions SET result_template_id=? WHERE id=? AND tenant_id=? AND (result_template_id IS NULL OR result_template_id=?) AND changes()=1').bind(target,session.pageId,session.tenantId,target),
+   ]);}catch{return c.json({error:'save_failed'},503);}
+   if(updated.meta.changes!==1)return c.json({error:'already_saved'},409);
+   return c.json({id:target,status},200);
+  }
   // The session's name and metadata, else those of the template it edits.
   // The source template's default signers too, for the roles the saved template keeps (a new PDF's are set after
   // the save: POST /api/templates/:id/default-signers).
@@ -119,7 +154,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   // harmless orphan.
   let saved:D1Result;
   try{[,saved]=await c.env.DB.batch([
-   c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at,name,metadata_json,default_signers_json,owner_user_id) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now(),labels.name,labels.metadata??'{}',JSON.stringify(signers),owner),
+   c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at,name,metadata_json,default_signers_json,owner_user_id,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now(),labels.name,labels.metadata??'{}',JSON.stringify(signers),owner,status),
    c.env.DB.prepare(`UPDATE editor_sessions AS x SET result_template_id=? WHERE x.id=? AND x.tenant_id=? AND x.result_template_id IS NULL AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND EXISTS (SELECT 1 FROM access_sessions s WHERE s.scope='editor' AND s.token_hash=? AND s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin AND s.expires_at>?)`).bind(id,session.pageId,session.tenantId,session.tokenHash,Date.now()),
    // Owned by whoever opened the session, shared and tagged as they asked; or, for a new version, shared and tagged as
    // its source was, which it replaces.
@@ -133,6 +168,6 @@ export function mountEditorRoutes(app:Hono<Env>){
    ]),
   ]);}catch{saved={meta:{changes:0}} as D1Result;}
   if(saved.meta.changes!==1){const result=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=?').bind(session.pageId).first<{result_template_id:string|null}>();if(result?.result_template_id)return c.json({error:'already_saved'},409);return c.json({error:'save_failed'},503);}
-  return c.json({id},201);
+  return c.json({id,status},201);
  });
 }

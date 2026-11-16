@@ -32,6 +32,11 @@ export const templates = sqliteTable('templates', {
    * editing session; it is still read by its id, and the envelopes sent from it are signed as before.
    */
   archived_at: integer('archived_at'),
+  /**
+   * `active`: ready, envelopes are sent from it, and its PDF and fields never change. `draft`: saved from the field
+   * editor before it is ready; it starts no envelope, and the editor changes it in place until it is saved as active.
+   */
+  status: text('status').notNull().default('active'),
 }, (table) => [
   index('templates_by_tenant').on(table.tenant_id, table.created_at),
   index('templates_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),
@@ -49,6 +54,11 @@ export const envelopes = sqliteTable('envelopes', {
   details_json: text('details_json').notNull().default('{}'),
   /** Its owner (ownership.ts): the member or API client that sent it, or whom it was transferred to. */
   owner_user_id: text('owner_user_id').notNull().default(''),
+  /**
+   * A draft's request (status DRAFT): `POST /api/envelopes` with `draft: true`, or its later changes, as given, not yet
+   * checked against the template. Sending it checks it, creates its tasks and clears this. Null once sent.
+   */
+  draft_json: text('draft_json'),
 }, (table) => [
   index('envelopes_by_tenant').on(table.tenant_id, table.created_at),
   index('envelopes_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),

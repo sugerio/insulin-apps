@@ -1,6 +1,6 @@
 import React from 'react';
 import {FieldEditor,type Field,type EditorHandle} from './FieldEditor.ts';
-import {readSaveRequest} from './editor-save-protocol.ts';
+import {readSaveCall} from './editor-save-protocol.ts';
 import {consumeEditorFragment} from './editor-client.ts';
 import {embedding} from './RecipientPage.ts';
 
@@ -28,10 +28,11 @@ async function openSession(pageId:string,code:string):Promise<Session>{
 function EmbeddedEditor({session}:{session:Session}){
   const editor=React.useRef<EditorHandle>(null);
   const {headers,details,initialFile}=session;
-  const onSave=async(file:File|null,roles:string[],fields:Field[])=>{const form=new FormData();if(file)form.set('file',file);form.set('roles',JSON.stringify(roles));form.set('fields',JSON.stringify(fields));const response=await fetch('/api/public/editor/save',{method:'POST',headers,body:form,cache:'no-store'});if(!response.ok)throw new Error('Save failed');const result=await response.json() as {id?:unknown};if(typeof result.id!=='string'||!/^[a-f0-9-]{36}$/.test(result.id))throw new Error('Invalid save result');window.parent.postMessage({type:'esign.editor.saved'},details.parentOrigin);return result.id;};
+  // A draft save tells the parent only through its answer to the request: the one-key "saved" message means the editor is done.
+  const onSave=async(file:File|null,roles:string[],fields:Field[],draft=false)=>{const form=new FormData();if(file)form.set('file',file);form.set('roles',JSON.stringify(roles));form.set('fields',JSON.stringify(fields));if(draft)form.set('draft','true');const response=await fetch('/api/public/editor/save',{method:'POST',headers,body:form,cache:'no-store'});if(!response.ok){if(draft){let code='';try{code=String((await response.json() as {error?:unknown}).error??'');}catch{/* no body */}throw new Error(code||'Save failed');}throw new Error('Save failed');}const result=await response.json() as {id?:unknown};if(typeof result.id!=='string'||!/^[a-f0-9-]{36}$/.test(result.id))throw new Error('Invalid save result');if(!draft)window.parent.postMessage({type:'esign.editor.saved'},details.parentOrigin);return result.id;};
   React.useEffect(()=>{
     let pending=false;
-    const onMessage=(event:MessageEvent)=>{const requestId=readSaveRequest(event,details.parentOrigin,window.parent);if(!requestId||pending)return;pending=true;void (async()=>{try{const result=await editor.current?.save();if(!result)throw new Error('Editor is not ready');window.parent.postMessage(result.ok?{type:'esign.editor.saved',requestId,templateId:result.templateId}:{type:'esign.editor.save-error',requestId,message:result.message},details.parentOrigin);}catch{window.parent.postMessage({type:'esign.editor.save-error',requestId,message:'Save unavailable. Check the saved result before retrying.'},details.parentOrigin);}finally{pending=false;}})();};
+    const onMessage=(event:MessageEvent)=>{const call=readSaveCall(event,details.parentOrigin,window.parent);if(!call||pending)return;const {requestId,draft}=call;pending=true;void (async()=>{try{const result=await editor.current?.save(draft);if(!result)throw new Error('Editor is not ready');window.parent.postMessage(result.ok?{type:'esign.editor.saved',requestId,templateId:result.templateId}:{type:'esign.editor.save-error',requestId,message:result.message},details.parentOrigin);}catch{window.parent.postMessage({type:'esign.editor.save-error',requestId,message:'Save unavailable. Check the saved result before retrying.'},details.parentOrigin);}finally{pending=false;}})();};
     window.addEventListener('message',onMessage);window.parent.postMessage({type:'esign.editor.ready'},details.parentOrigin);return()=>window.removeEventListener('message',onMessage);
   },[]);
   return h(FieldEditor,{ref:editor,initialRoles:details.roles.length?details.roles:undefined,initialFields:details.fields,initialFile,editingSource:true,embedded:true,onSave});

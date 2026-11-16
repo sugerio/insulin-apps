@@ -45,7 +45,7 @@ export const templates: DocTopic = {
           'Choose a role in the editor.',
           'Drag a field from the toolbar onto a page. Move a placed field by dragging it, or select it and use the arrow keys. Remove it with ×.',
           ['Fields are required. To let the signer leave one empty, select it and clear ', b('Required'), ' under ', b('Selected field'), '.'],
-          ['Repeat for every role, then choose ', b('Save fields'), '.'],
+          ['Repeat for every role, then choose ', b('Save'), ': the template is ready to use. Or choose ', b('Save draft'), ' to finish it later: a draft can\'t be used to send until it is saved as ready, and its ', b('Edit'), ' opens its fields again.'],
         ),
         h(DocTable, {
           label: 'Field types',
@@ -63,7 +63,7 @@ export const templates: DocTopic = {
       id: 'templates-dont-change',
       title: 'Editing, and what envelopes keep',
       body: [
-        p('A template\'s row has ', b('Send'), ' and a ⋯ menu: ', b('View'), ' (or a click on its name: its page, read only, with its details and, below them, its PDF with the box of each placed field, in its role\'s colour), ', b('Edit'), ' (its name and default signers on Details, the field editor on Fields), ', b('Tags'), ', ', b('Share'), ' and ', b('Delete'), ', each for the roles in it that may. The Access column says when a template is shared with you, and as what.'),
+        p('A template\'s row has ', b('Use'), ' (or ', b('Edit'), ', for a draft) and a ⋯ menu: ', b('View'), ' (or a click on its name: its page, read only, with its details and, below them, its PDF with the box of each placed field, in its role\'s colour), ', b('Edit'), ' (its name and default signers on Details, the field editor on Fields), ', b('Tags'), ', ', b('Share'), ' and ', b('Delete'), ', each for the roles in it that may. The Access column says when a template is shared with you, and as what.'),
         p('A template\'s PDF and fields never change: saving its fields makes a new version, which takes its place with the same name, owner, people and tags, while the earlier one is archived, like a deleted one: no longer listed in Esign, but kept for the envelopes sent from it and for a system that sends with its id. An envelope always keeps the exact PDF and fields it was sent with, so what a signer signs is what was sent, even after its template is edited or deleted.'),
       ],
     },

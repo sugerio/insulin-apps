@@ -65,7 +65,13 @@ The editor shows the PDF's pages on the left and the tools on the right.
    selecting it, and can't finish until every required one is signed.
 5. Repeat for every role. Each role needs at least one required **Signature** field. Place more where the same signer signs
    again (on several pages, say): the name they type goes in each one they sign.
-6. Choose **Save fields**. The page says "Fields saved as a new template. Send an envelope from it."
+6. Choose **Save**. The page says "Saved: the template is ready to use." and the template has **Use** in the list.
+
+Not finished? Choose **Save draft** instead: the template is saved as it is, even without a Signature field for every
+role, and the editor stays open. A draft shows **Draft** in the list and can't be used to send envelopes: its **Edit**
+opens its fields again, where **Save draft** saves it again and **Save** makes it ready, once every rule below holds.
+Until then it changes in place; once ready, editing its fields makes a new version, as for any template in use (only
+**Save**). **Status** above the list shows drafts or ready templates only.
 
 Choose **Close the editor** to leave without saving.
 
@@ -100,7 +106,7 @@ A default signer's name must be one the signature can draw, as for any signer.
 
 ## Edit, tag, share or delete a template
 
-Each template's row has **Send** and a **⋯** menu:
+Each template's row has **Use** (send an envelope from it), or **Edit** for a draft, and a **⋯** menu:
 
 - **View** (anyone who sees it), or a click on its name: its page, read only. **Details** shows its name, id, owner,
   your role in it, when it was uploaded, its signer roles in signing order with their default signers and fields, your
@@ -155,7 +161,9 @@ A host product can show the field editor inside its own pages. Its backend calls
    (`Content-Type: application/pdf`), once, before the page is opened.
 3. Frame the `url` in the host page. The editor posts `esign.editor.ready` to the parent; the host sends
    `esign.editor.save` with a request id, and the editor answers `esign.editor.saved` or `esign.editor.save-error`, only
-   to the parent origin.
+   to the parent origin. Add `draft: true` to save a draft: the editor stays open, and each save after the first saves
+   the same draft again; a save without it makes the template ready and ends the session. A template in use (with
+   `replace`) is saved as ready only; one that is a draft, with `replace`, is saved in place.
 4. Treat the message as a prompt only: read the result with `GET /api/template-editing-sessions/{id}`, which answers
    `{templateId}` once saved.
 

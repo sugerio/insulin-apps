@@ -270,10 +270,10 @@ tables:
 
 | Table | Holds |
 | --- | --- |
-| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none), the host's `name` and `metadata_json`, and `default_signers_json` (who usually signs as some roles, `default-signers.ts`; the one part of a template that can change, and never evidence) |
+| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none; pre-filled ones, type `Prefill`, nobody's, with a name, label and maybe a default), the host's `name` and `metadata_json`, and `default_signers_json` (who usually signs as some roles, `default-signers.ts`; the one part of a template that can change, and never evidence) |
 | `envelopes` | Tenant, template, status, creation time, `request_sha256`, `details_json` |
 | `tasks` | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
-| `artifacts` | Each envelope's initial document (D0): object key and SHA-256 |
+| `artifacts` | Each envelope's initial document (D0): object key and SHA-256. With pre-filled fields, D0 is the template's PDF with their values drawn on it when the envelope was sent (`prefill.ts`: loaded and saved as a signature's output is, so the same values give the same bytes and a retry stores the same D0); the envelope's `fields_json` then keeps its signers' fields only, and `details_json` the values (`prefill`) |
 | `access_codes` | One-time page codes (hashed) with scope, tenant, subject, origin, expiry, `used_at`, and how a recipient code was issued (`entry_json`) |
 | `access_sessions` | Page sessions (hashed tokens) with the same fields and `otp_verified_at` |
 | `invitations` | One per task Esign invites by email: the SHA-256 of its latest link's token, when it was reserved and sent |

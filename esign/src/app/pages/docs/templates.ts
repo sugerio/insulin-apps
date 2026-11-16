@@ -57,6 +57,7 @@ export const templates: DocTopic = {
           ],
         }),
         p('The signer signs each field by selecting it, and can\'t finish until every required one is signed. The editor won\'t save until every role has a required Signature field, and it saves at most 20 fields.'),
+        p(b('Pre-filled fields'), ' are filled in when an envelope is sent, before anyone signs, such as the partner\'s legal name. Nobody signs them: whoever sends gives each value by its name, or its default is used, and it is drawn on the document signers see. In the editor, give one a ', b('Label'), ' and a ', b('Name'), ' (such as partner.legalName), choose ', b('Add pre-filled field'), ' and drag it into place; drag its entry again to show it somewhere else too. Select it to change its label, name, default or whether it is required, wherever it is placed. Values are plain English letters, digits and punctuation, at most 128 characters, and must fit their box.'),
       ],
     },
     {

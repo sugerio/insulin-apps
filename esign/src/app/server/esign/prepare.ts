@@ -33,10 +33,12 @@ export class InitialDocumentConflict extends Error {}
  * Copies the template's source object to the envelope's initial document key, unless an earlier
  * attempt already stored the same bytes there. Returns the artifact row to insert with the envelope.
  */
-export async function storeInitialDocument(bucket: BlobStore, sourceKey: string, envelopeId: string): Promise<{ id: string; objectKey: string; sha256: string }> {
+export async function storeInitialDocument(bucket: BlobStore, sourceKey: string, envelopeId: string, transform?: (source: Uint8Array) => Promise<Uint8Array>): Promise<{ id: string; objectKey: string; sha256: string }> {
   const source = await bucket.get(sourceKey);
   if (!source) throw new Error('Source artifact missing');
-  const bytes = await source.arrayBuffer();
+  // With `transform` (pre-filled values drawn on it, prefill.ts): the same source and values give the same bytes, so a
+  // retry stores, or finds, the very same document.
+  const bytes: ArrayBuffer = transform ? (await transform(new Uint8Array(await source.arrayBuffer()))).slice().buffer as ArrayBuffer : await source.arrayBuffer();
   const hash = await sha256(bytes);
   const key = initialDocumentKey(envelopeId);
   const stored = await bucket.put(key, bytes, { onlyIf: { etagDoesNotMatch: '*' } });

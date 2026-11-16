@@ -106,3 +106,33 @@ test('the document name: the template\'s, filled in and followed until one is ty
     assert.equal(saved.documentName, 'Reseller agreement', 'emptied: the template\'s is sent');
   } finally { await app.unmount(); }
 });
+
+test('pre-filled fields on New envelope: their defaults filled in, required ones asked for, sent by name', async () => {
+  const PREFILLED = { ...TEMPLATE, id: 'tpl-3', name: 'Partner agreement', prefill: [{ name: 'partner.legalName', label: 'Partner legal name', required: true }, { name: 'partner.type', label: 'Partner type', required: false, default: 'Reseller' }] };
+  const app = await renderMember('/envelopes/new?template=tpl-3', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path === '/api/templates' || c.path.startsWith('/api/templates?')) return json({ templates: [PREFILLED] });
+    if (c.path.startsWith('/api/contacts')) return json({ contacts: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === '/api/envelopes' && c.method === 'POST') return json({ id: DRAFT_ID, status: 'IN_PROGRESS' }, 201);
+    if (c.path === `/api/envelopes/${DRAFT_ID}`) return json({ id: DRAFT_ID, templateId: 'tpl-3', status: 'IN_PROGRESS', tasks: [], owner: OWNER, myRole: 'owner', tags: [] });
+    if (c.path.startsWith(`/api/envelopes/${DRAFT_ID}/`)) return json(c.path.endsWith('/audit') ? { events: [] } : { id: DRAFT_ID, myRole: 'owner', owner: OWNER, shares: [] });
+  });
+  try {
+    assert.match(app.text(), /Pre-filled fields/);
+    assert.equal(app.byId('prefill-partner.legalName').props.value, '');
+    assert.equal(app.byId('prefill-partner.type').props.value, 'Reseller', 'its default');
+    await app.type(app.byId('signer-0-name'), 'Pat Partner');
+    await app.type(app.byId('signer-0-email'), 'pat@partner.example');
+    await app.click(app.button('Send for signature'), 'Send');
+    assert.match(app.text(), /Fill in Partner legal name\./);
+    await app.type(app.byId('prefill-partner.legalName'), 'Café Ltd');
+    await app.click(app.button('Send for signature'), 'Send');
+    assert.match(app.text(), /Partner legal name: use plain English letters, digits and punctuation/);
+    assert.equal(app.calls.filter((c) => c.method === 'POST').length, 0, 'nothing asked of the server');
+    await app.type(app.byId('prefill-partner.legalName'), 'Kestrel Systems Ltd');
+    await app.click(app.button('Send for signature'), 'Send');
+    const sent = JSON.parse(String(app.calls.find((c) => c.method === 'POST' && c.path === '/api/envelopes')!.body));
+    assert.deepEqual(sent.prefill, { 'partner.legalName': 'Kestrel Systems Ltd', 'partner.type': 'Reseller' });
+  } finally { await app.unmount(); }
+});

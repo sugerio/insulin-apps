@@ -6,7 +6,7 @@ import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedB
 import { envelopeDetails, taskDetails, type EnvelopeDetails, type TaskDetails } from './details.ts';
 import { parseMetadata, parseTemplateName, storedMetadata, unknownKeys, type Metadata } from './metadata.ts';
 import { PDFDocument } from 'pdf-lib';
-import { assertEditorSigningFields, assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf, validateTemplateFields, type TemplateField } from './fields.ts';
+import { assertEditorSigningFields, assertNoOverlappingFields, PREFILL, prefillDefinitions, signingFieldsOf, validateFieldPlacement, validateFields, validateFieldsPdf, validateTemplateFields, type PrefillDefinition, type TemplateField } from './fields.ts';
 import { assertRenderableRecipientNames } from './field-render.ts';
 import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './prepare.ts';
 import { mountSigningRoutes } from './signing-routes.ts';
@@ -26,6 +26,7 @@ import { atLeast, documentRole, effectiveRole, mountShareRoutes, ownersOf, parse
 import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsByDocument, tagsOf, tagWrites } from './tags.ts';
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
+import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
 import { callerOf, dueScheduled, parseSendAt, recordScheduleFailure, scheduledBy, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
@@ -203,7 +204,7 @@ app.get('/api/templates', async (context) => {
     .bind(...list.binds([]), query.before, ...binds, query.limit).all<Owned & { roles_json: string; fields_json: string; created_at: number; name: string | null; metadata_json: string; default_signers_json: string; status: string }>();
   const owned = await ownership(context, 'template', results);
   const last = results.length === query.limit ? results[results.length - 1] : undefined;
-  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), createdAt: row.created_at, status: row.status, ...owned.get(row.id) })), ...(last ? { next: last.created_at } : {}) });
+  return context.json({ templates: results.map((row) => ({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), fields: placedFields(row.fields_json), prefill: templatePrefill(row.fields_json), createdAt: row.created_at, status: row.status, ...owned.get(row.id) })), ...(last ? { next: last.created_at } : {}) });
 });
 
 const ENVELOPE_STATUSES = new Set(['DRAFT', 'IN_PROGRESS', 'FINALIZING', 'COMPLETED', 'VOIDED', 'DECLINED', 'EXPIRED']);
@@ -371,9 +372,9 @@ app.get('/api/templates/:id', async (context) => {
   if(hasFields){try{
     const source=await context.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(row.id,context.get('tenantId')).first<{object_key:string}>();
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
-    const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);fieldsSupported=true;
+    const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const roles=JSON.parse(row.roles_json),all=validateTemplateFields(JSON.parse(row.fields_json!),roles,pdf.getPageCount());assertNoOverlappingFields(all);validateFieldPlacement(pdf,all);supportedFields(JSON.stringify(signingFieldsOf(all)),roles,pdf.getPageCount());fieldsSupported=true;
   }catch{fieldsSupported=false;}}
-  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json, true), createdAt: row.created_at, status: row.status, ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }), ...(await ownership(context, 'template', [row])).get(row.id) });
+  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json, true), prefill: templatePrefill(row.fields_json), createdAt: row.created_at, status: row.status, ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }), ...(await ownership(context, 'template', [row])).get(row.id) });
 });
 
 // The template's PDF as uploaded, to read: anyone who sees the template (Viewer). Signers sign a copy of it.
@@ -444,12 +445,20 @@ function templateLabels(row: { name: string | null; metadata_json: string; roles
   return { ...(row.name ? { name: row.name } : {}), metadata: storedMetadata(row.metadata_json), defaultSigners: storedDefaultSigners(row.default_signers_json, JSON.parse(row.roles_json)) };
 }
 
-type PlacedField = { type: string; role: string; page: number; rect: { x: number; y: number; width: number; height: number }; required?: boolean };
+type PlacedField = { type: string; role: string; page: number; rect: { x: number; y: number; width: number; height: number }; required?: boolean; name?: string; label?: string };
 /**
  * The placed fields as a host previews them: type, role, page (1-based) and the box in
  * normalized coordinates of the displayed page (top-left origin); with `withRequired` (one template), whether the
  * signer must fill each. Ids stay inside.
  */
+/** A template's pre-filled fields, once per name (fields.ts): what a sender gives values for. */
+function templatePrefill(raw: string | undefined): PrefillDefinition[] {
+  try {
+    const value: unknown = JSON.parse(raw ?? '[]');
+    return Array.isArray(value) ? prefillDefinitions(value.filter((f): f is TemplateField => !!f && typeof f === 'object' && f.type === PREFILL && typeof f.name === 'string' && typeof f.label === 'string' && typeof f.required === 'boolean')) : [];
+  } catch { return []; }
+}
+
 function placedFields(raw: string | undefined, withRequired = false): PlacedField[] {
   if (raw === undefined) return [];
   let value: unknown;
@@ -458,18 +467,18 @@ function placedFields(raw: string | undefined, withRequired = false): PlacedFiel
   const out: PlacedField[] = [];
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
-    const f = item as { type?: unknown; role?: unknown; page?: unknown; required?: unknown; rect?: { x?: unknown; y?: unknown; width?: unknown; height?: unknown } };
+    const f = item as { type?: unknown; role?: unknown; page?: unknown; required?: unknown; name?: unknown; label?: unknown; rect?: { x?: unknown; y?: unknown; width?: unknown; height?: unknown } };
     const r = f.rect;
     if (typeof f.type !== 'string' || typeof f.role !== 'string' || !Number.isSafeInteger(f.page) || !r || typeof r !== 'object') continue;
     const { x, y, width, height } = r;
     if (![x, y, width, height].every((v) => typeof v === 'number' && Number.isFinite(v))) continue;
-    out.push({ type: f.type, role: f.role, page: f.page as number, rect: { x: x as number, y: y as number, width: width as number, height: height as number }, ...(withRequired ? { required: f.required !== false } : {}) });
+    out.push({ type: f.type, role: f.role, page: f.page as number, rect: { x: x as number, y: y as number, width: width as number, height: height as number }, ...(withRequired ? { required: f.required !== false } : {}), ...(f.type === PREFILL && typeof f.name === 'string' && typeof f.label === 'string' ? { name: f.name, label: f.label } : {}) });
   }
   return out;
 }
 
 /** The fields a create-envelope request and each of its recipients may have; any other is refused. */
-const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata', 'message', 'tags', 'share'];
+const ENVELOPE_FIELDS = ['templateId', 'recipients', 'documentName', 'documentVersion', 'sender', 'metadata', 'message', 'tags', 'share', 'prefill'];
 const validRecipientName = (name: unknown): name is string => typeof name === 'string' && !!name.trim() && name.length <= 200;
 const validRecipientEmail = (email: unknown): email is string => typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBehalfOf', 'namedBy', 'afterSigning', 'delivery', 'message'];
@@ -693,7 +702,10 @@ async function sendEnvelope(scope: SendScope, body: Record<string, unknown>, tar
     if (value && typeof value === 'object' && !Array.isArray(value)) unknownFields.push(...unknownKeys(value, allowed).map((field) => `${name}.${field}`));
   }
   if (unknownFields.length) return scope.json({ error: 'unknown_field', fields: unknownFields }, 422);
-  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown; message?: unknown; tags?: unknown; share?: unknown };
+  const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown; message?: unknown; tags?: unknown; share?: unknown; prefill?: unknown };
+  // The template's pre-filled fields' values, by name (prefill.ts).
+  const prefillInput = parsePrefill(input.prefill);
+  if (prefillInput === 'invalid') return scope.json({ error: 'invalid_prefill' }, 422);
   // The sender's own tags for it (tags.ts), and whom else it is shared with (ownership.ts).
   const tags = parseTags(input.tags), shares = parseShares(input.share);
   if (tags === 'invalid' || shares === 'invalid') return scope.json({ error: 'invalid_envelope' }, 422);
@@ -757,7 +769,7 @@ async function sendEnvelope(scope: SendScope, body: Record<string, unknown>, tar
     recipients.push({ role: recipient.role, ...(recipient.name === undefined ? {} : { name: recipient.name as string }), ...(recipient.email === undefined ? {} : { email: recipient.email as string }), ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}), ...(delivery === 'email' ? { delivery } : {}), ...(own ? { message: own } : {}) });
   }
   const tenantId = scope.tenantId;
-  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}), ...(tags.length ? { tags } : {}), ...(shares.length ? { share: shares } : {}) });
+  const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}), ...(tags.length ? { tags } : {}), ...(shares.length ? { share: shares } : {}), ...(prefillInput ? { prefill: prefillInput } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
   // Idempotency is by the envelope itself: its id comes from the tenant and the Idempotency-Key, and
   // it keeps the hash of the request that created it. A retry of that request gets the response a
@@ -803,16 +815,21 @@ async function sendEnvelope(scope: SendScope, body: Record<string, unknown>, tar
     try { assertEditorSigningFields(JSON.parse(template.fields_json ?? '[]') as TemplateField[], roles); }
     catch { return scope.json({ error: 'fields_not_ready' }, 422); }
   }
+  // Every placed field (pre-filled ones among them), the source they are on, and the signers' fields alone.
+  let placed: TemplateField[] = [], source: Uint8Array | null = null;
   if (template.fields_json !== undefined) {
     try {
       const raw:unknown=JSON.parse(template.fields_json);
       if(!Array.isArray(raw))throw new Error('Invalid fields');
       if(raw.length){
         const object=await scope.env.ARTIFACTS.get(template.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Source unavailable');
-        const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(template.fields_json,roles,pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);
+        source=new Uint8Array(await object.arrayBuffer());
+        const pdf=await PDFDocument.load(source,{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);placed=validateTemplateFields(raw,roles,pdf.getPageCount());assertNoOverlappingFields(placed);validateFieldPlacement(pdf,placed);
+        supportedFields(JSON.stringify(signingFieldsOf(placed)),roles,pdf.getPageCount());
       }
     } catch { return scope.json({ error: 'positioned_fields_not_supported' }, 422); }
   }
+  const prefillFields = placed.filter((f) => f.type === PREFILL);
   if (roles.length !== recipients.length || new Set(recipients.map((r) => r.role)).size !== roles.length || recipients.some((r) => !roles.includes(r.role))) return scope.json({ error: 'invalid_roles' }, 422);
   // A name or an email a recipient left out is their role's default signer's (default-signers.ts), as the
   // template has them now. The request's hash is of the request as sent: a retry gets this envelope even if
@@ -823,6 +840,19 @@ async function sendEnvelope(scope: SendScope, body: Record<string, unknown>, tar
   const people = filled as ((typeof recipients)[number] & { name: string; email: string })[];
   try { await assertRenderableRecipientNames(people.map((recipient) => recipient.name)); }
   catch { return scope.json({ error: 'unsupported_recipient_name' }, 422); }
+  // Pre-filled fields: their values, as given or by default, drawn on the document signers see (prefill.ts). An
+  // uploaded document has none.
+  const resolved = resolvePrefill(prefillDefinitions(placed), prefillInput);
+  if ('error' in resolved) return scope.json(resolved, 422);
+  const prefill = resolved.values.filter((v) => v.value);
+  let stamped: Uint8Array | null = null;
+  if (prefill.length && source) {
+    try { stamped = await stampPrefill(source, placed, prefill); }
+    catch (error) { if (error instanceof PrefillDoesNotFit) return scope.json({ error: 'prefill_too_long', fields: error.fields }, 422); throw error; }
+  }
+  // The envelope keeps its signers' fields only: its template's, byte for byte, when it has no pre-filled ones.
+  const envelopeFields = prefillFields.length ? JSON.stringify(signingFieldsOf(placed)) : template.fields_json ?? '[]';
+  const details = JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}), ...(prefill.length ? { prefill } : {}) } satisfies EnvelopeDetails);
   // Checked to be sent later: every signer's deadline comes after it is sent, and nothing more is done.
   if (options.check) {
     if (deadlines.some((deadline) => deadline !== null && deadline <= options.check!.sendAt)) return scope.json({ error: 'deadline_before_send_at' }, 422);
@@ -834,7 +864,7 @@ async function sendEnvelope(scope: SendScope, body: Record<string, unknown>, tar
   let d0: { id: string; objectKey: string; sha256: string };
   // An uploaded document is the envelope's initial document already.
   if (uploadedDocument) d0 = { id: initialDocumentId(id), objectKey: uploadedDocument.object_key, sha256: uploadedDocument.sha256 };
-  else try { d0 = await storeInitialDocument(scope.env.ARTIFACTS, template.object_key, id); }
+  else try { d0 = await storeInitialDocument(scope.env.ARTIFACTS, template.object_key, id, stamped ? async () => stamped! : undefined); }
   catch (error) {
     if (!(error instanceof InitialDocumentConflict)) return scope.json({ error: 'preparation_failed' }, 503);
     // Another request with this key stored a different document: it is a different request.
@@ -855,8 +885,8 @@ async function sendEnvelope(scope: SendScope, body: Record<string, unknown>, tar
     fromDraft
       // A draft becomes the envelope sent, in this batch, only while it is a draft: otherwise its status would be null,
       // which the table refuses, and nothing in the batch is written.
-      ? scope.env.DB.prepare(`UPDATE envelopes SET status = CASE WHEN status = '${DRAFT}' THEN ? ELSE NULL END, template_id = ?, created_at = ?, request_sha256 = ?, roles_json = ?, fields_json = ?, details_json = ?, draft_json = NULL WHERE id = ? AND tenant_id = ?`).bind(CREATED_STATUS, input.templateId ?? null, now, hash, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails), id, tenantId)
-      : scope.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, roles_json, fields_json, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
+      ? scope.env.DB.prepare(`UPDATE envelopes SET status = CASE WHEN status = '${DRAFT}' THEN ? ELSE NULL END, template_id = ?, created_at = ?, request_sha256 = ?, roles_json = ?, fields_json = ?, details_json = ?, draft_json = NULL WHERE id = ? AND tenant_id = ?`).bind(CREATED_STATUS, input.templateId ?? null, now, hash, template.roles_json, envelopeFields, details, id, tenantId)
+      : scope.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, roles_json, fields_json, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, template.roles_json, envelopeFields, details),
     ...people.map((recipient, index) => scope.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
     ...(uploaded ? [] : [scope.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256)]),
     // The organization's contacts (contacts.ts): each signer added or refreshed, with the envelope only.
@@ -917,7 +947,7 @@ app.get('/api/envelopes/:id', async (context) => {
     roles: envelope.roles_json ? JSON.parse(envelope.roles_json) as string[] : [],
     fields: placedFields(envelope.fields_json ?? '[]', true),
   } : undefined;
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(draft === undefined ? {} : { draft }), ...scheduled, ...(upload ? { upload } : {}), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(details.prefill ? { prefill: details.prefill } : {}), ...(draft === undefined ? {} : { draft }), ...scheduled, ...(upload ? { upload } : {}), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
 });
 
 /**

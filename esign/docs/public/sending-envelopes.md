@@ -91,6 +91,7 @@ the envelope is not changed.
 
 | Field | What it does |
 | --- | --- |
+| **Pre-filled fields** | Shown only when the template has some: one box each, with its default filled in. Required ones must be filled in. The values are drawn on the document before anyone signs. |
 | **Document name** | Shown to signers, named in the statement they agree to when they sign, and the name of the signed PDF. Filled in with the template's name (on **Upload and send**, the PDF's file name), which you can change; left empty, the template's is used, else "Document" and the day. Sent through the API without one, signers see "the document". |
 | **Version** and **Published (YYYY-MM-DD)** | Which version of the document this is, and when it was published. |
 | **Sender name** and **Sender company** | Who sent it, shown on the signing page. |

@@ -25,6 +25,8 @@ import { SharePanel } from './SharePanel.ts'
 import { TagList, TagsField } from './TagsField.ts'
 
 const h = React.createElement
+/** The fields a template's signers sign: every placed field but the pre-filled ones. */
+const signingCount = (t: { fields: { type: string }[] }) => t.fields.filter((f) => f.type !== 'Prefill').length
 const ROLE = /^[A-Za-z0-9_-]{1,64}$/
 /**
  * `defaultSigners`: who usually signs as each role of a new PDF, set on the template once the editor has saved it.
@@ -370,7 +372,7 @@ export function TemplatesPage({ me }: { me: Me }) {
                   t.name || t.status === 'draft' ? h('span', { className: 'flex items-center gap-2 font-medium' }, t.name ?? null, t.status === 'draft' ? h(Badge, { variant: 'outline', className: 'font-normal' }, 'Draft') : null) : null, h('span', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id)),
                 h(TagList, { tags: t.tags })),
               h(TableCell, { className: 'whitespace-normal' }, t.roles.map((role) => { const d = t.defaultSigners?.[role]; return d ? `${role} (${d.name ?? d.email})` : role }).join(', ')),
-              h(TableCell, null, t.fields.length ? `${t.fields.length} placed ${t.fields.length === 1 ? 'field' : 'fields'}` : t.status === 'draft' ? 'No fields yet' : 'A signature page'),
+              h(TableCell, null, signingCount(t) ? `${signingCount(t)} placed ${signingCount(t) === 1 ? 'field' : 'fields'}` : t.status === 'draft' ? 'No fields yet' : 'A signature page'),
               h(TableCell, { className: 'text-muted-foreground' }, ownerName(t.owner, me)),
               // Whether someone shared it with the member, and as what; theirs says nothing.
               h(TableCell, null, t.myRole && t.myRole !== 'owner' ? h(Badge, { variant: 'secondary' }, `Shared with you · ${ROLE_NAMES[t.myRole]}`) : null),

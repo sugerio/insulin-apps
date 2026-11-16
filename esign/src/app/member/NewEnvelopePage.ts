@@ -37,6 +37,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   const [perSigner, setPerSigner] = useState(false)
   // The sender's own tags for it; theirs on the template are added by Esign.
   const [tags, setTags] = useState<string[]>([])
+  // The template's pre-filled fields' values, by name: as typed, else their defaults.
+  const [prefill, setPrefill] = useState<Record<string, string>>({})
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
   const attempt = useRef<{ body: string; key: string } | null>(null)
@@ -71,6 +73,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   const autoName = useRef('')
   useEffect(() => {
     if (!template) return
+    // Each pre-filled field: what was typed for its name, else its default.
+    setPrefill((old) => Object.fromEntries((template.prefill ?? []).map((d) => [d.name, old[d.name] ?? d.default ?? ''])))
     const previous = autoName.current, suggested = defaultDocumentName(template)
     autoName.current = suggested
     setDoc((d) => (!d.name.trim() || d.name === previous ? { ...d, name: suggested } : d))
@@ -87,6 +91,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     filled.current = true
     const form = formFromRequest(saved, template.roles)
     setSigners(form.signers); setDoc(form.doc); setSignBy(form.signBy); setNote(form.note); setPerSigner(form.perSigner); setTags(form.tags)
+    const savedPrefill = saved.prefill && typeof saved.prefill === 'object' && !Array.isArray(saved.prefill) ? saved.prefill as Record<string, unknown> : {}
+    setPrefill(Object.fromEntries((template.prefill ?? []).map((d) => [d.name, typeof savedPrefill[d.name] === 'string' ? savedPrefill[d.name] as string : d.default ?? ''])))
   }, [saved, template?.id])
 
   if (!canManage(me)) {
@@ -101,7 +107,9 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     const people = perSigner ? signers : signers.map((s) => ({ ...s, subject: '', body: '' }))
     // Never without a name: the template's, when the field was emptied.
     const named = doc.name.trim() || !template ? doc : { ...doc, name: defaultDocumentName(template) }
-    return { ...envelopeRequest(templateId, template?.roles ?? [], people, named, signBy, perSigner ? { subject: '', body: '' } : note), ...(tags.length ? { tags } : {}) }
+    // The pre-filled values typed (an empty one is none: its default, or nothing).
+    const values = Object.fromEntries((template?.prefill ?? []).map((d) => [d.name, (prefill[d.name] ?? '').trim()]).filter(([, v]) => v))
+    return { ...envelopeRequest(templateId, template?.roles ?? [], people, named, signBy, perSigner ? { subject: '', body: '' } : note), ...(tags.length ? { tags } : {}), ...(Object.keys(values).length ? { prefill: values } : {}) }
   }
   /** Saves the form as a draft, as it is: the first time a new one (then this page is its address), later in place. */
   function saveDraft() {
@@ -122,6 +130,10 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   /** What stops the form from being sent, said as the member can fix it; '' when nothing does. */
   function sendProblem(): string {
     if (!template) return 'Choose a template.'
+    const missing = (template.prefill ?? []).find((d) => d.required && !(prefill[d.name] ?? '').trim())
+    if (missing) return `Fill in ${missing.label}.`
+    const undrawable = (template.prefill ?? []).find((d) => !/^[\x20-\x7e]{0,128}$/.test((prefill[d.name] ?? '').trim()))
+    if (undrawable) return `${undrawable.label}: use plain English letters, digits and punctuation, at most 128 characters.`
     if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) return 'Enter a name and an email address for each signer.'
     if ([note.subject, ...signers.map((s) => s.subject ?? '')].some((subject) => subject.trim().length > 100)) return 'Use at most 100 characters for an email subject.'
     if (signBy.trim()) {
@@ -184,7 +196,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
             : h(Field, { label: 'Template', htmlFor: 'envelope-template' },
               h(NativeSelect, { id: 'envelope-template', value: templateId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setTemplateId(e.target.value) },
                 h(NativeSelectOption, { value: '' }, 'Choose a template'),
-                ...templates.map((t) => h(NativeSelectOption, { key: t.id, value: t.id }, `${t.name ? `${t.name} · ` : ''}${t.roles.join(', ')} · ${t.fields.length ? `${t.fields.length} fields` : 'signature page'} · ${dateTime(t.createdAt)}`)))))),
+                ...templates.map((t) => h(NativeSelectOption, { key: t.id, value: t.id }, `${t.name ? `${t.name} · ` : ''}${t.roles.join(', ')} · ${t.fields.some((f) => f.type !== 'Prefill') ? `${t.fields.filter((f) => f.type !== 'Prefill').length} fields` : 'signature page'} · ${dateTime(t.createdAt)}`)))))),
     template ? h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Signers')), h(CardDescription, null, 'One for each role: your contacts are suggested as you type a name or email. Each is emailed an invitation when it is their turn. A title and a company are shown on the signing page and recorded with the signature.')),
       h(CardContent, { className: 'flex flex-col gap-6' }, ...template.roles.map((role, i) => h('fieldset', { key: role, className: 'grid gap-4 rounded-lg border p-4 sm:grid-cols-2' },
@@ -198,6 +210,10 @@ export function NewEnvelopePage({ me }: { me: Me }) {
           h('div', { key: 'body', className: 'sm:col-span-2' }, h(Field, { label: `Message to ${signers[i]?.name.trim() || 'this signer'} (optional)`, htmlFor: `signer-${i}-body` },
             h(Textarea, { id: `signer-${i}-body`, rows: 3, maxLength: 10000, value: signers[i]?.body ?? '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSigner(i, 'body', e.target.value) }))),
         ] : []))))) : null,
+    template?.prefill?.length ? h(Card, null,
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Pre-filled fields')), h(CardDescription, null, 'Filled in on the document when it is sent, before anyone signs. Signers see them and can\'t change them.')),
+      h(CardContent, { className: 'grid gap-4 sm:grid-cols-2' }, ...template.prefill.map((d) => h('div', { key: d.name },
+        text(`prefill-${d.name}`, `${d.label}${d.required ? '' : ' (optional)'}`, prefill[d.name] ?? '', (v) => setPrefill((old) => ({ ...old, [d.name]: v })), { hint: `${d.name}${d.default ? ` · default: ${d.default}` : ''}`, required: d.required }))))) : null,
     template ? h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Document')), h(CardDescription, null, 'Shown to signers. All optional.')),
       h(CardContent, { className: 'grid gap-4 sm:grid-cols-2' },

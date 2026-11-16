@@ -5,7 +5,7 @@ import {consumeEditorFragment} from './editor-client.ts';
 import {embedding} from './RecipientPage.ts';
 
 const h=React.createElement;
-type Session={headers:Record<string,string>;details:{roles:string[];roleLabels?:Record<string,string>;fields:Field[];sourceTemplateId:string|null;hasStagedSource?:boolean;parentOrigin:string};initialFile:File|null};
+type Session={headers:Record<string,string>;details:{roles:string[];roleLabels?:Record<string,string>;prefill?:boolean;fields:Field[];sourceTemplateId:string|null;hasStagedSource?:boolean;parentOrigin:string};initialFile:File|null};
 
 /**
  * /editor/page/:id#<code>: the field editor a host frames. It exchanges the one-time code for an
@@ -45,7 +45,7 @@ function EmbeddedEditor({session}:{session:Session}){
     const onMessage=(event:MessageEvent)=>{const call=readSaveCall(event,details.parentOrigin,window.parent);if(!call||pending)return;const {requestId,draft}=call;pending=true;void (async()=>{try{const result=await editor.current?.save(draft);if(!result)throw new Error('Editor is not ready');window.parent.postMessage(result.ok?{type:'esign.editor.saved',requestId,templateId:result.templateId}:{type:'esign.editor.save-error',requestId,message:result.message},details.parentOrigin);}catch{window.parent.postMessage({type:'esign.editor.save-error',requestId,message:'Save unavailable. Check the saved result before retrying.'},details.parentOrigin);}finally{pending=false;}})();};
     window.addEventListener('message',onMessage);window.parent.postMessage({type:'esign.editor.ready'},details.parentOrigin);return()=>window.removeEventListener('message',onMessage);
   },[]);
-  return h(FieldEditor,{ref:editor,roleLabels:details.roleLabels,initialRoles:details.roles.length?details.roles:undefined,initialFields:details.fields,initialFile,editingSource:true,embedded:true,onSave});
+  return h(FieldEditor,{ref:editor,allowPrefill:details.prefill!==false,roleLabels:details.roleLabels,initialRoles:details.roles.length?details.roles:undefined,initialFields:details.fields,initialFile,editingSource:true,embedded:true,onSave});
 }
 
 export function EditorPage(){

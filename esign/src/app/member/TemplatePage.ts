@@ -7,7 +7,7 @@ import { ArrowLeft, Send } from 'lucide-react'
 import { Badge } from '../components/ui/badge.ts'
 import { buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.ts'
-import { api, apiJson, canManage, dateTime, describeError, ownerName, ROLE_NAMES, type DefaultSigner, type Me, type Metadata, type Owned } from './api.ts'
+import { api, apiJson, canManage, dateTime, describeError, ownerName, ROLE_NAMES, type DefaultSigner, type Me, type Metadata, type Owned, type PrefillDefinition } from './api.ts'
 import { Notice, PageHeader } from './parts.ts'
 import { Link } from './router.ts'
 import { TagList } from './TagsField.ts'
@@ -15,10 +15,12 @@ import { loadPart, reloadForUpdate, StaleVersion } from './update.ts'
 
 const h = React.createElement
 
-type PlacedField = { type: string; role: string; page: number; required?: boolean; rect: { x: number; y: number; width: number; height: number } }
+/** A placed field; a pre-filled one (type Prefill) has no role, and a name and a label instead. */
+type PlacedField = { type: string; role: string; page: number; required?: boolean; rect: { x: number; y: number; width: number; height: number }; name?: string; label?: string }
+const PREFILL_COLOR = '#a16207'
 export type TemplateDetails = Owned & {
   id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]
-  fields: PlacedField[]; createdAt?: number; archivedAt?: number; status?: 'active' | 'draft'
+  fields: PlacedField[]; prefill?: PrefillDefinition[]; createdAt?: number; archivedAt?: number; status?: 'active' | 'draft'
 }
 
 /**
@@ -81,6 +83,8 @@ export function TemplatePage({ me, id }: { me: Me; id: string }) {
 
   const archived = template.archivedAt !== undefined, draft = template.status === 'draft'
   const metadata = Object.entries(template.metadata ?? {})
+  // What signers sign: every placed field but the pre-filled ones.
+  const signing = template.fields.filter((f) => f.type !== 'Prefill').length
   return h('div', { className: 'flex flex-col gap-6' },
     back,
     h(PageHeader, {
@@ -113,7 +117,11 @@ export function TemplatePage({ me, id }: { me: Me; id: string }) {
                   h('span', { className: 'text-xs text-muted-foreground' }, d ? `Usually ${[d.name, d.email].filter(Boolean).join(', ')}` : 'No default signer'),
                   template.fields.length ? h('span', { className: 'text-xs text-muted-foreground' }, fieldsOf(template.fields, role)) : null))
             }))),
-          h(Detail, { term: 'Signed on' }, template.fields.length ? `${template.fields.length} placed ${template.fields.length === 1 ? 'field' : 'fields'}` : draft ? 'No fields yet' : 'A signature page added at the end'),
+          h(Detail, { term: 'Signed on' }, signing ? `${signing} placed ${signing === 1 ? 'field' : 'fields'}` : draft ? 'No fields yet' : 'A signature page added at the end'),
+          template.prefill?.length ? h(Detail, { term: 'Pre-filled fields' },
+            h('ul', { 'aria-label': 'Pre-filled fields', className: 'flex flex-col gap-1' }, ...template.prefill.map((d) => h('li', { key: d.name, className: 'flex flex-col' },
+              h('span', { className: 'font-medium' }, `${d.label}${d.required ? '' : ' (optional)'}`),
+              h('span', { className: 'text-xs text-muted-foreground' }, h('code', null, d.name), d.default ? ` · default: ${d.default}` : ''))))) : null,
           h(Detail, { term: 'Your tags' }, template.tags?.length ? h(TagList, { tags: template.tags }) : h('span', { className: 'text-muted-foreground' }, 'None')),
           ...metadata.map(([key, value]) => h(Detail, { key, term: key }, value))))),
     h(Card, { 'aria-label': 'Document' },
@@ -157,12 +165,13 @@ function DocumentView({ id, roles, fields }: { id: string; roles: string[]; fiel
     ...fields.map((field, i) => {
       const page = pages[field.page - 1]
       if (!page) return null
-      const color = colorOf(roles, field.role)
-      const optional = field.required === false && field.type !== 'Date signed'
+      const prefilled = field.type === 'Prefill'
+      const color = prefilled ? PREFILL_COLOR : colorOf(roles, field.role)
+      const optional = !prefilled && field.required === false && field.type !== 'Date signed'
       return createPortal(h('div', {
-        key: i, role: 'note', 'data-template-field': i, 'aria-label': `${field.role}: ${field.type}${optional ? ', optional' : ''}, page ${field.page}`,
-        style: { position: 'absolute', boxSizing: 'border-box', left: `${field.rect.x * 100}%`, top: `${field.rect.y * 100}%`, width: `${field.rect.width * 100}%`, height: `${field.rect.height * 100}%`, border: `2px ${optional ? 'dashed' : 'solid'} ${color}`, background: `${color}14`, borderRadius: 2, lineHeight: 'normal' },
+        key: i, role: 'note', 'data-template-field': i, 'aria-label': prefilled ? `Pre-filled: ${field.label}, page ${field.page}` : `${field.role}: ${field.type}${optional ? ', optional' : ''}, page ${field.page}`,
+        style: { position: 'absolute', boxSizing: 'border-box', left: `${field.rect.x * 100}%`, top: `${field.rect.y * 100}%`, width: `${field.rect.width * 100}%`, height: `${field.rect.height * 100}%`, border: `2px ${optional || prefilled ? 'dashed' : 'solid'} ${color}`, background: `${color}14`, borderRadius: 2, lineHeight: 'normal' },
       }, h('span', { style: { position: 'absolute', left: -2, bottom: '100%', whiteSpace: 'nowrap', background: color, color: '#fff', fontSize: 11, padding: '1px 6px', borderRadius: '3px 3px 0 0' } },
-        `${field.role} · ${field.type}${optional ? ' (optional)' : ''}`)), page, `field-${i}`)
+        prefilled ? `Pre-filled · ${field.label}` : `${field.role} · ${field.type}${optional ? ' (optional)' : ''}`)), page, `field-${i}`)
     }))
 }

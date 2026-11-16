@@ -9,7 +9,8 @@ import { storedMetadata, type Metadata } from './metadata.ts';
 import type { Message } from './invitations.ts';
 
 /** What the host said about the envelope, and its metadata (metadata.ts). */
-export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender; metadata?: Metadata; message?: Message };
+/** `prefill`: the pre-filled fields' values drawn on its initial document when it was sent (prefill.ts). */
+export type EnvelopeDetails = { documentName?: string; documentVersion?: DocumentVersion; sender?: Sender; metadata?: Metadata; message?: Message; prefill?: { name: string; label: string; value: string }[] };
 /**
  * What the host said about a task's signer, what it says happens once they sign, how they reach
  * the signing page (`delivery`: absent is the host's, 'email' an invitation Esign emails), and the
@@ -41,7 +42,16 @@ export function envelopeDetails(raw: string | null | undefined): EnvelopeDetails
     sender: name ? defined({ name, email: text(sender.email), organization: text(sender.organization) }) : undefined,
     metadata: Object.keys(storedMetadata(value.metadata)).length ? storedMetadata(value.metadata) : undefined,
     message: storedMessage(value.message),
+    prefill: storedPrefill(value.prefill),
   });
+}
+
+/** The pre-filled values as stored: each a name, a label and a value, strings all; undefined when there are none. */
+function storedPrefill(value: unknown): EnvelopeDetails['prefill'] {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((item): item is { name: string; label: string; value: string } => !!item && typeof item === 'object' && typeof item.name === 'string' && typeof item.label === 'string' && typeof item.value === 'string')
+    .map(({ name, label, value: given }) => ({ name, label, value: given }));
+  return out.length ? out : undefined;
 }
 
 export function taskDetails(raw: string | null | undefined): TaskDetails {

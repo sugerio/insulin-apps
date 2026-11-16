@@ -14,7 +14,9 @@ export type DefaultSigner = { name?: string; email?: string }
 export type Owner = { id: string; kind: 'person' | 'client'; name?: string; email?: string }
 export type DocumentRole = 'owner' | 'admin' | 'editor' | 'viewer'
 export type Owned = { owner?: Owner; myRole?: DocumentRole; tags?: string[] }
-export type TemplateSummary = Owned & { id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number; status?: 'active' | 'draft' }
+/** A template's pre-filled field (server fields.ts): given a value when an envelope is sent, else its default. */
+export type PrefillDefinition = { name: string; label: string; required: boolean; default?: string }
+export type TemplateSummary = Owned & { id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]; fields: { type: string; role: string; page: number }[]; prefill?: PrefillDefinition[]; createdAt: number; status?: 'active' | 'draft' }
 /** A list's envelope: its signers in order, how many have signed, whose turn it is (and how they are invited), and when it last changed. */
 export type EnvelopeSummary = Owned & {
   id: string; templateId: string | null; status: string; createdAt: number; documentName?: string; metadata?: Metadata
@@ -67,6 +69,9 @@ export function describeError(error: unknown): string {
     if (error.status === 404 && error.code === 'signing_disabled') return 'Signing isn\'t set up on this deployment yet.'
     if (error.status === 404) return 'That isn\'t here any more, or belongs to another organization.'
     if (error.status === 409 && error.code === 'template_draft') return 'That template is a draft: save it as ready in the field editor before using it.'
+    if (error.status === 422 && error.code === 'prefill_too_long') return 'A pre-filled value is too long for its box on the document: shorten it.'
+    if (error.status === 422 && error.code === 'prefill_missing') return 'Fill in every required pre-filled field.'
+    if (error.status === 422 && error.code === 'invalid_prefill') return 'Pre-filled values can hold plain English letters, digits and punctuation, at most 128 characters.'
     if (error.status === 409) return 'That changed meanwhile. Reload and try again.'
     if (error.status === 422 || error.status === 400) return `The request wasn't accepted (${error.code || 'invalid'}). Check the values and try again.`
     return `Request failed (${error.message}).`

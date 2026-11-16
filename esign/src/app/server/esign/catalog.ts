@@ -122,6 +122,7 @@ const ENTRIES: Entry[] = [
         message: message('The sender\'s message to every signer'),
         tags: { ...tags, description: 'Your tags for it, with yours on the template' },
         share,
+        prefill: { type: 'object', additionalProperties: { type: 'string', maxLength: 128 }, description: 'The template\'s pre-filled fields\' values, by name (GET /api/templates/{id} lists them as prefill): drawn on the document before anyone signs; a field not given takes its default. Printable ASCII only' },
         draft: { type: 'boolean', description: 'true: save a draft, as it is (status DRAFT); send it later with POST /api/envelopes/{id}' },
         sendAt: { type: 'string', format: 'date-time', description: 'Send later: checked now as a send, kept a draft that Esign sends at this time (1 minute to 400 days ahead, before every signer\'s deadline), as you. Not with draft' },
       },

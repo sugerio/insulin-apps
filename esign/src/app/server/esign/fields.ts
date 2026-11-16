@@ -5,20 +5,50 @@
  */
 import {PDFDocument,PDFName,PDFArray} from 'pdf-lib';
 
-export const FIELD_TYPES=['Signature','Initials','Date signed','Full name','Title','Company','Text box','Checkbox'] as const;
-export type TemplateField={id:string;type:string;role:string;page:number;required:boolean;rect:{x:number;y:number;width:number;height:number}};
+export const FIELD_TYPES=['Signature','Initials','Date signed','Full name','Title','Company','Text box','Checkbox','Prefill'] as const;
+/**
+ * A placed field. A Pre-filled field (type `Prefill`) is nobody's to sign (`role` ''): it is named (`name`, what a
+ * sender gives its value by), labelled (`label`), and may be required or have a `default`; the same name may be placed
+ * several times, alike each time. Its value is drawn on the envelope's initial document when it is sent (prefill.ts),
+ * and the envelope keeps only its signers' fields.
+ */
+export type TemplateField={id:string;type:string;role:string;page:number;required:boolean;rect:{x:number;y:number;width:number;height:number};name?:string;label?:string;default?:string};
+export const PREFILL='Prefill';
+/** At most this many pre-filled names a template has, placed at most this many times in all. */
+export const MAX_PREFILL_NAMES=30,MAX_PREFILL_FIELDS=60;
+const PREFILL_NAME=/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$/;
+/** A pre-filled value: what the text renderer draws (printable ASCII, trimmed, at most 128 characters), or '' for none. */
+export const validPrefillValue=(value:unknown):value is string=>typeof value==='string'&&(value===''||(value.length<=128&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value)));
+const validLabel=(value:unknown):value is string=>typeof value==='string'&&value.length>=1&&value.length<=80&&value.trim()===value&&!/[\u0000-\u001f\u007f]/.test(value);
 /** Normalized coordinates use the displayed page's top-left as origin. */
 export function validateTemplateFields(value:unknown,roles:string[],pageCount:number):TemplateField[] {
   if(!Array.isArray(value)||value.length>200||!Number.isSafeInteger(pageCount)||pageCount<1)throw new Error('Invalid fields');
   const ids=new Set<string>();
-  return value.map((item:unknown)=>{
+  const fields=value.map((item:unknown):TemplateField=>{
     if(!item||typeof item!=='object'||Array.isArray(item))throw new Error('Invalid field');
     const f=item as Partial<TemplateField>,r=f.rect;
-    if(typeof f.id!=='string'||!/^[A-Za-z0-9_-]{1,64}$/.test(f.id)||ids.has(f.id)||typeof f.type!=='string'||!FIELD_TYPES.includes(f.type as typeof FIELD_TYPES[number])||typeof f.role!=='string'||!roles.includes(f.role)||!Number.isSafeInteger(f.page)||f.page!<1||f.page!>pageCount||typeof f.required!=='boolean'||!r||typeof r!=='object')throw new Error('Invalid field');
+    const prefill=f.type===PREFILL;
+    if(typeof f.id!=='string'||!/^[A-Za-z0-9_-]{1,64}$/.test(f.id)||ids.has(f.id)||typeof f.type!=='string'||!FIELD_TYPES.includes(f.type as typeof FIELD_TYPES[number])||typeof f.role!=='string'||(prefill?f.role!=='':!roles.includes(f.role))||!Number.isSafeInteger(f.page)||f.page!<1||f.page!>pageCount||typeof f.required!=='boolean'||!r||typeof r!=='object')throw new Error('Invalid field');
+    if(prefill&&(typeof f.name!=='string'||f.name.length>64||!PREFILL_NAME.test(f.name)||!validLabel(f.label)||(f.default!==undefined&&(!validPrefillValue(f.default)||f.default===''))))throw new Error('Invalid pre-filled field');
     const {x,y,width,height}=r;
     if(![x,y,width,height].every(v=>typeof v==='number'&&Number.isFinite(v))||x<0||y<0||width<=0||height<=0||x+width>1||y+height>1)throw new Error('Invalid field geometry');
-    ids.add(f.id);return {id:f.id,type:f.type,role:f.role,page:f.page!,required:f.required,rect:{x,y,width,height}};
+    ids.add(f.id);
+    return {id:f.id,type:f.type,role:f.role,page:f.page!,required:f.required,rect:{x,y,width,height},...(prefill?{name:f.name,label:f.label,...(f.default===undefined?{}:{default:f.default})}:{})};
   });
+  // A name is the same field wherever it is placed: one label, one required, one default.
+  const seen=new Map<string,TemplateField>();
+  for(const f of fields)if(f.type===PREFILL){const first=seen.get(f.name!);if(!first)seen.set(f.name!,f);else if(first.label!==f.label||first.required!==f.required||first.default!==f.default)throw new Error('Pre-filled field placed differently');}
+  return fields;
+}
+
+/** The fields signers sign: every field but the pre-filled ones. */
+export const signingFieldsOf=(fields:TemplateField[]):TemplateField[]=>fields.filter(f=>f.type!==PREFILL);
+/** A template's pre-filled fields, once per name, as first placed. */
+export type PrefillDefinition={name:string;label:string;required:boolean;default?:string};
+export function prefillDefinitions(fields:TemplateField[]):PrefillDefinition[]{
+  const out=new Map<string,PrefillDefinition>();
+  for(const f of fields)if(f.type===PREFILL&&!out.has(f.name!))out.set(f.name!,{name:f.name!,label:f.label!,required:f.required,...(f.default===undefined?{}:{default:f.default})});
+  return [...out.values()];
 }
 
 // Near touching boundaries, compare the JSON-visible decimal values exactly rather than
@@ -43,7 +73,9 @@ export const MAX_SIGNED_FIELDS=20;
  * Applied only when saving an editor version, never when reading historical templates: every role signs at least once
  * (a required Signature field), and may sign in several places; an optional field the signer may leave empty.
  */
-export function assertEditorSigningFields(fields:TemplateField[],roles:string[]):void {
+export function assertEditorSigningFields(all:TemplateField[],roles:string[]):void {
+  const fields=signingFieldsOf(all),prefill=all.filter(f=>f.type===PREFILL);
+  if(prefill.length>MAX_PREFILL_FIELDS||new Set(prefill.map(f=>f.name)).size>MAX_PREFILL_NAMES)throw new Error(`At most ${MAX_PREFILL_NAMES} pre-filled fields, placed ${MAX_PREFILL_FIELDS} times`);
   if(fields.length>MAX_SIGNED_FIELDS)throw new Error(`At most ${MAX_SIGNED_FIELDS} fields`);
   for(const role of roles){
     const owned=fields.filter(f=>f.role===role);

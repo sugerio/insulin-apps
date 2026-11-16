@@ -91,6 +91,21 @@ Rules the editor and the server check:
 - the PDF's pages are not rotated or cropped, and the PDF has no form fields or annotations. A PDF that breaks these rules
   can still be uploaded through the API with a signature page, but an envelope sent from it with placed fields is refused.
 
+## Pre-filled fields
+
+A pre-filled field is filled in when an envelope is sent, before anyone signs: the partner's legal name, an address, an
+agreement type. Nobody signs it. Whoever sends the envelope gives its value by its name (Esign's **New envelope** asks for
+it; a host product sends `prefill` with the API), or its default is used. The value is drawn on the document itself, so
+signers see it, sign it and the seal covers it, and can't change it.
+
+In the editor, under **Pre-filled fields**, give it a **Label** (what people read, such as "Partner legal name") and a
+**Name** (what a host product gives the value by, such as `partner.legalName`, made from the label until you type one),
+then **Add pre-filled field** and drag it where it goes. To show the same value in another place, drag its entry from the
+list again. Select one to change its label, name, **Default value** or whether it is **Required**: the change applies
+wherever it is placed. Values are plain English letters, digits and punctuation, at most 128 characters; a value too
+wide for its box is refused rather than cut, so make the box as wide as the longest value. A template has at most 30
+pre-filled fields, placed at most 60 times. A document uploaded with its envelope (**Upload and send**) has none.
+
 ## Default signers
 
 A role can have a default signer: who usually signs as it, such as the person who always countersigns for your company.

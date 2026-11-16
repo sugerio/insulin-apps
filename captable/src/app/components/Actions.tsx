@@ -83,6 +83,8 @@ export function ActionsMenu({ items, label = "Actions" }: { items: readonly Acti
         <Button
           ref={trigger}
           type="button"
+          // A page has one Actions menu: a dialog it opened gives focus back to it after a write remounts the page.
+          data-return-focus={`actions-menu:${label}`}
           onPointerDown={(event) => {
             pointerHandled.current = event.button === 0 && !event.ctrlKey;
           }}

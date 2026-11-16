@@ -214,7 +214,7 @@ describe('company import routes', () => {
       })),
     }
     plan.referenceRows.push({
-      entity: 'vesting_terms', id: crypto.randomUUID(), name: 'Oversized vesting schedule', definition,
+      entity: 'vesting_terms', id: crypto.randomUUID(), name: 'Oversized vesting schedule', isTemplate: false, definition,
       definitionSha256: engine.definitionSha256(toEngineVestingDefinition(definition)), sourceId: null,
     })
     const problems = validateImportPlan({ ...core, plan, canImport: true }, plan)
@@ -602,5 +602,64 @@ describe('company import routes', () => {
     expect(second.body.error?.message).toBe('Another import or setup changed the company. Check it and try again.')
     release()
     expect((await first).response.status).toBe(200)
+  }, 60_000)
+
+  it('registers the regular schedules as vesting templates and keeps each lot\'s repurchase right', async () => {
+    const db = await openDatabase()
+    const vests = (start: string, cliff: string, every: string) => ({ 'Vesting start date': { date: start }, 'Vesting months': '48', 'Cliff months': cliff, 'Vest every (months)': every })
+    const option = (id: string, cliff: string, every: string) => ({
+      'Grant ID': id, 'Stakeholder ID': 'holder_2', 'Plan ID': 'plan', Type: 'ISO', 'Options granted': { number: '4800' }, 'Exercise price': { number: '0.25' },
+      'Grant date': { date: '2025-01-15' }, 'Expiration date': { date: '2035-01-15' }, ...vests('2025-01-15', cliff, every), 'Early exercise': 'No', 'FMV at grant': '', Exercised: '0',
+    })
+    const data: TemplateData = {
+      Company: [{ 'Company name': 'Template Vesting Example, Inc.', 'As-of date': { date: AS_OF }, Currency: 'USD' }],
+      Stakeholders: [
+        { 'Stakeholder ID': 'holder_1', Name: 'Riley Stone', Type: 'Individual', Relationship: 'Founder', Email: 'riley@example.test', 'Termination date': { date: '2026-06-30' }, 'Termination type': 'Voluntary' },
+        { 'Stakeholder ID': 'holder_2', Name: 'Casey Lin', Type: 'Individual', Relationship: 'Employee', Email: 'casey@example.test', 'Termination date': '', 'Termination type': '' },
+      ],
+      'Share classes': [{ 'Class ID': 'common', Name: 'Common Stock', Type: 'Common', 'Authorized shares': { number: '1000000' }, 'Conversion ratio': '', 'Original issue price': { number: '0.01' } }],
+      'Equity plans': [{ 'Plan ID': 'plan', Name: '2025 Equity Plan', 'Share class ID': 'common', 'Pool size': { number: '100000' }, 'Effective date': { date: '2025-01-01' }, 'Exercise window after termination (days)': '' }],
+      Shares: [
+        { 'Certificate ID': 'RS-1', 'Stakeholder ID': 'holder_1', 'Share class ID': 'common', 'Plan ID': '', Shares: { number: '4800' }, 'Issue date': { date: '2025-01-15' }, 'Price per share': { number: '0.01' }, ...vests('2025-01-15', '12', '1'), 'Repurchase price per share': { number: '0.01' }, 'No repurchase deadline': 'Yes' },
+        { 'Certificate ID': 'RS-2', 'Stakeholder ID': 'holder_1', 'Share class ID': 'common', 'Plan ID': '', Shares: { number: '4800' }, 'Issue date': { date: '2025-01-15' }, 'Price per share': { number: '0.01' }, ...vests('2025-01-15', '12', '1'), 'Repurchase window (days)': '180' },
+      ],
+      Options: [option('OPT-1', '12', '1'), option('OPT-2', '12', '1'), option('OPT-3', '0', '3')],
+      Warrants: [],
+      SAFEs: [],
+    }
+    const shares = [...TEMPLATE_HEADERS.Shares, 'Vesting start date', 'Vesting months', 'Cliff months', 'Vest every (months)', 'Repurchase price per share', 'Repurchase window (days)', 'No repurchase deadline']
+    const file = {
+      name: 'cap-table.xlsx',
+      bytes: buildWorkbook([
+        { name: 'Instructions', rows: [['Generated in the test']] },
+        ...Object.entries({ ...TEMPLATE_HEADERS, Shares: shares }).map(([name, headers]) => ({ name, rows: table(headers, data[name as keyof TemplateData]) })),
+      ]),
+    }
+    const ready = await preview('template', [file])
+    expect(ready.body.preview.canImport, JSON.stringify(ready.body)).toBe(true)
+    const imported = await commit(ready.body.runId, [file])
+    expect(imported.response.status, JSON.stringify(imported.body)).toBe(200)
+    const orgId = imported.body.orgId
+
+    // One template per distinct schedule, used by every grant and lot on it, as a grant recorded in the app uses one.
+    const templates = await appRequest(`/api/orgs/${orgId}/vesting-terms?templates=true`)
+    expect(templates.status, await templates.clone().text()).toBe(200)
+    const items = (await templates.json() as api.VestingTermsList).items
+    expect(items.map((item) => ({ name: item.name, isTemplate: item.isTemplate, grantsUsing: item.grantsUsing, importedFromPulley: item.importedFromPulley }))).toEqual([
+      { name: '48 months, monthly, 12-month cliff', isTemplate: true, grantsUsing: 4, importedFromPulley: true },
+      { name: '48 months, quarterly, no cliff', isTemplate: true, grantsUsing: 1, importedFromPulley: true },
+    ])
+    expect(await db.db.prepare('SELECT COUNT(*) AS n FROM vesting_terms WHERE org_id = ? AND is_template = 0').bind(orgId).first('n')).toBe(0)
+
+    // RS-1's agreement sets no deadline; RS-2's own window runs 180 days from the termination.
+    const list = await appRequest(`/api/orgs/${orgId}/securities`)
+    const byId = new Map((await list.json() as api.SecurityList).items.map((item) => [item.id, item.displayId]))
+    const status = await appRequest(`/api/orgs/${orgId}/securities-status`)
+    expect(status.status, await status.clone().text()).toBe(200)
+    const rows = (await status.json() as api.SecuritiesStatus).unvestedSharesFromTerminated.map((row) => ({ id: byId.get(row.securityId), repurchasePrice: row.repurchasePrice, lastRepurchaseDate: row.lastRepurchaseDate, status: row.status }))
+    expect(rows.find((row) => row.id === 'RS-1')).toMatchObject({ repurchasePrice: '0.01', lastRepurchaseDate: null, status: 'no_deadline' })
+    expect(rows.find((row) => row.id === 'RS-2')).toMatchObject({ lastRepurchaseDate: '2026-12-27' })
+    const verified = await appRequest(`/api/admin/orgs/${orgId}/verify-ledger`, { method: 'POST' })
+    expect(await verified.json()).toMatchObject({ ok: true })
   }, 60_000)
 })

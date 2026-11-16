@@ -108,14 +108,16 @@ export interface VestingTermsValues {
   definitionSha256: string;
   createdBy: string | null;
   pulleyId?: string | null;
+  /** A template new grants may choose (an import's regular schedules); a grant's own terms otherwise. */
+  isTemplate?: boolean;
   now: number;
 }
 
 export function vestingTermsInsert(values: VestingTermsValues): Stmt {
   return stmt(
     `INSERT INTO vesting_terms (id, org_id, name, is_template, definition, definition_sha256, algorithm_version, created_by, created_at, pulley_id)
-     VALUES (?, ?, ?, 0, ?, ?, 1, ?, ?, ?)`,
-    values.id, values.orgId, values.name, values.definition, values.definitionSha256, values.createdBy, values.now,
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    values.id, values.orgId, values.name, values.isTemplate ? 1 : 0, values.definition, values.definitionSha256, values.createdBy, values.now,
     values.pulleyId ?? null,
   );
 }

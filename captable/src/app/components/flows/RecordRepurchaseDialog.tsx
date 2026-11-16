@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.tsx";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet, FieldTitle } from "@/components/ui/field.tsx";
 import { Input } from "@/components/ui/input.tsx";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.tsx";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { apiRequest } from "../../api/request.ts";
 import { parseAmount, times } from "../../lib/amounts.ts";
@@ -274,14 +274,11 @@ function RepurchaseForm({ security, row, termination, onClose, onDone }: { secur
           </Field>
           <Field data-invalid={errorOf("method") ? true : undefined}>
             <FieldLabel htmlFor={ids.method}>Paid by</FieldLabel>
-            <Select value={method} onValueChange={(value) => { setMethod(value as typeof method); clear("method"); }} disabled={!editing}>
-              <SelectTrigger id={ids.method} className="w-full" aria-invalid={errorOf("method") ? true : undefined} aria-describedby={errorOf("method") ? `${ids.method}-err` : undefined}>
-                <SelectValue placeholder="Choose how the company paid" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(REPURCHASE_METHOD_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <NativeSelect id={ids.method} className="w-full" value={method} disabled={!editing} aria-invalid={errorOf("method") ? true : undefined}
+              aria-describedby={errorOf("method") ? `${ids.method}-err` : undefined} onChange={(event) => { setMethod(event.target.value as typeof method); clear("method"); }}>
+              <NativeSelectOption value="">Choose how the company paid</NativeSelectOption>
+              {Object.entries(REPURCHASE_METHOD_LABELS).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}
+            </NativeSelect>
             {errorOf("method") ? <FieldError id={`${ids.method}-err`} role={undefined}>{errorOf("method")}</FieldError> : null}
           </Field>
           <Field data-invalid={errorOf("paidDate") ? true : undefined}>

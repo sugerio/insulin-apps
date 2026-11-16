@@ -9,11 +9,16 @@ const HEADERS = {
   Stakeholders: ["Stakeholder ID", "Name", "Type", "Relationship", "Email", "Termination date", "Termination type"],
   "Share classes": ["Class ID", "Name", "Type", "Authorized shares", "Conversion ratio", "Original issue price"],
   "Equity plans": ["Plan ID", "Name", "Share class ID", "Pool size", "Effective date", "Exercise window after termination (days)"],
-  Shares: ["Certificate ID", "Stakeholder ID", "Share class ID", "Plan ID", "Shares", "Issue date", "Price per share"],
+  Shares: ["Certificate ID", "Stakeholder ID", "Share class ID", "Plan ID", "Shares", "Issue date", "Price per share", "Vesting start date", "Vesting months", "Cliff months", "Vest every (months)", "Repurchase price per share", "Repurchase window (days)", "No repurchase deadline"],
   Options: ["Grant ID", "Stakeholder ID", "Plan ID", "Type", "Options granted", "Exercise price", "Grant date", "Expiration date", "Vesting start date", "Vesting months", "Cliff months", "Vest every (months)", "Early exercise", "FMV at grant", "Exercised", "Vested", "Vested outstanding", "Cancelled", "Cancellation date", "Cancellation reason"],
   Warrants: ["Warrant ID", "Stakeholder ID", "Share class ID", "Shares", "Exercise price", "Issue date", "Expiration date"],
   SAFEs: ["SAFE ID", "Stakeholder ID", "Principal", "Issue date", "Valuation cap", "Discount %", "Type"],
 } as const;
+
+/** A lot's vesting and repurchase right: columns added after the template first shipped, so a workbook may lack them. */
+const SHARE_VESTING = ["Vesting start date", "Vesting months", "Cliff months", "Vest every (months)"] as const;
+const SHARE_REPURCHASE = ["Repurchase price per share", "Repurchase window (days)", "No repurchase deadline"] as const;
+const OPTIONAL_COLUMNS: Record<string, readonly string[]> = { Shares: [...SHARE_VESTING, ...SHARE_REPURCHASE] };
 
 export function generateCapTableTemplate(): Uint8Array {
   const instructions = [
@@ -43,7 +48,7 @@ export function parseTemplateImport(file: UploadedImportFile, fallbackCurrency =
     const sheet = sheets.find((candidate) => key(candidate.name) === key(name));
     if (!sheet) { problems.push(problem("TEMPLATE_SHEET_MISSING", `The template is missing the ${name} sheet.`, { file: file.name, sheet: name, row: 1 })); records.set(name, []); continue; }
     const actual = sheet.rows[0] ?? [];
-    for (const header of headers) if (!actual.some((cell) => key(cell) === key(header))) problems.push(problem("TEMPLATE_COLUMN_MISSING", `${name} is missing the ${header} column.`, { file: file.name, sheet: name, row: 1, column: header }));
+    for (const header of headers) if (!OPTIONAL_COLUMNS[name]?.includes(header) && !actual.some((cell) => key(cell) === key(header))) problems.push(problem("TEMPLATE_COLUMN_MISSING", `${name} is missing the ${header} column.`, { file: file.name, sheet: name, row: 1, column: header }));
     records.set(name, sheet.rows.slice(1).map((row, index) => ({ values: Object.fromEntries(headers.map((header) => [header, row[actual.findIndex((cell) => key(cell) === key(header))] ?? ""])), source: { file: file.name, sheet: name, row: index + 2 } })).filter((row) => Object.values(row.values).some((value) => value.trim())));
   }
   validateTemplateRecords(records, problems);
@@ -67,7 +72,18 @@ export function parseTemplateImport(file: UploadedImportFile, fallbackCurrency =
   const securities: ImportDraft["securities"] = [];
   const vesting: ImportDraft["vesting"] = [];
   const cancellations: ImportDraft["cancellations"] = [];
-  for (const row of records.get("Shares") ?? []) securities.push({ sourceId: sid("security", value(row, "Certificate ID")), displayId: value(row, "Certificate ID"), kind: "stock", unsupportedType: null, stakeholderSourceId: stakeholderIds.get(value(row, "Stakeholder ID")) ?? sid("stakeholder", value(row, "Stakeholder ID")), stockClassSourceId: classIds.get(value(row, "Share class ID")) ?? sid("class", value(row, "Share class ID")), stockPlanSourceId: value(row, "Plan ID") ? planIds.get(value(row, "Plan ID")) ?? sid("plan", value(row, "Plan ID")) : null, optionType: null, issueDate: date(value(row, "Issue date")), issued: number(row, "Shares"), outstanding: number(row, "Shares"), exercised: "0", cancelled: "0", repurchased: "0", repurchaseDate: null, repurchaseConsideration: null, transferred: "0", unvestedCancelled: null, vested: null, vestedOutstanding: null, price: number(row, "Price per share"), purchasePrice: null, currency, expirationDate: null, exerciseDeadline: null, earlyExercise: null, fmvAtGrant: null, status: "OUTSTANDING", safeType: null, valuationCap: null, uncapped: null, discountRate: null, convertedDate: null, source: row.source });
+  for (const row of records.get("Shares") ?? []) {
+    const sourceId = sid("security", value(row, "Certificate ID"));
+    const vests = SHARE_VESTING.some((column) => value(row, column));
+    const window = optionalInteger(row, "Repurchase window (days)", problems);
+    const right = vests && repurchaseTerm(row)
+      ? { pricePerShare: number(row, "Repurchase price per share"), windowDays: window, noDeadline: yesNo(value(row, "No repurchase deadline")) === true }
+      : null;
+    securities.push({ sourceId, displayId: value(row, "Certificate ID"), kind: "stock", unsupportedType: null, stakeholderSourceId: stakeholderIds.get(value(row, "Stakeholder ID")) ?? sid("stakeholder", value(row, "Stakeholder ID")), stockClassSourceId: classIds.get(value(row, "Share class ID")) ?? sid("class", value(row, "Share class ID")), stockPlanSourceId: value(row, "Plan ID") ? planIds.get(value(row, "Plan ID")) ?? sid("plan", value(row, "Plan ID")) : null, optionType: null, issueDate: date(value(row, "Issue date")), issued: number(row, "Shares"), outstanding: number(row, "Shares"), exercised: "0", cancelled: "0", repurchased: "0", repurchaseDate: null, repurchaseConsideration: null, transferred: "0", unvestedCancelled: null, vested: null, vestedOutstanding: null, price: number(row, "Price per share"), purchasePrice: null, currency, expirationDate: null, exerciseDeadline: null, earlyExercise: null, fmvAtGrant: null, status: "OUTSTANDING", safeType: null, valuationCap: null, uncapped: null, discountRate: null, convertedDate: null, ...(right ? { repurchaseRight: right } : {}), source: row.source });
+    if (!vests) continue;
+    const totalMonths = integer(row, "Vesting months", problems); const cliffMonths = integer(row, "Cliff months", problems); const everyMonths = integer(row, "Vest every (months)", problems);
+    vesting.push({ securitySourceId: sourceId, grantDate: date(value(row, "Issue date")), startDate: date(value(row, "Vesting start date")), granted: number(row, "Shares"), definitionType: "SCHEDULE", schedule: totalMonths !== null && cliffMonths !== null && everyMonths !== null ? { totalMonths, cliffMonths, everyMonths } : null, events: [], source: row.source });
+  }
   for (const row of records.get("Options") ?? []) {
     const sourceId = sid("security", value(row, "Grant ID")); const granted = number(row, "Options granted"); const exercised = number(row, "Exercised") ?? "0"; const cancelled = number(row, "Cancelled") ?? "0";
     const consumed = addDecimals([exercised, cancelled]);
@@ -115,6 +131,17 @@ function validateTemplateRecords(records: ReadonlyMap<string, Row[]>, problems: 
   for (const [sheet, columns] of Object.entries(required)) for (const row of records.get(sheet) ?? []) for (const column of columns) {
     if (!value(row, column)) problems.push(problem("TEMPLATE_VALUE_MISSING", `${sheet} row ${row.source.row}, ${column} is required.`, { ...row.source, column }));
   }
+  // A lot vests with all four vesting columns or none; its repurchase right covers unvested shares, so it needs them.
+  const vestingShares = (records.get("Shares") ?? []).filter((row) => SHARE_VESTING.some((column) => value(row, column)));
+  for (const row of vestingShares) for (const column of SHARE_VESTING) {
+    if (!value(row, column)) problems.push(problem("TEMPLATE_VALUE_MISSING", `Shares row ${row.source.row}, ${column} is required when the lot vests.`, { ...row.source, column }));
+  }
+  for (const row of records.get("Shares") ?? []) {
+    const filled = repurchaseTerm(row);
+    if (filled && !vestingShares.includes(row)) problems.push(problem("TEMPLATE_REPURCHASE_WITHOUT_VESTING", `Shares row ${row.source.row}, a repurchase right covers unvested shares: enter the lot's vesting columns too.`, { ...row.source, column: filled }));
+    allowed(row, "No repurchase deadline", /^(Yes|No)$/i, "Yes or No", problems);
+    if (/^Yes$/i.test(value(row, "No repurchase deadline")) && value(row, "Repurchase window (days)")) problems.push(problem("TEMPLATE_REPURCHASE_CONFLICT", `Shares row ${row.source.row}, leave Repurchase window (days) blank when No repurchase deadline is Yes.`, { ...row.source, column: "Repurchase window (days)" }));
+  }
   if ((records.get("Company")?.length ?? 0) > 1) {
     const row = records.get("Company")![1]!;
     problems.push(problem("TEMPLATE_COMPANY_MULTIPLE", `Company row ${row.source.row} is extra; enter exactly one company row.`, { ...row.source, column: "Company name" }));
@@ -122,7 +149,7 @@ function validateTemplateRecords(records: ReadonlyMap<string, Row[]>, problems: 
 
   const numeric: Array<[string, string, boolean, boolean]> = [
     ["Share classes", "Authorized shares", false, true], ["Share classes", "Conversion ratio", true, true], ["Share classes", "Original issue price", true, false],
-    ["Equity plans", "Pool size", false, true], ["Equity plans", "Exercise window after termination (days)", true, false], ["Shares", "Shares", false, true], ["Shares", "Price per share", false, false],
+    ["Equity plans", "Pool size", false, true], ["Equity plans", "Exercise window after termination (days)", true, false], ["Shares", "Shares", false, true], ["Shares", "Price per share", false, false], ["Shares", "Repurchase price per share", true, false],
     ["Options", "Options granted", false, true], ["Options", "Exercise price", false, false], ["Options", "FMV at grant", true, false], ["Options", "Exercised", false, false], ["Options", "Vested", true, false], ["Options", "Vested outstanding", true, false], ["Options", "Cancelled", true, false],
     ["Warrants", "Shares", false, true], ["Warrants", "Exercise price", false, false], ["SAFEs", "Principal", false, true], ["SAFEs", "Valuation cap", true, true], ["SAFEs", "Discount %", true, false],
   ];
@@ -141,7 +168,7 @@ function validateTemplateRecords(records: ReadonlyMap<string, Row[]>, problems: 
 
   const dates: Array<[string, string, boolean]> = [
     ["Company", "As-of date", false], ["Stakeholders", "Termination date", true], ["Equity plans", "Effective date", false],
-    ["Shares", "Issue date", false], ["Options", "Grant date", false], ["Options", "Expiration date", false], ["Options", "Vesting start date", false], ["Options", "Cancellation date", true],
+    ["Shares", "Issue date", false], ["Shares", "Vesting start date", true], ["Options", "Grant date", false], ["Options", "Expiration date", false], ["Options", "Vesting start date", false], ["Options", "Cancellation date", true],
     ["Warrants", "Issue date", false], ["Warrants", "Expiration date", false], ["SAFEs", "Issue date", false],
   ];
   for (const [sheet, column, optional] of dates) for (const row of records.get(sheet) ?? []) {
@@ -158,18 +185,12 @@ function validateTemplateRecords(records: ReadonlyMap<string, Row[]>, problems: 
     if (value(row, "Termination date") && !value(row, "Termination type")) problems.push(problem("TERMINATION_TYPE_MISSING", `Stakeholders row ${row.source.row}, Termination type is required when Termination date is present.`, { ...row.source, column: "Termination type" }));
   }
   for (const row of records.get("Share classes") ?? []) allowed(row, "Type", /^(Common|Preferred)$/i, "Common or Preferred", problems);
+  for (const row of vestingShares) vestingRange(row, problems);
   for (const row of records.get("Options") ?? []) {
     allowed(row, "Type", /^(ISO|NSO)$/i, "ISO or NSO", problems);
     allowed(row, "Early exercise", /^(Yes|No)$/i, "Yes or No", problems);
     allowed(row, "Cancellation reason", /^(Unvested forfeiture|Expired|Other)$/i, "Unvested forfeiture, Expired, or Other", problems);
-    const every = Number(value(row, "Vest every (months)"));
-    const total = Number(value(row, "Vesting months"));
-    const cliff = Number(value(row, "Cliff months"));
-    if (Number.isInteger(every) && ![1, 3, 12].includes(every)) problems.push(problem("TEMPLATE_VESTING_FREQUENCY_UNSUPPORTED", `Options row ${row.source.row}, Vest every (months) must be 1, 3, or 12.`, { ...row.source, column: "Vest every (months)" }));
-    if (Number.isInteger(total) && (total <= 0 || total > 240)) problems.push(problem("TEMPLATE_VESTING_RANGE", `Options row ${row.source.row}, Vesting months must be from 1 through 240.`, { ...row.source, column: "Vesting months" }));
-    if (Number.isInteger(cliff) && Number.isInteger(total) && cliff > total) problems.push(problem("TEMPLATE_VESTING_RANGE", `Options row ${row.source.row}, Cliff months cannot exceed Vesting months.`, { ...row.source, column: "Cliff months" }));
-    if ([1, 3, 12].includes(every) && Number.isInteger(total) && total % every !== 0) problems.push(problem("TEMPLATE_VESTING_RANGE", `Options row ${row.source.row}, Vesting months must be a whole number of vesting periods.`, { ...row.source, column: "Vesting months" }));
-    if ([1, 3, 12].includes(every) && Number.isInteger(cliff) && cliff % every !== 0) problems.push(problem("TEMPLATE_VESTING_RANGE", `Options row ${row.source.row}, Cliff months must be a whole number of vesting periods.`, { ...row.source, column: "Cliff months" }));
+    vestingRange(row, problems);
     if (engine.isIsoDate(value(row, "Grant date")) && engine.isIsoDate(value(row, "Expiration date")) && value(row, "Expiration date") < value(row, "Grant date")) problems.push(problem("TEMPLATE_DATE_ORDER", `Options row ${row.source.row}, Expiration date cannot be before Grant date.`, { ...row.source, column: "Expiration date" }));
   }
   for (const row of records.get("SAFEs") ?? []) allowed(row, "Type", /^(Post-money|Pre-money)$/i, "Post-money or Pre-money", problems);
@@ -204,6 +225,24 @@ function validateTemplateRecords(records: ReadonlyMap<string, Row[]>, problems: 
     }
   }
 }
+/** The first repurchase column a lot fills in: No in No repurchase deadline, as blank, states no term. */
+function repurchaseTerm(row: Row): string | undefined {
+  return SHARE_REPURCHASE.find((column) => (column === "No repurchase deadline" ? /^Yes$/i.test(value(row, column)) : value(row, column) !== ""));
+}
+/** A row's schedule columns: a supported frequency, a term in range, and a cliff and term of whole vesting periods. */
+function vestingRange(row: Row, problems: ImportProblem[]): void {
+  const sheet = row.source.sheet;
+  // A blank column is reported as missing, not as out of range.
+  const whole = (column: string) => (value(row, column) ? Number(value(row, column)) : Number.NaN);
+  const every = whole("Vest every (months)");
+  const total = whole("Vesting months");
+  const cliff = whole("Cliff months");
+  if (Number.isInteger(every) && ![1, 3, 12].includes(every)) problems.push(problem("TEMPLATE_VESTING_FREQUENCY_UNSUPPORTED", `${sheet} row ${row.source.row}, Vest every (months) must be 1, 3, or 12.`, { ...row.source, column: "Vest every (months)" }));
+  if (Number.isInteger(total) && (total <= 0 || total > 240)) problems.push(problem("TEMPLATE_VESTING_RANGE", `${sheet} row ${row.source.row}, Vesting months must be from 1 through 240.`, { ...row.source, column: "Vesting months" }));
+  if (Number.isInteger(cliff) && Number.isInteger(total) && cliff > total) problems.push(problem("TEMPLATE_VESTING_RANGE", `${sheet} row ${row.source.row}, Cliff months cannot exceed Vesting months.`, { ...row.source, column: "Cliff months" }));
+  if ([1, 3, 12].includes(every) && Number.isInteger(total) && total % every !== 0) problems.push(problem("TEMPLATE_VESTING_RANGE", `${sheet} row ${row.source.row}, Vesting months must be a whole number of vesting periods.`, { ...row.source, column: "Vesting months" }));
+  if ([1, 3, 12].includes(every) && Number.isInteger(cliff) && cliff % every !== 0) problems.push(problem("TEMPLATE_VESTING_RANGE", `${sheet} row ${row.source.row}, Cliff months must be a whole number of vesting periods.`, { ...row.source, column: "Cliff months" }));
+}
 function allowed(row: Row, column: string, pattern: RegExp, expectation: string, problems: ImportProblem[]): void { const raw = value(row, column); if (raw && !pattern.test(raw)) problems.push(problem("TEMPLATE_VALUE_UNSUPPORTED", `${row.source.sheet} row ${row.source.row}, ${column} must be ${expectation}.`, { ...row.source, column })); }
 function checkReferences(rows: readonly Row[], column: string, ids: ReadonlySet<string>, problems: ImportProblem[], optional = false): void { for (const row of rows) { const id = value(row, column); if (optional && !id) continue; if (id && !ids.has(id)) problems.push(problem("TEMPLATE_REFERENCE_MISSING", `${row.source.sheet} row ${row.source.row}, ${column} ${id} does not match an ID in the referenced sheet.`, { ...row.source, column })); } }
 function sumBy(rows: readonly Row[], keyColumn: string, amountColumn: string): Map<string, string> { const sums = new Map<string, string>(); for (const row of rows) { const key = value(row, keyColumn); const amount = number(row, amountColumn); if (!key || amount === null || amount === "0") continue; sums.set(key, engine.Dec.parse(sums.get(key) ?? "0").add(engine.Dec.parse(amount)).toCanonical()); } return sums }
@@ -217,13 +256,13 @@ function sid(entity: string, raw: string): string { const safe = raw.replace(/[^
 function yesNo(raw: string): boolean | null { if (/^Yes$/i.test(raw)) return true; if (/^No$/i.test(raw)) return false; return null }
 function relationship(raw: string): engine.Relationship { return ({ founder: "founder", employee: "employee", investor: "investor", advisor: "advisor", consultant: "consultant", "board member": "board_member", other: "other" } as Record<string, engine.Relationship>)[raw.toLowerCase()] ?? "other" }
 function terminationType(raw: string): engine.TerminationType | null { return ({ voluntary: "voluntary", involuntary: "involuntary", "with cause": "with_cause", death: "death", disability: "disability", retirement: "retirement" } as Record<string, engine.TerminationType>)[raw.toLowerCase()] ?? null }
-function integer(row: Row, column: string, problems: ImportProblem[]): number | null { const raw = value(row, column); if (!/^\d+$/.test(raw)) { problems.push(problem("TEMPLATE_INTEGER_INVALID", `Options row ${row.source.row}, ${column} must be a whole number.`, { ...row.source, column })); return null; } return Number(raw) }
+function integer(row: Row, column: string, problems: ImportProblem[]): number | null { const raw = value(row, column); if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) { problems.push(problem("TEMPLATE_INTEGER_INVALID", `${row.source.sheet} row ${row.source.row}, ${column} must be a whole number.`, { ...row.source, column })); return null; } return Number(raw) }
 function optionalInteger(row: Row, column: string, problems: ImportProblem[]): number | null { const raw = value(row, column); if (!raw) return null; if (!/^\d+$/.test(raw) || Number(raw) > 1200) { problems.push(problem("TEMPLATE_INTEGER_INVALID", `${row.source.sheet} row ${row.source.row}, ${column} must be a whole number from 0 through 1200.`, { ...row.source, column })); return null; } return Number(raw) }
 function percentRate(raw: string): string | null { const value = canonicalDecimal(raw); if (value === null) return null; const negative = value.startsWith("-"); const digits = (negative ? value.slice(1) : value).replace(".", ""); const fraction = value.includes(".") ? value.length - value.indexOf(".") - 1 : 0; const padded = digits.padStart(fraction + 3, "0"); const point = padded.length - fraction - 2; const result = `${padded.slice(0, point)}.${padded.slice(point)}`.replace(/^0+(?=\d)/, "").replace(/\.?0+$/, "") || "0"; return negative && result !== "0" ? `-${result}` : result }
 function problem(code: string, message: string, source: SourceLocation): ImportProblem { return { severity: "error", code, message, source } }
 
 function instructionRows(): string[][] {
-  const examples: Record<string, string[]> = { Company: ["Acme Robotics, Inc.", "2026-10-27", "USD"], Stakeholders: ["holder_1", "Jordan Park", "Individual", "Employee", "jordan@example.test", "2026-09-30", "Voluntary"], "Share classes": ["common", "Common Stock", "Common", "10000000", "", "0.001"], "Equity plans": ["plan_2024", "2024 Equity Plan", "common", "1000000", "2024-01-15", "90"], Shares: ["CS-1", "holder_1", "common", "", "100000", "2024-01-15", "0.001"], Options: ["OPT-1", "holder_1", "plan_2024", "ISO", "48000", "0.25", "2024-02-01", "2034-02-01", "2024-02-01", "48", "12", "1", "No", "0.25", "0", "", "", "0", "", ""], Warrants: ["WAR-1", "holder_1", "common", "10000", "1.25", "2024-03-01", "2031-03-01"], SAFEs: ["SAFE-1", "holder_1", "500000", "2024-04-01", "10000000", "20", "Post-money"] };
+  const examples: Record<string, string[]> = { Company: ["Acme Robotics, Inc.", "2026-10-27", "USD"], Stakeholders: ["holder_1", "Jordan Park", "Individual", "Employee", "jordan@example.test", "2026-09-30", "Voluntary"], "Share classes": ["common", "Common Stock", "Common", "10000000", "", "0.001"], "Equity plans": ["plan_2024", "2024 Equity Plan", "common", "1000000", "2024-01-15", "90"], Shares: ["CS-1", "holder_1", "common", "", "100000", "2024-01-15", "0.001", "2024-01-15", "48", "12", "1", "0.001", "90", "No"], Options: ["OPT-1", "holder_1", "plan_2024", "ISO", "48000", "0.25", "2024-02-01", "2034-02-01", "2024-02-01", "48", "12", "1", "No", "0.25", "0", "", "", "0", "", ""], Warrants: ["WAR-1", "holder_1", "common", "10000", "1.25", "2024-03-01", "2031-03-01"], SAFEs: ["SAFE-1", "holder_1", "500000", "2024-04-01", "10000000", "20", "Post-money"] };
   return Object.entries(HEADERS).flatMap(([sheet, headers]) => headers.map((column, index) => [sheet, column, instruction(sheet, column), examples[sheet]![index] ?? ""]));
 }
 
@@ -233,7 +272,7 @@ function instruction(sheet: string, column: string): string {
     "Stakeholders.Stakeholder ID": "A unique ID used by every security row for this holder.", "Stakeholders.Name": "The person's or organization's display name.", "Stakeholders.Type": "Individual or Organization.", "Stakeholders.Relationship": "Founder, Employee, Investor, Advisor, Consultant, Board member, or Other.", "Stakeholders.Email": "Optional contact email address.", "Stakeholders.Termination date": "Optional service termination date in YYYY-MM-DD format.", "Stakeholders.Termination type": "Required with a termination date: Voluntary, Involuntary, With cause, Death, Disability, or Retirement.",
     "Share classes.Class ID": "A unique ID used by plans, shares, and warrants.", "Share classes.Name": "The class name shown on the cap table.", "Share classes.Type": "Common or Preferred.", "Share classes.Authorized shares": "The current authorized share count.", "Share classes.Conversion ratio": "Preferred-to-common conversion ratio; blank Preferred ratios use 1.", "Share classes.Original issue price": "Optional original issue price per share.",
     "Equity plans.Plan ID": "A unique ID used by option grants.", "Equity plans.Name": "The equity plan's display name.", "Equity plans.Share class ID": "The Class ID delivered when an award is exercised.", "Equity plans.Pool size": "The plan's current reserved share pool.", "Equity plans.Effective date": "The plan's approval or effective date in YYYY-MM-DD format.", "Equity plans.Exercise window after termination (days)": "Whole days allowed to exercise after termination; blank uses the disclosed template default of 90 days.",
-    "Shares.Certificate ID": "A unique certificate or lot number.", "Shares.Stakeholder ID": "The owner, matching Stakeholders.Stakeholder ID.", "Shares.Share class ID": "The issued class, matching Share classes.Class ID.", "Shares.Plan ID": "For shares from exercised options, the plan that issued the grant; otherwise blank.", "Shares.Shares": "The exact number of shares issued.", "Shares.Issue date": "The issuance date in YYYY-MM-DD format.", "Shares.Price per share": "The exact purchase price for each share.",
+    "Shares.Certificate ID": "A unique certificate or lot number.", "Shares.Stakeholder ID": "The owner, matching Stakeholders.Stakeholder ID.", "Shares.Share class ID": "The issued class, matching Share classes.Class ID.", "Shares.Plan ID": "For shares from exercised options, the plan that issued the grant; otherwise blank.", "Shares.Shares": "The exact number of shares issued.", "Shares.Issue date": "The issuance date in YYYY-MM-DD format.", "Shares.Price per share": "The exact purchase price for each share.", "Shares.Vesting start date": "Only for shares that vest (restricted stock): the first date used to calculate vesting; otherwise blank, with the next three columns.", "Shares.Vesting months": "For shares that vest: the total vesting term as a whole number of months.", "Shares.Cliff months": "For shares that vest: whole months before the first vest; use 0 for no cliff.", "Shares.Vest every (months)": "For shares that vest: 1 monthly, 3 quarterly, or 12 annually.", "Shares.Repurchase price per share": "Optional, for shares that vest: the price per share the company pays to buy back unvested shares after the holder leaves.", "Shares.Repurchase window (days)": "Optional, for shares that vest: whole days after termination the company has to buy back unvested shares. Blank gives the lot no window of its own, and an import records no plan default: for a holder who has already left, no deadline is recorded; terminating a holder later asks for the lot's last repurchase date.", "Shares.No repurchase deadline": "Yes only if the agreement sets no deadline for the buyback (leave the window blank); otherwise No or blank.",
     "Options.Grant ID": "A unique option grant number.", "Options.Stakeholder ID": "The grantee, matching Stakeholders.Stakeholder ID.", "Options.Plan ID": "The issuing plan, matching Equity plans.Plan ID.", "Options.Type": "ISO or NSO; do not guess when unknown.", "Options.Options granted": "The total options originally granted.", "Options.Exercise price": "The exact exercise price per option.", "Options.Grant date": "The grant date in YYYY-MM-DD format.", "Options.Expiration date": "The contractual expiration date in YYYY-MM-DD format.", "Options.Vesting start date": "The first date used to calculate time-based vesting.", "Options.Vesting months": "Total vesting term as a whole number of months.", "Options.Cliff months": "Whole months before the first vest; use 0 for no cliff.", "Options.Vest every (months)": "Vesting frequency: 1 monthly, 3 quarterly, or 12 annually.", "Options.Early exercise": "Yes only if the agreement allows exercise before vesting; otherwise No.", "Options.FMV at grant": "Optional fair market value per share on the grant date.", "Options.Exercised": "Options already exercised as of the workbook date; use 0 when none.", "Options.Vested": "Optional vested quantity as of the workbook date; preview reconciles it to the schedule.", "Options.Vested outstanding": "Optional vested and unexercised quantity as of the workbook date; preview reconciles it.", "Options.Cancelled": "Optional cancelled option quantity; use 0 or blank when none.", "Options.Cancellation date": "Required YYYY-MM-DD date when Cancelled is greater than zero.", "Options.Cancellation reason": "Required with a cancellation: Unvested forfeiture, Expired, or Other. Expired consumes vested options first; Other lets the engine split the quantity from the schedule.",
     "Warrants.Warrant ID": "A unique warrant number.", "Warrants.Stakeholder ID": "The holder, matching Stakeholders.Stakeholder ID.", "Warrants.Share class ID": "The class purchasable on exercise.", "Warrants.Shares": "The exact number of shares covered.", "Warrants.Exercise price": "The exact exercise price per share.", "Warrants.Issue date": "The warrant issuance date in YYYY-MM-DD format.", "Warrants.Expiration date": "The warrant expiration date in YYYY-MM-DD format.",
     "SAFEs.SAFE ID": "A unique SAFE identifier.", "SAFEs.Stakeholder ID": "The investor, matching Stakeholders.Stakeholder ID.", "SAFEs.Principal": "The original invested principal.", "SAFEs.Issue date": "The SAFE issue date in YYYY-MM-DD format.", "SAFEs.Valuation cap": "Optional valuation cap amount.", "SAFEs.Discount %": "Optional discount as a percentage, such as 20 for 20%.", "SAFEs.Type": "Post-money or Pre-money.",

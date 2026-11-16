@@ -62,6 +62,43 @@ describe("source-neutral spreadsheet import", () => {
     expect(message(future, "EXPORT_DATE_IN_FUTURE")).toContain("after today");
   });
 
+  it("registers a grant's tranches as a template only when they follow a regular schedule exactly", () => {
+    const terms = (preview: ReturnType<typeof buildImportPreview>) => preview.plan!.referenceRows.filter((row) => row.entity === "vesting_terms");
+    const usedBy = (preview: ReturnType<typeof buildImportPreview>) => Object.fromEntries(preview.plan!.commands.flatMap((command) => command.transactions)
+      .filter((tx) => tx.type === "TX_EQUITY_COMPENSATION_ISSUANCE")
+      .map((tx) => [tx.payload.custom_id, terms(preview).find((row) => row.id === tx.payload.vesting_terms_id)?.name]));
+    const preview = buildImportPreview(acmeExportFiles(), OPTIONS);
+    expect(errors(preview)).toEqual([]);
+    expect(terms(preview).map((row) => [row.name, row.isTemplate])).toEqual([["48 months, annually, no cliff", true], ["OPT-TERM vesting", false], ["24 months, annually, no cliff", true]]);
+    // OPT-TERM's last tranche was forfeited at its holder's termination, which names it: its tranches stay its own.
+    expect(usedBy(preview)).toEqual({ "OPT-14": "48 months, annually, no cliff", "OPT-EARLY": "48 months, annually, no cliff", "OPT-TERM": "OPT-TERM vesting", "OPT-PREF": "24 months, annually, no cliff" });
+    const before = replayPlan(preview.plan!).metrics.securities.map((item) => [item.displayId, item.vested.toCanonical()]);
+    // One share moved between two tranches: the total still matches, but no schedule gives those tranches.
+    const uneven = buildImportPreview(acmeExportFiles((data: any) => {
+      const rows = data.vestingEvents.filter((row: any) => row["Security ID"] === "OPT-14");
+      rows[0]["Quantity Vested"] = { number: "121" };
+      rows[1]["Quantity Vested"] = { number: "119" };
+    }), OPTIONS);
+    expect(errors(uneven)).toEqual([]);
+    expect(usedBy(uneven)["OPT-14"]).toBe("OPT-14 vesting");
+    expect(usedBy(uneven)["OPT-EARLY"]).toBe("48 months, annually, no cliff");
+    // Two annual tranches by the as-of date either way: the schedule vests exactly what the export's tranches did.
+    expect(before).toContainEqual(["OPT-14", "240"]);
+    expect(replayPlan(uneven.plan!).metrics.securities.find((item) => item.displayId === "OPT-14")?.vested.toCanonical()).toBe("240");
+  });
+
+  it("keeps the tranches of a grant with no issue date, whose opening balance records no vesting start", () => {
+    const preview = buildImportPreview(acmeExportFiles((data: any) => {
+      data.raw.Securities.find((row: any) => row.CertificateId === "OPT-PREF").IssueDate = "";
+      data.detailed["2025 Preferred Equity Plan"][0]["Grant Date"] = "";
+      data.vestingSubjects.find((row: any) => row["Security ID"] === "OPT-PREF")["Grant Date"] = "";
+    }), OPTIONS);
+    expect(errors(preview)).toEqual([]);
+    const terms = preview.plan!.referenceRows.filter((row) => row.entity === "vesting_terms");
+    expect(terms.find((row) => row.name === "OPT-PREF vesting")).toMatchObject({ isTemplate: false, definition: { type: "EXPLICIT" } });
+    expect(replayPlan(preview.plan!).metrics.securities.find((item) => item.displayId === "OPT-PREF")?.vested.toCanonical()).toBe("25");
+  });
+
   it("blocks changed, missing, and zero vesting events instead of dropping vesting", () => {
     for (const mutate of [
       (data: any) => { data.vestingEvents.find((row: any) => row["Security ID"] === "OPT-14")["Quantity Vested"] = "119"; },

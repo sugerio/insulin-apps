@@ -6,8 +6,7 @@ order: 8
 
 This page explains what happens behind Esign's pages: how an envelope moves from template to sealed PDF, what evidence
 Esign keeps and how it protects it, and what it doesn't establish. It is for people who need to judge the evidence, for
-developers of host products, and for AI agents answering questions about a signing. Esign is experimental: its evidence
-and wording still need review before real documents are signed.
+developers of host products, and for AI agents answering questions about a signing.
 
 ## The signing lifecycle
 

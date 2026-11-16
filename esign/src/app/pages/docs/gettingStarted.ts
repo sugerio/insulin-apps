@@ -15,7 +15,6 @@ export const gettingStarted: DocTopic = {
       body: [
         p('Esign sends PDFs for electronic signature. Someone in your organization uploads a document as a ', b('template'), ', names who signs it and in which order, and sends it as an ', b('envelope'), '.'),
         p('Each signer, in turn, opens the signing page. Esign emails them a 6-digit code to confirm it\'s them, shows them the document, and records their agreement and their signature. When everyone has signed, Esign seals the signed PDF and emails each signer a link to download their copy with a certificate of completion.'),
-        p(b('Esign is experimental. '), 'Use synthetic documents and test email addresses only. The consent wording, the certificate and the timestamp service still need review before real documents are signed.'),
       ],
     },
     {

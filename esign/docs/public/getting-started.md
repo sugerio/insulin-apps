@@ -5,7 +5,7 @@ order: 2
 ---
 
 This page takes you from an empty Esign to your first completed envelope. It is for the person in your organization
-who sends documents for signature. Use a synthetic PDF and test addresses: Esign is experimental.
+who sends documents for signature.
 
 ## Before you start
 

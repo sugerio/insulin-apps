@@ -92,8 +92,7 @@ ask the sender for a paper copy, or withdraw consent, by contacting the sender b
 electronic signing, at no charge), that they receive the signed document and its certificate after everyone has signed
 (Esign emails a link to download it), and that they need a current web browser, a PDF reader and access to their email.
 
-Signing records which version of the disclosure the signer agreed to. Its wording is a draft that still needs review by
-counsel; Esign is experimental.
+Signing records which version of the disclosure the signer agreed to.
 
 ### Placed fields
 

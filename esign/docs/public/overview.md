@@ -1,16 +1,11 @@
 ---
 title: Esign overview
-description: What Esign does, who it is for, its pages, and how it runs on Insulin Apps. Experimental, for synthetic documents only.
+description: What Esign does, who it is for, its pages, and how it runs on Insulin Apps.
 order: 1
 ---
 
 Esign sends PDFs for electronic signature. This page is for anyone deciding whether to use it, and for AI agents that need
 a map of the app before they act on it.
-
-> [!WARNING]
-> **Esign is experimental.** Use synthetic documents and test email addresses only. The consent wording, the
-> certificate of completion and the timestamp service still need legal and operational review before real documents
-> are signed.
 
 ## What Esign does
 

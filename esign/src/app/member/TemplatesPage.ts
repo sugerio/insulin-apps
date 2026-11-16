@@ -259,7 +259,7 @@ export function TemplatesPage({ me }: { me: Me }) {
     h(Notice, { message: creating || editor || current ? '' : message.text, error: message.error }),
     h(Dialog, { open: creating, onOpenChange: setCreating, label: 'New template', dismissible: !busy, className: 'sm:max-w-3xl' },
       h(DialogHeader, null, h(DialogTitle, null, 'New template'),
-        h(DialogDescription, null, 'A PDF of up to 5 MB and 100 pages, and the roles that sign it, in signing order. Use synthetic documents until your organization has reviewed Esign for real ones.')),
+        h(DialogDescription, null, 'A PDF of up to 5 MB and 100 pages, and the roles that sign it, in signing order.')),
       notice,
       h('div', { className: 'flex flex-col gap-4' },
         h(Field, { label: 'PDF', htmlFor: 'template-pdf' },

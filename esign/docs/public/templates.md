@@ -20,8 +20,7 @@ or `seller`. When you send an envelope, you name one person for each role, and t
 | Roles | 1 to 20, each different |
 | Role names | Letters, digits, `-` and `_`, no spaces, up to 64 characters |
 
-The PDF must be a valid PDF; a file Esign can't read is refused. Use synthetic documents until your organization has
-reviewed Esign for real ones.
+The PDF must be a valid PDF; a file Esign can't read is refused.
 
 ## A signature page, or placed fields
 

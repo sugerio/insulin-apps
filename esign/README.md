@@ -11,10 +11,6 @@ members in and decides what their role allows. A host product can also drive it 
 with a service account, embed the signing page and the template editor in its own pages, and follow
 each envelope's status.
 
-**Status: experimental.** Use synthetic documents and test addresses only. The consent wording, the
-certificate and the timestamp service still need review before real documents are signed (see
-"Known limitations" in [docs/architecture.md](docs/architecture.md)).
-
 ## What it does
 
 - **Templates.** A PDF with the roles that sign it (for example `partner` and `seller`). Fields

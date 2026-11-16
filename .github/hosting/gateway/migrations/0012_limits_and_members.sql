@@ -1,4 +1,4 @@
--- App limits, where each app is used, and member events (.github/hosting/DESIGN.md §12.2, §12.3). Console admins set
+-- App limits, where each app is used, and member events (.github/hosting/DESIGN.md §8.8, §8.9). Console admins set
 -- an app's limits for everyone or for one organization, and the app reads them on its tick (GET /__insulin/limits).
 -- Apps that let people share their records keep in step with who is still a member through GET
 -- /__insulin/member-events, written here by triggers in the same transaction as each change they record, whichever

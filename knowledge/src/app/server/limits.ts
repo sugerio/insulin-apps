@@ -2,7 +2,7 @@ import { ApiError } from './http.ts'
 import type { Bindings } from './env.ts'
 
 /**
- * Free limits (design section 12; DESIGN.md §12.2). The catalog is package.json `insulin.limits` (a test keeps this
+ * Free limits (design section 12; DESIGN.md §8.8). The catalog is package.json `insulin.limits` (a test keeps this
  * copy equal to it); Insulin Apps' operators change the defaults and each organization's overrides in the operator
  * console, and the tick pulls them from `/__insulin/limits` (limits-sync.ts) into `limit_defaults` and `org_limits`.
  * The effective limit is the organization's override (until its end date), else the default stored from the
@@ -139,7 +139,7 @@ export function supportSentence(env: Pick<Bindings, 'SUPPORT_EMAIL'>): string {
   return address ? `For a higher limit, contact Insulin Apps support at ${address}.` : 'For a higher limit, contact Insulin Apps support.'
 }
 
-/** The 429 of a limit (DESIGN.md §12.2): `{ error: 'quota_exceeded', limit, resets_at, message }`. */
+/** The 429 of a limit (DESIGN.md §8.8): `{ error: 'quota_exceeded', limit, resets_at, message }`. */
 export function quotaExceeded(env: Pick<Bindings, 'SUPPORT_EMAIL'>, key: LimitKey, limit: number, now: number): ApiError {
   const monthly = MONTHLY.has(key)
   const message = `Your organization has used ${PHRASES[key]?.(limit) ?? 'this limit'}. ${WHAT_NOW[key]?.(now) ?? ''} ${supportSentence(env)}`.replace(/\s+/g, ' ').trim()

@@ -739,7 +739,7 @@ test('argument parsing keeps mutating output restricted to dry-run', () => {
   assert.throws(() => parseArguments(['--gateway-only', '--engine-image', 'image.tar']), /--engine-image needs --only/)
 })
 
-// --- Engines (DESIGN.md §12.1), app platform variables and limit catalogs (§12.2) ----------------------------------
+// --- Engines (DESIGN.md §8.7), app platform variables and limit catalogs (§8.8) ------------------------------------
 
 const DIGEST = `sha256:${'d'.repeat(64)}`
 const PUSHED_DIGEST = `sha256:${'e'.repeat(64)}`

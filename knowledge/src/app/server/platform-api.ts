@@ -2,7 +2,7 @@ import type { Bindings } from './env.ts'
 import { gatewayEndpoint } from './gateway-fetch.ts'
 
 /**
- * The platform's endpoints Knowledge calls (DESIGN.md §8.2, §8.6, §12.2, §12.3), all with the app's token over the
+ * The platform's endpoints Knowledge calls (DESIGN.md §8.2, §8.6, §8.8, §8.9), all with the app's token over the
  * gateway's service binding: mail, usage reports, limits, the member lookup, member status and member events. Each URL
  * comes from the deploy (SUGER_*_URL); without it, or without SUGER_APP_TOKEN, nothing is called (the local preview).
  */

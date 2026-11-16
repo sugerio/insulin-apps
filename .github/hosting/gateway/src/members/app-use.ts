@@ -1,4 +1,4 @@
-// Where each app is used (DESIGN.md §12.3): the gateway's first request to an app for an organization, by a person, an
+// Where each app is used (DESIGN.md §8.9): the gateway's first request to an app for an organization, by a person, an
 // AI agent or an API client, is written to `app_orgs`. An isolate remembers the pairs it has written, so this costs one
 // D1 write per pair and isolate, not one per request. It is written before the request goes on, so an app never serves
 // an organization the limits and member endpoints don't yet answer for.

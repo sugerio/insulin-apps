@@ -220,7 +220,7 @@ test("reads a workflow's push paths: a list, none for a push without paths, or n
   assert.equal(pushPaths(''), null)
 })
 
-// --- Engines (DESIGN.md §12.1) ------------------------------------------------------------------------------------
+// --- Engines (DESIGN.md §10.1) ------------------------------------------------------------------------------------
 
 /** The synthetic engine (fixtures/engine) as the files of an app `kappa`'s engine/, for a repository. */
 function engineApp() {

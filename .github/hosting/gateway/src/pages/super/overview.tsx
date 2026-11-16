@@ -24,7 +24,7 @@ export interface OverviewData {
   snapshotAt: number | null
   /** What the latest snapshot couldn't read, by part; its meters leave those figures out. */
   snapshotProblems: string[]
-  /** Organizations at 80% or more of an app's limit, from the app's latest report (DESIGN.md §12.2). */
+  /** Organizations at 80% or more of an app's limit, from the app's latest report (DESIGN.md §11.7). */
   limits: (LimitWatchRow & { appTitle: string })[]
 }
 

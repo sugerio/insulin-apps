@@ -1,4 +1,4 @@
-// App limits (DESIGN.md §12.2). The deploy writes each app's catalog (its package.json insulin.limits) to
+// App limits (DESIGN.md §8.8). The deploy writes each app's catalog (its package.json insulin.limits) to
 // `app_limit_catalog` (scripts/limits-catalog.mjs); console admins put a default of their own in its place
 // (`app_limit_defaults`) or override a limit for one organization (`org_app_limits`), each change stamped with the next
 // number of `app_limit_sequence`; `org_app_limit_changes` keeps each organization's latest change, so an app reading

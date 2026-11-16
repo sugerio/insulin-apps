@@ -309,7 +309,7 @@ const ENGINE_RESERVED_DIRECTORIES = new Set(['src', 'public', 'docs', 'node_modu
 const ENGINE_SEGMENT = /^[a-z0-9][a-z0-9_-]{0,39}$/
 
 /**
- * An app's engine (DESIGN.md §12.1): `insulin.engine`, a directory inside the app that holds a second Worker of its
+ * An app's engine (DESIGN.md §8.7): `insulin.engine`, a directory inside the app that holds a second Worker of its
  * own (`"engine/"`), and `insulin.engineApi`, the engine API version the app calls (a positive integer, required with
  * an engine and refused without one). The directory comes back without its trailing slash, or null without an engine.
  */
@@ -337,7 +337,7 @@ const LIMIT_FIELDS = new Set(['key', 'label', 'unit', 'default'])
 const LIMIT_DEFAULT_MAX = 10 ** 15
 
 /**
- * An app's limit catalog, `insulin.limits` in its package.json (DESIGN.md §12.2): at most 20 entries of { key, label,
+ * An app's limit catalog, `insulin.limits` in its package.json (DESIGN.md §8.8): at most 20 entries of { key, label,
  * unit, default }, keys unique and named like usage metrics, `unit` one of count, bytes, hours or days, and `default`
  * a whole number from 0. It doesn't go to the gateway in SITE_APPS (5 KB): the deploy writes it to the gateway's D1.
  */
@@ -398,7 +398,7 @@ export function validateAppName(name) {
   if (RESERVED_APP_NAMES.has(name)) {
     throw new Error(`App directory name ${JSON.stringify(name)} is reserved for the hosting gateway`)
   }
-  // An app's engine Worker is insulin-apps-<app>-engine (DESIGN.md §12.1): an app named so would collide with one.
+  // An app's engine Worker is insulin-apps-<app>-engine (DESIGN.md §8.7): an app named so would collide with one.
   if (name.endsWith('-engine')) {
     throw new Error(`App directory name ${JSON.stringify(name)} ends in -engine, which names another app's engine Worker`)
   }

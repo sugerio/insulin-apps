@@ -34,7 +34,7 @@ export interface Actor {
  * The identity contract of `@fours/app` (`getCurrentUser` with SUGER_ACCESS_MODE=console), plus the permissions of an
  * app with a catalog and how the request came (DESIGN.md §2.4). A person (in a browser or through an AI agent) also
  * comes with their organization role, `x-suger-org-role`: OWNER, ADMIN, EDITOR, VIEWER or APPS; an API client, which
- * has none, without it (DESIGN.md §12.3). `memberLookup` is the signed x-suger-member-lookup header
+ * has none, without it (DESIGN.md §2.4). `memberLookup` is the signed x-suger-member-lookup header
  * (members/lookup-token.ts), for browser requests only.
  */
 export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, access: AppAccess, via: AccessVia, { memberLookup }: { memberLookup?: string | null } = {}): Record<string, string> {

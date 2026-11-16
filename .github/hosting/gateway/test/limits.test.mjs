@@ -1,4 +1,4 @@
-// App limits (DESIGN.md §12.2): the catalog the deploy writes to D1 (scripts/limits-catalog.mjs), GET /__insulin/limits
+// App limits (DESIGN.md §8.8): the catalog the deploy writes to D1 (scripts/limits-catalog.mjs), GET /__insulin/limits
 // with its defaults, overrides, cursor and pages, the console's /super/apps/<app>/limits and each organization's Limits
 // section (admins change, everything audited), the watch list at 80%, and an app's 429 reaching an AI assistant. All
 // data is synthetic.

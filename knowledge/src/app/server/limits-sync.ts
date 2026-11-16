@@ -3,7 +3,7 @@ import { LIMIT_KEYS } from './limits.ts'
 import { callPlatform } from './platform-api.ts'
 
 /**
- * Pulls the limits Insulin Apps' operators set (DESIGN.md §12.2): `GET <SUGER_LIMITS_URL>?since=<cursor>` with the
+ * Pulls the limits Insulin Apps' operators set (DESIGN.md §8.8): `GET <SUGER_LIMITS_URL>?since=<cursor>` with the
  * app's token, answering `{ defaults: { key: value }, organizations: [{ id, limits: { key: { value, until } } }],
  * cursor, more }`. Defaults replace what is stored; each organization listed has all its overrides replaced (`{}`
  * clears them). The cursor is saved after each page, so an interrupted tick resumes where it stopped. On anything

@@ -7,7 +7,7 @@ import { callPlatform } from './platform-api.ts'
 
 /**
  * The organization's people and API clients as Knowledge knows them (table `members`), and how sharing follows them
- * when they leave, return or change role (design section 08, DESIGN.md §12.3):
+ * when they leave, return or change role (design section 08, DESIGN.md §8.9):
  *
  * - A person or client who leaves loses access at once: their shares go on hold. A person who returns gets their
  *   shares back ("Welcome back"); an API client that was revoked doesn't come back.
@@ -20,7 +20,7 @@ import { callPlatform } from './platform-api.ts'
  * resyncs: a fresh cursor first, everyone it holds marked unchecked, then each checked with member status, saving
  * progress as it goes, and only then events again from the saved cursor.
  *
- * Shapes Knowledge reads from the platform (§12.3, as the gateway's src/members/ builds them):
+ * Shapes Knowledge reads from the platform (§8.9, as the gateway's src/members/ builds them):
  *   lookup  { members: [{ type: 'person', id, name, email, appRole } | { type: 'client', id, name }] }
  *   status  { org, owners: [{ user, since }], members: [{ id, type, status: member | left | revoked | gone, orgRole?, appRole? }] },
  *           404 org_deleted for an organization that no longer exists (404 unknown_organization isn't that)

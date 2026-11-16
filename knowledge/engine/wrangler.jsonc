@@ -1,4 +1,4 @@
-// The Knowledge engine Worker (.github/hosting/DESIGN.md §12.1). The deploy writes the deployed config itself: it
+// The Knowledge engine Worker (.github/hosting/DESIGN.md §8.7). The deploy writes the deployed config itself: it
 // names the R2 buckets (insulin-apps-knowledge-engine-files, insulin-apps-knowledge-engine-backups), replaces the
 // image's Dockerfile with the pushed image pinned by digest, and keeps both public switches off. Nothing here
 // names an account, a bucket or an image in a registry.

@@ -1,4 +1,4 @@
-// What an app may learn about its organizations' people (DESIGN.md §12.3), with its SUGER_APP_TOKEN over
+// What an app may learn about its organizations' people (DESIGN.md §8.9), with its SUGER_APP_TOKEN over
 // SUGER_GATEWAY, and only in organizations where it is used:
 //   GET  /__insulin/members?q=        a sharing dialog's search, for the person of the browser request it serves
 //   POST /__insulin/members/status    whether the people and API clients it holds can still use it, and the owners

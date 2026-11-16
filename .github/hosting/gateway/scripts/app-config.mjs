@@ -12,7 +12,7 @@
 // gives every app (deploy-apps.mjs's platformAppBindings): the SUGER_GATEWAY binding with the gateway's URLs on
 // http://insulinapps.localhost:<port>, an app token derived from the local key as the deploy derives it, so the mail
 // relay, usage reports, limits and the member endpoints work locally, and SUGER_TRUST_ORG_ROLE. An app with an engine
-// (DESIGN.md §12.1) also gets its stub engine (<engine>/src/stub/worker.ts) as insulin-apps-<app>-engine, bound as
+// (DESIGN.md §10.2) also gets its stub engine (<engine>/src/stub/worker.ts) as insulin-apps-<app>-engine, bound as
 // SUGER_ENGINE. Every config lands in .dev/.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'

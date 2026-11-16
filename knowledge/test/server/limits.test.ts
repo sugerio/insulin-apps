@@ -4,7 +4,7 @@ import { ORGANIZATION_METRICS } from '../../src/app/server/usage-metrics.ts'
 import { createHarness, ORG, PEOPLE, SUPPORT, type Harness, type Person } from '../support/harness.ts'
 import packageJson from '../../package.json' with { type: 'json' }
 
-// Free limits (design section 12; DESIGN.md §12.2): LIM-01, LIM-02, LIM-03, LIM-07, LIM-08, LIM-10, the limits pulled
+// Free limits (design section 12; DESIGN.md §8.8): LIM-01, LIM-02, LIM-03, LIM-07, LIM-08, LIM-10, the limits pulled
 // from the operator console, reservations under concurrency and the hourly usage report.
 
 let h: Harness

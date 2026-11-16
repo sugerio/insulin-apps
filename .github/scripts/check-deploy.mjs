@@ -14,7 +14,7 @@
 // is refused instead, and `all` leaves out the apps held back.
 //
 // A release older than the latest one goes back. Its own deploy does nothing then, since the newer release deploys
-// everything that passed; by hand it needs --rollback. An app's engine (DESIGN.md §12.1) can't go back past a Durable
+// everything that passed; by hand it needs --rollback. An app's engine (DESIGN.md §10.1) can't go back past a Durable
 // Object migration either: its migrations only move forward, as D1's do.
 //
 // For an app with an engine, it also says whether this run builds the engine's container image (`images`, a JSON

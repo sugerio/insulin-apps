@@ -1,4 +1,4 @@
-// What a console admin types into a limit's form (DESIGN.md §12.2): a value in the limit's unit, or "unlimited", and an
+// What a console admin types into a limit's form (DESIGN.md §11.7): a value in the limit's unit, or "unlimited", and an
 // optional last day for an organization's override. Pure, so the unit tests import it directly.
 import type { LimitUnit } from '../db/limits.ts'
 

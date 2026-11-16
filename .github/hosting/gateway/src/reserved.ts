@@ -32,7 +32,7 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
     // Usage reports (metrics/report.ts), sent by app Workers every hour with their own token: POST, apex only.
     case '/__insulin/metrics':
       return appMetricsReport(ctx)
-    // What apps read with their own token on the apex (DESIGN.md §12.2, §12.3): their limits (limits/endpoint.ts), and
+    // What apps read with their own token on the apex (DESIGN.md §8.8, §8.9): their limits (limits/endpoint.ts), and
     // the people of the organizations where they are used (members/endpoints.ts).
     case '/__insulin/limits':
       return appLimits(ctx)

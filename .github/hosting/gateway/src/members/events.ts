@@ -1,4 +1,4 @@
-// Member events in one app's terms (DESIGN.md §12.3). The triggers of migration 0012 write each change once, for every
+// Member events in one app's terms (DESIGN.md §8.9). The triggers of migration 0012 write each change once, for every
 // app ('*') or for one; here a stored event becomes what that app needs: `left` when the person can no longer use it,
 // `returned` when they can again (or for the first time), `role_changed` with their app and organization roles, the
 // organization's `owners`, `client_revoked` and `org_deleted`. No I/O, so the unit tests import it directly.

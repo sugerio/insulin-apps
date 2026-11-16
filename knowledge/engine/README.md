@@ -1,7 +1,7 @@
 # Insulin Knowledge: the engine
 
 The engine is the part of Insulin Knowledge that learns a collection's files and answers questions from them. It is
-an app-owned engine as `.github/hosting/DESIGN.md` §12.1 describes: a second Worker,
+an app-owned engine as `.github/hosting/DESIGN.md` §8.7 describes: a second Worker,
 `insulin-apps-knowledge-engine`, with no public address. Only the Knowledge app reaches it, over its `SUGER_ENGINE`
 service binding, and every call names the organization it acts for in `x-knowledge-org`. The app checks who may do
 what before it calls; the engine keeps one organization's collections apart from another's (an id from another
@@ -125,7 +125,7 @@ The models (GLiNER for the graph, fastembed `BAAI/bge-small-en-v1.5` for passage
 unusable; collections move from their backups on their next wake (HIS-03), and History marks the older restore
 points as unavailable.
 
-The release builds and pushes the image (DESIGN.md §12.1 "Images"). Wrangler's own build is not used for a release.
+The release builds and pushes the image (DESIGN.md §10.1 "Images"). Wrangler's own build is not used for a release.
 
 ## The Engine-lane harness
 
@@ -154,7 +154,7 @@ The runner has been rehearsed against the in-memory engine over HTTP; it has not
 
 - **Registry credential lifetime.** `wrangler deploy` pushes the image with a registry credential that lasts
   15 minutes. The dependency layer is about 2.5 GB; on a slow uplink it doesn't finish in time and every retry is
-  refused. Push with a longer-lived credential first (the release does, §12.1), then deploy with the digest.
+  refused. Push with a longer-lived credential first (the release does, §10.1), then deploy with the digest.
 - **LanceDB needs AVX2.** Apple Silicon builds amd64 images under Rosetta, which has no AVX/AVX2; LanceDB crashes
   there. So the build's warm-up only loads the models, and nothing that opens a database can run in a local amd64
   build. `test/container-smoke.sh` covers the control server and the import's fail paths locally; the databases run

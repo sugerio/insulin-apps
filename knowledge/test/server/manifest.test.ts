@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import packageJson from '../../package.json' with { type: 'json' }
 import { PERMISSIONS, rolePermissions } from '../../src/app/server/identity.ts'
 
-// package.json's `insulin` block: what the platform reads to host Knowledge (DESIGN.md §2.3, §3.2, §8, §12).
+// package.json's `insulin` block: what the platform reads to host Knowledge (DESIGN.md §2.3, §3.2, §8).
 
 describe('the insulin manifest', () => {
   const insulin = packageJson.insulin

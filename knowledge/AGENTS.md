@@ -8,7 +8,7 @@ before changing code. [README.md](README.md) explains what the app does and its 
 Insulin Knowledge keeps a team's files, web pages and notes in collections that people and their AI assistants ask,
 with answers that cite their sources or say "I won't guess". It is an Insulin app (one npm package, Vite + React +
 Nitro + Hono, one D1 database) that owns an **engine**: a second Worker in `engine/`, reached only over the
-`SUGER_ENGINE` service binding (`.github/hosting/DESIGN.md` §12.1). Users, roles and permissions come from the Insulin
+`SUGER_ENGINE` service binding (`.github/hosting/DESIGN.md` §8.7). Users, roles and permissions come from the Insulin
 platform; the organization is the tenant.
 
 ## Commands
@@ -60,7 +60,7 @@ configuration with `readAppEnv(name)` from `#platform`. Never put a secret in so
 
 ## Accounts, roles and access
 
-These follow the root `AGENTS.md` and DESIGN.md §2, §4, §12.3 and §12.4.
+These follow the root `AGENTS.md` and DESIGN.md §2, §4 and §8.9.
 
 - **One place signs people in.** Never add sign-in, sessions or OAuth. Read who calls with `readCaller` (identity.ts),
   the one place that reads `getCurrentUser` and the `x-suger-*` headers.

@@ -27,7 +27,7 @@ const ACTIONS: Record<string, string> = {
 const TARGET_PAGES: Record<string, (id: string) => string> = {
   org: (id) => `/super/orgs/${id}`,
   user: (id) => `/super/users/${id}`,
-  // An app's audit records are its limits' (DESIGN.md §12.2).
+  // An app's audit records are its limits' (DESIGN.md §11.7).
   app: (id) => `/super/apps/${id}/limits`,
 }
 

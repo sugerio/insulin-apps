@@ -73,7 +73,7 @@ export async function proxyToApp(ctx: Context, app: HostedApp): Promise<Response
   }
 
   await noteAppUse(ctx, app, org.id)
-  // The app passes this back to look up members for a sharing dialog (DESIGN.md §12.3); without the key, none.
+  // The app passes this back to look up members for a sharing dialog (DESIGN.md §8.9); without the key, none.
   const memberLookup = ctx.config.secretKey ? await signMemberLookup(ctx.config.secretKey, app.name, org.id, session.user.id, ctx.now) : null
   let upstream: Response
   try {

@@ -9,7 +9,7 @@ It is an Insulin app: it runs at `knowledge.<domain>` behind the Insulin hosting
 decides their role, serves Knowledge's MCP server for AI assistants and its API for API clients, relays mail and runs
 a five-minute tick. Unlike the other apps, Knowledge owns an **engine** (`engine/`): a second Worker, reached only over
 the `SUGER_ENGINE` service binding, with one Durable Object and container per collection
-(`.github/hosting/DESIGN.md` §12.1). The product design is "Insulin Knowledge" (design sections cited below).
+(`.github/hosting/DESIGN.md` §8.7). The product design is "Insulin Knowledge" (design sections cited below).
 
 **Status: in development.** The API, the screens (Home, Collections, each collection's Overview, Ask, Sources, What it
 knows, Sharing and History, Needs attention, Rules and data, Health) and the in-app Docs are built; the real engine

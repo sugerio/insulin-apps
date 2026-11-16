@@ -59,7 +59,7 @@ const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4'
 // dependency layer finishes uploading (Wrangler's own credential lasts 15 minutes). deploy-release.yml's deploy job
 // times out before it.
 export const REGISTRY_CREDENTIAL_MINUTES = 240
-// The gateway's module that writes an app's limit catalog to its D1 (DESIGN.md §12.2).
+// The gateway's module that writes an app's limit catalog to its D1 (DESIGN.md §8.8).
 const LIMIT_CATALOG_MODULE = join('.github', 'hosting', 'gateway', 'scripts', 'limits-catalog.mjs')
 const APP_CONFIG_KEYS = new Set(['compatibility_date', 'compatibility_flags', 'rules', 'no_bundle', 'assets'])
 const APP_ASSET_KEYS = new Set(['binding', 'html_handling', 'not_found_handling', 'run_worker_first'])
@@ -101,7 +101,7 @@ export function readSettings(environment = process.env, { gateway = true } = {})
     siteDomain: environment.SITE_DOMAIN?.trim() || 'insulinapps.com',
     gatewaySecretKey,
     // The contact the landing pages show, and the support address an app's limit messages name (SUGER_SUPPORT_EMAIL,
-    // DESIGN.md §12.2). Optional.
+    // DESIGN.md §8.8). Optional.
     supportEmail: environment.SUPPORT_EMAIL?.trim() ?? '',
   }
   if (!gateway) return settings
@@ -175,7 +175,7 @@ export function appSecretValues(app, environment) {
 }
 
 /**
- * The gateway's endpoints an app calls, by the variable that holds each URL (DESIGN.md §6, §8.2, §8.6, §12.2, §12.3),
+ * The gateway's endpoints an app calls, by the variable that holds each URL (DESIGN.md §6, §8.2, §8.6, §8.8, §8.9),
  * all on the apex and sent over the SUGER_GATEWAY binding with SUGER_APP_TOKEN. `origin` is
  * http://insulinapps.localhost:<port> in a local run.
  */
@@ -185,9 +185,9 @@ export function gatewayUrls(origin) {
     SUGER_MAIL_URL: `${origin}/__insulin/mail`,
     // Where the app reports its usage every hour (§8.6).
     SUGER_METRICS_URL: `${origin}/__insulin/metrics`,
-    // Its organizations' limits, set in the operator console (§12.2).
+    // Its organizations' limits, set in the operator console (§8.8).
     SUGER_LIMITS_URL: `${origin}/__insulin/limits`,
-    // The member lookup, member status and member events of §12.3.
+    // The member lookup, member status and member events of §8.9.
     SUGER_MEMBERS_URL: `${origin}/__insulin/members`,
     SUGER_MEMBER_STATUS_URL: `${origin}/__insulin/members/status`,
     SUGER_MEMBER_EVENTS_URL: `${origin}/__insulin/member-events`,
@@ -197,8 +197,8 @@ export function gatewayUrls(origin) {
 /**
  * The variables and service bindings the platform gives an app Worker, in production and in a local run alike:
  * the gateway's URLs with the binding to call them through (when there is an app token to call them with), the
- * support address, the organization role trusted (the gateway sets x-suger-org-role, §12.3) and, for an app with an
- * engine, the binding to it and the engine API version it calls, recorded so a later deploy can read it back (§12.1).
+ * support address, the organization role trusted (the gateway sets x-suger-org-role, §2.4) and, for an app with an
+ * engine, the binding to it and the engine API version it calls, recorded so a later deploy can read it back (§10.1).
  */
 export function platformAppBindings({ app, gatewayVars = null, supportEmail = '' }) {
   const vars = {
@@ -403,7 +403,7 @@ export async function deployApps({
     const runner = new CommandRunner({ dryRun, spawn, secrets: [] })
     if (buildOnly) buildApps(runner, root, selectedApps, environment)
     else for (const app of selectedApps.filter(({ engine }) => engine)) buildAppEngine(runner, root, app, environment)
-    // The engine's image, when the release needs it (DESIGN.md §12.1 "Images"): built here, pushed by the deploy.
+    // The engine's image, when the release needs it (DESIGN.md §10.1 "Images"): built here, pushed by the deploy.
     const image = engineImage ? buildEngineImage({ runner, root, app: requireEngineApp(selectedApps, only), archive: resolve(engineImage), environment }) : null
     return { skipped: false, built: selectedApps.map(({ name }) => name), ...(image ? { image } : {}), commands: runner.plan }
   }
@@ -490,7 +490,7 @@ export async function deployApps({
     const baseConfig = baseConfigs.get(app.name)
     let databaseId
 
-    // An app's engine goes first, so the app never runs against an engine that can't serve it (DESIGN.md §12.1).
+    // An app's engine goes first, so the app never runs against an engine that can't serve it (DESIGN.md §10.1).
     if (app.engine) {
       await deployEngine({
         runner, wrangler, root, app, engine: engines.get(app.name), cloudflare, outputDirectory, release, dryRun,
@@ -542,7 +542,7 @@ export async function deployApps({
       cwd: root,
       env: childEnvironment,
     })
-    // What SITE_APPS can't hold (5 KB): the limit catalogs of the apps this deploy put in production (DESIGN.md §12.2).
+    // What SITE_APPS can't hold (5 KB): the limit catalogs of the apps this deploy put in production (DESIGN.md §8.8).
     if (catalogApps.length) {
       await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: catalogApps, env: childEnvironment, dryRun, configPath: gatewayConfigPath })
     }
@@ -608,7 +608,7 @@ async function removePublicAccess(runner, cloudflare, worker, dryRun) {
   await removeAppPublicAccess({ ...cloudflare, worker })
 }
 
-// --- The engine (DESIGN.md §12.1) ----------------------------------------------------------------------------------
+// --- The engine (DESIGN.md §10.1) ----------------------------------------------------------------------------------
 
 /**
  * What the deploy needs of an app's engine, read from the release's checkout and checked again, never trusted: its
@@ -728,7 +728,7 @@ export async function ensureBucket({ fetchImpl, apiToken, accountId, name }) {
 }
 
 /**
- * The engine image to deploy, by digest (§12.1 "Images"): the digest its tag resolves to in the account's registry.
+ * The engine image to deploy, by digest (§10.1 "Images"): the digest its tag resolves to in the account's registry.
  * When the registry lacks the tag, the image this release's build job made is pushed first, with a credential that
  * outlasts the upload; without one (the build job didn't build it, so an earlier push must have failed) the deploy
  * stops and asks for a deploy by hand, which always builds the image.
@@ -881,7 +881,7 @@ export function buildAppEngine(runner, root, app, environment) {
 
 /**
  * Builds an app's engine image for linux/amd64 and saves it to `archive`, for the release's build job when its tag
- * changed (§12.1 "Images"). The build context holds exactly the files the tag covers, so the image is what its tag
+ * changed (§10.1 "Images"). The build context holds exactly the files the tag covers, so the image is what its tag
  * names; it is tagged insulin-apps-<app>-engine:<tag> locally, and the deploy pushes it.
  */
 export function buildEngineImage({ runner, root, app, archive, environment }) {
@@ -910,7 +910,7 @@ export function buildEngineImage({ runner, root, app, archive, environment }) {
   return { tag, local, archive }
 }
 
-// --- Limit catalogs (DESIGN.md §12.2) --------------------------------------------------------------------------------
+// --- Limit catalogs (DESIGN.md §8.8) ---------------------------------------------------------------------------------
 
 /**
  * Writes apps' limit catalogs to the gateway's D1 with the SQL the gateway's own module makes (gateway

@@ -1,4 +1,4 @@
-// The app endpoints of DESIGN.md §12.2 and §12.3 (limits, members, member status, member events): on the apex only,
+// The app endpoints of DESIGN.md §8.8 and §8.9 (limits, members, member status, member events): on the apex only,
 // called by an app Worker over SUGER_GATEWAY with its own SUGER_APP_TOKEN, and nothing else. A session, an AI agent's
 // token or an API client's is no app's token, so it gets 401; the app is the token's, never one the request names.
 import type { HostedApp } from '../config.ts'

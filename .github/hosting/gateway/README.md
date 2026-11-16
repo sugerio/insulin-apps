@@ -11,7 +11,7 @@ over a service binding with the console identity headers. The apps need no hosti
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
 | `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*`, the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2), their hourly usage reports `/__insulin/metrics` (DESIGN.md §8.6), their limits `/__insulin/limits` (DESIGN.md §12.2), and their members `/__insulin/members`, `/__insulin/members/status` and `/__insulin/member-events` (DESIGN.md §12.3) |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*`, the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2), their hourly usage reports `/__insulin/metrics` (DESIGN.md §8.6), their limits `/__insulin/limits` (DESIGN.md §8.8), and their members `/__insulin/members`, `/__insulin/members/status` and `/__insulin/member-events` (DESIGN.md §8.9) |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
 app) is `.github/hosting/README.md`. This file is for developers.
@@ -53,9 +53,9 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, disconnecting them, and links to each app's Connect AI |
 | `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
 | `src/reserved.ts` | `/__insulin/me` (who is signed in, their organizations, the apex's origin and, in an app, its settings pages), `switch-org`, `logout`, `nav` (the navigation's collapse toggles), and the local captured-mail page; and routes the apps' own endpoints (mail, metrics, limits, members) |
-| `src/http/app-caller.ts` | the apps' endpoints of DESIGN.md §12.2 and §12.3: apex only, the app's `SUGER_APP_TOKEN` only (the app is the token's), 503 without `GATEWAY_SECRET_KEY`, and their cursors |
-| `src/limits/endpoint.ts`, `src/db/limits.ts`, `scripts/limits-catalog.mjs` | app limits (DESIGN.md §12.2): `GET /__insulin/limits`; the catalog, the admins' defaults and each organization's overrides with their change numbers, and the watch list's query; the SQL the deploy and the local run use to write each app's catalog to D1 |
-| `src/members/` | what apps learn about their organizations' people (DESIGN.md §12.3): the signed `x-suger-member-lookup` header (`lookup-token.ts`), where each app is used (`app-use.ts`, one D1 write per app, organization and isolate), member events in one app's terms (`events.ts`), and the lookup, member status and member events endpoints (`endpoints.ts`); their queries are in `src/db/members.ts`, and the events are written by the triggers of migration 0012 |
+| `src/http/app-caller.ts` | the apps' endpoints of DESIGN.md §8.8 and §8.9: apex only, the app's `SUGER_APP_TOKEN` only (the app is the token's), 503 without `GATEWAY_SECRET_KEY`, and their cursors |
+| `src/limits/endpoint.ts`, `src/db/limits.ts`, `scripts/limits-catalog.mjs` | app limits (DESIGN.md §8.8): `GET /__insulin/limits`; the catalog, the admins' defaults and each organization's overrides with their change numbers, and the watch list's query; the SQL the deploy and the local run use to write each app's catalog to D1 |
+| `src/members/` | what apps learn about their organizations' people (DESIGN.md §8.9): the signed `x-suger-member-lookup` header (`lookup-token.ts`), where each app is used (`app-use.ts`, one D1 write per app, organization and isolate), member events in one app's terms (`events.ts`), and the lookup, member status and member events endpoints (`endpoints.ts`); their queries are in `src/db/members.ts`, and the events are written by the triggers of migration 0012 |
 | `src/navigation.ts` | the two-level navigation of the signed-in pages as data (DESIGN.md §3.2): level 1 and 2 for the organization's pages, the account pages and an app's settings pages (its manifest, by the person's role), the breadcrumb, the `insulin_nav` cookie and `/__insulin/nav`; `src/nav-icons.ts` the icon names an app's manifest may use (list-apps.mjs's) and each app's own icon (also the docs') |
 | `src/mail/` | the transport (Email Service binding, or the `mail_capture` table in test mode), the messages, and the apps' mail relay (`relay.ts`) |
 | `src/turnstile.ts`, `src/ratelimit.ts` | bot checks and rate limits |
@@ -108,7 +108,7 @@ The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-i
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
 `SUGER_ACCESS_MODE=console`, plus `x-suger-access-via` (`browser`, `mcp` or `api`) and, for an app with a permission
 catalog, `x-suger-app-permissions` (space-separated). A person's requests (`browser` and `mcp`) also carry
-`x-suger-org-role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for specific apps; DESIGN.md §12.3), and browser
+`x-suger-org-role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for specific apps; DESIGN.md §2.4), and browser
 requests, when `GATEWAY_SECRET_KEY` is set, `x-suger-member-lookup`: `v1.<organization>.<person>.<expiry>.<signature>`,
 the expiry five minutes ahead in epoch seconds and the signature an HMAC-SHA256 (base64url) over
 `v1|<app>|<organization>|<person>|<expiry>` with a key derived from `GATEWAY_SECRET_KEY` (HKDF-SHA256, info
@@ -401,7 +401,7 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   organizations go as one JSON parameter that `json_each` unpacks, so a report of 500 never meets D1's limits on
   statements per invocation or parameters per statement, and only organizations the gateway knows are stored. Each
   report also prunes up to 1,000 of its app's expired rows per table, more than it can add.
-- **App limits** (DESIGN.md §12.2). The deploy writes each app's catalog (`insulin.limits`) to `app_limit_catalog` with
+- **App limits** (DESIGN.md §8.8). The deploy writes each app's catalog (`insulin.limits`) to `app_limit_catalog` with
   `scripts/limits-catalog.mjs`, which replaces the app's whole catalog. A console admin's default (`app_limit_defaults`)
   or an organization's override (`org_app_limits`, a number or NULL for unlimited, until an optional time) is written in
   one batch with its audit record, conditional on being a change, and stamped with the next number of
@@ -413,7 +413,7 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   page, an AI agent's tool call, an API client) writes a row before the request goes on, once per pair and isolate. The
   limits, members and member events an app reads are only those of its organizations; deleting an organization
   forgets its rows.
-- **Member events** (DESIGN.md §12.3) are written by triggers (migration 0012), so every path that changes memberships,
+- **Member events** (DESIGN.md §8.9) are written by triggers (migration 0012), so every path that changes memberships,
   app grants, custom roles' permissions, API clients or organizations records them in its own transaction, however it
   is made, with no code of its own. An event is stored once, for every app (`*`) or one, with the roles after the change
   and, for a move between an organization role and specific apps, the apps before (a `BEFORE UPDATE` trigger, since the

@@ -1,4 +1,4 @@
-// App limits in the operator console (DESIGN.md §12.2). /super/apps/<app>/limits: each limit of the app's catalog with
+// App limits in the operator console (DESIGN.md §11.7). /super/apps/<app>/limits: each limit of the app's catalog with
 // the catalog's default and the default in force, and for admins the forms to change a default or put the catalog's
 // back. Each organization's page: a Limits section with the usage its apps last reported beside each limit, its
 // overrides, and for admins the forms to override a limit (a number or unlimited, an optional last day) or remove one.
@@ -162,7 +162,7 @@ export interface OrgAppLimits {
   usage: Metrics | null
 }
 
-/** A monthly count is a month-to-date gauge (§12.2): its key ends in _month. */
+/** A monthly count is a month-to-date gauge (§8.8): its key ends in _month. */
 function usageText(row: CatalogRow, usage: Metrics | null): string {
   const used = usage?.[row.key]
   if (used === undefined) return "–"

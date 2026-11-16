@@ -1,4 +1,4 @@
-// What apps learn about their organizations' people (DESIGN.md §12.3): where each app is used (`app_orgs`), the member
+// What apps learn about their organizations' people (DESIGN.md §8.9): where each app is used (`app_orgs`), the member
 // events the triggers of migration 0012 write with every change, someone's current access for member status, and the
 // people and API clients a member lookup may return. Every read is for one app, and only in organizations where it is
 // used.

@@ -12,7 +12,7 @@ import { callerOf, iso, json, now, param, type Ctx } from './common.ts'
  * Sharing, like a Google Doc (design section 08): the owner or a collection Admin gives everyone in the organization
  * who can use Knowledge one role (up to Editor), and people or API clients their own (Viewer, Editor or Admin); the
  * highest wins. A collection Admin can change anyone's role except the owner's. Sharing lives here in D1, never in the
- * engine, so going back to a restore point never changes it. Every route is browser-only (DESIGN.md §12.4).
+ * engine, so going back to a restore point never changes it. Every route is browser-only (DESIGN.md §2.5).
  */
 const roleSchema = z.enum(['VIEWER', 'EDITOR', 'ADMIN'])
 

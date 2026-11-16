@@ -12,7 +12,7 @@ name: Deploy release
 # an app it doesn't have, and going back past a migration of anything it deploys, which needs the database restored;
 # and it deploys only what passed its latest check at or before the release (for a release, the rest is held back).
 #
-# An app with an engine (.github/hosting/DESIGN.md §12.1) has its engine built and bundled in the same build job, and
+# An app with an engine (.github/hosting/DESIGN.md §10.1) has its engine built and bundled in the same build job, and
 # its container image built there only when check-deploy.mjs says the image changed (its tag, a hash of its inputs,
 # differs from the last release that deployed the app; a deploy by hand always builds it). The image goes to the
 # production job as an artifact of this run, never through a cache. The production job pushes it only when the

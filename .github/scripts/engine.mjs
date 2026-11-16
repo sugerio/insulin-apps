@@ -1,4 +1,4 @@
-// An app's engine (.github/hosting/DESIGN.md §12.1): a second Worker in the app's directory, reached only by the app
+// An app's engine (.github/hosting/DESIGN.md §8.7): a second Worker in the app's directory, reached only by the app
 // over the SUGER_ENGINE service binding. This module holds the rules both the checker (check-insulin-app.mjs) and the
 // deploy (deploy-apps.mjs, check-deploy.mjs) apply to it: what its package and Wrangler config may declare, its
 // container image's inputs and tag, and the config the deploy writes for it. The deploy never trusts the engine's own
@@ -11,7 +11,7 @@ export const ENGINE_CONFIG = 'wrangler.jsonc'
 /** Where the deploy's build puts the engine's bundled Worker, under the engine directory. */
 export const ENGINE_OUTPUT = '.output'
 export const ENGINE_BUNDLE = join(ENGINE_OUTPUT, 'worker', 'index.js')
-/** The variables the deploy sets, so it can read back the versions a deploy put in production (§12.1 "Versions"). */
+/** The variables the deploy sets, so it can read back the versions a deploy put in production (§10.1 "Versions"). */
 export const ENGINE_SERVES_VAR = 'SUGER_ENGINE_SERVES'
 export const ENGINE_API_VAR = 'SUGER_ENGINE_API'
 /** The binding the app reaches its engine through. */
@@ -26,7 +26,7 @@ export const engineBucketName = (app, binding) => `${engineWorkerName(app)}-${bi
 /** The engine image's repository in the account's registry. */
 export const engineImageRepository = (app) => engineWorkerName(app)
 
-// Top-level keys an engine's Wrangler config may hold (§12.1). `$schema` is only an editor hint.
+// Top-level keys an engine's Wrangler config may hold (§8.7). `$schema` is only an editor hint.
 const CONFIG_KEYS = new Set([
   '$schema', 'name', 'main', 'compatibility_date', 'compatibility_flags', 'durable_objects', 'migrations', 'containers',
   'r2_buckets', 'ai', 'observability', 'workers_dev', 'preview_urls', 'vars',
@@ -192,7 +192,7 @@ const resolveInside = (engineDirectory, path) => {
 }
 
 /**
- * Why an engine's Wrangler config is refused (§12.1), as a list: only the keys an engine may declare, its own Durable
+ * Why an engine's Wrangler config is refused (§8.7), as a list: only the keys an engine may declare, its own Durable
  * Object classes, migrations that never take another Worker's objects, containers built from a Dockerfile in the
  * engine's directory, R2 bindings without bucket names, the Workers AI binding, no address of its own and nothing
  * that names the account or holds a secret.
@@ -553,7 +553,7 @@ export function imageInputs(image) {
 }
 
 /**
- * The image's tag: a hash of its inputs (§12.1 "Images"). The same Dockerfile, build variables and copied files give
+ * The image's tag: a hash of its inputs (§10.1 "Images"). The same Dockerfile, build variables and copied files give
  * the same tag wherever the engine directory is, so a release that doesn't change them keeps the image.
  */
 export function imageTag(engineDirectory, inputs) {
@@ -581,7 +581,7 @@ export function engineImageTag(engineDirectory, config = readEngineConfig(engine
 // --- Checks of the engine directory ----------------------------------------------------------------------------------
 
 /**
- * Every problem with an app's engine directory (§12.1), for check-insulin-app.mjs: its own package with exact versions,
+ * Every problem with an app's engine directory (§8.7), for check-insulin-app.mjs: its own package with exact versions,
  * `insulin.serves` covering the app's `engineApi` and the scripts the pipeline runs; an exact, registry-only lockfile;
  * its Wrangler config (engineConfigProblems); a base image pinned by digest; and no reference to the engine's own
  * image in a registry, anywhere in it.
@@ -684,7 +684,7 @@ export function engineProblems({ app, appDirectory, engine, engineApi }) {
 // --- The deployed config -------------------------------------------------------------------------------------------
 
 /**
- * The engine's config as the deploy writes it (§12.1 "Deploy"): its own name, the bundle the build made, its classes,
+ * The engine's config as the deploy writes it (§10.1 "Deploy"): its own name, the bundle the build made, its classes,
  * migrations and bindings, each R2 binding pointed at the bucket the deploy created, the container image by digest,
  * the API versions it serves recorded in a var, and both public switches off. Nothing else from the repository's
  * config reaches it.

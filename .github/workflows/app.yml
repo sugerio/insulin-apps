@@ -2,7 +2,7 @@ name: App pipeline
 
 # An app's checks, which its own workflow (<app>.yml) runs on pull requests and pushes to main. Nothing deploys here:
 # once every workflow a push started has passed, release.yml tags it as a release and deploy-release.yml deploys it.
-# An app with an engine (`insulin.engine`, .github/hosting/DESIGN.md §12.1) also has its engine installed, built and
+# An app with an engine (`insulin.engine`, .github/hosting/DESIGN.md §8.7) also has its engine installed, built and
 # bundled as a release bundles it, typechecked and tested; check-insulin-app.mjs checks it with its own rules.
 on:
   workflow_call:

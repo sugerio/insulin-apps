@@ -91,7 +91,7 @@ export interface OrgDetailData {
   members: OrgMemberRow[]
   usage: OrgUsage
   apps: OrgAppUsage[]
-  /** Each app with a limit catalog, as its limits stand for this organization (DESIGN.md §12.2). */
+  /** Each app with a limit catalog, as its limits stand for this organization (DESIGN.md §11.7). */
   limits: OrgAppLimits[]
   history: AuditRow[]
 }

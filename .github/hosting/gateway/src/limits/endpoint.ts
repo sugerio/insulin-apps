@@ -1,4 +1,4 @@
-// GET /__insulin/limits?since=<cursor> (DESIGN.md §12.2): an app's limits as the console's admins set them, read on its
+// GET /__insulin/limits?since=<cursor> (DESIGN.md §8.8): an app's limits as the console's admins set them, read on its
 // tick with SUGER_APP_TOKEN over SUGER_GATEWAY. The answer holds every key's default in force and the organizations
 // (where the app is used) whose overrides changed after the cursor, each with all its current overrides, so the app
 // replaces that organization's overrides with them; without `since`, every organization with an override.

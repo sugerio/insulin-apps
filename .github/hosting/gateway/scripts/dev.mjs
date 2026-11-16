@@ -28,7 +28,7 @@ function run(args, { stdio = 'inherit', state }) {
 export async function startDev({ apps = ['stub'], port = '8787', state = DEV_STATE, gatewayVars, appVars, stdio = 'inherit', https = false } = {}) {
   const configs = await writeDevConfigs(apps, { gatewayVars, appVars, port, https })
   await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', configs.gateway], { stdio, state })
-  // As the deploy does after the gateway's migrations (DESIGN.md §12.2), so the console manages the apps' limits.
+  // As the deploy does after the gateway's migrations (DESIGN.md §8.8), so the console manages the apps' limits.
   const catalogs = await limitCatalogsSql(apps)
   if (catalogs) {
     const file = join(gatewayDir, '.dev', 'limit-catalogs.sql')

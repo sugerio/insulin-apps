@@ -9,7 +9,7 @@
 // 10 MiB in total, text files only, one npm package with an exact, registry-only
 // lockfile, and only the D1 binding and static assets at runtime.
 //
-// An app's engine (`insulin.engine`, .github/hosting/DESIGN.md §12.1) is a second Worker in
+// An app's engine (`insulin.engine`, .github/hosting/DESIGN.md §8.7) is a second Worker in
 // its own directory: it is left out of the app's rules and checked with its own (engine.mjs).
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, join, relative, resolve, sep } from 'node:path'
@@ -130,7 +130,7 @@ if (totalBytes > MAX_TOTAL_BYTES) fail(`${totalBytes} bytes in total; the limit 
 
 // The manifest's lockfile and fields.
 if (manifest.workspaces) fail('package.json must not declare workspaces: one package per app')
-// What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §3.2, §8, §12.2): checked as the deploy will check it.
+// What the app tells the hosting gateway (.github/hosting/DESIGN.md §2.3, §3.2, §8): checked as the deploy will check it.
 const declared = {}
 for (const [field, readField] of [['permissions', readPermissions], ['publicPaths', readPublicPaths], ['secrets', readSecretNames], ['navigation', readNavigation], ['limits', readLimits]]) {
   try {
@@ -212,7 +212,7 @@ for (const rel of sourceFiles) {
   }
 }
 
-// The engine, with its own rules: its package, lockfile, Wrangler config and image (DESIGN.md §12.1).
+// The engine, with its own rules: its package, lockfile, Wrangler config and image (DESIGN.md §8.7).
 if (engine) {
   for (const problem of engineProblems({ app: appName, appDirectory: app, engine, engineApi })) fail(problem)
   if (built && !existsSync(join(app, engine, ENGINE_BUNDLE))) {

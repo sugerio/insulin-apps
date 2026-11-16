@@ -1,6 +1,6 @@
 // Runs an app's production build the way Cloudflare does: builds it, applies its migrations to a local D1 database,
 // starts it in workerd with `wrangler dev --local`, and runs the app's own checks (apps/<app>.mjs) with synthetic data.
-// An app with an engine (.github/hosting/DESIGN.md §12.1) runs with its in-memory stub engine
+// An app with an engine (.github/hosting/DESIGN.md §8.7) runs with its in-memory stub engine
 // (<engine>/src/stub/worker.ts) as a second Worker in the same `wrangler dev`, bound as SUGER_ENGINE, as the deploy
 // binds the real one.
 //

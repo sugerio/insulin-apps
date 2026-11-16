@@ -2,7 +2,7 @@ import { gatewayEndpoint } from './gateway-fetch.ts';
 import { periodOf, SECONDS_PER_HOUR } from './limits.ts';
 
 /**
- * Usage reports (DESIGN.md §8.6, §12.2): every hour Knowledge tells the platform how much each organization uses it,
+ * Usage reports (DESIGN.md §8.6, §8.8): every hour Knowledge tells the platform how much each organization uses it,
  * under exactly the keys of its limits (package.json `insulin.limits`) that measure use, plus `database_bytes` for the
  * app. Counts and sizes only: never a name, an address, a question or a collection's contents. Every value is a gauge,
  * the total as measured now; the month counters (`*_month`) are month-to-date and drop to 0 on the 1st (UTC).

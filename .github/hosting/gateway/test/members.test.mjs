@@ -1,7 +1,7 @@
-// What apps learn about their organizations' people (DESIGN.md §12.3): the x-suger-org-role and x-suger-member-lookup
-// headers (and where they are never sent), the member lookup, member status and member events endpoints (an app's own
-// token only, organizations where it is used only), and a member event for every way membership, app access, roles,
-// owners, API clients and organizations change. All data is synthetic.
+// What apps learn about their organizations' people (DESIGN.md §2.4, §8.9): the x-suger-org-role and
+// x-suger-member-lookup headers (and where they are never sent), the member lookup, member status and member events
+// endpoints (an app's own token only, organizations where it is used only), and a member event for every way
+// membership, app access, roles, owners, API clients and organizations change. All data is synthetic.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac, hkdfSync } from 'node:crypto'

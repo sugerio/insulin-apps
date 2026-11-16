@@ -171,7 +171,7 @@ async function orgRoute(ctx: Context, session: OperatorSession, [orgId]: string[
     orgOverrides(db, orgId!),
   ])
   const series = await Promise.all(latest.map(async (row) => ({ app: row.app, days: await dailySeries(db, row.app, orgId!, since) })))
-  // Each app with a limit catalog, the usage it last reported beside each limit (DESIGN.md §12.2).
+  // Each app with a limit catalog, the usage it last reported beside each limit (DESIGN.md §11.7).
   const limits: OrgAppLimits[] = ctx.config.apps.flatMap((app) => {
     const catalog = catalogs.filter((row) => row.app === app.name)
     if (!catalog.length) return []

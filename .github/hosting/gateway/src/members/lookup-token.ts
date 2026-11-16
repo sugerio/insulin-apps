@@ -1,4 +1,4 @@
-// The member lookup header (DESIGN.md §12.3). Every browser request to an app carries x-suger-member-lookup: the
+// The member lookup header (DESIGN.md §8.9). Every browser request to an app carries x-suger-member-lookup: the
 // organization, the person and an expiry five minutes ahead, signed for that app with a key derived from
 // GATEWAY_SECRET_KEY. The app passes it back with GET /__insulin/members, so its own token alone reads no one: the
 // gateway takes the organization and the person from the header, never from the app. No I/O but Web Crypto.

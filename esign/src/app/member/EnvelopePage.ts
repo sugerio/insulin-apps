@@ -1,17 +1,18 @@
 // One envelope: its signers in order and where each stands, the audit trail, who sees it (its owner and the people it
 // is shared with) and the member's own tags; for its editors, admins and owner, voiding it and emailing the active
 // signer's invitation again. Esign is the signing product here, not a host: signers reach their
-// page from the invitation in their email, never from this page. A completed envelope offers the signed PDF with its
-// certificate.
+// page from the invitation in their email, never from this page. A completed envelope downloads the signed PDF with its
+// certificate at a click, and shows the certificate of completion in a dialog.
 import React, { useEffect, useState } from 'react'
 import { ArrowLeft, Ban, Download, FileCheck2, Mail } from 'lucide-react'
-import { Button, buttonVariants } from '../components/ui/button.ts'
+import { Button } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.ts'
+import { Dialog, DialogFooter } from '../components/ui/dialog.ts'
 import { Label } from '../components/ui/label.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { Textarea } from '../components/ui/textarea.ts'
 import { AUDIT_LABELS, CompletionCertificate } from '../ui/CompletionCertificate.ts'
-import { allows, api, apiJson, canManage, dateTime, describeError, ownerName, taskLabel, type AuditEvent, type Envelope, type Me, type Task } from './api.ts'
+import { allows, api, apiJson, canManage, dateTime, describeError, ownerName, saveSignedPdf, taskLabel, type AuditEvent, type Envelope, type Me, type Task } from './api.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { SharePanel } from './SharePanel.ts'
@@ -31,7 +32,6 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
   const [busy, setBusy] = useState(false)
   const [voiding, setVoiding] = useState(false)
   const [reason, setReason] = useState('')
-  const [pdf, setPdf] = useState<{ url: string; name: string } | null>(null)
   const [certificate, setCertificate] = useState<Certificate | null>(null)
 
   async function refresh() {
@@ -55,7 +55,6 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
     const timer = setInterval(() => { refresh().catch(() => {}) }, POLL_MS)
     return () => clearInterval(timer)
   }, [envelope?.id, envelope?.status])
-  useEffect(() => () => { if (pdf) URL.revokeObjectURL(pdf.url) }, [pdf])
 
   // A new link to the invited signer (the old one stops working).
   function resendInvitation(task: Task) {
@@ -81,8 +80,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
   }
   function downloadPdf() {
     void run(async () => {
-      const blob = await (await api(`/api/envelopes/${id}/delivery-pdf`)).blob()
-      setPdf({ url: URL.createObjectURL(blob), name: 'signed-with-certificate.pdf' })
+      await saveSignedPdf(id)
     })
   }
   function showCertificate() {
@@ -136,7 +134,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
           h('dt', { key: `k-${key}`, className: 'font-mono text-xs text-muted-foreground' }, key),
           h('dd', { key: `v-${key}`, className: 'break-all' }, value)])))) : null,
     h(Card, { 'aria-label': 'Sharing' },
-      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Who sees it')), h(CardDescription, null, 'Its owner and the people it is shared with. Nobody else in your organization sees it.')),
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Who sees it')), h(CardDescription, null, 'Its owner, the people it is shared with and, when it is shared with everyone, everyone in your organization.')),
       h(CardContent, { className: 'flex flex-col gap-6' },
         h(SharePanel, { kind: 'envelopes', id, me, onLeft: () => navigate('/envelopes') }),
         h(TagsField, { id: 'envelope-tags', value: envelope.tags ?? [], onChange: saveTags }))),
@@ -150,8 +148,12 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
             h(TableCell, { className: 'whitespace-normal' }, AUDIT_LABELS[event.type] ?? event.type, typeof event.detail?.reason === 'string' ? h('div', { className: 'text-xs text-muted-foreground' }, `Reason: ${event.detail.reason}`) : null),
             h(TableCell, null, event.recipient?.name ?? ''),
             h(TableCell, { className: 'font-mono text-xs' }, event.ip ?? ''))))))),
-    pdf ? h(Card, null, h(CardContent, { className: 'flex flex-col gap-3' },
-      h('a', { href: pdf.url, download: pdf.name, className: buttonVariants({ className: 'w-fit' }) }, h(Download, { 'aria-hidden': true }), `Download ${pdf.name}`),
-      h('iframe', { title: 'Signed PDF', src: pdf.url, className: 'h-[70vh] w-full rounded-md border' }))) : null,
-    certificate && completed ? h(CompletionCertificate, { certificate }) : null)
+    // The certificate over the page, as it is in the signed PDF; its own card's frame is the dialog's.
+    h(Dialog, { open: !!certificate && completed, onOpenChange: (open) => { if (!open) setCertificate(null) }, label: 'Certificate of completion', className: 'sm:max-w-3xl' },
+      certificate ? [
+        h('div', { key: 'certificate', className: '[&>section]:border-0 [&>section]:p-0 [&>section]:shadow-none' }, h(CompletionCertificate, { certificate })),
+        h(DialogFooter, { key: 'footer' },
+          h(Button, { variant: 'outline', disabled: busy, onClick: downloadPdf }, h(Download, { 'aria-hidden': true }), 'Signed PDF with certificate'),
+          h(Button, { onClick: () => setCertificate(null) }, 'Close')),
+      ] : null))
 }

@@ -4,7 +4,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
-import {route} from '../src/app/member/MemberApp.ts';
+import {pageTitle,route} from '../src/app/member/MemberApp.ts';
 import {envelopeRequest,signByTime} from '../src/app/member/api.ts';
 import {checkRoles} from '../src/app/member/TemplatesPage.ts';
 import {EDITOR,ENV_ID,ORIGIN,VIEWER,json,renderMember,visibleText} from './helpers/member.ts';
@@ -17,13 +17,16 @@ const envelope=(status:string,tasks:[string,string][])=>({id:ENV_ID,templateId:'
 const TEMPLATE={id:'tpl-1',roles:['partner','seller'],fields:[],createdAt:Date.parse('2026-11-01T00:00:00Z'),...OWNED};
 const CERTIFICATE={envelope:{id:ENV_ID,template_id:'tpl-1',created_at:0,status:'COMPLETED'},source:{id:'d0',sha256:'a'.repeat(64)},finalArtifactId:'x',finalSha256:'b'.repeat(64),recipients:[],signatures:[],mode:'LOCAL TEST ONLY'};
 
-test('addresses name pages: envelopes, a new one, one by id, templates and the Docs',()=>{
+test('addresses name pages: envelopes, a new one, one by id, templates, one by id, and the Docs',()=>{
  assert.deepEqual(route('/'),{section:'envelopes',page:'list'});
  assert.deepEqual(route('/envelopes/'),{section:'envelopes',page:'list'});
  assert.deepEqual(route('/envelopes/new'),{section:'envelopes',page:'new'});
  assert.deepEqual(route(`/envelopes/${ENV_ID}`),{section:'envelopes',page:'envelope',id:ENV_ID});
  assert.deepEqual(route('/envelopes/not-an-id').page,'missing');
  assert.deepEqual(route('/templates'),{section:'templates',page:'list'});
+ assert.deepEqual(route(`/templates/${ENV_ID}`),{section:'templates',page:'template',id:ENV_ID});
+ assert.deepEqual(route('/templates/not-an-id').page,'missing');
+ assert.equal(pageTitle(route(`/templates/${ENV_ID}`),''),'Template');
  assert.deepEqual(route('/docs'),{section:'docs',page:'docs',topic:undefined});
  assert.deepEqual(route('/docs/roles'),{section:'docs',page:'docs',topic:'roles'});
  assert.equal(route('/docs/roles/more').page,'missing');
@@ -49,7 +52,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   await editor.click(editor.link('Templates'),'Templates');
   assert.ok(editor.button('New template'),'New template opens its dialog');assert.ok(editor.link('Send'));
   await editor.click(editor.byLabel('More for tpl-1'),'the row\'s menu');
-  assert.deepEqual(editor.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['Edit','Tags','Share','Delete'],'its owner may do everything');
+  assert.deepEqual(editor.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['View','Edit','Tags','Share','Delete'],'its owner may do everything');
   await editor.click(editor.link('Envelopes'),'Envelopes');
   assert.equal(editor.location.pathname,'/envelopes');
  }finally{await editor.unmount();}
@@ -64,7 +67,7 @@ test('an Editor sees the actions; a Viewer the same pages without them; a visito
   await viewer.click(viewer.link('Templates'),'Templates');
   assert.equal(viewer.button('New template'),undefined);assert.equal(viewer.link('Send'),undefined);
   await viewer.click(viewer.byLabel('More for tpl-1'),'the row\'s menu');
-  assert.deepEqual(viewer.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['Tags'],'someone who only views tags it, and nothing else');
+  assert.deepEqual(viewer.renderer.root.findAll((n:any)=>n.type==='button'&&n.props.role==='menuitem').map((n:any)=>visibleText(n.children).trim()),['View','Tags'],'someone who only views sees and tags it, and nothing else');
   assert.match(viewer.text(),/Your role can see templates but not change them/);
  }finally{await viewer.unmount();}
  const viewerSending=await renderMember('/envelopes/new',routes(VIEWER));
@@ -240,21 +243,37 @@ test('an envelope: no signer\'s page opens here; the active invited signer\'s in
  }finally{await app.unmount();}
  const done=await renderMember(`/envelopes/${ENV_ID}`,c=>{
   if(c.path==='/api/me')return json(EDITOR);
-  if(c.path===`/api/envelopes/${ENV_ID}`)return json(envelope('COMPLETED',[['Ana','SIGNED'],['Marcus','SIGNED']]));
+  if(c.path===`/api/envelopes/${ENV_ID}`)return json({...envelope('COMPLETED',[['Ana','SIGNED'],['Marcus','SIGNED']]),documentName:'Synthetic NDA'});
   if(c.path===`/api/envelopes/${ENV_ID}/audit`)return json({events:[{type:'SIGNED',at:'2026-11-07T01:00:00.000Z',recipient:{role:'signer-1',name:'Ana',email:'ana@partner.example'},ip:'203.0.113.9'}]});
   if(c.path===`/api/envelopes/${ENV_ID}/shares`)return json(SHARING);
-  if(c.path===`/api/envelopes/${ENV_ID}/delivery-pdf`)return new Response(new Blob(['%PDF-delivery']),{status:200});
+  if(c.path===`/api/envelopes/${ENV_ID}/delivery-pdf`)return new Response(new Blob(['%PDF-delivery']),{status:200,headers:{'content-disposition':`inline; filename="Synthetic NDA - Signed 2026-11-07.pdf"; filename*=UTF-8''Synthetic%20NDA%20-%20Signed%202026-11-07.pdf`}});
   if(c.path===`/api/envelopes/${ENV_ID}/certificate`)return json(CERTIFICATE);
  });
  try{
   assert.match(done.text(),/Completed/);assert.match(done.text(),/203\.0\.113\.9/);
   assert.equal(done.button('Void envelope'),undefined,'a completed envelope can\'t be voided');
   assert.equal(done.button('Resend invitation'),undefined);
-  await done.click(done.button('Signed PDF with certificate'),'Signed PDF');
-  assert.ok(done.renderer.root.find((n:any)=>n.type==='iframe'&&n.props.title==='Signed PDF'));
-  assert.ok(done.renderer.root.find((n:any)=>n.type==='a'&&n.props.download==='signed-with-certificate.pdf'));
-  await done.click(done.button('Certificate of completion'),'Certificate');
-  assert.ok(done.byLabel('Certificate of completion'));assert.match(done.text(),/LOCAL TEST ONLY/);
+  // The signed PDF downloads at once, under the server's name: nothing is shown on the page.
+  const saved:{name:string;text:string}[]=[];const blobs=new Map<string,Blob>();
+  const createObjectURL=URL.createObjectURL,revokeObjectURL=URL.revokeObjectURL;
+  (globalThis as any).document={addEventListener(){},removeEventListener(){},body:{style:{}},createElement:(tag:string)=>{assert.equal(tag,'a');const link:any={click:async()=>{const blob=blobs.get(link.href)!;saved.push({name:link.download,text:await blob.text()});}};return link;}};
+  URL.createObjectURL=(blob:Blob)=>{const url=`blob:${blobs.size}`;blobs.set(url,blob);return url;};URL.revokeObjectURL=()=>{};
+  try{
+   await done.click(done.button('Signed PDF with certificate'),'Signed PDF');
+   await done.settle();
+   assert.deepEqual(saved,[{name:'Synthetic NDA - Signed 2026-11-07.pdf',text:'%PDF-delivery'}],'under the name the server gives it');
+   assert.equal(done.renderer.root.findAll((n:any)=>n.type==='iframe').length,0,'no PDF on the page');
+   // The certificate opens in a dialog, which downloads the PDF too, and closes.
+   assert.equal(done.byLabel('Certificate of completion'),undefined);
+   await done.click(done.button('Certificate of completion'),'Certificate');
+   const dialog=done.renderer.root.find((n:any)=>n.props?.role==='dialog');
+   assert.equal(dialog.props['aria-label'],'Certificate of completion');assert.match(visibleText(dialog.children),/LOCAL TEST ONLY/);
+   await done.click(dialog.findAll((n:any)=>n.type==='button'&&visibleText(n.children).trim()==='Signed PDF with certificate')[0],'Signed PDF in the dialog');
+   await done.settle();
+   assert.equal(saved.length,2);
+   await done.click(dialog.findAll((n:any)=>n.type==='button'&&visibleText(n.children).trim()==='Close')[0],'Close');
+   assert.equal(done.renderer.root.findAll((n:any)=>n.props?.role==='dialog').length,0);
+  }finally{delete (globalThis as any).document;URL.createObjectURL=createObjectURL;URL.revokeObjectURL=revokeObjectURL;}
  }finally{await done.unmount();}
 });
 

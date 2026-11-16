@@ -22,7 +22,8 @@ export type EnvelopeSummary = Owned & {
   current?: { taskId: string; name: string; email: string; delivery: 'host' | 'email' }; lastChangeAt?: number
 }
 export type Share = { email: string; name?: string; role: Exclude<DocumentRole, 'owner'>; sharedAt: number }
-export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; shares: Share[] }
+/** `organization`: shared with everyone in the organization, as editor or viewer. */
+export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; organization?: { role: 'editor' | 'viewer'; sharedAt: number }; shares: Share[] }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
 export type Envelope = Owned & { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
 /** A contact (server/esign/contacts.ts): someone the organization's envelopes named, or a member added. Never evidence. */
@@ -195,4 +196,30 @@ export const dateTime = (value: number | string | undefined) => {
   if (value === undefined) return ''
   const d = new Date(value)
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+/** Saves a file the app fetched (a signed PDF) to the member's downloads, named `name`. */
+export function saveBlob(blob: Blob, name: string): void {
+  if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') return
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+/**
+ * The name a response gives its file (Content-Disposition: `filename*`, else `filename`), or `fallback`. The server
+ * names a signed PDF by its document and the day it was completed (server/esign/signed-file-name.ts).
+ */
+export function fileNameOf(response: Response, fallback: string): string {
+  const header = response.headers.get('content-disposition') ?? ''
+  const exact = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (exact) { try { return decodeURIComponent(exact[1]!.trim()) } catch { /* malformed: the plain name */ } }
+  return /filename="([^"]+)"/i.exec(header)?.[1] ?? fallback
+}
+/** Downloads a completed envelope's signed PDF with its certificate, under the name the server gives it. */
+export async function saveSignedPdf(envelopeId: string): Promise<void> {
+  const response = await api(`/api/envelopes/${envelopeId}/delivery-pdf`)
+  saveBlob(await response.blob(), fileNameOf(response, 'Signed document.pdf'))
 }

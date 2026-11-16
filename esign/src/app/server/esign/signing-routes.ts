@@ -25,6 +25,7 @@ import { embedderAllowed, frameAncestors } from './signing-page.ts';
 import { releaseCopyLink, useCopyLink } from './signed-copies.ts';
 import type { Env } from './app.ts';
 import { deliveryPdf } from './delivery-pdf.ts';
+import { contentDisposition, signedFileNameOf } from './signed-file-name.ts';
 import { finalizeLocalTestEvidence } from './seal/local.ts';
 import type { BlobStore } from './blob-store.ts';
 
@@ -410,7 +411,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
         const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
         result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey);
       }
-      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${result.metadata.format.startsWith('esign-local-delivery')?'delivery-local-test':'delivery'}.pdf"`,'X-Content-Type-Options':'nosniff'});
+      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':contentDisposition('inline',await signedFileNameOf(c.env.DB,id,result.metadata.format.startsWith('esign-local-delivery'))),'X-Content-Type-Options':'nosniff'});
     } catch {return c.json({error:'unavailable'},503);}
   });
   // A signer's copy, from the link in their completion notice (signed-copies.ts): the /copy page
@@ -426,7 +427,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       if(!managed&&!testKey)throw new Error('Seal unavailable');
       const result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed?managedDelivery(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,sealTrustFromEnv(c.env)):testKey!);
       await recordAuditQuietly(c.env.DB,{envelopeId:link.envelopeId,taskId:link.taskId,type:AUDIT.copyDownloaded,...requestFacts(c.req.raw)});
-      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="signed-${link.envelopeId}.pdf"`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':contentDisposition('attachment',await signedFileNameOf(c.env.DB,link.envelopeId,result.metadata.format.startsWith('esign-local-delivery'))),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     } catch {
       // The copy could not be built this time: the link works again, rather than being spent on a failure.
       await releaseCopyLink(c.env.DB,body.token as string);

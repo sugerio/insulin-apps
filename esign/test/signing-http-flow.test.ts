@@ -87,6 +87,8 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     const failedDelivery=await app.fetch(new Request(`http://localhost/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management}),{...env,ARTIFACTS:failingBucket});assert.equal(failedDelivery.status,503);
     assert.ok(await bucket.get(`envelopes/${envelope.id}/local-delivery-v4.pdf`));
     const delivery=await req(`/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management});assert.equal(delivery.status,200);
+    const savedAs=(r:Response)=>decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(r.headers.get('content-disposition')??'')?.[1]??'');
+    assert.match(savedAs(delivery),new RegExp(`^(.+|Envelope ${envelope.id.slice(0,8)}) - Signed \\d{4}-\\d{2}-\\d{2} \\(local test\\)\\.pdf$`),'named by its document and the day it was completed');
     const deliveryBytes=await delivery.arrayBuffer();assert.ok((await PDFDocument.load(deliveryBytes)).getPageCount()>2);
     const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');
     const loaded=await pdfjs.getDocument({data:new Uint8Array(deliveryBytes.slice(0)),useSystemFonts:true}).promise;
@@ -107,7 +109,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     const brokenOpen=await app.fetch(new Request('http://localhost/api/public/copies/open',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json'},body:JSON.stringify({token:copyToken})}),{...env,ARTIFACTS:Object.assign(Object.create(bucket),{get:async()=>null})});
     assert.equal(brokenOpen.status,503);
     const copy=await openCopy('http://localhost');assert.equal(copy.status,200,'a failed attempt does not spend the link');
-    assert.match(copy.headers.get('content-disposition')??'',/^attachment;/);
+    assert.match(copy.headers.get('content-disposition')??'',/^attachment;/);assert.equal(savedAs(copy),savedAs(delivery),'a signer\'s copy is named as the sender\'s download');
     assert.deepEqual(await copy.arrayBuffer(),deliveryBytes);
     assert.equal((await openCopy('http://localhost')).status,410,'once');
     assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE envelope_id=? AND type='COPY_DOWNLOADED'").bind(envelope.id).first<{n:number}>())!.n,1);

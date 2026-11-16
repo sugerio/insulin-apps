@@ -99,12 +99,12 @@ no independent timestamp: don't rely on it.
 
 ### The certificate of completion
 
-A completed envelope's page offers two downloads:
+A completed envelope's page has two buttons:
 
-- **Signed PDF with certificate**: the signed document, page for page, followed by its certificate pages: the document and
+- **Signed PDF with certificate** downloads, as "*document name* - Signed *date completed*.pdf", the signed document, page for page, followed by its certificate pages: the document and
   how it was sealed, each signer with their email, how they were identified, their IP address and device, and the events
   in order. It is the same file each signer's copy link downloads.
-- **Certificate of completion**: the certificate as a page (and **Download certificate JSON**): the seal with its key, its
+- **Certificate of completion** opens the certificate in a dialog (with **Download certificate JSON**): the seal with its key, its
   key fingerprint, its timestamp and the authority; the envelope and document fingerprints; each signer's recorded events
   and fingerprints; and the audit trail.
 

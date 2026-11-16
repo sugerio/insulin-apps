@@ -71,7 +71,7 @@ When the last signer has signed, the envelope shows **Finishing** for a few seco
 **Completed**. Then:
 
 - choose **Signed PDF with certificate** to download the signed document followed by its certificate of completion;
-- choose **Certificate of completion** to see the seal, checked against the stored files, with the signers and the audit
+- choose **Certificate of completion** to see, in a dialog, the seal, checked against the stored files, with the signers and the audit
   trail;
 - each signer gets an email with a link to download their own copy, once, within 30 days.
 

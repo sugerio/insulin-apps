@@ -7,6 +7,7 @@ import { apiJson, describeError, RequestError, statusFilter, type Me } from './a
 import { ContactPage } from './ContactPage.ts'
 import { ContactsPage } from './ContactsPage.ts'
 import { EnvelopePage } from './EnvelopePage.ts'
+import { TemplatePage } from './TemplatePage.ts'
 import { EnvelopesPage } from './EnvelopesPage.ts'
 import { NewEnvelopePage } from './NewEnvelopePage.ts'
 import { OwnershipPage } from './OwnershipPage.ts'
@@ -24,6 +25,7 @@ type Route =
   | { section: 'envelopes'; page: 'list' | 'new' }
   | { section: 'envelopes'; page: 'envelope'; id: string }
   | { section: 'templates'; page: 'list' }
+  | { section: 'templates'; page: 'template'; id: string }
   | { section: 'contacts'; page: 'list' }
   | { section: 'contacts'; page: 'contact'; id: string }
   | { section: 'ownership'; page: 'ownership' }
@@ -39,6 +41,7 @@ export function route(path: string): Route {
     if (UUID.test(parts[1])) return { section: 'envelopes', page: 'envelope', id: parts[1] }
   }
   if (parts.length === 1 && parts[0] === 'templates') return { section: 'templates', page: 'list' }
+  if (parts[0] === 'templates' && parts.length === 2 && UUID.test(parts[1])) return { section: 'templates', page: 'template', id: parts[1] }
   if (parts.length === 1 && parts[0] === 'contacts') return { section: 'contacts', page: 'list' }
   if (parts[0] === 'contacts' && parts.length === 2 && UUID.test(parts[1])) return { section: 'contacts', page: 'contact', id: parts[1] }
   if (parts.length === 1 && parts[0] === 'ownership') return { section: 'ownership', page: 'ownership' }
@@ -52,6 +55,7 @@ export function pageTitle(current: Route, status: string): string {
   if (current.page === 'list' && current.section === 'envelopes') return 'Envelopes'
   if (current.page === 'new') return 'New envelope'
   if (current.page === 'envelope') return 'Envelope'
+  if (current.page === 'template') return 'Template'
   if (current.page === 'contact') return 'Contact'
   if (current.page === 'ownership') return 'Ownership'
   if (current.page === 'list') return current.section === 'contacts' ? 'Contacts' : 'Templates'
@@ -77,6 +81,7 @@ export function MemberApp() {
   else if (!me) page = h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading…')
   else if (current.page === 'new') page = h(NewEnvelopePage, { me })
   else if (current.page === 'envelope') page = h(EnvelopePage, { key: current.id, me, id: current.id })
+  else if (current.page === 'template') page = h(TemplatePage, { key: current.id, me, id: current.id })
   else if (current.page === 'contact') page = h(ContactPage, { key: current.id, me, id: current.id })
   else if (current.page === 'ownership') page = h(OwnershipPage, { me })
   else if (current.section === 'contacts') page = h(ContactsPage, { me })

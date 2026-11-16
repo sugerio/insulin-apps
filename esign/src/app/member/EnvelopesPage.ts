@@ -15,7 +15,7 @@ import { DropdownMenu, type MenuItem } from '../components/ui/dropdown-menu.ts'
 import { Label } from '../components/ui/label.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.ts'
 import { Textarea } from '../components/ui/textarea.ts'
-import { allows, api, apiJson, canManage, dateTime, describeError, envelopesPath, listPath, ownerName, statusLabel, taskLabel, type EnvelopeSummary, type Me, type Scope } from './api.ts'
+import { allows, api, apiJson, canManage, dateTime, describeError, envelopesPath, listPath, ownerName, saveSignedPdf, statusLabel, taskLabel, type EnvelopeSummary, type Me, type Scope } from './api.ts'
 import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, SENDERS, sinceOf, TagsFilter, toggled, useMyTags, usePages, type Chip, type Suggestion } from './ListFilters.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link, navigate } from './router.ts'
@@ -120,14 +120,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
   }
   function download(e: EnvelopeSummary) {
     void run(async () => {
-      const blob = await (await api(`/api/envelopes/${e.id}/delivery-pdf`)).blob()
-      if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') return
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${name(e).replace(/[^\w.-]+/g, '-')}-signed.pdf`
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      await saveSignedPdf(e.id)
     })
   }
   function voidEnvelope(e: EnvelopeSummary) {

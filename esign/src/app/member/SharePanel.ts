@@ -1,8 +1,9 @@
-// Who sees a template or an envelope (server/esign/ownership.ts): its owner, the people it is shared with and their
-// roles. Its admins and owner share it with anyone by email (members Esign has seen are suggested), change a role, or
-// stop sharing; anyone it is shared with can remove themselves.
+// Who sees a template or an envelope (server/esign/ownership.ts): its owner, everyone in the organization when it is
+// shared with them, and the people it is shared with and their roles. Its admins and owner share it with everyone (as
+// viewers or editors) or with anyone by email (members Esign has seen are suggested), change a role, or stop sharing;
+// anyone it is shared with by email can remove themselves.
 import React, { useEffect, useRef, useState } from 'react'
-import { UserPlus } from 'lucide-react'
+import { Building2, Lock, UserPlus } from 'lucide-react'
 import { Button } from '../components/ui/button.ts'
 import { Input } from '../components/ui/input.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
@@ -13,6 +14,8 @@ import { Field, Notice } from './parts.ts'
 const h = React.createElement
 const ROLE_HINTS: Record<Share['role'], string> = { viewer: 'Viewer: sees it', editor: 'Editor: also changes it', admin: 'Admin: also shares it' }
 type Member = { id: string; email: string; name?: string }
+/** General access: only the people it is shared with, or everyone in the organization, as viewers or editors. */
+const ACCESS: Record<'' | 'viewer' | 'editor', string> = { '': 'Only the people below', viewer: 'Everyone in your organization can view', editor: 'Everyone in your organization can edit' }
 
 /** An email field that suggests the organization's members Esign has seen, by name or email. */
 export function MemberEmailField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
@@ -64,11 +67,24 @@ export function SharePanel({ kind, id, me, onLeft }: { kind: 'templates' | 'enve
   if (!sharing) return h(Notice, { message: message.text || 'Loading who sees it…', error: message.error })
   const admin = allows(sharing.myRole, 'admin')
   const own = me.user?.email?.toLowerCase()
+  const everyone = sharing.organization?.role ?? ''
+  function setAccess(to: '' | 'viewer' | 'editor') {
+    if (to === everyone) return
+    void (to ? send(base, { organization: true, role: to }, `${ACCESS[to]} it.`) : send(`${base}/delete`, { organization: true }, 'No longer shared with everyone in your organization.'))
+  }
   return h('div', { className: 'flex flex-col gap-4' },
     h('p', { className: 'text-sm text-muted-foreground' }, 'Owner: ', h('span', { className: 'font-medium text-foreground' }, ownerName(sharing.owner, me)),
       sharing.owner.kind === 'client' ? ' (an API client)' : '', `. Your role: ${ROLE_NAMES[sharing.myRole]}.`),
     h(Notice, { message: message.text, error: message.error }),
-    sharing.shares.length === 0 ? h('p', { className: 'text-sm text-muted-foreground' }, 'Not shared with anyone else.')
+    h('section', { className: 'flex items-center gap-3 rounded-md border p-3' },
+      h(everyone ? Building2 : Lock, { className: 'size-4 shrink-0 text-muted-foreground', 'aria-hidden': true }),
+      h('div', { className: 'flex min-w-0 flex-1 flex-col gap-1' },
+        h('span', { className: 'text-sm font-medium' }, 'General access'),
+        admin ? h(NativeSelect, { id: `${kind}-${id}-access`, 'aria-label': 'General access', value: everyone, disabled: busy, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setAccess(e.target.value as '' | 'viewer' | 'editor') },
+          ...(['', 'viewer', 'editor'] as const).map((r) => h(NativeSelectOption, { key: r || 'none', value: r }, ACCESS[r])))
+          : h('span', { className: 'text-sm text-muted-foreground' }, `${ACCESS[everyone]}.`),
+        h('span', { className: 'text-xs text-muted-foreground' }, everyone ? 'Everyone who signs in to Esign from your organization finds it in their lists. Someone shared below as well gets the higher role.' : 'Only its owner and the people it is shared with see it.'))),
+    sharing.shares.length === 0 ? h('p', { className: 'text-sm text-muted-foreground' }, 'Not shared with anyone by email.')
       : h(Table, { 'aria-label': 'Shared with' },
         h(TableHeader, null, h(TableRow, null, h(TableHead, null, 'Shared with'), h(TableHead, null, 'Role'), h(TableHead, null, h('span', { className: 'sr-only' }, 'Actions')))),
         h(TableBody, null, ...sharing.shares.map((s) => {

@@ -8,7 +8,9 @@ import { unknownKeys } from './metadata.ts';
  * Who may see and change a template or an envelope. Each has one owner: the member or API client
  * that created it (`owner_user_id`), or whom an organization owner transferred it to (members.ts).
  * Nobody else sees it, an organization's owners and admins included, unless it is shared with them
- * (`document_shares`): by email, as admin, editor or viewer.
+ * (`document_shares`): by email, as admin, editor or viewer; or with everyone in the organization, as editor or viewer
+ * (the row whose key is `EVERYONE`). Everyone means the organization's people: an API client sees only what it owns
+ * or is shared with by email, which it never is. Someone shared both ways has the higher role.
  *
  * - viewer: sees it (its audit trail, certificate and signed PDF too) and its sharing; sends envelopes
  *   from a template; tags it for themselves (tags.ts).
@@ -28,6 +30,10 @@ const RANK: Record<DocumentRole, number> = { viewer: 1, editor: 2, admin: 3, own
 
 export const atLeast = (role: DocumentRole | null, needed: DocumentRole): role is DocumentRole => role !== null && RANK[role] >= RANK[needed];
 const higher = (a: ShareRole, b: ShareRole): ShareRole => (RANK[a] >= RANK[b] ? a : b);
+/** The roles a document can be shared with everyone in the organization as: sharing it on is for its admins. */
+export const ORG_SHARE_ROLES: readonly ShareRole[] = ['editor', 'viewer'];
+/** The `grantee_email_key` of the share with everyone in the organization: never an email key, which has an `@`. */
+export const EVERYONE = '*';
 
 /** The address the platform gives an API client (a service account): on a reserved domain nobody can own (RFC 2606). */
 const CLIENT_EMAIL = /@service-accounts\.invalid$/i;
@@ -36,6 +42,11 @@ export const isClient = (caller: Caller): boolean => caller.accessVia === 'api';
 /** The key the caller's shares are found by: their email, trimmed and lower-cased. An API client has none. */
 export const shareKey = (caller: Caller): string | null => (isClient(caller) || !caller.email ? null : emailKey(caller.email));
 export const emailKey = (email: string) => email.trim().toLowerCase();
+/**
+ * The keys the caller's shares are found by, as a JSON array for `json_each`: their email's, and, for a person (not an
+ * API client), the organization's.
+ */
+export const shareKeys = (caller: Caller): string => JSON.stringify([shareKey(caller), isClient(caller) ? null : EVERYONE].filter((key) => key !== null));
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** An address a document can be shared with: a person's, never an API client's. */
 export const shareableEmail = (value: unknown): value is string =>
@@ -44,20 +55,19 @@ export const shareableEmail = (value: unknown): value is string =>
 const TABLE: Record<ResourceType, string> = { template: 'templates', envelope: 'envelopes' };
 
 /**
- * SQL: the ids of the documents of `type` the caller sees, owned (`mine`), shared with them (`shared`)
- * or both, as an `IN (...)` set. Each side reads its own index, so the cost is that of the caller's own
- * documents, not the organization's. Binds, in order: tenant, user id, tenant, share key (both sides);
- * tenant, user id (`mine`); tenant, share key (`shared`).
+ * SQL: the ids of the documents of `type` the caller sees, owned (`mine`), shared with them (`shared`: by email or with
+ * everyone, but not their own) or both, as an `IN (...)` set. Each side reads its own index, so the cost is that of the
+ * caller's own documents and those shared with everyone. Binds: `visibleBinds`.
  */
 export function visibleIds(type: ResourceType, scope: 'all' | 'mine' | 'shared' = 'all'): string {
   const mine = `SELECT id FROM ${TABLE[type]} WHERE tenant_id = ? AND owner_user_id = ?`;
-  const shared = `SELECT resource_id FROM document_shares WHERE tenant_id = ? AND grantee_email_key = ? AND resource_type = '${type}'`;
-  return `(${scope === 'mine' ? mine : scope === 'shared' ? shared : `${mine} UNION ${shared}`})`;
+  const shared = `SELECT resource_id FROM document_shares WHERE tenant_id = ? AND grantee_email_key IN (SELECT value FROM json_each(?)) AND resource_type = '${type}'`;
+  return `(${scope === 'mine' ? mine : scope === 'shared' ? `${shared} EXCEPT ${mine}` : `${mine} UNION ${shared}`})`;
 }
 /** The binds of `visibleIds` for this caller and scope. */
-export function visibleBinds(tenantId: string, caller: Caller, scope: 'all' | 'mine' | 'shared' = 'all'): (string | null)[] {
-  const mine = [tenantId, caller.userId], shared = [tenantId, shareKey(caller)];
-  return scope === 'mine' ? mine : scope === 'shared' ? shared : [...mine, ...shared];
+export function visibleBinds(tenantId: string, caller: Caller, scope: 'all' | 'mine' | 'shared' = 'all'): string[] {
+  const mine = [tenantId, caller.userId], shared = [tenantId, shareKeys(caller)];
+  return scope === 'mine' ? mine : scope === 'shared' ? [...shared, ...mine] : [...mine, ...shared];
 }
 
 /** The caller's role in a document as stored, before the cap of their role in Esign. */
@@ -68,9 +78,10 @@ export function effectiveRole(ownerId: string, sharedRole: string | null, caller
   const role = storedRole(ownerId, sharedRole, caller);
   return role && !can(caller, 'esign.manage') ? 'viewer' : role;
 }
-/** SQL: the caller's share role in the row `alias` of `type`, as a column. Binds: share key. */
+/** SQL: the caller's share role in the row `alias` of `type`, the higher of theirs and everyone's, as a column. Binds: `shareKeys`. */
 export const sharedRoleColumn = (type: ResourceType, alias: string) =>
-  `(SELECT s.role FROM document_shares s WHERE s.resource_type = '${type}' AND s.resource_id = ${alias}.id AND s.grantee_email_key = ?)`;
+  `(SELECT s.role FROM document_shares s WHERE s.resource_type = '${type}' AND s.resource_id = ${alias}.id AND s.grantee_email_key IN (SELECT value FROM json_each(?))
+    ORDER BY CASE s.role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 ELSE 1 END DESC LIMIT 1)`;
 
 /**
  * The caller's role in one document of their organization, or null when they can't see it (or it doesn't exist). An
@@ -78,7 +89,7 @@ export const sharedRoleColumn = (type: ResourceType, alias: string) =>
  */
 export async function documentRole(db: D1Database, tenantId: string, caller: Caller, type: ResourceType, id: string): Promise<{ role: DocumentRole; ownerId: string } | null> {
   const row = await db.prepare(`SELECT x.owner_user_id, ${sharedRoleColumn(type, 'x')} AS shared_role FROM ${TABLE[type]} x WHERE x.id = ? AND x.tenant_id = ?`)
-    .bind(shareKey(caller), id, tenantId).first<{ owner_user_id: string; shared_role: string | null }>();
+    .bind(shareKeys(caller), id, tenantId).first<{ owner_user_id: string; shared_role: string | null }>();
   const role = row ? effectiveRole(row.owner_user_id, row.shared_role, caller) : null;
   return role && row ? { role, ownerId: row.owner_user_id } : null;
 }
@@ -94,20 +105,29 @@ export async function requireRole(context: import('hono').Context<Env>, type: Re
   return null;
 }
 
-export type Share = { email: string; role: ShareRole };
+/** A share: with a person, by email, or with everyone in the organization. */
+export type Share = { email: string; role: ShareRole } | { organization: true; role: ShareRole };
 const MAX_SHARES = 20;
+/** The `grantee_email_key` of a share. */
+const keyOf = (share: Share) => ('organization' in share ? EVERYONE : emailKey(share.email));
 
 /**
  * The `share` of a create request: whom else a new document is shared with, at most 20, each
- * `{email, role}`. Undefined is none; anything malformed is 'invalid'.
+ * `{email, role}`, or `{organization: true, role}` (editor or viewer) for everyone in the organization.
+ * Undefined is none; anything malformed is 'invalid'.
  */
 export function parseShares(value: unknown): Share[] | 'invalid' {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > MAX_SHARES) return 'invalid';
   const out: Share[] = [];
   for (const item of value) {
-    if (!item || typeof item !== 'object' || Array.isArray(item) || unknownKeys(item, ['email', 'role']).length) return 'invalid';
-    const { email, role } = item as { email?: unknown; role?: unknown };
+    if (!item || typeof item !== 'object' || Array.isArray(item) || unknownKeys(item, ['email', 'role', 'organization']).length) return 'invalid';
+    const { email, role, organization } = item as { email?: unknown; role?: unknown; organization?: unknown };
+    if (organization !== undefined) {
+      if (organization !== true || email !== undefined || typeof role !== 'string' || !(ORG_SHARE_ROLES as readonly string[]).includes(role)) return 'invalid';
+      out.push({ organization: true, role: role as ShareRole });
+      continue;
+    }
     if (!shareableEmail(email) || typeof role !== 'string' || !(SHARE_ROLES as readonly string[]).includes(role)) return 'invalid';
     out.push({ email: email.trim(), role: role as ShareRole });
   }
@@ -122,17 +142,17 @@ export async function clientShare(db: D1Database, tenantId: string, caller: Call
 }
 
 /**
- * The shares a new document gets, from the caller: one per person, the highest role each is given, the
- * caller (its owner) left out.
+ * The shares a new document gets, from the caller: one per person and one for everyone, the highest role each is
+ * given, the caller (its owner) left out.
  */
 export function sharesFor(shares: Share[], caller: Caller): Share[] {
   const byKey = new Map<string, Share>();
   const own = shareKey(caller);
   for (const share of shares) {
-    const key = emailKey(share.email);
+    const key = keyOf(share);
     if (key === own) continue;
     const seen = byKey.get(key);
-    byKey.set(key, seen ? { email: seen.email, role: higher(seen.role, share.role) } : share);
+    byKey.set(key, seen ? { ...seen, role: higher(seen.role, share.role) } : share);
   }
   return [...byKey.values()];
 }
@@ -141,21 +161,26 @@ export function sharesFor(shares: Share[], caller: Caller): Share[] {
 export function shareInserts(db: D1Database, tenantId: string, type: ResourceType, id: string, shares: Share[], grantedBy: string, now: number): D1PreparedStatement[] {
   return shares.map((share) => db.prepare(`INSERT INTO document_shares (tenant_id, resource_type, resource_id, grantee_email_key, grantee_email, role, granted_by, granted_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (resource_type, resource_id, grantee_email_key) DO NOTHING`)
-    .bind(tenantId, type, id, emailKey(share.email), share.email, share.role, grantedBy, now));
+    .bind(tenantId, type, id, keyOf(share), 'organization' in share ? EVERYONE : share.email, share.role, grantedBy, now));
 }
 
-type ShareRow = { grantee_email: string; role: ShareRole; granted_at: number; name: string | null };
+type ShareRow = { grantee_email_key: string; grantee_email: string; role: ShareRole; granted_at: number; name: string | null };
 
-/** A document's owner (as Esign has seen them, members.ts) and the people it is shared with, by name where known. */
+/**
+ * A document's owner (as Esign has seen them, members.ts), the people it is shared with, by name where known, and
+ * `organization`, its share with everyone in the organization, when it has one.
+ */
 async function sharing(db: D1Database, tenantId: string, type: ResourceType, id: string, ownerId: string) {
   const owner = await db.prepare('SELECT user_id, kind, email, name FROM members WHERE tenant_id = ? AND user_id = ?').bind(tenantId, ownerId).first<{ user_id: string; kind: string; email: string | null; name: string | null }>();
-  const { results } = await db.prepare(`SELECT s.grantee_email, s.role, s.granted_at,
+  const { results } = await db.prepare(`SELECT s.grantee_email_key, s.grantee_email, s.role, s.granted_at,
       (SELECT m.name FROM members m WHERE m.tenant_id = s.tenant_id AND m.email_key = s.grantee_email_key AND m.kind = 'person' ORDER BY m.last_seen_at DESC LIMIT 1) AS name
       FROM document_shares s WHERE s.tenant_id = ? AND s.resource_type = ? AND s.resource_id = ? ORDER BY s.granted_at, s.grantee_email_key`)
     .bind(tenantId, type, id).all<ShareRow>();
+  const everyone = results.find((row) => row.grantee_email_key === EVERYONE);
   return {
     owner: ownerSummary(ownerId, owner),
-    shares: results.map((row) => ({ email: row.grantee_email, ...(row.name ? { name: row.name } : {}), role: row.role, sharedAt: row.granted_at })),
+    ...(everyone ? { organization: { role: everyone.role, sharedAt: everyone.granted_at } } : {}),
+    shares: results.filter((row) => row !== everyone).map((row) => ({ email: row.grantee_email, ...(row.name ? { name: row.name } : {}), role: row.role, sharedAt: row.granted_at })),
   };
 }
 
@@ -185,12 +210,13 @@ export function mountShareRoutes(app: Hono<Env>) {
       if (!found) return context.json({ error: 'not_found' }, 404);
       return context.json({ id, myRole: found.role, ...await sharing(context.env.DB, tenantId, type, id, found.ownerId) });
     });
-    // Shares it with someone, or changes their role: admins and the owner, as admin at most.
+    // Shares it with someone, or with everyone in the organization (as editor or viewer), or changes their role:
+    // admins and the owner, as admin at most.
     app.post(base, bodyLimit({ maxSize: 4096 }), async (context) => {
       let body: unknown;
       try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
       if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_share' }, 422);
-      const unknown = unknownKeys(body, ['email', 'role']);
+      const unknown = unknownKeys(body, ['email', 'role', 'organization']);
       if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
       const parsed = parseShares([body]);
       if (parsed === 'invalid') return context.json({ error: 'invalid_share' }, 422);
@@ -200,19 +226,24 @@ export function mountShareRoutes(app: Hono<Env>) {
       if (!found) return context.json({ error: 'not_found' }, 404);
       if (!atLeast(found.role, 'admin')) return context.json({ error: 'forbidden', role: found.role }, 403);
       // The owner is never a share: sharing with their own email changes nothing they may do.
-      const owner = await context.env.DB.prepare("SELECT email_key FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'person'").bind(tenantId, found.ownerId).first<{ email_key: string | null }>();
-      if (owner?.email_key === emailKey(share.email)) return context.json({ error: 'owner_not_shared' }, 422);
+      if ('email' in share) {
+        const owner = await context.env.DB.prepare("SELECT email_key FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'person'").bind(tenantId, found.ownerId).first<{ email_key: string | null }>();
+        if (owner?.email_key === emailKey(share.email)) return context.json({ error: 'owner_not_shared' }, 422);
+      }
       await context.env.DB.prepare(`INSERT INTO document_shares (tenant_id, resource_type, resource_id, grantee_email_key, grantee_email, role, granted_by, granted_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (resource_type, resource_id, grantee_email_key) DO UPDATE SET role = excluded.role, grantee_email = excluded.grantee_email`)
-        .bind(tenantId, type, id, emailKey(share.email), share.email, share.role, caller.userId, Date.now()).run();
+        .bind(tenantId, type, id, keyOf(share), 'email' in share ? share.email : EVERYONE, share.role, caller.userId, Date.now()).run();
       return context.json({ id, myRole: found.role, ...await sharing(context.env.DB, tenantId, type, id, found.ownerId) });
     });
-    // Stops sharing it with someone: admins and the owner, or anyone for themselves.
+    // Stops sharing it with someone (`{email}`), or with everyone (`{organization: true}`): admins and the owner, or
+    // anyone for themselves.
     app.post(`${base}/delete`, bodyLimit({ maxSize: 4096 }), async (context) => {
       let body: unknown;
       try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
-      if (!body || typeof body !== 'object' || Array.isArray(body) || unknownKeys(body, ['email']).length || typeof (body as { email?: unknown }).email !== 'string') return context.json({ error: 'invalid_share' }, 422);
-      const key = emailKey((body as { email: string }).email);
+      if (!body || typeof body !== 'object' || Array.isArray(body) || unknownKeys(body, ['email', 'organization']).length) return context.json({ error: 'invalid_share' }, 422);
+      const { email, organization } = body as { email?: unknown; organization?: unknown };
+      if (organization === undefined ? typeof email !== 'string' : organization !== true || email !== undefined) return context.json({ error: 'invalid_share' }, 422);
+      const key = organization === true ? EVERYONE : emailKey(email as string);
       const tenantId = context.get('tenantId'), caller = context.get('caller'), id = context.req.param('id') ?? '';
       const found = await documentRole(context.env.DB, tenantId, caller, type, id);
       if (!found) return context.json({ error: 'not_found' }, 404);

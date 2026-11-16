@@ -1,5 +1,5 @@
 // Who sees and changes a template or an envelope (ownership.ts, tags.ts, members.ts): its owner, and those it is
-// shared with, by email, as admin, editor or viewer; never anyone else, the organization's owners and admins
+// shared with, by email, as admin, editor or viewer, or with everyone in the organization; never anyone else, the organization's owners and admins
 // included. A role is capped by the caller's role in Esign. Tags are each person's own. An API client's documents are
 // shared with the person Esign's settings name for it, if any; an organization owner takes over someone's documents.
 // Synthetic data, in-process.
@@ -119,6 +119,79 @@ test('shared as viewer, editor or admin: each role does what it allows, capped b
     assert.equal((await h.req(`/api/envelopes/${envelope}/audit`, h.ana)).status, 200);
     await h.post(`/api/envelopes/${envelope}/shares`, h.bo, { email: 'ana@example.test', role: 'editor' });
     assert.equal((await h.post(`/api/envelopes/${envelope}/void`, h.ana, {})).status, 200);
+  } finally { await h.mf.dispose(); }
+});
+
+test('shared with everyone in the organization: every person of it sees it at that role, or higher by email; API clients don\'t', async () => {
+  const h = await setup();
+  try {
+    const id = await h.template(h.ana);
+    const everyone = (by: Record<string, string>, role: string) => h.post(`/api/templates/${id}/shares`, by, { organization: true, role });
+    type Sharing = { organization?: { role: string; sharedAt: number }; shares: { email: string }[] };
+    const answer = await everyone(h.ana, 'viewer');
+    assert.equal(answer.status, 200, await answer.clone().text());
+    const shared = await answer.json() as Sharing;
+    assert.deepEqual([shared.organization?.role, shared.shares], ['viewer', []], 'everyone is not one of the people');
+    // Every person of the organization, its owners and those who may only view Esign too, sees it as a viewer.
+    for (const person of [h.bo, h.cy, h.owner, h.viewer]) {
+      const [seen] = await h.templates(person);
+      assert.deepEqual([seen?.id, seen?.myRole], [id, 'viewer']);
+      assert.deepEqual((await h.templates(person, '?scope=shared')).map(t => t.id), [id]);
+    }
+    assert.deepEqual((await h.templates(h.ana, '?scope=shared')).map(t => t.id), [], 'not shared with its owner');
+    assert.deepEqual((await h.templates(h.ana, '?scope=mine')).map(t => t.id), [id]);
+    // An API client sees what it owns or is shared by email, never what is shared with everyone; another organization neither.
+    assert.deepEqual(await h.templates(h.host), []);
+    assert.equal((await h.req(`/api/templates/${id}`, h.host)).status, 404);
+    assert.deepEqual(await h.templates(identity('other', { userId: 'user-zed', email: 'zed@example.test', role: 'EDITOR' })), []);
+    // A viewer sends from it, and changes nothing; as editor, everyone changes it; someone shared by email keeps a higher role.
+    await h.envelope(h.bo, id);
+    assert.equal((await h.post(`/api/templates/${id}/default-signers`, h.cy, { defaultSigners: {} })).status, 403);
+    await h.post(`/api/templates/${id}/shares`, h.ana, { email: 'bo@example.test', role: 'admin' });
+    assert.equal((await everyone(h.ana, 'editor')).status, 200);
+    assert.equal((await h.post(`/api/templates/${id}/default-signers`, h.cy, { defaultSigners: {} })).status, 200);
+    assert.deepEqual([(await h.templates(h.bo))[0].myRole, (await h.templates(h.cy))[0].myRole, (await h.templates(h.viewer))[0].myRole], ['admin', 'editor', 'viewer']);
+    // Only admins share with everyone or stop, and never as admin.
+    assert.equal((await everyone(h.cy, 'viewer')).status, 403);
+    assert.equal((await h.post(`/api/templates/${id}/shares/delete`, h.cy, { organization: true })).status, 403);
+    for (const bad of [{ organization: true, role: 'admin' }, { organization: false, role: 'viewer' }, { organization: true, email: 'x@example.test', role: 'viewer' }]) assert.equal((await h.post(`/api/templates/${id}/shares`, h.ana, bad)).status, 422, JSON.stringify(bad));
+    assert.equal((await h.post(`/api/templates/${id}/shares/delete`, h.ana, { organization: true, email: 'bo@example.test' })).status, 422);
+    const stopped = await (await h.post(`/api/templates/${id}/shares/delete`, h.bo, { organization: true })).json() as Sharing;
+    assert.deepEqual([stopped.organization, stopped.shares.map(s => s.email)], [undefined, ['bo@example.test']]);
+    assert.equal((await h.req(`/api/templates/${id}`, h.cy)).status, 404, 'no longer seen');
+    assert.equal((await h.post(`/api/templates/${id}/shares/delete`, h.ana, { organization: true })).status, 404);
+    // On a new document's request: once, at the highest role asked; never as admin.
+    const asked = await h.template(h.ana, { share: [{ organization: true, role: 'viewer' }, { organization: true, role: 'editor' }] });
+    assert.equal((await h.get<Sharing>(`/api/templates/${asked}/shares`, h.cy)).organization?.role, 'editor');
+    const sent = await h.envelope(h.ana, asked, { share: [{ organization: true, role: 'viewer' }] });
+    assert.deepEqual((await h.envelopes(h.cy)).map(e => [e.id, e.myRole]), [[sent, 'viewer']]);
+    assert.equal((await h.send(h.ana, asked, { share: [{ organization: true, role: 'admin' }] })).status, 422);
+  } finally { await h.mf.dispose(); }
+});
+
+test('a template\'s PDF and details are read by those who see it, for its page', async () => {
+  const h = await setup();
+  try {
+    const id = await h.template(h.ana);
+    await h.db.prepare('UPDATE templates SET fields_json = ? WHERE id = ?').bind(JSON.stringify([
+      { id: 'sig', type: 'Signature', role: 'partner', page: 1, required: true, rect: { x: 0.1, y: 0.7, width: 0.3, height: 0.05 } },
+      { id: 'title', type: 'Title', role: 'partner', page: 1, required: false, rect: { x: 0.1, y: 0.8, width: 0.3, height: 0.04 } },
+    ]), id).run();
+    const details = await h.get<{ createdAt: number; fields: { type: string; required: boolean; rect: unknown }[] }>(`/api/templates/${id}`, h.ana);
+    assert.ok(details.createdAt > 0);
+    assert.deepEqual(details.fields.map(f => [f.type, f.required]), [['Signature', true], ['Title', false]], 'whether each must be filled');
+    assert.equal(Object.hasOwn((await h.templates(h.ana))[0].fields[0] as object, 'required'), false, 'lists keep their fields as before');
+    const pdf = await h.req(`/api/templates/${id}/pdf`, h.ana);
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+    assert.equal(pdf.headers.get('cache-control'), 'no-store');
+    assert.equal(new TextDecoder().decode((await pdf.arrayBuffer()).slice(0, 5)), '%PDF-', 'the PDF as uploaded');
+    // Not seen: as one that doesn't exist. Shared, even with everyone: read.
+    assert.equal((await h.req(`/api/templates/${id}/pdf`, h.bo)).status, 404);
+    assert.equal((await h.req(`/api/templates/${id}/pdf`, h.host)).status, 404);
+    await h.post(`/api/templates/${id}/shares`, h.ana, { organization: true, role: 'viewer' });
+    assert.equal((await h.req(`/api/templates/${id}/pdf`, h.viewer)).status, 200);
+    assert.equal((await h.req('/api/templates/00000000-0000-4000-8000-000000000000/pdf', h.ana)).status, 404);
   } finally { await h.mf.dispose(); }
 });
 

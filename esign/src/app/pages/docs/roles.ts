@@ -37,7 +37,7 @@ export const roles: DocTopic = {
       id: 'who-sees-what',
       title: 'Who sees each template and envelope',
       body: [
-        p('Every template and envelope has an owner, whoever created it, and nobody else sees it, your organization\'s owners and admins included, unless it is shared with them by email, as one of:'),
+        p('Every template and envelope has an owner, whoever created it, and nobody else sees it, your organization\'s owners and admins included, unless it is shared with them by email or with everyone in your organization, as one of:'),
         h(DocTable, {
           label: 'Roles in a template or an envelope',
           columns: ['Role in it', 'What it allows'],
@@ -47,7 +47,7 @@ export const roles: DocTopic = {
             ['Admin', 'Also share it with others, and stop sharing it.'],
           ],
         }),
-        p('A role in a template or an envelope never goes beyond your role in Esign: with View envelopes only, you are a Viewer of everything shared with you. ', b('Share'), ' in a template\'s ⋯ menu, or ', b('Who sees it'), ' on an envelope\'s page, shows its owner and the people it is shared with; its admins and owner share it there, and anyone can leave. An envelope sent from a template is its sender\'s, not shared with the template\'s people.'),
+        p('A role in a template or an envelope never goes beyond your role in Esign: with View envelopes only, you are a Viewer of everything shared with you. ', b('Share'), ' in a template\'s ⋯ menu, or ', b('Who sees it'), ' on an envelope\'s page, shows its owner and the people it is shared with; its admins and owner share it there, and anyone shared by email can leave. Its ', b('General access'), ' shares it with everyone in your organization, as Viewer or Editor: everyone who uses Esign finds it in their lists, at that role or the higher one they are shared by email. API clients are not part of everyone. An envelope sent from a template is its sender\'s, not shared with the template\'s people.'),
         p('Your tags on a template or an envelope are yours alone. The lists filter by them (', b('Tags'), '), and by whether they are yours or shared with you (', b('Sender'), ' on Envelopes, ', b('Owner'), ' on Templates).'),
         p(b('Ownership'), ', in the navigation of organization owners and admins, lists the API clients that have called Esign and the one person what each creates is shared with, as Admin (without one, only the client sees it); and, for organization owners, everyone who owns templates or envelopes, with ', b('Take over'), ' to become the owner of everything someone owns.'),
       ],

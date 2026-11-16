@@ -22,7 +22,8 @@ Every role can read the built-in **Docs** and the [public docs](/docs/esign/over
 ## Who sees each template and envelope
 
 Your role decides what you may do in Esign; each template and envelope decides whom it is for. Every one has an
-**owner**, whoever created it, and nobody else sees it unless it is shared with them, by email, as:
+**owner**, whoever created it, and nobody else sees it unless it is shared with them, by email or with everyone in
+your organization, as:
 
 | Role in it | What it allows |
 | --- | --- |
@@ -33,7 +34,10 @@ Your role decides what you may do in Esign; each template and envelope decides w
 This holds for everyone, your organization's owners and admins included: they see what they own and what is shared with
 them. A role in a template or an envelope never goes beyond your role in Esign: with **View envelopes** only, you are a
 Viewer of everything shared with you. **Share** in a template's ⋯ menu, or **Who sees it** on an envelope, shows its owner and
-the people it is shared with; its admins and owner share it there.
+the people it is shared with; its admins and owner share it there. **General access** there shares it with everyone in
+your organization, as Viewer or Editor: everyone who signs in to Esign from it finds it in their lists, at that role or
+the higher one they are shared by email. API clients are not part of everyone: they see only what they own or is shared
+with their person.
 
 Your **tags** on a template or an envelope are yours alone: nobody else sees them. Lists filter by them (**Tags**),
 and by whether they are yours or shared with you (**Sender** on Envelopes, **Owner** on Templates).

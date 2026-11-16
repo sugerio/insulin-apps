@@ -30,7 +30,8 @@ test('a template\'s menu: its owner shares it by email and role, and tags it; th
     assert.equal(app.button('Sharing'), undefined, 'sharing is in the row\'s menu');
     await choose(app, 'Mutual NDA', 'Share');
     assert.ok(app.byLabel('Who sees the template'), 'sharing opens in a dialog over the list');
-    assert.match(app.text(), /Not shared with anyone else/);
+    assert.match(app.text(), /Not shared with anyone by email/);
+    assert.match(app.text(), /Only its owner and the people it is shared with see it/);
     await app.type(app.byId('templates-tpl-1-share-email'), 'bo');
     await app.click(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Choose Bo Example (bo@example.com)')[0], 'suggestion');
     await app.type(app.byId('templates-tpl-1-share-role'), 'editor');
@@ -55,6 +56,49 @@ test('a template\'s menu: its owner shares it by email and role, and tags it; th
   } finally { await app.unmount(); }
 });
 
+test('General access: a template\'s admin shares it with everyone in the organization, as viewers or editors, and stops', async () => {
+  let organization: { role: string; sharedAt: number } | undefined;
+  const sharing = () => json({ id: 'tpl-1', myRole: 'owner', owner: TEMPLATE.owner, ...(organization ? { organization } : {}), shares: [] });
+  const app = await renderMember('/templates', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/templates?') || c.path === '/api/templates') return json({ templates: [TEMPLATE] });
+    if (c.path === '/api/templates/tpl-1/shares/delete') { organization = undefined; return sharing(); }
+    if (c.path === '/api/templates/tpl-1/shares' && c.method === 'POST') { organization = { role: JSON.parse(String(c.body)).role, sharedAt: 1 }; return sharing(); }
+    if (c.path === '/api/templates/tpl-1/shares') return sharing();
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+  });
+  const posted = (path: string) => app.calls.filter((c) => c.path === path && c.method === 'POST').map((c) => JSON.parse(String(c.body)));
+  try {
+    await choose(app, 'Mutual NDA', 'Share');
+    assert.equal(app.byId('templates-tpl-1-access').props.value, '');
+    await app.type(app.byId('templates-tpl-1-access'), 'viewer');
+    assert.deepEqual(posted('/api/templates/tpl-1/shares'), [{ organization: true, role: 'viewer' }]);
+    assert.match(app.text(), /Everyone in your organization can view it\./);
+    assert.match(app.text(), /finds it in their lists/);
+    await app.type(app.byId('templates-tpl-1-access'), 'editor');
+    assert.deepEqual(posted('/api/templates/tpl-1/shares').at(-1), { organization: true, role: 'editor' });
+    assert.equal(app.byId('templates-tpl-1-access').props.value, 'editor');
+    await app.type(app.byId('templates-tpl-1-access'), '');
+    assert.deepEqual(posted('/api/templates/tpl-1/shares/delete'), [{ organization: true }]);
+    assert.match(app.text(), /No longer shared with everyone in your organization/);
+  } finally { await app.unmount(); }
+});
+
+test('General access: someone who may not share it reads it, on an envelope\'s page', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const app = await renderMember(`/envelopes/${id}`, (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path === `/api/envelopes/${id}`) return json({ id, templateId: 'tpl-1', status: 'IN_PROGRESS', createdAt: 1, tasks: [], owner: TEMPLATE.owner, myRole: 'viewer', tags: [] });
+    if (c.path === `/api/envelopes/${id}/audit`) return json({ events: [] });
+    if (c.path === `/api/envelopes/${id}/shares`) return json({ id, myRole: 'viewer', owner: TEMPLATE.owner, organization: { role: 'viewer', sharedAt: 1 }, shares: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+  });
+  try {
+    assert.equal(app.byId(`envelopes-${id}-access`), undefined, 'no control');
+    assert.match(app.text(), /Everyone in your organization can view\./);
+  } finally { await app.unmount(); }
+});
+
 test('a template\'s menu: Edit renames it and changes its default signers, or opens its fields as a new version; Delete asks first; shared with you shows', async () => {
   const shared = { ...TEMPLATE, id: 'tpl-2', name: 'Reseller agreement', owner: { id: 'u9', kind: 'person', name: 'Bo Example' }, myRole: 'viewer', tags: [] };
   const SESSION = 'e'.repeat(64);
@@ -69,7 +113,7 @@ test('a template\'s menu: Edit renames it and changes its default signers, or op
   try {
     assert.match(app.text(), /Shared with you · Viewer/, 'what someone shared with the member says so');
     await app.click(app.byLabel('More for Reseller agreement'), 'menu');
-    assert.deepEqual(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitem').map((n: any) => visibleText(n.children).trim()), ['Tags'], 'a viewer neither edits, shares nor deletes');
+    assert.deepEqual(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitem').map((n: any) => visibleText(n.children).trim()), ['View', 'Tags'], 'a viewer neither edits, shares nor deletes');
     await app.click(app.byLabel('More for Reseller agreement'), 'menu');
     // Edit › Details: the name and the default signers, saved together.
     await choose(app, 'Mutual NDA', 'Edit');

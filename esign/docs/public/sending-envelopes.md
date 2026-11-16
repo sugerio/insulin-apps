@@ -58,7 +58,7 @@ same request key, so the envelope is never sent twice.
 
 An envelope is yours when you send it, and nobody else sees it, your organization's owners and admins included, until
 you share it: **Who sees it** on its page shares it by email, as Viewer, Editor (who may also void it and resend
-invitations) or Admin (who may also share it). Tags you give it, on the form or on its page, are yours alone, along with
+invitations) or Admin (who may also share it), or, with **General access**, with everyone in your organization, as Viewer or Editor. Tags you give it, on the form or on its page, are yours alone, along with
 yours on its template; **Envelopes** filters by them (**Tags**), and by **Sent by me** or **Shared with me** (**Sender**). See
 [Roles and access](/docs/esign/roles-and-access#who-sees-each-template-and-envelope).
 

@@ -21,7 +21,7 @@ import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
 import { contactUpserts, mountContactRoutes } from './contacts.ts';
 import { defaultSignerNames, parseDefaultSigners, storedDefaultSigners, type DefaultSigners } from './default-signers.ts';
-import { clientShare, documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKey, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
+import { clientShare, documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKeys, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
 import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsByDocument, tagsOf, tagWrites } from './tags.ts';
 import { mountMemberRoutes, recordMember } from './members.ts';
 
@@ -151,7 +151,7 @@ function listed(context: import('hono').Context<Env>, type: ResourceType, query:
     // A template list shows the live ones only: not those archived (deleted, or replaced by a new version), which are
     // otherwise as they were: read, sent from and edited by their id.
     where: `x.tenant_id = ? AND x.id IN ${visibleIds(type, query.scope)}${query.tags.length ? ` AND x.id IN ${taggedIds(type)}` : ''}${type === 'template' ? ' AND x.archived_at IS NULL' : ''}`,
-    binds: (first: unknown[]) => [shareKey(caller), ...first, tenantId, ...visibleBinds(tenantId, caller, query.scope), ...(query.tags.length ? [tenantId, caller.userId, JSON.stringify(query.tags), query.tags.length] : [])],
+    binds: (first: unknown[]) => [shareKeys(caller), ...first, tenantId, ...visibleBinds(tenantId, caller, query.scope), ...(query.tags.length ? [tenantId, caller.userId, JSON.stringify(query.tags), query.tags.length] : [])],
   };
 }
 
@@ -335,7 +335,7 @@ function jsonField<T>(raw: FormDataEntryValue | null, parse: (value: unknown) =>
 
 app.get('/api/templates/:id', async (context) => {
   const row = await context.env.DB.prepare(`SELECT x.*, ${sharedRoleColumn('template', 'x')} AS shared_role FROM templates x WHERE x.id = ? AND x.tenant_id = ?`)
-    .bind(shareKey(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string; archived_at: number | null }>();
+    .bind(shareKeys(context.get('caller')), context.req.param('id'), context.get('tenantId')).first<Owned & { roles_json: string; fields_json?: string; name: string | null; metadata_json: string; default_signers_json: string; archived_at: number | null; created_at: number }>();
   if (!row || !effectiveRole(row.owner_user_id, row.shared_role, context.get('caller'))) return context.json({ error: 'not_found' }, 404);
   // The response names keep the word "positioned": hosts read them.
   let hasFields = false;
@@ -349,7 +349,18 @@ app.get('/api/templates/:id', async (context) => {
     const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Missing source');
     const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(row.fields_json!,JSON.parse(row.roles_json),pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);fieldsSupported=true;
   }catch{fieldsSupported=false;}}
-  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json), ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }), ...(await ownership(context, 'template', [row])).get(row.id) });
+  return context.json({ id: row.id, ...templateLabels(row), roles: JSON.parse(row.roles_json), hasPositionedFields: hasFields, positionedFieldsSupported: fieldsSupported, fields: placedFields(row.fields_json, true), createdAt: row.created_at, ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }), ...(await ownership(context, 'template', [row])).get(row.id) });
+});
+
+// The template's PDF as uploaded, to read: anyone who sees the template (Viewer). Signers sign a copy of it.
+app.get('/api/templates/:id/pdf', async (context) => {
+  const id = context.req.param('id');
+  const refused = await requireRole(context, 'template', id, 'viewer');
+  if (refused) return refused;
+  const row = await context.env.DB.prepare('SELECT object_key FROM templates WHERE id = ? AND tenant_id = ?').bind(id, context.get('tenantId')).first<{ object_key: string }>();
+  const object = row && await context.env.ARTIFACTS.get(row.object_key);
+  if (!object || object.size > MAX_PDF_BYTES) return context.json({ error: 'source_unavailable' }, 409);
+  return new Response(await object.arrayBuffer(), { headers: { 'content-type': 'application/pdf', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 });
 
 // Replaces a template's default signers (default-signers.ts): who usually signs as some of its roles. They
@@ -409,24 +420,26 @@ function templateLabels(row: { name: string | null; metadata_json: string; roles
   return { ...(row.name ? { name: row.name } : {}), metadata: storedMetadata(row.metadata_json), defaultSigners: storedDefaultSigners(row.default_signers_json, JSON.parse(row.roles_json)) };
 }
 
+type PlacedField = { type: string; role: string; page: number; rect: { x: number; y: number; width: number; height: number }; required?: boolean };
 /**
  * The placed fields as a host previews them: type, role, page (1-based) and the box in
- * normalized coordinates of the displayed page (top-left origin). Ids and flags stay inside.
+ * normalized coordinates of the displayed page (top-left origin); with `withRequired` (one template), whether the
+ * signer must fill each. Ids stay inside.
  */
-function placedFields(raw: string | undefined): { type: string; role: string; page: number; rect: { x: number; y: number; width: number; height: number } }[] {
+function placedFields(raw: string | undefined, withRequired = false): PlacedField[] {
   if (raw === undefined) return [];
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return []; }
   if (!Array.isArray(value)) return [];
-  const out: { type: string; role: string; page: number; rect: { x: number; y: number; width: number; height: number } }[] = [];
+  const out: PlacedField[] = [];
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
-    const f = item as { type?: unknown; role?: unknown; page?: unknown; rect?: { x?: unknown; y?: unknown; width?: unknown; height?: unknown } };
+    const f = item as { type?: unknown; role?: unknown; page?: unknown; required?: unknown; rect?: { x?: unknown; y?: unknown; width?: unknown; height?: unknown } };
     const r = f.rect;
     if (typeof f.type !== 'string' || typeof f.role !== 'string' || !Number.isSafeInteger(f.page) || !r || typeof r !== 'object') continue;
     const { x, y, width, height } = r;
     if (![x, y, width, height].every((v) => typeof v === 'number' && Number.isFinite(v))) continue;
-    out.push({ type: f.type, role: f.role, page: f.page as number, rect: { x: x as number, y: y as number, width: width as number, height: height as number } });
+    out.push({ type: f.type, role: f.role, page: f.page as number, rect: { x: x as number, y: y as number, width: width as number, height: height as number }, ...(withRequired ? { required: f.required !== false } : {}) });
   }
   return out;
 }
@@ -609,7 +622,7 @@ app.get('/api/envelopes/:id', async (context) => {
   const refused = await requireRole(context, 'envelope', id, 'viewer');
   if (refused) return refused;
   await expireIfDue(context.env.DB, id);
-  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKey(context.get('caller')), id, tenantId).first<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
+  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKeys(context.get('caller')), id, tenantId).first<Owned & { template_id: string; status: string; created_at: number; details_json: string }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
   // invitedAt: when Esign last emailed the signer's invitation (delivery 'email').

@@ -56,7 +56,7 @@ test('editor sessions enforce scope and persist immutable template versions with
   assert.equal((await req(`/api/template-editing-sessions/${first.sessionId}`,{headers:{authorization:`Bearer ${b}`}})).status,404);
   const fieldInfo=await req(`/api/templates/${one}`,{headers:{authorization:`Bearer ${a}`}});const fieldInfoBody=await fieldInfo.json() as any;assert.equal(fieldInfoBody.hasPositionedFields,true);
   // The host previews the placed fields: type, role, page and box only.
-  assert.deepEqual(fieldInfoBody.fields,fields.map(f=>({type:f.type,role:f.role,page:f.page,rect:f.rect})));
+  assert.deepEqual(fieldInfoBody.fields,fields.map(f=>({type:f.type,role:f.role,page:f.page,rect:f.rect,required:f.required})));
   assert.equal((await req(`/api/templates/${one}`,{headers:{authorization:`Bearer ${b}`}})).status,404);
   assert.equal((await req('/api/envelopes',{...management(a,{templateId:one,recipients:[{role:'Partner',name:'Ana',email:'ana@example.com'},{role:'Seller',name:'Bo',email:'bo@example.com'},{role:'Legal',name:'Cam',email:'cam@example.com'}]}),headers:{...management(a,{}).headers,'idempotency-key':'fields-1'}})).status,201);
   assert.equal((await req('/api/template-editing-sessions',management(b,{allowedParentOrigin:'https://other.example.com',sourceTemplateId:one}))).status,404);

@@ -57,7 +57,8 @@ that are shared with them (see [Owners, sharing and tags](#owners-sharing-and-ta
 | --- | --- | --- |
 | `GET /api/templates` | View | The templates you own or that are shared with you, newest first: `{templates: [{id, name?, metadata, defaultSigners, roles, fields, createdAt, owner, myRole, tags}], next?}`. Filters: `q` (the name contains it, or it is the template's id), `since` (uploaded at or after, epoch ms), `scope` and `tag`; `next` is the `before` of the following page. |
 | `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name`, `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)), `defaultSigners` (a JSON object; see [Default signers](#default-signers)), `tags` and `share` (JSON arrays; see [Owners, sharing and tags](#owners-sharing-and-tags)). You own it. Answers `201 {id, name?, metadata, roles, defaultSigners, tags}`. Signed on an added signature page. |
-| `GET /api/templates/{id}` | Viewer | A template's name, metadata and default signers, its roles and placed fields (type, role, page, box), whether they can be signed, its owner, your role and your tags, and `archivedAt` when it was deleted or replaced by a new version. Lists show the templates that aren't archived only. |
+| `GET /api/templates/{id}` | Viewer | A template's name, metadata and default signers, its roles and placed fields (type, role, page, box, `required`), whether they can be signed, `createdAt`, its owner, your role and your tags, and `archivedAt` when it was deleted or replaced by a new version. Lists show the templates that aren't archived only. |
+| `GET /api/templates/{id}/pdf` | Viewer | Its PDF as uploaded (`application/pdf`), to show it. |
 | `POST /api/templates/{id}` | Editor | Rename it: `{name}` (`null` clears it). Answers `{id, name?}`. Envelopes already sent keep their document name. |
 | `POST /api/templates/{id}/delete` | Admin | Delete it: it is archived, which takes it off every list, Esign's pages included. Everything by its id works as before (`GET` says `archivedAt`), so a host that keeps the id is unaffected, and envelopes sent from it are signed as before. Answers `{id, deleted: true}`. |
 | `POST /api/templates/{id}/default-signers` | Editor | Replace the template's default signers: `{defaultSigners}` (`{}` clears them). Answers `{id, defaultSigners}`. Envelopes already sent keep their signers. |
@@ -76,7 +77,7 @@ that are shared with them (see [Owners, sharing and tags](#owners-sharing-and-ta
 | `POST /api/envelopes/{id}/void` | Editor | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. |
 | `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Editor | A one-time code for the active signer's signing page: `{code}`. Body: `{signedInEmail, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
 | `POST /api/envelopes/{id}/tasks/{taskId}/invitation` | Editor | Email the active signer's invitation again, with a new link; the earlier link stops working. Answers `204`; `409 not_invited` for a signer Esign doesn't invite. |
-| `GET /api/envelopes/{id}/delivery-pdf` | Viewer | A completed envelope's signed PDF followed by its certificate of completion. |
+| `GET /api/envelopes/{id}/delivery-pdf` | Viewer | A completed envelope's signed PDF followed by its certificate of completion. `Content-Disposition` names it by its document and the day it was completed (UTC), such as `Reseller Agreement - Signed 2026-11-13.pdf`; each signer's copy has the same name. |
 | `GET /api/envelopes/{id}/certificate` | Viewer | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
 | `POST /api/process-due` † | Manage | Due work for the caller's organization, at once: answers `{expired, completed, waiting, failed}`. The platform runs it for every organization every five minutes anyway. |
 
@@ -104,9 +105,9 @@ Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLI
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/{kind}/{id}/shares` | Viewer | Who sees it: `{id, myRole, owner, shares: [{email, name?, role, sharedAt}]}`. |
-| `POST /api/{kind}/{id}/shares` | Admin | Share it with someone, or change their role: `{email, role}`, `role` one of `admin`, `editor`, `viewer`. Answers as above. Its owner's own email answers `422 owner_not_shared`; an API client's address is refused. |
-| `POST /api/{kind}/{id}/shares/delete` | Admin, or anyone for themselves | Stop sharing it with someone: `{email}`. Removing yourself answers `{id, removed: true}`. Someone it isn't shared with answers `404 not_shared`. |
+| `GET /api/{kind}/{id}/shares` | Viewer | Who sees it: `{id, myRole, owner, organization?: {role, sharedAt}, shares: [{email, name?, role, sharedAt}]}`. `organization` is there when it is shared with everyone in your organization. |
+| `POST /api/{kind}/{id}/shares` | Admin | Share it with someone, or change their role: `{email, role}`, `role` one of `admin`, `editor`, `viewer`; or with everyone in your organization: `{organization: true, role}`, `role` `editor` or `viewer`. Answers as above. Its owner's own email answers `422 owner_not_shared`; an API client's address is refused. |
+| `POST /api/{kind}/{id}/shares/delete` | Admin, or anyone for themselves | Stop sharing it with someone: `{email}`, or with everyone: `{organization: true}`. Removing yourself answers `{id, removed: true}`. Someone it isn't shared with answers `404 not_shared`. |
 | `POST /api/{kind}/{id}/tags` | Viewer | Replace your own tags on it: `{tags}` (`[]` clears them). Answers `{id, tags}`. |
 | `GET /api/tags` | View | Your own tags, most used first: `{tags: [{tag, uses}]}`. `q` keeps those containing it; `limit` 1 to 100 (20 by default). |
 | `GET /api/members` | View | People Esign has seen in your organization, to share with: `{members: [{id, email, name?}]}`. `q` and `limit` as for tags. |
@@ -190,7 +191,7 @@ PDF placed in the editor gets them with `POST /api/templates/{id}/default-signer
 
 Every template and envelope has one **owner**: the person or the API client that created it, or whom an organization
 owner transferred it to. Nobody else sees it, not even your organization's owners and admins, unless it is shared with
-them by email, with a role:
+them by email, or with everyone in your organization, with a role:
 
 | Role | What it may do |
 | --- | --- |
@@ -200,10 +201,15 @@ them by email, with a role:
 | **Owner** | All of that. The owner is never a share. |
 
 A role is capped by the caller's role in Esign: someone who may only view Esign is a Viewer at most. Anyone it is shared
-with can remove themselves. An envelope isn't shared with its template's people: it is its sender's.
+with by email can remove themselves. An envelope isn't shared with its template's people: it is its sender's.
 
-When you create a template, an envelope or an editing session, `share` (an array of at most 20 `{email, role}`) shares it
-with others at once; each person once, at the highest role given, and never with yourself.
+**Everyone in your organization.** Shared with everyone, as Viewer or Editor (never Admin), it is seen by every person of
+your organization who uses Esign, at that role, or at the higher one they are shared by email. API clients are not part of
+everyone. The lists' `scope=shared` includes it; its owner still finds it under `mine`.
+
+When you create a template, an envelope or an editing session, `share` (an array of at most 20 `{email, role}`, or
+`{organization: true, role}` for everyone) shares it with others at once; each person once, at the highest role given,
+and never with yourself.
 
 **API clients.** An API client owns what it creates, and nobody else sees it unless your organization's owners or admins
 choose, in Esign's **Ownership** page (or `POST /api/api-clients/{id}`), one person its new templates and envelopes are

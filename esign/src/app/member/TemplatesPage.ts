@@ -7,7 +7,7 @@
 // page is the API's alone), which this page hosts exactly as a host product would: a session for this origin, the source staged, then the
 // editor's own save, confirmed against the server.
 import React, { useEffect, useRef, useState } from 'react'
-import { Ellipsis, Pencil, Plus, Send, SquarePen, Tag, Trash2, Users } from 'lucide-react'
+import { Ellipsis, Eye, Pencil, Plus, Send, SquarePen, Tag, Trash2, Users } from 'lucide-react'
 import { Badge } from '../components/ui/badge.ts'
 import { DropdownMenu, type MenuItem } from '../components/ui/dropdown-menu.ts'
 import { Button, buttonVariants } from '../components/ui/button.ts'
@@ -219,6 +219,7 @@ export function TemplatesPage({ me }: { me: Me }) {
   /** A row's menu: what the member's role in the template, and in Esign, allows. */
   function menu(t: TemplateSummary): MenuItem[] {
     const items: (MenuItem | false)[] = [
+      { label: 'View', icon: Eye, onSelect: () => navigate(`/templates/${t.id}`) },
       manage && allows(t.myRole, 'editor') && { label: 'Edit', icon: Pencil, onSelect: () => open({ kind: 'edit', id: t.id, tab: 'details' }) },
       { label: 'Tags', icon: Tag, onSelect: () => open({ kind: 'tags', id: t.id }) },
       manage && allows(t.myRole, 'admin') && { label: 'Share', icon: Users, onSelect: () => open({ kind: 'share', id: t.id }) },
@@ -312,7 +313,7 @@ export function TemplatesPage({ me }: { me: Me }) {
     h(Dialog, { open: opened?.kind === 'share' && !!current, onOpenChange: (o) => { if (!o) close() }, label: 'Who sees the template', className: 'sm:max-w-2xl' },
       current && opened?.kind === 'share' ? [
         h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Who sees ${label(current)}`),
-          h(DialogDescription, null, 'Its owner and the people it is shared with. Viewers send envelopes from it; editors also edit it; admins also share and delete it.')),
+          h(DialogDescription, null, 'Its owner, the people it is shared with and, when it is shared with everyone, everyone in your organization. Viewers send envelopes from it; editors also edit it; admins also share and delete it.')),
         h(SharePanel, { key: current.id, kind: 'templates', id: current.id, me, onLeft: () => { setOpened(null); void load() } }),
         h(DialogFooter, { key: 'footer' }, h(Button, { variant: 'outline', onClick: close }, 'Close')),
       ] : null),
@@ -339,7 +340,10 @@ export function TemplatesPage({ me }: { me: Me }) {
           : h(Table, { 'aria-label': 'Templates' },
             h(TableHeader, null, h(TableRow, null, h(TableHead, { className: 'pl-6' }, 'Template'), h(TableHead, null, 'Roles'), h(TableHead, null, 'Signed on'), h(TableHead, null, 'Owner'), h(TableHead, null, 'Access'), h(TableHead, null, 'Uploaded'), h(TableHead, { className: 'pr-6' }, h('span', { className: 'sr-only' }, 'Actions')))),
             h(TableBody, null, ...templates.map((t) => h(TableRow, { key: t.id },
-              h(TableCell, { className: 'pl-6 whitespace-normal' }, t.name ? h('div', { className: 'font-medium' }, t.name) : null, h('div', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id), h(TagList, { tags: t.tags })),
+              h(TableCell, { className: 'pl-6 whitespace-normal' },
+                h(Link, { to: `/templates/${t.id}`, 'aria-label': `View ${t.name ?? t.id}`, className: 'flex flex-col hover:underline underline-offset-4' },
+                  t.name ? h('span', { className: 'font-medium' }, t.name) : null, h('span', { className: t.name ? 'font-mono text-xs text-muted-foreground' : 'font-mono text-xs' }, t.id)),
+                h(TagList, { tags: t.tags })),
               h(TableCell, { className: 'whitespace-normal' }, t.roles.map((role) => { const d = t.defaultSigners?.[role]; return d ? `${role} (${d.name ?? d.email})` : role }).join(', ')),
               h(TableCell, null, t.fields.length ? `${t.fields.length} placed ${t.fields.length === 1 ? 'field' : 'fields'}` : 'A signature page'),
               h(TableCell, { className: 'text-muted-foreground' }, ownerName(t.owner, me)),

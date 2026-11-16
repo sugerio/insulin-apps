@@ -102,6 +102,10 @@ A default signer's name must be one the signature can draw, as for any signer.
 
 Each template's row has **Send** and a **⋯** menu:
 
+- **View** (anyone who sees it), or a click on its name: its page, read only. **Details** shows its name, id, owner,
+  your role in it, when it was uploaded, its signer roles in signing order with their default signers and fields, your
+  tags and its metadata; below, **Document** shows its PDF as uploaded, with the box of each placed field, in its role's
+  colour and named by role and type (dashed when optional). Those who manage find **Send** there too.
 - **Edit** (its editors, admins and owner): on **Details**, its **Name** and its default signers; on **Fields**, the field
   editor. Saving the fields makes a new version of the template, which takes its place in the list with the same name,
   owner, people and tags.
@@ -123,7 +127,8 @@ change no envelope already sent.
 
 A template is yours when you upload it, and nobody else sees it until you share it: **Share** in its row's menu shows who
 sees it, and there its admins and owner share it by email, as Viewer (sees it and sends envelopes from it), Editor (also
-edits it) or Admin (also shares and deletes it). Your **tags** on it are yours alone.
+edits it) or Admin (also shares and deletes it), or, with **General access**, with everyone in your organization, as
+Viewer or Editor. Your **tags** on it are yours alone.
 
 Above the list, as on **Envelopes**: **Search templates** (a name, or a template id), **Date** (uploaded in the last 24
 hours to 12 months), **Owner** (**Mine** or **Shared with me**) and **Tags** (yours, picked by clicking), each shown as a

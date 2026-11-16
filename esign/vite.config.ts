@@ -40,6 +40,9 @@ export default defineConfig({
     // index.html is the page; every /api/ request goes to src/api.ts.
     nitro({ routes: { '/api/**': './src/api.ts' } }),
   ],
+  // Non-ASCII characters (×, …, —) are written as \u escapes, so the bundle reads the same however a browser decodes
+  // it: a browser decoding it as GBK showed × as a CJK character.
+  build: { rolldownOptions: { output: { charset: 'ascii' } } },
   server: {
     host: '0.0.0.0',
     port: 3000,

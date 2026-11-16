@@ -133,9 +133,9 @@ the platform for the rest in `package.json` under `insulin`:
   exactly `schedule` and no identity is present, treat a request marked `schedule` as nobody on every other route,
   keep it out of `/api/catalog`, and do every organization's due work there, idempotent and bounded per tick.
 - **Accepted, not built yet** (DESIGN.md §12): an app-owned engine (Durable Objects, Containers, R2, Workers AI)
-  reached over `SUGER_ENGINE`, app limits set in the operator console, the `x-suger-org-role` header, a member lookup
-  and member events for sharing, and rules for apps that let people share their records. Don't build against them
-  until they ship.
+  reached over `SUGER_ENGINE`, app limits set in the operator console, the `x-suger-org-role` header, a member lookup,
+  member status and member events for sharing, and rules for apps that let people share their records. Don't build
+  against them until they ship.
 - **Usage reports** are required of every app (DESIGN.md §8.6): Insulin Apps' operator console never reads an app's
   database, so each app declares `insulin.scheduled` and, on the first tick of each UTC hour, `POST`s its gauges to
   `SUGER_METRICS_URL` with `SUGER_APP_TOKEN` over the `SUGER_GATEWAY` binding: app-wide ones (`database_bytes`) and

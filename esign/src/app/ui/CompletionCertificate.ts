@@ -13,7 +13,8 @@ type Certificate={
   identities?:{signatureId:string;email:string;role:string;disclosure?:{version:string;sha256:string};authority?:{title?:string;onBehalfOf?:string}}[];
   /** Who did what, when and from where; `sealed` events are covered by the seal. */
   audit?:{sealed:AuditEntry[];afterSeal:AuditEntry[]};
-  envelope:{id:string;template_id:string;created_at:number;status:string};
+  /** template_id: null for an envelope whose document was uploaded with it. */
+  envelope:{id:string;template_id:string|null;created_at:number;status:string};
   source:{id:string;sha256:string}; finalArtifactId:string; finalSha256:string;
   recipients:{id:string;role:string;recipient_name:string;recipient_email:string;routing_order:number;status:string}[];
   signatures:{id:string;sequence:number;task_id:string;recipient_name:string;input_artifact_id:string;input_sha256:string;otp_verified_at:number;consented_at:number;previous_hash:string;event_hash:string;artifact_id:string;sha256:string}[];
@@ -36,7 +37,7 @@ export function CompletionCertificate({certificate:c}:{certificate:Certificate})
       h('p',null,'The source, signature records, event links and output hashes are checked against the local HMAC manifest and stored files. Envelope metadata (including template and creation time) and each task\'s current routing order and status are current database values and are not sealed by the manifest. Each signer\'s name, email address, role and consent text are bound with their signing record.')
     ]),
     h('h3',null,'Envelope and document'),h('dl',null,
-      field('Envelope ID',c.envelope.id),field('Status',c.envelope.status),field('Template ID (unsealed)',c.envelope.template_id),field('Envelope created, server time (unsealed)',utc(c.envelope.created_at)),
+      field('Envelope ID',c.envelope.id),field('Status',c.envelope.status),field('Template ID (unsealed)',c.envelope.template_id??'None: the document was uploaded with the envelope'),field('Envelope created, server time (unsealed)',utc(c.envelope.created_at)),
       field('Source artifact ID',c.source.id),field('Source SHA-256',c.source.sha256),field('Final artifact ID',c.finalArtifactId),field('Final artifact SHA-256',c.finalSha256)),
     h('h3',null,'Signers and recorded events'),
     ...c.signatures.map(signature=>{const recipient=c.recipients.find(r=>r.id===signature.task_id), identity=c.identities?.find(i=>i.signatureId===signature.id), signedAs=[identity?.authority?.title,identity?.authority?.onBehalfOf].filter(Boolean).join(', ');return h('section',{key:signature.id,className:'flex flex-col gap-3 rounded-lg border p-4'},

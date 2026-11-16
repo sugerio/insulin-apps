@@ -13,6 +13,7 @@ import {parseMetadata,parseTemplateName,unknownKeys} from './metadata.ts';
 import {storedDefaultSigners} from './default-signers.ts';
 import {atLeast,clientShare,documentRole,parseShares,shareInserts,sharesFor} from './ownership.ts';
 import {mergeTags,parseTags,tagsOf,tagWrites} from './tags.ts';
+import {draftRoleLabels,draftRoles,envelopeDocument} from './envelope-documents.ts';
 
 const limit=5*1024*1024;
 const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),n=>n.toString(16).padStart(2,'0')).join('');
@@ -33,8 +34,25 @@ export function mountEditorRoutes(app:Hono<Env>){
  const syncOrigins=async(c:import('hono').Context<Env>,next:import('hono').Next)=>{await syncEditorOrigins(c.env.DB,editorOrigins(new URL(c.req.url).origin,c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)));await next();};
  app.use('/api/template-editing-sessions',syncOrigins);app.use('/api/template-editing-sessions/*',syncOrigins);app.use('/api/public/editor/*',syncOrigins);
  app.post('/api/template-editing-sessions',bodyLimit({maxSize:32768}),async c=>{
-  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown;tags?:unknown;share?:unknown;replace?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
-  if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata','tags','share','replace']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
+  let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown;tags?:unknown;share?:unknown;replace?:unknown;envelopeId?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
+  if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata','tags','share','replace','envelopeId']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
+  // `envelopeId`: the fields of an envelope draft with an uploaded document (envelope-documents.ts), for its editors,
+  // admins and owner: its roles are its signers', its document the one uploaded, and saving writes the draft's fields.
+  if(input&&typeof input==='object'&&input.envelopeId!==undefined){
+   if(typeof input.envelopeId!=='string'||typeof input.allowedParentOrigin!=='string'||['sourceTemplateId','roles','name','metadata','tags','share','replace'].some(k=>(input as Record<string,unknown>)[k]!==undefined))return c.json({error:'invalid_session'},422);
+   const tenant=c.get('tenantId'),envelopeId=input.envelopeId;
+   const found=await documentRole(c.env.DB,tenant,c.get('caller'),'envelope',envelopeId);
+   if(!found)return c.json({error:'not_found'},404);
+   if(!atLeast(found.role,'editor'))return c.json({error:'forbidden',role:found.role},403);
+   const draft=await c.env.DB.prepare("SELECT status,template_id,draft_json,EXISTS (SELECT 1 FROM artifacts a WHERE a.envelope_id=envelopes.id) AS has_document FROM envelopes WHERE id=? AND tenant_id=?").bind(envelopeId,tenant).first<{status:string;template_id:string|null;draft_json:string|null;has_document:number}>();
+   if(draft?.status!=='DRAFT'||draft.template_id!==null)return c.json({error:'not_an_upload_draft'},409);
+   if(!draft.has_document)return c.json({error:'document_required'},409);
+   const roles=draftRoles(draft.draft_json);
+   if(!roles)return c.json({error:'invalid_roles'},422);
+   let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{roles,ownerUserId:c.get('caller').userId,envelopeId});}catch{return c.json({error:'origin_not_allowed'},403);}
+   const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;
+   c.header('Cache-Control','no-store');c.header('Referrer-Policy','no-referrer');return c.json({sessionId:issued.pageId,url:url.toString()},201);
+  }
   // The name and metadata the saved template gets (metadata.ts); without them, an edited template keeps its source's.
   // Its owner is the caller, with their tags (and theirs on the source) and the shares asked for (ownership.ts).
   const templateName=parseTemplateName(input?.name),templateMetadata=parseMetadata(input?.metadata);
@@ -66,9 +84,9 @@ export function mountEditorRoutes(app:Hono<Env>){
  app.post('/api/template-editing-sessions/:id/source',bodyLimit({maxSize:limit}),async c=>{
   const pageId=c.req.param('id'),tenant=c.get('tenantId'),owner=c.get('caller').userId;
   // A source can be staged only before the page is opened: while the session's code is unused and unexpired; by whoever opened the session.
-  const row=await c.env.DB.prepare(`SELECT x.source_template_id,x.staged_object_key,${editorCodeOpen('x')} AS open FROM editor_sessions x WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(Date.now(),pageId,tenant,owner).first<{source_template_id:string|null;staged_object_key:string|null;open:number}>();
+  const row=await c.env.DB.prepare(`SELECT x.source_template_id,x.staged_object_key,x.envelope_id,${editorCodeOpen('x')} AS open FROM editor_sessions x WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(Date.now(),pageId,tenant,owner).first<{source_template_id:string|null;staged_object_key:string|null;envelope_id:string|null;open:number}>();
   if(!row)return c.json({error:'not_found'},404);
-  if(row.source_template_id||row.staged_object_key||!row.open)return c.json({error:'source_immutable'},409);
+  if(row.source_template_id||row.staged_object_key||row.envelope_id||!row.open)return c.json({error:'source_immutable'},409);
   if(c.req.header('content-type')!=='application/pdf')return c.json({error:'invalid_file'},422);
   const bytes=new Uint8Array(await c.req.arrayBuffer());if(bytes.length<5||bytes.length>limit||new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')return c.json({error:'invalid_file'},422);
   try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});if(!pdf.getPageCount()||pdf.getPageCount()>100)throw new Error('pages');}catch{return c.json({error:'invalid_file'},422);}
@@ -77,14 +95,18 @@ export function mountEditorRoutes(app:Hono<Env>){
   const result=await c.env.DB.prepare(`UPDATE editor_sessions AS x SET staged_object_key=?,staged_sha256=? WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND x.source_template_id IS NULL AND x.staged_object_key IS NULL AND ${editorCodeOpen('x')} AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(key,hash,pageId,tenant,owner,Date.now()).run();
   if(result.meta.changes!==1)return c.json({error:'source_immutable'},409);return c.json({ok:true},201);
  });
- app.get('/api/template-editing-sessions/:id',async c=>{const row=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=? AND tenant_id=? AND owner_user_id=?').bind(c.req.param('id'),c.get('tenantId'),c.get('caller').userId).first<{result_template_id:string|null}>();if(!row)return c.json({error:'not_found'},404);c.header('Cache-Control','no-store');return c.json({templateId:row.result_template_id});});
+ app.get('/api/template-editing-sessions/:id',async c=>{const row=await c.env.DB.prepare('SELECT result_template_id,envelope_id FROM editor_sessions WHERE id=? AND tenant_id=? AND owner_user_id=?').bind(c.req.param('id'),c.get('tenantId'),c.get('caller').userId).first<{result_template_id:string|null;envelope_id:string|null}>();if(!row)return c.json({error:'not_found'},404);c.header('Cache-Control','no-store');return c.json({templateId:row.result_template_id,...(row.envelope_id?{envelopeId:row.envelope_id}:{})});});
  app.post('/api/public/editor/exchange',bodyLimit({maxSize:1024}),async c=>{if(!sameOrigin(c.req.raw))return c.json({error:'origin'},403);let data:{pageId?:unknown;code?:unknown;embedded?:unknown;embedder?:unknown;embedders?:unknown};try{data=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}if(!data||typeof data.pageId!=='string'||typeof data.code!=='string')return c.json({error:'invalid_code'},401);
   // Only the session's parent may frame the editor (signing-page.ts).
   const parent=await editorPageParent(c.env.DB,data.pageId,Date.now());if(!embedderAllowed(data,new URL(c.req.url).origin,parent?[parent]:[]))return c.json({error:'embedder_not_allowed'},403);
   try{const token=await exchangeEditorPage(c.env.DB,data.pageId,data.code,Date.now());c.header('Cache-Control','no-store');return c.json({token});}catch{return c.json({error:'invalid_code'},401);}});
  app.use('/api/public/editor/*',async(c,next)=>{if(!sameOrigin(c.req.raw))return c.json({error:'origin'},403);c.header('Cache-Control','no-store');await next();});
- app.get('/api/public/editor/current',async c=>{let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}if(!session.sourceTemplateId)return c.json({roles:session.roles,fields:[],sourceTemplateId:null,hasStagedSource:!!session.stagedObjectKey,parentOrigin:session.parentOrigin});const row=await c.env.DB.prepare('SELECT roles_json,fields_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{roles_json:string;fields_json:string}>();if(!row)return c.json({error:'not_found'},404);return c.json({roles:JSON.parse(row.roles_json),fields:JSON.parse(row.fields_json),sourceTemplateId:session.sourceTemplateId,parentOrigin:session.parentOrigin});});
- app.get('/api/public/editor/pdf',async c=>{let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}if(session.stagedObjectKey&&session.stagedSha256){try{return new Response(await stagedBytes(c.env.ARTIFACTS,session.stagedObjectKey,session.stagedSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}}if(!session.sourceTemplateId)return c.json({error:'not_found'},404);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string}>();if(!row)throw new Error('Source unavailable');return new Response(await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}});
+ app.get('/api/public/editor/current',async c=>{let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}
+  // An envelope draft's: its roles (fixed when the session opened) with each signer's name, and the fields placed so
+  // far for those roles.
+  if(session.envelopeId){const row=await c.env.DB.prepare("SELECT fields_json,draft_json FROM envelopes WHERE id=? AND tenant_id=? AND status='DRAFT'").bind(session.envelopeId,session.tenantId).first<{fields_json:string|null;draft_json:string|null}>();if(!row)return c.json({error:'not_found'},404);let fields:unknown=[];try{fields=JSON.parse(row.fields_json??'[]');}catch{fields=[];}return c.json({roles:session.roles,roleLabels:draftRoleLabels(row.draft_json),fields:Array.isArray(fields)?fields.filter((f:{role?:unknown})=>session.roles.includes(f?.role as string)):[],sourceTemplateId:null,hasStagedSource:true,envelopeId:session.envelopeId,parentOrigin:session.parentOrigin});}
+  if(!session.sourceTemplateId)return c.json({roles:session.roles,fields:[],sourceTemplateId:null,hasStagedSource:!!session.stagedObjectKey,parentOrigin:session.parentOrigin});const row=await c.env.DB.prepare('SELECT roles_json,fields_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{roles_json:string;fields_json:string}>();if(!row)return c.json({error:'not_found'},404);return c.json({roles:JSON.parse(row.roles_json),fields:JSON.parse(row.fields_json),sourceTemplateId:session.sourceTemplateId,parentOrigin:session.parentOrigin});});
+ app.get('/api/public/editor/pdf',async c=>{let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}if(session.envelopeId){const bytes=await envelopeDocument(c.env.DB,c.env.ARTIFACTS,session.envelopeId);return bytes?new Response(bytes,{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}}):c.json({error:'source_unavailable'},409);}if(session.stagedObjectKey&&session.stagedSha256){try{return new Response(await stagedBytes(c.env.ARTIFACTS,session.stagedObjectKey,session.stagedSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}}if(!session.sourceTemplateId)return c.json({error:'not_found'},404);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string}>();if(!row)throw new Error('Source unavailable');return new Response(await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256),{headers:{'Content-Type':'application/pdf','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}catch{return c.json({error:'source_unavailable'},409);}});
  app.post('/api/public/editor/save',bodyLimit({maxSize:limit+65536}),async c=>{
   let session;try{session=await contextFor(c);}catch{return c.json({error:'unauthorized'},401);}
   if(!c.req.header('content-type')?.startsWith('multipart/form-data;'))return c.json({error:'multipart_required'},400);
@@ -108,6 +130,23 @@ export function mountEditorRoutes(app:Hono<Env>){
    else if(draft)return c.json({error:'draft_not_allowed'},422);
   }
   let roles:unknown,fields:unknown;try{roles=JSON.parse(String(form.get('roles')));fields=JSON.parse(String(form.get('fields')));}catch{return c.json({error:'invalid_definition'},422);}if(!rolesValid(roles,true))return c.json({error:'invalid_roles'},422);
+  // An envelope draft's fields: on its own uploaded document, for the roles its signers have (fixed when the session
+  // opened). A draft is saved as it is; ready (without `draft`), every role has a required Signature. Sending it checks
+  // them again (app.ts). Only while it is a draft, and while this editor token is live.
+  if(session.envelopeId){
+   if(form.has('file'))return c.json({error:'source_immutable'},422);
+   if(roles.length!==session.roles.length||roles.some((r,i)=>r!==session.roles[i]))return c.json({error:'invalid_roles'},422);
+   const document=await envelopeDocument(c.env.DB,c.env.ARTIFACTS,session.envelopeId);
+   if(!document)return c.json({error:'source_unavailable'},409);
+   let placed:import('./fields.ts').TemplateField[];
+   try{const pdf=await PDFDocument.load(document,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');placed=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(placed);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
+   if(!draft)try{assertEditorSigningFields(placed,roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
+   const saved=await c.env.DB.prepare(`UPDATE envelopes SET roles_json=?,fields_json=? WHERE id=? AND tenant_id=? AND status='DRAFT' AND template_id IS NULL
+     AND EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND x.envelope_id=envelopes.id AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`)
+     .bind(JSON.stringify(roles),JSON.stringify(placed),session.envelopeId,session.tenantId,session.pageId,session.tenantId,session.tokenHash,Date.now()).run();
+   if(saved.meta.changes!==1)return c.json({error:'not_draft'},409);
+   return c.json({id:session.envelopeId,status:draft?'draft':'ready'},200);
+  }
   if(new Set(roles.map(role=>role.toLowerCase())).size!==roles.length){
    if(!session.sourceTemplateId)return c.json({error:'invalid_roles'},422);
    const source=await c.env.DB.prepare('SELECT roles_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{roles_json:string}>();

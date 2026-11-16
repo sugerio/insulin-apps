@@ -40,7 +40,7 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
       apiJson<{ events: AuditEvent[] }>(`/api/envelopes/${id}/audit`).catch(() => ({ events: [] })),
     ])
     // A draft opens where its editors finish and send it; others see it here, not yet sent.
-    if (data.status === 'DRAFT' && canManage(me) && allows(data.myRole, 'editor')) { navigate(`/envelopes/new?draft=${id}`, { replace: true }); return data }
+    if (data.status === 'DRAFT' && canManage(me) && allows(data.myRole, 'editor')) { navigate(`${data.templateId ? '/envelopes/new' : '/envelopes/send'}?draft=${id}`, { replace: true }); return data }
     setEnvelope(data)
     setAudit(trail.events)
     return data

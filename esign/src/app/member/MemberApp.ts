@@ -8,6 +8,7 @@ import { ContactPage } from './ContactPage.ts'
 import { ContactsPage } from './ContactsPage.ts'
 import { EnvelopePage } from './EnvelopePage.ts'
 import { TemplatePage } from './TemplatePage.ts'
+import { SendDocumentPage } from './SendDocumentPage.ts'
 import { EnvelopesPage } from './EnvelopesPage.ts'
 import { NewEnvelopePage } from './NewEnvelopePage.ts'
 import { OwnershipPage } from './OwnershipPage.ts'
@@ -22,7 +23,7 @@ const h = React.createElement
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type Route =
-  | { section: 'envelopes'; page: 'list' | 'new' }
+  | { section: 'envelopes'; page: 'list' | 'new' | 'send' }
   | { section: 'envelopes'; page: 'envelope'; id: string }
   | { section: 'templates'; page: 'list' }
   | { section: 'templates'; page: 'template'; id: string }
@@ -38,6 +39,7 @@ export function route(path: string): Route {
   if (parts.length === 0 || (parts.length === 1 && parts[0] === 'envelopes')) return { section: 'envelopes', page: 'list' }
   if (parts[0] === 'envelopes' && parts.length === 2) {
     if (parts[1] === 'new') return { section: 'envelopes', page: 'new' }
+    if (parts[1] === 'send') return { section: 'envelopes', page: 'send' }
     if (UUID.test(parts[1])) return { section: 'envelopes', page: 'envelope', id: parts[1] }
   }
   if (parts.length === 1 && parts[0] === 'templates') return { section: 'templates', page: 'list' }
@@ -54,6 +56,7 @@ export function pageTitle(current: Route, status: string): string {
   // The list's own filters (Status among them) narrow it: no level 2, so the page is its section.
   if (current.page === 'list' && current.section === 'envelopes') return 'Envelopes'
   if (current.page === 'new') return 'New envelope'
+  if (current.page === 'send') return 'Upload and send'
   if (current.page === 'envelope') return 'Envelope'
   if (current.page === 'template') return 'Template'
   if (current.page === 'contact') return 'Contact'
@@ -80,6 +83,7 @@ export function MemberApp() {
   else if (failure) page = failure instanceof RequestError && failure.status === 401 ? h(SignIn) : h(Notice, { message: describeError(failure), error: true })
   else if (!me) page = h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading…')
   else if (current.page === 'new') page = h(NewEnvelopePage, { me })
+  else if (current.page === 'send') page = h(SendDocumentPage, { me })
   else if (current.page === 'envelope') page = h(EnvelopePage, { key: current.id, me, id: current.id })
   else if (current.page === 'template') page = h(TemplatePage, { key: current.id, me, id: current.id })
   else if (current.page === 'contact') page = h(ContactPage, { key: current.id, me, id: current.id })

@@ -47,6 +47,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     apiJson<Envelope>(`/api/envelopes/${draftId}`).then((envelope) => {
       // Sent meanwhile: its own page.
       if (envelope.status !== 'DRAFT') { navigate(`/envelopes/${envelope.id}`, { replace: true }); return }
+      // Its document uploaded with it: the Upload and send page.
+      if (!envelope.templateId) { navigate(`/envelopes/send?draft=${envelope.id}`, { replace: true }); return }
       setTemplateId(envelope.templateId)
       setSaved(envelope.draft ?? {})
     }).catch((error) => setMessage({ text: describeError(error), error: true }))

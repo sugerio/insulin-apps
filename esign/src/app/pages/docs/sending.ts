@@ -21,7 +21,7 @@ export const sending: DocTopic = {
       id: 'steps',
       title: 'Steps',
       body: ol(
-        ['On ', h(PageLink, { to: '/' }, 'Envelopes'), ', choose ', b('New envelope'), '. Or, on Templates, choose ', b('Use'), ' next to a template.'],
+        ['On ', h(PageLink, { to: '/' }, 'Envelopes'), ', choose ', b('New envelope'), '. Or, on Templates, choose ', b('Use'), ' next to a template. To send a PDF of your own without a template, choose ', b('Upload and send'), ' instead: the document and its signers (each with a role you name), the fields in the editor, then a review and Send.'],
         'Choose the template.',
         ['For each role, name the signer and give their email address, or choose them from your contacts. The signers sign in this order.'],
         'Add what the signers should see about the document, and a sign-by day if there is one. Both are optional.',

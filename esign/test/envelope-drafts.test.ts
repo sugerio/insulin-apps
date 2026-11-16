@@ -59,8 +59,9 @@ test('a draft is saved as it is, with no tasks, invitations or contacts; lists s
     assert.deepEqual(await list(), []);
     const [draft] = await list('?status=DRAFT');
     assert.deepEqual([draft!.id, draft!.status, draft!.signers.map((s) => [s.name, s.status]), draft!.progress.total], [id, 'DRAFT', [['Pat Partner', 'DRAFT'], ['', 'DRAFT']], 2]);
-    // Its shape is checked: fields Esign knows, a template the caller sees.
-    for (const bad of [{ ...half(h.templateId), note: 1 }, { ...half(h.templateId), recipients: [{ role: 'partner', pet: 'cat' }] }, { recipients: [] }, { ...half(h.templateId), draft: 'yes' }])
+    // Its shape is checked: fields Esign knows, a template the caller sees (without one, its document is uploaded:
+    // envelope-upload.test.ts).
+    for (const bad of [{ ...half(h.templateId), note: 1 }, { ...half(h.templateId), recipients: [{ role: 'partner', pet: 'cat' }] }, { ...half(h.templateId), templateId: 42 }, { ...half(h.templateId), draft: 'yes' }])
       assert.equal((await h.post('/api/envelopes', h.ana, { draft: true, ...bad }, { 'idempotency-key': crypto.randomUUID() })).status, 422, JSON.stringify(bad));
     assert.equal((await h.post('/api/envelopes', h.bo, { ...half(h.templateId), draft: true }, { 'idempotency-key': crypto.randomUUID() })).status, 404, 'a template bo doesn\'t see');
   } finally { await h.mf.dispose(); }

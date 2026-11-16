@@ -218,6 +218,11 @@ export const editorSessions = sqliteTable('editor_sessions', {
   tags_json: text('tags_json').notNull().default('[]'),
   /** 1: the saved template is a new version of the source, which it replaces (its owner, shares and tags carry over). */
   replaces_source: integer('replaces_source').notNull().default(0),
+  /**
+   * The envelope draft whose fields it places (an uploaded document: envelopes with no template), instead of a
+   * template: it saves the draft's roles and fields, and reads its document (editor-routes.ts).
+   */
+  envelope_id: text('envelope_id'),
 })
 
 /**

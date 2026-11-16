@@ -6,7 +6,7 @@ import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedB
 import { envelopeDetails, taskDetails, type EnvelopeDetails, type TaskDetails } from './details.ts';
 import { parseMetadata, parseTemplateName, storedMetadata, unknownKeys, type Metadata } from './metadata.ts';
 import { PDFDocument } from 'pdf-lib';
-import { assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf } from './fields.ts';
+import { assertEditorSigningFields, assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf, type TemplateField } from './fields.ts';
 import { assertRenderableRecipientNames } from './field-render.ts';
 import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './prepare.ts';
 import { mountSigningRoutes } from './signing-routes.ts';
@@ -25,6 +25,7 @@ import { defaultSignerNames, parseDefaultSigners, storedDefaultSigners, type Def
 import { clientShare, documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKeys, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
 import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsByDocument, tagsOf, tagWrites } from './tags.ts';
 import { mountMemberRoutes, recordMember } from './members.ts';
+import { deleteDraftObjects, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -517,15 +518,17 @@ async function saveDraft(context: import('hono').Context<Env>, body: Record<stri
   for (const recipient of (recipients ?? []) as object[]) unknownFields.push(...unknownKeys(recipient, RECIPIENT_FIELDS).map((field) => `recipients[].${field}`));
   if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
   const tags = parseTags(body.tags), shares = parseShares(body.share);
-  if (typeof body.templateId !== 'string' || tags === 'invalid' || shares === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
-  if (!await documentRole(db, tenantId, caller, 'template', body.templateId)) return context.json({ error: 'not_found' }, 404);
+  // Without `templateId`, its document is uploaded with it (envelope-documents.ts); a draft keeps the kind it began as.
+  const templateId = body.templateId === undefined ? null : body.templateId;
+  if ((templateId !== null && typeof templateId !== 'string') || tags === 'invalid' || shares === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (templateId !== null && !await documentRole(db, tenantId, caller, 'template', templateId)) return context.json({ error: 'not_found' }, 404);
   const documentName = parseDocumentName(body.documentName);
   const details = JSON.stringify(documentName && documentName !== 'invalid' ? { documentName } : {});
   const draft = JSON.stringify(body), now = Date.now();
   if ('draftId' in target) {
     const id = target.draftId;
     const [updated] = await db.batch([
-      db.prepare(`UPDATE envelopes SET template_id = ?, details_json = ?, draft_json = ? WHERE id = ? AND tenant_id = ? AND status = '${DRAFT}'`).bind(body.templateId, details, draft, id, tenantId),
+      db.prepare(`UPDATE envelopes SET template_id = ?, details_json = ?, draft_json = ? WHERE id = ? AND tenant_id = ? AND status = '${DRAFT}' AND (template_id IS NULL) = (? IS NULL)`).bind(templateId, details, draft, id, tenantId, templateId),
       // The caller's tags, as the form has them now; whom else it is shared with, added.
       ...(body.tags === undefined ? [] : tagWrites(db, tenantId, caller.userId, 'envelope', id, tags)),
       ...shareInserts(db, tenantId, 'envelope', id, sharesFor(shares, caller), caller.userId, now),
@@ -541,10 +544,10 @@ async function saveDraft(context: import('hono').Context<Env>, body: Record<stri
   const existing = await lookup();
   if (existing) return replay(existing);
   const given = sharesFor([...shares, ...[await clientShare(db, tenantId, caller)].filter((share) => share !== null)], caller);
-  const allTags = mergeTags(tags, await tagsOf(db, tenantId, caller.userId, 'template', body.templateId));
+  const allTags = templateId === null ? tags : mergeTags(tags, await tagsOf(db, tenantId, caller.userId, 'template', templateId));
   try {
     await db.batch([
-      db.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, details_json, draft_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, body.templateId, DRAFT, now, hash, caller.userId, details, draft),
+      db.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, details_json, draft_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, templateId, DRAFT, now, hash, caller.userId, details, draft),
       ...shareInserts(db, tenantId, 'envelope', id, given, caller.userId, now),
       ...tagWrites(db, tenantId, caller.userId, 'envelope', id, allTags),
     ]);
@@ -587,7 +590,8 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
   // Who sent it, for the certificate.
   const sender = parseSender(input.sender);
   if (sender === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
-  if (typeof input.templateId !== 'string' || !Array.isArray(input.recipients) || input.recipients.length < 1 || input.recipients.length > 20) return context.json({ error: 'invalid_envelope' }, 422);
+  // A template, unless a draft whose document was uploaded with it is sent (envelope-documents.ts).
+  if ((typeof input.templateId !== 'string' && !(input.templateId === undefined && 'draftId' in target)) || !Array.isArray(input.recipients) || input.recipients.length < 1 || input.recipients.length > 20) return context.json({ error: 'invalid_envelope' }, 422);
   // As requested: a name or an email left out comes from the template's default signer, below.
   const recipients: ({ role: string; name?: string; email?: string; expiresAt?: string } & SignerFacts)[] = [];
   const deadlines: (number | null)[] = [];
@@ -649,19 +653,39 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
   // Anyone who sees the template sends from it (ownership.ts), an archived one too (archiving only takes it off the
   // lists: a host that keeps its id goes on using it); one they can't see doesn't exist for them.
   const caller = context.get('caller');
-  if (!await documentRole(context.env.DB, tenantId, caller, 'template', input.templateId)) return context.json({ error: 'not_found' }, 404);
-  const template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string; status: string }>();
+  // A draft whose document was uploaded with it is sent with that document (its initial document, D0) and the roles
+  // and fields placed on it; any other envelope with its template's.
+  const uploaded = fromDraft && input.templateId === undefined;
+  let template: { object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string; status: string } | null;
+  let uploadedDocument: { object_key: string; sha256: string } | null = null;
+  if (uploaded) {
+    const own = await context.env.DB.prepare('SELECT e.template_id, e.roles_json, e.fields_json, a.object_key, a.sha256 FROM envelopes e LEFT JOIN artifacts a ON a.id = ? AND a.envelope_id = e.id WHERE e.id = ? AND e.tenant_id = ?')
+      .bind(initialDocumentId(id), id, tenantId).first<{ template_id: string | null; roles_json: string | null; fields_json: string | null; object_key: string | null; sha256: string | null }>();
+    if (!own || own.template_id !== null) return context.json({ error: 'invalid_envelope' }, 422);
+    if (!own.object_key || !own.sha256) return context.json({ error: 'document_required' }, 409);
+    if (!own.roles_json || !own.fields_json) return context.json({ error: 'fields_required' }, 409);
+    uploadedDocument = { object_key: own.object_key, sha256: own.sha256 };
+    template = { object_key: own.object_key, roles_json: own.roles_json, fields_json: own.fields_json, default_signers_json: '{}', status: 'active' };
+  } else {
+    if (!await documentRole(context.env.DB, tenantId, caller, 'template', input.templateId as string)) return context.json({ error: 'not_found' }, 404);
+    template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string; status: string }>();
+  }
   if (!template) return context.json({ error: 'not_found' }, 404);
   // A draft template isn't ready: it is saved as active in the field editor first.
   if (template.status === 'draft') return context.json({ error: 'template_draft' }, 409);
   const roles = JSON.parse(template.roles_json) as string[];
+  // An uploaded document has no signature page to fall back on: every role signs in its fields, a required Signature
+  // among them, as a template's editor requires before it is ready.
+  if (uploaded) {
+    try { assertEditorSigningFields(JSON.parse(template.fields_json ?? '[]') as TemplateField[], roles); }
+    catch { return context.json({ error: 'fields_not_ready' }, 422); }
+  }
   if (template.fields_json !== undefined) {
     try {
       const raw:unknown=JSON.parse(template.fields_json);
       if(!Array.isArray(raw))throw new Error('Invalid fields');
       if(raw.length){
-        const source=await context.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(input.templateId,tenantId).first<{object_key:string}>();
-        const object=source&&await context.env.ARTIFACTS.get(source.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Source unavailable');
+        const object=await context.env.ARTIFACTS.get(template.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Source unavailable');
         const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(template.fields_json,roles,pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);
       }
     } catch { return context.json({ error: 'positioned_fields_not_supported' }, 422); }
@@ -680,7 +704,9 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
   // source, and the first signer's task is active. The id comes from the tenant and the
   // Idempotency-Key, so a retry after a failure reuses the D0 object stored by the failed attempt.
   let d0: { id: string; objectKey: string; sha256: string };
-  try { d0 = await storeInitialDocument(context.env.ARTIFACTS, template.object_key, id); }
+  // An uploaded document is the envelope's initial document already.
+  if (uploadedDocument) d0 = { id: initialDocumentId(id), objectKey: uploadedDocument.object_key, sha256: uploadedDocument.sha256 };
+  else try { d0 = await storeInitialDocument(context.env.ARTIFACTS, template.object_key, id); }
   catch (error) {
     if (!(error instanceof InitialDocumentConflict)) return context.json({ error: 'preparation_failed' }, 503);
     // Another request with this key stored a different document: it is a different request.
@@ -691,7 +717,7 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
   // The sender owns it. It is shared with whom the request names and, for an API client, its person (members.ts),
   // not with the template's people; the sender's tags are the request's and theirs on the template.
   const given = sharesFor([...shares, ...[await clientShare(context.env.DB, tenantId, caller)].filter((share) => share !== null)], caller);
-  const allTags = mergeTags(tags, await tagsOf(context.env.DB, tenantId, caller.userId, 'template', input.templateId));
+  const allTags = uploaded ? tags : mergeTags(tags, await tagsOf(context.env.DB, tenantId, caller.userId, 'template', input.templateId as string));
   const now = Date.now();
   // One batch: the envelope (with the request's hash, and the roles and fields it is signed with, its template's as
   // stored, byte for byte: envelope-fields.ts), its tasks, its D0 artifact, its shares and the sender's
@@ -701,10 +727,10 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
     fromDraft
       // A draft becomes the envelope sent, in this batch, only while it is a draft: otherwise its status would be null,
       // which the table refuses, and nothing in the batch is written.
-      ? context.env.DB.prepare(`UPDATE envelopes SET status = CASE WHEN status = '${DRAFT}' THEN ? ELSE NULL END, template_id = ?, created_at = ?, request_sha256 = ?, roles_json = ?, fields_json = ?, details_json = ?, draft_json = NULL WHERE id = ? AND tenant_id = ?`).bind(CREATED_STATUS, input.templateId, now, hash, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails), id, tenantId)
+      ? context.env.DB.prepare(`UPDATE envelopes SET status = CASE WHEN status = '${DRAFT}' THEN ? ELSE NULL END, template_id = ?, created_at = ?, request_sha256 = ?, roles_json = ?, fields_json = ?, details_json = ?, draft_json = NULL WHERE id = ? AND tenant_id = ?`).bind(CREATED_STATUS, input.templateId ?? null, now, hash, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails), id, tenantId)
       : context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, roles_json, fields_json, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
     ...people.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
-    context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256),
+    ...(uploaded ? [] : [context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256)]),
     // The organization's contacts (contacts.ts): each signer added or refreshed, with the envelope only.
     ...contactUpserts(context.env.DB, tenantId, people, now),
     ...shareInserts(context.env.DB, tenantId, 'envelope', id, given, caller.userId, now),
@@ -744,7 +770,7 @@ app.get('/api/envelopes/:id', async (context) => {
   const refused = await requireRole(context, 'envelope', id, 'viewer');
   if (refused) return refused;
   await expireIfDue(context.env.DB, id);
-  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, x.draft_json, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKeys(context.get('caller')), id, tenantId).first<Owned & { template_id: string; status: string; created_at: number; details_json: string; draft_json: string | null }>();
+  const envelope = await context.env.DB.prepare(`SELECT x.id, x.template_id, x.status, x.created_at, x.details_json, x.owner_user_id, x.draft_json, x.roles_json, x.fields_json, ${sharedRoleColumn('envelope', 'x')} AS shared_role FROM envelopes x WHERE x.id = ? AND x.tenant_id = ?`).bind(shareKeys(context.get('caller')), id, tenantId).first<Owned & { template_id: string | null; status: string; created_at: number; details_json: string; draft_json: string | null; roles_json: string | null; fields_json: string | null }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // openedAt: when the recipient first opened the signing page (the audit trail's first SIGNING_SESSION_OPENED).
   // invitedAt: when Esign last emailed the signer's invitation (delivery 'email').
@@ -756,7 +782,13 @@ app.get('/api/envelopes/:id', async (context) => {
   // A draft: its request as saved (`draft`), to go on with it; it has no tasks yet.
   let draft: unknown;
   if (envelope.status === DRAFT) { try { draft = JSON.parse(envelope.draft_json ?? '{}'); } catch { draft = {}; } }
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(draft === undefined ? {} : { draft }), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
+  // A draft whose document is uploaded with it: whether it has one yet, and the roles and fields placed on it so far.
+  const upload = envelope.status === DRAFT && envelope.template_id === null ? {
+    document: !!await context.env.DB.prepare('SELECT 1 FROM artifacts WHERE id = ? AND envelope_id = ?').bind(initialDocumentId(id), id).first(),
+    roles: envelope.roles_json ? JSON.parse(envelope.roles_json) as string[] : [],
+    fields: placedFields(envelope.fields_json ?? '[]', true),
+  } : undefined;
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(draft === undefined ? {} : { draft }), ...(upload ? { upload } : {}), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
 });
 
 /**
@@ -766,7 +798,7 @@ app.get('/api/envelopes/:id', async (context) => {
 app.post('/api/envelopes/:id/prepare', async (context) => {
   const refused = await requireRole(context, 'envelope', context.req.param('id'), 'editor');
   if (refused) return refused;
-  const prepared = await context.env.DB.prepare('SELECT 1 FROM envelopes e JOIN artifacts a ON a.envelope_id = e.id WHERE e.id = ? AND e.tenant_id = ?').bind(context.req.param('id'), context.get('tenantId')).first();
+  const prepared = await context.env.DB.prepare("SELECT 1 FROM envelopes e JOIN artifacts a ON a.envelope_id = e.id WHERE e.id = ? AND e.tenant_id = ? AND e.status <> 'DRAFT'").bind(context.req.param('id'), context.get('tenantId')).first();
   if (!prepared) return context.json({ error: 'not_found' }, 404);
   return context.body(null, 204);
 });
@@ -820,12 +852,15 @@ app.post('/api/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   // A draft was never sent: voiding it discards it, its shares and tags with it.
   if (envelope.status === DRAFT) {
-    const [discarded] = await db.batch([
+    const [, discarded] = await db.batch([
+      // An uploaded document's record first: it references the envelope.
+      db.prepare(`DELETE FROM artifacts WHERE envelope_id = ? AND EXISTS (SELECT 1 FROM envelopes WHERE id = ? AND tenant_id = ? AND status = '${DRAFT}')`).bind(id, id, tenantId),
       db.prepare(`DELETE FROM envelopes WHERE id = ? AND tenant_id = ? AND status = '${DRAFT}'`).bind(id, tenantId),
       db.prepare("DELETE FROM document_shares WHERE tenant_id = ? AND resource_type = 'envelope' AND resource_id = ? AND NOT EXISTS (SELECT 1 FROM envelopes WHERE id = ?)").bind(tenantId, id, id),
       db.prepare("DELETE FROM document_tags WHERE tenant_id = ? AND resource_type = 'envelope' AND resource_id = ? AND NOT EXISTS (SELECT 1 FROM envelopes WHERE id = ?)").bind(tenantId, id, id),
     ]);
     if (discarded!.meta.changes !== 1) return context.json({ error: 'envelope_not_voidable' }, 409);
+    await deleteDraftObjects(context.env.ARTIFACTS, id);
     return context.json({ id, status: 'DISCARDED' });
   }
   if (envelope.status !== 'VOIDED') {
@@ -844,6 +879,7 @@ app.post('/api/envelopes/:id/void', bodyLimit({ maxSize: 4096 }), async (context
 mountContactRoutes(app);
 mountShareRoutes(app);
 mountTagRoutes(app);
+mountEnvelopeDocumentRoutes(app);
 mountMemberRoutes(app);
 mountSigningRoutes(app);
 return app;

@@ -15,6 +15,13 @@
       "when": 1794345096760,
       "tag": "0001_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794798337090,
+      "tag": "0002_envelope_documents",
+      "breakpoints": true
     }
   ]
 }

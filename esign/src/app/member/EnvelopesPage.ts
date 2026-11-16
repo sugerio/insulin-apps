@@ -7,7 +7,7 @@
 // those they use), each shown
 // as a chip that removes it, and Clear all; below it, pages. Those who manage send new ones and run the due work.
 import React, { useEffect, useRef, useState } from 'react'
-import { Ban, Download, Ellipsis, Eye, Mail, Pencil, Plus, RefreshCw, Tag, Trash2, Users } from 'lucide-react'
+import { Ban, Download, Ellipsis, Eye, Mail, Pencil, Plus, RefreshCw, Tag, Trash2, Upload, Users } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent } from '../components/ui/card.ts'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog.ts'
@@ -142,7 +142,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
   const canResend = (e: EnvelopeSummary) => manage && allows(e.myRole, 'editor') && e.status === 'IN_PROGRESS' && e.current?.delivery === 'email'
   function primary(e: EnvelopeSummary) {
     // A draft: finish and send it.
-    if (e.status === 'DRAFT' && manage && allows(e.myRole, 'editor')) return h(Link, { to: `/envelopes/new?draft=${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Pencil, { 'aria-hidden': true }), 'Edit')
+    if (e.status === 'DRAFT' && manage && allows(e.myRole, 'editor')) return h(Link, { to: `${e.templateId ? '/envelopes/new' : '/envelopes/send'}?draft=${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Pencil, { 'aria-hidden': true }), 'Edit')
     if (canResend(e)) return h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => resend(e) }, h(Mail, { 'aria-hidden': true }), 'Resend')
     if (e.status === 'COMPLETED') return h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => download(e) }, h(Download, { 'aria-hidden': true }), 'Download')
     return h(Link, { to: `/envelopes/${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Eye, { 'aria-hidden': true }), 'View')
@@ -180,6 +180,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
       description: 'Documents sent for signature that are yours or shared with you, newest first.',
       actions: manage ? [
         h(Button, { key: 'due', variant: 'outline', disabled: busy, onClick: processDue }, h(RefreshCw, { 'aria-hidden': true }), 'Process due work'),
+        h(Link, { key: 'upload', to: '/envelopes/send', className: buttonVariants({ variant: 'outline' }) }, h(Upload, { 'aria-hidden': true }), 'Upload and send'),
         h(Link, { key: 'new', to: '/envelopes/new', className: buttonVariants() }, h(Plus, { 'aria-hidden': true }), 'New envelope'),
       ] : null,
     }),

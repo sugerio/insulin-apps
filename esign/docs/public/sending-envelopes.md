@@ -40,6 +40,24 @@ until it is sent. The page becomes the draft's (**Draft envelope**); **Save draf
 signature** checks it as any envelope and sends it. Drafts appear on **Envelopes** under **Status**: **Draft**, each with
 **Edit** to go on with it and, in its **⋯** menu, **Discard**, which deletes it after asking.
 
+## Upload and send
+
+To send a PDF of your own without making a template, choose **Upload and send** on **Envelopes**. Three steps:
+
+1. **Document and signers.** Choose the PDF (up to 5 MiB and 100 pages, with no form fields or annotations, pages not
+   rotated) and its **Document name**. Add the signers in signing order (**Add signer**, and the arrows to reorder), each
+   with a **Role** you name, such as `partner` (letters, digits, `-` and `_`, different for each), their **Name** and
+   **Email**, and an optional title and company. A message and a sign-by day are optional. **Next: place fields**.
+2. **Fields.** The field editor opens on the PDF, with a role for each signer ("partner — Pat Partner"). Place each
+   signer's fields as on a template (see [Place fields](/docs/esign/templates#place-fields)): at least one required
+   **Signature** each. **Next: review**.
+3. **Review and send.** Check the document, each signer and how many fields they have, the message and the deadline,
+   and choose **Send for signature**.
+
+It is a draft from the first step on: **Save draft**, on any step, keeps it (with the fields placed so far), and it is
+listed under **Status**: **Draft**, where **Edit** opens it again on this page. Choosing another PDF replaces the one
+uploaded and clears the fields placed on it. The envelope has no template: its document and fields are its own.
+
 ### Signer fields
 
 | Field | What it does |

@@ -89,7 +89,7 @@ test('the catalog lists what the caller may use, and process-due needs the manag
     assert.equal((await call('/api/process-due', identity('org-a', { role: 'VIEWER' }), { method: 'POST' })).status, 403);
     const due = await call('/api/process-due', identity('org-a', { role: 'EDITOR' }), { method: 'POST' });
     assert.equal(due.status, 200);
-    assert.deepEqual(await due.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 });
+    assert.deepEqual(await due.json(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 });
   } finally { await mf.dispose(); }
 });
 
@@ -100,7 +100,7 @@ test("process-due touches only the caller's organization, FINALIZING envelopes i
     await db.prepare("INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256) VALUES ('env-b', 'org-b', 'tpl-b', 'FINALIZING', 1, 'x')").run();
     const due = await call('/api/process-due', identity('org-a', { role: 'EDITOR' }), { method: 'POST' });
     assert.equal(due.status, 200);
-    assert.deepEqual(await due.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 }, "another organization's envelope is not picked up");
+    assert.deepEqual(await due.json(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, "another organization's envelope is not picked up");
     assert.equal((await db.prepare("SELECT status FROM envelopes WHERE id = 'env-b'").first<{ status: string }>())?.status, 'FINALIZING');
   } finally { await mf.dispose(); }
 });
@@ -120,7 +120,7 @@ test('POST /api/scheduled answers only the platform tick: schedule and no identi
     assert.equal((await tick({ ...TICK, 'x-suger-app-permissions': 'esign.manage' })).status, 403, 'permissions alone');
     const ran = await tick(TICK);
     assert.equal(ran.status, 200);
-    assert.deepEqual(await ran.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 });
+    assert.deepEqual(await ran.json(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 });
     assert.equal((await call('/api/scheduled', TICK)).status, 404, 'a POST only');
 
     // The tick reaches nothing else: a request marked schedule is nobody to the management routes.
@@ -152,17 +152,17 @@ test('the tick finishes due work for every organization at once; process-due sta
     }
     const ran = await call('/api/scheduled', TICK, { method: 'POST' });
     assert.equal(ran.status, 200);
-    assert.deepEqual(await ran.json(), { expired: 2, completed: 0, waiting: 2, failed: 0 }, 'both organizations, in one tick');
+    assert.deepEqual(await ran.json(), { expired: 2, completed: 0, waiting: 2, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, 'both organizations, in one tick');
     const statuses = Object.fromEntries((await db.prepare('SELECT id, status FROM envelopes ORDER BY id').all<{ id: string; status: string }>()).results.map((row) => [row.id, row.status]));
     assert.deepEqual(statuses, { 'late-org-a': 'EXPIRED', 'late-org-b': 'EXPIRED', 'stuck-org-a': 'IN_PROGRESS', 'stuck-org-b': 'IN_PROGRESS' });
     const tasks = (await db.prepare("SELECT status FROM tasks WHERE id LIKE 'stuck-task-%'").all<{ status: string }>()).results.map((row) => row.status);
     assert.deepEqual(tasks, ['ACTIVE', 'ACTIVE']);
     assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE type = 'EXPIRED'").first<{ n: number }>())?.n, 2, 'one audit event each');
-    assert.deepEqual(await (await call('/api/scheduled', TICK, { method: 'POST' })).json(), { expired: 0, completed: 0, waiting: 0, failed: 0 }, 'nothing is left for the next tick');
+    assert.deepEqual(await (await call('/api/scheduled', TICK, { method: 'POST' })).json(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, 'nothing is left for the next tick');
 
     await db.prepare("UPDATE tasks SET expires_at = 1 WHERE id IN ('stuck-task-org-a', 'stuck-task-org-b')").run();
     const due = await call('/api/process-due', identity('org-a', { role: 'EDITOR' }), { method: 'POST' });
-    assert.deepEqual(await due.json(), { expired: 1, completed: 0, waiting: 0, failed: 0 }, "a manager's process-due is their organization's only");
+    assert.deepEqual(await due.json(), { expired: 1, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, "a manager's process-due is their organization's only");
     assert.equal((await db.prepare("SELECT status FROM envelopes WHERE id = 'stuck-org-b'").first<{ status: string }>())?.status, 'IN_PROGRESS');
   } finally { await mf.dispose(); }
 });

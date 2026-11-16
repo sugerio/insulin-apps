@@ -38,7 +38,19 @@ same request key, so the envelope is never sent twice.
 **Save draft** keeps the form as it is, unfinished even, to send later: nobody is asked to sign, and no contact is added,
 until it is sent. The page becomes the draft's (**Draft envelope**); **Save draft** saves it again, and **Send for
 signature** checks it as any envelope and sends it. Drafts appear on **Envelopes** with the others, marked **Draft** (or alone, with **Status**: **Draft**), each with
-**Edit** to go on with it and, in its **⋯** menu, **Discard**, which deletes it after asking.
+**Continue** to go on with it and, in its **⋯** menu, **Discard**, which deletes it after asking.
+
+### Send later
+
+The arrow beside **Send for signature** has **Send later…**: choose a day and a time, in your time zone, at least five
+minutes and at most 400 days ahead and before the sign-by day if there is one, then **Schedule**. The envelope is checked
+as if you sent it now, and stays a draft until then; Esign sends it, as you, within a few minutes of that time. On
+**Envelopes** it shows **Sends** and the time. **Continue** opens it: **Send now** sends it at once, **Send later** picks
+another time, and **Save draft** cancels the scheduled send. **Discard** deletes it.
+
+If it can't be sent then (its template was made a draft, a signer no longer matches it, or you can no longer send it),
+it stays a draft, no longer scheduled, and **Envelopes** says **Not sent** and why. Fix it, then send or schedule it
+again.
 
 ## Upload and send
 
@@ -55,7 +67,8 @@ To send a PDF of your own without making a template, choose **New envelope** ›
    and choose **Send for signature**.
 
 It is a draft from the first step on: **Save draft**, on any step, keeps it (with the fields placed so far), and it is
-listed on **Envelopes** as a draft, where **Edit** opens it again on this page. Choosing another PDF replaces the one
+listed on **Envelopes** as a draft, where **Continue** opens it again on this page. **Send later** on the review step
+schedules it, as above; saving it as a draft again (also by going back to its fields) cancels that. Choosing another PDF replaces the one
 uploaded and clears the fields placed on it. The envelope has no template: its document and fields are its own.
 
 To send the same document again, make it a template. Tick **Also save as a template** on the review step (it is
@@ -148,7 +161,7 @@ Each filter in use shows as a chip under them, which removes it; **Clear all** r
 
 | Status | API value | What it means |
 | --- | --- | --- |
-| **Draft** | `DRAFT` | Saved, not sent: it has no signers' tasks yet. Listed on **Envelopes** with the others; the API lists drafts only when `status` asks for `DRAFT`. |
+| **Draft** | `DRAFT` | Saved, not sent: it has no signers' tasks yet, scheduled to be sent later or not. Listed on **Envelopes** with the others; the API lists drafts only when `status` asks for `DRAFT`. |
 | **Out for signature** | `IN_PROGRESS` | Signers are signing in turn. The only status in which anyone can sign, decline or void. |
 | **Finishing** | `FINALIZING` | Everyone has signed, and Esign is sealing the signed PDF. This usually takes seconds. |
 | **Completed** | `COMPLETED` | Sealed. The signed PDF and the certificate can be downloaded, and each signer is sent a link to their copy. |

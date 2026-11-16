@@ -25,7 +25,7 @@ export const sending: DocTopic = {
         'Choose the template.',
         ['For each role, name the signer and give their email address, or choose them from your contacts. The signers sign in this order.'],
         'Add what the signers should see about the document, and a sign-by day if there is one. Both are optional.',
-        ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn. Or choose ', b('Save draft'), ' to finish it later: nobody is asked to sign until it is sent, and Envelopes lists it as a draft, with Edit and Discard.'],
+        ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn. Or choose ', b('Save draft'), ' to finish it later: nobody is asked to sign until it is sent, and Envelopes lists it as a draft, with Continue and Discard. ', b('Send later…'), ', under the arrow beside the send button, picks a day and a time instead: it is checked now, stays a draft, and Esign sends it then, as you, within a few minutes; Continue opens it to send it now, pick another time, or cancel with Save draft. If it can\'t be sent then, Envelopes says Not sent, and why.'],
       ),
     },
     {

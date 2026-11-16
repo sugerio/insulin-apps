@@ -8,7 +8,7 @@
 // as a chip that removes it, and Clear all; below it, pages. Those who manage start new ones from New envelope: from a
 // template, or a PDF of their own (Upload and send).
 import React, { useEffect, useRef, useState } from 'react'
-import { Ban, ChevronDown, Download, Ellipsis, Eye, FilePlus2, FileText, Mail, Pencil, Plus, Tag, Trash2, Upload, Users } from 'lucide-react'
+import { Ban, CalendarClock, ChevronDown, Download, Ellipsis, Eye, FilePlus2, FileText, Mail, Pencil, Plus, Tag, Trash2, Upload, Users } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent } from '../components/ui/card.ts'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog.ts'
@@ -21,6 +21,7 @@ import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, SENDERS
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { SaveAsTemplateDialog } from './SaveAsTemplateDialog.ts'
+import { sendErrorText, sendTime } from './SendLater.ts'
 import { SharePanel } from './SharePanel.ts'
 import { TagList, TagsField } from './TagsField.ts'
 
@@ -40,6 +41,12 @@ type Open = { kind: 'void' | 'tags' | 'share' | 'template'; envelope: EnvelopeSu
 
 /** Where an envelope stands: out for signature, a bar of how many have signed and whose turn it is; else its status. */
 function Progress({ envelope }: { envelope: EnvelopeSummary }) {
+  // A draft to be sent later says when, or why it wasn't sent then (SendLater.ts).
+  if (envelope.status === 'DRAFT' && (envelope.sendAt || envelope.sendError)) {
+    return h('div', { className: 'flex flex-col items-start gap-1' }, h(StatusBadge, { status: envelope.status }),
+      envelope.sendAt ? h('span', { className: 'inline-flex items-center gap-1 text-xs text-muted-foreground' }, h(CalendarClock, { className: 'size-3.5', 'aria-hidden': true }), `Sends ${sendTime(envelope.sendAt)}`)
+        : h('span', { className: 'text-xs text-destructive' }, `Not sent: ${sendErrorText(envelope.sendError!)}`))
+  }
   if (envelope.status !== 'IN_PROGRESS' && envelope.status !== 'FINALIZING') return h(StatusBadge, { status: envelope.status })
   const finishing = envelope.status === 'FINALIZING'
   const { signed, total } = envelope.progress ?? { signed: 0, total: 0 }
@@ -133,7 +140,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
   const canResend = (e: EnvelopeSummary) => manage && allows(e.myRole, 'editor') && e.status === 'IN_PROGRESS' && e.current?.delivery === 'email'
   function primary(e: EnvelopeSummary) {
     // A draft: finish and send it.
-    if (e.status === 'DRAFT' && manage && allows(e.myRole, 'editor')) return h(Link, { to: `${e.templateId ? '/envelopes/new' : '/envelopes/send'}?draft=${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Pencil, { 'aria-hidden': true }), 'Edit')
+    if (e.status === 'DRAFT' && manage && allows(e.myRole, 'editor')) return h(Link, { to: `${e.templateId ? '/envelopes/new' : '/envelopes/send'}?draft=${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Pencil, { 'aria-hidden': true }), 'Continue')
     if (canResend(e)) return h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => resend(e) }, h(Mail, { 'aria-hidden': true }), 'Resend')
     if (e.status === 'COMPLETED') return h(Button, { size: 'sm', variant: 'outline', disabled: busy, onClick: () => download(e) }, h(Download, { 'aria-hidden': true }), 'Download')
     return h(Link, { to: `/envelopes/${e.id}`, className: buttonVariants({ size: 'sm', variant: 'outline' }) }, h(Eye, { 'aria-hidden': true }), 'View')

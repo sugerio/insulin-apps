@@ -22,10 +22,11 @@ import type { SealEnv } from './seal/config.ts';
 import { apiCatalog } from './catalog.ts';
 import { contactUpserts, mountContactRoutes } from './contacts.ts';
 import { defaultSignerNames, parseDefaultSigners, storedDefaultSigners, type DefaultSigners } from './default-signers.ts';
-import { documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKeys, sharedRoleBinds, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
+import { atLeast, documentRole, effectiveRole, mountShareRoutes, ownersOf, parseShares, requireRole, shareInserts, shareKeys, sharedRoleBinds, sharedRoleColumn, sharesFor, visibleBinds, visibleIds, type DocumentRole, type OwnerSummary, type ResourceType } from './ownership.ts';
 import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsByDocument, tagsOf, tagWrites } from './tags.ts';
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
+import { callerOf, dueScheduled, parseSendAt, recordScheduleFailure, scheduledBy, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -102,9 +103,10 @@ app.post('/api/scheduled', async (context) => {
   if (!isScheduleTick(context.req.raw)) return context.json({ error: 'forbidden' }, 403);
   try {
     if (!signingEnabled(context.env)) return context.json({ error: 'signing_disabled' }, 404);
+    const scheduled = await sendScheduled(context.env, null);
     const expired = await expireDueEnvelopes(context.env.DB, Date.now(), null);
     const counts = await sweepEnvelopes(context.env, null);
-    return context.json({ expired, ...counts });
+    return context.json({ expired, ...counts, ...scheduled });
   } finally {
     // After the due work, whatever its outcome: this hour's usage report, unless a tick sent it already
     // (usage-metrics.ts). It never throws, and with the request's waitUntil it runs after the response.
@@ -259,6 +261,8 @@ app.get('/api/envelopes', async (context) => {
       const details = envelopeDetails(row.details_json);
       // A draft has no tasks yet: its signers are those its request names so far.
       const signers = row.status === DRAFT ? draftSigners(row.draft_json) : signersOf.get(row.id) ?? [];
+      // A draft to be sent later: when, or why it wasn't (scheduled-send.ts).
+      const scheduled = row.status === DRAFT ? scheduleView(splitDraft(row.draft_json).schedule) : {};
       // Whose turn it is, while it is out for signature (voiding or declining leaves the task as it was).
       const active = row.status === 'IN_PROGRESS' ? signers.find((task) => task.status === 'ACTIVE') : undefined;
       return {
@@ -267,6 +271,7 @@ app.get('/api/envelopes', async (context) => {
         progress: { signed: signers.filter((task) => task.status === 'SIGNED').length, total: signers.length },
         ...(active ? { current: { taskId: active.id, name: active.recipient_name, email: active.recipient_email, delivery: taskDetails(active.details_json).delivery ?? 'host' } } : {}),
         lastChangeAt: Math.max(row.created_at, lastChange.get(row.id) ?? 0),
+        ...scheduled,
         ...owned.get(row.id),
       };
     }),
@@ -281,9 +286,10 @@ app.get('/api/envelopes', async (context) => {
 app.post('/api/process-due', async (context) => {
   if (!signingEnabled(context.env)) return context.json({ error: 'signing_disabled' }, 404);
   const tenantId = context.get('tenantId');
+  const scheduled = await sendScheduled(context.env, tenantId);
   const expired = await expireDueEnvelopes(context.env.DB, Date.now(), tenantId);
   const counts = await sweepEnvelopes(context.env, tenantId);
-  return context.json({ expired, ...counts });
+  return context.json({ expired, ...counts, ...scheduled });
 });
 
 app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async (context) => {
@@ -535,7 +541,8 @@ app.post('/api/envelopes', bodyLimit({ maxSize: 32768 }), async (context) => {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(key)) return context.json({ error: 'idempotency_key_required' }, 400);
   const request = await envelopeBody(context);
   if (request instanceof Response) return request;
-  return request.draft ? saveDraft(context, request.body, { key }) : sendEnvelope(context, request.body, { key });
+  if (request.sendAt !== null) return scheduleSend(context, request.body, { key }, request.sendAt);
+  return request.draft ? saveDraft(context, request.body, { key }) : sendEnvelope(sendScope(context), request.body, { key });
 });
 
 // A draft (status DRAFT, saveDraft below): changed, with `draft: true`, or sent, without it, by its editors, admins
@@ -548,17 +555,73 @@ app.post('/api/envelopes/:id', bodyLimit({ maxSize: 32768 }), async (context) =>
   if (request instanceof Response) return request;
   const found = await context.env.DB.prepare('SELECT status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, context.get('tenantId')).first<{ status: string }>();
   if (found?.status !== DRAFT) return context.json({ error: 'not_draft' }, 409);
-  return request.draft ? saveDraft(context, request.body, { draftId: id }) : sendEnvelope(context, request.body, { draftId: id });
+  if (request.sendAt !== null) return scheduleSend(context, request.body, { draftId: id }, request.sendAt);
+  return request.draft ? saveDraft(context, request.body, { draftId: id }) : sendEnvelope(sendScope(context), request.body, { draftId: id });
 });
 
-/** A creation's JSON body, and whether it asks for a draft (`draft: true`), or the answer refusing it. */
-async function envelopeBody(context: import('hono').Context<Env>): Promise<{ body: Record<string, unknown>; draft: boolean } | Response> {
+/**
+ * A creation's JSON body, and whether it asks for a draft (`draft: true`) or to be sent later (`sendAt`, an ISO 8601
+ * time at least a minute and at most 400 days ahead; scheduled-send.ts), or the answer refusing it. Not both.
+ */
+async function envelopeBody(context: import('hono').Context<Env>): Promise<{ body: Record<string, unknown>; draft: boolean; sendAt: number | null } | Response> {
   let body: unknown;
   try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_envelope' }, 422);
-  const { draft, ...rest } = body as Record<string, unknown>;
+  const { draft, sendAt, ...rest } = body as Record<string, unknown>;
   if (draft !== undefined && typeof draft !== 'boolean') return context.json({ error: 'invalid_envelope' }, 422);
-  return { body: rest, draft: draft === true };
+  if (sendAt === undefined) return { body: rest, draft: draft === true, sendAt: null };
+  const at = parseSendAt(sendAt, Date.now());
+  if (at === 'invalid' || draft === true) return context.json({ error: 'invalid_send_at' }, 422);
+  return { body: rest, draft: false, sendAt: at };
+}
+
+/** Who a send is for and how it answers: a request's caller, or (scheduled-send.ts) whoever scheduled a draft. */
+interface SendScope {
+  env: Bindings;
+  tenantId: string;
+  caller: Caller;
+  json: (body: unknown, status?: number) => Response;
+}
+const sendScope = (context: import('hono').Context<Env>): SendScope => ({
+  env: context.env, tenantId: context.get('tenantId'), caller: context.get('caller'), json: (body, status = 200) => Response.json(body, { status }),
+});
+
+/**
+ * Send later: the request is checked now as a send would check it, nothing created but the draft, which keeps when to
+ * send it and who scheduled it (scheduled-send.ts). A new one is idempotent by its key, as a draft is.
+ */
+async function scheduleSend(context: import('hono').Context<Env>, body: Record<string, unknown>, target: { key: string } | { draftId: string }, sendAt: number): Promise<Response> {
+  const checked = await sendEnvelope(sendScope(context), body, target, { check: { sendAt } });
+  if (checked.status !== 200) return checked;
+  return saveDraft(context, body, target, { at: sendAt, by: scheduledBy(context.get('caller')) });
+}
+
+/**
+ * The scheduled drafts due now, of one organization or (null) all, sent as whoever scheduled them, who must still be an
+ * editor of it (shares change); what the send refuses is recorded on the draft (scheduled-send.ts). A draft sent or
+ * changed meanwhile is left alone.
+ */
+async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
+  let sent = 0, failed = 0;
+  for (const row of await dueScheduled(env.DB, Date.now(), tenantId)) {
+    const { request, schedule } = splitDraft(row.draft_json);
+    if (!schedule || typeof schedule.at !== 'number') continue;
+    const caller = callerOf(schedule.by, row.tenant_id);
+    let error: string | null = null;
+    try {
+      if (!can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
+      else {
+        const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id });
+        if (answer.ok) { sent += 1; continue; }
+        const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
+        if (code === 'not_draft') continue;
+        error = typeof code === 'string' ? code : `status_${answer.status}`;
+      }
+    } catch { error = 'send_failed'; }
+    failed += 1;
+    await recordScheduleFailure(env.DB, row.id, schedule.at, error);
+  }
+  return { scheduledSent: sent, scheduledFailed: failed };
 }
 
 /**
@@ -567,7 +630,7 @@ async function envelopeBody(context: import('hono').Context<Env>): Promise<{ bod
  * a template the caller sees, its tags and shares). It has no tasks: nobody is invited, no contact is added and nothing
  * is stored for signing until it is sent. Its document name, when valid, is its details', for the lists.
  */
-async function saveDraft(context: import('hono').Context<Env>, body: Record<string, unknown>, target: { key: string } | { draftId: string }): Promise<Response> {
+async function saveDraft(context: import('hono').Context<Env>, body: Record<string, unknown>, target: { key: string } | { draftId: string }, schedule: Schedule | null = null): Promise<Response> {
   const db = context.env.DB, tenantId = context.get('tenantId'), caller = context.get('caller');
   const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
   const recipients = body.recipients;
@@ -581,7 +644,9 @@ async function saveDraft(context: import('hono').Context<Env>, body: Record<stri
   if (templateId !== null && !await documentRole(db, tenantId, caller, 'template', templateId)) return context.json({ error: 'not_found' }, 404);
   const documentName = parseDocumentName(body.documentName);
   const details = JSON.stringify(documentName && documentName !== 'invalid' ? { documentName } : {});
-  const draft = JSON.stringify(body), now = Date.now();
+  // Saved as a draft, it is not scheduled; scheduled, it keeps when and by whom (scheduled-send.ts).
+  const draft = JSON.stringify(schedule ? { ...body, schedule } : body), now = Date.now();
+  const view = scheduleView(schedule);
   if ('draftId' in target) {
     const id = target.draftId;
     const [updated] = await db.batch([
@@ -591,13 +656,13 @@ async function saveDraft(context: import('hono').Context<Env>, body: Record<stri
       ...shareInserts(db, tenantId, 'envelope', id, sharesFor(shares, caller), caller.userId, now),
     ]);
     if (updated!.meta.changes !== 1) return context.json({ error: 'not_draft' }, 409);
-    return context.json({ id, status: DRAFT });
+    return context.json({ id, status: DRAFT, ...view });
   }
   // A new draft: idempotent by its key, as a new envelope is.
   const id = await envelopeIdFor(tenantId, target.key);
   const hash = await sha256Hex(draft);
   const lookup = () => db.prepare('SELECT request_sha256, status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ request_sha256: string; status: string }>();
-  const replay = (existing: { request_sha256: string; status: string }) => existing.status === DRAFT && existing.request_sha256 === hash ? context.json({ id, status: DRAFT }, 201) : context.json({ error: 'idempotency_conflict' }, 409);
+  const replay = (existing: { request_sha256: string; status: string }) => existing.status === DRAFT && existing.request_sha256 === hash ? context.json({ id, status: DRAFT, ...view }, 201) : context.json({ error: 'idempotency_conflict' }, 409);
   const existing = await lookup();
   if (existing) return replay(existing);
   const given = sharesFor(shares, caller);
@@ -613,42 +678,42 @@ async function saveDraft(context: import('hono').Context<Env>, body: Record<stri
     if (raced) return replay(raced);
     throw error;
   }
-  return context.json({ id, status: DRAFT }, 201);
+  return context.json({ id, status: DRAFT, ...view }, 201);
 }
 
 /**
  * Sends an envelope: a new one (`key`, its Idempotency-Key), or a draft (`draftId`), which becomes this envelope as it
  * is sent. Everything is checked here, a draft's request as a new one's.
  */
-async function sendEnvelope(context: import('hono').Context<Env>, body: Record<string, unknown>, target: { key: string } | { draftId: string }): Promise<Response> {
+async function sendEnvelope(scope: SendScope, body: Record<string, unknown>, target: { key: string } | { draftId: string }, options: { check?: { sendAt: number } } = {}): Promise<Response> {
   // Every field must be one Esign knows: a misspelled one is refused rather than lost.
   const unknownFields = unknownKeys(body, ENVELOPE_FIELDS);
   for (const [name, allowed] of [['documentVersion', ['label', 'publishedAt']], ['sender', ['name', 'email', 'organization']], ['message', ['subject', 'body']]] as const) {
     const value = (body as Record<string, unknown>)[name];
     if (value && typeof value === 'object' && !Array.isArray(value)) unknownFields.push(...unknownKeys(value, allowed).map((field) => `${name}.${field}`));
   }
-  if (unknownFields.length) return context.json({ error: 'unknown_field', fields: unknownFields }, 422);
+  if (unknownFields.length) return scope.json({ error: 'unknown_field', fields: unknownFields }, 422);
   const input = body as { templateId?: unknown; recipients?: unknown; documentName?: unknown; documentVersion?: unknown; sender?: unknown; metadata?: unknown; message?: unknown; tags?: unknown; share?: unknown };
   // The sender's own tags for it (tags.ts), and whom else it is shared with (ownership.ts).
   const tags = parseTags(input.tags), shares = parseShares(input.share);
-  if (tags === 'invalid' || shares === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (tags === 'invalid' || shares === 'invalid') return scope.json({ error: 'invalid_envelope' }, 422);
   // The sender's message to every signer (invitations.ts): in an invitation's email, and on the signing page.
   const message = parseMessage(input.message);
-  if (message === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (message === 'invalid') return scope.json({ error: 'invalid_envelope' }, 422);
   // The host's own labels for the envelope (metadata.ts): kept and returned, never evidence.
   const metadata = parseMetadata(input.metadata);
-  if (metadata === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (metadata === 'invalid') return scope.json({ error: 'invalid_envelope' }, 422);
   // The document's name, shown to the signer and named in the intent statement.
   const documentName = parseDocumentName(input.documentName);
-  if (documentName === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (documentName === 'invalid') return scope.json({ error: 'invalid_envelope' }, 422);
   // Which version of the document it is ("v3"), and when it was published, as the host names it.
   const documentVersion = parseDocumentVersion(input.documentVersion);
-  if (documentVersion === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (documentVersion === 'invalid') return scope.json({ error: 'invalid_envelope' }, 422);
   // Who sent it, for the certificate.
   const sender = parseSender(input.sender);
-  if (sender === 'invalid') return context.json({ error: 'invalid_envelope' }, 422);
+  if (sender === 'invalid') return scope.json({ error: 'invalid_envelope' }, 422);
   // A template, unless a draft whose document was uploaded with it is sent (envelope-documents.ts).
-  if ((typeof input.templateId !== 'string' && !(input.templateId === undefined && 'draftId' in target)) || !Array.isArray(input.recipients) || input.recipients.length < 1 || input.recipients.length > 20) return context.json({ error: 'invalid_envelope' }, 422);
+  if ((typeof input.templateId !== 'string' && !(input.templateId === undefined && 'draftId' in target)) || !Array.isArray(input.recipients) || input.recipients.length < 1 || input.recipients.length > 20) return scope.json({ error: 'invalid_envelope' }, 422);
   // As requested: a name or an email left out comes from the template's default signer, below.
   const recipients: ({ role: string; name?: string; email?: string; expiresAt?: string } & SignerFacts)[] = [];
   const deadlines: (number | null)[] = [];
@@ -662,36 +727,36 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
       const unknownRecipientFields = unknownKeys(recipient, RECIPIENT_FIELDS);
       const message = (recipient as { message?: unknown }).message;
       if (message && typeof message === 'object' && !Array.isArray(message)) unknownRecipientFields.push(...unknownKeys(message, ['subject', 'body']).map((field) => `message.${field}`));
-      if (unknownRecipientFields.length) return context.json({ error: 'unknown_field', fields: unknownRecipientFields.map((field) => `recipients[].${field}`) }, 422);
+      if (unknownRecipientFields.length) return scope.json({ error: 'unknown_field', fields: unknownRecipientFields.map((field) => `recipients[].${field}`) }, 422);
     }
     // A name and an email each, unless the template's default signer for the role gives them (checked below).
-    if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || (recipient.name !== undefined && !validRecipientName(recipient.name)) || (recipient.email !== undefined && !validRecipientEmail(recipient.email))) return context.json({ error: 'invalid_recipient' }, 422);
+    if (!recipient || typeof recipient !== 'object' || typeof recipient.role !== 'string' || (recipient.name !== undefined && !validRecipientName(recipient.name)) || (recipient.email !== undefined && !validRecipientEmail(recipient.email))) return scope.json({ error: 'invalid_recipient' }, 422);
     // A sign-by deadline for this recipient (ISO 8601, future, within 400 days).
     const deadline = parseDeadline((recipient as { expiresAt?: unknown }).expiresAt);
-    if (deadline === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    if (deadline === 'invalid') return scope.json({ error: 'invalid_recipient' }, 422);
     deadlines.push(deadline);
     // The signer's title and the company they sign for (evidence of authority).
     const facts = parseSignerFacts(recipient as { title?: unknown; onBehalfOf?: unknown });
-    if (facts === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    if (facts === 'invalid') return scope.json({ error: 'invalid_recipient' }, 422);
     signerFacts.push(facts);
     // Who named this signer, for the certificate.
     const named = parseNamedBy((recipient as { namedBy?: unknown }).namedBy);
-    if (named === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    if (named === 'invalid') return scope.json({ error: 'invalid_recipient' }, 422);
     namedBy.push(named);
     // What the host says happens once this signer signs, shown on their signing page only.
     const after = parseAfterSigning((recipient as { afterSigning?: unknown }).afterSigning);
-    if (after === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    if (after === 'invalid') return scope.json({ error: 'invalid_recipient' }, 422);
     afterSigning.push(after);
     // How the signer reaches the page: the host's (default), or an invitation Esign emails; and the
     // sender's message to this signer alone.
     const delivery = parseDelivery((recipient as { delivery?: unknown }).delivery);
     const own = parseMessage((recipient as { message?: unknown }).message);
-    if (delivery === 'invalid' || own === 'invalid') return context.json({ error: 'invalid_recipient' }, 422);
+    if (delivery === 'invalid' || own === 'invalid') return scope.json({ error: 'invalid_recipient' }, 422);
     deliveries.push(delivery);
     messages.push(own);
     recipients.push({ role: recipient.role, ...(recipient.name === undefined ? {} : { name: recipient.name as string }), ...(recipient.email === undefined ? {} : { email: recipient.email as string }), ...(deadline === null ? {} : { expiresAt: new Date(deadline).toISOString() }), ...facts, ...(named ? { namedBy: named } : {}), ...(after ? { afterSigning: after } : {}), ...(delivery === 'email' ? { delivery } : {}), ...(own ? { message: own } : {}) });
   }
-  const tenantId = context.get('tenantId');
+  const tenantId = scope.tenantId;
   const encoded = JSON.stringify({ templateId: input.templateId, recipients, ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}), ...(tags.length ? { tags } : {}), ...(shares.length ? { share: shares } : {}) });
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))), (n) => n.toString(16).padStart(2, '0')).join('');
   // Idempotency is by the envelope itself: its id comes from the tenant and the Idempotency-Key, and
@@ -701,80 +766,86 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
   // A draft being sent is already this envelope: no key, no replay; it is sent once, when it is still a draft.
   const fromDraft = 'draftId' in target;
   const id = fromDraft ? target.draftId : await envelopeIdFor(tenantId, target.key);
-  const lookup = () => context.env.DB.prepare('SELECT request_sha256, status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ request_sha256: string; status: string }>();
-  const replay = (existing: { request_sha256: string; status: string }) => fromDraft ? context.json({ error: existing.status === DRAFT ? 'send_failed' : 'not_draft' }, 409)
-    : existing.status === DRAFT ? context.json({ error: 'idempotency_conflict' }, 409)
-    : existing.request_sha256 === hash ? context.json(createdResponse(id), 201) : context.json({ error: 'idempotency_conflict' }, 409);
-  const existing = fromDraft ? null : await lookup();
+  const lookup = () => scope.env.DB.prepare('SELECT request_sha256, status FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId).first<{ request_sha256: string; status: string }>();
+  const replay = (existing: { request_sha256: string; status: string }) => fromDraft ? scope.json({ error: existing.status === DRAFT ? 'send_failed' : 'not_draft' }, 409)
+    : existing.status === DRAFT ? scope.json({ error: 'idempotency_conflict' }, 409)
+    : existing.request_sha256 === hash ? scope.json(createdResponse(id), 201) : scope.json({ error: 'idempotency_conflict' }, 409);
+  // Checking a send to schedule it creates nothing: a draft by this key is the schedule's own, replayed by saveDraft.
+  const existing = fromDraft || options.check ? null : await lookup();
   if (existing) return replay(existing);
   // Anyone who sees the template sends from it (ownership.ts), an archived one too (archiving only takes it off the
   // lists: a host that keeps its id goes on using it); one they can't see doesn't exist for them.
-  const caller = context.get('caller');
+  const caller = scope.caller;
   // A draft whose document was uploaded with it is sent with that document (its initial document, D0) and the roles
   // and fields placed on it; any other envelope with its template's.
   const uploaded = fromDraft && input.templateId === undefined;
   let template: { object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string; status: string } | null;
   let uploadedDocument: { object_key: string; sha256: string } | null = null;
   if (uploaded) {
-    const own = await context.env.DB.prepare('SELECT e.template_id, e.roles_json, e.fields_json, a.object_key, a.sha256 FROM envelopes e LEFT JOIN artifacts a ON a.id = ? AND a.envelope_id = e.id WHERE e.id = ? AND e.tenant_id = ?')
+    const own = await scope.env.DB.prepare('SELECT e.template_id, e.roles_json, e.fields_json, a.object_key, a.sha256 FROM envelopes e LEFT JOIN artifacts a ON a.id = ? AND a.envelope_id = e.id WHERE e.id = ? AND e.tenant_id = ?')
       .bind(initialDocumentId(id), id, tenantId).first<{ template_id: string | null; roles_json: string | null; fields_json: string | null; object_key: string | null; sha256: string | null }>();
-    if (!own || own.template_id !== null) return context.json({ error: 'invalid_envelope' }, 422);
-    if (!own.object_key || !own.sha256) return context.json({ error: 'document_required' }, 409);
-    if (!own.roles_json || !own.fields_json) return context.json({ error: 'fields_required' }, 409);
+    if (!own || own.template_id !== null) return scope.json({ error: 'invalid_envelope' }, 422);
+    if (!own.object_key || !own.sha256) return scope.json({ error: 'document_required' }, 409);
+    if (!own.roles_json || !own.fields_json) return scope.json({ error: 'fields_required' }, 409);
     uploadedDocument = { object_key: own.object_key, sha256: own.sha256 };
     template = { object_key: own.object_key, roles_json: own.roles_json, fields_json: own.fields_json, default_signers_json: '{}', status: 'active' };
   } else {
-    if (!await documentRole(context.env.DB, tenantId, caller, 'template', input.templateId as string)) return context.json({ error: 'not_found' }, 404);
-    template = await context.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string; status: string }>();
+    if (!await documentRole(scope.env.DB, tenantId, caller, 'template', input.templateId as string)) return scope.json({ error: 'not_found' }, 404);
+    template = await scope.env.DB.prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').bind(input.templateId, tenantId).first<{ object_key: string; roles_json: string; fields_json?: string; default_signers_json?: string; status: string }>();
   }
-  if (!template) return context.json({ error: 'not_found' }, 404);
+  if (!template) return scope.json({ error: 'not_found' }, 404);
   // A draft template isn't ready: it is saved as active in the field editor first.
-  if (template.status === 'draft') return context.json({ error: 'template_draft' }, 409);
+  if (template.status === 'draft') return scope.json({ error: 'template_draft' }, 409);
   const roles = JSON.parse(template.roles_json) as string[];
   // An uploaded document has no signature page to fall back on: every role signs in its fields, a required Signature
   // among them, as a template's editor requires before it is ready.
   if (uploaded) {
     try { assertEditorSigningFields(JSON.parse(template.fields_json ?? '[]') as TemplateField[], roles); }
-    catch { return context.json({ error: 'fields_not_ready' }, 422); }
+    catch { return scope.json({ error: 'fields_not_ready' }, 422); }
   }
   if (template.fields_json !== undefined) {
     try {
       const raw:unknown=JSON.parse(template.fields_json);
       if(!Array.isArray(raw))throw new Error('Invalid fields');
       if(raw.length){
-        const object=await context.env.ARTIFACTS.get(template.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Source unavailable');
+        const object=await scope.env.ARTIFACTS.get(template.object_key);if(!object||object.size>MAX_PDF_BYTES)throw new Error('Source unavailable');
         const pdf=await PDFDocument.load(await object.arrayBuffer(),{throwOnInvalidObject:true,updateMetadata:false});validateFieldsPdf(pdf);const fields=supportedFields(template.fields_json,roles,pdf.getPageCount());assertNoOverlappingFields(fields);validateFieldPlacement(pdf,fields);
       }
-    } catch { return context.json({ error: 'positioned_fields_not_supported' }, 422); }
+    } catch { return scope.json({ error: 'positioned_fields_not_supported' }, 422); }
   }
-  if (roles.length !== recipients.length || new Set(recipients.map((r) => r.role)).size !== roles.length || recipients.some((r) => !roles.includes(r.role))) return context.json({ error: 'invalid_roles' }, 422);
+  if (roles.length !== recipients.length || new Set(recipients.map((r) => r.role)).size !== roles.length || recipients.some((r) => !roles.includes(r.role))) return scope.json({ error: 'invalid_roles' }, 422);
   // A name or an email a recipient left out is their role's default signer's (default-signers.ts), as the
   // template has them now. The request's hash is of the request as sent: a retry gets this envelope even if
   // the default signers have changed since.
   const defaults = storedDefaultSigners(template.default_signers_json, roles);
   const filled = recipients.map((r) => ({ ...r, name: r.name ?? defaults[r.role]?.name, email: r.email ?? defaults[r.role]?.email }));
-  if (filled.some((r) => !validRecipientName(r.name) || !validRecipientEmail(r.email))) return context.json({ error: 'invalid_recipient' }, 422);
+  if (filled.some((r) => !validRecipientName(r.name) || !validRecipientEmail(r.email))) return scope.json({ error: 'invalid_recipient' }, 422);
   const people = filled as ((typeof recipients)[number] & { name: string; email: string })[];
   try { await assertRenderableRecipientNames(people.map((recipient) => recipient.name)); }
-  catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
+  catch { return scope.json({ error: 'unsupported_recipient_name' }, 422); }
+  // Checked to be sent later: every signer's deadline comes after it is sent, and nothing more is done.
+  if (options.check) {
+    if (deadlines.some((deadline) => deadline !== null && deadline <= options.check!.sendAt)) return scope.json({ error: 'deadline_before_send_at' }, 422);
+    return scope.json({ checked: true }, 200);
+  }
   // The envelope is prepared here, in the same request: its initial document (D0) is the template's
   // source, and the first signer's task is active. The id comes from the tenant and the
   // Idempotency-Key, so a retry after a failure reuses the D0 object stored by the failed attempt.
   let d0: { id: string; objectKey: string; sha256: string };
   // An uploaded document is the envelope's initial document already.
   if (uploadedDocument) d0 = { id: initialDocumentId(id), objectKey: uploadedDocument.object_key, sha256: uploadedDocument.sha256 };
-  else try { d0 = await storeInitialDocument(context.env.ARTIFACTS, template.object_key, id); }
+  else try { d0 = await storeInitialDocument(scope.env.ARTIFACTS, template.object_key, id); }
   catch (error) {
-    if (!(error instanceof InitialDocumentConflict)) return context.json({ error: 'preparation_failed' }, 503);
+    if (!(error instanceof InitialDocumentConflict)) return scope.json({ error: 'preparation_failed' }, 503);
     // Another request with this key stored a different document: it is a different request.
     const raced = await lookup();
-    return raced ? replay(raced) : context.json({ error: 'idempotency_conflict' }, 409);
+    return raced ? replay(raced) : scope.json({ error: 'idempotency_conflict' }, 409);
   }
   const taskIds = recipients.map(() => crypto.randomUUID());
   // The sender owns it. It is shared with whom the request names and, for an API client, its person (members.ts),
   // not with the template's people; the sender's tags are the request's and theirs on the template.
   const given = sharesFor(shares, caller);
-  const allTags = uploaded ? tags : mergeTags(tags, await tagsOf(context.env.DB, tenantId, caller.userId, 'template', input.templateId as string));
+  const allTags = uploaded ? tags : mergeTags(tags, await tagsOf(scope.env.DB, tenantId, caller.userId, 'template', input.templateId as string));
   const now = Date.now();
   // One batch: the envelope (with the request's hash, and the roles and fields it is signed with, its template's as
   // stored, byte for byte: envelope-fields.ts), its tasks, its D0 artifact, its shares and the sender's
@@ -784,31 +855,31 @@ async function sendEnvelope(context: import('hono').Context<Env>, body: Record<s
     fromDraft
       // A draft becomes the envelope sent, in this batch, only while it is a draft: otherwise its status would be null,
       // which the table refuses, and nothing in the batch is written.
-      ? context.env.DB.prepare(`UPDATE envelopes SET status = CASE WHEN status = '${DRAFT}' THEN ? ELSE NULL END, template_id = ?, created_at = ?, request_sha256 = ?, roles_json = ?, fields_json = ?, details_json = ?, draft_json = NULL WHERE id = ? AND tenant_id = ?`).bind(CREATED_STATUS, input.templateId ?? null, now, hash, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails), id, tenantId)
-      : context.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, roles_json, fields_json, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
-    ...people.map((recipient, index) => context.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
-    ...(uploaded ? [] : [context.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256)]),
+      ? scope.env.DB.prepare(`UPDATE envelopes SET status = CASE WHEN status = '${DRAFT}' THEN ? ELSE NULL END, template_id = ?, created_at = ?, request_sha256 = ?, roles_json = ?, fields_json = ?, details_json = ?, draft_json = NULL WHERE id = ? AND tenant_id = ?`).bind(CREATED_STATUS, input.templateId ?? null, now, hash, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails), id, tenantId)
+      : scope.env.DB.prepare('INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256, owner_user_id, roles_json, fields_json, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, tenantId, input.templateId, CREATED_STATUS, now, hash, caller.userId, template.roles_json, template.fields_json ?? '[]', JSON.stringify({ ...(documentName ? { documentName } : {}), ...(documentVersion ? { documentVersion } : {}), ...(sender ? { sender } : {}), ...(metadata ? { metadata } : {}), ...(message ? { message } : {}) } satisfies EnvelopeDetails)),
+    ...people.map((recipient, index) => scope.env.DB.prepare('INSERT INTO tasks (id, envelope_id, role, recipient_name, recipient_email, routing_order, status, expires_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(taskIds[index], id, recipient.role, recipient.name, recipient.email, index + 1, index === 0 ? 'ACTIVE' : 'PENDING', deadlines[index], JSON.stringify({ ...signerFacts[index], ...(namedBy[index] ? { namedBy: namedBy[index] } : {}), ...(afterSigning[index] ? { afterSigning: afterSigning[index]! } : {}), ...(deliveries[index] === 'email' ? { delivery: 'email' as const } : {}), ...(messages[index] ? { message: messages[index]! } : {}) } satisfies TaskDetails))),
+    ...(uploaded ? [] : [scope.env.DB.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?, ?, ?, ?)').bind(d0.id, id, d0.objectKey, d0.sha256)]),
     // The organization's contacts (contacts.ts): each signer added or refreshed, with the envelope only.
-    ...contactUpserts(context.env.DB, tenantId, people, now),
-    ...shareInserts(context.env.DB, tenantId, 'envelope', id, given, caller.userId, now),
-    ...tagWrites(context.env.DB, tenantId, caller.userId, 'envelope', id, allTags),
+    ...contactUpserts(scope.env.DB, tenantId, people, now),
+    ...shareInserts(scope.env.DB, tenantId, 'envelope', id, given, caller.userId, now),
+    ...tagWrites(scope.env.DB, tenantId, caller.userId, 'envelope', id, allTags),
   ];
-  try { await context.env.DB.batch(statements); }
+  try { await scope.env.DB.batch(statements); }
   catch (error) {
     // A concurrent creation with this key committed first (the envelope id is the primary key), or the draft was sent
     // or discarded meanwhile.
     const raced = await lookup();
     if (raced && (!fromDraft || raced.status !== DRAFT)) return replay(raced);
-    if (fromDraft && !raced) return context.json({ error: 'not_draft' }, 409);
+    if (fromDraft && !raced) return scope.json({ error: 'not_draft' }, 409);
     throw error;
   }
   // The first signer's invitation, when Esign invites them: after the response, where the platform allows.
   if (deliveries[0] === 'email') {
-    const invite = sendDueInvitations(context.env, tenantId, id);
-    if (context.env.WAIT_UNTIL) context.env.WAIT_UNTIL(invite);
+    const invite = sendDueInvitations(scope.env, tenantId, id);
+    if (scope.env.WAIT_UNTIL) scope.env.WAIT_UNTIL(invite);
     else await invite;
   }
-  return context.json(createdResponse(id), fromDraft ? 200 : 201);
+  return scope.json(createdResponse(id), fromDraft ? 200 : 201);
 }
 
 /** The signers a draft's request names so far, as a list shows them (status DRAFT). */
@@ -837,15 +908,16 @@ app.get('/api/envelopes/:id', async (context) => {
     FROM tasks t WHERE t.envelope_id = ? ORDER BY t.routing_order`).bind(AUDIT.sessionOpened, id).all<{ id: string; role: string; recipient_name: string; recipient_email: string; routing_order: number; status: string ; expires_at: number | null; details_json: string; opened_at: number | null; invited_at: number | null }>();
   const details = envelopeDetails(envelope.details_json);
   // A draft: its request as saved (`draft`), to go on with it; it has no tasks yet.
-  let draft: unknown;
-  if (envelope.status === DRAFT) { try { draft = JSON.parse(envelope.draft_json ?? '{}'); } catch { draft = {}; } }
+  // Scheduled, also when it sends or why it didn't (scheduled-send.ts), apart from the request.
+  let draft: unknown, scheduled: { sendAt?: string; sendError?: string } = {};
+  if (envelope.status === DRAFT) { const split = splitDraft(envelope.draft_json); draft = split.request; scheduled = scheduleView(split.schedule); }
   // A draft whose document is uploaded with it: whether it has one yet, and the roles and fields placed on it so far.
   const upload = envelope.status === DRAFT && envelope.template_id === null ? {
     document: !!await context.env.DB.prepare('SELECT 1 FROM artifacts WHERE id = ? AND envelope_id = ?').bind(initialDocumentId(id), id).first(),
     roles: envelope.roles_json ? JSON.parse(envelope.roles_json) as string[] : [],
     fields: placedFields(envelope.fields_json ?? '[]', true),
   } : undefined;
-  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(draft === undefined ? {} : { draft }), ...(upload ? { upload } : {}), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
+  return context.json({ id: envelope.id, templateId: envelope.template_id, status: envelope.status, createdAt: envelope.created_at, ...(details.documentName ? { documentName: details.documentName } : {}), metadata: details.metadata ?? {}, ...(details.message ? { message: details.message } : {}), ...(draft === undefined ? {} : { draft }), ...scheduled, ...(upload ? { upload } : {}), ...(await ownership(context, 'envelope', [envelope])).get(envelope.id), tasks: tasks.results.map((task) => { const own = taskDetails(task.details_json); return { id: task.id, role: task.role, recipientName: task.recipient_name, recipientEmail: task.recipient_email, routingOrder: task.routing_order, status: task.status, delivery: own.delivery ?? 'host', ...(own.message ? { message: own.message } : {}), ...(task.expires_at == null ? {} : { expiresAt: new Date(task.expires_at).toISOString() }), ...(task.opened_at == null ? {} : { openedAt: new Date(task.opened_at).toISOString() }), ...(task.invited_at == null ? {} : { invitedAt: new Date(task.invited_at).toISOString() }) }; }) });
 });
 
 /**

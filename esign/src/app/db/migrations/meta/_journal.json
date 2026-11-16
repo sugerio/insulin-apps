@@ -29,6 +29,13 @@
       "when": 1794801641381,
       "tag": "0003_api_client_people",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794801701381,
+      "tag": "0004_scheduled_send",
+      "breakpoints": true
     }
   ]
 }

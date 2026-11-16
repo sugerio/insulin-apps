@@ -1,0 +1,85 @@
+// Send later: a draft envelope that sends itself at a time its sender chose. It stays a draft (status DRAFT) until
+// then; what it needs is kept in its own request, `draft_json`, under `schedule`, never in a column of its own:
+//
+//   schedule: { at: epoch ms, by: who scheduled it, error?: why it couldn't be sent }
+//
+// The platform's five-minute tick (and POST /api/process-due, for one organization) sends the drafts whose time has
+// come, as the person who scheduled them, through the very send a person's Send runs (app.ts). One the send refuses
+// stays a draft: its time is cleared and the reason kept, for its sender to see. The partial index
+// `envelopes_scheduled` (migration 0004) is on `json_extract(draft_json, '$.schedule.at')` for drafts only: every
+// query here spells that expression exactly, so the index serves it.
+import type { AppRole } from '@fours/app/server';
+import type { AccessVia, Caller, Permission } from './identity.ts';
+
+/** The expression the index is on: write it only as this. */
+export const SCHEDULE_AT = "json_extract(draft_json, '$.schedule.at')";
+/** How far ahead a send may be scheduled, as a signing deadline may be. */
+export const MAX_SCHEDULE_MS = 400 * 24 * 60 * 60 * 1000;
+/** How soon: the tick runs every five minutes, so a time a minute away is sent at the next one. */
+export const MIN_SCHEDULE_MS = 60 * 1000;
+/** Drafts sent per tick (or per process-due), oldest time first: the rest wait for the next. */
+export const SCHEDULED_PER_RUN = 25;
+
+/** Who scheduled a send: the caller then, as the send needs them when no one is calling. */
+export interface ScheduledBy {
+  userId: string;
+  email: string | null;
+  name: string | null;
+  role: AppRole;
+  permissions: Permission[];
+  accessVia: AccessVia;
+}
+export interface Schedule { at: number | null; by: ScheduledBy; error?: string }
+
+/** `sendAt` as a request gives it (an ISO 8601 time): epoch ms, or 'invalid' (not a time, too soon or too far). */
+export function parseSendAt(value: unknown, now: number): number | 'invalid' {
+  if (typeof value !== 'string' || value.length > 40) return 'invalid';
+  const at = Date.parse(value);
+  if (!Number.isFinite(at) || at < now + MIN_SCHEDULE_MS || at > now + MAX_SCHEDULE_MS) return 'invalid';
+  return at;
+}
+
+export const scheduledBy = (caller: Caller): ScheduledBy => ({
+  userId: caller.userId, email: caller.email, name: caller.name, role: caller.role, permissions: [...caller.permissions], accessVia: caller.accessVia,
+});
+
+/** The caller a scheduled send runs as: whoever scheduled it, as they were then. */
+export const callerOf = (by: ScheduledBy, organizationId: string): Caller => ({
+  userId: by.userId, organizationId, email: by.email, name: by.name, role: by.role, permissions: new Set(by.permissions), accessVia: by.accessVia, preview: false,
+});
+
+/** A draft's request and its schedule, apart: the request is what was asked to be sent, as given. */
+export function splitDraft(raw: string | null): { request: Record<string, unknown>; schedule: Schedule | null } {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw ?? '{}'); } catch { return { request: {}, schedule: null }; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { request: {}, schedule: null };
+  const { schedule, ...request } = parsed as Record<string, unknown>;
+  const valid = !!schedule && typeof schedule === 'object' && !Array.isArray(schedule) && !!(schedule as Schedule).by;
+  return { request, schedule: valid ? schedule as Schedule : null };
+}
+
+/** What a draft's schedule shows its readers: when it sends, or why it didn't. Never who scheduled it in full. */
+export function scheduleView(schedule: Schedule | null): { sendAt?: string; sendError?: string } {
+  if (!schedule) return {};
+  return {
+    ...(typeof schedule.at === 'number' ? { sendAt: new Date(schedule.at).toISOString() } : {}),
+    ...(schedule.error ? { sendError: schedule.error } : {}),
+  };
+}
+
+/** The drafts due now, oldest time first, of one organization or (null) all. */
+export async function dueScheduled(db: D1Database, now: number, tenantId: string | null): Promise<{ id: string; tenant_id: string; draft_json: string }[]> {
+  const { results } = await db.prepare(`SELECT id, tenant_id, draft_json FROM envelopes
+      WHERE status = 'DRAFT' AND ${SCHEDULE_AT} <= ?1 AND (?2 IS NULL OR tenant_id = ?2) ORDER BY ${SCHEDULE_AT} LIMIT ${SCHEDULED_PER_RUN}`)
+    .bind(now, tenantId).all<{ id: string; tenant_id: string; draft_json: string }>();
+  return results;
+}
+
+/**
+ * A scheduled draft that couldn't be sent: its time is cleared and `error` kept. Only while it is still the draft that
+ * was due at `at`: one its sender has changed or sent meanwhile is left as it is.
+ */
+export async function recordScheduleFailure(db: D1Database, id: string, at: number, error: string): Promise<void> {
+  await db.prepare(`UPDATE envelopes SET draft_json = json_set(draft_json, '$.schedule.at', NULL, '$.schedule.error', ?1)
+      WHERE id = ?2 AND status = 'DRAFT' AND ${SCHEDULE_AT} = ?3`).bind(error.slice(0, 100), id, at).run();
+}

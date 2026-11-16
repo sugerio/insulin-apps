@@ -1,9 +1,11 @@
 // Upload and send: an envelope whose document is uploaded with it, no template (server/esign/envelope-documents.ts).
 // Three steps: the document and its signers (each with a role of the sender's naming, in signing order); the fields,
 // placed on the document in the field editor for each signer's role; a review, and Send. It is a draft from the first
-// step on: Save draft keeps it, `/envelopes/send?draft=<id>` opens it again, and sending sends that envelope.
+// step on: Save draft keeps it, `/envelopes/send?draft=<id>` opens it again, and sending sends that envelope. Send later
+// (SendLater.ts) keeps it a draft that Esign sends at the time chosen; saving it as a draft again cancels that.
 import React, { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Save, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Save, Trash2 } from 'lucide-react'
+import { ScheduleNotice, SendButton, SendLaterDialog } from './SendLater.ts'
 import { Button } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { checkClass, Input } from '../components/ui/input.ts'
@@ -53,6 +55,9 @@ export function SendDocumentPage({ me }: { me: Me }) {
   const [loaded, setLoaded] = useState(!draftId)
   // Also save as a template, once sent: its document, fields and roles, named as the document.
   const [alsoTemplate, setAlsoTemplate] = useState(false)
+  // A scheduled draft: when it sends, or why it didn't (Send later).
+  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string }>({})
+  const [picking, setPicking] = useState(false)
   const frame = useRef<HTMLIFrameElement | null>(null)
   const draftKey = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
 
@@ -68,6 +73,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
       setPeople(roles.length ? form.signers.map((s, i) => ({ role: roles[i] ?? '', name: s.name, email: s.email, title: s.title, company: s.company })) : [{ ...EMPTY }])
       setDocName(form.doc.name); setNote(form.note); setSignBy(form.signBy); setTags(form.tags)
       setHasDocument(!!envelope.upload?.document); setPlaced(envelope.upload?.fields ?? [])
+      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError })
       setLoaded(true)
     }).catch((error) => { setMessage({ text: describeError(error), error: true }); setLoaded(true) })
   }, [])
@@ -123,6 +129,9 @@ export function SendDocumentPage({ me }: { me: Me }) {
       await api(`/api/envelopes/${id}/document`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: file })
       setFile(null); setHasDocument(true); setPlaced([])
     }
+    // Saved as a draft, it is no longer scheduled (the server keeps no time for a draft saved so).
+    if (schedule.sendAt) setMessage({ text: 'The scheduled send was cancelled: saving the draft unschedules it. Schedule it again from Review.', error: false })
+    setSchedule({})
     return id
   }
   function save() {
@@ -150,6 +159,17 @@ export function SendDocumentPage({ me }: { me: Me }) {
     setMessage({ text: asDraft ? 'Saving the draft…' : 'Saving the fields…', error: false })
     frame.current.contentWindow.postMessage({ type: 'esign.editor.save', requestId, ...(asDraft ? { draft: true } : {}) }, window.location.origin)
   }
+  /** Send later: the review's request, checked as a send and kept a draft that Esign sends at `sendAt`. */
+  function scheduleAt(sendAt: string) {
+    void run(async () => {
+      try {
+        const answer = await apiJson<{ sendAt?: string }>(`/api/envelopes/${draftId}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...request(), sendAt }) })
+        setSchedule({ sendAt: answer.sendAt ?? sendAt })
+        // The schedule's own notice says when it sends.
+        setMessage({ text: '', error: false })
+      } finally { setPicking(false) }
+    })
+  }
   function send() {
     void run(async () => {
       await apiJson(`/api/envelopes/${draftId}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request()) })
@@ -167,7 +187,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
       key: label, 'aria-current': i === step ? 'step' : undefined,
       className: `rounded-full border px-3 py-1 ${i === step ? 'border-primary bg-primary text-primary-foreground' : i < step ? 'text-foreground' : 'text-muted-foreground'}`,
     }, `${i + 1}. ${label}`))),
-    h(Notice, { message: message.text, error: message.error }))
+    h(Notice, { message: message.text, error: message.error }),
+    h(ScheduleNotice, schedule))
   if (!loaded) return h('div', { className: 'flex flex-col gap-6' }, header, h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading the draft…'))
   const saveButton = h(Button, { key: 'save', variant: 'outline', disabled: busy || (step === 1 && (!editor?.ready || !!editor?.requestId)), onClick: save }, h(Save, { 'aria-hidden': true }), 'Save draft')
 
@@ -236,5 +257,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
       h(CardFooter, { className: 'flex flex-wrap gap-2' },
         h(Button, { key: 'back', variant: 'ghost', disabled: busy, onClick: toFields }, h(ArrowLeft, { 'aria-hidden': true }), 'Back to fields'),
         saveButton,
-        h(Button, { key: 'send', disabled: busy, onClick: send }, h(Send, { 'aria-hidden': true }), busy ? 'Sending…' : 'Send for signature'))))
+        h(SendButton, { key: 'send', busy, label: schedule.sendAt ? 'Send now' : 'Send for signature', onSend: send, onLater: () => setPicking(true) })),
+      h(SendLaterDialog, { open: picking, initial: schedule.sendAt, signBy, busy, onClose: () => setPicking(false), onSchedule: scheduleAt,
+        note: alsoTemplate ? 'Also save as a template is done only when you send it now: save it as a template from the envelope\'s page once it is sent.' : undefined })))
 }

@@ -1,10 +1,12 @@
 // New envelope: a template and one signer per role, in its signing order, with what the signers see about the document
 // and who sent it. Sending creates the envelope and asks the first signer; a retry of the same send reuses its
 // idempotency key, so a lost response never sends twice. Save draft keeps the form as it is, unfinished even, to send
-// later: `/envelopes/new?draft=<id>` opens it again, and sending it sends that envelope.
+// later: `/envelopes/new?draft=<id>` opens it again, and sending it sends that envelope. Send later (SendLater.ts)
+// checks it as a send and keeps it a draft that Esign sends at the time chosen; Save draft cancels that.
 import React, { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Save, Send } from 'lucide-react'
+import { ArrowLeft, Save } from 'lucide-react'
 import { Button } from '../components/ui/button.ts'
+import { ScheduleNotice, SendButton, SendLaterDialog } from './SendLater.ts'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { checkClass, Input } from '../components/ui/input.ts'
 import { NativeSelect, NativeSelectOption } from '../components/ui/native-select.ts'
@@ -42,6 +44,9 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     try { return new URLSearchParams(window.location.search).get('draft') ?? '' } catch { return '' }
   })
   const [saved, setSaved] = useState<Record<string, unknown> | null>(null)
+  // A scheduled draft: when it sends, or why it didn't (Send later).
+  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string }>({})
+  const [picking, setPicking] = useState(false)
   useEffect(() => {
     if (!draftId || saved) return
     apiJson<Envelope>(`/api/envelopes/${draftId}`).then((envelope) => {
@@ -51,6 +56,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
       if (!envelope.templateId) { navigate(`/envelopes/send?draft=${envelope.id}`, { replace: true }); return }
       setTemplateId(envelope.templateId)
       setSaved(envelope.draft ?? {})
+      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError })
     }).catch((error) => setMessage({ text: describeError(error), error: true }))
   }, [])
 
@@ -101,17 +107,46 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     saving.then(({ id }) => {
       attempt.current = null
       if (!draftId) { setDraftId(id); navigate(`/envelopes/new?draft=${id}`, { replace: true }) }
-      setMessage({ text: 'Draft saved. Nobody is asked to sign until you send it.', error: false })
+      setMessage({ text: schedule.sendAt ? 'Draft saved. It is no longer scheduled: nobody is asked to sign until you send it.' : 'Draft saved. Nobody is asked to sign until you send it.', error: false })
+      setSchedule({})
     }).catch((error) => setMessage({ text: describeError(error), error: true })).finally(() => setBusy(false))
   }
-  function send() {
-    if (!template) { setMessage({ text: 'Choose a template.', error: true }); return }
-    if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) { setMessage({ text: 'Enter a name and an email address for each signer.', error: true }); return }
-    if ([note.subject, ...signers.map((s) => s.subject ?? '')].some((subject) => subject.trim().length > 100)) { setMessage({ text: 'Use at most 100 characters for an email subject.', error: true }); return }
+  /** What stops the form from being sent, said as the member can fix it; '' when nothing does. */
+  function sendProblem(): string {
+    if (!template) return 'Choose a template.'
+    if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) return 'Enter a name and an email address for each signer.'
+    if ([note.subject, ...signers.map((s) => s.subject ?? '')].some((subject) => subject.trim().length > 100)) return 'Use at most 100 characters for an email subject.'
     if (signBy.trim()) {
       const at = Date.parse(signByTime(signBy))
-      if (!(at > Date.now() && at <= Date.now() + 400 * 86_400_000)) { setMessage({ text: 'Choose a sign-by day from today up to 400 days ahead.', error: true }); return }
+      if (!(at > Date.now() && at <= Date.now() + 400 * 86_400_000)) return 'Choose a sign-by day from today up to 400 days ahead.'
     }
+    return ''
+  }
+  /** Send later: checked as a send, kept a draft that Esign sends at `sendAt`; this page is then its address. */
+  function sendLater() {
+    const problem = sendProblem()
+    if (problem) { setMessage({ text: problem, error: true }); return }
+    setMessage({ text: '', error: false })
+    setPicking(true)
+  }
+  function schedule_(sendAt: string) {
+    setBusy(true)
+    const body = JSON.stringify({ ...request(), sendAt })
+    if (!draftId && (!attempt.current || attempt.current.body !== body)) attempt.current = { body, key: crypto.randomUUID() }
+    const saving = draftId ? apiJson<{ id: string; sendAt?: string }>(`/api/envelopes/${draftId}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body })
+      : apiJson<{ id: string; sendAt?: string }>('/api/envelopes', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': attempt.current!.key }, body })
+    saving.then(({ id, sendAt: when }) => {
+      attempt.current = null
+      if (!draftId) { setDraftId(id); navigate(`/envelopes/new?draft=${id}`, { replace: true }) }
+      setPicking(false)
+      setSchedule({ sendAt: when ?? sendAt })
+      // The schedule's own notice says when it sends.
+      setMessage({ text: '', error: false })
+    }).catch((error) => { setPicking(false); setMessage({ text: describeError(error), error: true }) }).finally(() => setBusy(false))
+  }
+  function send() {
+    const problem = sendProblem()
+    if (problem) { setMessage({ text: problem, error: true }); return }
     setBusy(true)
     setMessage({ text: '', error: false })
     const body = JSON.stringify(request())
@@ -132,6 +167,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     h(Link, { to: '/', className: 'inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground' }, h(ArrowLeft, { className: 'size-4', 'aria-hidden': true }), 'All envelopes'),
     h(PageHeader, { title: draftId ? 'Draft envelope' : 'New envelope', description: draftId ? 'Saved, not sent: finish it and send it, or save it again for later. The signers sign in this order, each when the one before has signed.' : 'Send a template for signature. The signers sign in this order, each when the one before has signed. Save draft keeps it to finish later.' }),
     h(Notice, { message: message.text, error: message.error }),
+    h(ScheduleNotice, schedule),
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Template'))),
       h(CardContent, null,
@@ -176,5 +212,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
         ])),
       h(CardFooter, { className: 'flex flex-wrap gap-2' },
         h(Button, { variant: 'outline', disabled: busy, onClick: saveDraft }, h(Save, { 'aria-hidden': true }), 'Save draft'),
-        h(Button, { disabled: busy, onClick: send }, h(Send, { 'aria-hidden': true }), busy ? 'Sending…' : 'Send for signature'))) : null)
+        h(SendButton, { busy, label: schedule.sendAt ? 'Send now' : 'Send for signature', onSend: send, onLater: sendLater }),
+        schedule.sendAt ? h('p', { className: 'w-full text-xs text-muted-foreground' }, 'Saving as a draft cancels the scheduled send.') : null)) : null,
+    h(SendLaterDialog, { open: picking, initial: schedule.sendAt, signBy, busy, onClose: () => setPicking(false), onSchedule: schedule_ }))
 }

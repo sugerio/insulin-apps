@@ -1,6 +1,6 @@
 // Envelope drafts in the members' pages (member/NewEnvelopePage.ts, EnvelopesPage.ts, EnvelopePage.ts): Save draft
 // keeps the form as it is and the page becomes the draft's; opening a draft fills the form in again; sending it sends
-// that envelope. The list shows drafts under Status: Draft, with Edit and Discard. In-process, against stubbed API
+// that envelope. The list shows drafts under Status: Draft, with Continue and Discard. In-process, against stubbed API
 // answers; synthetic data.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -103,7 +103,7 @@ test('a draft opens in the form again, filled in as saved; its envelope page sen
   } finally { await viewer.unmount(); }
 });
 
-test('the list: Status Draft shows drafts, each with Edit and Discard, which asks first', async () => {
+test('the list: Status Draft shows drafts, each with Continue and Discard, which asks first', async () => {
   const draft = { id: DRAFT_ID, templateId: 'tpl-1', status: 'DRAFT', createdAt: 0, documentName: 'Reseller agreement', signers: [{ role: 'partner', name: 'Pat Partner', email: 'pat@', status: 'DRAFT' }], progress: { signed: 0, total: 2 }, owner: OWNER, myRole: 'owner', tags: [] };
   let listed = [draft];
   const app = await renderMember('/envelopes?status=draft', (c) => {
@@ -115,7 +115,7 @@ test('the list: Status Draft shows drafts, each with Edit and Discard, which ask
   try {
     assert.equal(new URL(app.calls.find((c) => c.path.startsWith('/api/envelopes?'))!.path, 'https://x.test').searchParams.get('status'), 'DRAFT');
     assert.ok(app.byLabel('Remove Status: Draft'), 'as a chip');
-    const edit = app.link('Edit');
+    const edit = app.link('Continue');
     assert.equal(edit.props.href, `/envelopes/new?draft=${DRAFT_ID}`);
     await app.click(app.byLabel('More for Reseller agreement'), 'menu');
     assert.deepEqual(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitem').map((n: any) => visibleText(n.children).trim()), ['View', 'Discard', 'Tags', 'Share']);

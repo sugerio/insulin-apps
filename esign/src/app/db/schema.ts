@@ -69,6 +69,7 @@ export const envelopes = sqliteTable('envelopes', {
 }, (table) => [
   index('envelopes_by_tenant').on(table.tenant_id, table.created_at),
   index('envelopes_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),
+  // And `envelopes_scheduled`, on a draft's `schedule.at` in `draft_json`: migration 0004, which drizzle-kit can't express.
   check('envelopes_details_json', sql`json_valid(${table.details_json})`),
 ])
 

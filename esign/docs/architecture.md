@@ -49,7 +49,10 @@ seals the finished envelope and emails each signer a link to their copy.
   identity included, and works for every organization; a request marked `schedule` is nobody to
   every other route (`readCaller`). It is neither a public path nor in the catalog.
   `POST /api/process-due` (manage permission) does the same work at once, for the caller's
-  organization only. After the due work, whatever its outcome, the tick sends the hour's usage
+  organization only. Its first part is send later (`scheduled-send.ts`): up to 25 drafts whose
+  `schedule.at` has come are sent by the very send a member's Send runs, as whoever scheduled them
+  (kept in the draft; they must still be an editor of it); one refused stays a draft, unscheduled,
+  with the reason in `schedule.error`. After the due work, whatever its outcome, the tick sends the hour's usage
   report (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the
@@ -257,8 +260,11 @@ rendering and every later re-verification fail closed if the running renderer di
 ## Data model
 
 `src/app/db/schema.ts` declares the tables; `src/app/db/migrations/` holds `0000_init.sql`, every table and index (the
-history before it was folded into one migration while nothing had shipped), and the custom `0001_triggers.sql` (the
-triggers Drizzle can't declare). Every record
+history before it was folded into one migration while nothing had shipped), the custom `0001_triggers.sql` (the
+triggers Drizzle can't declare), `0002_envelope_documents.sql`, `0003_api_client_people.sql`, and the custom
+`0004_scheduled_send.sql`: the partial index `envelopes_scheduled` on a draft's `json_extract(draft_json,
+'$.schedule.at')`, through which the tick finds the drafts to send later (`scheduled-send.ts`; there is no column for
+it). Every record
 of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 17
 tables:
 

@@ -14,12 +14,14 @@ import { unknownKeys } from './metadata.ts';
  * - `/api/members`: people to share with.
  * - `/api/owners` and its transfer: an organization owner takes over everything someone owns (someone
  *   who left, or an API client), becoming its owner. Nobody else's role in those documents changes.
- * - `/api/client-settings/{id}`: the platform's API access page shows, for each OAuth client, the people who see
- *   everything it owns, as admin (`api_client_people`, ownership.ts), and saves them (package.json
- *   `insulin.clientSettings`). Only organization owners and admins, in the browser. Without anyone, what a client
- *   creates is its own alone.
+ * - `/api/client-settings/{id}`: for each OAuth client, the people who see everything it owns, as admin
+ *   (`api_client_people`, ownership.ts). The page that sets them (`/client-settings/{id}`, package.json
+ *   `insulin.clientSettings`) is reached only from the platform's API access page. Organization owners and admins, in
+ *   the browser. Without anyone, what a client creates is its own alone.
  */
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
+/** The most people an API client's documents are seen by (`/api/client-settings`). */
+export const MAX_CLIENT_PEOPLE = 50;
 const MAX_QUERY = 100;
 
 /** Records the caller: added the first time, refreshed when what the platform says of them changed or after an hour. */
@@ -83,58 +85,55 @@ export function mountMemberRoutes(app: Hono<Env>) {
     return context.json({ from, to: caller.userId, templates: templates.meta.changes, envelopes: envelopes.meta.changes });
   });
 
-  // The platform's API access page (package.json `insulin.clientSettings`): for one OAuth client (its service account
-  // id, the `x-suger-user-id` its calls carry), the section the page shows and saves. The client may not have called
-  // Esign yet: it is recorded here, with the name the page gives, so that it is named as an owner from the start.
+  // Esign's page for one OAuth client (package.json `insulin.clientSettings`, linked from the platform's API access page
+  // with the client's service account id, the `x-suger-user-id` its calls carry, and its name). A client that hasn't
+  // called Esign yet is recorded here, with that name, so that it is named as an owner from the start; an id Esign knows
+  // as a person's is not a client's (404).
   const settingsCaller = (context: import('hono').Context<Env>) => {
     const caller = context.get('caller');
     return orgAdmin(caller) && caller.accessVia === 'browser' ? caller : null;
   };
   const CLIENT_ID = /^[A-Za-z0-9_-]{1,128}$/;
+  const clientSettings = async (db: D1Database, tenantId: string, id: string) => {
+    const client = await db.prepare("SELECT name FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'client'").bind(tenantId, id).first<{ name: string | null }>();
+    const { results } = await db.prepare(`SELECT p.email,
+        (SELECT m.name FROM members m WHERE m.tenant_id = p.tenant_id AND m.email_key = p.email_key AND m.kind = 'person' ORDER BY m.last_seen_at DESC LIMIT 1) AS name
+        FROM api_client_people p WHERE p.tenant_id = ? AND p.client_user_id = ? ORDER BY p.added_at, p.email_key`).bind(tenantId, id).all<{ email: string; name: string | null }>();
+    return { id, ...(client?.name ? { name: client.name } : {}), people: results.map((row) => ({ email: row.email, ...(row.name ? { name: row.name } : {}) })) };
+  };
   app.get('/api/client-settings/:id', async (context) => {
     const caller = settingsCaller(context), id = context.req.param('id'), tenantId = context.get('tenantId'), db = context.env.DB;
     if (!caller) return context.json({ error: 'forbidden' }, 403);
     if (!CLIENT_ID.test(id)) return context.json({ error: 'not_found' }, 404);
-    const name = (context.req.query('name') ?? '').trim().slice(0, 200) || null, now = Date.now();
     const known = await db.prepare('SELECT kind FROM members WHERE tenant_id = ? AND user_id = ?').bind(tenantId, id).first<{ kind: string }>();
     if (known && known.kind !== 'client') return context.json({ error: 'not_found' }, 404);
-    if (!known) await db.prepare(`INSERT INTO members (tenant_id, user_id, kind, email, email_key, name, org_role, first_seen_at, last_seen_at) VALUES (?, ?, 'client', NULL, NULL, ?, '', ?, ?)
-        ON CONFLICT (tenant_id, user_id) DO NOTHING`).bind(tenantId, id, name, now, now).run();
-    const { results } = await db.prepare('SELECT email FROM api_client_people WHERE tenant_id = ? AND client_user_id = ? ORDER BY added_at, email_key').bind(tenantId, id).all<{ email: string }>();
-    return context.json({
-      title: 'Who sees what it creates',
-      description: 'Everything this client creates in Esign, templates and envelopes, is seen by these people, as admins, for as long as they are chosen here. Without anyone, only the client sees it.',
-      status: results.length ? `Seen by ${results.length} ${results.length === 1 ? 'person' : 'people'}` : 'Seen by the client only',
-      fields: [{ name: 'people', type: 'members', label: 'Share with', value: results.map((row) => row.email) }],
-    });
+    if (!known) {
+      const name = (context.req.query('name') ?? '').trim().slice(0, 200) || null, now = Date.now();
+      await db.prepare(`INSERT INTO members (tenant_id, user_id, kind, email, email_key, name, org_role, first_seen_at, last_seen_at) VALUES (?, ?, 'client', NULL, NULL, ?, '', ?, ?)
+          ON CONFLICT (tenant_id, user_id) DO NOTHING`).bind(tenantId, id, name, now, now).run();
+    }
+    return context.json(await clientSettings(db, tenantId, id));
   });
-  // Saves the people for one OAuth client: the whole list, replacing the one before.
+  // Saves the people for one OAuth client, `{people: [email]}`: the whole list, replacing the one before.
   app.post('/api/client-settings/:id', bodyLimit({ maxSize: 16384 }), async (context) => {
     const caller = settingsCaller(context), id = context.req.param('id'), tenantId = context.get('tenantId'), db = context.env.DB;
     if (!caller) return context.json({ error: 'forbidden' }, 403);
     if (!CLIENT_ID.test(id)) return context.json({ error: 'not_found' }, 404);
     let body: unknown;
     try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
-    const values = (body as { values?: unknown } | null)?.values;
-    if (!body || typeof body !== 'object' || Array.isArray(body) || unknownKeys(body, ['values']).length || !values || typeof values !== 'object' || Array.isArray(values) || unknownKeys(values, ['people']).length) return context.json({ message: 'Unexpected settings.' }, 422);
-    const people = (values as { people?: unknown }).people ?? [];
-    if (!Array.isArray(people) || people.length > 50 || people.some((email) => !shareableEmail(email))) return context.json({ errors: { people: 'Choose at most 50 people, by their email address.' } }, 422);
-    const known = await db.prepare('SELECT kind FROM members WHERE tenant_id = ? AND user_id = ?').bind(tenantId, id).first<{ kind: string }>();
-    if (!known || known.kind !== 'client') return context.json({ error: 'not_found' }, 404);
-    const byKey = new Map((people as string[]).map((email) => [emailKey(email), email.trim()]));
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_people' }, 422);
+    const unknown = unknownKeys(body, ['people']);
+    if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
+    const people = (body as { people?: unknown }).people;
+    if (!Array.isArray(people) || people.length > MAX_CLIENT_PEOPLE || people.some((email) => !shareableEmail(email))) return context.json({ error: 'invalid_people' }, 422);
+    if (!await db.prepare("SELECT 1 FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'client'").bind(tenantId, id).first()) return context.json({ error: 'not_found' }, 404);
+    const byKey = new Map<string, string>();
+    for (const email of people as string[]) if (!byKey.has(emailKey(email))) byKey.set(emailKey(email), email.trim());
     const now = Date.now();
     await db.batch([
       db.prepare('DELETE FROM api_client_people WHERE tenant_id = ? AND client_user_id = ?').bind(tenantId, id),
       ...[...byKey].map(([key, email]) => db.prepare('INSERT INTO api_client_people (tenant_id, client_user_id, email_key, email, added_by, added_at) VALUES (?, ?, ?, ?, ?, ?)').bind(tenantId, id, key, email, caller.userId, now)),
     ]);
-    return context.json({ notice: byKey.size ? `Everything this client creates is seen by ${byKey.size} ${byKey.size === 1 ? 'person' : 'people'}, as admins.` : 'Only the client sees what it creates.' });
-  });
-  // The OAuth client was deleted on the platform: its list goes too. Its documents stay, with their owner.
-  app.delete('/api/client-settings/:id', async (context) => {
-    const caller = settingsCaller(context), id = context.req.param('id');
-    if (!caller) return context.json({ error: 'forbidden' }, 403);
-    if (!CLIENT_ID.test(id)) return context.json({ error: 'not_found' }, 404);
-    await context.env.DB.prepare('DELETE FROM api_client_people WHERE tenant_id = ? AND client_user_id = ?').bind(context.get('tenantId'), id).run();
-    return context.body(null, 204);
+    return context.json(await clientSettings(db, tenantId, id));
   });
 }

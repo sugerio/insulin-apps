@@ -42,9 +42,9 @@ Your **tags** on a template or an envelope are yours alone: nobody else sees the
 and by whether they are yours or shared with you (**Sender** on Envelopes, **Owner** on Templates).
 
 **API clients' documents.** What an OAuth client creates is its own. On Esign's **API access** page, your organization's
-owners and admins open **Esign settings** under a client and check, under **Who sees what it creates**, the members who
-see everything it owns, as Admin. Without anyone, only the client sees it. A change applies at once, to what the client
-created before too.
+owners and admins choose **Esign settings** under a client: its page in Esign, **Who sees what it creates**, lists the
+people who see everything it owns, as Admin. Add or remove people and **Save**. Without anyone, only the client sees it.
+A change applies at once, to what the client created before too. Nothing in Esign's navigation leads to that page.
 
 **Ownership**, for organization owners (admins find it in their navigation, with a pointer to API access): **Owners**
 lists everyone who owns templates or envelopes. **Take over** makes you the owner of everything someone owns, for
@@ -131,8 +131,8 @@ the organization creates on Esign's **API access** tab, with a role of its own (
 role). A host uses one to send envelopes, embed the signing page and the
 field editor, follow statuses, and finish due work at once with `POST /api/process-due` when it can't wait for the
 platform's five-minute run. **Rotate secret** there keeps the previous secret working for 24 hours, so the host can
-switch over without stopping. What a client creates is its own: under the client on that tab, **Esign settings** › **Who
-sees what it creates** names the members who see all of it, as Admin. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
+switch over without stopping. What a client creates is its own: under the client on that tab, **Esign settings** opens the
+page where you choose who sees all of it, as Admin. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ## What neither can reach
 

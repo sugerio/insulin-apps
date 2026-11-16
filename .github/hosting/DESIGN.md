@@ -388,34 +388,20 @@ role in that app (Admin, Editor, Viewer or a custom role).
 
 #### 5.3.1 An app's settings for each client
 
-An app can keep a few settings of its own for each of its OAuth clients, such as who in the organization sees what the
-client creates (Esign's). It declares one path in `insulin.clientSettings`, under the same rule as `insulin.scheduled`
-(§8.5: under `/api/`, never public or reserved), and the API access page shows a section of the app's under each
-live client, for the organization's owners and admins only. The app keeps the values; the gateway shows and forwards
-them and stores nothing.
+An app can keep settings of its own for each of its OAuth clients, such as who in the organization sees what the client
+creates (Esign's), on a page of its own. It declares the page's path in `insulin.clientSettings`, and the API access
+page links each live client there, for the organization's owners and admins only: **<App> settings**, to
+`https://<app host><path>/<service account id>?name=<client name>`. That is all the gateway does: it neither reads nor
+stores the settings, and calls nothing.
 
-- **The calls.** Over the app's service binding, to `https://<app host><path>/<service account id>`, as the signed-in
-  owner or admin (the usual identity headers, §2.4, with `x-suger-access-via: browser`), each with a 2.5-second timeout:
-  - `GET ?name=<client name>`: the section. The page reads every live client's section at once when it opens. The name
-    lets the app know a client that hasn't called it yet.
-  - `POST` with `{"values": {"<field>": …}}`: saves the section. The app answers 200 with `{"notice"?}`, or 422 with
-    `{"errors"?: {"<field>": "<message>"}, "message"?}`, shown under the section, which stays open.
-  - `DELETE`: the client was deleted on this page; the app forgets its settings. Whatever it answers, the deletion
-    stands. A client deleted on `/settings/oauth-clients` (§5.4) isn't announced, so the app treats settings for a
-    client that no longer calls it as harmless leftovers.
-- **The section.** JSON, every string plain text (control characters become spaces, never HTML): `title` (≤ 80
-  characters), optional `description` (≤ 300) and `status` (≤ 200, shown under the title), and 1 to 5 `fields`, each
-  with a `name` (`[a-z][A-Za-z0-9]{0,39}`, unique), a `label` (≤ 80), an optional `hint` (≤ 200), a `type` and a
-  `value`. The only type is `members`: people of the organization, as a list of at most 50 email addresses, shown as
-  a checkbox list of the organization's members (an address that is no longer one is listed as left out). Anything
-  else, an error status or no answer in time makes the section unavailable: the page says the app's settings couldn't
-  be loaded, and the rest of it works.
-- **Saving.** The gateway reads the section again, then sends only its fields: for a members field, the addresses
-  checked that belong to the organization's members, spelled as the member's, once each, at most 50. Only the
-  organization's owners and admins save (OWNER or ADMIN re-checked, as for every write on the page), only for a live
-  client of that app in their organization.
-- **What the app checks.** It answers only `x-suger-access-via: browser` from an organization owner or admin, and
-  validates the values itself; the gateway's filtering is a courtesy, not its guard.
+- **The path.** A page a navigation item could link to (§3.2: on the app's own host, never one of the gateway's
+  paths), without a query or a trailing slash, outside `/api/`, and neither one of the app's public paths nor under one,
+  so whoever opens it is signed in. `list-apps.mjs`, `check-insulin-app.mjs` and the gateway's configuration check it.
+- **The id and the name.** The service account id is the `x-suger-user-id` the client's calls carry, so the app can
+  match the settings to them; the name lets the app show a client that hasn't called it yet.
+- **What the app checks.** The link is only a way there: anyone could type the address. The app shows and saves the
+  settings only for the organization's owners and admins (`x-suger-access-via: browser`), and an id it knows as a
+  person's is not a client's. A client deleted on the platform isn't announced; settings left for it are harmless.
 
 ### 5.4 OAuth clients across the organization
 
@@ -523,7 +509,7 @@ declared in the app's `package.json` under `insulin`:
   "permissions": [ … ],
   "publicPaths": ["/sign", "/api/public/", "/assets/"],
   "scheduled": "/api/scheduled",
-  "clientSettings": "/api/client-settings",
+  "clientSettings": "/client-settings",
   "secrets": ["ESIGN_OTP_KEY", "ESIGN_FRAME_ANCESTORS"]
 }
 ```

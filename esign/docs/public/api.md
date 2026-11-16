@@ -212,11 +212,11 @@ When you create a template, an envelope or an editing session, `share` (an array
 `{organization: true, role}` for everyone) shares it with others at once; each person once, at the highest role given,
 and never with yourself.
 
-**API clients.** An API client owns what it creates. Your organization's owners and admins choose who else sees it, for
-each OAuth client on Esign's **API access** page (**Esign settings** › **Who sees what it creates**): the members checked
-see, as Admin, every template and envelope the client owns, those it created before included, for as long as they are
-checked. They are not shares: the documents' **Share** lists them under the client's settings, and only API access
-changes them. `share` on a create request shares with others as usual.
+**API clients.** An API client owns what it creates. Your organization's owners and admins choose who else sees it: on
+Esign's **API access** page, **Esign settings** under the client opens its page in Esign, **Who sees what it creates**.
+The people added there see, as Admin, every template and envelope the client owns, those it created before included,
+for as long as they are on the list. They are not shares: the documents' **Share** lists them under the client's
+settings, and only that page changes them. `share` on a create request shares with others as usual.
 
 **Taking over.** An organization owner can take over everything someone owns, for someone who left or an API client no
 longer used (`POST /api/owners/{id}/transfer`, or **Ownership** › **Owners**).

@@ -4,6 +4,7 @@
 // The Docs need no identity: they open for every role, and before sign-in.
 import React, { useEffect, useState } from 'react'
 import { apiJson, describeError, RequestError, statusFilter, type Me } from './api.ts'
+import { ClientSettingsPage } from './ClientSettingsPage.ts'
 import { ContactPage } from './ContactPage.ts'
 import { ContactsPage } from './ContactsPage.ts'
 import { EnvelopePage } from './EnvelopePage.ts'
@@ -20,6 +21,7 @@ import { Docs } from '../components/Docs.ts'
 import { docTopic } from '../pages/docs/topics.ts'
 
 const h = React.createElement
+const CLIENT_ID = /^[A-Za-z0-9_-]{1,128}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type Route =
@@ -30,6 +32,7 @@ type Route =
   | { section: 'contacts'; page: 'list' }
   | { section: 'contacts'; page: 'contact'; id: string }
   | { section: 'ownership'; page: 'ownership' }
+  | { section: null; page: 'client-settings'; id: string }
   | { section: 'docs'; page: 'docs'; topic: string | undefined }
   | { section: null; page: 'missing' }
 
@@ -47,6 +50,8 @@ export function route(path: string): Route {
   if (parts.length === 1 && parts[0] === 'contacts') return { section: 'contacts', page: 'list' }
   if (parts[0] === 'contacts' && parts.length === 2 && UUID.test(parts[1])) return { section: 'contacts', page: 'contact', id: parts[1] }
   if (parts.length === 1 && parts[0] === 'ownership') return { section: 'ownership', page: 'ownership' }
+  // An OAuth client's settings: linked only from the platform's API access page, never from Esign's navigation.
+  if (parts[0] === 'client-settings' && parts.length === 2 && CLIENT_ID.test(parts[1])) return { section: null, page: 'client-settings', id: parts[1] }
   if (parts[0] === 'docs' && parts.length <= 2) return { section: 'docs', page: 'docs', topic: parts[1] }
   return { section: null, page: 'missing' }
 }
@@ -61,6 +66,7 @@ export function pageTitle(current: Route, status: string): string {
   if (current.page === 'template') return 'Template'
   if (current.page === 'contact') return 'Contact'
   if (current.page === 'ownership') return 'Ownership'
+  if (current.page === 'client-settings') return 'API client'
   if (current.page === 'list') return current.section === 'contacts' ? 'Contacts' : 'Templates'
   if (current.page === 'docs') return docTopic(current.topic)?.title ?? 'Topic not found'
   return 'Page not found'
@@ -88,6 +94,7 @@ export function MemberApp() {
   else if (current.page === 'template') page = h(TemplatePage, { key: current.id, me, id: current.id })
   else if (current.page === 'contact') page = h(ContactPage, { key: current.id, me, id: current.id })
   else if (current.page === 'ownership') page = h(OwnershipPage, { me })
+  else if (current.page === 'client-settings') page = h(ClientSettingsPage, { key: current.id, me, id: current.id, name: new URLSearchParams(search).get('name') ?? undefined })
   else if (current.section === 'contacts') page = h(ContactsPage, { me })
   else if (current.section === 'templates') page = h(TemplatesPage, { me })
   else page = h(EnvelopesPage, { me, status })

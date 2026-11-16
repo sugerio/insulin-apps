@@ -194,14 +194,28 @@ export function readScheduled(app, raw, publicPaths = []) {
 }
 
 /**
- * Where the gateway reads and saves the app's section for each OAuth client on its API access page, over the app's
- * service binding, with the signed-in organization admin's identity: `insulin.clientSettings` in its package.json
- * (DESIGN.md §5.3.1), `{path}/{service account id}`, or null when it has none. The same rule as `insulin.scheduled`:
- * reached only through the gateway, never public.
+ * Why `insulin.clientSettings` is refused, or null: the app's own page of settings for one OAuth client, which the API
+ * access page links each client to (`{path}/{service account id}?name=…`, DESIGN.md §5.3.1). A page a navigation item
+ * could link to (navigationPathProblem), without a query or a trailing slash, outside `/api/`, and never public. The
+ * gateway's config.ts keeps the same rule.
  */
+export function clientSettingsProblem(entry, publicPaths = []) {
+  const problem = navigationPathProblem(entry)
+  if (problem) return problem
+  if (entry.includes('?') || entry.endsWith('/')) return 'must not hold a query or end with a slash'
+  const lower = entry.toLowerCase()
+  if (lower === '/api' || lower.startsWith('/api/')) return 'must be a page, not under /api/'
+  if (publicPaths.some((path) => {
+    const publicPath = path.toLowerCase()
+    return publicPath.endsWith('/') ? lower.startsWith(publicPath) : lower === publicPath || lower.startsWith(`${publicPath}/`)
+  })) return "must not be one of the app's public paths or under one"
+  return null
+}
+
+/** The app's page of settings for each OAuth client (`insulin.clientSettings`), or null when it has none. */
 export function readClientSettings(app, raw, publicPaths = []) {
   if (raw === undefined || raw === null) return null
-  const problem = scheduledProblem(raw, publicPaths)
+  const problem = clientSettingsProblem(raw, publicPaths)
   if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.clientSettings ${problem}`)
   return raw
 }

@@ -113,16 +113,17 @@ test("reads the path an app's due work runs on, which must be under /api/ and ne
   }
 })
 
-test("reads the path of an app's section for each OAuth client, under the same rule as the scheduled path", async () => {
-  const root = await repository({ signing: { insulin: { publicPaths: ['/api/public/'], clientSettings: '/api/client-settings' } } })
-  assert.equal((await listApps(root))[0].clientSettings, '/api/client-settings')
+test("reads the path of an app's own page of settings for each OAuth client: a signed-in page, never public or under /api/", async () => {
+  const root = await repository({ signing: { insulin: { publicPaths: ['/api/public/', '/sign'], clientSettings: '/client-settings' } } })
+  assert.equal((await listApps(root))[0].clientSettings, '/client-settings')
   assert.equal(readClientSettings('signing', undefined), null)
   for (const [clientSettings, message] of [
-    ['/api/public/settings', /insulin\.clientSettings must not be one of the app's public paths or under one/],
-    ['/settings', /insulin\.clientSettings must be a path under \/api\//],
-    ['/api/__suger/settings', /insulin\.clientSettings must not reach \/api\/__suger/],
+    ['/sign/clients', /insulin\.clientSettings must not be one of the app's public paths or under one/],
+    ['/api/client-settings', /insulin\.clientSettings must be a page, not under \/api\//],
+    ['/client-settings?tab=1', /insulin\.clientSettings must not hold a query or end with a slash/],
+    ['/settings/clients', /insulin\.clientSettings must not be one of the gateway's paths/],
   ]) {
-    const broken = await repository({ broken: { insulin: { publicPaths: ['/api/public/'], clientSettings } } })
+    const broken = await repository({ broken: { insulin: { publicPaths: ['/api/public/', '/sign'], clientSettings } } })
     await assert.rejects(() => listApps(broken), message, clientSettings)
   }
 })

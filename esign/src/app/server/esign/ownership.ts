@@ -11,8 +11,10 @@ import { unknownKeys } from './metadata.ts';
  * (`document_shares`): by email, as admin, editor or viewer; or with everyone in the organization, as editor or viewer
  * (the row whose key is `EVERYONE`). Everyone means the organization's people: an API client sees only what it owns
  * or is shared with by email, which it never is. And everything an API client owns is seen, as admin, by every person
- * on its list (`api_client_people`, set on the platform's API access page: members.ts), for as long as they are on it:
- * worked out each time from the list, never written per document. Someone shared several ways has the highest role.
+ * on its list (`api_client_people`, set on Esign's page for the client, linked from the platform's API access page:
+ * members.ts), for as long as they are on it and the owner is an API client (`members.kind`, so a list made for an id
+ * that turns out to be a person's never reaches that person's documents): worked out each time from the list, never
+ * written per document. Someone shared several ways has the highest role.
  *
  * - viewer: sees it (its audit trail, certificate and signed PDF too) and its sharing; sends envelopes
  *   from a template; tags it for themselves (tags.ts).
@@ -65,7 +67,7 @@ const TABLE: Record<ResourceType, string> = { template: 'templates', envelope: '
 export function visibleIds(type: ResourceType, scope: 'all' | 'mine' | 'shared' = 'all'): string {
   const mine = `SELECT id FROM ${TABLE[type]} WHERE tenant_id = ? AND owner_user_id = ?`;
   const shared = `SELECT resource_id FROM document_shares WHERE tenant_id = ? AND grantee_email_key IN (SELECT value FROM json_each(?)) AND resource_type = '${type}'
-    UNION SELECT id FROM ${TABLE[type]} WHERE tenant_id = ? AND owner_user_id IN (SELECT client_user_id FROM api_client_people WHERE tenant_id = ? AND email_key = ?)`;
+    UNION SELECT id FROM ${TABLE[type]} WHERE tenant_id = ? AND owner_user_id IN (SELECT p.client_user_id FROM api_client_people p JOIN members m ON m.tenant_id = p.tenant_id AND m.user_id = p.client_user_id AND m.kind = 'client' WHERE p.tenant_id = ? AND p.email_key = ?)`;
   return `(${scope === 'mine' ? mine : scope === 'shared' ? `${shared} EXCEPT ${mine}` : `${mine} UNION ${shared}`})`;
 }
 /** The binds of `visibleIds` for this caller and scope. */
@@ -87,7 +89,7 @@ export function effectiveRole(ownerId: string, sharedRole: string | null, caller
  * client that owns it, else the higher of theirs and everyone's. Binds: `sharedRoleBinds`.
  */
 export const sharedRoleColumn = (type: ResourceType, alias: string) =>
-  `(CASE WHEN EXISTS (SELECT 1 FROM api_client_people p WHERE p.tenant_id = ${alias}.tenant_id AND p.client_user_id = ${alias}.owner_user_id AND p.email_key = ?) THEN 'admin'
+  `(CASE WHEN EXISTS (SELECT 1 FROM api_client_people p JOIN members m ON m.tenant_id = p.tenant_id AND m.user_id = p.client_user_id AND m.kind = 'client' WHERE p.tenant_id = ${alias}.tenant_id AND p.client_user_id = ${alias}.owner_user_id AND p.email_key = ?) THEN 'admin'
     ELSE (SELECT s.role FROM document_shares s WHERE s.resource_type = '${type}' AND s.resource_id = ${alias}.id AND s.grantee_email_key IN (SELECT value FROM json_each(?))
     ORDER BY CASE s.role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 ELSE 1 END DESC LIMIT 1) END)`;
 /** The binds of `sharedRoleColumn`: the caller's email key (none for an API client), then `shareKeys`. */

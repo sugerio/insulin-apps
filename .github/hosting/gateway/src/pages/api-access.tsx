@@ -1,8 +1,7 @@
 // /apps/<app>/settings/api on the apex (DESIGN.md §5.3): the app's OAuth clients (client credentials, stored as service
 // accounts), how a program gets a token and calls the API, and, for the organization's owners and admins, creating,
-// changing, rotating and deleting clients. A secret appears once, right after it is made; the list never shows one. An
-// app with settings per OAuth client (integrations/client-settings.ts) shows its section under each client, for them.
-import { ChevronDown, KeyRound } from "lucide-react"
+// changing, rotating and deleting clients. A secret appears once, right after it is made; the list never shows one.
+import { ArrowUpRight, ChevronDown, KeyRound } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,8 +13,6 @@ import type { Context } from "../context.ts"
 import { appSettingsPath, originOf } from "../context.ts"
 import type { CustomRoleRow } from "../db/grants.ts"
 import type { ServiceAccountRow } from "../db/oauth.ts"
-import type { ClientSettingsLoad } from "../integrations/client-settings.ts"
-import type { ClientSettingsOutcome } from "../integrations/api-clients.ts"
 import type { MembershipRow } from "../db/orgs.ts"
 import { grantChoices, grantLabel, grantValue } from "../orgs/access-forms.ts"
 import type { Session } from "../auth/session.ts"
@@ -42,12 +39,6 @@ export interface ApiAccessData extends AppFrame {
   /** An OWNER or ADMIN of the organization: may create, change, rotate and delete clients. */
   manage: boolean
   clients: ServiceAccountRow[]
-  /** The app's section for each live client, when it has one (only for owners and admins), by client id. */
-  clientSettings: Record<string, ClientSettingsLoad>
-  /** The organization's members, to choose among in a section's members field. */
-  members: { email: string; name: string }[]
-  /** The answer to saving one client's section, shown under it. */
-  settings: ClientSettingsOutcome | null
   /** This app's custom roles. */
   customRoles: CustomRoleRow[]
   secret: NewSecret | null
@@ -66,6 +57,14 @@ function hasPrevious(ctx: Context, client: ServiceAccountRow): boolean {
 }
 
 /** The token endpoint and the app's API, as a program reaches them. */
+/**
+ * The app's own page of settings for one OAuth client (`insulin.clientSettings`, DESIGN.md §5.3.1), on the app's host:
+ * the client's service account id, the id its calls carry, and its name, for a client that hasn't called the app yet.
+ */
+function clientSettingsUrl(ctx: Context, app: HostedApp, client: ServiceAccountRow): string {
+  return `${originOf(ctx, app.host)}${app.clientSettings}/${encodeURIComponent(client.id)}?name=${encodeURIComponent(client.name)}`
+}
+
 function endpoints(ctx: Context, app: HostedApp) {
   return { tokenUrl: `${originOf(ctx, ctx.config.domain)}/oauth/token`, resource: originOf(ctx, app.host) }
 }
@@ -175,64 +174,6 @@ function SecretStatus({ ctx, app, data, client }: { ctx: Context; app: HostedApp
   )
 }
 
-/**
- * The app's section for one client: its fields, as the app describes them, and Save. A members field lists the
- * organization's members, those chosen checked; someone chosen who is no longer a member is shown, and left out on Save.
- */
-function ClientAppSettings({ app, data, client }: { app: HostedApp; data: ApiAccessData; client: ServiceAccountRow }) {
-  const load = data.clientSettings[client.id]
-  if (!load) return null
-  if (!("section" in load)) {
-    return <p className="mt-2 text-xs text-muted-foreground">{app.title}&apos;s settings for this client couldn&apos;t be loaded. Reload the page to try again.</p>
-  }
-  const section = load.section
-  const outcome = data.settings?.accountId === client.id ? data.settings : null
-  return (
-    <details className="group mt-2" open={!!outcome && (!!outcome.message || Object.keys(outcome.errors).length > 0)}>
-      <summary className={disclosure}>
-        {app.title} settings<span className="sr-only"> for {client.name}</span>
-        <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
-      </summary>
-      <form method="post" action={appSettingsPath(app, "api", `/clients/${client.id}/app-settings`)} className="mt-3 flex flex-col gap-3" aria-label={`${app.title} settings for ${client.name}`}>
-        <input type="hidden" name="org_id" defaultValue={data.orgId} />
-        <div className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium">{section.title}</h3>
-          {section.status ? <p className="text-xs">{section.status}</p> : null}
-          {section.description ? <p className="text-xs text-muted-foreground">{section.description}</p> : null}
-        </div>
-        {outcome?.message ? <p role="alert" className="text-xs text-destructive">{outcome.message}</p> : null}
-        {section.fields.map((field) => {
-          const chosen = new Set(field.value.map((email) => email.toLowerCase()))
-          const members = new Set(data.members.map((m) => m.email.toLowerCase()))
-          const gone = field.value.filter((email) => !members.has(email.toLowerCase()))
-          return (
-            <fieldset key={field.name} className="flex flex-col gap-1">
-              <legend className="mb-1 text-sm font-medium">{field.label}</legend>
-              {field.hint ? <p className="text-xs text-muted-foreground">{field.hint}</p> : null}
-              <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border p-2">
-                {data.members.map((m) => (
-                  <label key={m.email} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name={field.name} value={m.email} defaultChecked={chosen.has(m.email.toLowerCase())} className="size-4 shrink-0 accent-primary" />
-                    <span>{m.name || m.email}</span>
-                    {m.name ? <span className="text-xs text-muted-foreground">{m.email}</span> : null}
-                  </label>
-                ))}
-                {gone.map((email) => (
-                  <p key={email} className="text-xs text-muted-foreground">{email}: no longer a member, left out when saved</p>
-                ))}
-              </div>
-              {outcome?.errors[field.name] ? <p role="alert" className="text-xs text-destructive">{outcome.errors[field.name]}</p> : null}
-            </fieldset>
-          )
-        })}
-        <div>
-          <Button type="submit" variant="outline" size="sm">Save<span className="sr-only"> {app.title} settings for {client.name}</span></Button>
-        </div>
-      </form>
-    </details>
-  )
-}
-
 function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: ApiAccessData }) {
   const roles = grantChoices(app, data.customRoles, false)
   return (
@@ -283,7 +224,12 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
                         </form>
                       </details>
                     ) : null}
-                    {data.manage && client.revoked_at === null ? <ClientAppSettings app={app} data={data} client={client} /> : null}
+                    {data.manage && client.revoked_at === null && app.clientSettings ? (
+                      <a href={clientSettingsUrl(ctx, app, client)} className="mt-2 inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline">
+                        {app.title} settings<span className="sr-only"> for {client.name}</span>
+                        <ArrowUpRight className="size-4" aria-hidden="true" />
+                      </a>
+                    ) : null}
                   </TableCell>
                   <TableCell className="align-top"><Badge variant="outline">{grantLabel(client)}</Badge></TableCell>
                   <TableCell className="align-top text-muted-foreground max-md:hidden">{day(client.last_used_at)}</TableCell>

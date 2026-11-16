@@ -63,8 +63,8 @@ export interface HostedApp {
    */
   scheduled: string | null
   /**
-   * Where the app keeps its section for each OAuth client on the API access page (DESIGN.md §5.3.1): the gateway
-   * reads and saves it at `{path}/{service account id}` over the service binding, as the signed-in organization admin;
+   * The app's own page of settings for one OAuth client (DESIGN.md §5.3.1): the API access page links each live client
+   * to `{path}/{service account id}?name={client name}` on the app's host, for the organization's owners and admins;
    * null for an app that has none.
    */
   clientSettings: string | null
@@ -322,6 +322,31 @@ export function navigationPathProblem(entry: unknown): string | null {
   return null
 }
 
+/**
+ * Why an app's `insulin.clientSettings` is refused, or null. The same rule as .github/scripts/list-apps.mjs: a page of
+ * the app's that a navigation item could link to (navigationPathProblem), without a query or a trailing slash, outside
+ * `/api/`, and neither one of the app's public paths nor under one: the people who open it are signed in.
+ */
+export function clientSettingsProblem(entry: unknown, publicPaths: string[]): string | null {
+  const problem = navigationPathProblem(entry)
+  if (problem) return problem
+  const path = entry as string
+  if (path.includes('?') || path.endsWith('/')) return 'must not hold a query or end with a slash'
+  const lower = path.toLowerCase()
+  if (lower === '/api' || lower.startsWith('/api/')) return 'must be a page, not under /api/'
+  if (isPublicPath({ publicPaths: publicPaths.map((entry) => entry.toLowerCase()) }, lower)) return 'must not be one of the app\'s public paths or under one'
+  return null
+}
+
+function parseClientSettings(raw: unknown, publicPaths: string[], where: string, problems: string[]): string | null {
+  if (raw === undefined || raw === null) return null
+  if (clientSettingsProblem(raw, publicPaths)) {
+    problems.push(where)
+    return null
+  }
+  return raw as string
+}
+
 function navigationText(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const text = value.trim()
@@ -510,8 +535,7 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
       publicPaths,
       scheduled: parseScheduled(item.scheduled, publicPaths, `SITE_APPS[${index}].scheduled`, problems),
-      // The same rule as the scheduled path: under /api/, never public.
-      clientSettings: parseScheduled(item.clientSettings, publicPaths, `SITE_APPS[${index}].clientSettings`, problems),
+      clientSettings: parseClientSettings(item.clientSettings, publicPaths, `SITE_APPS[${index}].clientSettings`, problems),
       navigation: parseNavigation(item.navigation, `SITE_APPS[${index}].navigation`, problems),
     })
   })

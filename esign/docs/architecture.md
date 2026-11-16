@@ -26,8 +26,9 @@ seals the finished envelope and emails each signer a link to their copy.
   without `esign.manage`, and a document the caller can't see answers 404. Tags (`tags.ts`) are each
   person's own. `members.ts` records each caller as seen (Esign has no directory), names owners, lets
   an organization owner take over what someone owns, and keeps, per API client, the members who see
-  everything it owns as admin (`api_client_people`, read live by every visibility query; set from
-  the gateway's API access page, `insulin.clientSettings`). None of it is evidence.
+  everything it owns as admin (`api_client_people`, read live by every visibility query; set on
+  `/client-settings/{id}`, the page the gateway's API access page links each client to,
+  `insulin.clientSettings`). None of it is evidence.
 - **Public paths.** Recipients and embedded editors aren't members. `insulin.publicPaths` lists
   `/sign`, `/editor/`, `/copy`, `/assets/` and `/api/public/`; those requests carry a one-time code
   or token instead of an identity, and the management routes refuse anything the gateway marks public.
@@ -534,7 +535,7 @@ is enabled.
 | `POST /api/{templates,envelopes}/:id/tags`, `GET /api/tags` | Replace one's own tags on it; one's tags, most used first |
 | `GET /api/members` | Members Esign has seen, to share with |
 | `GET /api/owners`, `POST /api/owners/:id/transfer` | Organization owners: everyone who owns something; take over all of it |
-| `GET`/`POST`/`DELETE /api/client-settings/:id` | The gateway, for an organization owner or admin in the browser (`insulin.clientSettings`): an API client's section on API access, who sees what it owns; saving it; forgetting a deleted client |
+| `GET`/`POST /api/client-settings/:id` | Organization owners and admins, in the browser (the page `/client-settings/:id`, linked from API access): who sees what an API client owns, `{id, name?, people}`; replacing the list, `{people: [email]}` |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 

@@ -37,7 +37,7 @@ Run from `esign/` unless noted.
 | `src/app/server/router.ts` | `handleAppRequest(request)`: builds the bindings from `#platform` and hands every `/api/**` request to the Hono app |
 | `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due`, and the platform's tick `/api/scheduled` |
 | `src/app/server/esign/identity.ts` | The platform identity, the two permissions and `can()` |
-| `src/app/server/esign/ownership.ts`, `tags.ts`, `members.ts` | Who sees and changes each template and envelope (owners, shares, the one check `documentRole`/`requireRole`/`visibleIds`), each person's own tags, and the members and API clients seen (owners' names, taking over, who sees each API client's documents: `/api/client-settings`) |
+| `src/app/server/esign/ownership.ts`, `tags.ts`, `members.ts` | Who sees and changes each template and envelope (owners, shares, the one check `documentRole`/`requireRole`/`visibleIds`), each person's own tags, and the members and API clients seen (owners' names, taking over, who sees each API client's documents: `/api/client-settings`, set on `member/ClientSettingsPage.ts`) |
 | `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |

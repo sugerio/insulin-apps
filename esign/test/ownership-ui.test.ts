@@ -1,6 +1,6 @@
 // The members' pages for ownership (member/SharePanel.ts, TagsField.ts, ListFilters.ts, OwnershipPage.ts): who sees a
-// template and sharing it, the member's own tags and filtering by them, and the Ownership page's API clients and
-// owners. In-process, against stubbed API answers; synthetic data.
+// template and sharing it, the member's own tags and filtering by them, and the Ownership page's
+// owners, and an API client's page. In-process, against stubbed API answers; synthetic data.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EDITOR, json, me, renderMember, visibleText } from './helpers/member.ts';
@@ -173,4 +173,34 @@ test('Who sees it: a document an API client owns shows the people its settings n
     assert.match(section, /Admin: Sam Example \(sam@example\.com\), pat@example\.com/);
     assert.match(section, /Change who on API access/);
   } finally { await app.unmount(); }
+});
+
+test("an API client's page, reached from API access: owners and admins choose who sees what it creates, and save", async () => {
+  let people: { email: string; name?: string }[] = [{ email: 'sam@example.com', name: 'Sam Example' }];
+  const app = await renderMember('/client-settings/sa-1?name=Host%20product', (c) => {
+    if (c.path === '/api/me') return json(me('ADMIN', ['esign.manage', 'esign.view']));
+    if (c.path === '/api/client-settings/sa-1?name=Host%20product') return json({ id: 'sa-1', name: 'Host product', people });
+    if (c.path === '/api/client-settings/sa-1' && c.method === 'POST') { people = JSON.parse(String(c.body)).people.map((email: string) => ({ email })); return json({ id: 'sa-1', name: 'Host product', people }); }
+    if (c.path.startsWith('/api/members?')) return json({ members: [{ id: 'u2', email: 'bo@example.com', name: 'Bo Example' }] });
+  });
+  try {
+    assert.match(app.text(), /Host product/);
+    assert.match(app.text(), /Who sees what it creates/);
+    assert.match(app.text(), /Sam Example/);
+    assert.equal(app.button('Save').props.disabled, true, 'nothing to save yet');
+    await app.type(app.byId('client-person-email'), 'bo');
+    await app.click(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Choose Bo Example (bo@example.com)')[0], 'suggestion');
+    await app.click(app.button('Add'), 'Add');
+    await app.click(app.byLabel('Remove sam@example.com'), 'Remove');
+    await app.click(app.button('Save'), 'Save');
+    const saved = app.calls.find((c) => c.path === '/api/client-settings/sa-1' && c.method === 'POST')!;
+    assert.deepEqual(JSON.parse(String(saved.body)), { people: ['bo@example.com'] });
+    assert.match(app.text(), /Saved\. 1 person sees everything this client creates\./);
+  } finally { await app.unmount(); }
+  // Anyone else is told whose it is, and nothing is asked of the server.
+  const editor = await renderMember('/client-settings/sa-1', (c) => c.path === '/api/me' ? json(EDITOR) : undefined);
+  try {
+    assert.match(editor.text(), /Only your organization's owners and admins choose who sees what an API client creates/);
+    assert.ok(!editor.calls.some((c) => c.path.startsWith('/api/client-settings')));
+  } finally { await editor.unmount(); }
 });

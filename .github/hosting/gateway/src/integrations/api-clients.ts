@@ -2,8 +2,7 @@
 // redirects there): the OAuth clients (client credentials) that programs use to call the app's API, stored as service
 // accounts. Everyone who can use the app sees them, never a secret; only the organization's owners and admins create,
 // rename, change the role of, rotate and delete them, each write re-checking OWNER or ADMIN in SQL. Rotating keeps the
-// previous secret valid for 24 hours, so a running program can switch over. An app that keeps settings per OAuth client
-// (`insulin.clientSettings`, client-settings.ts) shows a section of its own under each client, for owners and admins.
+// previous secret valid for 24 hours, so a running program can switch over.
 import type { HostedApp } from '../config.ts'
 import type { Context } from '../context.ts'
 import { appSettingsPath } from '../context.ts'
@@ -13,8 +12,7 @@ import {
   deleteServiceAccount, findServiceAccount, insertServiceAccount, listServiceAccounts, revokePreviousSecret, rotateServiceAccount,
   updateServiceAccount,
 } from '../db/oauth.ts'
-import { findMembership, listMembers, listMemberships } from '../db/orgs.ts'
-import { forgetClientSettings, formValues, hasClientSettings, loadClientSettings, saveClientSettings, type ClientSettingsLoad } from './client-settings.ts'
+import { findMembership, listMemberships } from '../db/orgs.ts'
 import { field } from '../http/request.ts'
 import { htmlResponse, redirect } from '../http/response.ts'
 import { log } from '../log.ts'
@@ -36,44 +34,24 @@ const NOTICES: Record<string, string> = {
 
 const NAME_MAX = 80
 
-/** After saving an app's section for a client: the app's notice, or what it refused. */
-export interface ClientSettingsOutcome {
-  accountId: string
-  notice: string | null
-  errors: Record<string, string>
-  message: string | null
-}
-
-export async function renderApiAccess(ctx: Context, app: HostedApp, member: AppMember, extra: { problem?: Problem | null; secret?: NewSecret | null; settings?: ClientSettingsOutcome | null } = {}): Promise<Response> {
+export async function renderApiAccess(ctx: Context, app: HostedApp, member: AppMember, extra: { problem?: Problem | null; secret?: NewSecret | null } = {}): Promise<Response> {
   const db = ctx.config.db
   const orgId = member.membership.org_id
-  const manage = canManageAppClients(member.membership.role)
-  const [clients, customRoles, memberships, members] = await Promise.all([
+  const [clients, customRoles, memberships] = await Promise.all([
     listServiceAccounts(db, orgId, app.name),
     listCustomRoles(db, orgId),
     listMemberships(db, member.session.user.id),
-    manage && hasClientSettings(app) ? listMembers(db, orgId) : Promise.resolve([]),
   ])
-  // The app's section of each live client, read at once, for the owners and admins who change it.
-  const clientSettings: Record<string, ClientSettingsLoad> = {}
-  if (manage && hasClientSettings(app)) {
-    const live = clients.filter((client) => client.revoked_at === null)
-    const loads = await Promise.all(live.map((client) => loadClientSettings(app, member, { id: client.id, name: client.name })))
-    live.forEach((client, i) => { clientSettings[client.id] = loads[i]! })
-  }
   return htmlResponse(apiAccessPage(ctx, member.session, app, {
     orgId,
     orgName: member.membership.org_name,
     orgRole: member.membership.role,
     access: member.access,
-    manage,
+    manage: canManageAppClients(member.membership.role),
     clients,
-    clientSettings,
-    members: members.map((m) => ({ email: m.email, name: m.name })),
-    settings: extra.settings ?? null,
     customRoles: customRoles.filter((role) => role.app === app.name),
     secret: extra.secret ?? null,
-    notice: extra.problem || extra.secret ? null : extra.settings?.notice ?? NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null,
+    notice: extra.problem || extra.secret ? null : NOTICES[ctx.url.searchParams.get('notice') ?? ''] ?? null,
     error: extra.problem?.error ?? null,
   }, memberships), { status: extra.problem?.status ?? 200 })
 }
@@ -197,33 +175,5 @@ export async function deleteApiClient(ctx: Context, [id]: string[]): Promise<Res
     return (await stillOrgAdmin(ctx, found)) ?? notFoundPage(ctx)
   }
   log('service_account_deleted', { org: orgId, app: app.name, account: id, by: found.session.user.id })
-  // The app forgets its settings for the client; the deletion stands whatever it answers.
-  await forgetClientSettings(app, found, id!)
   return back(app, 'client-deleted')
-}
-
-/**
- * Saves the app's section for one client (client-settings.ts): read again from the app, so that only its fields, of
- * their types, are sent (a members field: the organization's members only), then saved by the app, which may refuse
- * with what to fix. Owners and admins of the organization.
- */
-export async function saveApiClientSettings(ctx: Context, [id]: string[]): Promise<Response> {
-  const app = ctx.app!
-  const found = await orgAdminOf(ctx, app)
-  if (found instanceof Response) return found
-  const orgId = found.membership.org_id
-  const account = await findServiceAccount(ctx.config.db, orgId, app.name, id!)
-  if (!account || account.revoked_at !== null || !hasClientSettings(app)) return notFoundPage(ctx)
-  const unreachable = { problem: { error: `${app.title} couldn't be reached to save its settings for ${account.name}. Try again.`, status: 502 } }
-  const load = await loadClientSettings(app, found, { id: account.id, name: account.name })
-  if (!('section' in load)) return renderApiAccess(ctx, app, found, unreachable)
-  const members = (await listMembers(ctx.config.db, orgId)).map((m) => m.email)
-  const saved = await saveClientSettings(app, found, account.id, formValues(load.section, ctx.form, members))
-  if (!saved.ok && !Object.keys(saved.errors).length && !saved.message) return renderApiAccess(ctx, app, found, unreachable)
-  log('service_account_app_settings_saved', { org: orgId, app: app.name, account: account.id, by: found.session.user.id, ok: saved.ok })
-  return renderApiAccess(ctx, app, found, {
-    settings: saved.ok
-      ? { accountId: account.id, notice: saved.notice ?? `${app.title}'s settings for ${account.name} were saved.`, errors: {}, message: null }
-      : { accountId: account.id, notice: null, errors: saved.errors, message: saved.message },
-  })
 }

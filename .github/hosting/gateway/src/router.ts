@@ -28,7 +28,7 @@ import { googleCallback, googleStart } from './auth/google.ts'
 import { mfaForm, mfaVerify } from './auth/mfa.ts'
 import { cancelSetup, disable as disableMfa, enable as enableMfa, regenerateCodes, securityView, startSetup } from './auth/security.ts'
 import {
-  apiAccess, createApiClient, deleteApiClient, revokePreviousApiClientSecret, rotateApiClientSecret, saveApiClientSettings, updateApiClient,
+  apiAccess, createApiClient, deleteApiClient, revokePreviousApiClientSecret, rotateApiClientSecret, updateApiClient,
 } from './integrations/api-clients.ts'
 import { createCredential, deleteCredential, integrations, updateCredential } from './integrations/settings.ts'
 import { connectAi, disconnectAppAgent } from './mcp/connect-ai.ts'
@@ -209,7 +209,6 @@ const APP_SETTINGS_ROUTES: Route[] = [
   route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})/rotate`, forApp(rotateApiClientSecret)),
   route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})/revoke-previous`, forApp(revokePreviousApiClientSecret)),
   route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})/delete`, forApp(deleteApiClient)),
-  route('POST', `/apps/(${APP})/settings/api/clients/(${ACCOUNT})/app-settings`, forApp(saveApiClientSettings)),
   route('GET', `/apps/(${APP})/settings/connect-ai`, forApp(connectAi)),
   route('POST', `/apps/(${APP})/settings/connect-ai/agents/(${GRANT})/disconnect`, forApp(disconnectAppAgent)),
 ]

@@ -4,7 +4,7 @@
 // page from the invitation in their email, never from this page. A completed envelope downloads the signed PDF with its
 // certificate at a click, and shows the certificate of completion in a dialog.
 import React, { useEffect, useState } from 'react'
-import { ArrowLeft, Ban, Download, FileCheck2, Mail } from 'lucide-react'
+import { ArrowLeft, Ban, Download, FileCheck2, FilePlus2, Mail } from 'lucide-react'
 import { Button } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.ts'
 import { Dialog, DialogFooter } from '../components/ui/dialog.ts'
@@ -15,6 +15,7 @@ import { AUDIT_LABELS, CompletionCertificate } from '../ui/CompletionCertificate
 import { allows, api, apiJson, canManage, dateTime, describeError, ownerName, saveSignedPdf, taskLabel, type AuditEvent, type Envelope, type Me, type Task } from './api.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link, navigate } from './router.ts'
+import { SaveAsTemplateDialog } from './SaveAsTemplateDialog.ts'
 import { SharePanel } from './SharePanel.ts'
 import { TagsField } from './TagsField.ts'
 
@@ -33,6 +34,9 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
   const [voiding, setVoiding] = useState(false)
   const [reason, setReason] = useState('')
   const [certificate, setCertificate] = useState<Certificate | null>(null)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  // Sent from Upload and send with "Also save as a template": the template it made, or that it failed.
+  const [savedTemplate] = useState(() => { try { return new URLSearchParams(window.location.search).get('savedAsTemplate') ?? '' } catch { return '' } })
 
   async function refresh() {
     const [data, trail] = await Promise.all([
@@ -101,10 +105,15 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
       actions: [
         completed ? h(Button, { key: 'pdf', variant: 'outline', disabled: busy, onClick: downloadPdf }, h(Download, { 'aria-hidden': true }), 'Signed PDF with certificate') : null,
         completed ? h(Button, { key: 'cert', variant: 'outline', disabled: busy, onClick: showCertificate }, h(FileCheck2, { 'aria-hidden': true }), 'Certificate of completion') : null,
+        // An envelope whose document was uploaded with it: a template of it, to send again.
+        canManage(me) && envelope.templateId === null && envelope.status !== 'DRAFT' ? h(Button, { key: 'template', variant: 'outline', onClick: () => setSavingTemplate(true) }, h(FilePlus2, { 'aria-hidden': true }), 'Save as template') : null,
         manage && envelope.status === 'IN_PROGRESS' ? h(Button, { key: 'void', variant: 'outline', className: 'text-destructive hover:bg-destructive/10 hover:text-destructive', disabled: busy, onClick: () => setVoiding(true) }, h(Ban, { 'aria-hidden': true }), 'Void envelope') : null,
       ],
     }),
     h(Notice, { message: message.text, error: message.error }),
+    savedTemplate === 'failed' ? h(Notice, { message: 'It was sent, but not saved as a template: choose Save as template to try again.', error: true })
+      : savedTemplate ? h('p', { role: 'status', className: 'text-sm' }, 'Sent, and saved as a ', h(Link, { to: `/templates/${savedTemplate}`, className: 'font-medium underline underline-offset-4' }, 'template'), ' to send again.') : null,
+    h(SaveAsTemplateDialog, { open: savingTemplate, envelopeId: envelope.id, documentName: envelope.documentName, signers: envelope.tasks.map((t) => ({ role: t.role, name: t.recipientName, email: t.recipientEmail })), onClose: () => setSavingTemplate(false) }),
     voiding ? h(Card, { 'aria-label': 'Void envelope' },
       h(CardHeader, null, h(CardTitle, null, 'Void this envelope?'), h(CardDescription, null, 'Signers who haven\'t signed can no longer open, verify or sign it. This can\'t be undone.')),
       h(CardContent, { className: 'flex flex-col gap-3' },

@@ -58,6 +58,12 @@ It is a draft from the first step on: **Save draft**, on any step, keeps it (wit
 listed under **Status**: **Draft**, where **Edit** opens it again on this page. Choosing another PDF replaces the one
 uploaded and clears the fields placed on it. The envelope has no template: its document and fields are its own.
 
+To send the same document again, make it a template. Tick **Also save as a template** on the review step (it is
+named as the document, with the same roles), or, once it is sent, choose **Save as template** on the envelope's page or
+in its **⋯** menu on **Envelopes**: give it a name, rename each role if you like (its signer is shown beside it), and tick
+**Keep these people as the default signers** to have them filled in each time. The template is yours and ready to use;
+the envelope is not changed.
+
 ### Signer fields
 
 | Field | What it does |

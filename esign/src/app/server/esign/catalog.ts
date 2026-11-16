@@ -86,7 +86,7 @@ const ENTRIES: Entry[] = [
     body: null, idempotencyKey: false, permission: 'esign.view',
   },
   {
-    method: 'POST', path: '/api/templates', summary: 'Upload a PDF (at most 5 MiB and 100 pages) with the roles that sign it, in signing order',
+    method: 'POST', path: '/api/templates', summary: 'Upload a PDF (at most 5 MiB and 100 pages) with the roles that sign it, in signing order. Or, with a JSON body {fromEnvelope, name?, roles?, defaultSigners?, tags?, share?}, save an envelope sent with an uploaded document as a template (its PDF and fields; roles renamed in order; its signers as default signers if defaultSigners)',
     query: null,
     body: { type: 'object', description: 'Sent as multipart/form-data fields', required: ['file', 'roles'], additionalProperties: false, properties: { file: { type: 'string', contentMediaType: 'application/pdf' }, roles: { type: 'string', description: 'A JSON array of 1 to 20 distinct role names ([A-Za-z0-9_-], up to 64 characters)' }, name: templateName, metadata: { type: 'string', description: 'A JSON object: your own keys and values (at most 20 keys of [A-Za-z0-9_.-], up to 40 characters; string values up to 500), returned as given' }, defaultSigners: { type: 'string', description: `A JSON object. ${defaultSigners.description}` }, tags: { type: 'string', description: `A JSON array. ${tags.description}` }, share: { type: 'string', description: `A JSON array of {email, role}. ${share.description}` } } },
     idempotencyKey: false, permission: 'esign.manage',

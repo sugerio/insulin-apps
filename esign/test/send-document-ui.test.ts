@@ -111,3 +111,70 @@ test('a draft opens again where it was; the Envelopes page leads to Upload and s
     assert.equal(list.link('Edit').props.href, `/envelopes/send?draft=${ID}`);
   } finally { await list.unmount(); }
 });
+
+test('save as template: from an uploaded envelope\'s page, its roles renamed; also when it is sent; and in the list\'s menu for uploaded ones only', async () => {
+  const TEMPLATE = '66666666-6666-4666-8666-666666666666';
+  const envelope = { id: ID, templateId: null, status: 'IN_PROGRESS', documentName: 'Reseller agreement', tasks: [
+    { id: 't1', role: 'partner', recipientName: 'Pat Partner', recipientEmail: 'pat@partner.example', routingOrder: 1, status: 'ACTIVE' },
+    { id: 't2', role: 'seller', recipientName: 'Sam Seller', recipientEmail: 'sam@seller.example', routingOrder: 2, status: 'PENDING' }], owner: OWNER, myRole: 'owner', tags: [] };
+  const routes = (one: Record<string, unknown>) => (c: { path: string; method: string }) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === '/api/templates' && c.method === 'POST') return json({ id: TEMPLATE, name: 'Reseller template' }, 201);
+    if (c.path === `/api/envelopes/${ID}`) return json(one);
+    if (c.path === `/api/envelopes/${ID}/audit`) return json({ events: [] });
+    if (c.path === `/api/envelopes/${ID}/shares`) return json({ id: ID, myRole: 'owner', owner: OWNER, shares: [] });
+    if (c.path.startsWith('/api/envelopes?')) return json({ envelopes: [{ ...one, signers: [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example', status: 'ACTIVE' }], progress: { signed: 0, total: 1 }, createdAt: 0 }] });
+  };
+  const page = await renderMember(`/envelopes/${ID}`, routes(envelope));
+  try {
+    await page.click(page.button('Save as template'), 'Save as template');
+    assert.ok(page.byLabel('Save as template'), 'a dialog');
+    assert.equal(page.byId('save-template-name').props.value, 'Reseller agreement');
+    assert.deepEqual([page.byId('save-template-role-0').props.value, page.byId('save-template-role-1').props.value], ['partner', 'seller']);
+    await page.type(page.byId('save-template-name'), 'Reseller template');
+    await page.type(page.byId('save-template-role-0'), 'customer');
+    await page.act(async () => { page.byId('save-template-signers').props.onChange({ target: { checked: true } }); });
+    const dialog = () => page.renderer.root.find((n: any) => n.props?.role === 'dialog');
+    await page.click(dialog().findAll((n: any) => n.type === 'button' && visibleText(n.children).trim() === 'Save as template')[0], 'Save');
+    assert.deepEqual(JSON.parse(String(page.calls.find((c) => c.path === '/api/templates')!.body)), { fromEnvelope: ID, name: 'Reseller template', roles: ['customer', 'seller'], defaultSigners: true });
+    assert.match(visibleText(dialog().children), /Saved as the template\s+Reseller template/);
+  } finally { await page.unmount(); }
+  // After Upload and send with "Also save as a template": said on the envelope's page.
+  const after = await renderMember(`/envelopes/${ID}?savedAsTemplate=${TEMPLATE}`, routes(envelope));
+  try { assert.equal(after.link('template').props.href, `/templates/${TEMPLATE}`); } finally { await after.unmount(); }
+  // Sent from a template: nothing to save; the list's menu has it for uploaded ones only.
+  const fromTemplate = await renderMember(`/envelopes/${ID}`, routes({ ...envelope, templateId: 'tpl-1' }));
+  try { assert.equal(fromTemplate.button('Save as template'), undefined); } finally { await fromTemplate.unmount(); }
+  const list = await renderMember('/envelopes', routes(envelope));
+  try {
+    await list.click(list.byLabel('More for Reseller agreement'), 'menu');
+    assert.ok(list.renderer.root.findAll((n: any) => n.props?.role === 'menuitem').map((n: any) => visibleText(n.children).trim()).includes('Save as template'));
+  } finally { await list.unmount(); }
+});
+
+test('Upload and send: "Also save as a template" saves one once sent, and the envelope\'s page says so', async () => {
+  let status = 'DRAFT';
+  const app = await renderMember(`/envelopes/send?draft=${ID}`, (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/contacts')) return json({ contacts: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === '/api/templates' && c.method === 'POST') return json({ id: '77777777-7777-4777-8777-777777777777' }, 201);
+    if (c.path === `/api/envelopes/${ID}/document`) return json({ id: ID, pages: 1 }, 201);
+    if (c.path === '/api/template-editing-sessions' && c.method === 'POST') return json({ sessionId: SESSION, url: `${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}` }, 201);
+    if (c.path === `/api/envelopes/${ID}` && c.method === 'POST') { if (!JSON.parse(String(c.body)).draft) status = 'IN_PROGRESS'; return json({ id: ID, status }); }
+    if (c.path === `/api/envelopes/${ID}`) return json({ id: ID, templateId: null, status, tasks: [], draft: { recipients: [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example' }], documentName: 'Reseller agreement' }, upload: { document: true, roles: ['partner'], fields: [{ role: 'partner', type: 'Signature' }] }, owner: OWNER, myRole: 'owner', tags: [] });
+    if (c.path.startsWith(`/api/envelopes/${ID}/`)) return json(c.path.endsWith('/audit') ? { events: [] } : { id: ID, myRole: 'owner', owner: OWNER, shares: [] });
+  });
+  try {
+    await app.click(app.button('Next: place fields'), 'Next');
+    await app.dispatch({ origin: ORIGIN, source: app.frameWindow, data: { type: 'esign.editor.ready' } });
+    await app.click(app.button('Next: review'), 'Next');
+    const request = app.posted.filter((m: any) => m?.type === 'esign.editor.save')[0] as { requestId: string };
+    await app.dispatch({ origin: ORIGIN, source: app.frameWindow, data: { type: 'esign.editor.saved', requestId: request.requestId, templateId: ID } });
+    await app.act(async () => { app.byId('send-also-template').props.onChange({ target: { checked: true } }); });
+    await app.click(app.button('Send for signature'), 'Send');
+    assert.deepEqual(JSON.parse(String(app.calls.find((c) => c.path === '/api/templates')!.body)), { fromEnvelope: ID, name: 'Reseller agreement' });
+    assert.equal(`${app.location.pathname}${app.location.search}`, `/envelopes/${ID}?savedAsTemplate=77777777-7777-4777-8777-777777777777`);
+  } finally { await app.unmount(); }
+});

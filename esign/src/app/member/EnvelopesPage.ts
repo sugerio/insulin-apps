@@ -7,7 +7,7 @@
 // those they use), each shown
 // as a chip that removes it, and Clear all; below it, pages. Those who manage send new ones and run the due work.
 import React, { useEffect, useRef, useState } from 'react'
-import { Ban, Download, Ellipsis, Eye, Mail, Pencil, Plus, RefreshCw, Tag, Trash2, Upload, Users } from 'lucide-react'
+import { Ban, Download, Ellipsis, Eye, FilePlus2, Mail, Pencil, Plus, RefreshCw, Tag, Trash2, Upload, Users } from 'lucide-react'
 import { Button, buttonVariants } from '../components/ui/button.ts'
 import { Card, CardContent } from '../components/ui/card.ts'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog.ts'
@@ -19,6 +19,7 @@ import { allows, api, apiJson, canManage, dateTime, describeError, envelopesPath
 import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, SENDERS, sinceOf, TagsFilter, toggled, useMyTags, usePages, type Chip, type Suggestion } from './ListFilters.ts'
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link, navigate } from './router.ts'
+import { SaveAsTemplateDialog } from './SaveAsTemplateDialog.ts'
 import { SharePanel } from './SharePanel.ts'
 import { TagList, TagsField } from './TagsField.ts'
 
@@ -32,7 +33,7 @@ const VIEWS: Record<string, string> = { waiting: 'Waiting for others', expiring:
 
 type Filters = { q: string; date: string; scope: Scope; view: string; tags: string[] }
 const NONE: Filters = { q: '', date: '', scope: '', view: '', tags: [] }
-type Open = { kind: 'void' | 'tags' | 'share'; envelope: EnvelopeSummary }
+type Open = { kind: 'void' | 'tags' | 'share' | 'template'; envelope: EnvelopeSummary }
 
 /** Where an envelope stands: out for signature, a bar of how many have signed and whose turn it is; else its status. */
 function Progress({ envelope }: { envelope: EnvelopeSummary }) {
@@ -154,6 +155,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
       manage && allows(e.myRole, 'editor') && e.status === 'DRAFT' && { label: 'Discard', icon: Trash2, destructive: true, onSelect: () => { setReason(''); setOpened({ kind: 'void', envelope: e }) } },
       { label: 'Tags', icon: Tag, onSelect: () => setOpened({ kind: 'tags', envelope: e }) },
       manage && allows(e.myRole, 'admin') && { label: 'Share', icon: Users, onSelect: () => setOpened({ kind: 'share', envelope: e }) },
+      manage && e.templateId === null && e.status !== 'DRAFT' && { label: 'Save as template', icon: FilePlus2, onSelect: () => setOpened({ kind: 'template', envelope: e }) },
     ]
     return items.filter((item): item is MenuItem => !!item)
   }
@@ -235,6 +237,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
           h(Button, { variant: 'outline', disabled: busy, onClick: () => setOpened(null) }, 'Keep it'),
           h(Button, { variant: 'destructive', disabled: busy, onClick: () => voidEnvelope(current) }, busy ? 'Voiding…' : 'Void envelope')),
       ] : null),
+    h(SaveAsTemplateDialog, { open: opened?.kind === 'template', envelopeId: current?.id ?? '', documentName: current?.documentName, signers: current?.signers ?? [], onClose: () => setOpened(null) }),
     h(Dialog, { open: opened?.kind === 'tags', onOpenChange: (o) => { if (!o) setOpened(null) }, label: 'Your tags' },
       current && opened?.kind === 'tags' ? [
         h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Your tags on ${name(current)}`), h(DialogDescription, null, 'Only you see them. Tags, above the list, filters it by them.')),

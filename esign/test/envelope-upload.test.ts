@@ -130,3 +130,40 @@ test('only an upload draft takes a document; a new envelope needs a template; re
     assert.equal((await h.bucket.list({ prefix: `envelopes/${id}/` })).objects.length, 0);
   } finally { await h.mf.dispose(); }
 });
+
+test('save as template: an uploaded envelope\'s PDF and fields, roles renamed, its signers as default signers if asked; never a draft\'s or a template\'s envelope', async () => {
+  const h = await setup();
+  try {
+    const id = await h.draft('upload-3');
+    await h.upload(id);
+    const fields = [signature('a', 'partner', 0.1), { ...signature('d', 'partner', 0.1), type: 'Date signed', rect: { x: 0.1, y: 0.4, width: 0.3, height: 0.05 } }, signature('b', 'seller', 0.5)];
+    await (await h.editor(id)).save!(['partner', 'seller'], fields);
+    const fromTemplate = (body: Record<string, unknown>) => h.post('/api/templates', body);
+    assert.deepEqual(await (await fromTemplate({ fromEnvelope: id })).json(), { error: 'not_an_uploaded_envelope' }, 'not while a draft');
+    assert.equal((await h.post(`/api/envelopes/${id}`, { recipients: RECIPIENTS, documentName: 'Uploaded agreement' })).status, 200);
+    // Refused: unknown fields, roles of another count or repeated, an envelope nobody sees.
+    for (const bad of [{ fromEnvelope: id, note: 1 }, { fromEnvelope: id, roles: ['only'] }, { fromEnvelope: id, roles: ['x', 'X'] }, { fromEnvelope: id, roles: ['has space', 'b'] }, { fromEnvelope: id, defaultSigners: 'yes' }])
+      assert.equal((await fromTemplate(bad)).status, 422, JSON.stringify(bad));
+    assert.equal((await fromTemplate({ fromEnvelope: '00000000-0000-4000-8000-000000000000' })).status, 404);
+    // Saved: its PDF, its fields with the roles renamed, its name, ready; its signers as default signers.
+    const saved = await fromTemplate({ fromEnvelope: id, roles: ['customer', 'vendor'], defaultSigners: true });
+    assert.equal(saved.status, 201, await saved.clone().text());
+    const { id: templateId, name } = await saved.json() as { id: string; name: string };
+    assert.equal(name, 'Uploaded agreement', 'named as the document');
+    const template = await (await h.req(`/api/templates/${templateId}`, { headers: h.auth })).json() as { status: string; roles: string[]; fields: { type: string; role: string }[]; defaultSigners: Record<string, { name: string; email: string }>; templateId?: string };
+    assert.deepEqual([template.status, template.roles], ['active', ['customer', 'vendor']]);
+    assert.deepEqual(template.fields.map((f) => [f.type, f.role]), [['Signature', 'customer'], ['Date signed', 'customer'], ['Signature', 'vendor']]);
+    assert.deepEqual(template.defaultSigners, { customer: { name: 'Pat Partner', email: 'pat@partner.example' }, vendor: { name: 'Sam Seller', email: 'sam@seller.example' } });
+    assert.deepEqual(new Uint8Array(await (await h.req(`/api/templates/${templateId}/pdf`, { headers: h.auth })).arrayBuffer()), h.bytes);
+    // A template like any: it sends, its defaults filling in the signers; the envelope it came from is untouched.
+    const sent = await h.post('/api/envelopes', { templateId, recipients: [{ role: 'customer' }, { role: 'vendor' }] }, { 'idempotency-key': 'from-saved' });
+    assert.equal(sent.status, 201, await sent.clone().text());
+    assert.deepEqual([(await h.shown(id)).status, (await h.shown(id)).templateId], ['IN_PROGRESS', null]);
+    // Without names: its own roles and the document's name; no default signers.
+    const plain = await (await fromTemplate({ fromEnvelope: id })).json() as { id: string };
+    const second = await (await h.req(`/api/templates/${plain.id}`, { headers: h.auth })).json() as { roles: string[]; defaultSigners: object };
+    assert.deepEqual([second.roles, second.defaultSigners], [['partner', 'seller'], {}]);
+    // An envelope sent from a template has one already.
+    assert.deepEqual(await (await fromTemplate({ fromEnvelope: (await sent.json() as { id: string }).id })).json(), { error: 'not_an_uploaded_envelope' });
+  } finally { await h.mf.dispose(); }
+});

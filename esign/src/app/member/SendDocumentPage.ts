@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Save, Send, Trash2 } from 'lucide-react'
 import { Button } from '../components/ui/button.ts'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.ts'
-import { Input } from '../components/ui/input.ts'
+import { checkClass, Input } from '../components/ui/input.ts'
 import { Textarea } from '../components/ui/textarea.ts'
 import { readSaveResult } from '../ui/editor-save-protocol.ts'
 import { api, apiJson, canManage, describeError, EMAIL, envelopeRequest, formFromRequest, MAX_PDF_BYTES, signByTime, type Contact, type Envelope, type Me, type Signer } from './api.ts'
@@ -14,6 +14,7 @@ import { ContactField } from './ContactField.ts'
 import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { TagsField } from './TagsField.ts'
+import { saveAsTemplate } from './SaveAsTemplateDialog.ts'
 
 const h = React.createElement
 const ROLE = /^[A-Za-z0-9_-]{1,64}$/
@@ -50,6 +51,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
   const [message, setMessage] = useState({ text: '', error: false })
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(!draftId)
+  // Also save as a template, once sent: its document, fields and roles, named as the document.
+  const [alsoTemplate, setAlsoTemplate] = useState(false)
   const frame = useRef<HTMLIFrameElement | null>(null)
   const draftKey = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
 
@@ -150,7 +153,10 @@ export function SendDocumentPage({ me }: { me: Me }) {
   function send() {
     void run(async () => {
       await apiJson(`/api/envelopes/${draftId}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request()) })
-      navigate(`/envelopes/${draftId}`)
+      // Sent: the template is extra, and its failure is said on the envelope's page.
+      let saved = ''
+      if (alsoTemplate) saved = await saveAsTemplate(draftId, docName.trim() ? { name: docName.trim() } : {}).then((t) => t.id, () => 'failed')
+      navigate(`/envelopes/${draftId}${saved ? `?savedAsTemplate=${saved}` : ''}`)
     })
   }
 
@@ -223,7 +229,10 @@ export function SendDocumentPage({ me }: { me: Me }) {
         h('dt', { className: 'text-muted-foreground' }, 'Signers'),
         h('dd', null, h('ol', { className: 'flex flex-col gap-1' }, ...people.map((p, i) => h('li', { key: i }, `${i + 1}. ${p.role} — ${p.name} (${p.email}): ${count(p.role.trim())} ${count(p.role.trim()) === 1 ? 'field' : 'fields'}`)))),
         h('dt', { className: 'text-muted-foreground' }, 'Message'), h('dd', null, note.subject.trim() || note.body.trim() ? [note.subject.trim(), note.body.trim()].filter(Boolean).join(' — ') : 'None'),
-        h('dt', { className: 'text-muted-foreground' }, 'Sign by'), h('dd', null, signBy ? new Date(signByTime(signBy)).toLocaleString() : 'No deadline'))),
+        h('dt', { className: 'text-muted-foreground' }, 'Sign by'), h('dd', null, signBy ? new Date(signByTime(signBy)).toLocaleString() : 'No deadline')),
+        h('label', { className: 'mt-4 flex items-center gap-2 text-sm' },
+          h('input', { id: 'send-also-template', type: 'checkbox', className: checkClass, checked: alsoTemplate, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setAlsoTemplate(e.target.checked) }),
+          'Also save as a template, to send this document again (its fields and roles, named as the document)')),
       h(CardFooter, { className: 'flex flex-wrap gap-2' },
         h(Button, { key: 'back', variant: 'ghost', disabled: busy, onClick: toFields }, h(ArrowLeft, { 'aria-hidden': true }), 'Back to fields'),
         saveButton,

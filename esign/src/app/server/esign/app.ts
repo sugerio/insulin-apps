@@ -6,7 +6,7 @@ import { parseAfterSigning, parseDocumentName, parseDocumentVersion, parseNamedB
 import { envelopeDetails, taskDetails, type EnvelopeDetails, type TaskDetails } from './details.ts';
 import { parseMetadata, parseTemplateName, storedMetadata, unknownKeys, type Metadata } from './metadata.ts';
 import { PDFDocument } from 'pdf-lib';
-import { assertEditorSigningFields, assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf, type TemplateField } from './fields.ts';
+import { assertEditorSigningFields, assertNoOverlappingFields, validateFieldPlacement, validateFields, validateFieldsPdf, validateTemplateFields, type TemplateField } from './fields.ts';
 import { assertRenderableRecipientNames } from './field-render.ts';
 import { envelopeIdFor, InitialDocumentConflict, storeInitialDocument } from './prepare.ts';
 import { mountSigningRoutes } from './signing-routes.ts';
@@ -287,6 +287,8 @@ app.post('/api/process-due', async (context) => {
 });
 
 app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async (context) => {
+  // A JSON body makes a template of an envelope whose document was uploaded with it (templateFromEnvelope).
+  if (context.req.header('content-type')?.toLowerCase().startsWith('application/json')) return templateFromEnvelope(context);
   if (!context.req.header('content-type')?.toLowerCase().startsWith('multipart/form-data;')) return context.json({ error: 'multipart_required' }, 400);
   let form: FormData;
   try { form = await context.req.formData(); } catch { return context.json({ error: 'invalid_multipart' }, 400); }
@@ -470,6 +472,61 @@ const RECIPIENT_FIELDS = ['role', 'name', 'email', 'expiresAt', 'title', 'onBeha
 const CREATED_STATUS = 'IN_PROGRESS';
 /** A draft envelope's status (saveDraft): saved, not sent; it has no tasks yet. */
 const DRAFT = 'DRAFT';
+/**
+ * Save as template: a new template of an envelope sent with a document uploaded with it (no template; not a draft), for
+ * anyone who sees the envelope and manages in Esign: `POST /api/templates` with `{fromEnvelope, name?, roles?,
+ * defaultSigners?, tags?, share?}`. Its PDF is the envelope's document and its fields the envelope's, each role renamed
+ * as `roles` says (the new names in the envelope's role order; its own by default); `defaultSigners: true` makes the
+ * envelope's signers the template's default signers. The caller owns it; it is ready (active). The envelope is untouched.
+ */
+async function templateFromEnvelope(context: import('hono').Context<Env>): Promise<Response> {
+  let body: unknown;
+  try { body = await context.req.json(); } catch { return context.json({ error: 'invalid_json' }, 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return context.json({ error: 'invalid_template' }, 422);
+  const unknown = unknownKeys(body, ['fromEnvelope', 'name', 'roles', 'defaultSigners', 'tags', 'share']);
+  if (unknown.length) return context.json({ error: 'unknown_field', fields: unknown }, 422);
+  const input = body as { fromEnvelope?: unknown; name?: unknown; roles?: unknown; defaultSigners?: unknown; tags?: unknown; share?: unknown };
+  const name = parseTemplateName(input.name), tags = parseTags(input.tags), shares = parseShares(input.share);
+  if (typeof input.fromEnvelope !== 'string' || name === 'invalid' || tags === 'invalid' || shares === 'invalid' || (input.defaultSigners !== undefined && typeof input.defaultSigners !== 'boolean')) return context.json({ error: 'invalid_template' }, 422);
+  const id = input.fromEnvelope, db = context.env.DB, tenantId = context.get('tenantId'), caller = context.get('caller');
+  if (!await documentRole(db, tenantId, caller, 'envelope', id)) return context.json({ error: 'not_found' }, 404);
+  const envelope = await db.prepare('SELECT template_id, status, details_json, roles_json, fields_json FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId)
+    .first<{ template_id: string | null; status: string; details_json: string; roles_json: string | null; fields_json: string | null }>();
+  if (!envelope) return context.json({ error: 'not_found' }, 404);
+  if (envelope.template_id !== null || envelope.status === DRAFT || !envelope.roles_json || !envelope.fields_json) return context.json({ error: 'not_an_uploaded_envelope' }, 409);
+  const from = JSON.parse(envelope.roles_json) as string[];
+  const roles = input.roles === undefined ? from : input.roles;
+  if (!Array.isArray(roles) || roles.length !== from.length || roles.some((r) => typeof r !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(r)) || new Set(roles.map((r: string) => r.toLowerCase())).size !== roles.length) return context.json({ error: 'invalid_roles' }, 422);
+  const renamed = new Map(from.map((role, i) => [role, roles[i] as string]));
+  const document = await envelopeDocument(db, context.env.ARTIFACTS, id);
+  if (!document) return context.json({ error: 'source_unavailable' }, 409);
+  let fields: TemplateField[];
+  try {
+    const pdf = await PDFDocument.load(document, { throwOnInvalidObject: true, updateMetadata: false });
+    fields = validateTemplateFields((JSON.parse(envelope.fields_json) as TemplateField[]).map((f) => ({ ...f, role: renamed.get(f.role) ?? f.role })), roles as string[], pdf.getPageCount());
+    assertNoOverlappingFields(fields);
+    assertEditorSigningFields(fields, roles as string[]);
+  } catch { return context.json({ error: 'invalid_fields' }, 422); }
+  // Its signers as default signers, when asked: each role's, renamed.
+  let defaultSigners: DefaultSigners = {};
+  if (input.defaultSigners === true) {
+    const { results } = await db.prepare('SELECT role, recipient_name, recipient_email FROM tasks WHERE envelope_id = ?').bind(id).all<{ role: string; recipient_name: string; recipient_email: string }>();
+    defaultSigners = Object.fromEntries(results.filter((t) => renamed.has(t.role)).map((t) => [renamed.get(t.role)!, { name: t.recipient_name, email: t.recipient_email }]));
+  }
+  const details = envelopeDetails(envelope.details_json);
+  const templateName = name ?? (details.documentName ? details.documentName.slice(0, 200) : null);
+  const templateId = crypto.randomUUID(), key = `templates/${templateId}/source.pdf`, now = Date.now();
+  if (!await context.env.ARTIFACTS.put(key, document, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } })) return context.json({ error: 'storage_conflict' }, 503);
+  const given = sharesFor([...shares, ...[await clientShare(db, tenantId, caller)].filter((share) => share !== null)], caller);
+  await db.batch([
+    db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, fields_json, created_at, name, metadata_json, default_signers_json, owner_user_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, 'active')")
+      .bind(templateId, tenantId, key, JSON.stringify(roles), JSON.stringify(fields), now, templateName, JSON.stringify(defaultSigners), caller.userId),
+    ...shareInserts(db, tenantId, 'template', templateId, given, caller.userId, now),
+    ...tagWrites(db, tenantId, caller.userId, 'template', templateId, tags),
+  ]);
+  return context.json({ id: templateId, ...(templateName ? { name: templateName } : {}), roles, defaultSigners, tags }, 201);
+}
+
 /** The response to POST /api/envelopes, for the first creation and for every retry of it alike. */
 const createdResponse = (id: string) => ({ id, status: CREATED_STATUS });
 

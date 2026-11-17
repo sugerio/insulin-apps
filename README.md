@@ -8,6 +8,7 @@ D1 database.
 |---|---|
 | [`captable/`](captable/) | Cap table and equity management: stakeholders, share classes, equity plans, option grants, vesting, exercises, terminations, 409A valuations, documents and a holder view, set up by importing Pulley's reports or a spreadsheet template. |
 | [`esign/`](esign/) | Electronic signatures: templates, envelopes signed in order on a public signing page after an emailed code, an embeddable template editor, hash-chained evidence, a signed and timestamped seal, and certificates of completion. Experimental: synthetic documents only. |
+| [`personal-tax/`](personal-tax/) | Canadian personal income tax for a household: the household and each year's facts today, then AI-read slips, deductions, and the CRA's own T1 forms filled in to sign and mail. Early: built in parts. |
 
 ## Use the apps online
 

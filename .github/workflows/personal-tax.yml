@@ -1,0 +1,30 @@
+name: personal-tax
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - personal-tax/**
+      - .github/workflows/personal-tax.yml
+      - .github/workflows/app.yml
+      - .github/scripts/**
+  pull_request:
+    paths:
+      - personal-tax/**
+      - .github/workflows/personal-tax.yml
+      - .github/workflows/app.yml
+      - .github/scripts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-tax-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  app:
+    uses: ./.github/workflows/app.yml
+    with:
+      app: personal-tax

@@ -19,7 +19,7 @@ export function isNavIconName(value: unknown): value is NavIconName {
 }
 
 /** Each app's icon where the gateway lists it (its level 1, its card on the home page, its docs section). */
-const APP_ICONS: Readonly<Record<string, NavIconName>> = { captable: 'chart-pie', esign: 'signature' }
+const APP_ICONS: Readonly<Record<string, NavIconName>> = { captable: 'chart-pie', esign: 'signature', 'personal-tax': 'receipt' }
 
 export function appIconName(name: string): NavIconName {
   return APP_ICONS[name] ?? 'layout-grid'

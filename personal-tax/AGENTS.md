@@ -1,0 +1,117 @@
+# AGENTS.md
+
+Guidance for AI coding agents (including the Insulin AppBuilder) and for contributors working on Personal Tax. Read it,
+and the repository's root `AGENTS.md`, before changing code.
+
+## The app in brief
+
+Personal Tax prepares Canadian T1 returns for one household per organization: the person preparing and, together, their
+spouse or common-law partner, in Ontario, British Columbia or Alberta. It never files with the CRA: it fills in the
+CRA's own forms for the person to sign and mail. It runs on the Insulin app template: one npm package, Vite + React +
+Nitro, deployed as a Cloudflare Worker with one D1 database. Users, roles and permissions come from the Insulin
+platform; the organization is the tenant.
+
+A tax year has six steps: household, upload documents, what applies, confirm, deductions, finish. **Only the household
+step is built.** The other five are pages that say what they will do (`src/app/pages/LaterStep.tsx`); the server
+reports them as `not_built`. The tax engine, AI reading of documents and CRA form filling come in later changes.
+
+## Commands
+
+Run from `personal-tax/` unless noted.
+
+| When | Run |
+|---|---|
+| After any TypeScript change | `npm run typecheck` |
+| Before you finish, and after every behaviour change | `npm test` (Vitest: `test/server` and `test/shared` on Node, `test/web` under jsdom against the real server in-process) |
+| After changing `src/app/db/schema.ts` | `npm run db:generate` (drizzle-kit 0.31.11 with drizzle-orm 0.45.3, as in Cap Table's README, "Database changes") |
+| To check what publishing will build | `NITRO_PRESET=cloudflare_module npm run build` |
+| To try it | `npm run dev` (port 3000; you are the "Preview owner", a stand-in owner) |
+| From the repository root, before you finish | `node .github/scripts/check-insulin-app.mjs personal-tax` and `node .github/scripts/check-public-content.mjs` |
+
+## Where things live
+
+| Path | What |
+|---|---|
+| `src/app/shared/` | The contract the browser, the server and API clients share: `access.ts` (roles, the two permissions, `/api/me`), `household.ts` (the household and tax-year schemas), `routes.ts` (the route table, also `GET /api/catalog`), `errors.ts` |
+| `src/app/server/app.ts` | The Hono app: security headers, the tick (`POST /api/scheduled`), same-origin and identity checks, and every route of the table mounted with its permission, params, body and answer checked |
+| `src/app/server/lib/` | `identity.ts` (the platform's headers, the only reader of them), `household.ts` (D1 reads and writes, the issues of a year), `usage-metrics.ts` (the hourly report), `http.ts` (errors, JSON bodies) |
+| `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated) |
+| `src/app/router.tsx`, `src/app/pages/`, `src/app/components/` | The React app: Returns (`/returns`), a year's steps (`/returns/:year/:step`, framed by `YearFrame.tsx`), Docs |
+| `src/app/components/AppLayout.tsx`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation, Docs and Settings, the organization switcher and the person |
+| `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic |
+| `docs/public/` | The public docs at `insulinapps.com/docs/personal-tax/` |
+| `test/support/server.ts`, `test/web/support.tsx` | The real server on an in-memory D1 with the platform's headers; the whole React app rendered against it |
+
+## Platform files: leave them alone
+
+`index.html`, `src/main.tsx`, `src/api.ts`, `src/platform.local.ts`, `src/platform.worker.ts`, `src/local-d1.ts`,
+`src/cloudflare-workers.d.ts`, `src/suger-app-builder-runtime.tsx`, `vite.config.ts` and `drizzle.config.ts` come from
+the Insulin template and stay byte-identical to it (`test/server/framework-template.test.ts` pins the ones under
+`src/`). All app code goes under `src/app/`. Keep the export of `handleAppRequest` in `src/app/server/router.ts`; import
+`@fours/app/server` only from server code; read configuration with `readAppEnv(name)` from `#platform`.
+
+## Platform limits
+
+- **Runtime:** one D1 database, static assets, outbound `fetch` and environment values. Due work runs on the platform's
+  five-minute tick (`insulin.scheduled`: `POST /api/scheduled`), which today only sends the usage report.
+- **The app may run in a sandboxed iframe:** no `window.open`, `alert`, `confirm` or `prompt`; downloads use
+  `<a download>`; no fonts, scripts or images from CDNs.
+- **Dependencies:** exact versions from registry.npmjs.org, pure JavaScript, no install scripts.
+
+## Access
+
+- **Two permissions**, declared in `package.json` `insulin.permissions` and in `shared/access.ts`:
+  `personaltax.prepare` (Owner, Admin, Editor: every change) and `personaltax.view` (every role: every read). Each
+  route in `shared/routes.ts` names the one it needs and `mount()` in `app.ts` enforces it; decide by permission, never
+  by role name. `x-suger-app-permissions` narrows a role, never widens it (`readGrant`).
+- **The organization is the tenant.** Every row has `org_id`, and every statement names it, from the caller's
+  `x-suger-organization-id`. Another organization's ids answer 404.
+- **The tick** (`/api/scheduled`): only `x-suger-access-via: schedule` with no identity passes; such a request is
+  nobody on every other route (`readCaller`). It is never in the catalog.
+- **Usage reports** (`usage-metrics.ts`): once an hour, counts per organization (households, people, tax_years,
+  returns) and the database size. Counts only: never a name, a birth date, an amount or a document. A new metric goes
+  in the in-app Docs ("Usage reports every hour") and `docs/public/how-it-works.md`.
+- **No login of our own.** The preview owner exists only in the dev server.
+
+## Data
+
+- **Never store** a SIN, a home address or bank details. The person writes them on the paper return.
+- **One batch per write**, with its audit event in the same batch. A year's household facts save under the year's
+  `revision`: the first statement writes -1 to `revision` on a stale one, which `CHECK (revision >= 1)` refuses, so
+  the whole batch rolls back and the caller gets a 409 (`saveHousehold`).
+- **Migrations are generated.** Edit `schema.ts` and run `npm run db:generate`; never edit a published migration.
+
+## Docs, required by default
+
+Every Insulin app ships a **Docs** entry in its navigation:
+
+- every role can open it, people with no permission left included;
+- it covers getting started, the main tasks, what each kind of user sees, and the background a person needs for
+  Canadian personal tax, plus a glossary;
+- the pages are static content inside the app, in plain words, and describe only what the app actually does. Tax
+  background is labelled general information, not advice;
+- a change that alters behaviour updates the Docs topic that describes it in the same change;
+- tests cover the Docs entry for each role and every topic rendering (`test/web/docs.test.tsx`).
+
+Personal Tax's Docs are `src/app/pages/docs/` and `src/app/components/Docs.tsx`. The public docs at
+`https://insulinapps.com/docs/personal-tax/` are `docs/public/*.md` (front matter `title`, `description`, `order`);
+update the page that describes a behaviour in the same change, then run `npm run build:docs` in
+`.github/hosting/gateway/` and commit its `src/assets/docs-content.ts`.
+
+## UI and navigation
+
+New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default neutral theme, light and dark: the components
+in `src/app/components/ui/` (add one by copying it from shadcn/ui), `cn()` from `src/app/lib/utils.ts`, icons from
+`lucide-react`.
+
+Every Insulin app has the two-level, collapsible navigation of
+[DESIGN.md §3.2](../.github/hosting/DESIGN.md): the organization switcher, its sections from `insulin.navigation` in
+`package.json` (Returns and Household), then Docs and Settings (People, Integrations, API access, Connect AI, which
+link to the gateway's pages), and the person at the bottom; each level collapses to icons. Docs and Settings are added
+by the shell and never in the manifest. A manifest icon must be one `lib/navigation.ts` (`NAV_ICONS`) and
+`components/Icon.tsx` draw.
+
+## Public repository
+
+This code is public. Use synthetic data only: example.com or `.test` addresses and fictional people. Never add real
+names, SINs, addresses, cloud account ids, keys or internal hostnames.

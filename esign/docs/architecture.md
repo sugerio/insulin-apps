@@ -19,6 +19,16 @@ seals the finished envelope and emails each signer a link to their copy.
   (every role: see them), declared in `package.json` `insulin.permissions`. A custom role's
   `x-suger-app-permissions` header only narrows a role, never widens it. `can(caller, permission)`
   in `identity.ts` is the one check; `esign.manage` implies `esign.view`.
+- **Ownership.** Every template and envelope has an owner (`owner_user_id`: the member or API client
+  that created it) and is seen only by its owner and those it is shared with (`document_shares`, by
+  email, as admin, editor or viewer), organization owners and admins included. `ownership.ts` is the
+  one check (`documentRole`, `requireRole`, `visibleIds`): a role is capped at viewer for a caller
+  without `esign.manage`, and a document the caller can't see answers 404. Tags (`tags.ts`) are each
+  person's own. `members.ts` records each caller as seen (Esign has no directory), names owners, lets
+  an organization owner take over what someone owns, and keeps, per API client, the members who see
+  everything it owns as admin (`api_client_people`, read live by every visibility query; set on
+  `/client-settings/{id}`, the page the gateway's API access page links each client to,
+  `insulin.clientSettings`). None of it is evidence.
 - **Public paths.** Recipients and embedded editors aren't members. `insulin.publicPaths` lists
   `/sign`, `/editor/`, `/copy`, `/assets/` and `/api/public/`; those requests carry a one-time code
   or token instead of an identity, and the management routes refuse anything the gateway marks public.
@@ -39,7 +49,10 @@ seals the finished envelope and emails each signer a link to their copy.
   identity included, and works for every organization; a request marked `schedule` is nobody to
   every other route (`readCaller`). It is neither a public path nor in the catalog.
   `POST /api/process-due` (manage permission) does the same work at once, for the caller's
-  organization only. After the due work, whatever its outcome, the tick sends the hour's usage
+  organization only. Its first part is send later (`scheduled-send.ts`): up to 25 drafts whose
+  `schedule.at` has come are sent by the very send a member's Send runs, as whoever scheduled them
+  (kept in the draft; they must still be an editor of it); one refused stays a draft, unscheduled,
+  with the reason in `schedule.error`. After the due work, whatever its outcome, the tick sends the hour's usage
   report (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the
@@ -104,8 +117,8 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
 ## The members' app and the Docs
 
 - **Pages.** `src/app/member/MemberApp.ts` reads `/api/me` and routes by path: `/` and `/envelopes`
-  (envelopes, `?status=` filtering by status), `/envelopes/new`, `/envelopes/:id`, `/templates` and
-  `/docs/:topic?`. It moves with
+  (envelopes, `?status=` filtering by status), `/envelopes/new`, `/envelopes/:id`, `/templates`,
+  `/contacts`, `/contacts/:id`, `/ownership` (organization owners; anyone else sees a notice) and `/docs/:topic?`. It moves with
   `history.pushState` (`router.ts`), the only navigation the console's sandboxed iframe allows. Every
   call is a same-origin request as the signed-in member; there is no key in the browser.
 - **Navigation.** `src/app/member/Shell.ts` draws DESIGN.md §3.2's two levels around every member
@@ -114,7 +127,7 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
   the member's role reaches, lowered by their permissions (`navigationRole`: without `esign.manage`
   a Viewer's, with neither permission none; `navigation.ts` reads and checks the manifest), Docs,
   Settings and the person (Account, Sign out through `/__insulin/logout`); level 2 is the open
-  section's items (the Envelopes views, the Docs topics and a link to the public docs on the apex,
+  section's items (the Docs topics and a link to the public docs on the apex; Envelopes, Templates and Contacts have none,
   or Settings' People, Integrations, API access and Connect AI, at the addresses `/__insulin/me`
   gives or else on the apex), and the page header carries the breadcrumb. Each level collapses to
   icons, remembered in localStorage `insulin-nav`; below 768px a menu button opens both levels in a
@@ -124,8 +137,8 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
   `/settings/*` of its own.
 - **Roles.** What a role can't do is hidden (`canManage(me)`), and the server refuses it anyway.
   `/api/me` answering 401 shows a sign-in message; the Docs open without it.
-- **Hosting the public pages.** The envelope page opens the active signer's `/sign` in a dialog
-  with a recipient view for its own origin and follows its `esign.signing.*` messages; the Templates
+- **Hosting the public pages.** The envelope page opens no signer's page (Esign invites its signers
+  by email: Resend invitation sends it again; a host product calls `recipient-view`); the Templates
   page opens the editor for its own origin and confirms the editor's save with
   `GET /api/template-editing-sessions/:id`. Both behave exactly as a host product would.
 - **Sending.** A send carries an `Idempotency-Key` that a retry of the same form reuses. An
@@ -153,9 +166,19 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
    source is copied to the envelope's initial document (D0, `envelopes/<id>/d0.pdf`), the first
    recipient's task becomes `ACTIVE`, and the envelope is created `IN_PROGRESS`. Recipients sign in
    routing order.
-3. **Recipient view.** For the active task the host calls
-   `POST /api/envelopes/:id/tasks/:taskId/recipient-view` and embeds
-   `<worker origin>/sign#code=<code>`. The page exchanges the code for a page session.
+3. **Recipient view.** A task's `delivery` (in `details_json`) says how its signer reaches the page.
+   The host's (the default): for the active task the host calls
+   `POST /api/envelopes/:id/tasks/:taskId/recipient-view` with `signedInEmail`, the email of the
+   account signed in to it, which must be the task's (whoever calls; Esign's console opens no
+   signer's page), and embeds `<worker origin>/sign#code=<code>`. `email`: when the task
+   becomes active (at creation, after the previous signature in `completeEnvelope`, or by due work),
+   Esign emails an invitation (`invitations.ts`) with `<worker origin>/sign#invite=<token>`; the page
+   trades the token for a code (`POST /api/public/signing/invitation`) while the task is active, and
+   the host can't ask for one. Either way the page exchanges the code for a page session, which
+   keeps how the code was issued (`entry_json`: the host's statement and the checked account, or the
+   invitation); confirming the emailed code records it in `OTP_VERIFIED`, and the certificate's
+   "Identified by" reads it there. The sender's `message` (the envelope's, or the task's own) is in
+   the invitation and on Review.
 4. **Review, confirm, sign.** The page has three steps: **Review** (the document, its fingerprint,
    page count and download, and the signer's title and authority when the host named a company),
    **Confirm it's you** (a six-digit code emailed for the task) and **Sign** (the fields, the
@@ -182,8 +205,9 @@ Two ways to sign:
   signature page appended to the document, eight blocks to a page, drawn in Helvetica. Recipient
   names that Helvetica cannot draw, or that are too wide at the fixed size, are refused when the
   envelope is created (`422 unsupported_recipient_name`) and checked again before each signature.
-- **With placed fields**: Signature, Date signed and Title only, at most 20 fields per template,
-  and every role needs a Signature field (the editor requires exactly one per role). Envelope
+- **With placed fields**: Signature, Date signed and Title for the signers, at most 20 of them per
+  template (`MAX_SIGNED_FIELDS`), plus Pre-filled fields (nobody's; at most 60, drawn before anyone
+  signs); every role needs at least one required Signature field and may have several. Envelope
   creation refuses other field types and overlapping fields (`422
   positioned_fields_not_supported`). The PDF must have unrotated, uncropped pages with a zero
   media-box origin, default units, no annotations and no form; each field is at least 20 × 10
@@ -236,27 +260,36 @@ rendering and every later re-verification fail closed if the running renderer di
 
 ## Data model
 
-`src/app/db/schema.ts` declares the tables; `src/app/db/migrations/` holds the generated
-`0000_init.sql`, `0003_labels.sql` and `0004_metrics_reports.sql`, the custom `0001_triggers.sql` (the triggers Drizzle can't declare), and
-`0002_seal_key.sql`, a rebuild of `seals` written by hand in drizzle-kit's form (it changes a CHECK constraint). Every record
-of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these 17
+`src/app/db/schema.ts` declares the tables; `src/app/db/migrations/` holds `0000_init.sql`, every table and index (the
+history before it was folded into one migration while nothing had shipped), the custom `0001_triggers.sql` (the
+triggers Drizzle can't declare), `0002_envelope_documents.sql`, `0003_api_client_people.sql`, and the custom
+`0004_scheduled_send.sql`: the partial index `envelopes_scheduled` on a draft's `json_extract(draft_json,
+'$.schedule.at')`, through which the tick finds the drafts to send later (`scheduled-send.ts`; there is no column for
+it). Every record
+of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these
 tables:
 
 | Table | Holds |
 | --- | --- |
-| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none), the host's `name` and `metadata_json` |
+| `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none; pre-filled ones, type `Prefill`, nobody's, with a name, label and maybe a default), the host's `name` and `metadata_json`, and `default_signers_json` (who usually signs as some roles, `default-signers.ts`; the one part of a template that can change, and never evidence) |
 | `envelopes` | Tenant, template, status, creation time, `request_sha256`, `details_json` |
 | `tasks` | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
-| `artifacts` | Each envelope's initial document (D0): object key and SHA-256 |
-| `access_codes` | One-time page codes (hashed) with scope, tenant, subject, origin, expiry, `used_at` |
+| `artifacts` | Each envelope's initial document (D0): object key and SHA-256. With pre-filled fields, D0 is the template's PDF with their values drawn on it when the envelope was sent (`prefill.ts`: loaded and saved as a signature's output is, so the same values give the same bytes and a retry stores the same D0); the envelope's `fields_json` then keeps its signers' fields only, and `details_json` the values (`prefill`) |
+| `access_codes` | One-time page codes (hashed) with scope, tenant, subject, origin, expiry, `used_at`, and how a recipient code was issued (`entry_json`) |
 | `access_sessions` | Page sessions (hashed tokens) with the same fields and `otp_verified_at` |
+| `invitations` | One per task Esign invites by email: the SHA-256 of its latest link's token, when it was reserved and sent |
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
 | `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |
-| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template |
+| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template; who opened it (its owner) and the shares and tags it gets, since the save carries no identity; whether it saves a new version that replaces its source (`replaces_source`: the source's owner, shares and tags carry over, and the source is archived like a deleted one) |
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
+| `contacts` | The organization's address book (`contacts.ts`): one per email (`email_key`, trimmed and lower-cased), name, title, company, how many envelopes named them since and `last_used_at` (counted in each envelope's creating batch), and `recent_at` (last used or added, the list's order). A contact's page finds their envelopes through `tasks_by_recipient_email`, an index on `lower(recipient_email)`. Never evidence |
+| `document_shares` | Who else sees a template or an envelope (`ownership.ts`): one row per person, by email (`grantee_email_key`), with their role; the owner (`owner_user_id` on the template or envelope) is never a row |
+| `document_tags` | Each person's own tags on what they see (`tags.ts`), by `tag_key` (trimmed, lower-cased) |
+| `members` | The members and API clients Esign has seen (`members.ts`): kind, email, name, organization role, when first and last seen |
+| `api_client_people` | Per API client, the members who see everything it owns, as admin (read live, never copied into shares) |
 | `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
 | `metrics_reports` | One per UTC hour (epoch ms of its start): when a tick claimed its usage report and when it was sent; kept three days |
@@ -318,7 +351,7 @@ only the current state.
 
 | Step | Written first | Commit point |
 | --- | --- | --- |
-| Envelope creation | D0 in the object store | One D1 batch: the envelope, its tasks and the D0 row, all or none |
+| Envelope creation | D0 in the object store | One D1 batch: the envelope, its tasks, the D0 row and its signers' contacts, all or none |
 | Code exchange (both pages) | The `access_sessions` row | Marking the code used (`used_at IS NULL`, scope and validity); the token is returned only then |
 | Editor session start | The `editor_sessions` row | Inserting its `editor` code, which requires the session and an allowed parent |
 | Editor save | The source object and the template row | Recording the template as the session's result, while unsaved and while this request's token is live |
@@ -475,8 +508,10 @@ due work for envelopes created in the last seven days.
 ## API
 
 Management routes take the Insulin platform identity (the console, insulinapps.com, an MCP client
-or a service-account token, all through the gateway) and see only the caller's organization (another
-organization's ids answer 404). Reading needs `esign.view`, anything else `esign.manage`. A request
+or a service-account token, all through the gateway) and see only the caller's organization, and in
+it only what the caller owns or is shared with (any other id answers 404). Reading needs `esign.view`,
+anything else `esign.manage` (but setting one's own tags); a template or an envelope also needs the
+caller's role in it (`ownership.ts`). A request
 the gateway marks public or as its tick (`x-suger-access-via: public` or `schedule`) never reaches
 them. `GET /api/catalog` lists
 the routes the caller may use, with JSON Schemas. Routes marked † are available only while signing
@@ -488,17 +523,26 @@ is enabled.
 | --- | --- |
 | `GET /api/me` | The caller: organization, user, role, permissions, how the request came, whether signing is enabled |
 | `GET /api/catalog` | The management routes the caller may use |
-| `GET /api/templates`, `GET /api/envelopes` | The organization's templates and envelopes, newest first (`limit`, `before`; envelopes also `status`) |
-| `POST /api/process-due` † | Expires envelopes past a deadline, finishes envelopes the signing request did not, and retries completion notices, for the caller's organization, at once (the platform's tick does it for every organization every five minutes) |
-| `POST /api/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`); returns `{id, roles}` |
+| `GET /api/templates`, `GET /api/envelopes` | The templates and envelopes the caller sees, newest first (`limit`, `cursor` from a page's `next`, or `before`; `scope`, `tag`, `q`, `since`; envelopes also `status` and `view`), each with its owner, the caller's role and tags |
+| `POST /api/process-due` † | Sends the scheduled drafts whose time has come, expires envelopes past a deadline, finishes envelopes the signing request did not, and retries completion notices and invitations, for the caller's organization, at once (the platform's tick does it for every organization every five minutes) |
+| `POST /api/templates` | Multipart `file` (PDF, at most 5 MiB and 100 pages) and `roles` (JSON array, 1–20 unique names of `[A-Za-z0-9_-]`), optionally `name`, `metadata` and `defaultSigners`; returns `{id, roles, defaultSigners, ...}` |
+| `POST /api/templates/:id`, `POST /api/templates/:id/delete` | Rename (editor); delete (admin): `archived_at`, which only takes it off the lists; everything by its id works as before |
+| `POST /api/templates/:id/default-signers` | Replaces the template's default signers; a recipient of a new envelope that leaves out its name or email gets its role's |
 | `GET /api/templates/:id` | Roles, the placed fields (type, role, page, normalized box) and whether they can be signed (`positionedFieldsSupported`) |
 | `POST /api/envelopes` | Creates and prepares an envelope (lifecycle step 2); `Idempotency-Key` required |
 | `GET /api/envelopes/:id` | Status and tasks (role, name, email, order, status, `expiresAt`, `openedAt`) |
 | `POST /api/envelopes/:id/void` | Optional `{reason}` (at most 500 characters); a repeat is a no-op; any status other than `IN_PROGRESS` answers `409 envelope_not_voidable` |
 | `GET /api/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
-| `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{origin?, hostAuthentication?}`; returns `{code}` for the active task |
+| `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{signedInEmail, origin?, hostAuthentication?}`, `signedInEmail` the account signed in to the host, which must be the signer's; returns `{code}` for the active task (`409 recipient_signs_by_email` for a signer Esign invites) |
 | `GET /api/envelopes/:id/delivery-pdf` | The signed PDF with its certificate, for a `COMPLETED` envelope |
 | `GET /api/envelopes/:id/certificate` | The completion certificate as JSON (shown on the envelope page), verified on every read |
+| `GET /api/contacts`, `GET /api/contacts/:id` | The address book, most recently used first (`q`, `limit`, `cursor`), and one contact with the envelopes that name them |
+| `POST /api/contacts`, `POST /api/contacts/:id`, `POST /api/contacts/:id/delete` | Add a contact (or change the one with that email), change one, delete one |
+| `GET`/`POST /api/{templates,envelopes}/:id/shares`, `POST .../shares/delete` | Who sees it; share it or change a role (admin); stop sharing (admin, or oneself) |
+| `POST /api/{templates,envelopes}/:id/tags`, `GET /api/tags` | Replace one's own tags on it; one's tags, most used first |
+| `GET /api/members` | The organization's people who can use Esign, from the gateway's `GET /__insulin/members` (`directory.ts`, `SUGER_MEMBERS_URL`); without it, the members Esign has seen. An API client's people must be among them (`422 not_members`) |
+| `GET /api/owners`, `POST /api/owners/:id/transfer` | Organization owners: everyone who owns something; take over all of it |
+| `GET`/`POST /api/client-settings/:id` | Organization owners and admins, in the browser (the page `/client-settings/:id`, linked from API access): who sees what an API client owns, `{id, name?, people}`; replacing the list, `{people: [email]}` |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |
 | `POST /api/envelopes/:id/prepare` | **Deprecated**: does nothing (204 for the organization's envelope, else 404). Kept for callers that still call it after creating an envelope; remove once they stop |
 
@@ -516,7 +560,7 @@ by the same live session with the same input and values, and returns the same si
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?}`; returns `{sessionId, url}`, the code in the URL fragment |
+| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?, envelopeId?, prefill?}` (`envelopeId`: an upload draft's own document and roles, instead of a template) (`prefill`: the host's pre-filled fields, the only ones offered); returns `{sessionId, url}`, the code in the URL fragment |
 | `POST /api/template-editing-sessions/:id/source` | Management | The PDF bytes (`Content-Type: application/pdf`, at most 5 MiB and 100 pages), once, before the page is opened |
 | `GET /api/template-editing-sessions/:id` | Management | `{templateId}` once saved, else null |
 | `GET /editor/page/:id` | — | The editor page, framable only by the session's parent origin |
@@ -527,7 +571,7 @@ by the same live session with the same input and values, and returns the same si
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `POST /api/scheduled` † | `x-suger-access-via: schedule` and no identity (403 otherwise) | Every organization's due work, every five minutes (`insulin.scheduled`), then the hour's usage report if no tick has sent it; answers `{expired, completed, waiting, failed}`. Not public, not in the catalog |
+| `POST /api/scheduled` † | `x-suger-access-via: schedule` and no identity (403 otherwise) | Every organization's due work, every five minutes (`insulin.scheduled`), then the hour's usage report if no tick has sent it; answers `{expired, completed, waiting, failed, scheduledSent, scheduledFailed}`. Not public, not in the catalog |
 
 **Pages** (the React app, `src/app/App.tsx`): `/sign` (the signing page), `/editor/page/:id` (the
 editor), `/copy` (a signer's copy) and, at every other path, the members' app (see "The members'
@@ -536,8 +580,10 @@ app and the Docs"). **Public API** (declared in
 
 ## Embedded editor
 
-The source is either an existing template of the organization (`sourceTemplateId`; its SHA-256 is bound
-when the session starts) or PDF bytes posted to `/source` (bound once, before the page is opened).
+The source is an existing template of the organization (`sourceTemplateId`; its SHA-256 is bound
+when the session starts), PDF bytes posted to `/source` (bound once, before the page is opened), or an
+upload draft's own document (`envelopeId`, which takes no `/source`; its fields are saved into the
+draft only while its document is still the one they were placed on).
 The app never downloads a document. Every preview and the save re-read the source and check
 that hash; missing, changed or oversized bytes fail closed. The editor sends only fields and roles;
 the server uses the bound bytes and refuses a replacement file. The embedded UI refuses a session
@@ -588,8 +634,10 @@ display.
   WORM; privileged changes to D1 or keys remain possible and are detected only where the checks above
   re-verify. Orphans are never cleaned up. A recorded signature cannot be rolled back if its input
   changes in storage before rendering; rendering then fails and the row stays `PENDING`.
-- **Due work.** Between the platform's five-minute ticks, deadlines, unfinished envelopes and unsent
-  notices wait for the next signing request on the envelope or a `POST /api/process-due`. One run
-  looks at up to 25 envelopes to finish and 25 owing signed copies; a backlog takes several ticks.
+- **Due work.** Between the platform's five-minute ticks, scheduled drafts, deadlines, unfinished
+  envelopes and unsent notices and invitations wait for the next signing request on the envelope or a
+  `POST /api/process-due`. One run starts scheduled sends for up to 10 seconds (at most 25 drafts) and
+  looks at up to 25 envelopes to finish, 25 owing signed copies and 25 owing invitations; a backlog
+  takes several ticks.
 - **Blank editor sessions.** `POST /api/public/editor/save` still accepts a file for a session
   without a bound source, for older clients; the embedded UI does not.

@@ -126,12 +126,12 @@ test('a built-in role has every permission at or below it, and a custom role is 
 })
 
 test('access comes from the organization role, or from the grant for the app, never both', () => {
-  assert.deepEqual(orgAccess(APP, 'OWNER'), { role: 'ADMIN', permissions: permissionsOf(APP, 'ADMIN'), label: 'Admin', source: 'org', admin: true, customRole: null })
+  assert.deepEqual(orgAccess(APP, 'OWNER'), { role: 'ADMIN', permissions: permissionsOf(APP, 'ADMIN'), orgRole: 'OWNER', label: 'Admin', source: 'org', admin: true, customRole: null })
   assert.equal(orgAccess(APP, 'EDITOR').admin, false)
   assert.equal(orgAccess(APP, 'APPS'), null)
   assert.deepEqual(orgAccess(BARE, 'VIEWER').permissions, [], 'an app without a catalog gets no permissions')
   const custom = grantAccess(APP, { role: 'CUSTOM', customRoleId: 'r1', customRoleName: 'Board', customPermissions: '["records.view","gone"]' })
-  assert.deepEqual(custom, { role: 'EDITOR', permissions: ['records.view'], label: 'Board', source: 'app', admin: false, customRole: { id: 'r1', name: 'Board' } })
+  assert.deepEqual(custom, { role: 'EDITOR', permissions: ['records.view'], orgRole: 'APPS', label: 'Board', source: 'app', admin: false, customRole: { id: 'r1', name: 'Board' } })
   assert.equal(grantAccess(APP, { role: 'CUSTOM', customRoleId: 'r2', customRoleName: 'All', customPermissions: '["billing.manage"]' }).admin, false,
     'a custom role never makes someone an app admin, even one sent as ADMIN')
   assert.equal(grantAccess(APP, { role: 'ADMIN', customRoleId: null, customRoleName: null, customPermissions: null }).admin, true)
@@ -142,7 +142,7 @@ test('access comes from the organization role, or from the grant for the app, ne
   assert.equal(accessFromRow(APP, null), null)
 })
 
-test('the identity headers carry the app role, the permissions of an app with a catalog, and how the request came', () => {
+test('the identity headers carry the app role, the permissions of an app with a catalog, how the request came and the organization role', () => {
   const actor = { id: 'u1', email: 'ada@example.test', name: 'Ada Lovelace' }
   const app = { ...APP, appId: 'insulin-apps-captable' }
   const headers = identityHeaders(actor, 'o1', app, orgAccess(app, 'OWNER'), 'mcp')
@@ -150,6 +150,11 @@ test('the identity headers carry the app role, the permissions of an app with a 
   assert.equal(headers['x-suger-app-permissions'], 'records.manage records.view own.view billing.manage')
   assert.equal(headers['x-suger-access-via'], 'mcp')
   assert.equal(headers['x-suger-user-name'], 'Ada%20Lovelace')
+  assert.equal(headers['x-suger-org-role'], 'OWNER', 'what an app needs to tell an owner from an admin')
+  const granted = identityHeaders(actor, 'o1', app, grantAccess(app, { role: 'ADMIN', customRoleId: null, customRoleName: null, customPermissions: null }), 'browser')
+  assert.deepEqual([granted['x-suger-app-role'], granted['x-suger-org-role']], ['ADMIN', 'APPS'], 'an app admin by grant is no organization admin')
+  const client = identityHeaders(actor, 'o1', app, { ...grantAccess(app, { role: 'ADMIN', customRoleId: null, customRoleName: null, customPermissions: null }), orgRole: null }, 'api')
+  assert.equal('x-suger-org-role' in client, false, 'a service account has no organization role')
   const bare = identityHeaders(actor, 'o1', { ...BARE, appId: 'insulin-apps-ledger' }, orgAccess(BARE, 'VIEWER'), 'browser')
   assert.equal('x-suger-app-permissions' in bare, false, 'no catalog, no permissions header')
 })

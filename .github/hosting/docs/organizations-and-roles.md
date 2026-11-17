@@ -66,7 +66,7 @@ Each app interprets three built-in roles:
 | **Viewer** | Read only. The app decides what that shows. |
 
 What "read only" shows is up to each app. For example, a Viewer in [Cap Table](/docs/captable/overview) sees only their
-own holdings, while a Viewer in [Esign](/docs/esign/overview) sees the organization's templates and envelopes.
+own holdings, while a Viewer in [Esign](/docs/esign/overview) sees the templates and envelopes shared with them, read only.
 
 Owners and admins of the organization are **Admin** in every app. Editors are **Editor** and viewers are **Viewer** in
 every app.
@@ -121,7 +121,7 @@ permission: a role higher up has it too, and Admin has every permission.
 | Cap Table | `captable.manage` | Record changes | Record and reverse equity changes, run imports and manage documents. Includes viewing the whole cap table. | Editor |
 | Cap Table | `captable.view` | View the cap table | See the whole cap table, stakeholders, reports and documents, read only. | Editor |
 | Cap Table | `portfolio.view` | See own holdings | See their own holdings in the holder view, matched by their e-mail address. | Viewer |
-| Esign | `esign.manage` | Send and manage envelopes | Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing. | Editor |
+| Esign | `esign.manage` | Send and manage envelopes | Upload templates and place their fields, send envelopes, void them, resend invitations and finish due work. Includes viewing. | Editor |
 | Esign | `esign.view` | View envelopes | See templates, envelopes and their status, the audit trail, signed documents and certificates of completion. | Viewer |
 
 ### How an app sees a custom role

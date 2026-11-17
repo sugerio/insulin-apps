@@ -31,7 +31,7 @@ export interface Actor {
 
 /**
  * The identity contract of `@fours/app` (`getCurrentUser` with SUGER_ACCESS_MODE=console), plus the permissions of an
- * app with a catalog and how the request came (DESIGN.md §2.4).
+ * app with a catalog, how the request came and, for a person, their organization role (DESIGN.md §2.4).
  */
 export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, access: AppAccess, via: AccessVia): Record<string, string> {
   const headers: Record<string, string> = {
@@ -44,6 +44,8 @@ export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, acc
     'x-suger-access-via': via,
   }
   if (app.permissions.length) headers['x-suger-app-permissions'] = access.permissions.join(' ')
+  // It can give an app's owners powers no app role gives, so apps honour it only with SUGER_TRUST_ORG_ROLE.
+  if (access.orgRole) headers['x-suger-org-role'] = access.orgRole
   return headers
 }
 

@@ -5,7 +5,8 @@ import { finalizeManagedEvidence } from './seal/managed.ts';
 import type { BlobStore } from './blob-store.ts';
 import { envelopesOwingCopies, sendSignedCopies } from './signed-copies.ts';
 import { mailerFor, type MailEnv } from './mail.ts';
-import { testSealKey, type EnvironmentEnv } from './environment.ts';
+import { signingEnabled, testSealKey, type EnvironmentEnv } from './environment.ts';
+import { envelopesOwingInvitations, sendInvitations } from './invitations.ts';
 import { managedEvidenceFromEnv, type SealEnv } from './seal/config.ts';
 
 /**
@@ -62,6 +63,8 @@ export async function completeEnvelope(env: CompletionEnv, tenantId: string, env
   }
   const envelope=await env.DB.prepare('SELECT status FROM envelopes WHERE id=? AND tenant_id=?').bind(envelopeId,tenantId).first<{status:string}>();
   if (envelope?.status === 'COMPLETED') return 'completed';
+  // Still being signed: the next signer's turn may have come, and with it their invitation.
+  if (envelope?.status === 'IN_PROGRESS') { await sendDueInvitations(env,tenantId,envelopeId); return 'waiting'; }
   if (envelope?.status !== 'FINALIZING') return 'waiting';
   // The managed seal when configured; otherwise the local test seal, if there is a key for it.
   const managed = await managedEvidenceFromEnv(env);
@@ -98,6 +101,17 @@ async function sendCopies(env: CompletionEnv, tenantId: string, envelopeId: stri
   } catch { console.error(`Esign: sending the signed-copy notices of envelope ${envelopeId} failed; process-due retries it`); }
 }
 
+/**
+ * Emails the invitations the envelope owes (invitations.ts): to its active signers Esign invites,
+ * while signing is set up and mail is configured. Failures are logged; process-due retries them.
+ */
+export async function sendDueInvitations(env: CompletionEnv, tenantId: string, envelopeId: string): Promise<void> {
+  const mailer = mailerFor(env, tenantId);
+  if (!mailer || !env.APP_ORIGIN || !signingEnabled(env)) return;
+  try { await sendInvitations(env.DB, tenantId, envelopeId, mailer, env.APP_ORIGIN); }
+  catch { console.error(`Esign: sending the invitations of envelope ${envelopeId} failed; process-due retries it`); }
+}
+
 /** The envelope a recipient page session signs, by the session's bearer token. */
 export async function completeEnvelopeOfSession(env: CompletionEnv, token: string): Promise<Completion> {
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
@@ -129,6 +143,8 @@ export async function sweepEnvelopes(env: CompletionEnv, tenantId: string | null
     try { counts[await completeEnvelope(env,row.tenant_id,row.id)]++; }
     catch { counts.failed++; }
   }
+  // Envelopes in progress whose active signer Esign invites has not been invited.
+  for (const row of await envelopesOwingInvitations(env.DB, 25, tenantId)) await sendDueInvitations(env,row.tenant_id,row.id);
   // Completed envelopes whose signed copies were not all sent.
   for (const row of await envelopesOwingCopies(env.DB, Date.now(), 25, tenantId)) if (mailerFor(env, row.tenant_id)) await sendCopies(env,row.tenant_id,row.id);
   return counts;

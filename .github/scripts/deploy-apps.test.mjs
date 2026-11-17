@@ -358,7 +358,7 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   assert.deepEqual(alpha.compatibility_flags, ['nodejs_compat'])
   assert.deepEqual(alpha.rules, [{ type: 'ESModule', globs: ['**/*.mjs'], fallthrough: true }])
   assert.equal(alpha.no_bundle, true)
-  assert.deepEqual(alpha.vars, { SUGER_ACCESS_MODE: 'console' })
+  assert.deepEqual(alpha.vars, { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: 'true' })
   assert.equal(alpha.workers_dev, false)
   assert.equal(alpha.preview_urls, false)
   for (const key of ['build', 'unsafe', 'routes']) assert.ok(!(key in alpha), `${key} leaked from the generated config`)
@@ -638,6 +638,8 @@ test("an app's declared secrets come from the environment's secrets, then its va
   const alpha = JSON.parse(readFileSync(join(result.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
   assert.equal(alpha.vars.SUGER_MAIL_URL, 'https://apps.example.com/__insulin/mail')
   assert.equal(alpha.vars.SUGER_METRICS_URL, 'https://apps.example.com/__insulin/metrics', 'where the app reports its usage every hour')
+  assert.equal(alpha.vars.SUGER_MEMBERS_URL, 'https://apps.example.com/__insulin/members', 'where the app asks who can use it')
+  assert.equal(alpha.vars.SUGER_TRUST_ORG_ROLE, 'true', 'the gateway sends x-suger-org-role, so the app may honour it')
   assert.deepEqual(alpha.services, [{ binding: 'SUGER_GATEWAY', service: 'insulin-apps-gateway' }], 'the app calls the gateway over a service binding, not its public URL')
   const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
   const site = gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'alpha-app')
@@ -671,6 +673,7 @@ test("an app's declared secrets come from the environment's secrets, then its va
   const plainAlpha = JSON.parse(readFileSync(join(plain.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
   assert.equal(plainAlpha.services, undefined, 'without the gateway key there is no relay or proxy to bind')
   assert.equal(plainAlpha.vars.SUGER_METRICS_URL, undefined, 'nor anywhere to report usage')
+  assert.equal(plainAlpha.vars.SUGER_MEMBERS_URL, undefined, 'nor anywhere to ask who can use it')
   await assert.rejects(
     () => deployApps({ root, environment: { ...environment, APP_SECRETS_JSON: '{"ALPHA_APP_KMS_KEY": "kms-secret-value-1234"' }, dryRun: true, skipBuild: true, only: 'alpha-app' }),
     (error) => /APP_SECRETS_JSON is not valid JSON/.test(error.message) && !error.message.includes('kms-secret-value-1234'),

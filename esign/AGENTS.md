@@ -29,7 +29,7 @@ Run from `esign/` unless noted.
 | Path | What |
 |---|---|
 | `src/app/App.tsx` | The pages: `/sign` (signing), `/editor/page/:id` (embedded editor), `/copy` (a signer's copy), and every other path the members' app |
-| `src/app/member/` | The members' app: `MemberApp.ts` (routes), `Shell.ts` (the two-level navigation), `navigation.ts` (the manifest, role filtering, Settings links, the remembered collapse), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `TemplatesPage.ts`, `api.ts`, `router.ts` (pushState, no router library) |
+| `src/app/member/` | The members' app: `MemberApp.ts` (routes), `Shell.ts` (the two-level navigation), `navigation.ts` (the manifest, role filtering, Settings links, the remembered collapse), `EnvelopesPage.ts`, `EnvelopePage.ts`, `NewEnvelopePage.ts`, `SendDocumentPage.ts` (Upload and send), `SendLater.ts`, `SaveAsTemplateDialog.ts`, `TemplatesPage.ts`, `TemplatePage.ts` (a template's read-only page), `ContactsPage.ts`, `ContactPage.ts`, `ContactField.ts` (a name or email field suggesting contacts as typed), `SharePanel.ts` (who sees a template or envelope, and sharing it), `TagsField.ts` (the member's own tags), `ListFilters.ts`, `OwnershipPage.ts` (taking over, for organization owners), `ClientSettingsPage.ts` (an API client's people, linked from the platform's API access page), `update.ts` (a page left open across a deploy), `api.ts`, `router.ts` (pushState, no router library) |
 | `src/app/pages/docs/`, `src/app/components/Docs.ts` | The in-app Docs: one file per topic, `topics.ts` (reading order), `parts.ts`, and the Docs component |
 | `src/app/ui/` | The public pages and their parts: `RecipientPage.ts`, `SigningHelp.ts` ("About signing"), `FieldEditor.ts`, `EditorPage.ts`, `CopyPage.ts`, `CompletionCertificate.ts`, `pdf.ts`, `esign-theme.css` (layout hooks) |
 | `src/app/components/ui/`, `src/app/lib/utils.ts`, `src/app/styles.css` | shadcn/ui components (copied, as `.ts`; `sidebar.ts` is the sidebar's class names), `cn()`, and Tailwind with the shadcn neutral theme and sidebar colours, light and dark |
@@ -37,13 +37,15 @@ Run from `esign/` unless noted.
 | `src/app/server/router.ts` | `handleAppRequest(request)`: builds the bindings from `#platform` and hands every `/api/**` request to the Hono app |
 | `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due`, and the platform's tick `/api/scheduled` |
 | `src/app/server/esign/identity.ts` | The platform identity, the two permissions and `can()` |
+| `src/app/server/esign/ownership.ts`, `tags.ts`, `members.ts` | Who sees and changes each template and envelope (owners, shares, the one check `documentRole`/`requireRole`/`visibleIds`), each person's own tags, and the members and API clients seen (owners' names, taking over, who sees each API client's documents: `/api/client-settings`, set on `member/ClientSettingsPage.ts`) |
+| `src/app/server/esign/prefill.ts` | Pre-filled fields: a template's fields nobody signs (`fields.ts`, type `Prefill`), whose values are drawn on an envelope's initial document when it is sent |
 | `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
 | `src/app/server/esign/mail.ts` | Codes and completion notices through the platform's mail relay |
 | `src/app/server/esign/usage-metrics.ts` | The hourly usage report to the platform (counts and byte sizes per organization), sent by the tick, once an hour (`metrics_reports`) |
 | `src/app/server/gateway-fetch.ts` | The `SUGER_GATEWAY` service binding's fetch, which the relay and the usage reports are called over, and `gatewayEndpoint` (their address and the app's token, https only) |
 | `src/app/server/esign/seal/` | Evidence manifest, the HMAC test seal, the seal key + TSA seal, and `keys.ts`, the seal keys trusted |
-| `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql` and the hand-written rebuild `0002_seal_key.sql`) |
+| `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated, plus the custom `0001_triggers.sql`) |
 | `scripts/` | The bitmap atlas generators (macOS, Swift), and `put-seal-key.mjs`, which puts a new seal key on the Worker |
 | `test/`, `test/helpers/` | Tests (`node --test`); `helpers/platform.ts` plays the platform, `helpers/gateway.ts` the gateway and a host's service account, `helpers/member.ts` renders the members' app; `navigation.test.ts` and `shell.test.ts` cover the navigation |
 
@@ -75,6 +77,9 @@ secret in source.
 - **Two permissions**, declared in `package.json` `insulin.permissions` and listed in `identity.ts`: `esign.manage`
   (Owner, Admin, Editor) and `esign.view` (every role). Reading needs `esign.view`, every change `esign.manage`.
   Decide by permission with `can()`, never by role name. `x-suger-app-permissions` narrows a role, never widens it.
+- **Organization owners and admins** (`members.ts`): taking over what someone owns (owners) and an API client's
+  people (owners and admins, in the browser) go by `x-suger-org-role`, which `identity.ts` reads only with
+  `SUGER_TRUST_ORG_ROLE`; never by `x-suger-app-role`, which says `ADMIN` for an Admin of Esign by grant too.
 - **The organization is the tenant.** Every query that reads or changes an organization's record names its
   `tenant_id`, from `getCurrentUser().organizationId`. Another organization's ids answer 404.
 - **Public paths** (`insulin.publicPaths`): `/sign`, `/editor/`, `/copy`, `/assets/`, `/api/public/`. They carry a
@@ -109,10 +114,9 @@ secret in source.
 4. **One batch per write**, guarded by the statement itself (`INSERT ... SELECT ... WHERE`); see "How writes commit".
 5. **Migrations are generated.** Edit `schema.ts` and run `npm run db:generate`; never edit a published migration.
    Tables with triggers (`signatures`, `tasks`, `audit_events`) take additive changes only: a table rebuild drops
-   their triggers. Custom migrations are for developers: one statement per breakpoint, each safe to run again. The one
-   exception, `0002_seal_key.sql`, rebuilds `seals` (no triggers, nothing references it) to change a CHECK constraint, which
-   drizzle-kit can't: it is written by hand in drizzle-kit's table-rebuild form with its snapshot, and `npm run db:generate`
-   still writes nothing.
+   their triggers. Custom migrations are for developers: one statement per breakpoint, each safe to run again. The
+   history before Esign shipped is folded into `0000_init.sql` (with `0001_triggers.sql`); a local database made from
+   the earlier chain is recreated (delete its `.wrangler/state`), never migrated.
 
 ## Secrets
 
@@ -159,8 +163,7 @@ Every Insulin app has the two-level, collapsible navigation of
 and the person at the bottom; each level collapses to icons. In Esign:
 
 - **The manifest is `package.json` `insulin.navigation`**, which the gateway renders Esign's settings pages from too:
-  Envelopes (its level 2: All envelopes, New envelope for EDITOR and up, and a view per status, `/envelopes?status=…`)
-  and Templates. Keep it to DESIGN.md's rules (`navigationProblems` in `src/app/member/navigation.ts`, which
+  Envelopes, Templates and Contacts, none with a level 2 (each page has its own search, filters and buttons). Keep it to DESIGN.md's rules (`navigationProblems` in `src/app/member/navigation.ts`, which
   `test/navigation.test.ts` runs): a unique `key` of `[a-z0-9-]`, a `label` of 1 to 40 characters, an `icon` from the
   gateway's Lucide set (`ICON_NAMES`), a `path` the members' app routes and that isn't the gateway's (`/__insulin/*`,
   `/settings/*`, `/mcp`, `/.well-known/*`), optional `group` and `role` (the least app role that sees it), at most 12

@@ -63,6 +63,12 @@ export interface HostedApp {
    */
   scheduled: string | null
   /**
+   * The app's own page of settings for one OAuth client (DESIGN.md §5.3.1): the API access page links each live client
+   * to `{path}/{service account id}?name={client name}` on the app's host, for the organization's owners and admins,
+   * with the app's one line on what is set there (`description`); null for an app that has none.
+   */
+  clientSettings: { path: string; description: string | null } | null
+  /**
    * The app's level 1 (DESIGN.md §3.2), which the gateway renders on the app's settings pages so they read as part of
    * the app; empty for an app without a manifest (or a SITE_APPS from before it existed).
    */
@@ -316,6 +322,40 @@ export function navigationPathProblem(entry: unknown): string | null {
   return null
 }
 
+/**
+ * Why an app's `insulin.clientSettings` is refused, or null. The same rule as .github/scripts/list-apps.mjs: a page of
+ * the app's that a navigation item could link to (navigationPathProblem), without a query or a trailing slash, outside
+ * `/api/`, and neither one of the app's public paths nor under one: the people who open it are signed in.
+ */
+export function clientSettingsProblem(entry: unknown, publicPaths: string[]): string | null {
+  const problem = navigationPathProblem(entry)
+  if (problem) return problem
+  const path = entry as string
+  if (path.includes('?') || path.endsWith('/')) return 'must not hold a query or end with a slash'
+  const lower = path.toLowerCase()
+  if (lower === '/api' || lower.startsWith('/api/')) return 'must be a page, not under /api/'
+  if (isPublicPath({ publicPaths: publicPaths.map((entry) => entry.toLowerCase()) }, lower)) return 'must not be one of the app\'s public paths or under one'
+  return null
+}
+
+/** What the API access page says the app's settings for a client are for: plain text, 1 to 160 characters, or null. */
+export function clientSettingsDescriptionProblem(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string' || !value.trim() || value.length > 160 || /[\u0000-\u001f\u007f]/.test(value)) return 'description must be 1 to 160 characters of plain text'
+  return null
+}
+
+/** `insulin.clientSettings`: the page's path, or `{path, description?}`. */
+function parseClientSettings(raw: unknown, publicPaths: string[], where: string, problems: string[]): HostedApp['clientSettings'] {
+  if (raw === undefined || raw === null) return null
+  const { path, description } = typeof raw === 'string' ? { path: raw, description: null } : raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as { path?: unknown; description?: unknown } : { path: undefined, description: undefined }
+  if (clientSettingsProblem(path, publicPaths) || clientSettingsDescriptionProblem(description)) {
+    problems.push(where)
+    return null
+  }
+  return { path: path as string, description: typeof description === 'string' ? description.trim() : null }
+}
+
 function navigationText(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const text = value.trim()
@@ -504,6 +544,7 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
       publicPaths,
       scheduled: parseScheduled(item.scheduled, publicPaths, `SITE_APPS[${index}].scheduled`, problems),
+      clientSettings: parseClientSettings(item.clientSettings, publicPaths, `SITE_APPS[${index}].clientSettings`, problems),
       navigation: parseNavigation(item.navigation, `SITE_APPS[${index}].navigation`, problems),
     })
   })

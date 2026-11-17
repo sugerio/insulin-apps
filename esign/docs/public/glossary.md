@@ -28,9 +28,8 @@ document and its records electronically. Also called the electronic records disc
 **Delivery PDF.** The signed PDF followed by its certificate of completion: what **Signed PDF with certificate** and each
 signer's copy link download.
 
-**Due work.** Expiring envelopes past their deadline, finishing envelopes a request left unfinished, and retrying
-signed-copy emails. The platform runs it every five minutes; someone who manages can run it at once with **Process due
-work**, and a host with `POST /api/process-due`.
+**Due work.** Sending drafts scheduled with Send later whose time has come, expiring envelopes past their deadline,
+finishing envelopes a request left unfinished, and retrying signed-copy emails and invitations that didn't go out. The platform runs it every five minutes; a host can run it at once with `POST /api/process-due`.
 
 **Electronic signature.** A sound, symbol or process attached to a record and adopted by someone with the intent to sign
 it. See [Electronic signatures in general](/docs/esign/e-signatures).
@@ -58,16 +57,17 @@ field editor inside its own pages.
 **Idempotency key.** A random value sent with a request to send an envelope. A retry with the same key never sends the
 envelope twice.
 
+**Invitation.** The email Esign sends a signer when their turn comes, with the sender's message and a link to the signing
+page. The link opens the page each time it is used while it is their turn; sending the invitation again replaces it.
+
 **Local test seal.** The stand-in seal of a local preview, with a test key and no independent timestamp. Its certificate
 says LOCAL TEST ONLY.
 
 ## O–R
 
-**One-time link.** The link that opens the signing page for one signer's turn. It works once, within two minutes.
+**One-time link.** The link a host product opens the signing page with, for one signer's turn (an invitation's link is traded for one too). It works once, within two minutes.
 
 **Page session.** What the signing page gets for its one-time link: 15 minutes of access to that signer's turn.
-
-**Process due work.** The button on **Envelopes** that runs due work for your organization at once.
 
 **RFC 3161 timestamp.** A timestamp signed by an independent time-stamping authority, showing that a piece of data
 existed at that time. A published Esign timestamps each seal.
@@ -98,8 +98,8 @@ certificate. It works once, within 30 days.
 
 **Signing order.** The order of a template's roles. Each signer is asked when the one before has signed.
 
-**Signing page.** Where a signer reviews the document, confirms it is them and signs. It opens with a one-time link from a
-host product, or from the envelope's page.
+**Signing page.** Where a signer reviews the document, confirms it is them and signs. It opens from the invitation Esign
+emails, or with a one-time link from a host product.
 
 ## T–V
 

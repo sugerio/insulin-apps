@@ -21,10 +21,12 @@ export function otpCode(): string {
   do { crypto.getRandomValues(values); } while (values[0] >= 4294000000);
   return String(values[0] % 1000000).padStart(6, '0');
 }
-type View = { tenantId: string; envelopeId: string; taskId: string; origin: string; now: number };
+/** `entry`: how the code is issued (signer-facts.ts SessionEntry), kept with the session it opens. */
+type View = { tenantId: string; envelopeId: string; taskId: string; origin: string; now: number; entry?: Record<string, unknown> };
 /** A one-time code (scope `recipient`) for the ACTIVE task of an IN_PROGRESS envelope of the tenant. */
 export async function issueRecipientCode(db: D1Database, view: View): Promise<string> {
   return issueAccessCode(db, { scope: 'recipient', tenantId: view.tenantId, subjectId: view.taskId, origin: view.origin, now: view.now,
+    ...(view.entry && Object.keys(view.entry).length ? { entry: JSON.stringify(view.entry) } : {}),
     where: { sql: 'EXISTS (SELECT 1 FROM tasks WHERE id=v.subject_id AND envelope_id=?)', binds: [view.envelopeId] } });
 }
 /** Exchanges a recipient code, only at the origin it was issued for, for a page session token. */

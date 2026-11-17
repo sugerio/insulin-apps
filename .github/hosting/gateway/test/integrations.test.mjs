@@ -103,6 +103,7 @@ test('a service account gets tokens with its credentials and calls the API with 
   assert.equal(headers['x-suger-app-role'], 'EDITOR')
   assert.equal(headers['x-suger-app-permissions'], 'captable.manage captable.view portfolio.view')
   assert.equal(headers['x-suger-access-via'], 'api')
+  assert.equal(headers['x-suger-org-role'], undefined, 'a service account has no organization role')
   assert.equal(headers['user-agent'], 'Insulin Apps API: Nightly export')
   assert.equal(headers.authorization, undefined)
   assert.equal(headers.origin, 'http://captable.insulinapps.localhost')

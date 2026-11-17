@@ -105,11 +105,13 @@ These headers reach the app on every request from a person, an AI agent or an OA
 | `x-suger-app-role` | `ADMIN`, `EDITOR` or `VIEWER`. For a custom role, the least built-in role that covers its permissions |
 | `x-suger-app-permissions` | Apps with a permission catalog only: the effective permissions, space-separated |
 | `x-suger-access-via` | `browser`, `mcp` (an AI agent) or `api` (an OAuth client); `public` and `schedule` are described below |
+| `x-suger-org-role` | A person's organization role: `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for specific apps. Never sent for an OAuth client |
 
 User and organization ids are random UUIDs. An app reads these with `getCurrentUser(request)` from `@fours/app/server`.
 
 Apps treat `x-suger-app-permissions` as a narrowing of the role, never a widening: what a caller may do is the role's
-permissions that are also in the header. Apps also refuse changes to their own people, roles, billing or integrations
+permissions that are also in the header. `x-suger-org-role` lets an app give organization owners or admins something
+no app role gives (in Esign, taking over what someone owns); an Admin of an app by specific-apps access is `APPS` there. Apps also refuse changes to their own people, roles, billing or integrations
 unless `x-suger-access-via` is `browser`.
 
 AI agents and OAuth clients also send a `User-Agent` that names them: `Insulin Apps MCP: <client name>` or

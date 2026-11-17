@@ -70,7 +70,8 @@ or AI agent management.
 
 **What an app receives and must do.** Every request carries `x-suger-app-role` (`ADMIN`, `EDITOR` or `VIEWER`; the
 Insulin console may still send `OWNER`, treated as `ADMIN`, and `USER`, treated as `VIEWER`), `x-suger-app-permissions`
-and `x-suger-access-via`.
+and `x-suger-access-via`; a person's also `x-suger-org-role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for
+specific apps).
 
 - **Admin** can do everything in the app. **Editor** can use every function except people, roles, permissions and
   integrations. **Viewer** is read only, and the app decides what reading shows (Cap Table shows a Viewer their own
@@ -81,6 +82,9 @@ and `x-suger-access-via`.
 - **Permissions only narrow.** Effective permissions are the role's permissions intersected with
   `x-suger-app-permissions`, and a missing header means the role's full set. Read both headers through one helper, as
   Cap Table does in `src/app/server/lib/identity.ts`.
+- **The organization role gives, so trust it only when told to.** An app may give organization owners or admins
+  powers no app role gives (an app Admin by grant is `APPS` there), only when the deploy sets `SUGER_TRUST_ORG_ROLE`,
+  treating a missing or unknown value as no organization role (DESIGN.md §2.4; Esign's `identity.ts`).
 - **Enforce on the server.** Hiding a button isn't access control.
 
 **AI agents and API clients.** Each app is its own MCP server at `https://<app>.insulinapps.com/mcp`, with its own OAuth
@@ -133,8 +137,8 @@ the platform for the rest in `package.json` under `insulin`:
   exactly `schedule` and no identity is present, treat a request marked `schedule` as nobody on every other route,
   keep it out of `/api/catalog`, and do every organization's due work there, idempotent and bounded per tick.
 - **Accepted, not built yet** (DESIGN.md §12): an app-owned engine (Durable Objects, Containers, R2, Workers AI)
-  reached over `SUGER_ENGINE`, app limits set in the operator console, the `x-suger-org-role` header, a member lookup,
-  member status and member events for sharing, and rules for apps that let people share their records. Don't build
+  reached over `SUGER_ENGINE`, app limits set in the operator console, a member lookup for sharing (the signed one of
+  §12.3), member status and member events, and rules for apps that let people share their records. Don't build
   against them until they ship.
 - **Usage reports** are required of every app (DESIGN.md §8.6): Insulin Apps' operator console never reads an app's
   database, so each app declares `insulin.scheduled` and, on the first tick of each UTC hour, `POST`s its gauges to

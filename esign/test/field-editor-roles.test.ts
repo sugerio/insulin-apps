@@ -49,3 +49,36 @@ test('role names are rendered as text, not HTML',async()=>{
  assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
  assert.ok(!html.includes('<img src=x'));
 });
+
+test('pre-filled fields: offered for a template, listed once per name with its name, and named from a label', async()=>{
+ const {renderToStaticMarkup}=await import('react-dom/server');
+ const {FieldEditor,prefillNameOf}=await import('../src/app/ui/FieldEditor.ts');
+ assert.equal(prefillNameOf('Partner legal name'),'partnerLegalName');
+ assert.equal(prefillNameOf('  Effective date! '),'effectiveDate');
+ assert.equal(prefillNameOf('1st party'),'f1stParty');
+ assert.equal(prefillNameOf('***'),'');
+ const placed=(id:string,y:number)=>({id,type:'Prefill',role:'',name:'partner.legalName',label:'Partner legal name',required:true,page:1,rect:{x:.1,y,width:.3,height:.05}});
+ const initialFields=[placed('p1',.1),placed('p2',.3),{id:'s',type:'Signature',role:'Partner',page:1,required:true,rect:{x:.1,y:.5,width:.3,height:.05}}];
+ const html=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner'],initialFields,allowPrefill:true}));
+ assert.match(html,/aria-label="Pre-filled fields"/);
+ assert.equal(html.split('aria-label="Place Partner legal name"').length-1,1,'one entry for the name placed twice');
+ assert.match(html,/title="partner\.legalName"[^>]*aria-label="Place Partner legal name"/,'its name on hover');
+ assert.match(html,/id="prefill-label"/);
+ assert.match(html,/Add pre-filled field/);
+ const without=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner']}));
+ assert.doesNotMatch(without,/Pre-filled fields/,'an uploaded envelope\'s editor offers none');
+});
+
+test('pre-filled fields a host fills in: only those are offered, to drag on, with no adding one\'s own', async()=>{
+ const {renderToStaticMarkup}=await import('react-dom/server');
+ const {FieldEditor}=await import('../src/app/ui/FieldEditor.ts');
+ const prefillCatalog=[{name:'partner.name',label:'Partner name'},{name:'agreement.sentDate',label:'Sent date'}];
+ const placed={id:'p1',type:'Prefill',role:'',name:'legacy.field',label:'Legacy field',required:false,page:1,rect:{x:.1,y:.1,width:.3,height:.05}};
+ const html=renderToStaticMarkup(React.createElement(FieldEditor,{initialRoles:['Partner'],initialFields:[placed],allowPrefill:true,prefillCatalog}));
+ assert.ok(html.indexOf('aria-label="Place Partner name"')<html.indexOf('aria-label="Place Sent date"'),'the host\'s, in its order');
+ assert.match(html,/aria-label="Place Legacy field"/,'one the template has already stays placeable');
+ assert.match(html,/title="agreement\.sentDate"/);
+ assert.doesNotMatch(html,/id="prefill-label"/);
+ assert.doesNotMatch(html,/Add pre-filled field/);
+ assert.match(html,/Drag onto the page/);
+});

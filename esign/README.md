@@ -11,10 +11,6 @@ members in and decides what their role allows. A host product can also drive it 
 with a service account, embed the signing page and the template editor in its own pages, and follow
 each envelope's status.
 
-**Status: experimental.** Use synthetic documents and test addresses only. The consent wording, the
-certificate and the timestamp service still need review before real documents are signed (see
-"Known limitations" in [docs/architecture.md](docs/architecture.md)).
-
 ## What it does
 
 - **Templates.** A PDF with the roles that sign it (for example `partner` and `seller`). Fields
@@ -23,7 +19,8 @@ certificate and the timestamp service still need review before real documents ar
 - **Envelopes.** A template sent to named recipients, one per role, who sign in order. An envelope
   can carry the document's name and version, the sender, a sign-by deadline, and what each signer
   sees after signing. It can be voided; a signer can decline with a reason.
-- **Signing.** The recipient opens a one-time link, confirms a six-digit code sent to their email,
+- **Signing.** The recipient opens the signing page from the invitation Esign emails them (or a host product's one-time
+  link), confirms a six-digit code sent to their email,
   reviews the document, agrees to sign electronically and signs. Signing for a company records their
   title and authority.
 - **Evidence.** Every signature is hash-chained to the previous one and to the document it was made
@@ -34,11 +31,13 @@ certificate and the timestamp service still need review before real documents ar
 
 Members open Esign from their organization's Insulin apps:
 
-- **Envelopes**: every envelope with its status; one envelope's signers, audit trail and, once
-  completed, the signed PDF and certificate. Those who manage send new ones, void, open the active
-  signer's signing page, and run the due work.
-- **Templates**: upload a PDF with its roles, signed on an added page or in fields placed in the
-  editor.
+- **Envelopes**: the envelopes they own or that are shared with them, with their status; one envelope's
+  signers, audit trail and, once completed, the signed PDF and certificate. Those who manage send new
+  ones (Esign emails each signer an invitation), void them and resend an invitation.
+- **Templates**: upload a PDF with its roles and place its fields in the editor (templates signed on an
+  added page come through the API).
+- **Contacts**: the organization's address book, everyone its envelopes named as signers and anyone
+  added by hand; everyone who can use Esign sees it.
 - **Docs**: getting started, the main tasks, what signers see, statuses, evidence, roles, background
   on electronic signatures (general information, not legal advice) and a glossary. Every role can
   open them.
@@ -46,9 +45,9 @@ Members open Esign from their organization's Insulin apps:
   `insulinapps.com/apps/esign/settings/`.
 
 They are in the two-level navigation every Insulin app has: the organization switcher, these
-sections (Envelopes and Templates from `insulin.navigation` in `package.json`) and the person in the
-first column; the open section's items (the Envelopes views by status, the Docs topics, Settings'
-pages) in the second; each column collapses to icons.
+sections (Envelopes, Templates and Contacts from `insulin.navigation` in `package.json`) and the person
+in the first column; the open section's items (the Docs topics, Settings' pages) in the second; each
+column collapses to icons.
 
 Signers use three public pages: the signing page (`/sign`, with an "About signing" panel), the copy
 link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).
@@ -57,8 +56,8 @@ link (`/copy`), and, for hosts, the embedded field editor (`/editor/page/:id`).
 
 | Role | Esign permission | Can |
 | --- | --- | --- |
-| Editor and above (Owner, Admin, Editor) | `esign.manage` | send, void and follow envelopes, upload templates, open signing pages for testing |
-| Viewer | `esign.view` | see the organization's templates and envelopes |
+| Editor and above (Owner, Admin, Editor) | `esign.manage` | send, void and follow envelopes, resend invitations, upload templates |
+| Viewer | `esign.view` | see the templates and envelopes shared with them |
 
 A custom role is built from these two permissions. Recipients don't need an account: their link and
 emailed code are their access, to their own task only.
@@ -66,9 +65,9 @@ emailed code are their access, to their own task only.
 **The platform runs due work every five minutes.** Esign declares `"scheduled": "/api/scheduled"`
 under `insulin` in `package.json`, and the hosting gateway POSTs there every five minutes with no
 identity (`x-suger-access-via: schedule`). An envelope is normally finished right after its last
-signature, after the signer's response; due work finishes any that a request couldn't (a CPU limit,
-an outage), expires envelopes past their deadline and retries completion notices, for every
-organization. Hosts no longer need to schedule anything: `POST /api/process-due` stays, for a
+signature, after the signer's response; due work sends the drafts scheduled with Send later whose
+time has come, finishes any envelope a request couldn't (a CPU limit, an outage), expires envelopes
+past their deadline and retries completion notices and invitations, for every organization. Hosts no longer need to schedule anything: `POST /api/process-due` stays, for a
 manager or a host's service account to finish their own organization's due work at once.
 
 **Esign reports its usage every hour.** After the due work, the first tick of each hour sends the
@@ -111,8 +110,8 @@ response and locally generated OpenSSL responses).
 
 Edit `src/app/db/schema.ts` and run `npm run db:generate` (drizzle-kit 0.31.11 with drizzle-orm
 0.45.3). The triggers that keep signatures and the audit trail append-only are the custom migration
-`src/app/db/migrations/0001_triggers.sql`. `0002_seal_key.sql` was written by hand, in the form drizzle-kit gives a
-table rebuild, to carry existing seals over to the new mode.
+`src/app/db/migrations/0001_triggers.sql`. The history before Esign shipped is folded into `0000_init.sql`: a local
+database made from the earlier chain is recreated, not migrated.
 
 ### Configuration
 

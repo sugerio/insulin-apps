@@ -21,6 +21,8 @@ export interface MemberRow {
   email: string
   role: Role
   created_at: number
+  /** The account's standing (DESIGN.md §11.3): a suspended or disabled one stays a member but uses no app. */
+  status: string
 }
 
 const ROLE_ORDER = `CASE m.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 WHEN 'EDITOR' THEN 2 WHEN 'VIEWER' THEN 3 ELSE 4 END`
@@ -152,7 +154,7 @@ export async function listUnavailableOrgs(db: D1Database, userId: string): Promi
 
 export async function listMembers(db: D1Database, orgId: string): Promise<MemberRow[]> {
   const { results } = await db.prepare(
-    `SELECT m.user_id, u.name, u.email, m.role, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id
+    `SELECT m.user_id, u.name, u.email, m.role, m.created_at, u.status FROM memberships m JOIN users u ON u.id = m.user_id
      WHERE m.org_id = ?1 ORDER BY ${ROLE_ORDER}, u.name COLLATE NOCASE, u.email`,
   ).bind(orgId).all<MemberRow>()
   return results

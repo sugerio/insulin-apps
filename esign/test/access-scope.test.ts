@@ -96,8 +96,8 @@ test('signing APIs refuse editor codes and tokens, editor APIs refuse recipient 
   const template=await (await req('/api/templates',{method:'POST',headers:management,body:form})).json() as {id:string};
   const created=await req('/api/envelopes',json({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'}]},{...management,'idempotency-key':'scope-1'}));
   assert.equal(created.status,201,await created.clone().text());const envelope=await created.json() as {id:string};
-  const task=((await (await req(`/api/envelopes/${envelope.id}`,{headers:management})).json()) as {tasks:{id:string}[]}).tasks[0].id;
-  const view=await req(`/api/envelopes/${envelope.id}/tasks/${task}/recipient-view`,json({origin:host},management));assert.equal(view.status,201);
+  const task=((await (await req(`/api/envelopes/${envelope.id}`,{headers:management})).json()) as {tasks:{id:string;recipientEmail:string}[]}).tasks[0].id;
+  const view=await req(`/api/envelopes/${envelope.id}/tasks/${task}/recipient-view`,json({origin:host,signedInEmail:'ana@example.com'},management));assert.equal(view.status,201);
   const recipientCode=((await view.json()) as {code:string}).code;
   const session=await req('/api/template-editing-sessions',json({allowedParentOrigin:host,roles:['Signer']},management));assert.equal(session.status,201);
   const editor=await session.json() as {sessionId:string;url:string};const editorCode=new URL(editor.url).hash.slice(1);

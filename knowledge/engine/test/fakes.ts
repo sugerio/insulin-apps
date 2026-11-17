@@ -734,16 +734,29 @@ const STOP = new Set(['what', 'the', 'and', 'does', 'how', 'are', 'for', 'with',
 
 /** The fake container's hiding: e-mail addresses and the organization's words. Offsets as JavaScript counts them. */
 export function hideFake(text: string, words: string[]) {
-  const hidden: { start: number; end: number; kind: string }[] = []
   const patterns: [RegExp, string][] = [[/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, 'email']]
   for (const w of words) patterns.push([new RegExp(`(?<!\\w)${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\w)`, 'gi'), 'word'])
-  let out = text
-  for (const [pattern, kind] of patterns) {
-    out = out.replace(pattern, (match, offset: number) => {
-      hidden.push({ start: offset, end: offset + 8, kind })
-      return '[hidden]'
-    })
+  // Every value found in the text as given, overlapping ones merged, then each replaced; positions are in the
+  // redacted text, as ops.py records them.
+  const found: { start: number; end: number; kind: string }[] = []
+  for (const [pattern, kind] of patterns) for (const m of text.matchAll(pattern)) found.push({ start: m.index!, end: m.index! + m[0].length, kind })
+  found.sort((a, b) => a.start - b.start || b.end - a.end)
+  const merged: typeof found = []
+  for (const f of found) {
+    const last = merged[merged.length - 1]
+    if (last && f.start < last.end) last.end = Math.max(last.end, f.end)
+    else merged.push({ ...f })
   }
+  let out = ''
+  let at = 0
+  const hidden: { start: number; end: number; kind: string }[] = []
+  for (const f of merged) {
+    out += text.slice(at, f.start)
+    hidden.push({ start: out.length, end: out.length + 8, kind: f.kind })
+    out += '[hidden]'
+    at = f.end
+  }
+  out += text.slice(at)
   return { text: out, pages: [], hidden }
 }
 

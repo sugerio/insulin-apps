@@ -4,7 +4,7 @@ import { ORG_HEADER, type CollectionStatus, type ImportStatus, type OutboxPage, 
 import { createStubEngine, STUB_MARKER } from '../../engine/src/stub/index.ts'
 import { sha256Hex } from '../../engine/src/stub/text.ts'
 import worker from '../../engine/src/stub/worker.ts'
-import { readZip, writeZip } from '../../engine/src/stub/zip.ts'
+import { readZip, writeZip, zipStats } from '../../engine/src/stub/zip.ts'
 
 // The in-memory engine against the contract (knowledge/engine/src/contract.ts): every route answers in its shapes,
 // organizations are kept apart, and it keeps the real engine's rules the app relies on.
@@ -370,7 +370,7 @@ describe('the in-memory engine, as the real engine behaves', () => {
 
     await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
     await call('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip', 'x-file-name': 'export.zip' })
-    const started = await call<ImportStatus>('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009' })
+    const started = await call<ImportStatus>('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009', sha256: sha256Hex(zip) })
     expect(started.status).toBe(202)
     engine.control.runUntilIdle()
     expect((await call<ImportStatus>('GET', '/v1/collections/c2/imports/restore1')).body.state).toBe('committed')
@@ -383,17 +383,17 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call<{ restorePoints: unknown[] }>('GET', '/v1/collections/c2/restore-points')).body.restorePoints).toHaveLength(1)
     // Only into an empty collection, and only a Knowledge export.
     await call('PUT', '/v1/collections/c1/inbox/file0010', zip, 'org-a', { 'content-type': 'application/zip' })
-    expect((await call<{ error: string }>('POST', '/v1/collections/c1/import-export', { importId: 'restore2', fileId: 'file0010' })).status).toBe(409)
+    expect((await call<{ error: string }>('POST', '/v1/collections/c1/import-export', { importId: 'restore2', fileId: 'file0010', sha256: sha256Hex(zip) })).status).toBe(409)
     await call('PUT', '/v1/collections/c3', { settings: SETTINGS })
     await stage('c3', 'file0011', 'notes.md', '# not an export')
-    const wrong = await call<{ error: string }>('POST', '/v1/collections/c3/import-export', { importId: 'restore3', fileId: 'file0011' })
+    const wrong = await call<{ error: string }>('POST', '/v1/collections/c3/import-export', { importId: 'restore3', fileId: 'file0011', sha256: sha256Hex('# not an export') })
     expect(wrong.status).toBe(409)
     expect(wrong.body.error).toBe('bad_request')
     // A zip with an export's files but a document id the real engine wouldn't read is refused the same way.
     const odd = await writeZip([['README.txt', 'x'], ['collection.json', '{"collectionId":"c1","version":1}'], ['notes.json', '{"notes":[]}'], ['corrections.json', '{"corrections":[]}'],
       ['documents/doc-1.json', '{"document":{"documentId":"doc-1","kind":"file","name":"a.md","type":"text/markdown","bytes":1,"pages":null,"sha256":"x","active":true}}'], ['documents/doc-1.txt', 'a']])
     await call('PUT', '/v1/collections/c3/inbox/file0012', odd, 'org-a', { 'content-type': 'application/zip' })
-    expect((await call('POST', '/v1/collections/c3/import-export', { importId: 'restore4', fileId: 'file0012' })).status).toBe(409)
+    expect((await call('POST', '/v1/collections/c3/import-export', { importId: 'restore4', fileId: 'file0012', sha256: sha256Hex(odd) })).status).toBe(409)
   })
 
   it('a queued export learns with the hiding rules in force when it learns, and keeps corrected passages corrected', async () => {
@@ -410,7 +410,7 @@ describe('the in-memory engine, as the real engine behaves', () => {
     await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
     await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z' })
     await call('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip' })
-    expect((await call('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009' })).status).toBe(202)
+    expect((await call('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009', sha256: sha256Hex(zip) })).status).toBe(202)
     await call('PUT', '/v1/collections/c2', { settings: { ...SETTINGS, hiding: { ...SETTINGS.hiding, words: ['Cobalt', '8001'] }, revision: 5 } })
     await call('POST', '/v1/orgs/org-a/hold', { until: null })
     engine.control.runUntilIdle()
@@ -441,8 +441,87 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect(await readZip(forged)).toBeNull()
     expect(await readZip(good, { entryBytes: 1024 * 1024 })).toBeNull()
     await call('PUT', '/v1/collections/c1/inbox/file0009', forged, 'org-a', { 'content-type': 'application/zip' })
-    const started = await call<{ error: string }>('POST', '/v1/collections/c1/import-export', { importId: 'restore1', fileId: 'file0009' })
+    const started = await call<{ error: string }>('POST', '/v1/collections/c1/import-export', { importId: 'restore1', fileId: 'file0009', sha256: sha256Hex(forged) })
     expect(started.status).toBe(409)
+  })
+
+  it('starts from the export it was asked to, by its checksum: a different file is refused', async () => {
+    const { call, learn, engine } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Tiers.md', text: 'Gold partners renew every March.' }])
+    engine.control.runUntilIdle()
+    await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })
+    const zip = new Uint8Array(await (await engine.fetch(new Request('https://engine.test/v1/collections/c1/exports/e1?download=1', { headers: { [ORG_HEADER]: 'org-a' } }))).arrayBuffer())
+    await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
+    const staged = await call<{ sha256: string }>('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip' })
+    const other = await call<{ error: string }>('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009', sha256: '0'.repeat(64) })
+    expect(other.status).toBe(409)
+    expect(other.body.error).toBe('bad_request')
+    expect((await call('POST', '/v1/collections/c2/import-export', { importId: 'restore2', fileId: 'file0009' })).status).toBe(400)
+    expect((await call('POST', '/v1/collections/c2/import-export', { importId: 'restore3', fileId: 'file0009', sha256: staged.body.sha256 })).status).toBe(202)
+  })
+
+  it('reads an export lazily within one budget: entries it doesn\'t need are never inflated, and too much in all is refused', async () => {
+    const { call } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    const manifests: [string, string][] = [['README.txt', 'x'], ['collection.json', '{"format":2,"collectionId":"c0","version":1}'], ['notes.json', '{"notes":[]}'], ['corrections.json', '{"corrections":[]}']]
+    const details = (documentId: string, name: string) => JSON.stringify({ document: { documentId, kind: 'file', name, type: 'text/markdown', bytes: 1, pages: null, sha256: 'a'.repeat(64), active: true }, noteId: null, truncated: false, pages: [], hidden: {}, outdated: [] })
+    const extras: [string, string][] = Array.from({ length: 48 }, (_, index) => [`extra/${index}.bin`, '0'.repeat(3 * 1024 * 1024)])
+    const document: [string, string][] = [['documents/d_000000000000000000000001.json', details('d_000000000000000000000001', 'a.md')], ['documents/d_000000000000000000000001.txt', 'Gold partners renew every March.']]
+    const padded = await writeZip([...manifests, ...extras, ...document])
+    expect(padded.byteLength).toBeLessThan(1024 * 1024)
+    const before = zipStats.inflated
+    const staged = await call<{ sha256: string }>('PUT', '/v1/collections/c1/inbox/file0001', padded, 'org-a', { 'content-type': 'application/zip' })
+    expect((await call('POST', '/v1/collections/c1/import-export', { importId: 'restore1', fileId: 'file0001', sha256: staged.body.sha256 })).status).toBe(202)
+    expect(zipStats.inflated - before).toBeLessThan(64 * 1024)
+    // Thirty documents of 3 MB of text each is more than an export may bring back in all: refused before inflating.
+    const many: [string, string][] = Array.from({ length: 30 }, (_, index) => {
+      const documentId = `d_${String(index + 1).padStart(24, '0')}`
+      return [[`documents/${documentId}.json`, details(documentId, `${index}.md`)], [`documents/${documentId}.txt`, 'a'.repeat(3 * 1024 * 1024)]] as [string, string][]
+    }).flat()
+    const heavy = await writeZip([...manifests, ...many])
+    await call('PUT', '/v1/collections/c3', { settings: SETTINGS })
+    const stagedHeavy = await call<{ sha256: string }>('PUT', '/v1/collections/c3/inbox/file0003', heavy, 'org-a', { 'content-type': 'application/zip' })
+    const start = zipStats.inflated
+    expect((await call('POST', '/v1/collections/c3/import-export', { importId: 'restore3', fileId: 'file0003', sha256: stagedHeavy.body.sha256 })).status).toBe(409)
+    expect(zipStats.inflated - start).toBeLessThan(64 * 1024)
+  })
+
+  it('a correction of a passage already corrected wins over the earlier one', async () => {
+    const { call, learn, engine } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Ports.md', text: 'The gateway listens on port 8001.' }])
+    engine.control.runUntilIdle()
+    const passage = (await call<{ passages: { documentId: string; textHash: string }[] }>('POST', '/v1/collections/c1/search', { query: 'gateway port' })).body.passages[0]!
+    const ref = { documentId: passage.documentId, textHash: passage.textHash }
+    await call('POST', '/v1/collections/c1/corrections', { importId: 'fix1', note: { noteId: 'n1', title: 'Correction', text: 'The gateway listens on port 9001.', outdated: [ref] } })
+    engine.control.runUntilIdle()
+    await call('POST', '/v1/collections/c1/corrections', { importId: 'fix2', note: { noteId: 'n2', title: 'Correction', text: 'The gateway listens on port 9002.', outdated: [ref] } })
+    engine.control.runUntilIdle()
+    const answers = (await call<{ passages: { text: string }[] }>('POST', '/v1/collections/c1/search', { query: 'gateway listens on port' })).body.passages.map((found) => found.text)
+    expect(answers.some((text) => text.includes('9002'))).toBe(true)
+    expect(answers.some((text) => text.includes('9001'))).toBe(false)
+  })
+
+  it('an export hidden again asks for a check of every corrected passage whose text changed', async () => {
+    const { call, learn, engine } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Ports.md', text: 'The Cobalt gateway listens on port 8001.' }])
+    engine.control.runUntilIdle()
+    const passage = (await call<{ passages: { documentId: string; textHash: string }[] }>('POST', '/v1/collections/c1/search', { query: 'Cobalt gateway port' })).body.passages[0]!
+    await call('POST', '/v1/collections/c1/corrections', { importId: 'fix1', note: { noteId: 'n1', title: 'Correction', text: 'The gateway listens on port 9001.', outdated: [{ documentId: passage.documentId, textHash: passage.textHash }] } })
+    engine.control.runUntilIdle()
+    await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })
+    const zip = new Uint8Array(await (await engine.fetch(new Request('https://engine.test/v1/collections/c1/exports/e1?download=1', { headers: { [ORG_HEADER]: 'org-a' } }))).arrayBuffer())
+    await call('PUT', '/v1/collections/c2', { settings: { ...SETTINGS, hiding: { ...SETTINGS.hiding, words: ['Cobalt'] } } })
+    const staged = await call<{ sha256: string }>('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip' })
+    const since = (await call<OutboxPage>('GET', '/v1/outbox?since=&limit=500', undefined, null)).body.cursor
+    await call('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009', sha256: staged.body.sha256 })
+    engine.control.runUntilIdle()
+    const events = (await call<OutboxPage>('GET', `/v1/outbox?since=${since}&limit=500`, undefined, null)).body.events
+    const checks = events.filter((event) => event.type === 'needs_check' && event.collectionId === 'c2')
+    expect(checks).toMatchObject([{ noteId: 'n1', documentId: passage.documentId }])
+    expect((checks[0] as { textHash: string }).textHash).not.toBe(passage.textHash)
   })
 
   it('clears staged files nobody imported after a day, unless kept for a waiting import, at most 45 days', async () => {

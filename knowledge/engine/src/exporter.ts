@@ -3,7 +3,8 @@
 // never a hidden value (the texts were redacted before they were stored; the organization's own hidden words are
 // left out of the settings too). Built in the alarm, stored in R2 for 7 days.
 
-import type { ExportStatus } from './contract.ts'
+import type { ExportStatus, HiddenSpan } from './contract.ts'
+import { EXPORT_FORMAT, documentEntries, layoutOf } from './exportfile.ts'
 import type { CollectionEngine } from './collection.ts'
 import { factFilter, publicDocument, publicFact, type StoredFact } from './collection.ts'
 import { fail, json, requireId } from './http.ts'
@@ -17,8 +18,8 @@ import * as history from './history.ts'
 const README = `This file is an export of an Insulin Knowledge collection.
 
 documents/<id>.txt   the text Knowledge learned from each file or note, with sensitive values shown as [hidden]
-documents/<id>.json  the document's details, its page map (where each page starts and ends in the text)
-                     and where each [hidden] value is
+documents/<id>.json  the document's details, its page map ([page, start, end] in the text) and where each
+                     [hidden] value starts, by kind; for a note, its id and the passages it corrects
 notes.json           the notes people wrote
 facts.json           the facts Knowledge found, each with the sentence it came from
 corrections.json     passages marked outdated by a correction, and the note that corrects each
@@ -86,6 +87,7 @@ async function build(e: CollectionEngine, record: ExportRecord): Promise<void> {
       'collection.json',
       JSON.stringify(
         {
+          format: EXPORT_FORMAT,
           collectionId: meta.collectionId,
           version: meta.version,
           exportedAt: iso(),
@@ -100,12 +102,14 @@ async function build(e: CollectionEngine, record: ExportRecord): Promise<void> {
     for (const doc of documents) {
       const object = await e.env.FILES.get(doc.textKey)
       if (!object) continue
-      const stored = (await object.json()) as { text: string; pages: unknown; hidden: unknown }
-      await zip.add(`documents/${doc.documentId}.txt`, stored.text)
-      await zip.add(
-        `documents/${doc.documentId}.json`,
-        JSON.stringify({ document: publicDocument(doc), pages: stored.pages, hidden: stored.hidden, truncated: doc.truncated }, null, 2),
-      )
+      const stored = (await object.json()) as { text: string; pages: { page: number; start: number; end: number }[]; hidden: HiddenSpan[] }
+      // Within the bounds the import holds an export to, so every export can start a collection again.
+      const layout = layoutOf(stored.pages ?? [], stored.hidden ?? [])
+      const outdated = state.marks.filter((m) => m.noteDocumentId === doc.documentId).map((m) => ({ documentId: m.documentId, textHash: m.textHash, needsCheck: m.needsCheck }))
+      const entries = layout && documentEntries({ document: publicDocument(doc), noteId: doc.noteId, truncated: doc.truncated, ...layout, outdated }, stored.text)
+      if (!entries) throw new Error(`“${doc.name}” is larger than an export can hold`)
+      await zip.add(`documents/${doc.documentId}.txt`, entries.text)
+      await zip.add(`documents/${doc.documentId}.json`, entries.json)
       if (doc.kind === 'note') notes.push({ documentId: doc.documentId, noteId: doc.noteId, title: doc.name, text: stored.text })
     }
     await zip.add('notes.json', JSON.stringify({ notes }, null, 2))
@@ -162,9 +166,13 @@ export async function expire(e: CollectionEngine): Promise<void> {
   }
 }
 
-/** Remove for good: a stored export that holds the document is deleted. */
-export async function dropContaining(e: CollectionEngine, documentId: string): Promise<void> {
+/**
+ * Remove for good, or stricter hiding: a stored export that holds the document is deleted (with `before`, only one
+ * made before then: a later one holds its text as it is now).
+ */
+export async function dropContaining(e: CollectionEngine, documentId: string, before?: string): Promise<void> {
   for (const record of await e.store.listExports()) {
+    if (before && record.status.readyAt && record.status.readyAt >= before) continue
     if (record.status.state === 'ready' && record.documentIds.includes(documentId)) {
       await e.env.FILES.delete(record.key)
       record.status = { ...record.status, state: 'failed', bytes: null }

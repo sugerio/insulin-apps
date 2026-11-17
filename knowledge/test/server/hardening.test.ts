@@ -550,6 +550,6 @@ describe('the awake-hours stop, held in the engine', () => {
     h.clock.now = Date.UTC(2026, 11, 1, 0, 5)
     await h.tick()
     expect((await engineStatus(id)).state).not.toBe('held')
-    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM org_holds WHERE org_id = ?`).bind(ORG).first('n')).toBe(0)
+    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM org_holds WHERE org_id = ? AND until != 0`).bind(ORG).first('n')).toBe(0)
   })
 })

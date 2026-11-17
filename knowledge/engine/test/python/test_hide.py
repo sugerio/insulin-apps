@@ -142,3 +142,21 @@ class Hostile(unittest.TestCase):
         self.assertEqual(found(f"Key:\n{key}\nDone."), [key])
         two = f"{key}\n\n{key}"
         self.assertEqual(found(two), [key, key], "two keys are two values")
+
+
+class Bounded(unittest.TestCase):
+    def test_del03_a_text_hiding_lengthened_is_cut_at_the_export_bound_never_inside_a_mark(self):
+        # "QX " hidden is "[hidden] ": three times as long.
+        text = "QX " * (hide.STORED_TEXT_BYTES // 8)
+        rules = {"words": ["QX"]}
+        redaction = hide.apply(text, rules, [{"page": 1, "start": 0, "end": 30}, {"page": 2, "start": 30, "end": len(text)}])
+        self.assertGreater(len(redaction.text.encode()), hide.STORED_TEXT_BYTES)
+        cut, was_cut = hide.bounded(redaction)
+        self.assertTrue(was_cut)
+        self.assertLessEqual(len(cut.text.encode()), hide.STORED_TEXT_BYTES)
+        self.assertTrue(all(cut.text[s.start : s.end] == hide.MARK for s in cut.hidden), "no mark is cut in two")
+        self.assertTrue(all(s.end <= len(cut.text) for s in cut.hidden))
+        self.assertEqual(cut.text.count("["), len(cut.hidden), "the text ends before the mark it would have cut")
+        self.assertEqual(cut.pages[-1]["end"], len(cut.text))
+        same, again = hide.bounded(hide.apply("A short text.", rules))
+        self.assertFalse(again)

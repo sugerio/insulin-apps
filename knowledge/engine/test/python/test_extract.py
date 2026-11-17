@@ -100,6 +100,16 @@ class Formats(unittest.TestCase):
         self.assertGreater(len(result.text.encode("utf-8")), MAX_TEXT_BYTES * 0.9)
         self.assertEqual(result.note, "Only the first 2 MB of text was learned.")
 
+    def test_del03_a_page_map_is_cut_at_max_pages_so_an_export_can_hold_it(self):
+        import extract as module
+
+        result = module._assemble([f"Page {n}." for n in range(1, module.MAX_PAGES + 50)], paged=True)
+        result = module._cap(result)
+        self.assertEqual(len(result.pages), module.MAX_PAGES)
+        self.assertTrue(result.truncated)
+        self.assertTrue(result.text.endswith(f"Page {module.MAX_PAGES}."))
+        self.assertEqual(result.note, f"Only the first {module.MAX_PAGES:,} pages were learned.")
+
     def test_excel_keeps_each_value_in_its_column(self):
         path = self.out / "sparse.xlsx"
         make_fixtures.write_xlsx(path, [("Quotas", [["Person", "City", "Quota"], ["Jordan", "", "450"], ["", "Lisbon", ""]])])

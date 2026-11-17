@@ -175,16 +175,23 @@ async function collectGarbage(e: CollectionEngine): Promise<void> {
 /** Remove for good: every backup that holds the document is dropped; the caller writes a new latest one. */
 export async function dropDocument(e: CollectionEngine, documentId: string): Promise<void> {
   const meta = await e.meta()
+  let latestDropped = false
   for (const key of [...(await dailyIndexes(e)), `${prefix(meta)}latest.json`]) {
     const object = await e.env.BACKUPS.get(key)
     if (!object) continue
     const index = (await object.json()) as BackupIndex
-    if (index.state.documents.some((d) => d.documentId === documentId)) await e.env.BACKUPS.delete(key)
+    if (index.state.documents.some((d) => d.documentId === documentId)) {
+      await e.env.BACKUPS.delete(key)
+      latestDropped ||= key.endsWith('latest.json')
+    }
   }
   await collectGarbage(e)
-  await e.updateMeta((m) => {
-    m.backupDue = true
-  })
+  // Without a latest backup, one is taken soon.
+  if (latestDropped) {
+    await e.updateMeta((m) => {
+      m.backupDue = true
+    })
+  }
 }
 
 /**
@@ -194,16 +201,22 @@ export async function dropDocument(e: CollectionEngine, documentId: string): Pro
 export async function dropOlder(e: CollectionEngine, before: number, documentIds: string[]): Promise<void> {
   const meta = await e.meta()
   const changed = new Set(documentIds)
+  let latestDropped = false
   for (const key of [...(await dailyIndexes(e)), `${prefix(meta)}latest.json`]) {
     const object = await e.env.BACKUPS.get(key)
     if (!object) continue
     const index = (await object.json()) as BackupIndex
-    if (index.version < before && index.state.documents.some((d) => changed.has(d.documentId))) await e.env.BACKUPS.delete(key)
+    if (index.version < before && index.state.documents.some((d) => changed.has(d.documentId))) {
+      await e.env.BACKUPS.delete(key)
+      latestDropped ||= key.endsWith('latest.json')
+    }
   }
   await collectGarbage(e)
-  await e.updateMeta((m) => {
-    m.backupDue = true
-  })
+  if (latestDropped) {
+    await e.updateMeta((m) => {
+      m.backupDue = true
+    })
+  }
 }
 
 /** HID-01's and HID-04's evidence, test controls only: where each planted value can still be found. */

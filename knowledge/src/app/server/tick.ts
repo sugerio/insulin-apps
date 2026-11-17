@@ -2,7 +2,7 @@ import { loadCollection, type CollectionRow } from './access.ts'
 import { EngineCallError, EngineClient } from './engine/client.ts'
 import type { Bindings } from './env.ts'
 import { eraseCollection } from './erase.ts'
-import { holdOrganization, releaseOrganization } from './holds.ts'
+import { deliverHold, holdOrganization, releaseOrganization } from './holds.ts'
 import { ApiError, logError } from './http.ts'
 import { hideKept } from './kept.ts'
 import { atAwakeStop, effectiveLimit, ensureAwakeBlock, expireReservations, formatBytes, inUnit, LIMITS, MONTHLY, periodOf, release, reservationsOf, resetsAt, SECONDS_PER_HOUR, supportSentence, type LimitKey } from './limits.ts'
@@ -150,22 +150,30 @@ export async function endOverrides(db: D1Database, now: number): Promise<number>
  * (holds.ts), and those held let go once a raised limit frees them or the month they were held for is over. Every
  * organization's use and limit are read in a few grouped queries.
  */
-export async function awakeHolds(env: Bindings, now: number, deadline: number): Promise<{ held: number; released: number }> {
+export async function awakeHolds(env: Bindings, now: number, deadline: number): Promise<{ held: number; released: number; resent: number }> {
   const db = env.DB
   let held = 0
   let released = 0
-  const { results: holds } = await db.prepare(`SELECT org_id, until FROM org_holds ORDER BY held_at LIMIT 100`).all<{ org_id: string; until: number }>()
+  let resent = 0
+  // Let go: the month it was held for is over, or a raised limit frees it.
+  const { results: holds } = await db.prepare(`SELECT org_id, until FROM org_holds WHERE until != 0 ORDER BY held_at LIMIT 100`).all<{ org_id: string; until: number }>()
   for (const hold of holds) {
-    if (Date.now() > deadline) return { held, released }
+    if (Date.now() > deadline) return { held, released, resent }
     if (hold.until > now && (await atAwakeStop(db, hold.org_id, now)).stopped) continue
-    if (await releaseOrganization(env, hold.org_id)) released += 1
+    if (await releaseOrganization(env, hold.org_id, now)) released += 1
+  }
+  // What the engine hasn't taken yet (a send that failed, or an answer that came late): sent again.
+  const { results: behind } = await db.prepare(`SELECT org_id FROM org_holds WHERE delivered != version ORDER BY held_at LIMIT 100`).all<{ org_id: string }>()
+  for (const row of behind) {
+    if (Date.now() > deadline) return { held, released, resent }
+    if (await deliverHold(env, row.org_id)) resent += 1
   }
   const period = periodOf(now)
   const { results: used } = await db.prepare(
-    `SELECT org_id, SUM(used) AS used FROM usage_counters WHERE period = ? AND key = 'awake_hours_month' AND org_id NOT IN (SELECT org_id FROM org_holds)
+    `SELECT org_id, SUM(used) AS used FROM usage_counters WHERE period = ?1 AND key = 'awake_hours_month' AND org_id NOT IN (SELECT org_id FROM org_holds WHERE until > ?2)
      GROUP BY org_id HAVING SUM(used) > 0 ORDER BY SUM(used) DESC LIMIT 500`,
-  ).bind(period).all<{ org_id: string; used: number }>()
-  if (!used.length) return { held, released }
+  ).bind(period, now).all<{ org_id: string; used: number }>()
+  if (!used.length) return { held, released, resent }
   const [defaults, overrides] = await db.batch<{ org_id?: string; value: number | null }>([
     db.prepare(`SELECT value FROM limit_defaults WHERE key = 'awake_hours_month'`),
     db.prepare(`SELECT org_id, value FROM org_limits WHERE key = 'awake_hours_month' AND (until IS NULL OR until > ?) AND org_id IN (SELECT value FROM json_each(?))`).bind(now, JSON.stringify(used.map((row) => row.org_id))),
@@ -183,7 +191,7 @@ export async function awakeHolds(env: Bindings, now: number, deadline: number): 
     if (limit === null || Number(row.used) < limit * SECONDS_PER_HOUR) continue
     if (await holdOrganization(env, row.org_id, Date.parse(resetsAt(now)), now)) held += 1
   }
-  return { held, released }
+  return { held, released, resent }
 }
 
 const WAITING_CURSOR = 'waiting_imports'
@@ -286,7 +294,8 @@ async function startWaiting(env: Bindings, row: WaitingRow, now: number): Promis
     throw error
   }
   // Marked sent before it goes: from now on it may be in the engine, so it can't be cancelled until the engine says not.
-  await db.prepare(`UPDATE imports SET request = json_set(request, '$.sentAt', ?) WHERE id = ? AND org_id = ? AND request IS NOT NULL`).bind(now, row.id, org).run()
+  await db.prepare(`UPDATE imports SET request = json_set(request, '$.sentAt', ?, '$.sends', COALESCE(json_extract(request, '$.sends'), 0) + 1) WHERE id = ? AND org_id = ? AND request IS NOT NULL`)
+    .bind(now, row.id, org).run()
   try {
     await submitImport(env, new EngineClient(env.ENGINE!, org, env.DEADLINE), org, collection, row.kind, request, row.id, now, { onRefused: 'fail' })
   } catch (error) {

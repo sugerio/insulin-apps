@@ -4,6 +4,7 @@
 
 import type { GoBackPreview, NotRestorableReason, RestorePoint } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
+import { isHeld } from './collection.ts'
 import { fail } from './http.ts'
 import { SETTINGS } from './settings.ts'
 import type { Operation, RestorePointRecord, SnapshotRecord } from './types.ts'
@@ -236,7 +237,7 @@ async function goBack(e: CollectionEngine, op: Extract<Operation, { kind: 'go_ba
   await e.state.storage.delete('goBackFailures')
   const current = meta.version ? await e.store.getPoint(meta.version) : undefined
   const state = (await e.store.getState(target.version))!
-  await commitPoint(e, {
+  const committed = await commitPoint(e, {
     record: syntheticRecord(op.undo ? 'undo' : 'back'),
     kind: op.undo ? 'undo' : 'go_back',
     changes: emptyChanges(),
@@ -248,6 +249,15 @@ async function goBack(e: CollectionEngine, op: Extract<Operation, { kind: 'go_ba
     previous: meta.version,
     importEvent: false,
   })
+  if (!committed) {
+    // The hold landed (or a removal came first) as it committed: nothing went back.
+    await e.box.destroy('the go back did not commit')
+    await e.store.deleteRuntime()
+    await e.updateMeta((m) => {
+      if (m.op?.kind === 'go_back') m.op = null
+    })
+    return
+  }
   await e.updateMeta((m) => {
     m.op = null
   })
@@ -282,7 +292,7 @@ async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repai
     if (!(await startVerified(e, candidate))) return // next alarm tries the next one
     const state = (await e.store.getState(candidate.version))!
     const note = `Answering from version ${candidate.version} after version ${op.failedVersion} failed its check`
-    await commitPoint(e, {
+    const committed = await commitPoint(e, {
       record: syntheticRecord('repair'),
       kind: 'repair',
       changes: emptyChanges(),
@@ -294,6 +304,12 @@ async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repai
       previous: meta.version,
       importEvent: false,
     })
+    if (!committed) {
+      // Held, or a removal came first: the repair runs again after.
+      await e.box.destroy('the repair did not commit')
+      await e.store.deleteRuntime()
+      return
+    }
     await e.updateMeta((m) => {
       m.op = null
       m.repairNote = note
@@ -353,12 +369,14 @@ async function fromBackup(e: CollectionEngine, op: Extract<Operation, { kind: 'f
     importEvent: false,
   })
   if (!committed) {
-    // A removal for good came first: it brings the files back itself, without the removed one.
-    await e.box.destroy('a removal for good goes first')
+    await e.box.destroy('the restore from the backup did not commit')
     await e.store.deleteRuntime()
-    await e.updateMeta((m) => {
-      m.op = null
-    })
+    // A removal for good came first: it brings the files back itself, without the removed one. Held: it waits.
+    if (!isHeld(await e.meta())) {
+      await e.updateMeta((m) => {
+        m.op = null
+      })
+    }
     return
   }
   await e.updateMeta((m) => {

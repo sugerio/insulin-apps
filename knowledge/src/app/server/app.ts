@@ -36,7 +36,8 @@ function engineError(error: EngineCallError): ApiError {
     case 'unsupported_type':
       return new ApiError('unsupported_type', "That is a type of file Insulin can't read.")
     case 'bad_request':
-      return new ApiError('bad_request', error.message && error.status === 400 ? plain(error.message) : "The request wasn't accepted. Reload and try again.")
+      // 409 is the engine refusing a start from an export (not empty, not an export, or not the file that was read).
+      return new ApiError('bad_request', error.message && (error.status === 400 || error.status === 409) ? plain(error.message) : "The request wasn't accepted. Reload and try again.")
     default:
       return new ApiError('engine_unavailable', "Knowledge's engine isn't answering right now. Try again in a minute.", retry)
   }

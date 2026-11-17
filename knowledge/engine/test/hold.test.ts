@@ -309,3 +309,40 @@ test('a go back whose container is starting when the hold lands commits nothing'
   assert.equal(t.container('c1').running, false, 'its container was stopped')
   assert.ok(!(await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints.some((p: any) => /Went back/.test(p.summary)))
 })
+
+test('a hold that arrives while an import takes its snapshot: the import keeps nothing and waits, a removal still commits', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  t.advance(6 * 60_000)
+  const box = t.container('c1') as any
+  const snapshot = box.snapshotContainer.bind(box)
+  let landed = false
+  box.snapshotContainer = async (options: any) => {
+    if (!landed) {
+      landed = true
+      await holdFor(t, 1)
+    }
+    return snapshot(options)
+  }
+  await startImport(t, 'c1', 'imp-2', [doc(3)])
+  await t.drain('c1')
+  assert.ok(landed)
+  const status = (await t.api('GET', '/v1/collections/c1/imports/imp-2')).body
+  assert.deepEqual([status.state, status.attempt, status.version], ['queued', 1, null], 'it waits for the hold to end, its try not counted')
+  const collection = (await t.api('GET', '/v1/collections/c1')).body
+  assert.deepEqual([collection.version, collection.counts.documents, collection.state], [1, 2, 'held'], 'nothing of it was kept')
+  // A removal for good still goes ahead while held.
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents[0]
+  const removed = await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+  for (let i = 0; i < 10; i++) {
+    await t.drain('c1', { steps: 50 })
+    t.advance(60_000)
+  }
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, removed.body.version)
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-2')).body.state, 'queued')
+  // Once the hold ends, the import learns.
+  t.advance(DAY_MS)
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-2')).body.state, 'committed')
+})

@@ -261,3 +261,24 @@ def redact_positions(old: list[Span], spans: list[Span]) -> list[Span]:
         if not inside:
             out.append(Span(mark.start + shift, mark.end + shift, mark.kind))
     return out
+
+
+# A stored text is at most this long (UTF-8): hiding can lengthen a text (each value becomes "[hidden]"), and an
+# export holds a text no longer than this (src/exportfile.ts EXPORT_LIMITS.textBytes), so every export can be learned
+# again.
+STORED_TEXT_BYTES = 3 * 1024 * 1024  # the export bound
+
+
+def bounded(redaction: Redaction) -> tuple[Redaction, bool]:
+    """The redaction cut to STORED_TEXT_BYTES, never inside a MARK, with its page map and marks cut to match; and
+    whether it was cut."""
+    encoded = redaction.text.encode("utf-8")
+    if len(encoded) <= STORED_TEXT_BYTES:
+        return redaction, False
+    cut = len(encoded[:STORED_TEXT_BYTES].decode("utf-8", errors="ignore"))
+    for span in redaction.hidden:
+        if span.start < cut < span.end:
+            cut = span.start
+            break
+    pages = [dict(p, end=min(p["end"], cut)) for p in redaction.pages if p["start"] < cut]
+    return Redaction(text=redaction.text[:cut], pages=pages, hidden=[s for s in redaction.hidden if s.end <= cut]), True

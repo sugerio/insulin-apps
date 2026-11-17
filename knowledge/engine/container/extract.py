@@ -18,6 +18,8 @@ from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
 MAX_TEXT_BYTES = 2 * 1024 * 1024
+# Page-map entries a document keeps (src/exportfile.ts EXPORT_LIMITS.pages): an export holds no longer page map.
+MAX_PAGES = 20_000
 # Readers stop a little past the limit (the cap then cuts and says so), so a small file can't grow into gigabytes.
 READ_BUDGET_BYTES = MAX_TEXT_BYTES + 64 * 1024
 MAX_BLANK_COLUMNS = 64  # blank cells kept between two values of one spreadsheet row
@@ -141,6 +143,12 @@ def _tidy(text: str) -> str:
 
 
 def _cap(result: Extracted) -> Extracted:
+    if len(result.pages) > MAX_PAGES:
+        end = result.pages[MAX_PAGES - 1]["end"]
+        result.text = result.text[:end]
+        result.pages = result.pages[:MAX_PAGES]
+        result.truncated = True
+        result.note = f"Only the first {MAX_PAGES:,} pages were learned."
     encoded = result.text.encode("utf-8")
     if len(encoded) <= MAX_TEXT_BYTES:
         return result

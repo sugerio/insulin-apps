@@ -173,8 +173,9 @@ export async function finishImport(env: Bindings, org: string, collection: { id:
 
 /** The statements that record an import's new state (see finishImport), for one batch. */
 export async function finishImportStatements(db: D1Database, org: string, collection: { id: string }, importId: string, status: Pick<ImportStatus, 'state'> & Partial<ImportStatus>, now: number): Promise<D1PreparedStatement[]> {
-  const row = await db.prepare(`SELECT id, detail FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ id: string; detail: string }>()
-  if (!row) return []
+  const row = await db.prepare(`SELECT id, detail, state FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ id: string; detail: string; state: string }>()
+  // What an import's end does is done once: asked about again (polled, or its event read again), nothing changes.
+  if (!row || TERMINAL.has(row.state)) return []
   const failure = status.state === 'failed' ? plainFailure(status) : null
   // The documents each file became, so a fix can tell the person who added a file.
   let detail = row.detail
@@ -204,11 +205,13 @@ export async function finishImportStatements(db: D1Database, org: string, collec
          correction_id = (SELECT id FROM corrections WHERE import_id = ?1 AND org_id = ?2)
        WHERE org_id = ?2 AND status = 'open' AND id IN (SELECT report_id FROM corrections WHERE import_id = ?1 AND org_id = ?2 AND report_id IS NOT NULL)`,
     ).bind(importId, org, now))
-    // A new correction of a file settles the checks earlier corrections of it asked for.
+    // A new correction of a file settles the checks earlier corrections of it asked for, in its collection: those that
+    // came before it was learned, not one a later re-read asks for.
+    const learnedAt = (status.finishedAt && Date.parse(status.finishedAt)) || now
     statements.push(db.prepare(
-      `DELETE FROM correction_checks WHERE org_id = ?2 AND document_id IN (
+      `DELETE FROM correction_checks WHERE org_id = ?2 AND collection_id = ?3 AND at <= ?4 AND document_id IN (
          SELECT json_extract(o.value, '$.documentId') FROM corrections k, json_each(k.outdated) o WHERE k.import_id = ?1 AND k.org_id = ?2)`,
-    ).bind(importId, org))
+    ).bind(importId, org, collection.id, learnedAt))
   } else {
     statements.push(...releaseStatements(db, org, held.map((reservation) => reservation.id), now))
   }

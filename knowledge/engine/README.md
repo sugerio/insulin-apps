@@ -73,6 +73,8 @@ And from the design:
   earlier restore points are blocked. Only redacted text is stored, in the container, R2, backups and exports. The
   detectors run in time linear in the text (a 2 MB text built to make them backtrack takes under a second); the
   app's "Try it" box (`hiding.ts`) uses the same patterns, checked against the shared fixtures.
+- **The newest correction of a passage wins**: a correction written again for a passage takes it over from the
+  earlier one, and an earlier correction left correcting nothing is kept but no longer used.
 - **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
   the correction keeps applying and a `needs_check` event asks a person to check it.
 - **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
@@ -100,8 +102,9 @@ And from the design:
   containers stop, an import in progress stops, keeps nothing and waits, questions answer `held`, and the collection's
   state is `held`. Imports and corrections are queued; stop using / use again commits at once (it needs no
   container); go back, undo and new exports answer 429 `capacity` with `retryAfterSeconds` until the hold ends; a go
-  back asked for before the hold is dropped (a `state` event says `held`). A removal for good starts wherever it
-  waits in the queue, ahead of a re-learning and of a pending wake from a backup or repair (it brings the files back
+  back asked for before the hold is dropped (a `state` event says `held`). Nothing but a removal for good or a stop
+  using / use again commits while held: an import whose hold arrived as it saved keeps nothing and waits. A removal
+  for good starts wherever it waits in the queue, ahead of a re-learning and of a pending wake from a backup or repair (it brings the files back
   itself). The hold lifts at its `until` time or with `until: null`. A collection made while held is held. The
   registry keeps the hold and tells every collection; one it can't reach is told again every minute until it has.
   Every hold change (a lift too) is numbered, and a collection refuses a delivery older than the change it holds, so
@@ -117,9 +120,15 @@ And from the design:
   back with their outdated marks, which follow their passage if hiding again changed it (the correction then asks to
   be checked, as after a re-read). Facts are found again as it learns, and History starts with one restore point. Its
   ImportStatus lists the export's files in `files` (by document id) and counts its notes, corrections included, in
-  `notes`; the zip itself isn't listed. A collection that isn't empty, or a file that isn't an export, answers 409
-  `bad_request`; an export over 32 MB, 413. Each entry is inflated only up to the size it says, and at most 3 MB
-  for a text, so a forged zip costs no memory.
+  `notes`; the zip itself isn't listed. The request names the staged zip by its SHA-256, which is checked again
+  whenever the zip is read: a file staged under that id since isn't learned. A collection that isn't empty, a file
+  that isn't an export, or another file than the one named answers 409 `bad_request`; an export over 32 MB, 413.
+- **Every export can be imported again**: the exporter and the import share one set of bounds (`EXPORT_LIMITS` in
+  `src/exportfile.ts`): a stored text is at most 3 MiB (the container cuts one that hiding lengthened past it, never
+  inside a `[hidden]`) and a page map at most 20,000 pages (`extract.py`); each `documents/<id>.json` holds its page
+  map and hidden values compactly (8 MiB at the most for the densest text) and, for a note, its id and the passages
+  it corrects, so the import reads neither `notes.json` nor `corrections.json` (they are for people). The import
+  inflates no entry past those bounds, so a forged zip costs no memory.
 
 ## Service settings
 

@@ -112,8 +112,15 @@ def load_text(document_id: str) -> dict | None:
 
 
 def to_stored(document_id: str, kind: str, name: str, media_type: str, redaction, page_count, truncated, note) -> dict:
-    """A redaction (code points) as stored: positions in UTF-16 code units, as the app counts them."""
+    """A redaction (code points) as stored: positions in UTF-16 code units, as the app counts them. A text that hiding
+    made longer than an export holds is cut there (hide.STORED_TEXT_BYTES)."""
+    import hide
     from offsets import Utf16
+
+    redaction, cut = hide.bounded(redaction)
+    if cut:
+        truncated = True
+        note = "Only the first 3 MB of its text, with its values hidden, was learned."
 
     units = Utf16(redaction.text)
     return {

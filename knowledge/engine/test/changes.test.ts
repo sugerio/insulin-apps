@@ -213,3 +213,97 @@ test('HID-04 stricter hiding: ready exports and backups that hold the newly hidd
   assert.equal(latest.version, version, 'a new latest backup holds the version read again')
   assert.deepEqual(holding(t.files, 'text/'), [])
 })
+
+test('a correction written again for the same passage replaces the earlier one: the newest answers', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1), doc(2)])
+  const old = (await ask(t, 'c1', 'topic number 1 gateway port')).body.passages.find((p: any) => p.text.includes('8001'))
+  const correct = async (importId: string, noteId: string, port: number) => {
+    t.advance(6 * 60_000)
+    const res = await t.api('POST', '/v1/collections/c1/corrections', {
+      importId,
+      note: { noteId, title: 'Port', text: `Topic number 1: the gateway port is now ${port}.`, outdated: [{ documentId: old.documentId, textHash: old.textHash }] },
+    })
+    assert.equal(res.status, 202)
+    await t.drain('c1')
+    assert.equal((await t.api('GET', `/v1/collections/c1/imports/${importId}`)).body.state, 'committed')
+  }
+  await correct('fix-1', 'n-port', 9001)
+  assert.ok((await ask(t, 'c1', 'topic number 1 gateway port')).body.passages[0].text.includes('9001'))
+  await correct('fix-2', 'n-port', 9002) // "Write it again"
+  const passages = (await ask(t, 'c1', 'topic number 1 gateway port')).body.passages
+  assert.ok(passages[0].text.includes('9002'), 'the newest correction answers')
+  assert.ok(!passages.some((p: any) => p.text.includes('9001')), 'the earlier one is no longer used')
+  assert.ok(!passages.some((p: any) => p.textHash === old.textHash), 'the passage stays outdated')
+  const notes = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.filter((d: any) => d.kind === 'note')
+  assert.deepEqual(notes.map((d: any) => d.active).sort(), [false, true], 'the earlier correction is kept, not used')
+  const facts = (await t.api('GET', '/v1/collections/c1/facts')).body.facts
+  assert.ok(!facts.some((f: any) => f.sentence.includes('9001')))
+  // A correction that still corrects another passage stays in use for that one.
+  const other = (await ask(t, 'c1', 'topic number 2 gateway port')).body.passages.find((p: any) => p.text.includes('8002'))
+  t.advance(6 * 60_000)
+  await t.api('POST', '/v1/collections/c1/corrections', {
+    importId: 'fix-3',
+    note: { noteId: 'n-both', title: 'Ports', text: 'Topic number 1 and topic number 2: the gateway port is now 7001 and 7002.', outdated: [{ documentId: old.documentId, textHash: old.textHash }, { documentId: other.documentId, textHash: other.textHash }] },
+  })
+  await t.drain('c1')
+  await correct('fix-4', 'n-port', 9004)
+  const both = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'Ports')
+  assert.equal(both.active, true, 'it still corrects topic number 2')
+  const second = (await ask(t, 'c1', 'topic number 2 gateway port')).body.passages
+  assert.ok(second.some((p: any) => p.text.includes('7002')) && !second.some((p: any) => p.textHash === other.textHash))
+})
+
+async function stricterAfterBackup() {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1, 'The codename is Bluewater.'), doc(2)])
+  t.advance(11 * 60_000)
+  await t.drain('c1') // asleep: a daily backup and the latest
+  return t
+}
+
+test("stricter hiding's clean-up keeps the backed-up files the new latest backup shares: none is stored twice", async () => {
+  const t = await stricterAfterBackup()
+  const put = t.backups.put.bind(t.backups)
+  const blobs: string[] = []
+  t.backups.put = async (key: string, value: unknown, options?: any) => {
+    if (key.includes('/blobs/')) blobs.push(key)
+    return put(key, value, options)
+  }
+  t.advance(6 * 60_000)
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater'] } } })
+  for (let i = 0; i < 5; i++) {
+    await t.drain('c1')
+    t.advance(60_000)
+  }
+  const before = new Set(blobs)
+  assert.ok(blobs.length > 0)
+  const existing = t.backups.keys(`backups/${ORG}/c1/blobs/`)
+  // Every file of the new latest backup is stored once; the ones it shares with the old backup were never deleted.
+  assert.equal(blobs.length, before.size, 'no file uploaded twice')
+  assert.ok(existing.length > blobs.length, 'files the backups share stayed')
+})
+
+test("a retried clean-up after stricter hiding leaves an export made since alone", async () => {
+  const t = await stricterAfterBackup()
+  t.advance(6 * 60_000)
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater'] } } })
+  for (let i = 0; i < 5; i++) {
+    await t.drain('c1')
+    t.advance(60_000)
+  }
+  const version = (await t.api('GET', '/v1/collections/c1')).body.version
+  const committedAt = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints[0].createdAt
+  await t.api('POST', '/v1/collections/c1/exports', { exportId: 'after' })
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/exports/after')).body.state, 'ready')
+  // The clean-up is owed again (its first try failed part-way), and runs from the alarm.
+  const doc1 = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'doc-1.md')
+  await t.storage('c1').put('hiddenCleanup', { before: version, at: committedAt, documentIds: [doc1.documentId] })
+  await t.object('c1').alarm()
+  assert.equal(await t.storage('c1').get('hiddenCleanup'), undefined, 'done')
+  assert.equal((await t.api('GET', '/v1/collections/c1/exports/after')).body.state, 'ready', 'the export made after the change holds the hidden text')
+  assert.ok(t.backups.keys(`backups/${ORG}/c1/`).some((k) => k.endsWith('latest.json')), 'the new latest backup stays')
+})

@@ -759,8 +759,8 @@ plan('DEL-03', 'Export and import again', async () => {
   const names = [...unzip(bytes).keys()]
   const copy = `e2e-${stamp}-copy`
   await createCollection(copy)
-  await stage(copy, { fileId: 'export', name: 'knowledge-export.zip', type: 'application/zip', bytes })
-  await must('POST', `/v1/collections/${copy}/import-export`, { importId: 'from-export', fileId: 'export' }, [202])
+  const staged = await stage(copy, { fileId: 'export', name: 'knowledge-export.zip', type: 'application/zip', bytes })
+  await must('POST', `/v1/collections/${copy}/import-export`, { importId: 'from-export', fileId: 'export', sha256: staged.sha256 }, [202])
   const restored = await waitImport(copy, 'from-export')
   // The same passages with the same scores; passages that tie may come in either order.
   const answer = async (cid, query) =>
@@ -782,7 +782,7 @@ plan('DEL-03', 'Export and import again', async () => {
       answersMatch: same.every((s) => s.same),
       correctionKept: fixed[0]?.kind === 'note' && !fixed.some((p) => p.textHash === old.textHash),
       stoppedSourceKept: copyDocs.find((d) => d.documentId === stopped.documentId)?.active === false,
-      refusedWhenNotEmpty: (await api('POST', `/v1/collections/${source}/import-export`, { importId: 'again', fileId: 'none' })).status === 409,
+      refusedWhenNotEmpty: (await api('POST', `/v1/collections/${source}/import-export`, { importId: 'again', fileId: 'none', sha256: staged.sha256 })).status === 409,
     },
     evidence: { files: names.length, same, restored },
   }

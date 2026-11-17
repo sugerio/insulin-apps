@@ -276,19 +276,24 @@ function fileStatus(f: ImportRecord['files'][number]): ImportFileStatus {
  * texts are hidden again with this collection's rules, and one restore point holds the documents, which of them are
  * stopped, the notes and the corrections with their outdated marks.
  */
-export async function submitExportImport(e: CollectionEngine, body: { importId?: unknown; fileId?: unknown }): Promise<{ status: number; record: ImportRecord }> {
+export async function submitExportImport(e: CollectionEngine, body: { importId?: unknown; fileId?: unknown; sha256?: unknown }): Promise<{ status: number; record: ImportRecord }> {
   const importId = requireId(body.importId, 'importId')
   const existing = await e.store.getImport(importId)
   if (existing) return { status: 200, record: existing }
   const fileId = requireId(body.fileId, 'fileId')
+  if (!isSha256(body.sha256)) return fail('bad_request', "sha256 must be the staged export's SHA-256, in hex.")
+  const sha256 = body.sha256
   const meta = await e.meta()
   if (meta.version > 0 || meta.queue.length || meta.active || meta.removals.length || meta.op) {
     return failWithStatus(409, 'bad_request', 'An export starts an empty collection only: this one already has something in it.')
   }
   const staged = await e.store.getStaged(fileId)
   if (!staged) return fail('bad_request', 'The export was not staged; upload it to the inbox first.')
+  // The app reserved what it read from this very file: another one staged under the id since isn't learned.
+  if (staged.sha256 !== sha256) return failWithStatus(409, 'bad_request', "The staged file isn't the export that was checked. Add it again.")
   if (staged.bytes > SETTINGS.maxExportImportBytes) return fail('too_large', 'That export is too large to start a collection from.')
-  const contents = await readStagedExport(e, meta, fileId)
+  const contents = await readStagedExport(e, meta, fileId, sha256)
+  if (contents === 'replaced') return failWithStatus(409, 'bad_request', "The staged file isn't the export that was checked. Add it again.")
   if (!contents) return failWithStatus(409, 'bad_request', "That file isn't a Knowledge export.")
   const record = baseRecord(importId, 'export', {
     importId,
@@ -323,15 +328,21 @@ export async function submitExportImport(e: CollectionEngine, body: { importId?:
   return { status: 202, record }
 }
 
-async function readStagedExport(e: CollectionEngine, meta: Meta, fileId: string): Promise<ExportContents | null> {
+/** The staged export, read whole; 'replaced' when its bytes aren't the ones whose checksum was given. */
+async function readStagedExport(e: CollectionEngine, meta: Meta, fileId: string, sha256: string): Promise<ExportContents | 'replaced' | null> {
   const object = await e.env.FILES.get(inboxKey(meta, fileId))
-  return object ? openExport(new Uint8Array(await object.arrayBuffer())) : null
+  if (!object) return null
+  const bytes = new Uint8Array(await object.arrayBuffer())
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+  if ([...digest].map((b) => b.toString(16).padStart(2, '0')).join('') !== sha256) return 'replaced'
+  return openExport(bytes)
 }
 
 /** The export's documents and marks, as this collection's records (version and sizes are set at the commit). */
 async function exportedState(e: CollectionEngine, meta: Meta, record: ImportRecord): Promise<{ contents: ExportContents; state: AnswerState }> {
   const zip = record.files[0]
-  const contents = zip ? await readStagedExport(e, meta, zip.fileId) : null
+  const contents = zip ? await readStagedExport(e, meta, zip.fileId, zip.sha256) : null
+  if (contents === 'replaced') throw new AttemptFailure('The export was replaced after it was checked, so it was not learned; add it again.', zip.fileId, true, 'bad_request')
   if (!contents) throw new AttemptFailure('The export is no longer waiting to be learned; add it again.', zip?.fileId ?? null, true, 'bad_request')
   const importId = record.status.importId
   const documents: DocRecord[] = contents.documents.map((d) => ({
@@ -769,6 +780,7 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
   record.phase = 'queued'
   record.capacity = 'none'
   record.jobId = null
+  record.snapshotTaken = false
   record.status.state = 'queued'
   record.status.files = waitingFiles(record)
   await e.store.putImport(record)
@@ -1102,11 +1114,15 @@ async function save(e: CollectionEngine, record: ImportRecord): Promise<void> {
   const latest = await e.meta()
   if (latest.deleting) return
   if (latest.removals.length && record.kind !== 'remove') return preempt(e, record)
+  if (isHeld(latest) && record.kind !== 'remove') return stopForHold(e, record)
   const snapshot = await e.box.snapshot(`${meta.collectionId}-${importId}-a${record.status.attempt}`)
   record.snapshotTaken = true
   await e.store.putImport(record)
   const committed = await commitImport(e, record, snapshot, manifest, stats, facts)
-  if (!committed) return preempt(e, record)
+  if (committed) return
+  // Not committed: a removal for good came first, or the hold arrived meanwhile. The snapshot goes unused.
+  if (isHeld(await e.meta()) && record.kind !== 'remove') return stopForHold(e, record)
+  return preempt(e, record)
 }
 
 interface IngestDocument {
@@ -1198,6 +1214,7 @@ function applyResult(
   const byId = new Map((result.documents ?? []).map((d) => [d.documentId, d]))
   let documents = current.documents.slice()
   let marks = current.marks.slice()
+  const superseded = new Set<string>()
   if (record.kind === 'import' || record.kind === 'correction') {
     for (const file of record.files) {
       if (file.duplicateOf) continue
@@ -1243,10 +1260,18 @@ function applyResult(
         hiddenCount: learned?.hidden ?? 0,
       })
       for (const ref of note.outdated) {
-        if (marks.some((m) => m.documentId === ref.documentId && m.textHash === ref.textHash)) continue
+        // The newest correction of a passage wins ("Write it again"): it takes the passage over from an earlier one.
+        const same = (m: OutdatedMark) => m.documentId === ref.documentId && m.textHash === ref.textHash
+        const earlier = marks.find(same)
+        if (earlier?.noteDocumentId === note.documentId) continue
+        if (earlier) superseded.add(earlier.noteDocumentId)
+        marks = marks.filter((m) => !same(m))
         marks.push({ ...ref, noteDocumentId: note.documentId, correctionImportId: record.status.importId, needsCheck: false })
       }
     }
+    // An earlier correction left correcting nothing is kept but no longer used, so it can't answer instead.
+    const stillCorrecting = new Set(marks.map((m) => m.noteDocumentId))
+    documents = documents.map((d) => (superseded.has(d.documentId) && !stillCorrecting.has(d.documentId) ? { ...d, active: false } : d))
   } else if (record.kind === 'remove') {
     const gone = new Set(record.removeDocumentIds)
     documents = documents.filter((d) => !gone.has(d.documentId))
@@ -1360,6 +1385,9 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   await e.state.storage.transaction(async (txn) => {
     const meta = (await txn.get<Meta>('meta'))!
     if (meta.deleting || (meta.removals.length && c.record.kind !== 'remove')) return
+    // The organization's hold arrived while this was learned: only a removal for good and a stop using / use again
+    // (no container) commit while held; anything else keeps nothing and waits for the hold to end.
+    if (isHeld(meta) && c.kind !== 'remove' && c.kind !== 'change') return
     const version = Math.max(meta.nextVersion, c.record.reserveVersion ?? 0)
     const prev = meta.version ? await txn.get<RestorePointRecord>(`rp:${String(meta.version).padStart(10, '0')}`) : undefined
     const fold =
@@ -1446,6 +1474,7 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
       const owed = await txn.get<HiddenCleanup>('hiddenCleanup')
       await txn.put('hiddenCleanup', {
         before: Math.max(owed?.before ?? 0, version),
+        at: now,
         documentIds: [...new Set([...(owed?.documentIds ?? []), ...c.changedDocumentIds])],
       } satisfies HiddenCleanup)
     }
@@ -1491,21 +1520,24 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   if (c.record.capacity === 'granted') await step('capacity', () => e.releaseCapacity(c.record))
   await deleteOriginals(e, c.record.files.map((f) => f.fileId))
   if (c.changedDocumentIds?.length) await step('facts', () => dropUnusedFacts(e))
+  if (c.record.kind === 'remove' || c.changedDocumentIds?.length) {
+    // The new latest backup is written first, so the files it shares with the backups dropped next stay stored
+    // (and aren't uploaded again).
+    const runtime = await e.store.getRuntime()
+    if (runtime && e.box.running) await step('backup', () => backup.run(e, runtime))
+  }
   if (c.changedDocumentIds?.length) await retryHiddenCleanup(e)
   if (c.record.kind === 'remove') {
     // Facts files and backups written while the removal waited may still hold the file: they go too (tried again
-    // from the alarm until they have), and the latest backup is written again without it.
+    // from the alarm until they have).
     await retryRemovalCleanup(e)
-  }
-  if (c.record.kind === 'remove' || c.changedDocumentIds?.length) {
-    const runtime = await e.store.getRuntime()
-    if (runtime && e.box.running) await step('backup', () => backup.run(e, runtime))
   }
   return true
 }
 
 interface HiddenCleanup {
   before: number // the version whose texts are hidden more: backups of earlier ones hold the words
+  at: string // when it committed: exports made before then hold the words
   documentIds: string[]
 }
 
@@ -1517,7 +1549,7 @@ export async function retryHiddenCleanup(e: CollectionEngine): Promise<void> {
   const owed = await e.state.storage.get<HiddenCleanup>('hiddenCleanup')
   if (!owed) return
   try {
-    for (const documentId of owed.documentIds) await exporter.dropContaining(e, documentId)
+    for (const documentId of owed.documentIds) await exporter.dropContaining(e, documentId, owed.at)
     await backup.dropOlder(e, owed.before, owed.documentIds)
     const now = await e.state.storage.get<HiddenCleanup>('hiddenCleanup')
     if (now && (now.before !== owed.before || now.documentIds.length !== owed.documentIds.length)) return // more came meanwhile

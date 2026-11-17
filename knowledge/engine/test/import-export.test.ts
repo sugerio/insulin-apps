@@ -10,12 +10,18 @@ import { ask, createCollection, doc, learn, makeEngine, outboxEvents, type TestE
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
+const stagedSha = new Map<string, string>()
+
 async function stageBytes(t: TestEngine, cid: string, fileId: string, bytes: Uint8Array, name = 'knowledge-export.zip') {
   const res = await t.api('PUT', `/v1/collections/${cid}/inbox/${fileId}`, bytes, {
     headers: { 'content-type': 'application/zip', 'x-file-name': encodeURIComponent(name), 'x-file-sha256': sha256(bytes) },
   })
   assert.equal(res.status, 200, JSON.stringify(res.body))
+  stagedSha.set(`${cid}/${fileId}`, sha256(bytes))
 }
+
+/** An ImportExportRequest naming the staged zip by its checksum, as the app sends it. */
+const exportRequest = (cid: string, importId: string, fileId: string) => ({ importId, fileId, sha256: stagedSha.get(`${cid}/${fileId}`) ?? '0'.repeat(64) })
 
 /** c1 with two files (one stopped), a note, and a correction that marks a passage of doc 1 outdated; its export. */
 async function exported(t: TestEngine) {
@@ -53,9 +59,9 @@ test('DEL-03 an export starts an empty collection: texts, notes, stopped sources
   const { zip, old, stopped } = await exported(t)
   await createCollection(t, 'c2')
   await stageBytes(t, 'c2', 'export-zip', zip)
-  const started = await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-export', fileId: 'export-zip' })
+  const started = await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))
   assert.deepEqual([started.status, started.body.state], [202, 'queued'])
-  assert.equal((await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-export', fileId: 'export-zip' })).status, 200, 'the same id answers the same import')
+  assert.equal((await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))).status, 200, 'the same id answers the same import')
   await t.drain('c2')
   const done = (await t.api('GET', '/v1/collections/c2/imports/from-export')).body
   assert.deepEqual([done.state, done.version], ['committed', 1])
@@ -103,22 +109,22 @@ test("import-export is refused for a collection that isn't empty, or a file that
   const t = makeEngine()
   const { zip } = await exported(t)
   await stageBytes(t, 'c1', 'export-zip', zip)
-  const busy = await t.api('POST', '/v1/collections/c1/import-export', { importId: 'from-export', fileId: 'export-zip' })
+  const busy = await t.api('POST', '/v1/collections/c1/import-export', exportRequest('c1', 'from-export', 'export-zip'))
   assert.deepEqual([busy.status, busy.body.error], [409, 'bad_request'])
 
   await createCollection(t, 'c2')
   await stageBytes(t, 'c2', 'notes', new TextEncoder().encode('# Just notes\n\nNot an export.'), 'notes.md')
-  const plain = await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-notes', fileId: 'notes' })
+  const plain = await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-notes', 'notes'))
   assert.deepEqual([plain.status, plain.body.error], [409, 'bad_request'])
   // A zip whose document text was damaged: refused before anything is queued.
   const damaged = zip.slice()
   const at = Buffer.from(damaged).indexOf('documents/')
   damaged[at + 'documents/'.length] = 'x'.charCodeAt(0) // a document id that isn't one
   await stageBytes(t, 'c2', 'damaged', damaged)
-  const refused = await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-damaged', fileId: 'damaged' })
+  const refused = await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-damaged', 'damaged'))
   assert.deepEqual([refused.status, refused.body.error], [409, 'bad_request'])
   assert.equal((await t.api('GET', '/v1/collections/c2')).body.version, 0)
-  const missing = await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-nothing', fileId: 'never-staged' })
+  const missing = await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-nothing', 'never-staged'))
   assert.deepEqual([missing.status, missing.body.error], [400, 'bad_request'])
 })
 
@@ -129,7 +135,7 @@ test("an export's texts are hidden again with the new collection's stricter rule
     settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['rota'] } },
   })
   await stageBytes(t, 'c2', 'export-zip', zip)
-  await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-export', fileId: 'export-zip' })
+  await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))
   await t.drain('c2')
   assert.equal((await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state, 'committed')
   const stored = t.files.keys().filter((k) => k.startsWith('text/org-acme/c2/')).map((k) => t.files.text(k)!).join('\n')
@@ -185,33 +191,38 @@ test('a zip entry is inflated only up to the size it says: a lying size, a bad C
   assert.equal(await unzipEntry(entry(forge([{ name: 'a.txt', data: fine, size: 6000 }])), 1 << 20), null, 'shorter than it says')
 })
 
-test("an export is refused when its text entry lies about its size, a file's checksum isn't one, or a correction comes from a file", async () => {
+test("an export is refused when an entry passes its bounds, a file's checksum isn't one, or a correction comes from a file", async () => {
   const t = makeEngine()
   await createCollection(t)
   const file = 'd_' + 'a'.repeat(24)
   const other = 'd_' + 'b'.repeat(24)
   const json = (v: unknown) => Buffer.from(JSON.stringify(v))
   const info = (id: string, sha256 = 'c'.repeat(64)) => ({ documentId: id, kind: 'file', name: `${id}.md`, type: 'text/markdown', bytes: 10, pages: null, sha256, active: true })
-  const exportOf = (o: { text?: { data: Buffer; size?: number; crc?: number }; sha256?: string; corrections?: unknown[] }) =>
+  const meta = (id: string, o: { sha256?: string; outdated?: unknown[]; pages?: unknown[]; hidden?: unknown } = {}) =>
+    json({ document: info(id, o.sha256), noteId: null, truncated: false, pages: o.pages ?? [], hidden: o.hidden ?? {}, outdated: o.outdated ?? [] })
+  const exportOf = (o: { text?: { data: Buffer; size?: number; crc?: number }; first?: Buffer; size?: number }) =>
     forge([
       { name: 'README.txt', data: Buffer.from('export') },
-      { name: 'collection.json', data: json({ collectionId: 'src', version: 3 }) },
-      { name: 'notes.json', data: json({ notes: [] }) },
-      { name: 'corrections.json', data: json({ corrections: o.corrections ?? [] }) },
-      { name: `documents/${file}.json`, data: json({ document: info(file, o.sha256), pages: [], hidden: [] }) },
+      { name: 'collection.json', data: json({ format: 2, collectionId: 'src', version: 3 }) },
+      { name: `documents/${file}.json`, data: o.first ?? meta(file), ...(o.size ? { size: o.size, crc: 0 } : {}) },
       { name: `documents/${file}.txt`, ...(o.text ?? { data: Buffer.from('Some text.') }) },
-      { name: `documents/${other}.json`, data: json({ document: info(other), pages: [], hidden: [] }) },
+      { name: `documents/${other}.json`, data: meta(other) },
       { name: `documents/${other}.txt`, data: Buffer.from('Other text.') },
     ])
   let n = 0
   const tryIt = async (zip: Uint8Array) => {
     n += 1
     await stageBytes(t, 'c1', `zip-${n}`, zip)
-    return t.api('POST', '/v1/collections/c1/import-export', { importId: `from-${n}`, fileId: `zip-${n}` })
+    return t.api('POST', '/v1/collections/c1/import-export', exportRequest('c1', `from-${n}`, `zip-${n}`))
   }
+  const { EXPORT_LIMITS } = await import('../src/exportfile.ts')
   for (const [why, zip] of [
-    ['a checksum that is not one', exportOf({ sha256: 'x' })],
-    ['a correction from a file', exportOf({ corrections: [{ documentId: file, textHash: 'e'.repeat(64), noteDocumentId: other, needsCheck: false }] })],
+    ['a checksum that is not one', exportOf({ first: meta(file, { sha256: 'x' }) })],
+    ['a correction from a file', exportOf({ first: meta(file, { outdated: [{ documentId: other, textHash: 'e'.repeat(64), needsCheck: false }] }) })],
+    ['too long a page map', exportOf({ first: meta(file, { pages: Array.from({ length: EXPORT_LIMITS.pages + 1 }, (_, i) => [i + 1, 0, 0]) }) })],
+    ['hidden values that overlap', exportOf({ first: meta(file, { hidden: { word: [0, 4] } }) })],
+    ['a document entry that says it is larger than the bound', exportOf({ size: EXPORT_LIMITS.documentBytes + 1 })],
+    ['an export of another format', forge([{ name: 'README.txt', data: Buffer.from('export') }, { name: 'collection.json', data: json({ collectionId: 'src', version: 3 }) }])],
   ] as const) {
     const res = await tryIt(zip)
     assert.deepEqual([res.status, res.body.error], [409, 'bad_request'], why)
@@ -226,6 +237,52 @@ test("an export is refused when its text entry lies about its size, a file's che
   assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, 0)
 })
 
+test('DEL-03 at the edges: a text dense with hidden values and hundreds of long notes go round trip', async () => {
+  const t = makeEngine()
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['QX'] } } })
+  // 340,000 hidden values: their spans alone were 7.7 MB of page-map JSON before; the text is just under 3 MiB.
+  await learn(t, 'c1', 'dense', [{ fileId: 'dense', name: 'dense.md', text: 'QX '.repeat(340_000) }])
+  // 220 notes of 20,000 characters: notes.json is over 4 MiB.
+  for (let batch = 0; batch < 220; batch += 44) {
+    const notes = Array.from({ length: 44 }, (_, i) => ({ noteId: `note-${batch + i}`, title: `Note ${batch + i}`, text: `Note ${String(batch + i).padStart(3, '0')}. ` + 'lorem ipsum '.repeat(1665), outdated: [] }))
+    const res = await t.api('POST', '/v1/collections/c1/imports', { importId: `notes-${batch}`, files: [], notes, small: true })
+    assert.equal(res.status, 202, JSON.stringify(res.body))
+    await t.drain('c1')
+  }
+  const counts = (await t.api('GET', '/v1/collections/c1')).body.counts
+  assert.equal(counts.documents, 221)
+  await t.api('POST', '/v1/collections/c1/exports', { exportId: 'exp-1' })
+  await t.drain('c1')
+  const exp = (await t.api('GET', '/v1/collections/c1/exports/exp-1')).body
+  assert.equal(exp.state, 'ready')
+  const zip = new Uint8Array(await (await t.api('GET', '/v1/collections/c1/exports/exp-1?download=1')).response.arrayBuffer())
+  const { zipEntries } = await import('../src/zip.ts')
+  const entries = zipEntries(zip)!
+  assert.ok(entries.get('notes.json')!.size > 4 * 1024 * 1024, 'notes.json is past the old bound')
+  await createCollection(t, 'c2')
+  await t.api('PUT', '/v1/collections/c2', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['QX'] } } })
+  await stageBytes(t, 'c2', 'export-zip', zip)
+  const started = await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))
+  assert.equal(started.status, 202, JSON.stringify(started.body))
+  await t.drain('c2')
+  assert.equal((await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state, 'committed')
+  assert.deepEqual((await t.api('GET', '/v1/collections/c2')).body.counts, counts)
+  const dense = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'dense.md')
+  const [a, b] = [await t.api('GET', `/v1/collections/c1/documents/${dense.documentId}`), await t.api('GET', `/v1/collections/c2/documents/${dense.documentId}`)]
+  assert.equal(b.body.hidden.length, 340_000)
+  assert.deepEqual([b.body.text, b.body.hidden], [a.body.text, a.body.hidden])
+})
+
+test('the export bounds are the ones the container cuts texts and page maps to', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { EXPORT_LIMITS } = await import('../src/exportfile.ts')
+  const hide = readFileSync(new URL('../container/hide.py', import.meta.url), 'utf8')
+  const extract = readFileSync(new URL('../container/extract.py', import.meta.url), 'utf8')
+  const [, a, b, c] = /^STORED_TEXT_BYTES = (\d+) \* (\d+) \* (\d+)/m.exec(hide)!
+  assert.equal(Number(a) * Number(b) * Number(c), EXPORT_LIMITS.textBytes)
+  assert.equal(Number(/^MAX_PAGES = ([\d_]+)/m.exec(extract)![1].replace(/_/g, '')), EXPORT_LIMITS.pages)
+})
+
 test("stricter hiding that changes a corrected passage: its mark follows it, it stays left out, and the correction asks to be checked", async () => {
   const t = makeEngine()
   const { zip, old } = await exported(t)
@@ -234,7 +291,7 @@ test("stricter hiding that changes a corrected passage: its mark follows it, it 
     settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['8001'] } },
   })
   await stageBytes(t, 'c2', 'export-zip', zip)
-  await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-export', fileId: 'export-zip' })
+  await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))
   await t.drain('c2')
   assert.equal((await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state, 'committed')
   const passages = (await ask(t, 'c2', 'topic number 1 gateway port')).body.passages
@@ -242,4 +299,37 @@ test("stricter hiding that changes a corrected passage: its mark follows it, it 
   assert.ok(!passages.some((p: any) => p.documentId === old.documentId && /gateway port is \[hidden\]/.test(p.text)), 'the corrected passage, hidden again, is still left out')
   const checks = (await outboxEvents(t)).filter((e: any) => e.type === 'needs_check' && e.collectionId === 'c2')
   assert.deepEqual(checks.map((e: any) => [e.noteId, e.documentId]), [['n-fix', old.documentId]])
+})
+
+test("import-export names the staged zip by its checksum: another file under that id is refused, now or when it is read", async () => {
+  const t = makeEngine()
+  const { zip } = await exported(t)
+  await createCollection(t, 'c2')
+  await stageBytes(t, 'c2', 'export-zip', zip)
+  const wrong = await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-export', fileId: 'export-zip', sha256: 'a'.repeat(64) })
+  assert.deepEqual([wrong.status, wrong.body.error], [409, 'bad_request'])
+  const none = await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-export', fileId: 'export-zip' })
+  assert.deepEqual([none.status, none.body.error], [400, 'bad_request'])
+  assert.equal((await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))).status, 202)
+  // The zip is replaced under the same id before it is learned (a bigger export): what was accepted isn't learned.
+  // Another valid export: one file the app never reserved for.
+  const id = 'd_' + 'f'.repeat(24)
+  const json = (v: unknown) => Buffer.from(JSON.stringify(v))
+  const other = forge([
+    { name: 'README.txt', data: Buffer.from('export') },
+    { name: 'collection.json', data: json({ format: 2, collectionId: 'elsewhere', version: 1 }) },
+    { name: `documents/${id}.json`, data: json({ document: { documentId: id, kind: 'file', name: 'extra.md', type: 'text/markdown', bytes: 9, pages: null, sha256: 'e'.repeat(64), active: true }, noteId: null, truncated: false, pages: [], hidden: {}, outdated: [] }) },
+    { name: `documents/${id}.txt`, data: Buffer.from('Extra text that was never reserved.') },
+  ])
+  const res = await t.api('PUT', '/v1/collections/c2/inbox/export-zip', other, {
+    headers: { 'content-type': 'application/zip', 'x-file-name': 'knowledge-export.zip', 'x-file-sha256': sha256(other) },
+  })
+  if (res.status === 200) {
+    await t.drain('c2')
+    const status = (await t.api('GET', '/v1/collections/c2/imports/from-export')).body
+    assert.equal(status.state, 'failed')
+    assert.equal((await t.api('GET', '/v1/collections/c2')).body.version, 0)
+  } else {
+    assert.equal(res.status, 409, 'or the staged file is refused while an import names it')
+  }
 })

@@ -77,7 +77,7 @@ export type ImportKind = 'files' | 'web_page' | 'note' | 'correction'
  * files the engine no longer had when asked to keep them, taken out of it to be added again. Its notes are kept with
  * the organization's hidden values hidden (`hidden`: an older row without it is hidden by the tick).
  */
-export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[]; hidden?: boolean; sentAt?: number }
+export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[]; hidden?: boolean; sentAt?: number; sends?: number }
 
 /** An import kept for the 1st of next month, when the organization has used this month's documents learned. */
 export interface Waiting {
@@ -104,7 +104,7 @@ export async function waitForNextMonth(engine: EngineClient, collectionId: strin
   // An export stays an export, and an import already sent to the engine stays marked sent, through every month it waits.
   const waiting: WaitingRequest = {
     files: request.files, notes: request.notes, waitsFor: resetsAt(at), lost: request.lost ?? [],
-    ...(request.export ? { export: request.export } : {}), ...(request.sentAt ? { sentAt: request.sentAt } : {}),
+    ...(request.export ? { export: request.export } : {}), ...(request.sentAt ? { sentAt: request.sentAt } : {}), ...(request.sends ? { sends: request.sends } : {}),
   }
   if (!request.files.length) return waiting
   const { kept } = await engine.keepStaged(collectionId, { fileIds: request.files.map((file) => file.fileId), until: new Date(keptUntil(at)).toISOString() })
@@ -234,7 +234,8 @@ export async function submitImport(env: Bindings, engine: EngineClient, org: str
   try {
     const small = kind === 'note' || kind === 'correction'
     status = request.export
-      ? await engine.importExport(collection.id, { importId, fileId: request.files[0]!.fileId })
+      // The checksum of the zip Knowledge read and reserved from: the engine refuses any other file under that id.
+      ? await engine.importExport(collection.id, { importId, fileId: request.files[0]!.fileId, sha256: request.files[0]!.sha256 })
       : kind === 'correction'
         ? await engine.correct(collection.id, { importId, note: request.notes[0]! })
         : await engine.startImport(collection.id, { importId, files: request.files, notes: request.notes, small })
@@ -449,8 +450,11 @@ export function sourceRoutes() {
       .first<{ state: string; request: string | null }>()
     if (!row) throw notFound('There is no such import in this collection.')
     // Sent to the engine on the 1st without an answer: it may be learning. The engine is asked; while it may have it,
-    // the import isn't cancelled and keeps what it reserved.
+    // the import isn't cancelled and keeps what it reserved. The cancel is written only if no send was made since this
+    // request read the import (`sends`, which the tick counts up before each send, unchanged): a send it didn't see, or
+    // one made after the engine said it had nothing, refuses it.
     const request = row.state === 'waiting' && row.request ? (JSON.parse(row.request) as WaitingRequest) : null
+    const sends = request?.sends ?? 0
     if (request?.sentAt) {
       let status: ImportStatus | null = null
       try {
@@ -464,15 +468,22 @@ export function sourceRoutes() {
         await finishImport(c.env, caller.organizationId, collection, importId, status, at)
         throw new ApiError('conflict', 'This is already being learned: Insulin sent it when the month started, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.')
       }
-      // The engine never had it.
-      await db.prepare(`UPDATE imports SET request = json_remove(request, '$.sentAt') WHERE id = ? AND org_id = ? AND state = 'waiting'`).bind(importId, caller.organizationId).run()
+      // The engine never had it, as of the sends this request read.
     }
     const [cancelled] = await db.batch([
-      db.prepare(`UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting'`).bind(importId, caller.organizationId, at),
+      db.prepare(
+        `UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting'
+           AND COALESCE(json_extract(request, '$.sends'), 0) = ?4`,
+      ).bind(importId, caller.organizationId, at, sends),
       db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND state = 'held' AND EXISTS (SELECT 1 FROM imports WHERE id = ?4 AND state = 'cancelled')`)
         .bind(caller.organizationId, `import:${importId}`, at, importId),
     ])
-    if (cancelled?.meta.changes !== 1) throw new ApiError('conflict', 'Only an import waiting for the 1st can be cancelled; this one has started or finished.')
+    if (cancelled?.meta.changes !== 1) {
+      const current = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ?`).bind(importId, caller.organizationId).first<{ state: string }>()
+      throw new ApiError('conflict', current?.state === 'waiting'
+        ? 'This is already being learned: Insulin sent it when the month started, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.'
+        : 'Only an import waiting for the 1st can be cancelled; this one has started or finished.')
+    }
     return json(c, { import: { importId, state: 'cancelled' } })
   })
 

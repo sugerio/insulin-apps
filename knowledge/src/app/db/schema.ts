@@ -400,12 +400,15 @@ export const engineEvents = sqliteTable('engine_events', {
 })
 
 /**
- * Organizations held in the engine (POST /v1/orgs/:org/hold) because they used their awake hours: nothing runs for
- * them until `until` (the 1st), or until the tick lets go when a raised limit frees them.
+ * The awake-hours hold Knowledge wants the engine to have for each organization (POST /v1/orgs/:org/hold): held until
+ * `until` (the 1st), or let go (`until` 0). Each change is a new `version`, written before it is sent; `delivered` is
+ * the version the engine last took. The tick sends again while the two differ.
  */
 export const orgHolds = sqliteTable('org_holds', {
   org_id: text('org_id').primaryKey().notNull(),
   until: integer('until').notNull(),
+  version: integer('version').notNull().default(1),
+  delivered: integer('delivered').notNull().default(0),
   held_at: integer('held_at').notNull(),
 })
 

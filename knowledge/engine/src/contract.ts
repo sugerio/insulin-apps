@@ -151,6 +151,7 @@ export interface KeepStagedRequest {
 export interface ImportExportRequest {
   importId: string
   fileId: string
+  sha256: string // the staged zip's checksum the app read and reserved from; a different file answers 409 bad_request
 }
 
 export interface ImportRequest {

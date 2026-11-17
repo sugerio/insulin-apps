@@ -58,7 +58,7 @@ export const collectionsAndSources: DocTopic = {
           </p>
           <p>
             What waits for the 1st (your organization has learned this month's documents) is listed on <b>Sources</b>, under
-            <b> Waiting for the 1st</b>, with who added it and when it starts; its editors can <b>Cancel</b> it, and it is never learned. What Insulin has but hasn't started learning yet (sent on the 1st, or waiting its turn behind other imports) is listed under <b>Waiting to be learned</b>, and its editors can <b>Cancel</b> it too. Once learning has started, it can't be cancelled: Knowledge says so, and it is learned.
+            <b> Waiting for the 1st</b>, with who added it and when it starts; its editors can <b>Cancel</b> it, and it is never learned. What Insulin has but hasn't started learning yet (sent on the 1st, or waiting its turn behind other imports) is listed under <b>Waiting to be learned</b>, and its editors can <b>Cancel</b> it too. Once learning has started, it leaves that list and can't be cancelled, also while Insulin tries it again after an interruption: Knowledge says so, and it is learned. One that had to wait again (a removal for good went first, or your organization used this month's awake hours) is back on the list, and can be cancelled again.
           </p>
           <p>
             Before Insulin reads anything, it hides e-mail addresses, phone numbers, card numbers, API keys and values labelled
@@ -79,7 +79,7 @@ export const collectionsAndSources: DocTopic = {
           <ul>
             <li><b>A type Insulin can't read</b>, such as an Excel workbook with macros (.xlsm), an older Word or PowerPoint file (.doc, .ppt) or an image. Save it in one of the types above and add it again.</li>
             <li><b>An empty file</b>, or one <b>larger than your organization's largest file</b>. Split it, or save it in a smaller format.</li>
-            <li><b>A scanned PDF</b>: a PDF whose pages draw only images, with no text in them, is named when it is uploaded, even when it lists a font. Upload a PDF with text, or a Word file. One whose pages Insulin can't look into while it uploads (an unusual compression) is accepted; if it has no text after all, its import fails and names it.</li>
+            <li><b>A scanned PDF</b>: a PDF whose pages draw only images, with no text in them, is named when it is uploaded, even when it lists a font. Upload a PDF with text, or a Word file. Insulin names a PDF only when it is sure there is no text: one whose pages it can't look into for certain while it uploads (an unusual compression, an encrypted file, a very large or unusual layout) is accepted, and if it has no text after all, its import fails and names it.</li>
             <li><b>Your organization's limits</b>: if the files would go past the documents or stored files, nothing starts and Knowledge says which limit. Past this month's documents learned, they are taken and wait for the 1st. See <DocLink to="limits">Limits</DocLink>.</li>
           </ul>
         </>

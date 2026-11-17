@@ -64,6 +64,16 @@ export function useMe(): Me {
   return me
 }
 
+/**
+ * "For a higher limit, contact Insulin Apps support at …": the sentence every limit message ends with, as the server
+ * writes it (limits.ts supportSentence), with the address from /api/me (SUGER_SUPPORT_EMAIL), never one written here.
+ * Without the session or the address it names support without one.
+ */
+export function useSupportSentence(): string {
+  const address = useContext(SessionContext)?.me?.supportEmail?.trim()
+  return address ? `For a higher limit, contact Insulin Apps support at ${address}.` : 'For a higher limit, contact Insulin Apps support.'
+}
+
 export const hasPermission = (me: Me | null, permission: string) => Boolean(me?.permissions.includes(permission))
 export const canCreate = (me: Me | null) => hasPermission(me, 'knowledge.collections.create') && me?.user.kind === 'person'
 export const canEdit = (me: Me | null) => hasPermission(me, 'knowledge.collections.edit')

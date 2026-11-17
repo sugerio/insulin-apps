@@ -497,6 +497,9 @@ export class CollectionEngine {
       })
     }
     if (meta.queue.length && (await imports.startNext(this))) return
+    // A hold that landed while the capacity guard answered: nothing wakes for questions either.
+    meta = await this.meta()
+    if (isHeld(meta)) return this.whileHeld(meta)
     await this.lifecycle()
   }
 
@@ -578,7 +581,10 @@ export class CollectionEngine {
       if (next) times.push(next)
     }
     const pendingWork =
-      (await this.state.storage.get('pendingDeletes')) || (await this.state.storage.get('removalCleanup')) || (await this.state.storage.get('hiddenCleanup'))
+      (await this.state.storage.get('pendingDeletes')) ||
+      (await this.state.storage.get('removalCleanup')) ||
+      (await this.state.storage.get('hiddenCleanup')) ||
+      (await imports.owesCapacity(this))
     if ((await this.store.pendingEvents()).length || pendingWork) times.push(now + 30_000)
     for (const staged of await this.store.listStaged()) times.push(imports.stagedExpiry(staged))
     for (const record of await this.store.listExports()) {
@@ -979,17 +985,21 @@ export class CollectionEngine {
     await imports.retryRemovalCleanup(this)
     await imports.retryHiddenCleanup(this)
     await imports.forgetCancelled(this)
+    await imports.returnCapacity(this)
     await exporter.expire(this)
   }
 
-  async releaseCapacity(record: ImportRecord): Promise<void> {
+  /** Gives back the import's slot, or its place in the guard's waiting list; false when the guard couldn't be told. */
+  async releaseCapacity(record: Pick<ImportRecord, 'status' | 'small'>): Promise<boolean> {
     const meta = await this.meta()
     try {
       await callObject(this.env.CAPACITY, CAPACITY_NAME, '/release', {
         body: { org: meta.org, collectionId: meta.collectionId, importId: record.status.importId, small: record.small },
       })
+      return true
     } catch (error) {
-      await this.store.log('capacity-release-failed', { error: errorText(error) })
+      await this.store.log('capacity-release-failed', { importId: record.status.importId, error: errorText(error) })
+      return false
     }
   }
 

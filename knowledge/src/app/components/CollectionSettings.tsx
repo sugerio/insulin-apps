@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea.tsx'
 import { api, collectionPath } from '../lib/api.ts'
 import { DAYS, keepReadyLabel } from '../lib/format.ts'
 import type { CollectionSummary, KeepReadyWindow } from '../lib/types.ts'
+import { useSupportSentence } from '../session.tsx'
 import { ActionError, Banner, Note } from './Feedback.tsx'
 
 // A collection's settings, for its owner and admins (design J7, LIM-10): its name and purpose, the one switch for AI
@@ -92,6 +93,7 @@ export function AssistantsSwitch({ collection, onSaved }: { collection: Collecti
 
 export function KeepReadyForm({ collection, timeZone, onSaved }: { collection: CollectionSummary; timeZone?: string | null; onSaved: (collection: CollectionSummary) => void }) {
   const current = collection.keepReady
+  const support = useSupportSentence()
   const [mode, setMode] = useState<'asked' | 'window'>(current ? 'window' : 'asked')
   const [days, setDays] = useState<number[]>(current?.days ?? WORKING_DAYS)
   const [start, setStart] = useState(current?.start ?? '09:00')
@@ -163,7 +165,7 @@ export function KeepReadyForm({ collection, timeZone, onSaved }: { collection: C
           {days.length ? <Note>Kept ready {keepReadyLabel({ days, start, hours })}.</Note> : <Note>Pick at least one day.</Note>}
         </div>
       ) : null}
-      {current?.paused ? <Banner kind="warn">Keep-ready is paused: your organization has used 90% of its awake hours this month. It starts again on the 1st.</Banner> : null}
+      {current?.paused ? <Banner kind="warn">Keep-ready is paused: your organization has used 90% of its awake hours this month. It starts again on the 1st. {support}</Banner> : null}
       <ActionError error={error} />
       {saved ? <p className="text-sm text-emerald-700 dark:text-emerald-400" role="status">Saved.</p> : null}
       <div><Button type="submit" variant="outline" disabled={busy || (mode === 'window' && days.length === 0)}>Save</Button></div>

@@ -76,7 +76,7 @@ describe('the in-memory engine', () => {
   })
 
   it('learns all or nothing: committed with a restore point, already here, interrupted and retried, failed after 3 tries', async () => {
-    const { call, learn, engine } = engineFor()
+    const { call, learn, engine, advance } = engineFor()
     await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
     const first = await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Rules.md', text: 'Partner discounts stop at 20 percent.' }])
     expect(first.status).toBe(202)
@@ -85,15 +85,23 @@ describe('the in-memory engine', () => {
     const same = await learn('c1', 'imp2', [{ fileId: 'file0002', name: 'Copy.md', text: 'Partner discounts stop at 20 percent.' }])
     expect(same.body).toMatchObject({ state: 'duplicate', version: null, files: [{ state: 'already_here' }] })
     engine.control.failNextImport({ collectionId: 'c1', times: 1 })
-    const retried = await learn('c1', 'imp3', [{ fileId: 'file0003', name: 'More.md', text: 'Gold partners get a named contact.' }])
-    expect(retried.body).toMatchObject({ state: 'committed', attempt: 2, version: 2 })
+    // Interrupted, it is tried again in place, as the real engine does: still the running import, so not cancellable.
+    const interrupted = await learn('c1', 'imp3', [{ fileId: 'file0003', name: 'More.md', text: 'Gold partners get a named contact.' }])
+    expect(interrupted.body).toMatchObject({ state: 'interrupted', attempt: 2, version: null })
+    expect((await call('DELETE', '/v1/collections/c1/imports/imp3')).body).toMatchObject({ error: 'busy_learning' })
+    advance(15_000)
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp3')).body).toMatchObject({ state: 'committed', attempt: 2, version: 2 })
     engine.control.failNextImport({ collectionId: 'c1', times: 3, fileName: 'Deck.md' })
-    const failed = await learn('c1', 'imp4', [{ fileId: 'file0004', name: 'Notes.md', text: 'Silver partners renew in June.' }, { fileId: 'file0005', name: 'Deck.md', text: 'Bronze partners renew in May.' }])
+    await learn('c1', 'imp4', [{ fileId: 'file0004', name: 'Notes.md', text: 'Silver partners renew in June.' }, { fileId: 'file0005', name: 'Deck.md', text: 'Bronze partners renew in May.' }])
+    engine.control.runUntilIdle()
+    const failed = await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp4')
     expect(failed.body).toMatchObject({ state: 'failed', attempt: 3, failedFileId: 'file0005', version: null })
     expect(failed.body.files.find((file) => file.fileId === 'file0005')).toMatchObject({ state: 'failed', reason: 'Couldn\'t learn “Deck.md” after 3 tries.' })
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body).toMatchObject({ version: 2, counts: { documents: 2 } })
+    // The app hears each try start and each interruption, as from the real engine.
     const outbox = await call<OutboxPage>('GET', '/v1/outbox?limit=500', undefined, null)
-    expect(outbox.body.events.filter((event) => event.type === 'import' && event.import.importId === 'imp4').map((event) => (event as { import: ImportStatus }).import.state)).toEqual(['interrupted', 'interrupted', 'failed'])
+    expect(outbox.body.events.filter((event) => event.type === 'import' && event.import.importId === 'imp4').map((event) => (event as { import: ImportStatus }).import.state))
+      .toEqual(['learning', 'interrupted', 'learning', 'interrupted', 'learning', 'failed'])
   })
 
   it('refuses a scanned PDF and a type it can\'t read, failing closed with the reason', async () => {
@@ -318,7 +326,8 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('held')
     expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('queued')
     const page = await call<OutboxPage>('GET', '/v1/outbox?since=&limit=100', undefined, null)
-    expect(page.body.events.some((event) => event.type === 'import' && event.import.importId === 'imp2' && event.import.state === 'interrupted')).toBe(true)
+    // As the real engine: the app hears it went back to the queue.
+    expect(page.body.events.filter((event) => event.type === 'import' && event.import.importId === 'imp2').map((event) => (event as { import: ImportStatus }).import.state)).toEqual(['learning', 'queued'])
     expect((await call<{ status: string }>('POST', '/v1/collections/c1/search', { query: 'first rule' })).body.status).toBe('held')
     expect((await call<CollectionStatus>('POST', '/v1/collections/c1/wake')).body.state).toBe('held')
     expect((await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })).status).toBe(429)

@@ -70,10 +70,12 @@ async function emptyCollection(db: D1Database, collection: CollectionRow, except
   return !busy
 }
 /**
- * Imports that can be cancelled (DELETE …/imports/:importId): waiting for the 1st, or with the engine but not started
- * (queued, or interrupted and waiting its turn again); and why one can't be, in plain words.
+ * Imports that can no longer be cancelled (DELETE …/imports/:importId), whatever the engine says: finished. Any other
+ * sent to the engine is asked about there, since D1 follows the engine's outbox a little behind it (an import back in
+ * the engine's queue may still read `reading` here, one it started may still read `queued`). Why one can't be
+ * cancelled, in plain words.
  */
-const CANCELLABLE = new Set(['waiting', 'queued', 'interrupted'])
+const FINISHED = new Set(['committed', 'duplicate', 'failed', 'cancelled'])
 const BEING_LEARNED = 'This is already being learned, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.'
 const CANT_TELL = 'Insulin can\'t tell yet whether this has started learning, so it can\'t be cancelled now. Try again in a few minutes.'
 const NOT_CANCELLABLE = 'Only an import Insulin hasn\'t started learning can be cancelled; this one has started or finished.'
@@ -437,10 +439,24 @@ export function sourceRoutes() {
     const { results } = await c.env.DB.prepare(
       `SELECT i.id, i.kind, i.created_at, i.created_by, i.request, i.detail, COALESCE(m.name, m.email) AS name FROM imports i
        LEFT JOIN members m ON m.org_id = i.org_id AND m.principal_type = 'person' AND m.principal_id = i.created_by
-       WHERE i.org_id = ?1 AND i.collection_id = ?2 AND (i.state = ?3 OR (?3 = 'queued' AND i.state = 'interrupted')) ORDER BY i.created_at, i.rowid LIMIT 100`,
+       WHERE i.org_id = ?1 AND i.collection_id = ?2 AND i.state = ?3 ORDER BY i.created_at, i.rowid LIMIT 100`,
     ).bind(caller.organizationId, collection.id, state).all<{ id: string; kind: string; created_at: number; created_by: string; request: string | null; detail: string; name: string | null }>()
+    let rows = results
+    if (state === 'queued' && rows.length && c.env.ENGINE) {
+      // The engine tells Knowledge when it starts one, through its outbox, a little later: the one it is learning now
+      // is left out here (and recorded), so nothing being learned is offered to cancel.
+      try {
+        const running = (await engineFor(c).getCollection(collection.id)).currentImport
+        if (running && rows.some((row) => row.id === running.importId)) {
+          rows = rows.filter((row) => row.id !== running.importId)
+          await finishImport(c.env, caller.organizationId, collection, running.importId, running, now(c))
+        }
+      } catch (error) {
+        logError('waiting_list_engine_failed', error, { org: caller.organizationId })
+      }
+    }
     return json(c, {
-      imports: results.map((row) => {
+      imports: rows.map((row) => {
         // A waiting import keeps its request; one sent has its files' names (`detail`), and a note's title no more.
         const request = row.request ? (JSON.parse(row.request) as WaitingRequest) : null
         const sent = request ? null : (JSON.parse(row.detail || '{}') as { files?: string[] })
@@ -466,30 +482,10 @@ export function sourceRoutes() {
     const row = await db.prepare(`SELECT state, sends FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
       .first<{ state: string; sends: number }>()
     if (!row) throw notFound('There is no such import in this collection.')
-    if (!CANCELLABLE.has(row.state)) throw new ApiError('conflict', NOT_CANCELLABLE)
-    if (row.state !== 'waiting' || row.sends > 0) {
-      // Sent to the engine (on a 1st without an answer, or queued there): it may be in the engine, or still on its way
-      // there. The engine cancels it if it hasn't started learning it, or remembers its id as cancelled so a send still
-      // on its way learns nothing; only once the engine says so is it cancelled here (whatever the tick is doing with
-      // it meanwhile: a send now answers `cancelled` too). While the engine may be learning it, it isn't cancelled and
-      // keeps what it reserved.
-      let status: ImportStatus
-      try {
-        status = await engineFor(c).cancelImport(collection.id, importId)
-      } catch (error) {
-        if (!(error instanceof EngineCallError && error.code === 'busy_learning')) throw new ApiError('conflict', CANT_TELL)
-        try {
-          await finishImport(c.env, caller.organizationId, collection, importId, await engineFor(c).getImport(collection.id, importId), at)
-        } catch (failure) {
-          logError('cancel_status_failed', failure, { org: caller.organizationId })
-        }
-        throw new ApiError('conflict', BEING_LEARNED)
-      }
-      if (status.state !== 'cancelled') throw new ApiError('conflict', BEING_LEARNED)
-      await finishImport(c.env, caller.organizationId, collection, importId, status, at)
-    } else {
-      // Never sent: cancelled only if the tick hasn't sent it since this request read it (`sends`, counted before each
-      // send, unchanged); otherwise it may be learning.
+    if (FINISHED.has(row.state)) throw new ApiError('conflict', NOT_CANCELLABLE)
+    if (row.state === 'waiting' && row.sends === 0) {
+      // Never sent: cancelled only if the tick hasn't claimed or sent it since this request read it (`sends`, counted
+      // before each send, unchanged).
       const [cancelled] = await db.batch([
         db.prepare(
           `UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting' AND sends = 0`,
@@ -498,9 +494,34 @@ export function sourceRoutes() {
           .bind(caller.organizationId, `import:${importId}`, at, importId),
       ])
       if (cancelled?.meta.changes === 1) return json(c, { import: { importId, state: 'cancelled' } })
+      const current = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ?`).bind(importId, caller.organizationId).first<{ state: string }>()
+      if (current?.state === 'cancelled') return json(c, { import: { importId, state: 'cancelled' } })
+      if (!current || FINISHED.has(current.state)) throw new ApiError('conflict', NOT_CANCELLABLE)
+      // The tick claimed it meanwhile, to send it: the engine is asked, once, below (it remembers the id as cancelled
+      // when the send hasn't arrived yet, and the send then answers `cancelled`).
     }
-    const current = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ?`).bind(importId, caller.organizationId).first<{ state: string }>()
-    if (current?.state !== 'cancelled') throw new ApiError('conflict', current?.state && CANCELLABLE.has(current.state) ? BEING_LEARNED : NOT_CANCELLABLE)
+    // Sent to the engine (or on its way there): the engine cancels it if it hasn't started learning it, or remembers its
+    // id as cancelled so a send still on its way learns nothing; only once the engine says so is it cancelled here
+    // (whatever the tick is doing with it meanwhile: a send now answers `cancelled` too). While the engine may be
+    // learning it, it isn't cancelled and keeps what it reserved.
+    let status: ImportStatus
+    try {
+      status = await engineFor(c).cancelImport(collection.id, importId)
+    } catch (error) {
+      if (!(error instanceof EngineCallError && error.code === 'busy_learning')) throw new ApiError('conflict', CANT_TELL)
+      // Started or finished there: what the engine says is recorded, so the lists show it where it is.
+      let finished = false
+      try {
+        const known = await engineFor(c).getImport(collection.id, importId)
+        finished = FINISHED.has(known.state)
+        await finishImport(c.env, caller.organizationId, collection, importId, known, at)
+      } catch (failure) {
+        logError('cancel_status_failed', failure, { org: caller.organizationId })
+      }
+      throw new ApiError('conflict', finished ? NOT_CANCELLABLE : BEING_LEARNED)
+    }
+    if (status.state !== 'cancelled') throw new ApiError('conflict', BEING_LEARNED)
+    await finishImport(c.env, caller.organizationId, collection, importId, status, at)
     return json(c, { import: { importId, state: 'cancelled' } })
   })
 

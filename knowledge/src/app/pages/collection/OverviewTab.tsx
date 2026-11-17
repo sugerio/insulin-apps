@@ -9,6 +9,7 @@ import { collectionPath } from '../../lib/api.ts'
 import { formatNumber, formatWhen, keepReadyLabel, plural, stateMessage } from '../../lib/format.ts'
 import type { AttentionCollection, FactWithCheck, RestorePoint } from '../../lib/types.ts'
 import { useResource } from '../../lib/useResource.ts'
+import { useSupportSentence } from '../../session.tsx'
 import { describeRestorePoint } from './HistoryTab.tsx'
 import type { TabProps } from './CollectionPage.tsx'
 
@@ -17,6 +18,7 @@ import type { TabProps } from './CollectionPage.tsx'
 
 export function OverviewTab({ detail }: TabProps) {
   const { collection, engine, questions } = detail
+  const support = useSupportSentence()
   const state = engine?.state ?? collection.state
   const editor = canChange(detail.role)
   const facts = useResource<{ facts: FactWithCheck[] }>(collection.facts > 0 ? collectionPath(collection.id, '/facts') : null)
@@ -43,7 +45,7 @@ export function OverviewTab({ detail }: TabProps) {
           {engine && engine.queuedImports > 0 ? <Note>{plural(engine.queuedImports, 'more import')} waiting to start.</Note> : null}
           {keepReady ? (
             keepReady.paused
-              ? <Banner kind="warn">Keep-ready for {collection.name} is paused: your organization has used 90% of its awake hours this month. It starts again on the 1st.</Banner>
+              ? <Banner kind="warn">Keep-ready for {collection.name} is paused: your organization has used 90% of its awake hours this month. It starts again on the 1st. {support}</Banner>
               : <Note>Kept ready {keepReadyLabel(keepReady)}{zone ? ` (${zone})` : ''}, so answers then take a few seconds.</Note>
           ) : (
             <Note>Sleeps {engine?.settings.awakeMinutes ?? 10} minutes after the last question; the next question wakes it in about a minute. A collection is never lost by sitting unused: after 30 days it comes back from its latest backup.</Note>

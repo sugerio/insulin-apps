@@ -151,6 +151,7 @@ export interface ImportRecord {
   rebuild: boolean // a removal whose restore point can't be started: the other documents are learned again
   restoreFrom: number | null // re-learning after a repair: also bring back that version's documents
   rounds?: number // a removal for good that failed its three tries this many times: each wait is longer
+  turns?: number // how many times the alarm started it (a removal or a hold can send it back to the queue): keys its events
   fromExport?: { collectionId: string; version: number } // an empty collection started from that collection's export
   result: Record<string, any> | null // the container job's result, kept until the commit
   test: { crashFileId?: string; detectorError?: boolean } | null

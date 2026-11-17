@@ -51,8 +51,9 @@ can check, with the file it came from. Search them by word: the search looks thr
 are more, **Show more** at the end of the list adds them.
 
 - **Looks right** (owners, admins and editors) marks a fact as checked, with the person's name.
-- **Fix** writes the right sentence. It is saved as a correction named after the file the fact came from ("Correction
-  to …"), holding only the new sentence, never the old one, and answers that used the fact use the fix.
+- **Fix** writes the right sentence. It is saved as a correction called "Correction to a fact", holding only the new
+  sentence: never the old one, nor the name of the file it came from (a name can say the same wrong thing). Answers
+  that used the fact use the fix.
 - **Report a problem** (everyone else) tells the owner something is wrong, like a reported answer.
 
 Through the API: `POST /api/collections/{id}/facts/{factId}/check` marks a fact as checked, and

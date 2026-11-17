@@ -147,9 +147,10 @@ describe('fixing and reporting', () => {
     expect(factsAfter.body.facts.some((entry) => /20 percent/.test(entry.sentence))).toBe(false)
   })
 
-  it('FIX-04 a fact\'s fix sends the engine only the right fact: the wrong sentence is in neither its title nor its text', async () => {
+  it.each(['Partner rules', 'Partner discounts stop at 20 percent for gold partners'])('FIX-04 a fact\'s fix sends the engine only the right fact: the wrong sentence is in neither its title nor its text (a source named “%s”)', async (name) => {
     const id = await h.collection(PEOPLE.maya)
-    await h.note(PEOPLE.maya, id, RULES, 'Partner rules')
+    // Must catch: a title naming the source repeats the wrong fact when the source's name says it.
+    await h.note(PEOPLE.maya, id, RULES, name)
     const facts = await h.json<{ facts: { factId: string; sentence: string }[] }>(PEOPLE.maya, 'GET', `/api/collections/${id}/facts`)
     const wrong = facts.body.facts.find((entry) => /20 percent/.test(entry.sentence))!
     const engine = h.env.ENGINE!
@@ -167,14 +168,21 @@ describe('fixing and reporting', () => {
     expect(sent).toHaveLength(1)
     const notes = (JSON.parse(sent[0]!) as { notes: { title: string; text: string }[] }).notes
     // Must catch: the old sentence learned again inside its own correction.
-    expect(notes).toEqual([expect.objectContaining({ title: 'Correction to “Partner rules”', text: 'Partner discounts stop at 15 percent for gold partners.' })])
+    expect(notes).toEqual([expect.objectContaining({ title: 'Correction to a fact', text: 'Partner discounts stop at 15 percent for gold partners.' })])
     expect(sent[0]).not.toContain(wrong.sentence)
+    expect(sent[0]).not.toContain(name)
     expect(sent[0]).not.toMatch(/20 percent/)
     h.env.ENGINE = engine
     h.engine.control.runUntilIdle()
     await h.tick()
     const after = await answered(id, 'Where do partner discounts stop for gold partners?')
-    expect(JSON.stringify(after.body)).not.toMatch(/20 percent/)
+    const correction = (after.body.sources as { documentName: string }[]).filter((source) => source.documentName === 'Correction to a fact')
+    expect(correction).toHaveLength(1)
+    expect(JSON.stringify(correction)).toMatch(/15 percent/)
+    expect(JSON.stringify(correction)).not.toMatch(/20 percent/)
+    // A source named for the wrong fact still says it under its own name (learned with a note, a second time): only
+    // the passage the fact came from is marked outdated, as for any other passage that says the same.
+    if (name === 'Partner rules') expect(JSON.stringify(after.body)).not.toMatch(/20 percent/)
   })
 })
 

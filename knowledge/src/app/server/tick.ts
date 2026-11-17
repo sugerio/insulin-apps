@@ -24,7 +24,8 @@ import { reportUsage } from './usage-metrics.ts'
  * 2. Limits from the operator console (limits-sync.ts).
  * 3. Member events: leaving, returning, roles, owners, revoked clients, deleted organizations (members.ts), with a
  *    resync after 410 and on the first tick.
- * 4. The engine's outbox: history, counts, usage, finished imports and their mail (outbox.ts).
+ * 4. The engine's outbox: history, counts, usage, imports' states and their mail (outbox.ts), the events parked
+ *    after a failure tried again first (only here, not in the pulls after requests).
  * 5. The awake-hours stop held in the engine for organizations at 100%, and let go for those a raised limit or the
  *    new month frees (holds.ts).
  * 6. Imports waiting for next month's documents learned (started on the 1st, organizations in turn), and imports
@@ -62,7 +63,7 @@ export async function runTick(env: Bindings, now: number): Promise<Record<string
   const until = (end: number): Bindings => ({ ...env, DEADLINE: end })
   await step('limits', () => { const end = within(4_000); return syncLimits(until(end), now, end) })
   await step('members', () => { const end = within(5_000); return syncMembers(until(end), now, end) })
-  await step('outbox', () => { const end = within(5_000); return syncOutbox(until(end), now, end) })
+  await step('outbox', () => { const end = within(5_000); return syncOutbox(until(end), now, end, { retry: true }) })
   const rest = until(deadline)
   await step('holds', () => awakeHolds(rest, now, deadline))
   await step('waitingImports', () => startWaitingImports(rest, now, deadline))

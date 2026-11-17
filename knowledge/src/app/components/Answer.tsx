@@ -7,6 +7,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group.tsx'
 import { Textarea } from '@/components/ui/textarea.tsx'
 import { api, collectionPath } from '../lib/api.ts'
 import type { AskAnswer, AskSource, CollectionSummary, ImportStatus, Report } from '../lib/types.ts'
+import { useSupportSentence } from '../session.tsx'
 import { canChange } from './CollectionParts.tsx'
 import { ActionError, Badge, Banner, Note } from './Feedback.tsx'
 import { FINAL, nextMonth, useImportWatch } from './ImportProgress.tsx'
@@ -261,6 +262,7 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
   onCancel: () => void
   onAskAgain: () => void
 }) {
+  const support = useSupportSentence()
   const [text, setText] = useState('')
   const [outdated, setOutdated] = useState(sources[0]?.passageId ?? '')
   const [notify, setNotify] = useState(false)
@@ -300,7 +302,7 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
         ) : null}
         {failed ? <Banner kind="danger">{status?.error?.message ?? "The correction couldn't be learned."} Nothing was changed. Try again.</Banner> : null}
         {status?.state === 'waiting' ? (
-          <Banner kind="info">Your organization has learned this month's documents, so {collection.name} learns your correction on {nextMonth()}, by itself. Until then, answers stay as they are.</Banner>
+          <Banner kind="info">Your organization has learned this month's documents, so {collection.name} learns your correction on {nextMonth()}, by itself. Until then, answers stay as they are. {support}</Banner>
         ) : null}
         {step === 4 ? (
           <Banner kind="ok" title="Fixed." action={<Button type="button" size="sm" onClick={onAskAgain}>Ask again</Button>}>
@@ -408,6 +410,7 @@ export function ReportPanel({ collection, question, answer, answerId, missing = 
 }
 
 function WriteAnswerPanel({ collection, question, onAskAgain }: { collection: CollectionSummary; question: string; onAskAgain: () => void }) {
+  const support = useSupportSentence()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -431,7 +434,7 @@ function WriteAnswerPanel({ collection, question, onAskAgain }: { collection: Co
     return done
       ? <Banner kind="ok" title="Saved and learned." action={<Button type="button" size="sm" onClick={onAskAgain}>Ask again</Button>}>New questions use your answer, cited as a note.</Banner>
       : status?.state === 'waiting'
-        ? <Banner kind="info">Saved. Your organization has learned this month's documents, so {collection.name} learns your answer on {nextMonth()}, by itself. Until then, answers stay as they are.</Banner>
+        ? <Banner kind="info">Saved. Your organization has learned this month's documents, so {collection.name} learns your answer on {nextMonth()}, by itself. Until then, answers stay as they are. {support}</Banner>
       : status && FINAL.has(status.state)
         ? <Banner kind="danger">{status.error?.message ?? "Your answer couldn't be learned."} Nothing was changed. Try again.</Banner>
         : <Banner kind="info">Learning your answer. Questions to {collection.name} wait until it finishes, about a minute.</Banner>

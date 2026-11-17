@@ -111,13 +111,15 @@ export function createApp(options: { enforceSameOrigin?: boolean } = {}) {
       preview: caller.preview,
       engine: Boolean(c.env.ENGINE),
       supportConfigured: Boolean(c.env.SUPPORT_EMAIL?.trim()),
+      supportEmail: c.env.SUPPORT_EMAIL?.trim() || null,
     })
   })
 
   app.get('/api/catalog', (c) => c.json(apiCatalog(c.get('caller'))))
 
   // After a request that may have changed something in the engine, its outbox is pulled too (as on the tick), so
-  // counts, history and usage follow at once; in the background when the runtime allows, never failing the request.
+  // counts, history, imports' states and usage follow at once; in the background when the runtime allows, never failing
+  // the request. Events parked after a failure are tried again only on the tick, every five minutes (outbox.ts).
   app.use('/api/collections/*', async (c, next) => {
     await next()
     if (!c.env.ENGINE || c.res.status >= 500) return

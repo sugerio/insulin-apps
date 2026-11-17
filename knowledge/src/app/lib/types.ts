@@ -28,6 +28,8 @@ export interface Me {
   preview: boolean
   engine: boolean
   supportConfigured: boolean
+  /** Insulin Apps support's address (the deploy's SUGER_SUPPORT_EMAIL), named in every limit message; null when unset. */
+  supportEmail: string | null
 }
 
 export interface KeepReadyWindow {

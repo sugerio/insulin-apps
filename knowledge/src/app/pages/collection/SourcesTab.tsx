@@ -11,6 +11,7 @@ import { api, collectionPath } from '../../lib/api.ts'
 import { formatBytes, formatDay, formatResetDay, formatWhen, plural, sourceKind } from '../../lib/format.ts'
 import type { DocumentInfo, ImportStatus } from '../../lib/types.ts'
 import { useResource } from '../../lib/useResource.ts'
+import { useSupportSentence } from '../../session.tsx'
 import type { TabProps } from './CollectionPage.tsx'
 
 // Sources (design J1, J9, section 10): the files, web pages and notes a collection holds, adding more (for its editors),
@@ -26,6 +27,9 @@ export function SourcesTab({ detail, reload, openSource }: TabProps) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<unknown>(null)
   const watch = useImportWatch(collection.id, started, () => { void sources.reload(); void reload() })
+  // The lists of imports not learned yet are read again when an import is added, and whenever the one watched changes
+  // state or ends (it starts, is waiting again, or is learned).
+  const changed = watch.status ? `${watch.status.importId}:${watch.status.state}` : null
 
   async function setActive(document: DocumentInfo, active: boolean) {
     setBusy(document.documentId)
@@ -113,8 +117,8 @@ export function SourcesTab({ detail, reload, openSource }: TabProps) {
         <Banner kind="info">Your role here is Viewer: you can read this list and open every source. The collection's owner, admins and editors add or remove sources.</Banner>
       )}
       {watch.status ? <ImportProgress status={watch.status} collectionName={collection.name} error={watch.error} /> : null}
-      <WaitingImports collectionId={collection.id} state="waiting" editor={editor} refresh={started} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
-      <WaitingImports collectionId={collection.id} state="queued" editor={editor} refresh={started} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
+      <WaitingImports collectionId={collection.id} state="waiting" editor={editor} refresh={changed} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
+      <WaitingImports collectionId={collection.id} state="queued" editor={editor} refresh={changed} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
       {notice ? <Banner kind="ok">{notice}</Banner> : null}
       <ActionError error={error} />
       {sources.loading ? <Loading /> : sources.error ? <ErrorState error={sources.error} onRetry={() => void sources.reload()} /> : (
@@ -203,7 +207,10 @@ function waitingWhat(entry: WaitingImport): string {
   return entry.notes === 1 ? 'a note' : plural(entry.notes, 'note')
 }
 
-/** The two lists of imports not learned yet that can still be cancelled: their titles and what they say. */
+/**
+ * The two lists of imports not learned yet that can still be cancelled: their titles and what they say. Waiting for the
+ * 1st is a limit, so it names Insulin Apps support, as every limit message does.
+ */
 const WAITING_LISTS = {
   waiting: { title: 'Waiting for the 1st', description: "Your organization has learned this month's documents. These are learned on the 1st, by themselves; everything already learned keeps answering." },
   queued: { title: 'Waiting to be learned', description: 'Insulin has these and learns them in turn. Until it starts on one, it can be cancelled.' },
@@ -213,16 +220,18 @@ const WAITING_LISTS = {
  * The collection's imports waiting for the 1st (its organization has learned this month's documents), or those Insulin
  * has but hasn't started learning (`queued`): each with what it brings, who added it and, for the 1st, when it starts
  * by itself (the day in UTC, as the limits' month and the learning progress name it); its editors can cancel one, and it
- * is never learned.
+ * is never learned. A cancel that can't be done (it started meanwhile) reads the list again too.
  */
 function WaitingImports({ collectionId, state, editor, refresh, onCancelled }: { collectionId: string; state: keyof typeof WAITING_LISTS; editor: boolean; refresh: unknown; onCancelled: (what: string) => void }) {
   const waiting = useResource<{ imports: WaitingImport[] }>(collectionPath(collectionId, `/imports?state=${state}`))
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<unknown>(null)
+  const support = useSupportSentence()
   const { reload } = waiting
   useEffect(() => { if (refresh) void reload() }, [refresh, reload])
   const list = waiting.data?.imports ?? []
-  if (!list.length) return null
+  // Emptied by a cancel that couldn't be done, the card stays to say why.
+  if (!list.length && !error) return null
   async function cancel(entry: WaitingImport) {
     setBusy(entry.importId)
     setError(null)
@@ -232,13 +241,15 @@ function WaitingImports({ collectionId, state, editor, refresh, onCancelled }: {
       await reload()
     } catch (failure) {
       setError(failure)
+      await reload()
     } finally {
       setBusy(null)
     }
   }
+  const description = state === 'waiting' ? `${WAITING_LISTS.waiting.description} ${support}` : WAITING_LISTS[state].description
   return (
-    <Card title={WAITING_LISTS[state].title} description={WAITING_LISTS[state].description}>
-      <ul className="flex flex-col divide-y rounded-lg border" aria-label={WAITING_LISTS[state].title}>
+    <Card title={WAITING_LISTS[state].title} description={description}>
+      <ul className="flex flex-col divide-y rounded-lg border empty:hidden" aria-label={WAITING_LISTS[state].title}>
         {list.map((entry) => (
           <li key={entry.importId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm" data-waiting-import={entry.importId}>
             <span className="min-w-0 grow basis-48 [overflow-wrap:anywhere]">

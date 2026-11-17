@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea.tsx'
 import { api, collectionPath } from '../lib/api.ts'
 import { formatDay, plural } from '../lib/format.ts'
 import type { CollectionSummary, DocumentInfo, FactWithCheck, ImportStatus } from '../lib/types.ts'
+import { useSupportSentence } from '../session.tsx'
 import { ActionError, Badge, Banner, ErrorState, Loading, Note } from './Feedback.tsx'
 import { FINAL, nextMonth, useImportWatch } from './ImportProgress.tsx'
 
@@ -138,6 +139,7 @@ export function FactList({ collection, editor, onOpenSource, limit, search = tru
 function FixFactDialog({ collection, fact, onClose, onFixed }: { collection: CollectionSummary; fact: FactWithCheck; onClose: () => void; onFixed: () => void }) {
   const [text, setText] = useState(fact.sentence)
   const [notify, setNotify] = useState(false)
+  const support = useSupportSentence()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [started, setStarted] = useState<ImportStatus | null>(null)
@@ -174,7 +176,7 @@ function FixFactDialog({ collection, fact, onClose, onFixed }: { collection: Col
               <Label htmlFor="fact-notify" className="font-normal leading-snug">Tell the person who added this file, so they can update it too. They get an e-mail with a link, not your fix.</Label>
             </div>
           )}
-          {status?.state === 'waiting' ? <Banner kind="info">Your organization has learned this month's documents, so {collection.name} learns your fix on {nextMonth()}, by itself.</Banner>
+          {status?.state === 'waiting' ? <Banner kind="info">Your organization has learned this month's documents, so {collection.name} learns your fix on {nextMonth()}, by itself. {support}</Banner>
             : started && !failed ? <Banner kind="info">Learning your fix, about a minute. Questions to {collection.name} wait meanwhile.</Banner> : null}
           {failed ? <Banner kind="danger">{status?.error?.message ?? "The fix couldn't be learned."} Nothing was changed.</Banner> : null}
           <ActionError error={error} />

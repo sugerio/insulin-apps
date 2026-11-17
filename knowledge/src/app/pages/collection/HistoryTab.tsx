@@ -7,6 +7,7 @@ import { api, collectionPath } from '../../lib/api.ts'
 import { formatWhen, formatWhenInline, notRestorableReason, plural } from '../../lib/format.ts'
 import type { CollectionDetail, GoBackPreview, RestorePoint } from '../../lib/types.ts'
 import { useResource } from '../../lib/useResource.ts'
+import { useSupportSentence } from '../../session.tsx'
 import type { TabProps } from './CollectionPage.tsx'
 
 // History (design J8, HIS-01, HIS-06, HIS-07): every change is a restore point. Going back explains first what the
@@ -29,6 +30,7 @@ export function describeRestorePoint(point: RestorePoint, all: RestorePoint[]): 
 export function HistoryTab({ detail, reload }: TabProps) {
   const { collection } = detail
   const editor = canChange(detail.role) && detail.can.change
+  const support = useSupportSentence()
   const history = useResource<{ restorePoints: RestorePoint[] }>(collectionPath(collection.id, '/history'))
   const [asking, setAsking] = useState<RestorePoint | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -111,9 +113,9 @@ export function HistoryTab({ detail, reload }: TabProps) {
       </p>
       {state === 'going_back' ? <Banner kind="info" title="Going back to an earlier version.">About a minute. Questions wait for a moment. This page says when it has finished.</Banner> : null}
       {stopped ? (
-        <Banner kind="warn">Going back was stopped: Knowledge has stopped until the 1st, because your organization has used this month's awake hours. Nothing changed; go back again once it runs again.</Banner>
+        <Banner kind="warn">Going back was stopped: Knowledge has stopped until the 1st, because your organization has used this month's awake hours. Nothing changed; go back again once it runs again. {support}</Banner>
       ) : state === 'held' ? (
-        <Banner kind="warn">Knowledge has stopped until the 1st: your organization has used this month's awake hours. Going back and undo wait until then; everything is kept.</Banner>
+        <Banner kind="warn">Knowledge has stopped until the 1st: your organization has used this month's awake hours. Going back and undo wait until then; everything is kept. {support}</Banner>
       ) : null}
       {notice ? <Banner kind="ok">{notice}</Banner> : null}
       <ActionError error={error} />

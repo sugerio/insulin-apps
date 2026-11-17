@@ -10,6 +10,7 @@ import type {
   Manifest,
   Meta,
   OutdatedMark,
+  PendingEvent,
   RestorePointRecord,
   Runtime,
   AnswerState,
@@ -387,7 +388,6 @@ export async function cancel(e: CollectionEngine, importId: string): Promise<Imp
     const meta = (await txn.get<Meta>('meta'))!
     const cancellable = ['import', 'correction', 'export'].includes(record.kind) && record.phase === 'queued' && meta.active !== importId
     if (!cancellable) return { done: 'busy' as const, record }
-    const capacity = record.capacity
     record.phase = 'done'
     record.capacity = 'none'
     record.notes = scrubbed(record.notes)
@@ -395,7 +395,7 @@ export async function cancel(e: CollectionEngine, importId: string): Promise<Imp
     await e.store.putImport(record, txn)
     meta.queue = meta.queue.filter((id) => id !== importId)
     await txn.put('meta', meta)
-    return { done: 'cancelled' as const, record, capacity }
+    return { done: 'cancelled' as const, record }
   })
   if (outcome.done === 'busy') {
     const finished = outcome.record.phase === 'done'
@@ -403,7 +403,9 @@ export async function cancel(e: CollectionEngine, importId: string): Promise<Imp
   }
   if (outcome.done === 'cancelled') {
     const record = outcome.record
-    if (outcome.capacity !== 'none') await e.releaseCapacity(record)
+    // Always: the guard may hold a slot or a place in its waiting list for it whatever the record says (an answer to
+    // the alarm's /acquire can be lost on its way back). The guard ignores a release of what it doesn't hold.
+    await giveBack(e, record)
     await deleteOriginals(e, record.files.map((f) => f.fileId))
     if (record.textsSaved) {
       // Texts saved by an earlier try (stopped for a removal or a hold) that will never be learned.
@@ -416,6 +418,48 @@ export async function cancel(e: CollectionEngine, importId: string): Promise<Imp
   }
   if (outcome.done === 'remembered') await e.store.log('import-cancelled', { importId, when: 'before it was sent' })
   return outcome.record
+}
+
+const RETURNS_KEY = 'capacityReturns'
+
+/**
+ * Gives back what the capacity guard holds for an import that no longer runs or waits here (its slot, or its place in
+ * the guard's waiting list). When the guard can't be told now, the id is kept and told again from the alarm
+ * (returnCapacity), so a slot never stays taken for a cancelled import until its lease lapses.
+ */
+async function giveBack(e: CollectionEngine, record: Pick<ImportRecord, 'status' | 'small'>): Promise<void> {
+  if (await e.releaseCapacity(record)) return
+  await oweReturn(e, record.status.importId)
+}
+
+async function oweReturn(e: CollectionEngine, importId: string): Promise<void> {
+  const owed = (await e.state.storage.get<string[]>(RETURNS_KEY)) ?? []
+  if (!owed.includes(importId)) await e.state.storage.put(RETURNS_KEY, [...owed, importId])
+}
+
+/**
+ * From the alarm: the guard is told again to give back what it holds for imports whose release didn't reach it, or
+ * whose /acquire answer was lost. An import queued or running here again is left to the queue, which gives back its
+ * slot when it ends or is cancelled.
+ */
+export async function returnCapacity(e: CollectionEngine): Promise<void> {
+  const owed = (await e.state.storage.get<string[]>(RETURNS_KEY)) ?? []
+  if (!owed.length) return
+  const meta = await e.meta()
+  const settled: string[] = []
+  for (const importId of owed) {
+    if (meta.active === importId || meta.queue.includes(importId)) settled.push(importId)
+    else if (await e.releaseCapacity({ status: { importId } as ImportStatus, small: false })) settled.push(importId)
+  }
+  // Ids added while the guard was being told stay owed.
+  const left = ((await e.state.storage.get<string[]>(RETURNS_KEY)) ?? []).filter((id) => !settled.includes(id))
+  if (left.length) await e.state.storage.put(RETURNS_KEY, left)
+  else await e.state.storage.delete(RETURNS_KEY)
+}
+
+/** Whether the guard is still owed a release (the alarm then comes back soon). */
+export async function owesCapacity(e: CollectionEngine): Promise<boolean> {
+  return ((await e.state.storage.get<string[]>(RETURNS_KEY)) ?? []).length > 0
 }
 
 /** Cancelled ids are remembered for SETTINGS.cancelledKeepMs: no send stays in flight that long. */
@@ -882,16 +926,22 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
       body: { org: meta.org, collectionId: meta.collectionId, importId, small: record.small },
     })
   } catch (error) {
-    await e.store.log('capacity-unreachable', { error: errorText(error) })
+    // The guard may have granted a slot or a place whose answer was lost. If the import is cancelled meanwhile (or
+    // was already), what the guard holds for it is given back from the alarm; one still queued asks again and gets
+    // the same slot.
+    await oweReturn(e, importId)
+    await e.store.log('capacity-unreachable', { importId, error: errorText(error) })
     return false
   }
-  // The guard answered after an await: a cancel may have won meanwhile. The import is claimed only if it is still the
-  // one waiting, read again and written with meta.active in one transaction; otherwise what the guard gave goes back.
+  // The guard answered after an await: a cancel or the organization's hold may have won meanwhile. The import is
+  // claimed only if it is still the one waiting and the organization isn't held (a removal for good still starts),
+  // read again and written with meta.active in one transaction; otherwise what the guard gave goes back.
   const id = importId
   const claimed = await e.state.storage.transaction(async (txn) => {
     const current = await e.store.getImport(id, txn)
     const latest = (await txn.get<Meta>('meta'))!
     if (!current || current.phase !== 'queued' || !latest.queue.includes(id) || latest.active) return null
+    if (isHeld(latest) && current.kind !== 'remove') return null
     if (!answer.granted) {
       current.capacity = 'waiting'
       current.status.waitingFor = answer.waitingFor
@@ -904,21 +954,47 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
     current.status.state = 'reading'
     current.status.waitingFor = null
     current.status.queuePosition = null
+    current.turns = (current.turns ?? 0) + 1
     await e.store.putImport(current, txn)
     latest.queue = latest.queue.filter((q) => q !== id)
     latest.active = id
     await txn.put('meta', latest)
+    // The app hears that it started: from now on it can't be cancelled.
+    if (APP_KINDS.has(current.kind)) await e.store.addEvents([stateEvent(latest, current, `started:${current.turns}`)], txn)
     return { started: true, record: current }
   })
   if (!claimed) {
-    await e.releaseCapacity(record) // the slot just given, or the place in the waiting list
-    await e.store.log('capacity-claim-lost', { importId: id, granted: answer.granted })
+    await giveBack(e, record) // the slot just given, or the place in the waiting list
+    await e.store.log('capacity-claim-lost', { importId: id, granted: answer.granted, held: isHeld(await e.meta()) })
     return false
   }
   if (!claimed.started) return false
   await e.store.log('import-started', { importId: id, kind: claimed.record.kind, attempt: claimed.record.status.attempt })
   await advance(e, claimed.record)
   return true
+}
+
+/** Imports the app sent (not the engine's own re-reads, re-learning and removals): the app follows their state. */
+const APP_KINDS = new Set<ImportKind>(['import', 'correction', 'export'])
+
+/**
+ * An `import` event for a change of state the app follows besides the end: started, back in the queue (a removal for
+ * good or the hold went first), interrupted and tried again. `what` makes each one's key its own.
+ */
+function stateEvent(meta: Meta, record: ImportRecord, what: string): PendingEvent {
+  return {
+    key: `${meta.org}:${meta.collectionId}:import:${record.status.importId}:${what}`,
+    event: { at: iso(), org: meta.org, collectionId: meta.collectionId, type: 'import', import: structuredClone(record.status) },
+  }
+}
+
+async function tellApp(e: CollectionEngine, record: ImportRecord, what: string): Promise<void> {
+  if (APP_KINDS.has(record.kind)) await e.store.addEvents([stateEvent(await e.meta(), record, what)])
+}
+
+/** The organization's hold landed during an earlier await: nothing but a removal for good starts a container now. */
+async function heldNow(e: CollectionEngine, record: ImportRecord): Promise<boolean> {
+  return record.kind !== 'remove' && isHeld(await e.meta())
 }
 
 /** One step of the active import. */
@@ -941,6 +1017,8 @@ export async function advance(e: CollectionEngine, record: ImportRecord): Promis
       return preempt(e, record)
     }
   }
+  // The hold may have landed while the guard answered: nothing more starts (an import saving finds it as it commits).
+  if (!record.snapshotTaken && (await heldNow(e, record))) return stopForHold(e, record)
   try {
     if (record.phase === 'staging') await startJob(e, record)
     else if (record.phase === 'running') await poll(e, record)
@@ -985,6 +1063,7 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
     m.active = null
   })
   await enqueue(e, record, true)
+  await tellApp(e, record, `requeued:${record.turns ?? 0}`)
   await e.store.log('import-preempted', { importId: record.status.importId })
 }
 
@@ -997,10 +1076,12 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
  * the other documents again in an empty container, and any other import waits behind re-learning everything.
  */
 async function learningContainer(e: CollectionEngine, record: ImportRecord): Promise<Runtime> {
+  await stopIfHeld(e, record)
   const meta = await e.meta()
   if (record.kind === 'relearn' || record.kind === 'export' || record.rebuild) return e.startContainer(null, 'learning')
   const current = await e.currentSnapshot(meta)
   if (current.unusable) {
+    await stopIfHeld(e, record)
     const runtime = await e.startContainer(null, 'learning', true)
     const latest = await backup.latestIndex(e)
     if (current.snapshot && latest && backup.holds(latest, current.snapshot, runtime.dataFormat) && (await backup.restoreFiles(e, latest))) {
@@ -1034,6 +1115,7 @@ async function learningContainer(e: CollectionEngine, record: ImportRecord): Pro
     await e.store.putRuntime(runtime)
     return runtime
   }
+  await stopIfHeld(e, record)
   const started = await e.startContainer(snapshot, 'learning')
   if (snapshot) {
     const manifest = await e.box.manifest()
@@ -1045,6 +1127,13 @@ async function learningContainer(e: CollectionEngine, record: ImportRecord): Pro
     await e.store.log('checksum-ok', { snapshot: snapshot.handle.id, purpose: 'learning' })
   }
   return started
+}
+
+/** Checked before each container start and job: a hold that landed meanwhile stops the import, which keeps nothing and waits. */
+async function stopIfHeld(e: CollectionEngine, record: ImportRecord): Promise<void> {
+  if (!(await heldNow(e, record))) return
+  await stopForHold(e, record)
+  throw new Deferred()
 }
 
 /** The documents a re-learning holds: the current ones, and after a repair those of the version that failed too. */
@@ -1066,6 +1155,8 @@ async function relearnDocuments(e: CollectionEngine, record: ImportRecord, meta:
 
 async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void> {
   const importId = record.status.importId
+  // An interrupted try is tried again in place, as the active import: the app hears when it starts again.
+  const retrying = record.status.state === 'interrupted'
   const before = await e.meta()
   if (record.kind === 'import' || record.kind === 'correction') {
     // Content learned since this import was queued is already here: never learn it twice.
@@ -1169,6 +1260,7 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
     }
   }
   await e.box.putInbox(importId, 'batch.json', JSON.stringify(batch))
+  await stopIfHeld(e, record)
   // From here the container holds an uncommitted import: it is never reused if this import doesn't commit.
   runtime.dirty = true
   await e.store.putRuntime(runtime)
@@ -1179,6 +1271,7 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   record.learningStartedAt ??= clock.now()
   record.status.files = record.status.files.map((f) => (f.state === 'waiting' ? { ...f, state: 'reading' } : f))
   await e.store.putImport(record)
+  if (retrying) await tellApp(e, record, `retried:${record.status.attempt}`)
   await e.chargeUsage('learning')
   await e.store.log('job-started', { importId, op, job: job.id, attempt: record.status.attempt })
 }
@@ -1368,8 +1461,13 @@ async function commitImport(
       : record.kind === 'export'
         ? (await exportedState(e, meta, record)).state
         : null
-  const next = applyResult(meta, current, record, result, version, facts, stats, extra)
+  const dropped: DroppedMark[] = []
+  const next = applyResult(meta, current, record, result, version, facts, stats, extra, dropped)
   const before = record.kind === 'export' ? (extra?.marks ?? []) : current.marks
+  // Each moved mark with the correction it belonged to before (another than its owner now when passages merged).
+  const moves = (result.marks ?? [])
+    .filter((m) => m.changed || m.newTextHash === null)
+    .map((m) => ({ ...m, noteDocumentId: before.find((b) => b.documentId === m.documentId && b.textHash === m.textHash)?.noteDocumentId ?? null }))
   const changes = emptyChanges()
   changes.files = record.files.filter((f) => !f.duplicateOf).length
   changes.notes = record.kind === 'correction' ? 0 : record.notes.length
@@ -1394,11 +1492,17 @@ async function commitImport(
     changedDocumentIds: result.changed ?? [],
     ...(record.kind === 'relearn' ? { summary: 'Learned everything again from its saved text' } : {}),
     ...(record.kind === 'export' ? { summary: `Started from an export (${describe(changes).toLowerCase()})` } : {}),
-    // Each moved mark with the correction it belonged to before (another than its owner now when passages merged).
-    needsCheck: (result.marks ?? [])
-      .filter((m) => m.changed || m.newTextHash === null)
-      .map((m) => ({ ...m, noteDocumentId: before.find((b) => b.documentId === m.documentId && b.textHash === m.textHash)?.noteDocumentId ?? null })),
+    // And each mark a merge dropped without moving it (its passage went to a newer correction): its earlier check goes.
+    needsCheck: [...moves, ...dropped.filter((d) => !moves.some((m) => m.documentId === d.documentId && m.textHash === d.textHash))],
   })
+}
+
+/** A mark that lost its passage to a newer correction when passages merged: where it was, where it is, and its correction. */
+interface DroppedMark {
+  documentId: string
+  textHash: string
+  newTextHash: string
+  noteDocumentId: string
 }
 
 function applyResult(
@@ -1410,6 +1514,7 @@ function applyResult(
   facts: string | null,
   stats: Stats,
   extra: AnswerState | null = null,
+  dropped: DroppedMark[] = [],
 ): AnswerState {
   const now = iso()
   const byId = new Map((result.documents ?? []).map((d) => [d.documentId, d]))
@@ -1484,7 +1589,7 @@ function applyResult(
       const learned = byId.get(d.documentId)
       return learned?.changed ? { ...d, textBytes: learned.textBytes, hiddenCount: learned.hidden } : d
     })
-    marks = followMarks(marks, result.marks ?? [], superseded)
+    marks = followMarks(marks, result.marks ?? [], superseded, dropped)
     documents = retireCorrections(documents, marks, superseded)
   } else if (record.kind === 'export') {
     // An empty collection started from an export: its documents as learned now, stopped ones still stopped, and the
@@ -1496,7 +1601,7 @@ function applyResult(
         return { ...d, textBytes: learned.textBytes, hiddenCount: learned.hidden ?? d.hiddenCount, pages: learned.pages ?? d.pages, addedAt: now, version }
       })
     const kept = new Set(documents.map((d) => d.documentId))
-    marks = followMarks((extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId)), result.marks ?? [], superseded)
+    marks = followMarks((extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId)), result.marks ?? [], superseded, dropped)
     documents = retireCorrections(documents, marks, superseded)
   } else if (record.kind === 'relearn' && record.restoreFrom !== null) {
     // A repair's re-learning also brings back the documents of the version that failed its check.
@@ -1518,9 +1623,9 @@ function applyResult(
 
 /**
  * Outdated marks follow their passage to its new text (a re-read, or an export hidden again): one whose passage
- * changed, or can't be found, asks to be checked.
+ * changed, or can't be found, asks to be checked. Marks a merge drops are added to `dropped`.
  */
-function followMarks(marks: OutdatedMark[], moves: NonNullable<IngestResult['marks']>, superseded: Set<string>): OutdatedMark[] {
+function followMarks(marks: OutdatedMark[], moves: NonNullable<IngestResult['marks']>, superseded: Set<string>, dropped: DroppedMark[] = []): OutdatedMark[] {
   const remap = new Map(moves.map((m) => [`${m.documentId}:${m.textHash}`, m.newTextHash]))
   const changed = new Set(moves.filter((m) => m.changed).map((m) => `${m.documentId}:${m.textHash}`))
   const moved = marks.map((m): OutdatedMark => {
@@ -1540,6 +1645,7 @@ function followMarks(marks: OutdatedMark[], moves: NonNullable<IngestResult['mar
   return moved.filter((m, i) => {
     if (winner.get(`${m.documentId}:${m.textHash}`) === i) return true
     superseded.add(m.noteDocumentId)
+    dropped.push({ documentId: m.documentId, textHash: marks[i].textHash, newTextHash: m.textHash, noteDocumentId: m.noteDocumentId })
     return false
   })
 }
@@ -1713,10 +1819,14 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
         ...(appImport ? [{ key: `${meta.org}:${meta.collectionId}:import:${status.importId}:committed`, event: { ...event, type: 'import' as const, import: status } }] : []),
         // A re-read changed a passage a correction marked outdated: the correction asks to be checked.
         ...(c.needsCheck ?? []).flatMap((m) => {
-          const mark = c.state.marks.find((x) => x.documentId === m.documentId && (x.textHash === m.newTextHash || x.textHash === m.textHash))
+          // The mark that holds the passage now: this one where it went (or stayed), or the one that took it over.
+          const mark = c.state.marks.find((x) => x.documentId === m.documentId && x.textHash === (m.newTextHash ?? m.textHash))
           const note = mark && c.state.documents.find((d) => d.documentId === mark.noteDocumentId)
           if (!mark || !note?.noteId) return []
           const moved = !!m.newTextHash && m.newTextHash !== m.textHash
+          // Merged passages went to a newer correction: the mark's own correction changed, even where it didn't move.
+          const handedOver = !!m.noteDocumentId && m.noteDocumentId !== mark.noteDocumentId
+          const replaces = moved || handedOver
           const was = m.noteDocumentId ? c.state.documents.find((d) => d.documentId === m.noteDocumentId) : undefined
           return [
             {
@@ -1727,11 +1837,12 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
                 noteId: note.noteId,
                 documentId: m.documentId,
                 textHash: mark.textHash,
-                // The hash the mark had before this re-read moved it (none when it couldn't follow its passage), and the
-                // correction it belonged to (the retired one when merged passages went to a newer correction), so the
-                // app replaces that mark's earlier check: one check per mark, none left over for a dropped one.
-                previousTextHash: moved ? m.textHash : null,
-                previousNoteId: moved ? (was?.noteId ?? note.noteId) : null,
+                // The hash the mark had before this re-read (none when it neither moved nor changed hands, or couldn't
+                // follow its passage), and the correction it belonged to (the retired one when merged passages went to
+                // a newer correction, whether or not the mark moved), so the app replaces that mark's earlier check:
+                // one check per mark, none left over for a dropped one.
+                previousTextHash: replaces ? m.textHash : null,
+                previousNoteId: replaces ? (was?.noteId ?? note.noteId) : null,
               },
             },
           ]
@@ -1839,12 +1950,14 @@ async function attemptFailed(e: CollectionEngine, record: ImportRecord, failure:
     reason: failure.message,
   })
   if (!lastTry) {
+    // Tried again in place, as the active import (it can't be cancelled): the app hears it was interrupted.
     record.status.state = 'interrupted'
     record.status.attempt += 1
     record.phase = 'staging'
     record.retryAt = clock.now() + 15_000 * (record.status.attempt - 1)
     record.status.files = waitingFiles(record)
     await e.store.putImport(record)
+    await tellApp(e, record, `interrupted:${record.status.attempt}`)
     await e.chargeUsage(null)
     return
   }

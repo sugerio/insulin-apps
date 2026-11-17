@@ -52,8 +52,10 @@ and what it holds counts toward the organization's limits before anything starts
 What waits for the 1st (the organization has learned this month's documents) is listed on **Sources**, under
 **Waiting for the 1st**, with who added it and when it starts; its editors can **Cancel** it, and it is never learned.
 What Insulin has but hasn't started learning yet (sent on the 1st, or waiting its turn behind other imports) is
-listed under **Waiting to be learned**, and its editors can **Cancel** it too. Once learning has started, it can't be
-cancelled: Knowledge says so, and it is learned.
+listed under **Waiting to be learned**, and its editors can **Cancel** it too. Once learning has started, it leaves
+that list and can't be cancelled, also while Insulin tries it again after an interruption: Knowledge says so, and it
+is learned. One that had to wait again (a removal for good went first, or the organization used this month's awake
+hours) is back on the list, and can be cancelled again.
 
 ## Files that can't be learned
 
@@ -64,8 +66,9 @@ instead. Only the others are learned:
   (`.doc`, `.ppt`) or an image. Save it in one of the types above and add it again.
 - **An empty file**, or one **larger than the organization's largest file**. Split it, or save it smaller.
 - **A scanned PDF**: a PDF whose pages draw only images, with no text, is named when it is uploaded, before learning,
-  even when it lists a font. One whose pages Insulin can't look into while it uploads (an unusual compression) is
-  accepted; if it has no text after all, its import fails and names it.
+  even when it lists a font. Insulin names a PDF only when it is sure there is no text: one whose pages it can't look
+  into for certain while it uploads (an unusual compression, an encrypted file, a very large or unusual layout) is
+  accepted, and if it has no text after all, its import fails and names it.
 - **The organization's limits**: if the files would go past its documents or stored files, nothing starts and
   Knowledge says which limit. Past this month's documents learned, they are taken and wait for the 1st. See
   [Limits](/docs/knowledge/limits).

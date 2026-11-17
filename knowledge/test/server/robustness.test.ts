@@ -122,6 +122,8 @@ describe('imports and engine failures', () => {
     const id = await h.collection(PEOPLE.maya)
     h.engine.control.failNextImport({ collectionId: id, times: 3 })
     expect((await h.call(PEOPLE.maya, 'POST', `/api/collections/${id}/notes`, { text: 'A note that fails.' })).status).toBe(202)
+    // Its tries are made again in place, each after a wait.
+    h.engine.control.runUntilIdle()
     // The request saw the import as queued: its final state comes through the outbox.
     await h.db.prepare(`UPDATE imports SET state = 'learning' WHERE org_id = ?`).bind(ORG).run()
     await h.db.prepare(`UPDATE reservations SET state = 'held' WHERE org_id = ? AND key != 'awake_hours_month'`).bind(ORG).run()
@@ -470,6 +472,7 @@ describe('asking and fixing', () => {
     expect(await statusOf()).toBe('open')
     h.engine.control.failNextImport({ collectionId: id, times: 3 })
     h.engine.control.hold(false)
+    h.engine.control.runUntilIdle()
     await h.tick()
     expect(await statusOf()).toBe('open')
     await h.call(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text: 'Partner discounts stop at 15 percent.', reportId: report.body.report.id })

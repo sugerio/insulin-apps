@@ -23,9 +23,10 @@ import { memberOf } from './members.ts'
  *
  * An event that can't be applied (a statement D1 refuses, say) doesn't stop the outbox for everyone else: it is parked
  * (table `parked_events`, as the engine sent it), with every later event of its collection behind it, so a
- * collection's events are still applied in their order; other collections' go on. Each tick tries the parked ones
- * again first, a collection's oldest first, stopping at one that fails again. Health shows the collections held up.
- * Only when even parking fails (D1 not answering) does the outbox stop, at that event, as before.
+ * collection's events are still applied in their order; other collections' go on. Each tick (every five minutes, not
+ * the pulls after requests) tries the parked ones again first, the collections tried longest ago first, a collection's
+ * oldest event first, stopping at one that fails again. Health shows the collections held up. Only when even parking
+ * fails (D1 not answering) does the outbox stop, at that event, as before.
  */
 const NAME = 'outbox'
 const TERMINAL = new Set(['committed', 'duplicate', 'failed', 'cancelled'])
@@ -67,7 +68,9 @@ async function applyInOrder(env: Bindings, event: OutboxEvent, now: number): Pro
 
 /**
  * Parked events tried again, the collections tried longest ago first: each collection's in order, until one fails
- * again (it and those behind it wait for the next tick). Returns how many were applied now.
+ * again (it and those behind it wait for the next tick). A failure marks the whole collection tried now, the events
+ * waiting behind its head too, so it goes to the back and every parked collection gets its turn. Returns how many
+ * were applied now.
  */
 export async function retryParked(env: Bindings, now: number, deadline: number): Promise<number> {
   const db = env.DB
@@ -87,7 +90,10 @@ export async function retryParked(env: Bindings, now: number, deadline: number):
         if (await applyEngineEvent(env, event, now)) applied += 1
       } catch (error) {
         logError('outbox_event_failed', error, { org: collection.org_id })
-        await db.prepare(`UPDATE parked_events SET attempts = attempts + 1, error = ?, tried_at = ? WHERE id = ?`).bind(failureOf(error), now, row.id).run()
+        await db.batch([
+          db.prepare(`UPDATE parked_events SET attempts = attempts + 1, error = ? WHERE id = ?`).bind(failureOf(error), row.id),
+          db.prepare(`UPDATE parked_events SET tried_at = ? WHERE org_id = ? AND collection_id = ?`).bind(now, collection.org_id, collection.collection_id),
+        ])
         break
       }
       // Applied (or found applied before): it no longer waits.
@@ -104,15 +110,16 @@ export async function retryParked(env: Bindings, now: number, deadline: number):
 /**
  * Pulls the outbox and applies it, page after page, until `deadline`. The engine's event ids are ordered and each is
  * the cursor that continues after it, so the cursor is saved after every event: a page longer than the tick's time
- * still moves on. Engine calls give up at the deadline, their bodies included.
+ * still moves on. Engine calls give up at the deadline, their bodies included. `retry`: the tick's pull also tries the
+ * parked events again, first; the pull after a request doesn't (a collection's later events wait behind them anyway).
  */
-export async function syncOutbox(input: Bindings, now: number, deadline: number): Promise<{ applied: number; pages: number }> {
+export async function syncOutbox(input: Bindings, now: number, deadline: number, options: { retry?: boolean } = {}): Promise<{ applied: number; pages: number }> {
   if (!input.ENGINE) return { applied: 0, pages: 0 }
   const env: Bindings = { ...input, DEADLINE: Math.min(input.DEADLINE ?? deadline, deadline) }
   const db = env.DB
   const engine = new EngineClient(env.ENGINE!, SERVICE_ORG, env.DEADLINE)
   // What waits behind an event that failed goes first: a collection's events stay in order.
-  let applied = await retryParked(env, now, deadline)
+  let applied = options.retry ? await retryParked(env, now, deadline) : 0
   const state = await db.prepare(`SELECT cursor FROM sync_state WHERE name = ?`).bind(NAME).first<{ cursor: string | null }>()
   let cursor = state?.cursor ?? null
   let pages = 0

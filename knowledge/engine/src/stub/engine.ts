@@ -166,7 +166,12 @@ interface RunningImport {
   order: number
   startedAt: number | null
   finishAt: number | null
+  /** An interrupted try: when the next one starts, in place (it is still the running import). */
+  retryAt?: number | null
 }
+
+/** After an interrupted try the next starts this long after it, for each try made (as the real engine). */
+const RETRY_MS = 15_000
 
 interface StubCollection {
   org: string
@@ -492,9 +497,10 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   // ------------------------------------------------------------------ imports
 
   function eta(collection: StubCollection, item: RunningImport): number {
-    const finish = item.finishAt ?? now() + durationOf(item.request)
+    // An interrupted try starts again after its wait; one in the queue waits for those ahead of it too.
+    const finish = item.finishAt ?? Math.max(now(), item.retryAt ?? 0) + durationOf(item.request)
     let wait = Math.max(0, finish - now())
-    if (item.startedAt === null) for (const id of collection.queue) if (id !== item.status.importId) wait += durationOf(collection.imports.get(id)!.request)
+    if (item.startedAt === null && collection.running !== item.status.importId) for (const id of collection.queue) if (id !== item.status.importId) wait += durationOf(collection.imports.get(id)!.request)
     return Math.ceil(wait / 1000)
   }
 
@@ -502,31 +508,47 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     return timing.importMs + timing.perDocumentMs * (request.files.length + request.notes.length)
   }
 
+  /** An import's state as an event (the app follows it), its files copied. */
+  function importEvent(collection: StubCollection, status: ImportStatus): void {
+    emit({ org: collection.org, collectionId: collection.id, type: 'import', import: { ...status, files: status.files.map((file) => ({ ...file })) } })
+  }
+
   function start(collection: StubCollection, item: RunningImport): void {
     collection.queue = collection.queue.filter((id) => id !== item.status.importId)
     collection.running = item.status.importId
-    item.startedAt = now()
-    item.finishAt = now() + durationOf(item.request)
-    item.status.state = 'learning'
     item.status.queuePosition = null
     item.status.waitingFor = null
-    item.status.files = item.status.files.map((file) => ({ ...file, state: 'understanding' }))
+    begin(collection, item)
   }
 
   /**
-   * An organization on hold runs nothing: the import running stops (it keeps nothing and waits in the queue), and its
-   * collections stop being awake, the time they were awake written to the ledger.
+   * A try starts: the import's first, or the next after an interrupted one, in place. The app hears it (as when the
+   * real engine claims an import, or tries one again): from now on it can't be cancelled.
+   */
+  function begin(collection: StubCollection, item: RunningImport): void {
+    item.retryAt = null
+    item.startedAt = now()
+    item.finishAt = now() + durationOf(item.request)
+    item.status.state = 'learning'
+    item.status.files = item.status.files.map((file) => ({ ...file, state: 'understanding' }))
+    importEvent(collection, item.status)
+  }
+
+  /**
+   * An organization on hold runs nothing: the import running stops (it keeps nothing, goes back to the queue and the
+   * app hears it waits again), and its collections stop being awake, the time they were awake written to the ledger.
    */
   function stopForHold(collection: StubCollection): void {
     const current = running(collection)
     if (current) {
-      emit({ org: collection.org, collectionId: collection.id, type: 'import', import: { ...current.status, state: 'interrupted', files: current.status.files.map((file) => ({ ...file })) } })
       current.status.state = 'queued'
       current.status.files = current.status.files.map((file) => ({ ...file, state: 'waiting' }))
       current.startedAt = null
       current.finishAt = null
+      current.retryAt = null
       collection.running = null
       collection.queue.unshift(current.status.importId)
+      importEvent(collection, current.status)
     }
     if (collection.awakeSince !== null) {
       const seconds = Math.round((now() - collection.awakeSince) / 1000)
@@ -556,7 +578,13 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
           changed = true
         }
         const current = running(collection)
-        if (current && (force || !held) && (current.finishAt ?? 0) <= now()) {
+        if (current?.status.state === 'interrupted') {
+          // Tried again in place once its wait is over.
+          if ((force || !held) && (force || (current.retryAt ?? 0) <= now())) {
+            begin(collection, current)
+            changed = true
+          }
+        } else if (current && (force || !held) && (current.finishAt ?? 0) <= now()) {
           finish(collection, current)
           changed = true
         }
@@ -662,16 +690,15 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
         failImport(collection, item, file?.fileId ?? null, `Couldn't learn “${file?.name ?? 'the note'}” after 3 tries.`)
         return
       }
-      // Interrupted: nothing from it is kept, and it tries again.
-      const stopped = { ...item.status, state: 'interrupted' as const, files: item.status.files.map((file) => ({ ...file })) }
-      emit({ org: collection.org, collectionId: collection.id, type: 'import', import: stopped })
+      // Interrupted: nothing from it is kept, and it is tried again in place, as the real engine does: it stays the
+      // running import (it can't be cancelled) and the next try starts after a wait.
       item.status.attempt += 1
-      item.status.state = 'queued'
+      item.status.state = 'interrupted'
       item.status.files = item.status.files.map((file) => ({ ...file, state: 'waiting' }))
       item.startedAt = null
       item.finishAt = null
-      collection.running = null
-      collection.queue.unshift(item.status.importId)
+      item.retryAt = now() + RETRY_MS * (item.status.attempt - 1)
+      importEvent(collection, item.status)
       return
     }
     learn(collection, item)
@@ -927,28 +954,38 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
    * real engine (imports.ts followMarks): one whose passage changed, or can't be found, asks for its correction to be
    * checked, under the hash its mark has now (and the hash and correction it had, so the check asked for before is
    * replaced). Two marks that come to one passage keep the newer correction by its number (`content.seqs`; an equal
-   * one: the later in `marks`), and a correction left correcting nothing is kept but no longer used. The checks to ask
-   * for.
+   * one: the later in `marks`), and a correction left correcting nothing is kept but no longer used; a mark that loses
+   * its passage that way without moving also names the hash and correction it had, so its earlier check goes. The
+   * checks to ask for.
    */
   function followMarks(content: Content, marks: { documentId: string; textHash: string; noteId: string }[], moved: Map<string, string | null>): { noteId: string; documentId: string; textHash: string; previousTextHash: string | null; previousNoteId: string | null }[] {
     const superseded = new Set<string>()
     // Each passage a mark that changed asks to be checked at, the hash it had before (null: it couldn't follow) and the
     // correction it belonged to then.
     const changed: { at: string; previousTextHash: string | null; previousNoteId: string | null }[] = []
+    // The mark holding each passage so far: its correction, the hash it had, and whether it moved to get there.
+    const holders = new Map<string, { noteId: string; textHash: string; moved: boolean }>()
+    const lose = (at: string, mark: { noteId: string; textHash: string; moved: boolean }) => {
+      superseded.add(mark.noteId)
+      // One that moved already names the hash and correction it had.
+      if (!mark.moved) changed.push({ at, previousTextHash: mark.textHash, previousNoteId: mark.noteId })
+    }
     content.outdated = new Map()
     for (const mark of marks) {
       const key = `${mark.documentId}:${mark.textHash}`
       const hash = (moved.has(key) ? moved.get(key) : mark.textHash) ?? mark.textHash
       const at = `${mark.documentId}:${hash}`
       if (moved.has(key) && moved.get(key) !== mark.textHash) changed.push({ at, ...(hash === mark.textHash ? { previousTextHash: null, previousNoteId: null } : { previousTextHash: mark.textHash, previousNoteId: mark.noteId }) })
-      const earlier = content.outdated.get(at)
-      if (earlier !== undefined && earlier !== mark.noteId) {
-        if ((content.seqs.get(mark.noteId) ?? 0) < (content.seqs.get(earlier) ?? 0)) {
-          superseded.add(mark.noteId)
+      const holder = { noteId: mark.noteId, textHash: mark.textHash, moved: hash !== mark.textHash }
+      const earlier = holders.get(at)
+      if (earlier !== undefined && earlier.noteId !== mark.noteId) {
+        if ((content.seqs.get(mark.noteId) ?? 0) < (content.seqs.get(earlier.noteId) ?? 0)) {
+          lose(at, holder)
           continue
         }
-        superseded.add(earlier)
+        lose(at, earlier)
       }
+      holders.set(at, holder)
       content.outdated.set(at, mark.noteId)
     }
     const stillCorrecting = new Set(content.outdated.values())

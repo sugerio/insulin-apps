@@ -69,7 +69,7 @@ export const fixingAndReporting: DocTopic = {
           </p>
           <ul>
             <li><b>Looks right</b> (owners, admins and editors) marks a fact as checked, with your name, so others can see someone checked it.</li>
-            <li><b>Fix</b> writes the right sentence. It is saved as a correction, like a fixed answer, named after the file the fact came from (“Correction to …”) and holding only your sentence, never the old one, and answers that used the fact use your fix.</li>
+            <li><b>Fix</b> writes the right sentence. It is saved as a correction, like a fixed answer, called “Correction to a fact” and holding only your sentence: never the old one, nor the name of the file it came from (a name can say the same wrong thing). Answers that used the fact use your fix.</li>
             <li><b>Report a problem</b> (everyone else) tells the owner something is wrong, like a reported answer.</li>
           </ul>
           <InApp>A collection › What it knows. Reported answers and facts wait under Needs attention.</InApp>

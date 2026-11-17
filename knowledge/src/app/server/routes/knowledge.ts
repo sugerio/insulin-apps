@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { PassageRef } from '../../../../engine/src/contract.ts'
-import { authorize, quoted, type CollectionRow } from '../access.ts'
+import { authorize, type CollectionRow } from '../access.ts'
 import type { EngineClient } from '../engine/client.ts'
 import type { AppEnv } from '../env.ts'
 import { ApiError, badRequest, notFound, readJson } from '../http.ts'
@@ -38,15 +38,11 @@ async function passageOfFact(engine: EngineClient, collection: CollectionRow, fa
 }
 
 /**
- * The title of a fact's correction, which the engine learns with its text: the document the fact came from, never
- * the fact itself (that is the wrong sentence being replaced; learned again inside the correction, answers would
- * quote it). "Correction" when the document isn't listed.
+ * The title of a fact's correction, which the engine learns with its text: the same few words for every fact, never
+ * the fact itself (the wrong sentence being replaced) nor the name of the file it came from, which can say the same
+ * wrong thing ("Discounts stop at 20 percent.md"). Learned again inside the correction, answers would quote either.
  */
-async function factCorrectionTitle(engine: EngineClient, collection: CollectionRow, documentId: string): Promise<string> {
-  const { documents } = await engine.documents(collection.id)
-  const name = documents.find((document) => document.documentId === documentId)?.name
-  return name ? `Correction to ${quoted(name)}`.slice(0, 200) : 'Correction'
-}
+const FACT_CORRECTION_TITLE = 'Correction to a fact'
 
 /** Who added the documents a correction marks outdated (from the imports that learned them), other than `except`. */
 async function authorsOf(db: D1Database, org: string, collectionId: string, documentIds: string[], except: string): Promise<{ id: string; files: string[] }[]> {
@@ -130,19 +126,18 @@ export function knowledgeRoutes() {
         if (!report) throw notFound('There is no such report in this collection.')
       }
       const outdated = [...(body.outdated ?? [])]
-      let factDocument: string | null = null
+      let ofFact = false
       if (body.factId && !outdated.length) {
         const ref = await passageOfFact(engine, collection, body.factId)
         if (!ref) throw badRequest("That fact isn't in this collection any more. Reload What it knows and try again.")
         outdated.push(ref)
-        factDocument = ref.documentId
+        ofFact = true
       }
       const importId = await stableId(c)
       const id = importId
-      // The title is the server's: learned with the text, it holds only what the person wrote or the question it
-      // answers, never the sentence a fact's fix replaces.
-      const title = factDocument ? await factCorrectionTitle(engine, collection, factDocument)
-        : body.question ? `Correction: ${body.question}`.slice(0, 200) : 'Correction'
+      // The title is the server's: learned with the text, it holds only the question it answers, or for a fact's fix
+      // the same neutral words, never the sentence the fix replaces or the name of the file that said it.
+      const title = ofFact ? FACT_CORRECTION_TITLE : body.question ? `Correction: ${body.question}`.slice(0, 200) : 'Correction'
       const note = { noteId: id.replace(/-/g, ''), title, text: body.text, outdated }
       // Recorded first: a report it answers is marked fixed once the correction is learned (outbox.ts), not before.
       // Kept as the engine learns it, with the organization's hidden values hidden: Knowledge keeps none.

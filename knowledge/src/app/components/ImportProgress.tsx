@@ -3,6 +3,7 @@ import { Progress } from '@/components/ui/progress.tsx'
 import { api, collectionPath, describeError } from '../lib/api.ts'
 import { plural, startsIn, timeLeft } from '../lib/format.ts'
 import type { ImportStatus } from '../lib/types.ts'
+import { useSupportSentence } from '../session.tsx'
 import { Badge, Banner } from './Feedback.tsx'
 
 // Learning progress (design J1 step 3, J9 and section 10): each file Waiting → Reading → Understanding → learned, with
@@ -98,6 +99,7 @@ const FILE_STATE: Record<string, string> = {
 }
 
 export function ImportProgress({ status, collectionName, title, error }: { status: ImportStatus; collectionName: string; title?: string; error?: unknown }) {
+  const support = useSupportSentence()
   const files = status.files
   const n = files.length
   const learned = files.filter((file) => file.state === 'learned').length
@@ -129,7 +131,7 @@ export function ImportProgress({ status, collectionName, title, error }: { statu
     const waits = files.filter((file) => file.state !== 'failed').length
     const lost = files.filter((file) => file.state === 'failed')
     const gone = lost.length ? ` Insulin couldn't keep ${lost.length === 1 ? `“${lost[0]!.name}”` : plural(lost.length, 'file')} until then: add ${lost.length === 1 ? 'it' : 'them'} again.` : ''
-    message = { kind: 'info', text: `Your organization has learned this month's documents, so ${waits ? (waits === 1 ? 'this file waits' : 'these files wait') : 'this waits'} and ${collectionName} learns ${waits === 1 || !waits ? 'it' : 'them'} on ${nextMonth()}, by itself. Everything already learned keeps answering.${gone} You can leave this page; Insulin e-mails you when it's done.` }
+    message = { kind: 'info', text: `Your organization has learned this month's documents, so ${waits ? (waits === 1 ? 'this file waits' : 'these files wait') : 'this waits'} and ${collectionName} learns ${waits === 1 || !waits ? 'it' : 'them'} on ${nextMonth()}, by itself. Everything already learned keeps answering.${gone} You can leave this page; Insulin e-mails you when it's done. ${support}` }
   } else if (retrying) {
     message = { kind: 'warn', text: `The import was interrupted. Nothing from it was kept, so ${collectionName} is exactly as it was before. Trying again (${status.attempt} of 3).` }
   } else if (status.state === 'queued' && status.waitingFor === 'organization') {

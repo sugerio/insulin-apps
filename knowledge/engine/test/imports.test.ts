@@ -339,7 +339,7 @@ test("one import id in two collections: each collection's import event reaches t
     await createCollection(t, c)
     await learn(t, c, 'same-id', [doc(c === 'c1' ? 1 : 2)])
   }
-  const events = (await outboxEvents(t)).filter((e) => e.type === 'import' && e.import.importId === 'same-id')
+  const events = (await outboxEvents(t)).filter((e) => e.type === 'import' && e.import.importId === 'same-id' && e.import.state === 'committed')
   assert.deepEqual(events.map((e) => e.collectionId).sort(), ['c1', 'c2'])
 })
 

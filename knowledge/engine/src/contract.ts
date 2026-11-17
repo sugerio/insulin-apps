@@ -158,7 +158,8 @@ export interface ImportExportRequest {
 // DELETE /v1/collections/:cid/imports/:importId: cancel an import the engine hasn't started learning, or, when the
 // engine has no import with that id, remember the id as cancelled so a later submission with it (a send still in
 // flight) answers `cancelled` and learns nothing. Answers ImportStatus with state `cancelled`; 409 `busy_learning`
-// once learning has started or the import is finished.
+// once learning has started (an `interrupted` import is still started: it is tried again in place) or the import is
+// finished. One that went back to the queue (a removal for good or the hold came first) can be cancelled again.
 
 export interface ImportRequest {
   importId: string // idempotent: the same id answers the existing import
@@ -181,7 +182,7 @@ export type ImportState =
   | 'saving'
   | 'committed'
   | 'duplicate' // everything was already here; nothing changed
-  | 'interrupted' // will be retried; nothing was kept
+  | 'interrupted' // a try stopped and nothing was kept; tried again in place, still the import being learned
   | 'failed' // gave up after 3 tries, or a file failed closed
   | 'cancelled'
 
@@ -343,13 +344,15 @@ export type UsageKind = 'awake' | 'learning' | 'export' | 'ready'
 
 export type OutboxEvent =
   | { id: string; at: string; org: string; collectionId: string; type: 'committed'; version: number; summary: string; counts: CollectionCounts; importId: string | null }
+  // An import's state: when it starts (`reading`, or `learning` in the in-memory engine), goes back to the queue
+  // (`queued`), is interrupted, starts its next try, and ends (committed, duplicate, failed, cancelled).
   | { id: string; at: string; org: string; collectionId: string; type: 'import'; import: ImportStatus }
   | { id: string; at: string; org: string; collectionId: string; type: 'usage'; kind: UsageKind; seconds: number }
   | { id: string; at: string; org: string; collectionId: string; type: 'state'; state: CollectionState; version: number }
   | { id: string; at: string; org: string; collectionId: string; type: 'backup'; version: number }
   | { id: string; at: string; org: string; collectionId: string; type: 'deleted' }
   // A file re-read changed a passage a correction marked outdated: the correction asks to be checked.
-  | { id: string; at: string; org: string; collectionId: string; type: 'needs_check'; noteId: string; documentId: string; textHash: string; previousTextHash: string | null; previousNoteId: string | null } // previousTextHash/previousNoteId: the hash the mark had before this re-read moved it and the correction it belonged to (another note's when passages merged and the newer correction won), so the older check can be replaced
+  | { id: string; at: string; org: string; collectionId: string; type: 'needs_check'; noteId: string; documentId: string; textHash: string; previousTextHash: string | null; previousNoteId: string | null } // previousTextHash/previousNoteId: the hash the mark had before this re-read moved it and the correction it belonged to (another note's when passages merged and the newer correction won, also for a mark that lost its passage that way without moving, whose previousTextHash is then textHash), so the older check can be replaced
 
 export interface OutboxPage {
   events: OutboxEvent[]

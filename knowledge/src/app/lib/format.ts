@@ -109,8 +109,11 @@ export function stateLabel(state: string): { label: string; tone: Tone } {
   }
 }
 
-/** The one message each state has (design section 10, "Copy"). */
-export function stateMessage(state: string, name: string): string {
+/**
+ * The one message each state has (design section 10, "Copy"). `support` is the sentence naming Insulin Apps support
+ * (session.tsx useSupportSentence), which ends the message of the awake-hours stop, as every limit's message.
+ */
+export function stateMessage(state: string, name: string, support?: string): string {
   switch (state) {
     case 'ready': return 'Ready · answers in a few seconds.'
     case 'asleep': return 'Asleep · your first question wakes it up (about a minute).'
@@ -122,7 +125,7 @@ export function stateMessage(state: string, name: string): string {
     case 'repairing': return `${name} couldn't open its latest restore point, so it's answering from an earlier version while Insulin repairs it.`
     case 'deleting': return `${name} is being deleted.`
     case 'empty': return 'Nothing learned yet. Add files, a web page or a note in Sources.'
-    case 'held': return `Your organization has used this month's awake hours, so ${name} has stopped until the 1st (or until Insulin Apps raises the limit). Everything it learned is kept, and removing a file for good still works.`
+    case 'held': return `Your organization has used this month's awake hours, so ${name} has stopped until the 1st (or until Insulin Apps raises the limit). Everything it learned is kept, and removing a file for good still works.${support ? ` ${support}` : ''}`
     default: return 'Asleep · your first question wakes it up (about a minute).'
   }
 }

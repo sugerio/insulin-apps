@@ -4,7 +4,7 @@
 
 import type { GoBackPreview, NotRestorableReason, RestorePoint } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
-import { isHeld } from './collection.ts'
+import { isHeld, OnHold } from './collection.ts'
 import { fail } from './http.ts'
 import { SETTINGS } from './settings.ts'
 import type { Operation, RestorePointRecord, SnapshotRecord } from './types.ts'
@@ -107,6 +107,15 @@ export async function runOperation(e: CollectionEngine): Promise<void> {
     else if (op.kind === 'repair') await repair(e, op)
     else await fromBackup(e, op)
   } catch (error) {
+    if (error instanceof OnHold) {
+      // The hold landed while the old container stopped, and none started: not a failure. A repair tries the same
+      // restore point again once the hold ends (a go back was dropped when the hold landed).
+      await e.updateMeta((m) => {
+        if (m.op?.kind === op.kind && m.op.startedAt === op.startedAt) m.op = op
+      })
+      await e.store.log('operation-held', { kind: op.kind })
+      return
+    }
     await e.store.log('operation-failed', { kind: op.kind, error: errorText(error) })
     await e.box.destroy('operation failed')
     await e.store.deleteRuntime()
@@ -340,7 +349,7 @@ async function fromBackup(e: CollectionEngine, op: Extract<Operation, { kind: 'f
   const meta = await e.meta()
   const latest = await backup.latestIndex(e)
   const current = (await e.currentSnapshot(meta)).snapshot
-  const runtime = await e.startContainer(null, 'learning', true)
+  const runtime = await e.startContainer(null, 'learning', { fromBackup: true })
   const usable = latest && current && backup.holds(latest, current, runtime.dataFormat)
   if (!usable || !(await backup.restoreFiles(e, latest))) {
     await e.store.log('from-backup-relearn', { reason: op.reason, backupVersion: latest?.version ?? null })

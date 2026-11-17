@@ -282,3 +282,150 @@ describe('the repository\'s own PDFs (engine/test/python/make_fixtures.py)', () 
     for (const { name, bytes } of fixtures!.withText) expect(await noText(bytes, [1, 7, 1024, 1 << 20]), name).toBe(false)
   })
 })
+
+describe('F188 text in a page\'s content streams, whatever order they are stored in', () => {
+  it('a string shown with Tj, TJ, \' or " counts as text with or without a BT before it, and so does a stream that starts with Tj', async () => {
+    const split = [
+      ['BT /F1 12 Tf 50 700 Td', '(Gold partners renew in June.) Tj ET'],
+      ['BT /F1 12 Tf 50 700 Td (Gold partners renew in June.)', 'Tj ET'],
+      ['BT /F1 12 Tf [(Gold) -250 (partners)]', '% shown below\nTJ ET'],
+      ['BT /F1 12 Tf 14 TL (Gold partners renew in June.)', "' ET"],
+    ]
+    for (const [first, second] of split) {
+      for (const compress of [false, true]) {
+        const filter = compress ? ' /Filter /FlateDecode' : ''
+        // /Contents [6 0 R 5 0 R]: the page draws stream 6 first, but the file stores stream 5 first.
+        const bytes = pdfFrom([...BASE, page('[6 0 R 5 0 R]'), { num: 5, dict: `<< /Length LEN${filter} >>`, data: compress ? z(second!) : second! }, { num: 6, dict: `<< /Length LEN${filter} >>`, data: compress ? z(first!) : first! }])
+        // Must catch: the streams read in the order they are stored, the BT after its Tj, the PDF refused.
+        expect(await noText(bytes), `${first} | ${second}`).toBe(false)
+      }
+    }
+    // Two streams that only draw an image, stored in either order: still no text.
+    for (const contents of ['[5 0 R 6 0 R]', '[6 0 R 5 0 R]']) {
+      expect(await noText(pdfFrom([...BASE, page(contents), IMAGE, { num: 5, dict: '<< /Length LEN >>', data: 'q 612 0 0 792 0 0 cm' }, { num: 6, dict: '<< /Length LEN /Filter /FlateDecode >>', data: z('/Im0 Do Q') }]))).toBe(true)
+    }
+  })
+})
+
+describe('F189 names spelled with #xx escapes', () => {
+  const laidOut = (dict: string, content: string, extra: PdfObject[] = []) => pdfFrom([...BASE, page('5 0 R'), IMAGE, { num: 5, dict, data: z(content) }, ...extra])
+
+  it('are read as the names they spell: /Fil#74er is /Filter, so a page with text is accepted and a scanned one still refused', async () => {
+    for (const dict of ['<< /Length LEN /Fil#74er /FlateDecode >>', '<< /Length LEN /Filter /Fl#61te#44ecode >>', '<< /L#65ngth LEN /Filter [/Fl#61teDecode] >>']) {
+      // Must catch: /Fil#74er read as no filter, the compressed bytes read as they are, a PDF with text refused.
+      expect(await noText(laidOut(dict, TEXT)), dict).toBe(false)
+      expect(await noText(laidOut(dict, DRAW)), dict).toBe(true)
+    }
+    // An image whose dictionary is spelled so is still an image, whatever its bytes hold.
+    const image: PdfObject = { num: 7, dict: '<< /Ty#70e /XObject /Subty#70e /Im#61ge /Width 10 /Height 3 /ColorSpace /DeviceGray /Bits#50erComponent 8 /Length LEN >>', data: 'BT /F1 1 Tf (not text) Tj ET' }
+    expect(await noText(pdfFrom([...BASE, page('5 0 R'), image, { num: 5, dict: '<< /Length LEN /Filter /FlateDecode >>', data: z(DRAW) }]))).toBe(true)
+  })
+
+  it('encryption named so makes it unsure, and a font named so counts as a font', async () => {
+    const cipher = createCipheriv('aes-128-cbc', Buffer.alloc(16, 7), Buffer.alloc(16, 9))
+    const encrypted = Buffer.concat([Buffer.alloc(16, 9), cipher.update(Buffer.from(TEXT)), cipher.final()])
+    const objects: PdfObject[] = [...BASE, page('5 0 R'), { num: 5, dict: '<< /Length LEN >>', data: encrypted }, { num: 9, dict: '<< /Filter /Standard /V 4 /R 4 /O <00> /U <00> /P -1340 >>' }]
+    // Must catch: /Encr#79pt missed, the ciphertext read as content, the PDF refused.
+    expect(await noText(pdfFrom(objects, '/Encr#79pt 9 0 R /ID [<00> <00>]'))).toBe(false)
+    // Unsure (a filter it can't read), it is refused only with no font at all; /F#6fnt is /Font.
+    const unknownFilter: PdfObject = { num: 5, dict: '<< /Length LEN /Filter /ASCII85Decode >>', data: '<~87cURD]i,"Ebo80~>' }
+    const catalog = BASE.slice(0, 2)
+    expect(await noText(pdfFrom([...catalog, page('5 0 R', '<< >>'), unknownFilter]))).toBe(true)
+    expect(await noText(pdfFrom([...catalog, page('5 0 R', '<< /F#6fnt << /F1 3 0 R >> >>'), unknownFilter, { num: 3, dict: '<< /Type /F#6fnt /Subtype /Type1 /BaseFont /Helvetica >>' }]))).toBe(false)
+  })
+})
+
+/** A small seeded random generator (mulberry32), so that a failing case can be repeated from its seed. */
+function randomFrom(seed: number): () => number {
+  let state = seed
+  return () => {
+    state = (state + 0x6d2b79f5) | 0
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state)
+    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** Whether the check finds no text in `bytes`, sent in pieces whose sizes `size()` gives in turn. */
+async function noTextInPieces(bytes: Uint8Array, size: () => number): Promise<boolean> {
+  const check = new PdfTextCheck()
+  for (let at = 0; at < bytes.length;) {
+    const next = size()
+    await check.push(bytes.slice(at, at + next))
+    at += next
+  }
+  await check.end()
+  return check.noText
+}
+
+describe('F190 the same answer however the file arrives', () => {
+  it('a stream\'s dictionary holding a long string is read whole: a scanned page stays refused, in pieces of any size', async () => {
+    for (const length of [5_000, 6_000, 20_000]) {
+      const laidOut = (content: string) => pdfFrom([...BASE, page('5 0 R'), IMAGE, { num: 5, dict: `<< /Length LEN /Filter /FlateDecode /PieceInfo << /Note (${'x'.repeat(length)}) >> >>`, data: z(content) }])
+      // Must catch: its object header kept after small pieces and dropped after a large one, refused or accepted by that.
+      expect(await noText(laidOut(DRAW)), String(length)).toBe(true)
+      expect(await noText(laidOut(TEXT)), String(length)).toBe(false)
+    }
+  })
+
+  it('the same file in pieces of random sizes always gives the answer it gives whole', async () => {
+    const note = `/PieceInfo << /Note (${'x'.repeat(6_000)}) >>`
+    const cases: [string, Uint8Array][] = [
+      ['scanned', onePage(DRAW, true)],
+      ['scanned, plain content', onePage(DRAW, false)],
+      ['text', onePage(TEXT, true)],
+      ['a long string in the dictionary, scanned', pdfFrom([...BASE, page('5 0 R'), IMAGE, { num: 5, dict: `<< /Length LEN /Filter /FlateDecode ${note} >>`, data: z(DRAW) }])],
+      ['a long string in the dictionary, text', pdfFrom([...BASE, page('5 0 R'), IMAGE, { num: 5, dict: `<< /Length LEN /Filter /FlateDecode ${note} >>`, data: z(TEXT) }])],
+      ['white space before "stream"', pdfFrom([...BASE, page('5 0 R'), IMAGE, { num: 5, dict: '<< /Length LEN /Filter /FlateDecode >>', data: z(DRAW), keyword: `${' '.repeat(6_000)}\nstream\n` }])],
+      ['split, stored backwards', pdfFrom([...BASE, page('[6 0 R 5 0 R]'), { num: 5, dict: '<< /Length LEN >>', data: 'Tj ET' }, { num: 6, dict: '<< /Length LEN /Filter /FlateDecode >>', data: z('BT /F1 12 Tf (Gold partners renew in June.)') }])],
+      ['escaped names', pdfFrom([...BASE, page('5 0 R'), IMAGE, { num: 5, dict: '<< /Length LEN /Fil#74er /FlateDecode >>', data: z(DRAW) }])],
+      ['an indirect length', pdfFrom([...BASE, page('15 0 R'), IMAGE, { num: 15, dict: '<< /Length 16 0 R /Filter /FlateDecode >>', data: z(DRAW) }, { num: 16, dict: String(z(DRAW).length) }])],
+      ['an unknown filter', pdfFrom([...BASE, page('5 0 R'), { num: 5, dict: '<< /Length LEN /Filter /ASCII85Decode >>', data: '<~87cURD]i,"Ebo80~>' }])],
+      ['the corpus\'s scanned.pdf shape', pdfOf(['', ''], { imageOnly: true, compress: true })],
+      ...(fixturePdfs()?.withText.slice(0, 6).map(({ name, bytes }): [string, Uint8Array] => [name, bytes]) ?? []),
+    ]
+    for (const [name, bytes] of cases) {
+      const whole = await noTextInPieces(bytes, () => bytes.length)
+      for (let seed = 1; seed <= 30; seed += 1) {
+        const random = randomFrom(seed)
+        // Pieces of 1 to a few bytes in some runs, up to 64 KB in others, of mixed sizes in each.
+        const largest = [3, 17, 300, 5_000, 70_000][seed % 5]!
+        const size = () => 1 + Math.floor(random() * (random() < 0.1 ? 70_000 : largest))
+        // Must catch: an answer that depends on where the pieces break, as a window that depends on their sizes.
+        expect(await noTextInPieces(bytes, size), `${name}, seed ${seed}`).toBe(whole)
+      }
+    }
+  }, 60_000)
+})
+
+describe('F191 the cost of reading a file', () => {
+  it('reads dictionaries in one pass: 4,100 streams, each with a 3,000-digit string in its dictionary (12.8 MB), take well under a second', async () => {
+    const digits = `(${'7'.repeat(3_000)})`
+    const bytes = pdfFrom([...BASE, page('10 0 R'), ...Array.from({ length: 4_100 }, (_, index): PdfObject => ({ num: 10 + index, dict: `<< /Length LEN /Filter /FlateDecode /Note ${digits} >>`, data: z(DRAW) }))])
+    expect(bytes.length).toBeGreaterThan(12_700_000)
+    const started = performance.now()
+    // Past 4,000 inflated streams it is unsure, and the PDF declares a font: accepted.
+    expect(await noTextIn(bytes, 1 << 16)).toBe(false)
+    const took = performance.now() - started
+    console.info(`F191: 12.8 MB, 4,100 streams with 3,000-digit strings: ${Math.round(took)} ms`)
+    // Must catch: a regular expression that backtracks over each digit run, about 54 s of CPU for this one upload.
+    expect(took).toBeLessThan(3_000)
+  }, 120_000)
+
+  it('stops past its budget of bytes read and can\'t be sure: a scanned PDF is then accepted', async () => {
+    const drawing = `${DRAW}\n${'0 0 m 1 1 l S\n'.repeat(100_000)}`
+    const bytes = onePage(drawing, true)
+    expect(await noText(bytes, [1024, 1 << 20])).toBe(true)
+    // The same file, with a budget smaller than what it holds.
+    const check = new PdfTextCheck(512 * 1024)
+    await check.push(bytes)
+    await check.end()
+    expect(check.noText).toBe(false)
+  })
+
+  it('a stream\'s dictionary of more than a few thousand tokens can\'t be read: unsure, so accepted when it declares a font', async () => {
+    const laidOut = (count: number) => pdfFrom([...BASE, page('5 0 R'), IMAGE, { num: 5, dict: `<< /Length LEN /Filter /FlateDecode /Note [${' 0'.repeat(count)}] >>`, data: z(DRAW) }])
+    expect(await noText(laidOut(1_000), [1, 1024, 1 << 20])).toBe(true)
+    expect(await noText(laidOut(10_000), [1, 1024, 1 << 20])).toBe(false)
+  })
+})

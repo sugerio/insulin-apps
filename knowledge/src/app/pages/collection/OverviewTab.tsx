@@ -39,7 +39,7 @@ export function OverviewTab({ detail }: TabProps) {
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Right now" right={<Button asChild size="sm"><Link to={`/collections/${collection.id}/ask`}>Ask it</Link></Button>}>
-          <p className="text-sm" data-state-message={state}>{stateMessage(state, collection.name)}</p>
+          <p className="text-sm" data-state-message={state}>{stateMessage(state, collection.name, support)}</p>
           {state === 'waking' || state === 'waking_from_backup' ? <WakeSteps step={engine?.wake?.step ?? 1} /> : null}
           {engine?.currentImport ? <ImportProgress status={engine.currentImport} collectionName={collection.name} title="Learning now" /> : null}
           {engine && engine.queuedImports > 0 ? <Note>{plural(engine.queuedImports, 'more import')} waiting to start.</Note> : null}

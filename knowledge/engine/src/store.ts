@@ -18,6 +18,7 @@ import { clock, iso } from './util.ts'
 
 const CHUNK_CHARS = 100_000
 const LOG_KEEP = 300
+const EVENT_SEQ_KEY = 'eventSeq'
 
 type Writer = Pick<DurableObjectStorage, 'put' | 'delete'> | DurableObjectTransaction
 
@@ -35,6 +36,8 @@ export function chunkEntries(prefix: string, value: unknown): Record<string, unk
 
 export class CollectionStore {
   storage: DurableObjectStorage
+  /** The last number given to a pending event (addEvents); read from storage once per object. */
+  eventSeq: number | undefined
 
   constructor(storage: DurableObjectStorage) {
     this.storage = storage
@@ -119,13 +122,30 @@ export class CollectionStore {
   }
   putLedger = (ledger: Ledger) => this.storage.put('ledger', ledger)
 
+  /** Events waiting for the Outbox, in the order they were added (the Outbox numbers them in the order it gets them). */
   async pendingEvents(): Promise<[string, PendingEvent][]> {
     return [...(await this.storage.list<PendingEvent>({ prefix: 'pending:' })).entries()]
   }
-  async addEvents(events: PendingEvent[], writer: Writer = this.storage): Promise<void> {
+  /**
+   * Each event's key starts with its own number from one counter, kept in storage with the events it numbered: events
+   * keep the order they happened in, within one millisecond and across restarts. A transaction's events are written
+   * with it (`writer`).
+   */
+  async addEvents(events: PendingEvent[], writer: DurableObjectStorage | DurableObjectTransaction = this.storage): Promise<void> {
     if (!events.length) return
-    const stamp = `${pad(clock.now(), 15)}`
-    await writer.put(Object.fromEntries(events.map((e, i) => [`pending:${stamp}:${String(i).padStart(3, '0')}:${e.key}`, e])))
+    if (this.eventSeq === undefined) {
+      // After a restart: on from the stored number, or from the last event waiting, whichever is higher.
+      const stored = (await writer.get<number>(EVENT_SEQ_KEY)) ?? 0
+      const [last] = (await writer.list({ prefix: 'pending:', reverse: true, limit: 1 })).keys()
+      this.eventSeq = Math.max(this.eventSeq ?? 0, stored, Number(last?.split(':')[1]) || 0)
+    }
+    // Numbered with nothing awaited in between, so events added at once never share a number.
+    const first = this.eventSeq + 1
+    this.eventSeq += events.length
+    await writer.put({
+      ...Object.fromEntries(events.map((e, i) => [`pending:${pad(first + i, 15)}:${e.key}`, e])),
+      [EVENT_SEQ_KEY]: this.eventSeq,
+    })
   }
 
   /** The engine's own log, for the harness's evidence (ASK-06 reads the order of the checksum check and the open). */

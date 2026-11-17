@@ -20,7 +20,7 @@ import type {
 } from './types.ts'
 import type { CollectionCounts, HidingRules, ImportFile, ImportFileStatus, ImportNote, ImportStatus, RemoveResult } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
-import { EMPTY_STATE, isHeld } from './collection.ts'
+import { EMPTY_STATE, isHeld, OnHold } from './collection.ts'
 import { CAPACITY_NAME, callObject } from './env.ts'
 import { EngineFailure, fail, failWithStatus, requireId } from './http.ts'
 import { SETTINGS, instances } from './settings.ts'
@@ -423,9 +423,9 @@ export async function cancel(e: CollectionEngine, importId: string): Promise<Imp
 const RETURNS_KEY = 'capacityReturns'
 
 /**
- * Gives back what the capacity guard holds for an import that no longer runs or waits here (its slot, or its place in
- * the guard's waiting list). When the guard can't be told now, the id is kept and told again from the alarm
- * (returnCapacity), so a slot never stays taken for a cancelled import until its lease lapses.
+ * Gives back what the capacity guard holds for an import that ended, was cancelled or stopped (its slot, or its place
+ * in the guard's waiting list). When the guard can't be told now, the id is kept and told again from the alarm
+ * (returnCapacity), so a slot never stays taken for an import that doesn't use it until its lease lapses.
  */
 async function giveBack(e: CollectionEngine, record: Pick<ImportRecord, 'status' | 'small'>): Promise<void> {
   if (await e.releaseCapacity(record)) return
@@ -439,8 +439,10 @@ async function oweReturn(e: CollectionEngine, importId: string): Promise<void> {
 
 /**
  * From the alarm: the guard is told again to give back what it holds for imports whose release didn't reach it, or
- * whose /acquire answer was lost. An import queued or running here again is left to the queue, which gives back its
- * slot when it ends or is cancelled.
+ * whose /acquire answer was lost. An id is settled only when the guard confirms, or when the import runs here with the
+ * slot it was granted (it renews it and gives it back when it ends). One still queued that asks the guard again soon
+ * (not held, or a removal for good, and not waiting to be tried again later) keeps its id and takes what the guard
+ * holds for it when it asks; a held one can't ask, so the guard is told again on every alarm until it has.
  */
 export async function returnCapacity(e: CollectionEngine): Promise<void> {
   const owed = (await e.state.storage.get<string[]>(RETURNS_KEY)) ?? []
@@ -448,13 +450,38 @@ export async function returnCapacity(e: CollectionEngine): Promise<void> {
   const meta = await e.meta()
   const settled: string[] = []
   for (const importId of owed) {
-    if (meta.active === importId || meta.queue.includes(importId)) settled.push(importId)
+    const record = await e.store.getImport(importId)
+    const asksAgain = !!record && meta.queue.includes(importId) && (record.kind === 'remove' || !isHeld(meta)) && !(record.retryAt && record.retryAt > clock.now())
+    if (meta.active === importId && record?.capacity === 'granted') settled.push(importId)
+    else if (asksAgain) continue
     else if (await e.releaseCapacity({ status: { importId } as ImportStatus, small: false })) settled.push(importId)
   }
   // Ids added while the guard was being told stay owed.
   const left = ((await e.state.storage.get<string[]>(RETURNS_KEY)) ?? []).filter((id) => !settled.includes(id))
   if (left.length) await e.state.storage.put(RETURNS_KEY, left)
   else await e.state.storage.delete(RETURNS_KEY)
+}
+
+/**
+ * While held: an import waiting in the guard's list gives up its place, so the guard never grants it a slot it can't
+ * use (a removal for good keeps its place: it still runs). It asks again when the hold ends; a release the guard
+ * doesn't confirm is told again from the alarm until it has.
+ */
+export async function leaveGuardWhileHeld(e: CollectionEngine): Promise<void> {
+  for (const id of (await e.meta()).queue) {
+    const record = await e.store.getImport(id)
+    if (!record || record.kind === 'remove' || record.capacity !== 'waiting') continue
+    await giveBack(e, record)
+    // Read again: a cancel may have won while the guard answered.
+    await e.state.storage.transaction(async (txn) => {
+      const current = await e.store.getImport(id, txn)
+      if (!current || current.capacity !== 'waiting') return
+      current.capacity = 'none'
+      current.status.waitingFor = null
+      current.status.queuePosition = null
+      await e.store.putImport(current, txn)
+    })
+  }
 }
 
 /** Whether the guard is still owed a release (the alarm then comes back soon). */
@@ -927,8 +954,8 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
     })
   } catch (error) {
     // The guard may have granted a slot or a place whose answer was lost. If the import is cancelled meanwhile (or
-    // was already), what the guard holds for it is given back from the alarm; one still queued asks again and gets
-    // the same slot.
+    // was already), or held, what the guard holds for it is given back from the alarm; one still queued asks again
+    // and gets the same slot.
     await oweReturn(e, importId)
     await e.store.log('capacity-unreachable', { importId, error: errorText(error) })
     return false
@@ -1025,6 +1052,8 @@ export async function advance(e: CollectionEngine, record: ImportRecord): Promis
     else if (record.phase === 'saving') await save(e, record)
   } catch (error) {
     if (error instanceof Deferred) return
+    // The hold landed while the old container stopped for this one: it stops, keeps nothing and waits.
+    if (error instanceof OnHold) return stopForHold(e, record)
     // A failure after the commit (tidying up) never turns a committed import into a failed try.
     if ((await e.store.getImport(record.status.importId))?.phase === 'done') {
       await e.store.log('after-commit-failed', { importId: record.status.importId, error: errorText(error) })
@@ -1051,7 +1080,8 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
     await e.box.destroy('an import gave way to a removal')
     await e.store.deleteRuntime()
   }
-  await e.releaseCapacity(record)
+  // Owed and told again from the alarm when the guard can't be told now: held, it can't ask for its slot again.
+  await giveBack(e, record)
   record.phase = 'queued'
   record.capacity = 'none'
   record.jobId = null
@@ -1078,11 +1108,13 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
 async function learningContainer(e: CollectionEngine, record: ImportRecord): Promise<Runtime> {
   await stopIfHeld(e, record)
   const meta = await e.meta()
-  if (record.kind === 'relearn' || record.kind === 'export' || record.rebuild) return e.startContainer(null, 'learning')
+  // Only a removal for good starts its container while held; startContainer reads the hold last (OnHold).
+  const removal = record.kind === 'remove'
+  if (record.kind === 'relearn' || record.kind === 'export' || record.rebuild) return e.startContainer(null, 'learning', { removal })
   const current = await e.currentSnapshot(meta)
   if (current.unusable) {
     await stopIfHeld(e, record)
-    const runtime = await e.startContainer(null, 'learning', true)
+    const runtime = await e.startContainer(null, 'learning', { fromBackup: true, removal })
     const latest = await backup.latestIndex(e)
     if (current.snapshot && latest && backup.holds(latest, current.snapshot, runtime.dataFormat) && (await backup.restoreFiles(e, latest))) {
       runtime.snapshotId = current.snapshot.handle.id
@@ -1116,7 +1148,7 @@ async function learningContainer(e: CollectionEngine, record: ImportRecord): Pro
     return runtime
   }
   await stopIfHeld(e, record)
-  const started = await e.startContainer(snapshot, 'learning')
+  const started = await e.startContainer(snapshot, 'learning', { removal })
   if (snapshot) {
     const manifest = await e.box.manifest()
     const expected = await e.store.getManifest(snapshot.handle.id)
@@ -1288,7 +1320,7 @@ async function finishUnchanged(e: CollectionEngine, record: ImportRecord): Promi
     if (m.active === record.status.importId) m.active = null
   })
   await e.event(`import:${record.status.importId}:duplicate`, { type: 'import', import: record.status })
-  if (record.capacity === 'granted') await e.releaseCapacity(record)
+  if (record.capacity === 'granted') await giveBack(e, record)
   await deleteOriginals(e, record.files.map((f) => f.fileId))
   await e.store.log('import-duplicate', { importId: record.status.importId })
 }
@@ -1865,7 +1897,7 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   }
   if (c.snapshot) await step('usage', async () => e.chargeUsage(await e.usageKind()))
   await step('outbox', () => e.flushOutbox())
-  if (c.record.capacity === 'granted') await step('capacity', () => e.releaseCapacity(c.record))
+  if (c.record.capacity === 'granted') await step('capacity', () => giveBack(e, c.record))
   await deleteOriginals(e, c.record.files.map((f) => f.fileId))
   if (c.changedDocumentIds?.length) await step('facts', () => dropUnusedFacts(e))
   if (c.record.kind === 'remove' || c.changedDocumentIds?.length) {
@@ -1995,7 +2027,7 @@ async function attemptFailed(e: CollectionEngine, record: ImportRecord, failure:
     await deleteLater(e, unused)
   }
   await e.event(`import:${record.status.importId}:failed`, { type: 'import', import: record.status })
-  await e.releaseCapacity(record)
+  await giveBack(e, record)
   // The failing file's original goes now; the others stay staged a day, so they can be learned without it.
   if (failure.failedFileId) await deleteOriginals(e, [failure.failedFileId])
   await e.chargeUsage(null)

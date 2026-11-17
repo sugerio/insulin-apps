@@ -202,3 +202,27 @@ export async function outboxEvents(t: TestEngine) {
 export async function log(t: TestEngine, collectionId: string, org = ORG) {
   return (await t.storage(collectionId, org).get<any[]>('log')) ?? []
 }
+
+/** What the capacity guard holds: the slots running (by key) and the imports waiting (by id). */
+export async function guard(t: TestEngine) {
+  const res = await t.capacity.get(t.capacity.idFromName('capacity')).fetch('https://engine.internal/state')
+  const state = (await res.json()) as { running: Record<string, unknown>; waiting: { importId: string }[] }
+  return { running: Object.keys(state.running), waiting: state.waiting.map((w) => w.importId) }
+}
+
+/** Wraps the capacity guard: `around` runs for each call to `path`, before (and may replace) the guard's answer. */
+export function wrapGuard(t: TestEngine, around: (path: string, call: () => Promise<Response>) => Promise<Response>) {
+  const get = t.capacity.get.bind(t.capacity)
+  ;(t.capacity as any).get = (id: any) => {
+    const stub = get(id)
+    return {
+      fetch: (input: RequestInfo, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        return around(new URL(url).pathname, () => stub.fetch(input, init))
+      },
+    }
+  }
+  return () => {
+    ;(t.capacity as any).get = get
+  }
+}

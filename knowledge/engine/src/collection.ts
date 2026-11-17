@@ -505,11 +505,14 @@ export class CollectionEngine {
 
   /**
    * The organization is on hold (the app's hard stop on awake hours): only a removal for good runs, wherever it waits
-   * in the queue and whatever operation is pending; any other import stops, keeps nothing and waits; a container left
-   * running is stopped; nothing else starts. Waking from a backup or a repair waits for the hold to end.
+   * in the queue and whatever operation is pending; any other import stops, keeps nothing and waits, and one waiting
+   * in the capacity guard's list gives up its place; a container left running is stopped; nothing else starts. Waking
+   * from a backup or a repair waits for the hold to end.
    */
   async whileHeld(meta: Meta): Promise<void> {
     await this.dropGoBackForHold()
+    // First, so the slot a stopped import gives back can't go to one of these.
+    await imports.leaveGuardWhileHeld(this)
     const active = meta.active ? await this.store.getImport(meta.active) : undefined
     if (active && active.kind !== 'remove') return imports.stopForHold(this, active)
     if (active) return imports.advance(this, active)
@@ -619,14 +622,26 @@ export class CollectionEngine {
     this.state.waitUntil?.(this.monitoring)
   }
 
-  /** Starts a container and waits for its control server. Never opens a database. */
-  async startContainer(snapshot: SnapshotRecord | null, purpose: 'questions' | 'learning', fromBackup = false): Promise<Runtime> {
+  /**
+   * Starts a container and waits for its control server. Never opens a database. While the organization is on hold
+   * only a removal for good starts one (`removal`): the hold is read again after the old container stopped, with
+   * nothing awaited between that and the start, so a hold that landed meanwhile starts nothing (OnHold).
+   */
+  async startContainer(snapshot: SnapshotRecord | null, purpose: 'questions' | 'learning', options: { fromBackup?: boolean; removal?: boolean } = {}): Promise<Runtime> {
+    const fromBackup = options.fromBackup ?? false
     const meta = await this.meta()
     await this.box.destroy('replaced')
     const instance = instances(this.env)[purpose]
     const started = clock.now()
     // Running time counts from the start: starting, checking and putting files back are paid for too.
     await this.chargeUsage(purpose === 'learning' || fromBackup ? 'learning' : await this.questionsUsageKind())
+    if (!options.removal && isHeld(await this.meta())) {
+      // The old container is gone and none starts: nothing runs, and no time is counted.
+      await this.store.deleteRuntime()
+      await this.chargeUsage(null)
+      await this.store.log('start-refused-held', { purpose })
+      throw new OnHold()
+    }
     this.box.start({
       snapshot: snapshot?.handle ?? null,
       instance,
@@ -706,6 +721,8 @@ export class CollectionEngine {
       try {
         runtime = await this.startContainer(current.snapshot, 'questions')
       } catch (error) {
+        // The hold landed while the old container stopped: not a failed start.
+        if (error instanceof OnHold) return this.whileHeld(await this.meta())
         await this.store.log('start-failed', { error: errorText(error) })
         await this.box.destroy('failed to start')
         await this.store.deleteRuntime()
@@ -1160,6 +1177,13 @@ interface PendingHold {
 }
 
 export const isHeld = (meta: Meta): boolean => !!meta.heldUntil && Date.parse(meta.heldUntil) > clock.now()
+
+/** startContainer found the organization on hold as it was about to start one: nothing started, and no try failed. */
+export class OnHold extends Error {
+  constructor() {
+    super('the organization is on hold')
+  }
+}
 
 function versionParam(value: string): number {
   const version = Number(value)

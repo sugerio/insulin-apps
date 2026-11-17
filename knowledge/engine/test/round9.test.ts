@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ORG, ask, createCollection, doc, learn, makeEngine, outboxEvents, startImport, type TestEngine } from './helpers.ts'
+import { ORG, ask, createCollection, doc, guard, learn, makeEngine, outboxEvents, startImport, wrapGuard, type TestEngine } from './helpers.ts'
 
 // Round 9 of the review: what the app hears about an import between its start and its end (F168), a corrected passage
 // that loses a merge without moving (F169), a hold that lands while the capacity guard answers (F170), and a cancel
@@ -8,29 +8,6 @@ import { ORG, ask, createCollection, doc, learn, makeEngine, outboxEvents, start
 
 const importStates = async (t: TestEngine, importId: string) =>
   (await outboxEvents(t)).filter((e: any) => e.type === 'import' && e.import.importId === importId).map((e: any) => [e.import.state, e.import.attempt])
-
-async function guard(t: TestEngine) {
-  const res = await t.capacity.get(t.capacity.idFromName('capacity')).fetch('https://engine.internal/state')
-  const state = (await res.json()) as { running: Record<string, unknown>; waiting: { importId: string }[] }
-  return { running: Object.keys(state.running), waiting: state.waiting.map((w) => w.importId) }
-}
-
-/** Wraps the capacity guard: `around` runs for each call to `path`, before (and may replace) the guard's answer. */
-function wrapGuard(t: TestEngine, around: (path: string, call: () => Promise<Response>) => Promise<Response>) {
-  const get = t.capacity.get.bind(t.capacity)
-  ;(t.capacity as any).get = (id: any) => {
-    const stub = get(id)
-    return {
-      fetch: (input: RequestInfo, init?: RequestInit) => {
-        const url = input instanceof Request ? input.url : String(input)
-        return around(new URL(url).pathname, () => stub.fetch(input, init))
-      },
-    }
-  }
-  return () => {
-    ;(t.capacity as any).get = get
-  }
-}
 
 test('F168 the app hears an import start, be interrupted and tried again in place (not cancellable), and go back to the queue', async () => {
   const t = makeEngine()

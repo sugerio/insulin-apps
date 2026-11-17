@@ -87,12 +87,17 @@ And from the design:
   The alarm takes a queued import only in one transaction with `meta.active`, after the capacity guard answers: if a
   cancel or the organization's hold won meanwhile, the slot (or the place in the guard's waiting list) is given back
   and nothing starts (a removal for good still starts while held). A cancel always tells the guard to give back what
-  it holds for the import; when the guard can't be told, or the answer to the alarm's `/acquire` was lost, the alarm
-  tells it again until it has, so a slot is never kept for a cancelled import until its lease lapses.
+  it holds for the import; when the guard can't be told (a cancel, a stop for the hold or a removal, the import's end),
+  or the answer to the alarm's `/acquire` was lost, the alarm tells it again until the guard confirms, so a slot is
+  never kept for an import that doesn't use it until its lease lapses. Only an import running with the slot it was
+  granted, or one still queued that will ask the guard again soon (not held, or a removal for good), takes over what
+  the guard holds instead; a held import in the queue can't, so the guard is told again on every alarm.
 - **The app follows each import**: besides its end, an `import` event says when the alarm starts it (from then on it
   can't be cancelled), when it goes back to the queue (a removal for good or the hold came first; it can be cancelled
   again), when a try is interrupted (nothing kept; it stays the import being learned and is tried again in place,
-  15 seconds later for each try made) and when the next try starts. The in-memory engine says the same.
+  15 seconds later for each try made) and when the next try starts. The in-memory engine says the same. Events reach
+  the outbox in the order they happened: each is numbered from one counter the collection keeps in storage, so two in
+  the same millisecond (a start, then a hold that sends it back to the queue) keep their order, across restarts too.
 - **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
   the correction keeps applying and a `needs_check` event asks a person to check it; its `previousTextHash` is the hash
   the mark had before this re-read moved it (null when it couldn't follow) and `previousNoteId` the correction it
@@ -128,7 +133,12 @@ And from the design:
   back asked for before the hold is dropped (a `state` event says `held`). Nothing but a removal for good or a stop
   using / use again commits while held: an import whose hold arrived as it saved keeps nothing and waits, and one
   whose hold arrived while the capacity guard answered, or before its container or its job started, starts nothing
-  and waits (the hold is checked again after each of those waits). A removal
+  and waits (the hold is checked again after each of those waits). Every container start (learning, questions, going
+  back, a repair, coming back from a backup, a backup while asleep) reads the hold again after the container it
+  replaces has stopped, right before it starts, so a hold that landed meanwhile starts nothing and counts as no failed
+  try (a repair tries the same restore point again once the hold ends). An import waiting in the capacity guard's
+  list gives up its place when the hold lands (told again until the guard confirms), so the guard never grants the
+  held organization's imports a slot nobody uses; it asks again when the hold ends. A removal
   for good starts wherever it waits in the queue, ahead of a re-learning and of a pending wake from a backup or repair (it brings the files back
   itself). The hold lifts at its `until` time or with `until: null`. A collection made while held is held. The
   registry keeps the hold and tells every collection; one it can't reach is told again every minute until it has.

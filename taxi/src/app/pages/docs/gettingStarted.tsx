@@ -72,8 +72,8 @@ export const gettingStarted: DocTopic = {
         <>
           <p>
             Beside the steps after the household, <b>Estimate</b> shows each return's key lines: total income, net income, taxable income, net
-            federal tax, Ontario tax, the total payable, the tax already deducted, and the refund or balance owing. British Columbia and Alberta
-            tax come in a later version; until then the estimate says so instead of guessing.
+            federal tax, provincial tax (Ontario, British Columbia or Alberta), the total payable, the tax already deducted, and the refund or
+            balance owing. When both returns are prepared together, each uses the other's numbers, such as the spouse amount.
           </p>
           <p>
             Select a line to see why it is what it is: its formula, the values that went into it, and each number's source, down to the box of

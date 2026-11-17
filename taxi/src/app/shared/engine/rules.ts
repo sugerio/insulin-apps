@@ -13,6 +13,9 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   answer.<question>             the person's answer; the question's default when there is none (an estimate)
 //   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count, max)
 //   person.age, person.province   the person's age on December 31 and province on December 31
+//   household.maritalStatus, household.partnerInYear, household.childrenUnder18, household.childrenUnder19
+//                                 the year's marital status, whether the spouse's return is prepared too, and the
+//                                 number of dependants under 18 (or 19) at the end of the year
 //   spouse.<any of the above but param>   the same, for the spouse
 
 export const STATUSES = ["complete", "estimate", "missing"] as const;
@@ -354,6 +357,12 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
       if (!question) return fail(`No question ${rest.join(".")}`);
       return question.type === "money" ? "number" : question.type === "boolean" ? "boolean" : "string";
     }
+    case "household":
+      if (spouse) return fail(`${name}: the household is the same for both spouses; write household.${rest.join(".")}`);
+      if (rest.length === 1 && rest[0] === "maritalStatus") return "string";
+      if (rest.length === 1 && rest[0] === "partnerInYear") return "boolean";
+      if (rest.length === 1 && (rest[0] === "childrenUnder18" || rest[0] === "childrenUnder19")) return "number";
+      return fail(`${name}: the household has maritalStatus, partnerInYear, childrenUnder18 and childrenUnder19`);
     case "person":
       if (rest.length === 1 && rest[0] === "age") return "number";
       if (rest.length === 1 && rest[0] === "province") return "string";

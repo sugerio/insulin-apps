@@ -1,0 +1,128 @@
+# Alberta tax: Form AB428. Line ids are the line numbers in the form's right margin. Every number below was checked
+# against the 2025 AB428 (5009-C) and Worksheet AB428 (5009-D). For 2025 Alberta added an 8% bracket and a
+# supplemental tax credit that keeps credit amounts above $60,000 at 10%.
+
+params:
+  abTaxBrackets:
+    label: Alberta tax brackets
+    source: "AB428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 60000, rate: 8%, base: 0 }
+      - { upTo: 151234, rate: 10%, base: 4800 }
+      - { upTo: 181481, rate: 12%, base: 13923.40 }
+      - { upTo: 241974, rate: 13%, base: 17553.04 }
+      - { upTo: 362961, rate: 14%, base: 25417.13 }
+      - { rate: 15%, base: 42355.31 }
+  abCreditRate:
+    label: Alberta credit rate
+    source: "AB428 line 53: 8%"
+    value: 8%
+  abBasicPersonalAmount:
+    label: Alberta basic personal amount
+    source: "AB428 line 58040: claim $22,323"
+    value: 22323
+  abAgeAmountMax:
+    label: Alberta age amount, full
+    source: "Worksheet AB428, line 58080: $6,221"
+    value: 6221
+  abAgeAmountThreshold:
+    label: Net income where the Alberta age amount starts to go down
+    source: "Worksheet AB428, line 58080: income threshold"
+    value: 46308
+  abAgeAmountRate:
+    label: Alberta age amount reduction rate
+    source: "Worksheet AB428, line 58080: applicable rate"
+    value: 15%
+  abSpouseBase:
+    label: Alberta spouse and eligible dependant amount, base
+    source: "AB428 lines 18 and 21: $22,323"
+    value: 22323
+  abMedicalThresholdMax:
+    label: Alberta medical expense threshold, most
+    source: "AB428 line 48: whichever is less, $2,884 or 3% of net income"
+    value: 2884
+  abDonationLowRate:
+    label: Alberta donation credit rate on the first $200
+    source: "AB428 line 55: 60%"
+    value: 60%
+  abDonationHighRate:
+    label: Alberta donation credit rate above $200
+    source: "AB428 line 56: 21%"
+    value: 21%
+  abDividendEligibleRate:
+    label: Alberta dividend tax credit rate, eligible dividends
+    source: "Worksheet AB428, line 61520: 8.12% of the taxable amount"
+    value: 8.12%
+  abDividendOtherRate:
+    label: Alberta dividend tax credit rate, other dividends
+    source: "Worksheet AB428, line 61520: 2.18% of the taxable amount"
+    value: 2.18%
+  abSupplementalBase:
+    label: Alberta supplemental tax credit, base amount
+    source: "Worksheet AB428, line 61545, line 6: $4,800"
+    value: 4800
+  abSupplementalRate:
+    label: Alberta supplemental tax credit rate
+    source: "Worksheet AB428, line 61545, line 8: 25%"
+    value: 25%
+
+lines:
+  # Part A – Alberta tax on taxable income
+  AB428.8:
+    label: Alberta tax on taxable income
+    formula: "round(bracket(param.abTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Alberta non-refundable tax credits
+  AB428.16:
+    label: Alberta basic personal amount
+    formula: "param.abBasicPersonalAmount"
+  AB428.17:
+    label: Alberta age amount
+    formula: "if(person.age >= 65, max(0, param.abAgeAmountMax - round(max(0, line.T1.23600 - param.abAgeAmountThreshold) * param.abAgeAmountRate, 2)), 0)"
+    source: "Worksheet AB428, line 58080: for people born in 1960 or earlier"
+  AB428.20:
+    label: Alberta spouse or common-law partner amount
+    formula: "if(line.HH.partner == 1, max(0, param.abSpouseBase - line.HH.spouseNetIncome), 0)"
+  AB428.23:
+    label: Alberta amount for an eligible dependant
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.abSpouseBase, 0)"
+    source: "AB428 lines 21 to 23. The app assumes the child had no income"
+  AB428.32:
+    label: CPP and EI credit amounts
+    formula: "line.T1.30800 + line.T1.31200"
+  AB428.42:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: 'if(line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65, unsupported("Transferring your spouse''s unused Alberta age amount (Schedule AB(S2)) isn''t handled by this app yet"), 0)'
+  AB428.49:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "AB428 lines 44 to 49: expenses over whichever is less, $2,884 or 3% of net income"
+  AB428.52:
+    label: Alberta credit amounts
+    formula: "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.42 + line.AB428.49"
+  AB428.54:
+    label: Alberta credit amounts at the credit rate
+    formula: "round(line.AB428.52 * param.abCreditRate, 2)"
+  AB428.57:
+    label: Alberta donations credit
+    formula: "round(line.S9.13 * param.abDonationLowRate, 2) + round(line.S9.14 * param.abDonationHighRate, 2)"
+    source: "AB428 lines 55 to 57: Schedule 9 lines 13 and 14 at 60% and 21%"
+  AB428.58:
+    label: Alberta non-refundable tax credits
+    formula: "line.AB428.54 + line.AB428.57"
+
+  # Part C – Alberta tax
+  AB428.63:
+    label: Alberta dividend tax credit
+    formula: "round(line.T1.12010 * param.abDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.abDividendEligibleRate, 2)"
+    source: "Worksheet AB428, line 61520"
+  AB428.66:
+    label: Alberta tax after credits
+    formula: "max(0, line.AB428.8 - line.AB428.58 - line.AB428.63)"
+  AB428.74:
+    label: Alberta supplemental tax credit
+    formula: "round(max(0, round(line.AB428.52 * param.abCreditRate, 2) - param.abSupplementalBase) * param.abSupplementalRate, 2)"
+    source: "Worksheet AB428, line 61545: credit amounts (less unused tuition) at 8%, over $4,800, at 25%"
+  AB428.75:
+    label: Alberta tax
+    formula: "max(0, line.AB428.66 - line.AB428.74)"

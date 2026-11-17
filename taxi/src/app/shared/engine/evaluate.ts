@@ -25,6 +25,11 @@ export const engineInputSchema = z.strictObject({
     .min(1)
     .max(2)
     .refine((people) => people.filter((person) => person.role === "self").length === 1, { message: "One person is self" }),
+  /** What the household says for the year: the marital status on December 31 and the dependants in the year. */
+  household: z.strictObject({
+    maritalStatus: z.string().nullable(),
+    dependants: z.array(z.strictObject({ id: z.string().min(1), name: z.string(), birthDate: z.iso.date() })),
+  }),
   /** Per person, the answers given: money as decimal text, yes/no, a choice's option. */
   answers: z.record(z.string(), z.record(z.string(), z.union([z.string(), z.boolean()]))),
   slips: z.array(
@@ -65,7 +70,7 @@ export interface PersonResult {
   personId: string;
   /** The rule set's result lines, in order. */
   lines: ResultLine[];
-  /** Questions with no answer and no default that a result line needs. */
+  /** What a result line needs that isn't given: questions with no answer and no default, household facts, the province. */
   missing: { question: string; ask: string }[];
   /** Questions a result line needs that are unanswered, so their default was used. */
   estimates: { question: string; ask: string; assumed: string | boolean }[];
@@ -169,6 +174,11 @@ export class Evaluation {
         const asked = [...reached].filter((key) => key.startsWith(`${person.id}:answer.`)).map((key) => key.slice(`${person.id}:answer.`.length));
         const missing: PersonResult["missing"] = [];
         const estimates: PersonResult["estimates"] = [];
+        // A household fact or the province that a result line needs and that hasn't been given yet.
+        for (const key of reached) {
+          const fact = key.startsWith("household.") ? key : key.startsWith(`${person.id}:person.`) ? key.slice(person.id.length + 1) : null;
+          if (fact !== null && this.node(key).status === "missing") missing.push({ question: fact, ask: this.node(key).label });
+        }
         for (const id of asked) {
           if (id in answered) continue;
           const question = this.rules.questions.get(id)!;
@@ -202,7 +212,7 @@ export class Evaluation {
       if (!other) return `${personId}:${path.join(".")}`;
       return this.key(other, path.slice(1));
     }
-    if (path[0] === "param") return path.join(".");
+    if (path[0] === "param" || path[0] === "household") return path.join(".");
     return `${personId}:${path.join(".")}`;
   }
 
@@ -225,6 +235,7 @@ export class Evaluation {
   }
 
   private compute(key: string): Node {
+    if (key.startsWith("household.")) return this.householdValue(key.slice("household.".length));
     if (key.startsWith("param.")) {
       const param = this.rules.params.get(key.slice("param.".length))!;
       return { value: param.value, status: "complete", label: param.label, source: param.source, reads: [] };
@@ -279,6 +290,30 @@ export class Evaluation {
           items,
         };
       }
+    }
+  }
+
+  /** The household's facts: the same for both returns. */
+  private householdValue(name: string): Node {
+    const { household, year } = this.input;
+    const childrenUnder = (age: number) =>
+      Dec.of(household.dependants.filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < age).length);
+    switch (name) {
+      case "maritalStatus":
+        return {
+          value: household.maritalStatus,
+          status: household.maritalStatus === null ? "missing" : "complete",
+          label: "Marital status on December 31",
+          reads: [],
+        };
+      case "partnerInYear":
+        return { value: this.input.people.length > 1, status: "complete", label: "Both returns are prepared together", reads: [] };
+      case "childrenUnder18":
+        return { value: childrenUnder(18), status: "complete", label: "Dependants under 18 at the end of the year", reads: [] };
+      case "childrenUnder19":
+        return { value: childrenUnder(19), status: "complete", label: "Dependants under 19 at the end of the year", reads: [] };
+      default:
+        throw new EngineError("ENGINE_NAME", `No household.${name}`);
     }
   }
 

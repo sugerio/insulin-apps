@@ -20,6 +20,8 @@ interface Golden {
 const ALWAYS_ZERO: Record<string, string> = {
   "T1.44800": "a CPP overpayment is not handled yet: the line is zero or says so",
   "T1.45000": "an EI overpayment is not handled yet: the line is zero or says so",
+  "BC428.44": "a spouse's unused British Columbia age amount is not handled yet: the line is zero or says so",
+  "AB428.42": "a spouse's unused Alberta age amount is not handled yet: the line is zero or says so",
 };
 
 for (const folder of readdirSync(ROOT)) {

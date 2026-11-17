@@ -1,0 +1,151 @@
+# British Columbia tax: Form BC428. Line ids are the line numbers in the form's right margin. Every number below was
+# checked against the 2025 BC428 (5010-C) and Worksheet BC428 (5010-D).
+
+params:
+  bcTaxBrackets:
+    label: British Columbia tax brackets
+    source: "BC428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 49279, rate: 5.06%, base: 0 }
+      - { upTo: 98560, rate: 7.7%, base: 2493.52 }
+      - { upTo: 113158, rate: 10.5%, base: 6288.15 }
+      - { upTo: 137407, rate: 12.29%, base: 7820.94 }
+      - { upTo: 186306, rate: 14.7%, base: 10801.15 }
+      - { upTo: 259829, rate: 16.8%, base: 17989.30 }
+      - { rate: 20.5%, base: 30341.16 }
+  bcCreditRate:
+    label: British Columbia credit rate
+    source: "BC428 line 55: 5.06%"
+    value: 5.06%
+  bcBasicPersonalAmount:
+    label: British Columbia basic personal amount
+    source: "BC428 line 58040: claim $12,932"
+    value: 12932
+  bcAgeAmountMax:
+    label: British Columbia age amount, full
+    source: "Worksheet BC428, line 58080: $5,799"
+    value: 5799
+  bcAgeAmountThreshold:
+    label: Net income where the British Columbia age amount starts to go down
+    source: "Worksheet BC428, line 58080: income threshold"
+    value: 43169
+  bcAgeAmountRate:
+    label: British Columbia age amount reduction rate
+    source: "Worksheet BC428, line 58080: applicable rate"
+    value: 15%
+  bcSpouseBase:
+    label: British Columbia spouse and eligible dependant amount, base
+    source: "BC428 lines 18 and 21: $12,181"
+    value: 12181
+  bcSpouseMax:
+    label: British Columbia spouse and eligible dependant amount, most
+    source: "BC428 lines 20 and 23: maximum $11,073"
+    value: 11073
+  bcMedicalThresholdMax:
+    label: British Columbia medical expense threshold, most
+    source: "BC428 line 50: whichever is less, $2,689 or 3% of net income"
+    value: 2689
+  bcDonationLowRate:
+    label: British Columbia donation credit rate on the first $200
+    source: "Worksheet BC428, line 58969: 5.06%"
+    value: 5.06%
+  bcDonationHighRate:
+    label: British Columbia donation credit rate above $200
+    source: "Worksheet BC428, line 58969: 16.8%"
+    value: 16.8%
+  bcDonationTopRate:
+    label: British Columbia donation credit rate on income in the top bracket
+    source: "Worksheet BC428, line 58969: 20.5% on the part of donations up to taxable income over $259,829"
+    value: 20.5%
+  bcDonationTopThreshold:
+    label: Taxable income where the top British Columbia donation rate starts
+    source: "Worksheet BC428, line 58969, line 5"
+    value: 259829
+  bcDividendEligibleRate:
+    label: British Columbia dividend tax credit rate, eligible dividends
+    source: "Worksheet BC428, line 61520: 12% of the taxable amount"
+    value: 12%
+  bcDividendOtherRate:
+    label: British Columbia dividend tax credit rate, other dividends
+    source: "Worksheet BC428, line 61520: 1.96% of the taxable amount"
+    value: 1.96%
+  bcTaxReductionBasic:
+    label: British Columbia tax reduction, basic amount
+    source: "BC428 line 73: claim $562"
+    value: 562
+  bcTaxReductionBase:
+    label: Net income where the British Columbia tax reduction starts to go down
+    source: "BC428 line 75: $25,020"
+    value: 25020
+  bcTaxReductionRate:
+    label: British Columbia tax reduction rate
+    source: "BC428 line 77: 3.56%"
+    value: 3.56%
+  bcTaxReductionLimit:
+    label: Net income from which there is no British Columbia tax reduction
+    source: "BC428: no reduction when net income is $40,807 or more"
+    value: 40807
+
+lines:
+  # Part A – British Columbia tax on taxable income
+  BC428.8:
+    label: British Columbia tax on taxable income
+    formula: "round(bracket(param.bcTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – British Columbia non-refundable tax credits
+  BC428.16:
+    label: British Columbia basic personal amount
+    formula: "param.bcBasicPersonalAmount"
+  BC428.17:
+    label: British Columbia age amount
+    formula: "if(person.age >= 65, max(0, param.bcAgeAmountMax - round(max(0, line.T1.23600 - param.bcAgeAmountThreshold) * param.bcAgeAmountRate, 2)), 0)"
+    source: "Worksheet BC428, line 58080: for people born in 1960 or earlier"
+  BC428.20:
+    label: British Columbia spouse or common-law partner amount
+    formula: "if(line.HH.partner == 1, min(param.bcSpouseMax, max(0, param.bcSpouseBase - line.HH.spouseNetIncome)), 0)"
+  BC428.23:
+    label: British Columbia amount for an eligible dependant
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)"
+    source: "BC428 lines 21 to 23. The app assumes the child had no income"
+  BC428.33:
+    label: CPP and EI credit amounts
+    formula: "line.T1.30800 + line.T1.31200"
+  BC428.44:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: 'if(line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65, unsupported("Transferring your spouse''s unused British Columbia age amount (Schedule BC(S2)) isn''t handled by this app yet"), 0)'
+  BC428.51:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "BC428 lines 46 to 51: expenses over whichever is less, $2,689 or 3% of net income"
+  BC428.54:
+    label: British Columbia credit amounts
+    formula: "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.44 + line.BC428.51"
+  BC428.56:
+    label: British Columbia credit amounts at the credit rate
+    formula: "round(line.BC428.54 * param.bcCreditRate, 2)"
+  BC428.57:
+    label: British Columbia donations credit
+    formula: >-
+      round(min(line.S9.14, max(0, line.T1.26000 - param.bcDonationTopThreshold)) * param.bcDonationTopRate, 2)
+      + round((line.S9.14 - min(line.S9.14, max(0, line.T1.26000 - param.bcDonationTopThreshold))) * param.bcDonationHighRate, 2)
+      + round(line.S9.13 * param.bcDonationLowRate, 2)
+    source: "Worksheet BC428, line 58969: the first $200 at 5.06%, the rest at 16.8%, or 20.5% up to taxable income over $259,829"
+  BC428.60:
+    label: British Columbia non-refundable tax credits
+    formula: "line.BC428.56 + line.BC428.57"
+
+  # Part C – British Columbia tax
+  BC428.65:
+    label: British Columbia dividend tax credit
+    formula: "round(line.T1.12010 * param.bcDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.bcDividendEligibleRate, 2)"
+    source: "Worksheet BC428, line 61520"
+  BC428.68:
+    label: British Columbia tax after credits
+    formula: "max(0, line.BC428.8 - line.BC428.60 - line.BC428.65)"
+  BC428.79:
+    label: British Columbia tax reduction
+    formula: "if(line.T1.23600 >= param.bcTaxReductionLimit, 0, max(0, param.bcTaxReductionBasic - round(max(0, line.T1.23600 - param.bcTaxReductionBase) * param.bcTaxReductionRate, 2)))"
+    source: "BC428 lines 73 to 79: $562, less 3.56% of net income over $25,020"
+  BC428.91:
+    label: British Columbia tax
+    formula: "max(0, line.BC428.68 - line.BC428.79)"

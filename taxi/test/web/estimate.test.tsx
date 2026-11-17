@@ -11,6 +11,10 @@ describe("the estimate beside a step", () => {
       seed: async (server) => {
         const alex = (await (await server.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
         await server.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await server.call("PUT", "/api/years/2025/household", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
+        });
       },
     });
     const card = (await screen.findByRole("heading", { name: "Estimate" })).closest("[data-slot=card]") as HTMLElement;

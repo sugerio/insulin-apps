@@ -17,6 +17,13 @@ questions:
     type: money
     ask: Donations on official receipts (not on a T4)
     default: 0
+  spouseNetIncome:
+    type: money
+    ask: Your spouse's or partner's 2025 net income (line 23600 of their return)
+  tuitionTransfer:
+    type: money
+    ask: Tuition to transfer to your spouse or partner (from the back of your T2202)
+    default: 0
   unusedTuition:
     type: money
     ask: Unused federal tuition from your 2024 notice of assessment

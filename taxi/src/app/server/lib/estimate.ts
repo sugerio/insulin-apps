@@ -24,6 +24,12 @@ export async function getEstimate(db: D1Database, orgId: string, year: number): 
         province: adult.province,
       };
     }),
+    household: {
+      maritalStatus: view.maritalStatus,
+      dependants: view.people
+        .filter((person) => view.members.includes(person.id) && (person.relationship === "child" || person.relationship === "other_dependant"))
+        .map((person) => ({ id: person.id, name: person.name, birthDate: person.birthDate })),
+    },
     answers: {},
     slips: [],
   };

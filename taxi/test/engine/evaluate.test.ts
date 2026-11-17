@@ -51,6 +51,7 @@ function input(overrides: Partial<EngineInput> = {}): EngineInput {
       { id: "a", name: "Alex", role: "self", birthDate: "1960-04-02", province: "ON" },
       { id: "b", name: "Sam", role: "spouse", birthDate: "1987-09-15", province: "BC" },
     ],
+    household: { maritalStatus: "married", dependants: [] },
     answers: {},
     slips: [
       { id: "s1", person: "a", type: "S", issuer: "One", boxes: { 1: "150.50" } },
@@ -151,6 +152,7 @@ describe("the 2025 rules", () => {
     new Evaluation(rulesFor(2025)!, {
       year: 2025,
       people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
+      household: { maritalStatus: "single", dependants: [] },
       answers: { p1: answers },
       slips,
     });
@@ -169,13 +171,28 @@ describe("the 2025 rules", () => {
     expect(result.unhandled).toEqual(["T4 from Maple Corp: box 40 isn't handled by this app"]);
   });
 
+  it("say which household fact is missing", () => {
+    const evaluation = new Evaluation(rulesFor(2025)!, {
+      year: 2025,
+      people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: null }],
+      household: { maritalStatus: null, dependants: [] },
+      answers: {},
+      slips: [],
+    });
+    expect(evaluation.line("p1", "T1.42000").status).toBe("missing");
+    expect(evaluation.result().people[0]!.missing).toEqual([
+      { question: "household.maritalStatus", ask: "Marital status on December 31" },
+      { question: "person.province", ask: "Province on December 31" },
+    ]);
+  });
+
   it("say what they can't compute instead of guessing", () => {
-    const bc = alone([t4({ 14: "60000", 22: "9000" })], "BC");
-    expect(bc.line("p1", "T1.42800")).toEqual({ value: null, status: "missing" });
-    expect(bc.line("p1", "T1.48400").status).toBe("missing");
-    expect(bc.line("p1", "T1.42000").status).toBe("estimate");
-    expect(bc.result().people[0]!.unhandled).toContain("Provincial tax for British Columbia and Alberta comes in the next version of this app");
-    expect(bc.explain("p1", "line.T1.42800").notes).toEqual(["Provincial tax for British Columbia and Alberta comes in the next version of this app"]);
+    const manitoba = alone([t4({ 14: "60000", 22: "9000" })], "MB");
+    expect(manitoba.line("p1", "T1.42800")).toEqual({ value: null, status: "missing" });
+    expect(manitoba.line("p1", "T1.48400").status).toBe("missing");
+    expect(manitoba.line("p1", "T1.42000").status).toBe("estimate");
+    expect(manitoba.result().people[0]!.unhandled).toContain("Provincial tax for this province isn't handled by this app");
+    expect(manitoba.explain("p1", "line.T1.42800").notes).toEqual(["Provincial tax for this province isn't handled by this app"]);
 
     const twoJobs = alone([t4({ 14: "60000", 16: "3361.75", 22: "9000" }), t4({ 14: "30000", 16: "1576.75", 22: "4000" }, "s2")]);
     expect(twoJobs.line("p1", "T1.44800").status).toBe("missing");
@@ -187,6 +204,7 @@ describe("the 2025 rules", () => {
       new Evaluation(rulesFor(2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON" }],
+        household: { maritalStatus: "single", dependants: [] },
         answers: { p1: { rrspDeduction: "0" } },
         slips: [{ id: "s1", person: "p1", type: "T4", issuer: "Maple Corp", boxes: { 14: income } }],
       }).line("p1", "T1.30000").value!.toString();

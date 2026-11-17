@@ -69,7 +69,7 @@ per return:
 - `estimates`: questions with no answer whose usual answer was used, with the `assumed` value.
 - `missing`: questions with no answer and no usual answer.
 - `unhandled`: what was entered that the app doesn't use, such as a slip box, and the cases the rules can't compute
-  yet, such as provincial tax outside Ontario. A line those cases reach is `missing`.
+  yet, such as a CPP overpayment from two jobs. A line those cases reach is `missing`.
 
 `result.rulesVersion` names the rules the result was computed with. Nothing is stored: each request computes again.
 

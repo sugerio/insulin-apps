@@ -14,6 +14,238 @@
     "T1.48500"
   ],
   "params": {
+    "abTaxBrackets": {
+      "label": "Alberta tax brackets",
+      "value": [
+        {
+          "upTo": "60000",
+          "rate": "0.08",
+          "base": "0"
+        },
+        {
+          "upTo": "151234",
+          "rate": "0.1",
+          "base": "4800"
+        },
+        {
+          "upTo": "181481",
+          "rate": "0.12",
+          "base": "13923.4"
+        },
+        {
+          "upTo": "241974",
+          "rate": "0.13",
+          "base": "17553.04"
+        },
+        {
+          "upTo": "362961",
+          "rate": "0.14",
+          "base": "25417.13"
+        },
+        {
+          "upTo": null,
+          "rate": "0.15",
+          "base": "42355.31"
+        }
+      ],
+      "source": "AB428 Part A, bases as printed on the form"
+    },
+    "abCreditRate": {
+      "label": "Alberta credit rate",
+      "value": "0.08",
+      "source": "AB428 line 53: 8%"
+    },
+    "abBasicPersonalAmount": {
+      "label": "Alberta basic personal amount",
+      "value": "22323",
+      "source": "AB428 line 58040: claim $22,323"
+    },
+    "abAgeAmountMax": {
+      "label": "Alberta age amount, full",
+      "value": "6221",
+      "source": "Worksheet AB428, line 58080: $6,221"
+    },
+    "abAgeAmountThreshold": {
+      "label": "Net income where the Alberta age amount starts to go down",
+      "value": "46308",
+      "source": "Worksheet AB428, line 58080: income threshold"
+    },
+    "abAgeAmountRate": {
+      "label": "Alberta age amount reduction rate",
+      "value": "0.15",
+      "source": "Worksheet AB428, line 58080: applicable rate"
+    },
+    "abSpouseBase": {
+      "label": "Alberta spouse and eligible dependant amount, base",
+      "value": "22323",
+      "source": "AB428 lines 18 and 21: $22,323"
+    },
+    "abMedicalThresholdMax": {
+      "label": "Alberta medical expense threshold, most",
+      "value": "2884",
+      "source": "AB428 line 48: whichever is less, $2,884 or 3% of net income"
+    },
+    "abDonationLowRate": {
+      "label": "Alberta donation credit rate on the first $200",
+      "value": "0.6",
+      "source": "AB428 line 55: 60%"
+    },
+    "abDonationHighRate": {
+      "label": "Alberta donation credit rate above $200",
+      "value": "0.21",
+      "source": "AB428 line 56: 21%"
+    },
+    "abDividendEligibleRate": {
+      "label": "Alberta dividend tax credit rate, eligible dividends",
+      "value": "0.0812",
+      "source": "Worksheet AB428, line 61520: 8.12% of the taxable amount"
+    },
+    "abDividendOtherRate": {
+      "label": "Alberta dividend tax credit rate, other dividends",
+      "value": "0.0218",
+      "source": "Worksheet AB428, line 61520: 2.18% of the taxable amount"
+    },
+    "abSupplementalBase": {
+      "label": "Alberta supplemental tax credit, base amount",
+      "value": "4800",
+      "source": "Worksheet AB428, line 61545, line 6: $4,800"
+    },
+    "abSupplementalRate": {
+      "label": "Alberta supplemental tax credit rate",
+      "value": "0.25",
+      "source": "Worksheet AB428, line 61545, line 8: 25%"
+    },
+    "bcTaxBrackets": {
+      "label": "British Columbia tax brackets",
+      "value": [
+        {
+          "upTo": "49279",
+          "rate": "0.0506",
+          "base": "0"
+        },
+        {
+          "upTo": "98560",
+          "rate": "0.077",
+          "base": "2493.52"
+        },
+        {
+          "upTo": "113158",
+          "rate": "0.105",
+          "base": "6288.15"
+        },
+        {
+          "upTo": "137407",
+          "rate": "0.1229",
+          "base": "7820.94"
+        },
+        {
+          "upTo": "186306",
+          "rate": "0.147",
+          "base": "10801.15"
+        },
+        {
+          "upTo": "259829",
+          "rate": "0.168",
+          "base": "17989.3"
+        },
+        {
+          "upTo": null,
+          "rate": "0.205",
+          "base": "30341.16"
+        }
+      ],
+      "source": "BC428 Part A, bases as printed on the form"
+    },
+    "bcCreditRate": {
+      "label": "British Columbia credit rate",
+      "value": "0.0506",
+      "source": "BC428 line 55: 5.06%"
+    },
+    "bcBasicPersonalAmount": {
+      "label": "British Columbia basic personal amount",
+      "value": "12932",
+      "source": "BC428 line 58040: claim $12,932"
+    },
+    "bcAgeAmountMax": {
+      "label": "British Columbia age amount, full",
+      "value": "5799",
+      "source": "Worksheet BC428, line 58080: $5,799"
+    },
+    "bcAgeAmountThreshold": {
+      "label": "Net income where the British Columbia age amount starts to go down",
+      "value": "43169",
+      "source": "Worksheet BC428, line 58080: income threshold"
+    },
+    "bcAgeAmountRate": {
+      "label": "British Columbia age amount reduction rate",
+      "value": "0.15",
+      "source": "Worksheet BC428, line 58080: applicable rate"
+    },
+    "bcSpouseBase": {
+      "label": "British Columbia spouse and eligible dependant amount, base",
+      "value": "12181",
+      "source": "BC428 lines 18 and 21: $12,181"
+    },
+    "bcSpouseMax": {
+      "label": "British Columbia spouse and eligible dependant amount, most",
+      "value": "11073",
+      "source": "BC428 lines 20 and 23: maximum $11,073"
+    },
+    "bcMedicalThresholdMax": {
+      "label": "British Columbia medical expense threshold, most",
+      "value": "2689",
+      "source": "BC428 line 50: whichever is less, $2,689 or 3% of net income"
+    },
+    "bcDonationLowRate": {
+      "label": "British Columbia donation credit rate on the first $200",
+      "value": "0.0506",
+      "source": "Worksheet BC428, line 58969: 5.06%"
+    },
+    "bcDonationHighRate": {
+      "label": "British Columbia donation credit rate above $200",
+      "value": "0.168",
+      "source": "Worksheet BC428, line 58969: 16.8%"
+    },
+    "bcDonationTopRate": {
+      "label": "British Columbia donation credit rate on income in the top bracket",
+      "value": "0.205",
+      "source": "Worksheet BC428, line 58969: 20.5% on the part of donations up to taxable income over $259,829"
+    },
+    "bcDonationTopThreshold": {
+      "label": "Taxable income where the top British Columbia donation rate starts",
+      "value": "259829",
+      "source": "Worksheet BC428, line 58969, line 5"
+    },
+    "bcDividendEligibleRate": {
+      "label": "British Columbia dividend tax credit rate, eligible dividends",
+      "value": "0.12",
+      "source": "Worksheet BC428, line 61520: 12% of the taxable amount"
+    },
+    "bcDividendOtherRate": {
+      "label": "British Columbia dividend tax credit rate, other dividends",
+      "value": "0.0196",
+      "source": "Worksheet BC428, line 61520: 1.96% of the taxable amount"
+    },
+    "bcTaxReductionBasic": {
+      "label": "British Columbia tax reduction, basic amount",
+      "value": "562",
+      "source": "BC428 line 73: claim $562"
+    },
+    "bcTaxReductionBase": {
+      "label": "Net income where the British Columbia tax reduction starts to go down",
+      "value": "25020",
+      "source": "BC428 line 75: $25,020"
+    },
+    "bcTaxReductionRate": {
+      "label": "British Columbia tax reduction rate",
+      "value": "0.0356",
+      "source": "BC428 line 77: 3.56%"
+    },
+    "bcTaxReductionLimit": {
+      "label": "Net income from which there is no British Columbia tax reduction",
+      "value": "40807",
+      "source": "BC428: no reduction when net income is $40,807 or more"
+    },
     "taxBrackets": {
       "label": "Federal tax brackets",
       "value": [
@@ -180,6 +412,11 @@
       "value": "57375",
       "source": "Schedule 11 line 11: $57,375"
     },
+    "tuitionTransferMax": {
+      "label": "Most current-year tuition a student can transfer",
+      "value": "5000",
+      "source": "Schedule 11 line 21: maximum $5,000"
+    },
     "capitalGainsInclusionRate": {
       "label": "Capital gains inclusion rate",
       "value": "0.5",
@@ -216,6 +453,11 @@
       ],
       "source": "ON428 Part A, bases as printed on the form"
     },
+    "onFirstBracketTop": {
+      "label": "Top of the first Ontario bracket",
+      "value": "52886",
+      "source": "ON428 Part A and ON(S2) line 5: $52,886"
+    },
     "onCreditRate": {
       "label": "Ontario credit rate",
       "value": "0.0505",
@@ -240,6 +482,16 @@
       "label": "Ontario age amount reduction rate",
       "value": "0.15",
       "source": "Worksheet ON428, line 58080: applicable rate"
+    },
+    "onSpouseBase": {
+      "label": "Ontario spouse and eligible dependant amount, base",
+      "value": "11905",
+      "source": "ON428 lines 11 and 14: $11,905"
+    },
+    "onSpouseMax": {
+      "label": "Ontario spouse and eligible dependant amount, most",
+      "value": "10823",
+      "source": "ON428 lines 13 and 16: maximum $10,823"
     },
     "onMedicalThresholdMax": {
       "label": "Ontario medical expense threshold, most",
@@ -291,6 +543,16 @@
       "value": "294",
       "source": "ON428 line 74: $294"
     },
+    "onTaxReductionChild": {
+      "label": "Ontario tax reduction per dependent child",
+      "value": "544",
+      "source": "ON428 line 75: $544 for each dependent child born in 2007 or later"
+    },
+    "liftFamilyThreshold": {
+      "label": "LIFT credit, family income threshold",
+      "value": "65000",
+      "source": "ON428-A line 36: $65,000"
+    },
     "liftMax": {
       "label": "LIFT credit, most",
       "value": "875",
@@ -313,6 +575,155 @@
     }
   },
   "lines": {
+    "AB428.8": {
+      "label": "Alberta tax on taxable income",
+      "formula": "round(bracket(param.abTaxBrackets, line.T1.26000), 2)"
+    },
+    "AB428.16": {
+      "label": "Alberta basic personal amount",
+      "formula": "param.abBasicPersonalAmount"
+    },
+    "AB428.17": {
+      "label": "Alberta age amount",
+      "formula": "if(person.age >= 65, max(0, param.abAgeAmountMax - round(max(0, line.T1.23600 - param.abAgeAmountThreshold) * param.abAgeAmountRate, 2)), 0)",
+      "source": "Worksheet AB428, line 58080: for people born in 1960 or earlier"
+    },
+    "AB428.20": {
+      "label": "Alberta spouse or common-law partner amount",
+      "formula": "if(line.HH.partner == 1, max(0, param.abSpouseBase - line.HH.spouseNetIncome), 0)"
+    },
+    "AB428.23": {
+      "label": "Alberta amount for an eligible dependant",
+      "formula": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.abSpouseBase, 0)",
+      "source": "AB428 lines 21 to 23. The app assumes the child had no income"
+    },
+    "AB428.32": {
+      "label": "CPP and EI credit amounts",
+      "formula": "line.T1.30800 + line.T1.31200"
+    },
+    "AB428.42": {
+      "label": "Amounts transferred from your spouse or common-law partner",
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65, unsupported(\"Transferring your spouse's unused Alberta age amount (Schedule AB(S2)) isn't handled by this app yet\"), 0)"
+    },
+    "AB428.49": {
+      "label": "Allowable medical expenses",
+      "formula": "max(0, line.T1.33099 - min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))",
+      "source": "AB428 lines 44 to 49: expenses over whichever is less, $2,884 or 3% of net income"
+    },
+    "AB428.52": {
+      "label": "Alberta credit amounts",
+      "formula": "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.42 + line.AB428.49"
+    },
+    "AB428.54": {
+      "label": "Alberta credit amounts at the credit rate",
+      "formula": "round(line.AB428.52 * param.abCreditRate, 2)"
+    },
+    "AB428.57": {
+      "label": "Alberta donations credit",
+      "formula": "round(line.S9.13 * param.abDonationLowRate, 2) + round(line.S9.14 * param.abDonationHighRate, 2)",
+      "source": "AB428 lines 55 to 57: Schedule 9 lines 13 and 14 at 60% and 21%"
+    },
+    "AB428.58": {
+      "label": "Alberta non-refundable tax credits",
+      "formula": "line.AB428.54 + line.AB428.57"
+    },
+    "AB428.63": {
+      "label": "Alberta dividend tax credit",
+      "formula": "round(line.T1.12010 * param.abDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.abDividendEligibleRate, 2)",
+      "source": "Worksheet AB428, line 61520"
+    },
+    "AB428.66": {
+      "label": "Alberta tax after credits",
+      "formula": "max(0, line.AB428.8 - line.AB428.58 - line.AB428.63)"
+    },
+    "AB428.74": {
+      "label": "Alberta supplemental tax credit",
+      "formula": "round(max(0, round(line.AB428.52 * param.abCreditRate, 2) - param.abSupplementalBase) * param.abSupplementalRate, 2)",
+      "source": "Worksheet AB428, line 61545: credit amounts (less unused tuition) at 8%, over $4,800, at 25%"
+    },
+    "AB428.75": {
+      "label": "Alberta tax",
+      "formula": "max(0, line.AB428.66 - line.AB428.74)"
+    },
+    "BC428.8": {
+      "label": "British Columbia tax on taxable income",
+      "formula": "round(bracket(param.bcTaxBrackets, line.T1.26000), 2)"
+    },
+    "BC428.16": {
+      "label": "British Columbia basic personal amount",
+      "formula": "param.bcBasicPersonalAmount"
+    },
+    "BC428.17": {
+      "label": "British Columbia age amount",
+      "formula": "if(person.age >= 65, max(0, param.bcAgeAmountMax - round(max(0, line.T1.23600 - param.bcAgeAmountThreshold) * param.bcAgeAmountRate, 2)), 0)",
+      "source": "Worksheet BC428, line 58080: for people born in 1960 or earlier"
+    },
+    "BC428.20": {
+      "label": "British Columbia spouse or common-law partner amount",
+      "formula": "if(line.HH.partner == 1, min(param.bcSpouseMax, max(0, param.bcSpouseBase - line.HH.spouseNetIncome)), 0)"
+    },
+    "BC428.23": {
+      "label": "British Columbia amount for an eligible dependant",
+      "formula": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)",
+      "source": "BC428 lines 21 to 23. The app assumes the child had no income"
+    },
+    "BC428.33": {
+      "label": "CPP and EI credit amounts",
+      "formula": "line.T1.30800 + line.T1.31200"
+    },
+    "BC428.44": {
+      "label": "Amounts transferred from your spouse or common-law partner",
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65, unsupported(\"Transferring your spouse's unused British Columbia age amount (Schedule BC(S2)) isn't handled by this app yet\"), 0)"
+    },
+    "BC428.51": {
+      "label": "Allowable medical expenses",
+      "formula": "max(0, line.T1.33099 - min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))",
+      "source": "BC428 lines 46 to 51: expenses over whichever is less, $2,689 or 3% of net income"
+    },
+    "BC428.54": {
+      "label": "British Columbia credit amounts",
+      "formula": "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.44 + line.BC428.51"
+    },
+    "BC428.56": {
+      "label": "British Columbia credit amounts at the credit rate",
+      "formula": "round(line.BC428.54 * param.bcCreditRate, 2)"
+    },
+    "BC428.57": {
+      "label": "British Columbia donations credit",
+      "formula": "round(min(line.S9.14, max(0, line.T1.26000 - param.bcDonationTopThreshold)) * param.bcDonationTopRate, 2) + round((line.S9.14 - min(line.S9.14, max(0, line.T1.26000 - param.bcDonationTopThreshold))) * param.bcDonationHighRate, 2) + round(line.S9.13 * param.bcDonationLowRate, 2)",
+      "source": "Worksheet BC428, line 58969: the first $200 at 5.06%, the rest at 16.8%, or 20.5% up to taxable income over $259,829"
+    },
+    "BC428.60": {
+      "label": "British Columbia non-refundable tax credits",
+      "formula": "line.BC428.56 + line.BC428.57"
+    },
+    "BC428.65": {
+      "label": "British Columbia dividend tax credit",
+      "formula": "round(line.T1.12010 * param.bcDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.bcDividendEligibleRate, 2)",
+      "source": "Worksheet BC428, line 61520"
+    },
+    "BC428.68": {
+      "label": "British Columbia tax after credits",
+      "formula": "max(0, line.BC428.8 - line.BC428.60 - line.BC428.65)"
+    },
+    "BC428.79": {
+      "label": "British Columbia tax reduction",
+      "formula": "if(line.T1.23600 >= param.bcTaxReductionLimit, 0, max(0, param.bcTaxReductionBasic - round(max(0, line.T1.23600 - param.bcTaxReductionBase) * param.bcTaxReductionRate, 2)))",
+      "source": "BC428 lines 73 to 79: $562, less 3.56% of net income over $25,020"
+    },
+    "BC428.91": {
+      "label": "British Columbia tax",
+      "formula": "max(0, line.BC428.68 - line.BC428.79)"
+    },
+    "HH.partner": {
+      "label": "Spouse or common-law partner on December 31 (1 for yes)",
+      "formula": "if(household.maritalStatus == \"married\" or household.maritalStatus == \"common_law\", 1, 0)"
+    },
+    "HH.spouseNetIncome": {
+      "label": "Your spouse's or partner's net income",
+      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)",
+      "source": "From their return when both returns are prepared here; otherwise from your answer"
+    },
     "T1.10100": {
       "label": "Employment income",
       "formula": "sum(T4.box14)"
@@ -393,6 +804,16 @@
       "formula": "if(person.age >= 65, max(0, param.ageAmountMax - round(max(0, line.T1.23600 - param.ageAmountThreshold) * param.ageAmountRate, 2)), 0)",
       "source": "Federal Worksheet, line 30100: for people born in 1960 or earlier"
     },
+    "T1.30300": {
+      "label": "Spouse or common-law partner amount",
+      "formula": "if(line.HH.partner == 1, max(0, line.T1.30000 - line.HH.spouseNetIncome), 0)",
+      "source": "Schedule 5 line 30300: your basic personal amount minus their net income"
+    },
+    "T1.30400": {
+      "label": "Amount for an eligible dependant",
+      "formula": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, line.T1.30000, 0)",
+      "source": "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
+    },
     "T1.30800": {
       "label": "Base CPP contributions through employment",
       "formula": "min(param.cppBaseMax, round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2))",
@@ -408,11 +829,16 @@
     },
     "T1.T101": {
       "label": "Credit amounts before tuition (T1 line 101)",
-      "formula": "line.T1.30000 + line.T1.30100 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+      "formula": "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400 + line.T1.30800 + line.T1.31200 + line.T1.31260"
     },
     "T1.32300": {
       "label": "Federal tuition amount",
       "formula": "line.S11.17"
+    },
+    "T1.32600": {
+      "label": "Amounts transferred from your spouse or common-law partner",
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.S2.13, 0)",
+      "source": "Schedule 2: their unused age amount and the tuition they designate to you"
     },
     "T1.33099": {
       "label": "Medical expenses for you",
@@ -425,7 +851,7 @@
     },
     "T1.33500": {
       "label": "Federal non-refundable credit amounts",
-      "formula": "line.T1.T101 + line.T1.32300 + line.T1.33200"
+      "formula": "line.T1.T101 + line.T1.32300 + line.T1.32600 + line.T1.33200"
     },
     "T1.33800": {
       "label": "Credit amounts at the credit rate",
@@ -467,7 +893,7 @@
     },
     "T1.42800": {
       "label": "Provincial tax",
-      "formula": "if(person.province == \"ON\", line.ON428.90, unsupported(\"Provincial tax for British Columbia and Alberta comes in the next version of this app\"))"
+      "formula": "if(person.province == \"ON\", line.ON428.90, if(person.province == \"BC\", line.BC428.91, if(person.province == \"AB\", line.AB428.75, unsupported(\"Provincial tax for this province isn't handled by this app\"))))"
     },
     "T1.43500": {
       "label": "Total payable",
@@ -496,6 +922,28 @@
     "T1.48500": {
       "label": "Balance owing",
       "formula": "max(0, line.T1.43500 - line.T1.48200)"
+    },
+    "S2.6": {
+      "label": "Their age amount and the tuition they designate to you",
+      "formula": "spouse.line.T1.30100 + spouse.line.S11.24"
+    },
+    "S2.7": {
+      "label": "Their taxable income, for the transfer",
+      "formula": "if(spouse.line.T1.26000 <= param.tuitionIncomeThreshold, spouse.line.T1.26000, round(spouse.line.T1.40400 / param.creditRate, 2))",
+      "source": "Schedule 2 line 7"
+    },
+    "S2.11": {
+      "label": "Their basic personal amount, CPP, EI and employment amounts, and tuition",
+      "formula": "spouse.line.T1.30000 + spouse.line.T1.30800 + spouse.line.T1.31200 + spouse.line.T1.31260 + spouse.line.T1.32300",
+      "source": "Schedule 2 lines 8 to 11: their lines 30000, 96 and 32300"
+    },
+    "S2.12": {
+      "label": "Their adjusted taxable income",
+      "formula": "max(0, line.S2.7 - line.S2.11)"
+    },
+    "S2.13": {
+      "label": "Federal amounts transferred from your spouse or common-law partner",
+      "formula": "max(0, line.S2.6 - line.S2.12)"
     },
     "S3.13200": {
       "label": "Gain or loss on publicly traded shares and mutual fund units",
@@ -590,6 +1038,16 @@
       "label": "Federal tuition amount",
       "formula": "line.S11.14 + line.S11.16"
     },
+    "S11.23": {
+      "label": "Tuition you can transfer",
+      "formula": "max(0, min(param.tuitionTransferMax, line.S11.8) - line.S11.16)",
+      "source": "Schedule 11 lines 21 to 23: this year's tuition up to $5,000, less what you used"
+    },
+    "S11.24": {
+      "label": "Tuition transferred to your spouse or common-law partner",
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, min(answer.tuitionTransfer, line.S11.23), 0)",
+      "source": "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
+    },
     "ON428.8": {
       "label": "Ontario tax on taxable income",
       "formula": "round(bracket(param.onTaxBrackets, line.T1.26000), 2)"
@@ -602,6 +1060,15 @@
       "label": "Ontario age amount",
       "formula": "if(person.age >= 65, max(0, param.onAgeAmountMax - round(max(0, line.T1.23600 - param.onAgeAmountThreshold) * param.onAgeAmountRate, 2)), 0)",
       "source": "Worksheet ON428, line 58080: for people born in 1960 or earlier"
+    },
+    "ON428.13": {
+      "label": "Ontario spouse or common-law partner amount",
+      "formula": "if(line.HH.partner == 1, min(param.onSpouseMax, max(0, param.onSpouseBase - line.HH.spouseNetIncome)), 0)"
+    },
+    "ON428.16": {
+      "label": "Ontario amount for an eligible dependant",
+      "formula": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)",
+      "source": "ON428 lines 14 to 16. The app assumes the child had no income"
     },
     "ON428.24": {
       "label": "CPP and EI credit amounts",
@@ -617,9 +1084,14 @@
       "formula": "max(0, line.ON428.36 - min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))",
       "source": "ON428 lines 36 to 41: expenses over whichever is less, $2,885 or 3% of net income"
     },
+    "ON428.34": {
+      "label": "Ontario amounts transferred from your spouse or common-law partner",
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 == 0, 0, if(spouse.person.province == \"ON\", line.ONS2.11, unsupported(\"Your spouse lives in another province: transferring their Ontario age amount isn't handled by this app\"))), 0)",
+      "source": "Schedule ON(S2): their unused Ontario age amount"
+    },
     "ON428.44": {
       "label": "Ontario credit amounts",
-      "formula": "line.ON428.9 + line.ON428.10 + line.ON428.24 + line.ON428.41"
+      "formula": "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.34 + line.ON428.41"
     },
     "ON428.46": {
       "label": "Ontario credit amounts at the credit rate",
@@ -653,10 +1125,15 @@
       "formula": "max(0, line.ON428.53 + line.ON428.68 - line.ON428.57)",
       "source": "ON428 lines 69 to 73"
     },
+    "ON428.75": {
+      "label": "Ontario tax reduction for dependent children",
+      "formula": "if(line.HH.partner == 1 and line.HH.spouseNetIncome > line.T1.23600, 0, param.onTaxReductionChild * household.childrenUnder19)",
+      "source": "ON428 line 75: $544 per child born in 2007 or later, claimed by the spouse with the higher net income"
+    },
     "ON428.80": {
       "label": "Ontario tax reduction",
-      "formula": "if(line.ON428.73 == 0, 0, max(0, 2 * param.onTaxReductionBasic - line.ON428.73))",
-      "source": "ON428 lines 74 to 80: twice the reductions, less Ontario tax. Dependent children come with dependants"
+      "formula": "if(line.ON428.73 == 0, 0, max(0, 2 * (param.onTaxReductionBasic + line.ON428.75) - line.ON428.73))",
+      "source": "ON428 lines 74 to 80: twice the reductions, less Ontario tax"
     },
     "ON428.81": {
       "label": "Ontario tax after the reduction",
@@ -664,7 +1141,8 @@
     },
     "ON428.85": {
       "label": "Low-income individuals and families tax (LIFT) credit",
-      "formula": "line.ON428A.20"
+      "formula": "if(line.HH.partner == 1, line.ON428A.41, line.ON428A.20)",
+      "source": "ON428-A Part A when single, Part B with a spouse or partner"
     },
     "ON428.86": {
       "label": "Ontario tax after the LIFT credit",
@@ -693,8 +1171,36 @@
       "formula": "round(max(0, line.ON428A.13 - param.liftThreshold) * param.liftReductionRate, 2)"
     },
     "ON428A.20": {
-      "label": "LIFT credit",
+      "label": "LIFT credit, single",
       "formula": "max(0, line.ON428A.5 - line.ON428A.19)"
+    },
+    "ON428A.28": {
+      "label": "Your spouse's or partner's adjusted net income",
+      "formula": "if(household.partnerInYear, spouse.line.ON428A.13, answer.spouseNetIncome)",
+      "source": "ON428-A line 28: from their return, or your answer for their net income"
+    },
+    "ON428A.38": {
+      "label": "Income over the LIFT thresholds",
+      "formula": "max(max(0, line.ON428A.13 - param.liftThreshold), max(0, line.ON428A.13 + line.ON428A.28 - param.liftFamilyThreshold))",
+      "source": "ON428-A Part B lines 30 to 38: the greater of your income over $32,500 and family income over $65,000"
+    },
+    "ON428A.41": {
+      "label": "LIFT credit, with a spouse or partner",
+      "formula": "max(0, line.ON428A.5 - round(line.ON428A.38 * param.liftReductionRate, 2))"
+    },
+    "ONS2.5": {
+      "label": "Their taxable income, for the transfer",
+      "formula": "if(spouse.line.T1.26000 <= param.onFirstBracketTop, spouse.line.T1.26000, round(spouse.line.ON428.8 / param.onCreditRate, 2))",
+      "source": "ON(S2) line 5"
+    },
+    "ONS2.10": {
+      "label": "Their adjusted taxable income",
+      "formula": "max(0, line.ONS2.5 - spouse.line.ON428.9 - spouse.line.ON428.24)",
+      "source": "ON(S2) lines 6 to 10"
+    },
+    "ONS2.11": {
+      "label": "Ontario amounts transferred from your spouse",
+      "formula": "max(0, spouse.line.ON428.10 - line.ONS2.10)"
     }
   },
   "questions": {
@@ -716,6 +1222,15 @@
     "donations": {
       "type": "money",
       "ask": "Donations on official receipts (not on a T4)",
+      "default": "0"
+    },
+    "spouseNetIncome": {
+      "type": "money",
+      "ask": "Your spouse's or partner's 2025 net income (line 23600 of their return)"
+    },
+    "tuitionTransfer": {
+      "type": "money",
+      "ask": "Tuition to transfer to your spouse or partner (from the back of your T2202)",
       "default": "0"
     },
     "unusedTuition": {
@@ -807,5 +1322,5 @@
       ]
     }
   },
-  "version": "72bd03c34530642c"
+  "version": "87bbc09ba22eea59"
 }

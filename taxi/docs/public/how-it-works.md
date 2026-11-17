@@ -55,9 +55,11 @@ a name, a birth date, an amount or a document.
 ## Limits today
 
 - Only the household step works; the other steps of a year come later. Slips can't be entered yet.
-- The 2025 rules cover one adult's T1 and Ontario's ON428: employment, interest, dividends, trust income and capital
-  gains; RRSP, FHSA, pension plan and union dues; the basic, age, CPP, EI, employment, tuition, medical and donation
-  credits. Couples and British Columbia and Alberta tax come next.
+- The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults: employment,
+  interest, dividends, trust income and capital gains; RRSP, FHSA, pension plan and union dues; the basic, age, CPP,
+  EI, employment, tuition, medical and donation credits; the spouse and eligible dependant amounts; and a spouse's
+  unused age amount and tuition moved between returns. Child care expenses and moving a spouse's age amount in
+  British Columbia or Alberta come later.
 - When the rules meet a case they don't handle, such as a CPP overpayment from two jobs, the number is shown as
   missing with the reason, never guessed.
 - Only the 2025 tax year.

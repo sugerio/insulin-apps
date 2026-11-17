@@ -1,7 +1,7 @@
 # Federal tax: the T1 (5006-R) and Schedules 3, 9 and 11, for the income, deductions and credits in scope. Line ids
 # are the form's own: T1 lines by their five-digit number, a schedule's lines by the number in its right margin.
-# Every number below was checked against the 2025 forms: T1 5006-R, Federal Worksheet 5000-D1, Schedules 3, 9 and 11,
-# and the CRA's 2025 payroll tables for CPP and EI.
+# Every number below was checked against the 2025 forms: T1 5006-R, Federal Worksheet 5000-D1, Schedules 2, 3, 5, 9
+# and 11, and the CRA's 2025 payroll tables for CPP and EI.
 
 params:
   taxBrackets:
@@ -121,12 +121,25 @@ params:
     label: Taxable income up to which tuition is limited by taxable income
     source: "Schedule 11 line 11: $57,375"
     value: 57375
+  tuitionTransferMax:
+    label: Most current-year tuition a student can transfer
+    source: "Schedule 11 line 21: maximum $5,000"
+    value: 5000
   capitalGainsInclusionRate:
     label: Capital gains inclusion rate
     source: "Schedule 3 line 23: 50%"
     value: 50%
 
 lines:
+  # The household: whether you have a spouse or partner, and their net income
+  HH.partner:
+    label: Spouse or common-law partner on December 31 (1 for yes)
+    formula: 'if(household.maritalStatus == "married" or household.maritalStatus == "common_law", 1, 0)'
+  HH.spouseNetIncome:
+    label: Your spouse's or partner's net income
+    formula: "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)"
+    source: "From their return when both returns are prepared here; otherwise from your answer"
+
   # Step 2 – Total income
   T1.10100:
     label: Employment income
@@ -200,6 +213,14 @@ lines:
     label: Age amount
     formula: "if(person.age >= 65, max(0, param.ageAmountMax - round(max(0, line.T1.23600 - param.ageAmountThreshold) * param.ageAmountRate, 2)), 0)"
     source: "Federal Worksheet, line 30100: for people born in 1960 or earlier"
+  T1.30300:
+    label: Spouse or common-law partner amount
+    formula: "if(line.HH.partner == 1, max(0, line.T1.30000 - line.HH.spouseNetIncome), 0)"
+    source: "Schedule 5 line 30300: your basic personal amount minus their net income"
+  T1.30400:
+    label: Amount for an eligible dependant
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, line.T1.30000, 0)"
+    source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
   T1.30800:
     label: Base CPP contributions through employment
     formula: "min(param.cppBaseMax, round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2))"
@@ -212,10 +233,14 @@ lines:
     formula: "min(param.canadaEmploymentAmount, line.T1.10100)"
   T1.T101:
     label: Credit amounts before tuition (T1 line 101)
-    formula: "line.T1.30000 + line.T1.30100 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+    formula: "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400 + line.T1.30800 + line.T1.31200 + line.T1.31260"
   T1.32300:
     label: Federal tuition amount
     formula: "line.S11.17"
+  T1.32600:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.S2.13, 0)"
+    source: "Schedule 2: their unused age amount and the tuition they designate to you"
   T1.33099:
     label: Medical expenses for you
     formula: "answer.medicalExpenses"
@@ -225,7 +250,7 @@ lines:
     source: "T1 lines 107 to 112: expenses over whichever is less, $2,834 or 3% of net income"
   T1.33500:
     label: Federal non-refundable credit amounts
-    formula: "line.T1.T101 + line.T1.32300 + line.T1.33200"
+    formula: "line.T1.T101 + line.T1.32300 + line.T1.32600 + line.T1.33200"
   T1.33800:
     label: Credit amounts at the credit rate
     formula: "round(line.T1.33500 * param.creditRate, 2)"
@@ -261,7 +286,7 @@ lines:
   # Step 6 – Refund or balance owing
   T1.42800:
     label: Provincial tax
-    formula: 'if(person.province == "ON", line.ON428.90, unsupported("Provincial tax for British Columbia and Alberta comes in the next version of this app"))'
+    formula: 'if(person.province == "ON", line.ON428.90, if(person.province == "BC", line.BC428.91, if(person.province == "AB", line.AB428.75, unsupported("Provincial tax for this province isn''t handled by this app"))))'
   T1.43500:
     label: Total payable
     formula: "line.T1.42000 + line.T1.42800"
@@ -283,6 +308,25 @@ lines:
   T1.48500:
     label: Balance owing
     formula: "max(0, line.T1.43500 - line.T1.48200)"
+
+  # Schedule 2 – Federal amounts transferred from your spouse or common-law partner (read from their return)
+  S2.6:
+    label: Their age amount and the tuition they designate to you
+    formula: "spouse.line.T1.30100 + spouse.line.S11.24"
+  S2.7:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.tuitionIncomeThreshold, spouse.line.T1.26000, round(spouse.line.T1.40400 / param.creditRate, 2))"
+    source: "Schedule 2 line 7"
+  S2.11:
+    label: Their basic personal amount, CPP, EI and employment amounts, and tuition
+    formula: "spouse.line.T1.30000 + spouse.line.T1.30800 + spouse.line.T1.31200 + spouse.line.T1.31260 + spouse.line.T1.32300"
+    source: "Schedule 2 lines 8 to 11: their lines 30000, 96 and 32300"
+  S2.12:
+    label: Their adjusted taxable income
+    formula: "max(0, line.S2.7 - line.S2.11)"
+  S2.13:
+    label: Federal amounts transferred from your spouse or common-law partner
+    formula: "max(0, line.S2.6 - line.S2.12)"
 
   # Schedule 3 – Capital gains or losses
   S3.13200:
@@ -360,3 +404,11 @@ lines:
   S11.17:
     label: Federal tuition amount
     formula: "line.S11.14 + line.S11.16"
+  S11.23:
+    label: Tuition you can transfer
+    formula: "max(0, min(param.tuitionTransferMax, line.S11.8) - line.S11.16)"
+    source: "Schedule 11 lines 21 to 23: this year's tuition up to $5,000, less what you used"
+  S11.24:
+    label: Tuition transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and household.partnerInYear, min(answer.tuitionTransfer, line.S11.23), 0)"
+    source: "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"

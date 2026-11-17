@@ -1,6 +1,6 @@
-# Ontario tax: Form ON428 and Schedule ON428-A (the LIFT credit). Line ids are the line numbers in the forms' right
-# margin. Every number below was checked against the 2025 ON428 (5006-C), ON428-A (5006-A) and Worksheet ON428
-# (5006-D).
+# Ontario tax: Form ON428, Schedule ON428-A (the LIFT credit) and Schedule ON(S2). Line ids are the line numbers in
+# the forms' right margin. Every number below was checked against the 2025 ON428 (5006-C), ON428-A (5006-A),
+# Worksheet ON428 (5006-D) and ON(S2) (5006-S2).
 
 params:
   onTaxBrackets:
@@ -12,6 +12,10 @@ params:
       - { upTo: 150000, rate: 11.16%, base: 7510.09 }
       - { upTo: 220000, rate: 12.16%, base: 12445.60 }
       - { rate: 13.16%, base: 20957.60 }
+  onFirstBracketTop:
+    label: Top of the first Ontario bracket
+    source: "ON428 Part A and ON(S2) line 5: $52,886"
+    value: 52886
   onCreditRate:
     label: Ontario credit rate
     source: "ON428 line 45: Ontario non-refundable tax credit rate"
@@ -32,6 +36,14 @@ params:
     label: Ontario age amount reduction rate
     source: "Worksheet ON428, line 58080: applicable rate"
     value: 15%
+  onSpouseBase:
+    label: Ontario spouse and eligible dependant amount, base
+    source: "ON428 lines 11 and 14: $11,905"
+    value: 11905
+  onSpouseMax:
+    label: Ontario spouse and eligible dependant amount, most
+    source: "ON428 lines 13 and 16: maximum $10,823"
+    value: 10823
   onMedicalThresholdMax:
     label: Ontario medical expense threshold, most
     source: "ON428 line 40: whichever is less, $2,885 or 3% of net income"
@@ -72,6 +84,14 @@ params:
     label: Ontario tax reduction, basic amount
     source: "ON428 line 74: $294"
     value: 294
+  onTaxReductionChild:
+    label: Ontario tax reduction per dependent child
+    source: "ON428 line 75: $544 for each dependent child born in 2007 or later"
+    value: 544
+  liftFamilyThreshold:
+    label: LIFT credit, family income threshold
+    source: "ON428-A line 36: $65,000"
+    value: 65000
   liftMax:
     label: LIFT credit, most
     source: "ON428-A line 5: maximum $875"
@@ -103,6 +123,13 @@ lines:
     label: Ontario age amount
     formula: "if(person.age >= 65, max(0, param.onAgeAmountMax - round(max(0, line.T1.23600 - param.onAgeAmountThreshold) * param.onAgeAmountRate, 2)), 0)"
     source: "Worksheet ON428, line 58080: for people born in 1960 or earlier"
+  ON428.13:
+    label: Ontario spouse or common-law partner amount
+    formula: "if(line.HH.partner == 1, min(param.onSpouseMax, max(0, param.onSpouseBase - line.HH.spouseNetIncome)), 0)"
+  ON428.16:
+    label: Ontario amount for an eligible dependant
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)"
+    source: "ON428 lines 14 to 16. The app assumes the child had no income"
   ON428.24:
     label: CPP and EI credit amounts
     formula: "line.T1.30800 + line.T1.31200"
@@ -114,9 +141,13 @@ lines:
     label: Allowable medical expenses
     formula: "max(0, line.ON428.36 - min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
     source: "ON428 lines 36 to 41: expenses over whichever is less, $2,885 or 3% of net income"
+  ON428.34:
+    label: Ontario amounts transferred from your spouse or common-law partner
+    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 == 0, 0, if(spouse.person.province == "ON", line.ONS2.11, unsupported("Your spouse lives in another province: transferring their Ontario age amount isn''t handled by this app"))), 0)'
+    source: "Schedule ON(S2): their unused Ontario age amount"
   ON428.44:
     label: Ontario credit amounts
-    formula: "line.ON428.9 + line.ON428.10 + line.ON428.24 + line.ON428.41"
+    formula: "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.34 + line.ON428.41"
   ON428.46:
     label: Ontario credit amounts at the credit rate
     formula: "round(line.ON428.44 * param.onCreditRate, 2)"
@@ -144,16 +175,21 @@ lines:
     label: Ontario tax after surtax and the dividend credit
     formula: "max(0, line.ON428.53 + line.ON428.68 - line.ON428.57)"
     source: "ON428 lines 69 to 73"
+  ON428.75:
+    label: Ontario tax reduction for dependent children
+    formula: "if(line.HH.partner == 1 and line.HH.spouseNetIncome > line.T1.23600, 0, param.onTaxReductionChild * household.childrenUnder19)"
+    source: "ON428 line 75: $544 per child born in 2007 or later, claimed by the spouse with the higher net income"
   ON428.80:
     label: Ontario tax reduction
-    formula: "if(line.ON428.73 == 0, 0, max(0, 2 * param.onTaxReductionBasic - line.ON428.73))"
-    source: "ON428 lines 74 to 80: twice the reductions, less Ontario tax. Dependent children come with dependants"
+    formula: "if(line.ON428.73 == 0, 0, max(0, 2 * (param.onTaxReductionBasic + line.ON428.75) - line.ON428.73))"
+    source: "ON428 lines 74 to 80: twice the reductions, less Ontario tax"
   ON428.81:
     label: Ontario tax after the reduction
     formula: "max(0, line.ON428.73 - line.ON428.80)"
   ON428.85:
     label: Low-income individuals and families tax (LIFT) credit
-    formula: "line.ON428A.20"
+    formula: "if(line.HH.partner == 1, line.ON428A.41, line.ON428A.20)"
+    source: "ON428-A Part A when single, Part B with a spouse or partner"
   ON428.86:
     label: Ontario tax after the LIFT credit
     formula: "max(0, line.ON428.81 - line.ON428.85)"
@@ -182,5 +218,29 @@ lines:
     label: LIFT credit reduction
     formula: "round(max(0, line.ON428A.13 - param.liftThreshold) * param.liftReductionRate, 2)"
   ON428A.20:
-    label: LIFT credit
+    label: LIFT credit, single
     formula: "max(0, line.ON428A.5 - line.ON428A.19)"
+  ON428A.28:
+    label: Your spouse's or partner's adjusted net income
+    formula: "if(household.partnerInYear, spouse.line.ON428A.13, answer.spouseNetIncome)"
+    source: "ON428-A line 28: from their return, or your answer for their net income"
+  ON428A.38:
+    label: Income over the LIFT thresholds
+    formula: "max(max(0, line.ON428A.13 - param.liftThreshold), max(0, line.ON428A.13 + line.ON428A.28 - param.liftFamilyThreshold))"
+    source: "ON428-A Part B lines 30 to 38: the greater of your income over $32,500 and family income over $65,000"
+  ON428A.41:
+    label: LIFT credit, with a spouse or partner
+    formula: "max(0, line.ON428A.5 - round(line.ON428A.38 * param.liftReductionRate, 2))"
+
+  # Schedule ON(S2) – Ontario amounts transferred from your spouse (read from their ON428)
+  ONS2.5:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.onFirstBracketTop, spouse.line.T1.26000, round(spouse.line.ON428.8 / param.onCreditRate, 2))"
+    source: "ON(S2) line 5"
+  ONS2.10:
+    label: Their adjusted taxable income
+    formula: "max(0, line.ONS2.5 - spouse.line.ON428.9 - spouse.line.ON428.24)"
+    source: "ON(S2) lines 6 to 10"
+  ONS2.11:
+    label: Ontario amounts transferred from your spouse
+    formula: "max(0, spouse.line.ON428.10 - line.ONS2.10)"

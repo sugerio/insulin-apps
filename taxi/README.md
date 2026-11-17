@@ -23,8 +23,9 @@ federal and Ontario rules; the rest of the year's steps say what they will do.
   The engine computes every return of the year from them, marks each number complete, estimated (a default stood in
   for an answer) or missing, and explains any number down to the slip boxes. The 2025 rules cover the T1 for
   employment, interest, dividends, trust income and capital gains (T4, T5, T3, T5008), RRSP, FHSA, RPP and union dues,
-  the basic, age, CPP, EI, employment, tuition (T2202), medical and donation credits, and Ontario tax (ON428 with the
-  surtax, tax reduction, LIFT credit and health premium). British Columbia and Alberta come next. Beside steps 2 to 6,
+  the basic, age, CPP, EI, employment, tuition (T2202), medical and donation credits, the spouse and eligible
+  dependant amounts, transfers between spouses (Schedule 2), and provincial tax: ON428 (surtax, tax reduction, LIFT
+  credit, health premium), BC428 (BC tax reduction) and AB428 (supplemental credit). Beside steps 2 to 6,
   an estimate shows each return's result lines; select a line to see why. Slips can't be entered yet, so the estimate
   is $0 for now.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick

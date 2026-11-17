@@ -44,6 +44,7 @@ test('a template\'s menu: its owner shares it by email and role, and tags it; th
     assert.equal(app.byLabel('Who sees the template'), undefined, 'and closes');
     // Tags: removing one saves the member's tags at once.
     await choose(app, 'Mutual NDA', 'Tags');
+    assert.match(app.text(), /Only you see them\. Tags, above the list, filters it by them\./, 'names the filter as the list shows it');
     await app.click(app.byLabel('Remove tag NDA'), 'remove tag');
     assert.deepEqual(JSON.parse(String(app.calls.find((c) => c.path === '/api/templates/tpl-1/tags')!.body)), { tags: [] });
     await app.click(app.button('Done'), 'Done');

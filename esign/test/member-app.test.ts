@@ -363,6 +363,13 @@ test('the completion certificate lists the audit trail, marking events recorded 
  assert.match(html,/Signing link issued \(by the sender\)/);assert.match(html,/those of whoever issued it/);
 });
 
+test('every event the audit trail records has a label on the envelope page and in the certificate, not its code',async()=>{
+ const {AUDIT}=await import('../src/app/server/esign/audit.ts');
+ const {AUDIT_LABELS}=await import('../src/app/ui/CompletionCertificate.ts');
+ assert.deepEqual(Object.values(AUDIT).filter(type=>!AUDIT_LABELS[type]),[]);
+ assert.equal(AUDIT_LABELS.INVITATION_SENT,'Invitation emailed');assert.equal(AUDIT_LABELS.INVITATION_OPENED,'Invitation link opened');
+});
+
 const CONTACT_ID='22222222-2222-4222-8222-222222222222';
 const ANA={id:CONTACT_ID,email:'ana@partner.example',name:'Ana Example',title:'Partner Manager',company:'Partner Company Ltd',envelopeCount:2,lastUsedAt:Date.parse('2026-11-10T00:00:00Z'),createdAt:0,updatedAt:0};
 

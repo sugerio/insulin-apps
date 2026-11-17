@@ -1,7 +1,8 @@
 // shadcn/ui (MIT), new-york style: ui.shadcn.com/r/styles/new-york-v4/dropdown-menu.json, with createElement instead of
 // JSX and without Radix (none of the project's components use it): a trigger, and while open, a menu of items placed
 // under it, right-aligned. The menu is `position: fixed`, from the trigger's box, so a table's scrolling container
-// doesn't clip it. A click outside, Escape, scrolling or choosing an item closes it.
+// doesn't clip it. A click outside, Escape, scrolling or choosing an item closes it. Choosing one gives focus back to
+// the trigger first: the item leaves with the menu, and a dialog it opens gives focus back to what had it on closing.
 import React, { useEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
@@ -43,7 +44,7 @@ export function DropdownMenu({ label, heading, align = 'end', multi = false, tri
       key: item.label, type: 'button', role: item.checked === undefined ? 'menuitem' : multi ? 'menuitemcheckbox' : 'menuitemradio', 'aria-checked': item.checked, disabled: item.disabled, 'data-slot': 'dropdown-menu-item',
       className: cn('relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=\'size-\'])]:size-4 [&_svg:not([class*=\'text-\'])]:text-muted-foreground',
         item.destructive && 'text-destructive hover:bg-destructive/10 hover:text-destructive [&_svg:not([class*=\'text-\'])]:text-destructive'),
-      onClick: () => { if (!multi || item.checked === undefined) setAt(null); item.onSelect() },
+      onClick: () => { if (!multi || item.checked === undefined) { button.current?.focus?.(); setAt(null) } item.onSelect() },
     }, item.checked === undefined ? null : h('span', { className: 'flex size-4 items-center justify-center' }, item.checked ? h(Check, { 'aria-hidden': true }) : null),
       item.icon ? h(item.icon, { 'aria-hidden': true }) : null, item.label))) : null)
 }

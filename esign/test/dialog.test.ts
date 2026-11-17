@@ -1,10 +1,11 @@
 // The dialog (components/ui/dialog.ts) keeps the keyboard inside it while it is open and gives focus back to what
-// opened it when it closes. In-process, with a stand-in panel and document.
+// opened it when it closes, also when a menu's item opened it. In-process, with a stand-in panel and document.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import Renderer, { act } from 'react-test-renderer';
 import { Dialog } from '../src/app/components/ui/dialog.ts';
+import { DropdownMenu } from '../src/app/components/ui/dropdown-menu.ts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -66,4 +67,30 @@ test('an embedded page (the field editor\'s frame) is one of the stops Tab cycle
     assert.equal(fake.activeElement, frame, 'Tab from the last button goes back to the editor');
     await act(async () => { renderer.unmount(); });
   } finally { (globalThis as { document?: unknown }).document = before; }
+});
+
+test('a dialog a menu item opens gives focus back to the menu\'s button when it closes: the item left with the menu', async () => {
+  const fake = { activeElement: null as unknown, body: { style: { overflow: '' } }, addEventListener() {}, removeEventListener() {} };
+  const element = (name: string) => ({ name, focus() { fake.activeElement = this; }, contains: () => false, getBoundingClientRect: () => ({ left: 100, right: 200, bottom: 40 }), querySelectorAll: () => [] });
+  const trigger = element('trigger'), item = element('item'), panel = element('panel');
+  const before = { document: (globalThis as { document?: unknown }).document, window: (globalThis as { window?: unknown }).window };
+  Object.assign(globalThis, { document: fake, window: { innerWidth: 1280, addEventListener() {}, removeEventListener() {} } });
+  try {
+    function Page() {
+      const [open, setOpen] = React.useState(false);
+      return React.createElement(React.Fragment, null,
+        React.createElement(DropdownMenu, { label: 'More', items: [{ label: 'Edit', onSelect: () => setOpen(true) }], trigger: (props) => React.createElement('button', props, 'More') }),
+        React.createElement(Dialog, { open, onOpenChange: setOpen, label: 'Edit' }));
+    }
+    let renderer!: Renderer.ReactTestRenderer;
+    await act(async () => { renderer = Renderer.create(React.createElement(Page), { createNodeMock: (node: any) => node.props['aria-haspopup'] ? trigger : node.props.role === 'dialog' ? panel : element('menu') }); });
+    await act(async () => { renderer.root.findByProps({ 'aria-haspopup': 'menu' }).props.onClick(); });
+    // Chosen with a click or the keyboard, the item has focus, and it leaves the page with the menu.
+    fake.activeElement = item;
+    await act(async () => { renderer.root.findByProps({ role: 'menuitem' }).props.onClick(); });
+    assert.equal(fake.activeElement, panel, 'focus moves into the dialog');
+    await act(async () => { renderer.root.findByProps({ 'data-slot': 'dialog-close' }).props.onClick(); });
+    assert.equal(fake.activeElement, trigger, 'closed: focus is back on the menu\'s button');
+    await act(async () => { renderer.unmount(); });
+  } finally { Object.assign(globalThis, before); }
 });

@@ -333,7 +333,7 @@ export function TemplatesPage({ me }: { me: Me }) {
       ] : null),
     h(Dialog, { open: opened?.kind === 'tags' && !!current, onOpenChange: (o) => { if (!o) close() }, label: 'Your tags', className: 'sm:max-w-lg' },
       current && opened?.kind === 'tags' ? [
-        h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Your tags on ${label(current)}`), h(DialogDescription, null, 'Only you see them. Filter the list by them with With your tags.')),
+        h(DialogHeader, { key: 'header' }, h(DialogTitle, null, `Your tags on ${label(current)}`), h(DialogDescription, null, 'Only you see them. Tags, above the list, filters it by them.')),
         h('div', { key: 'notice' }, notice),
         // A save that failed says so here: the page's notice is hidden while a dialog is open.
         h(Notice, { key: 'notice', message: message.error ? message.text : '', error: true }),

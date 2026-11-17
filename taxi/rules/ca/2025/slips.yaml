@@ -10,6 +10,7 @@ slips:
       16: Employee's CPP contributions
       16A: Employee's second CPP contributions
       18: Employee's EI premiums
+      20: RPP contributions
       22: Income tax deducted
       24: EI insurable earnings
       26: CPP pensionable earnings
@@ -17,3 +18,48 @@ slips:
       46: Charitable donations
       52: Pension adjustment
     informational: [24, 26, 52]   # used by the CRA to check the slip, and for next year's RRSP limit
+
+  T5:
+    title: T5 Statement of Investment Income
+    about: Interest, dividends and capital gains dividends from a bank, broker or corporation
+    boxes:
+      10: Actual amount of dividends other than eligible dividends
+      11: Taxable amount of dividends other than eligible dividends
+      12: Dividend tax credit for dividends other than eligible dividends
+      13: Interest from Canadian sources
+      18: Capital gains dividends
+      24: Actual amount of eligible dividends
+      25: Taxable amount of eligible dividends
+      26: Dividend tax credit for eligible dividends
+    informational: [10, 24]   # the actual amounts; the return uses the taxable amounts
+
+  T3:
+    title: T3 Statement of Trust Income Allocations and Designations
+    about: Income a trust or mutual fund allocated to you, such as capital gains, dividends and other income
+    boxes:
+      21: Capital gains
+      23: Actual amount of dividends other than eligible dividends
+      25: Foreign non-business income
+      26: Other income
+      32: Taxable amount of dividends other than eligible dividends
+      39: Dividend tax credit for dividends other than eligible dividends
+      49: Actual amount of eligible dividends
+      50: Taxable amount of eligible dividends
+      51: Dividend tax credit for eligible dividends
+    informational: [23, 49]
+
+  T5008:
+    title: T5008 Statement of Securities Transactions
+    about: A sale of shares, bonds or fund units through a broker, with the proceeds and, when the broker knows it, the cost
+    boxes:
+      20: Proceeds of disposition or settlement amount
+      21: Cost or book value
+
+  T2202:
+    title: T2202 Tuition and Enrolment Certificate
+    about: Eligible tuition fees a college or university received, and the months of study
+    boxes:
+      24: Number of months part-time
+      25: Number of months full-time
+      26: Eligible tuition fees
+    informational: [24, 25]

@@ -63,11 +63,13 @@ what the app can't prepare, such as a province other than Ontario, British Colum
 adults (`id`, `name`, `role`, `birthDate`, `province`), their `answers` and their `slips`. `result.people` has one entry
 per return:
 
-- `lines`: the result lines (total income, net income, taxable income, credits, net federal tax, tax deducted), each
-  with a `value` as decimal text and a `status`: `complete`, `estimate` or `missing`.
+- `lines`: the result lines (total income, net income, taxable income, net federal tax, provincial tax, total payable,
+  tax deducted, refund, balance owing), each with a `value` as decimal text and a `status`: `complete`, `estimate` or
+  `missing`.
 - `estimates`: questions with no answer whose usual answer was used, with the `assumed` value.
 - `missing`: questions with no answer and no usual answer.
-- `unhandled`: what was entered that the app doesn't use, such as a slip box.
+- `unhandled`: what was entered that the app doesn't use, such as a slip box, and the cases the rules can't compute
+  yet, such as provincial tax outside Ontario. A line those cases reach is `missing`.
 
 `result.rulesVersion` names the rules the result was computed with. Nothing is stored: each request computes again.
 

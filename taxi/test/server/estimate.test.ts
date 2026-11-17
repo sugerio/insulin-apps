@@ -34,7 +34,10 @@ describe("a year's estimate", () => {
     });
     expect(estimate.result.people.map((person) => person.personId)).toEqual([alex.id, sam.id]);
     expect(estimate.result.people[0]!.lines.find((line) => line.id === "T1.42000")).toEqual({ id: "T1.42000", label: "Net federal tax", value: "0", status: "estimate" });
-    expect(estimate.result.people[0]!.estimates).toEqual([{ question: "rrspDeduction", ask: "RRSP contributions to deduct for 2025", assumed: "0" }]);
+    expect(estimate.result.people[0]!.estimates).toContainEqual({ question: "rrspDeduction", ask: "RRSP contributions to deduct for 2025", assumed: "0" });
+    // Sam lives in British Columbia, which comes in the next version: the provincial tax says so instead of guessing.
+    expect(estimate.result.people[1]!.lines.find((line) => line.id === "T1.42800")).toMatchObject({ value: null, status: "missing" });
+    expect(estimate.result.people[1]!.unhandled).toEqual(["Provincial tax for British Columbia and Alberta comes in the next version of this app"]);
   });
 
   it("covers only your return when your spouse isn't in the year", async () => {

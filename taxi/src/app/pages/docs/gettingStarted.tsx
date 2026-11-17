@@ -71,8 +71,9 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Beside the steps after the household, <b>Federal estimate</b> shows each return's key lines: total income, net income, taxable income,
-            federal credits, net federal tax, and the tax already deducted from pay. Provincial tax comes in a later version.
+            Beside the steps after the household, <b>Estimate</b> shows each return's key lines: total income, net income, taxable income, net
+            federal tax, Ontario tax, the total payable, the tax already deducted, and the refund or balance owing. British Columbia and Alberta
+            tax come in a later version; until then the estimate says so instead of guessing.
           </p>
           <p>
             Select a line to see why it is what it is: its formula, the values that went into it, and each number's source, down to the box of

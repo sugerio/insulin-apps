@@ -8,7 +8,7 @@ It is an Insulin app: you start from it in the Insulin console, change it with t
 and publish it. It brings its own database.
 
 **Status: early.** It is being built in parts. Today it has the household step and the tax engine with the 2025
-federal rules for employees; the rest of the year's steps say what they will do.
+federal and Ontario rules; the rest of the year's steps say what they will do.
 
 ## What it does today
 
@@ -21,8 +21,12 @@ federal rules for employees; the rest of the year's steps say what they will do.
   can't prepare (another province, or someone who moved to or from Canada during the year).
 - **The tax engine.** All tax rules are YAML files under `rules/`, one folder per year, each number with its source.
   The engine computes every return of the year from them, marks each number complete, estimated (a default stood in
-  for an answer) or missing, and explains any number down to the slip boxes. Beside steps 2 to 6, a federal estimate
-  shows the result lines; select a line to see why. Slips can't be entered yet, so the estimate is $0 for now.
+  for an answer) or missing, and explains any number down to the slip boxes. The 2025 rules cover the T1 for
+  employment, interest, dividends, trust income and capital gains (T4, T5, T3, T5008), RRSP, FHSA, RPP and union dues,
+  the basic, age, CPP, EI, employment, tuition (T2202), medical and donation credits, and Ontario tax (ON428 with the
+  surtax, tax reduction, LIFT credit and health premium). British Columbia and Alberta come next. Beside steps 2 to 6,
+  an estimate shows each return's result lines; select a line to see why. Slips can't be entered yet, so the estimate
+  is $0 for now.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,

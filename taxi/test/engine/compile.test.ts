@@ -88,6 +88,18 @@ describe("compiling rule files", () => {
     expect(compileError(withLine("S.box9"))).toContain("S.box9: S has boxes 1, 2");
     expect(compileError(withLine("median(1)"))).toContain("No function median");
     expect(compileError(withLine("spouse.param.rate"))).toContain("params are the same for both spouses");
+    expect(compileError(withLine("unsupported(1)"))).toContain("unsupported takes the reason, as text in quotes");
+  });
+
+  it("checks a bracket base printed on a form against the brackets below it", () => {
+    const brackets = (base2: number) => ({
+      label: "Brackets",
+      source: "s",
+      value: [{ upTo: 100, rate: "10%", base: 0 }, { upTo: 200, rate: "20%", base: base2 }, { rate: "30%", base: 30 }],
+    });
+    const withBrackets = (base2: number) => [year(2025, null, { "a.yaml": { ...base, params: { ...base.params, brackets: brackets(base2) } } })];
+    expect(compileRules(withBrackets(10), hash).params.brackets!.value).toHaveLength(3);
+    expect(compileError(withBrackets(11))).toBe("rules/xx/2025/a.yaml, params.brackets: The base of bracket 2 is 11; the brackets below it give 10");
   });
 
   it("refuses an entry defined twice in a year, a removal of nothing, and a param without its source", () => {

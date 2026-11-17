@@ -31,7 +31,7 @@ type Section = (typeof SECTIONS)[number];
 const sourceNumber = z.union([z.number(), z.string()]);
 const sourceParam = z.strictObject({
   label: z.string().min(1),
-  value: z.union([sourceNumber, z.array(z.strictObject({ upTo: sourceNumber.optional(), rate: sourceNumber }))]),
+  value: z.union([sourceNumber, z.array(z.strictObject({ upTo: sourceNumber.optional(), rate: sourceNumber, base: sourceNumber.optional() }))]),
   source: z.string().min(1, "Every param names its source"),
 });
 const sourceLine = z.strictObject({ label: z.string().min(1), formula: z.string().min(1), source: z.string().min(1).optional() });
@@ -121,6 +121,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
         ? param.value.map((row) => ({
             upTo: row.upTo === undefined ? null : decimal(`params.${id}`, row.upTo),
             rate: decimal(`params.${id}`, row.rate),
+            ...(row.base === undefined ? {} : { base: decimal(`params.${id}`, row.base) }),
           }))
         : decimal(`params.${id}`, param.value),
       source: param.source,

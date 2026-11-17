@@ -1,0 +1,186 @@
+# Ontario tax: Form ON428 and Schedule ON428-A (the LIFT credit). Line ids are the line numbers in the forms' right
+# margin. Every number below was checked against the 2025 ON428 (5006-C), ON428-A (5006-A) and Worksheet ON428
+# (5006-D).
+
+params:
+  onTaxBrackets:
+    label: Ontario tax brackets
+    source: "ON428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 52886, rate: 5.05%, base: 0 }
+      - { upTo: 105775, rate: 9.15%, base: 2670.74 }
+      - { upTo: 150000, rate: 11.16%, base: 7510.09 }
+      - { upTo: 220000, rate: 12.16%, base: 12445.60 }
+      - { rate: 13.16%, base: 20957.60 }
+  onCreditRate:
+    label: Ontario credit rate
+    source: "ON428 line 45: Ontario non-refundable tax credit rate"
+    value: 5.05%
+  onBasicPersonalAmount:
+    label: Ontario basic personal amount
+    source: "ON428 line 58040: claim $12,747"
+    value: 12747
+  onAgeAmountMax:
+    label: Ontario age amount, full
+    source: "Worksheet ON428, line 58080: $6,223"
+    value: 6223
+  onAgeAmountThreshold:
+    label: Net income where the Ontario age amount starts to go down
+    source: "Worksheet ON428, line 58080: income threshold"
+    value: 46330
+  onAgeAmountRate:
+    label: Ontario age amount reduction rate
+    source: "Worksheet ON428, line 58080: applicable rate"
+    value: 15%
+  onMedicalThresholdMax:
+    label: Ontario medical expense threshold, most
+    source: "ON428 line 40: whichever is less, $2,885 or 3% of net income"
+    value: 2885
+  onDonationLowRate:
+    label: Ontario donation credit rate on the first $200
+    source: "ON428 line 47"
+    value: 5.05%
+  onDonationHighRate:
+    label: Ontario donation credit rate above $200
+    source: "ON428 line 48"
+    value: 11.16%
+  onDividendEligibleRate:
+    label: Ontario dividend tax credit rate, eligible dividends
+    source: "Worksheet ON428, line 61520: 10% of the taxable amount of eligible dividends"
+    value: 10%
+  onDividendOtherRate:
+    label: Ontario dividend tax credit rate, other dividends
+    source: "Worksheet ON428, line 61520: 2.9863% of the taxable amount of other than eligible dividends"
+    value: 2.9863%
+  onSurtaxThreshold1:
+    label: Ontario surtax, first threshold
+    source: "ON428 line 66: 20% of Ontario tax over $5,710"
+    value: 5710
+  onSurtaxRate1:
+    label: Ontario surtax, first rate
+    source: "ON428 line 66"
+    value: 20%
+  onSurtaxThreshold2:
+    label: Ontario surtax, second threshold
+    source: "ON428 line 67: 36% of Ontario tax over $7,307"
+    value: 7307
+  onSurtaxRate2:
+    label: Ontario surtax, second rate
+    source: "ON428 line 67"
+    value: 36%
+  onTaxReductionBasic:
+    label: Ontario tax reduction, basic amount
+    source: "ON428 line 74: $294"
+    value: 294
+  liftMax:
+    label: LIFT credit, most
+    source: "ON428-A line 5: maximum $875"
+    value: 875
+  liftRate:
+    label: LIFT credit, share of employment income
+    source: "ON428-A line 4: 5.05%"
+    value: 5.05%
+  liftThreshold:
+    label: LIFT credit, individual income threshold
+    source: "ON428-A line 16: $32,500"
+    value: 32500
+  liftReductionRate:
+    label: LIFT credit reduction rate
+    source: "ON428-A line 18: 5%"
+    value: 5%
+
+lines:
+  # Part A – Ontario tax on taxable income
+  ON428.8:
+    label: Ontario tax on taxable income
+    formula: "round(bracket(param.onTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Ontario non-refundable tax credits
+  ON428.9:
+    label: Ontario basic personal amount
+    formula: "param.onBasicPersonalAmount"
+  ON428.10:
+    label: Ontario age amount
+    formula: "if(person.age >= 65, max(0, param.onAgeAmountMax - round(max(0, line.T1.23600 - param.onAgeAmountThreshold) * param.onAgeAmountRate, 2)), 0)"
+    source: "Worksheet ON428, line 58080: for people born in 1960 or earlier"
+  ON428.24:
+    label: CPP and EI credit amounts
+    formula: "line.T1.30800 + line.T1.31200"
+    source: "ON428 lines 19 to 24: the federal amounts from lines 30800 and 31200"
+  ON428.36:
+    label: Medical expenses
+    formula: "line.T1.33099"
+  ON428.41:
+    label: Allowable medical expenses
+    formula: "max(0, line.ON428.36 - min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "ON428 lines 36 to 41: expenses over whichever is less, $2,885 or 3% of net income"
+  ON428.44:
+    label: Ontario credit amounts
+    formula: "line.ON428.9 + line.ON428.10 + line.ON428.24 + line.ON428.41"
+  ON428.46:
+    label: Ontario credit amounts at the credit rate
+    formula: "round(line.ON428.44 * param.onCreditRate, 2)"
+  ON428.49:
+    label: Ontario donations credit
+    formula: "round(line.S9.13 * param.onDonationLowRate, 2) + round(line.S9.14 * param.onDonationHighRate, 2)"
+    source: "ON428 lines 47 to 49: Schedule 9 lines 13 and 14 at 5.05% and 11.16%"
+  ON428.50:
+    label: Ontario non-refundable tax credits
+    formula: "line.ON428.46 + line.ON428.49"
+
+  # Part C – Ontario tax
+  ON428.53:
+    label: Ontario tax after credits
+    formula: "max(0, line.ON428.8 - line.ON428.50)"
+  ON428.57:
+    label: Ontario dividend tax credit
+    formula: "round(line.T1.12010 * param.onDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.onDividendEligibleRate, 2)"
+    source: "Worksheet ON428, line 61520"
+  ON428.68:
+    label: Ontario surtax
+    formula: "round(max(0, line.ON428.53 - param.onSurtaxThreshold1) * param.onSurtaxRate1, 2) + round(max(0, line.ON428.53 - param.onSurtaxThreshold2) * param.onSurtaxRate2, 2)"
+    source: "ON428 lines 63 to 68, on Ontario tax after credits (line 62)"
+  ON428.73:
+    label: Ontario tax after surtax and the dividend credit
+    formula: "max(0, line.ON428.53 + line.ON428.68 - line.ON428.57)"
+    source: "ON428 lines 69 to 73"
+  ON428.80:
+    label: Ontario tax reduction
+    formula: "if(line.ON428.73 == 0, 0, max(0, 2 * param.onTaxReductionBasic - line.ON428.73))"
+    source: "ON428 lines 74 to 80: twice the reductions, less Ontario tax. Dependent children come with dependants"
+  ON428.81:
+    label: Ontario tax after the reduction
+    formula: "max(0, line.ON428.73 - line.ON428.80)"
+  ON428.85:
+    label: Low-income individuals and families tax (LIFT) credit
+    formula: "line.ON428A.20"
+  ON428.86:
+    label: Ontario tax after the LIFT credit
+    formula: "max(0, line.ON428.81 - line.ON428.85)"
+  ON428.89:
+    label: Ontario health premium
+    formula: >-
+      round(min(300, max(0, line.T1.26000 - 20000) * 6%), 2)
+      + round(min(150, max(0, line.T1.26000 - 36000) * 6%), 2)
+      + round(min(150, max(0, line.T1.26000 - 48000) * 25%), 2)
+      + round(min(150, max(0, line.T1.26000 - 72000) * 25%), 2)
+      + round(min(150, max(0, line.T1.26000 - 200000) * 25%), 2)
+    source: "ON428 line 89 chart: $0 to $900 by taxable income, in steps at $20,000, $36,000, $48,000, $72,000 and $200,000"
+  ON428.90:
+    label: Ontario tax
+    formula: "line.ON428.86 + line.ON428.89"
+
+  # Schedule ON428-A – LIFT credit, Part A (single individuals; couples use Part B, which comes with couples)
+  ON428A.5:
+    label: LIFT credit before the income test
+    formula: "min(param.liftMax, round(line.T1.10100 * param.liftRate, 2))"
+  ON428A.13:
+    label: Adjusted net income
+    formula: "max(0, line.T1.23400)"
+    source: "ON428-A lines 6 to 13: net income before it was floored at zero"
+  ON428A.19:
+    label: LIFT credit reduction
+    formula: "round(max(0, line.ON428A.13 - param.liftThreshold) * param.liftReductionRate, 2)"
+  ON428A.20:
+    label: LIFT credit
+    formula: "max(0, line.ON428A.5 - line.ON428A.19)"

@@ -13,12 +13,13 @@ describe("the estimate beside a step", () => {
         await server.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
       },
     });
-    const card = (await screen.findByRole("heading", { name: "Federal estimate" })).closest("[data-slot=card]") as HTMLElement;
+    const card = (await screen.findByRole("heading", { name: "Estimate" })).closest("[data-slot=card]") as HTMLElement;
     const line = await within(card).findByRole("button", { name: /Net federal tax/ });
     expect(line.textContent).toContain("$0.00");
-    expect(within(card).getByText("Assumed: RRSP contributions to deduct for 2025, $0.00")).toBeTruthy();
+    expect(within(card).getByText("5 answers assumed")).toBeTruthy();
+    expect(within(card).getByText("RRSP contributions to deduct for 2025: $0.00")).toBeTruthy();
     fireEvent.click(line);
-    expect(within(card).getByText("= max(0, line.T1.40400 - line.T1.35000)")).toBeTruthy();
-    expect(within(card).getByRole("button", { name: /Federal tax on taxable income/ })).toBeTruthy();
+    expect(within(card).getByText("= line.T1.40600")).toBeTruthy();
+    expect(within(card).getByRole("button", { name: /Federal tax/ })).toBeTruthy();
   });
 });

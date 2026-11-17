@@ -1,73 +1,193 @@
-# Federal tax for an employee: total income, the deductions on T4 amounts, the basic credits, and federal tax.
-# Line ids are the T1's line numbers. Sources: the 2025 T1 General (5006-R) and Schedule 8 instructions, and the
-# CRA's indexation table for 2025.
+# Federal tax: the T1 (5006-R) and Schedules 3, 9 and 11, for the income, deductions and credits in scope. Line ids
+# are the form's own: T1 lines by their five-digit number, a schedule's lines by the number in its right margin.
+# Every number below was checked against the 2025 forms: T1 5006-R, Federal Worksheet 5000-D1, Schedules 3, 9 and 11,
+# and the CRA's 2025 payroll tables for CPP and EI.
 
 params:
   taxBrackets:
     label: Federal tax brackets
-    source: "Federal rates for 2025. The lowest rate went from 15% to 14% on July 1, 2025, so 14.5% applies for the year."
+    source: "T1 Step 5 Part A. The lowest rate went from 15% to 14% on July 1, 2025, so 14.5% applies for the year. Bases as printed on the form."
     value:
-      - { upTo: 57375, rate: 14.5% }
-      - { upTo: 114750, rate: 20.5% }
-      - { upTo: 177882, rate: 26% }
-      - { upTo: 253414, rate: 29% }
-      - { rate: 33% }
+      - { upTo: 57375, rate: 14.5%, base: 0 }
+      - { upTo: 114750, rate: 20.5%, base: 8319.38 }
+      - { upTo: 177882, rate: 26%, base: 20081.25 }
+      - { upTo: 253414, rate: 29%, base: 36495.57 }
+      - { rate: 33%, base: 58399.85 }
   creditRate:
     label: Federal credit rate
-    source: "Rate for federal non-refundable tax credits in 2025 (the 2025 lowest rate)"
+    source: "T1 line 114: federal non-refundable tax credit rate for 2025"
     value: 14.5%
   basicPersonalAmountMax:
     label: Basic personal amount, full
-    source: "Basic personal amount for 2025, net income up to the start of the 26% bracket"
+    source: "T1 line 30000 and Federal Worksheet: $16,129 when net income is $177,882 or less"
     value: 16129
   basicPersonalAmountMin:
     label: Basic personal amount, minimum
-    source: "Basic personal amount for 2025, net income from the start of the 33% bracket"
+    source: "T1 line 30000 and Federal Worksheet: $14,538 when net income is $253,414 or more"
     value: 14538
   basicPersonalAmountPhaseStart:
-    label: Net income where the amount starts to go down
-    source: "Start of the 26% bracket for 2025: the basic personal amount goes down from here"
+    label: Net income where the basic personal amount starts to go down
+    source: "Federal Worksheet, line 30000: income threshold"
     value: 177882
   basicPersonalAmountPhaseEnd:
-    label: Net income where the amount reaches its minimum
-    source: "Start of the 33% bracket for 2025: the basic personal amount reaches its minimum here"
+    label: Net income where the basic personal amount reaches its minimum
+    source: "Federal Worksheet, line 30000: threshold plus the 75,532 range"
     value: 253414
+  ageAmountMax:
+    label: Age amount, full
+    source: "T1 line 30100 and Federal Worksheet: maximum $9,028 for people born in 1960 or earlier"
+    value: 9028
+  ageAmountThreshold:
+    label: Net income where the age amount starts to go down
+    source: "Federal Worksheet, line 30100: income threshold"
+    value: 45522
+  ageAmountRate:
+    label: Age amount reduction rate
+    source: "Federal Worksheet, line 30100: applicable rate"
+    value: 15%
   canadaEmploymentAmount:
     label: Canada employment amount
-    source: "Canada employment amount for 2025 (line 31260)"
+    source: "T1 line 31260: whichever is less, $1,471 or employment income"
     value: 1471
   cppBaseRate:
     label: CPP base rate
-    source: "CPP base contribution rate for employees (4.95%): this part is a credit, line 30800"
+    source: "Schedule 8: the base part of the 5.95% employee rate (4.95%) is a credit on line 30800"
     value: 4.95%
   cppTotalRate:
     label: CPP rate for employees
-    source: "CPP contribution rate for employees in 2025 (5.95%): base plus the first enhancement, which is a deduction, line 22215"
+    source: "CRA payroll table, 2025: employee rate 5.95%"
     value: 5.95%
+  cppBaseMax:
+    label: Most base CPP contributions
+    source: "4.95% of the 2025 maximum contributory earnings ($67,800)"
+    value: 3356.10
+  cppEmployeeMax:
+    label: Most CPP contributions for an employee
+    source: "CRA payroll table, 2025: maximum employee contribution $4,034.10"
+    value: 4034.10
+  cpp2EmployeeMax:
+    label: Most second CPP contributions for an employee
+    source: "CRA payroll table, 2025: CPP2 maximum employee contribution $396"
+    value: 396
+  enhancedCppDeductionMax:
+    label: Most deduction for enhanced CPP contributions
+    source: "T1 line 22215: maximum $1,074.00"
+    value: 1074
+  eiPremiumMax:
+    label: Most EI premiums
+    source: "T1 line 31200: maximum $1,077.48"
+    value: 1077.48
+  medicalThresholdRate:
+    label: Medical expense threshold rate
+    source: "T1 line 108: 3% of net income"
+    value: 3%
+  medicalThresholdMax:
+    label: Medical expense threshold, most
+    source: "T1 line 109: whichever is less, $2,834 or 3% of net income"
+    value: 2834
+  donationLowRate:
+    label: Donation credit rate on the first $200
+    source: "Schedule 9 line 22: 14.5%"
+    value: 14.5%
+  donationHighRate:
+    label: Donation credit rate above $200
+    source: "Schedule 9 line 21: 29%"
+    value: 29%
+  donationTopRate:
+    label: Donation credit rate on income in the top bracket
+    source: "Schedule 9 line 20: 33% on the part of donations up to taxable income over $253,414"
+    value: 33%
+  donationLowLimit:
+    label: Donations at the low rate
+    source: "Schedule 9 line 13: the first $200"
+    value: 200
+  donationTopThreshold:
+    label: Taxable income where the top donation rate starts
+    source: "Schedule 9 line 18"
+    value: 253414
+  donationIncomeLimit:
+    label: Donation limit, share of net income
+    source: "Schedule 9 line 6: 75% of net income"
+    value: 75%
+  topUpThreshold:
+    label: Credits that the 14.5% rate fully covers
+    source: "Federal Worksheet, line 34990, line 4"
+    value: 8319.38
+  topUpRate:
+    label: Top-up tax credit rate
+    source: "Federal Worksheet, line 34990, line 6"
+    value: 3.45%
+  tuitionIncomeThreshold:
+    label: Taxable income up to which tuition is limited by taxable income
+    source: "Schedule 11 line 11: $57,375"
+    value: 57375
+  capitalGainsInclusionRate:
+    label: Capital gains inclusion rate
+    source: "Schedule 3 line 23: 50%"
+    value: 50%
 
 lines:
+  # Step 2 – Total income
   T1.10100:
     label: Employment income
     formula: "sum(T4.box14)"
+  T1.12000:
+    label: Taxable amount of dividends (eligible and other than eligible)
+    formula: "sum(T5.box11) + sum(T5.box25) + sum(T3.box32) + sum(T3.box50)"
+    source: "Federal Worksheet, line 12000: boxes 11 and 25 of T5 slips, boxes 32 and 50 of T3 slips"
+  T1.12010:
+    label: Taxable amount of dividends other than eligible
+    formula: "sum(T5.box11) + sum(T3.box32)"
+    source: "Federal Worksheet, line 12010"
+  T1.12100:
+    label: Interest and other investment income
+    formula: "sum(T5.box13) + sum(T3.box25)"
+    source: "Federal Worksheet, line 12100: box 13 of T5 slips, box 25 of T3 slips"
+  T1.12700:
+    label: Taxable capital gains
+    formula: "max(0, line.S3.19900)"
+    source: "Schedule 3. A net capital loss isn't entered here; it carries forward"
+  T1.13000:
+    label: Other income
+    formula: "sum(T3.box26)"
+    source: "Box 26 of T3 slips"
   T1.15000:
     label: Total income
-    formula: "line.T1.10100"
+    formula: "line.T1.10100 + line.T1.12000 + line.T1.12100 + line.T1.12700 + line.T1.13000"
+
+  # Step 3 – Net income
+  T1.20700:
+    label: Registered pension plan (RPP) deduction
+    formula: "sum(T4.box20)"
   T1.20800:
     label: RRSP deduction
     formula: "answer.rrspDeduction"
+  T1.20805:
+    label: FHSA deduction
+    formula: "answer.fhsaDeduction"
+  T1.21200:
+    label: Annual union, professional, or like dues
+    formula: "sum(T4.box44)"
   T1.22215:
     label: Deduction for CPP enhanced contributions on employment income
-    formula: "round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A)"
+    formula: "min(param.enhancedCppDeductionMax, round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A))"
     source: "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
   T1.23300:
     label: Total deductions
-    formula: "line.T1.20800 + line.T1.22215"
+    formula: "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.22215"
+  T1.23400:
+    label: Net income before adjustments
+    formula: "line.T1.15000 - line.T1.23300"
   T1.23600:
     label: Net income
-    formula: "max(0, line.T1.15000 - line.T1.23300)"
+    formula: "max(0, line.T1.23400)"
+
+  # Step 4 – Taxable income
   T1.26000:
     label: Taxable income
     formula: "line.T1.23600"
+
+  # Step 5 Part B – Federal non-refundable tax credits
   T1.30000:
     label: Basic personal amount
     formula: >-
@@ -75,33 +195,168 @@ lines:
         - (param.basicPersonalAmountMax - param.basicPersonalAmountMin)
         * clamp(line.T1.23600 - param.basicPersonalAmountPhaseStart, 0, param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart)
         / (param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart), 2)
-    source: "Line 30000 worksheet: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+    source: "Federal Worksheet, line 30000: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+  T1.30100:
+    label: Age amount
+    formula: "if(person.age >= 65, max(0, param.ageAmountMax - round(max(0, line.T1.23600 - param.ageAmountThreshold) * param.ageAmountRate, 2)), 0)"
+    source: "Federal Worksheet, line 30100: for people born in 1960 or earlier"
   T1.30800:
     label: Base CPP contributions through employment
-    formula: "round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2)"
+    formula: "min(param.cppBaseMax, round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2))"
     source: "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit"
   T1.31200:
     label: Employment insurance premiums through employment
-    formula: "sum(T4.box18)"
+    formula: "min(param.eiPremiumMax, sum(T4.box18))"
   T1.31260:
     label: Canada employment amount
     formula: "min(param.canadaEmploymentAmount, line.T1.10100)"
+  T1.T101:
+    label: Credit amounts before tuition (T1 line 101)
+    formula: "line.T1.30000 + line.T1.30100 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+  T1.32300:
+    label: Federal tuition amount
+    formula: "line.S11.17"
+  T1.33099:
+    label: Medical expenses for you
+    formula: "answer.medicalExpenses"
+  T1.33200:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "T1 lines 107 to 112: expenses over whichever is less, $2,834 or 3% of net income"
   T1.33500:
     label: Federal non-refundable credit amounts
-    formula: "line.T1.30000 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+    formula: "line.T1.T101 + line.T1.32300 + line.T1.33200"
   T1.33800:
     label: Credit amounts at the credit rate
     formula: "round(line.T1.33500 * param.creditRate, 2)"
+  T1.34900:
+    label: Donations and gifts
+    formula: "line.S9.23"
+  T1.34990:
+    label: Top-up tax credit
+    formula: "round(max(0, line.T1.33800 + line.S9.22 - param.topUpThreshold) * param.topUpRate, 2)"
+    source: "Federal Worksheet, line 34990: keeps credit amounts above the first bracket at 15%"
   T1.35000:
     label: Total federal non-refundable tax credits
-    formula: "line.T1.33800"
+    formula: "line.T1.33800 + line.T1.34900 + line.T1.34990"
+
+  # Step 5 Part C – Net federal tax
   T1.40400:
     label: Federal tax on taxable income
     formula: "round(bracket(param.taxBrackets, line.T1.26000), 2)"
+  T1.40425:
+    label: Federal dividend tax credit
+    formula: "sum(T5.box12) + sum(T5.box26) + sum(T3.box39) + sum(T3.box51)"
+    source: "Federal Worksheet, line 40425: the credit as shown on the slips"
+  T1.42900:
+    label: Basic federal tax
+    formula: "max(0, line.T1.40400 - line.T1.35000 - line.T1.40425)"
+  T1.40600:
+    label: Federal tax
+    formula: "line.T1.42900"
   T1.42000:
     label: Net federal tax
-    formula: "max(0, line.T1.40400 - line.T1.35000)"
+    formula: "line.T1.40600"
+
+  # Step 6 – Refund or balance owing
+  T1.42800:
+    label: Provincial tax
+    formula: 'if(person.province == "ON", line.ON428.90, unsupported("Provincial tax for British Columbia and Alberta comes in the next version of this app"))'
+  T1.43500:
+    label: Total payable
+    formula: "line.T1.42000 + line.T1.42800"
   T1.43700:
     label: Total income tax deducted
     formula: "sum(T4.box22)"
-    source: "Federal and provincial tax together, as the T4 shows it"
+  T1.44800:
+    label: CPP overpayment
+    formula: 'if(sum(T4.box16) > param.cppEmployeeMax or sum(T4.box16A) > param.cpp2EmployeeMax, unsupported("More CPP was deducted than the 2025 maximum. The overpayment (Schedule 8) isn''t handled by this app yet"), 0)'
+  T1.45000:
+    label: Employment insurance overpayment
+    formula: 'if(sum(T4.box18) > param.eiPremiumMax, unsupported("More EI was deducted than the 2025 maximum. The overpayment isn''t handled by this app yet"), 0)'
+  T1.48200:
+    label: Total credits
+    formula: "line.T1.43700 + line.T1.44800 + line.T1.45000"
+  T1.48400:
+    label: Refund
+    formula: "max(0, line.T1.48200 - line.T1.43500)"
+  T1.48500:
+    label: Balance owing
+    formula: "max(0, line.T1.43500 - line.T1.48200)"
+
+  # Schedule 3 – Capital gains or losses
+  S3.13200:
+    label: Gain or loss on publicly traded shares and mutual fund units
+    formula: "sum(T5008.box20) - sum(T5008.box21)"
+    source: "Schedule 3 line 4: proceeds (T5008 box 20) minus cost (box 21)"
+  S3.17400:
+    label: Capital gains from T5 slips
+    formula: "sum(T5.box18)"
+  S3.17600:
+    label: Capital gains from T3 slips
+    formula: "sum(T3.box21)"
+  S3.19700:
+    label: Total capital gains or losses
+    formula: "line.S3.13200 + line.S3.17400 + line.S3.17600"
+  S3.19900:
+    label: Taxable capital gains or net capital loss
+    formula: "round(line.S3.19700 * param.capitalGainsInclusionRate, 2)"
+
+  # Schedule 9 – Donations and gifts
+  S9.5:
+    label: Total eligible amount of charitable donations
+    formula: "answer.donations + sum(T4.box46)"
+    source: "Schedule 9 line 5: official receipts, and box 46 of T4 slips"
+  S9.10:
+    label: Donations claimed (within the limit)
+    formula: "min(line.S9.5, round(line.T1.23600 * param.donationIncomeLimit, 2))"
+    source: "Schedule 9 lines 6 to 10: up to 75% of net income"
+  S9.13:
+    label: Donations at the low rate
+    formula: "min(line.S9.10, param.donationLowLimit)"
+  S9.14:
+    label: Donations above the first $200
+    formula: "line.S9.10 - line.S9.13"
+  S9.19:
+    label: Taxable income in the top bracket
+    formula: "max(0, line.T1.26000 - param.donationTopThreshold)"
+  S9.F:
+    label: Donations at the top rate
+    formula: "min(line.S9.14, line.S9.19)"
+  S9.20:
+    label: Credit at the top rate
+    formula: "round(line.S9.F * param.donationTopRate, 2)"
+  S9.21:
+    label: Credit at the high rate
+    formula: "round((line.S9.14 - line.S9.F) * param.donationHighRate, 2)"
+  S9.22:
+    label: Credit on the first $200
+    formula: "round(line.S9.13 * param.donationLowRate, 2)"
+  S9.23:
+    label: Allowable donations credit
+    formula: "line.S9.20 + line.S9.21 + line.S9.22"
+
+  # Schedule 11 – Federal tuition amount (the student's own; transfers come with couples)
+  S11.8:
+    label: Tuition fees for 2025
+    formula: "sum(T2202.box26)"
+    source: "Schedule 11 lines 1 to 8: eligible fees from T2202 box 26. The Canada training credit isn't claimed"
+  S11.9:
+    label: Unused federal tuition from your 2024 notice of assessment
+    formula: "answer.unusedTuition"
+  S11.11:
+    label: Income the tuition amount can reduce to zero tax
+    formula: "if(line.T1.26000 <= param.tuitionIncomeThreshold, line.T1.26000, round(line.T1.40400 / param.creditRate, 2))"
+    source: "Schedule 11 line 11: taxable income, or above $57,375, federal tax on taxable income ÷ 14.5%"
+  S11.13:
+    label: Room left after other credits
+    formula: "max(0, line.S11.11 - line.T1.T101)"
+  S11.14:
+    label: Unused tuition claimed for 2025
+    formula: "min(line.S11.9, line.S11.13)"
+  S11.16:
+    label: 2025 tuition claimed
+    formula: "min(line.S11.8, line.S11.13 - line.S11.14)"
+  S11.17:
+    label: Federal tuition amount
+    formula: "line.S11.14 + line.S11.16"

@@ -5,3 +5,19 @@ questions:
     type: money
     ask: RRSP contributions to deduct for 2025
     default: 0
+  fhsaDeduction:
+    type: money
+    ask: FHSA contributions to deduct for 2025
+    default: 0
+  medicalExpenses:
+    type: money
+    ask: Medical expenses you paid for yourself
+    default: 0
+  donations:
+    type: money
+    ask: Donations on official receipts (not on a T4)
+    default: 0
+  unusedTuition:
+    type: money
+    ask: Unused federal tuition from your 2024 notice of assessment
+    default: 0

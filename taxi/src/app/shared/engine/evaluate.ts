@@ -50,6 +50,8 @@ export interface Explanation {
   status: Status;
   formula?: string;
   source?: string;
+  /** Why the value is missing when the rules can't compute it. */
+  notes?: string[];
   inputs: Explanation[];
 }
 
@@ -89,6 +91,8 @@ interface Node extends Computed {
   reads: string[];
   /** For a slip box: one entry per slip that has it. */
   items?: { label: string; value: Dec }[];
+  /** Why the value is missing when the rules can't compute it (`unsupported`). */
+  notes?: string[];
 }
 
 const RANK: Record<Status, number> = { complete: 0, estimate: 1, missing: 2 };
@@ -181,6 +185,9 @@ export class Evaluation {
         for (const id of Object.keys(answered)) {
           if (!this.rules.questions.has(id)) unhandled.push(`The answer to ${id} isn't used for ${this.input.year}`);
         }
+        for (const key of reached) {
+          if (key.startsWith(`${person.id}:`)) for (const note of this.node(key).notes ?? []) if (!unhandled.includes(note)) unhandled.push(note);
+        }
         return { personId: person.id, lines, missing, estimates, unhandled };
       }),
     };
@@ -233,8 +240,16 @@ export class Evaluation {
       case "line": {
         const line = this.rules.lines.get(rest.join("."))!;
         const reads: string[] = [];
-        const computed = this.formula(line.formula, personId, reads);
-        return { ...computed, label: line.label, formula: line.text, source: line.source, reads: [...new Set(reads)] };
+        const notes: string[] = [];
+        const computed = this.formula(line.formula, personId, reads, notes);
+        return {
+          ...computed,
+          label: line.label,
+          formula: line.text,
+          source: line.source,
+          reads: [...new Set(reads)],
+          ...(notes.length > 0 ? { notes } : {}),
+        };
       }
       case "answer": {
         const question = this.rules.questions.get(rest[0]!)!;
@@ -267,8 +282,8 @@ export class Evaluation {
     }
   }
 
-  private formula(formula: Formula, personId: string, reads: string[]): Computed {
-    const evaluate = (inner: Formula) => this.formula(inner, personId, reads);
+  private formula(formula: Formula, personId: string, reads: string[], notes: string[]): Computed {
+    const evaluate = (inner: Formula) => this.formula(inner, personId, reads, notes);
     switch (formula.kind) {
       case "number":
         return { value: Dec.from(formula.value), status: "complete" };
@@ -296,6 +311,10 @@ export class Evaluation {
         return { value: binary(formula.op, left.value, right.value), status: worst(left.status, right.status) };
       }
       case "call": {
+        if (formula.name === "unsupported") {
+          notes.push((formula.args[0] as Extract<Formula, { kind: "string" }>).value);
+          return MISSING;
+        }
         if (formula.name === "if") {
           const condition = evaluate(formula.args[0]!);
           if (condition.value === null) return MISSING;
@@ -327,6 +346,7 @@ export class Evaluation {
       status: node.status,
       ...(node.formula === undefined ? {} : { formula: node.formula }),
       ...(node.source === undefined ? {} : { source: node.source }),
+      ...(node.notes === undefined ? {} : { notes: node.notes }),
       inputs,
     };
   }
@@ -407,8 +427,15 @@ function call(name: string, args: Value[]): Value {
   }
 }
 
-/** Progressive tax: each bracket's rate on the part of the amount inside it. */
+/** Progressive tax: each bracket's rate on the part of the amount inside it, or the form's base and one rate. */
 function bracket(rows: BracketRow[], amount: Dec): Dec {
+  if (rows.every((row) => row.base !== undefined)) {
+    let floor = Dec.ZERO;
+    for (const row of rows) {
+      if (row.upTo === null || amount.lte(row.upTo)) return row.base!.add(Dec.max(amount.sub(floor), Dec.ZERO).mul(row.rate));
+      floor = row.upTo;
+    }
+  }
   let total = Dec.ZERO;
   let floor = Dec.ZERO;
   for (const row of rows) {

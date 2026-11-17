@@ -147,21 +147,39 @@ describe("evaluating a household", () => {
 });
 
 describe("the 2025 rules", () => {
-  it("explain net federal tax with each number's source", () => {
-    const evaluation = new Evaluation(rulesFor(2025)!, {
+  const alone = (slips: EngineInput["slips"], province = "ON", answers: Record<string, string> = {}) =>
+    new Evaluation(rulesFor(2025)!, {
       year: 2025,
-      people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON" }],
-      answers: {},
-      slips: [{ id: "s1", person: "p1", type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 16: "3361.75", 18: "984", 22: "9000", 44: "620" } }],
+      people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
+      answers: { p1: answers },
+      slips,
     });
-    const explanation = evaluation.explain("p1", "line.T1.42000");
-    expect(explanation).toMatchObject({ label: "Net federal tax", value: "5641.47", status: "estimate" });
-    const federalTax = explanation.inputs.find((input) => input.ref === "line.T1.40400")!;
+  const t4 = (boxes: Record<string, string>, id = "s1") => ({ id, person: "p1", type: "T4", issuer: "Maple Corp", boxes });
+
+  it("explain basic federal tax with each number's source", () => {
+    const evaluation = alone([t4({ 14: "60000", 16: "3361.75", 18: "984", 22: "9000", 40: "100" })]);
+    const explanation = evaluation.explain("p1", "line.T1.42900");
+    expect(explanation).toMatchObject({ label: "Basic federal tax", value: "5641.47", status: "estimate" });
+    expect(explanation.inputs.map((input) => input.ref)).toEqual(["line.T1.40400", "line.T1.35000", "line.T1.40425"]);
+    const federalTax = explanation.inputs[0]!;
     expect(federalTax.inputs.map((input) => input.ref)).toEqual(["param.taxBrackets", "line.T1.26000"]);
     expect(federalTax.inputs[0]!.source).toMatch(/14\.5% applies for the year/);
     const result = evaluation.result().people[0]!;
-    expect(result.estimates.map((estimate) => estimate.question)).toEqual(["rrspDeduction"]);
-    expect(result.unhandled).toEqual(["T4 from Maple Corp: box 44 isn't handled by this app"]);
+    expect(result.estimates.map((estimate) => estimate.question).sort()).toEqual(["donations", "fhsaDeduction", "medicalExpenses", "rrspDeduction", "unusedTuition"]);
+    expect(result.unhandled).toEqual(["T4 from Maple Corp: box 40 isn't handled by this app"]);
+  });
+
+  it("say what they can't compute instead of guessing", () => {
+    const bc = alone([t4({ 14: "60000", 22: "9000" })], "BC");
+    expect(bc.line("p1", "T1.42800")).toEqual({ value: null, status: "missing" });
+    expect(bc.line("p1", "T1.48400").status).toBe("missing");
+    expect(bc.line("p1", "T1.42000").status).toBe("estimate");
+    expect(bc.result().people[0]!.unhandled).toContain("Provincial tax for British Columbia and Alberta comes in the next version of this app");
+    expect(bc.explain("p1", "line.T1.42800").notes).toEqual(["Provincial tax for British Columbia and Alberta comes in the next version of this app"]);
+
+    const twoJobs = alone([t4({ 14: "60000", 16: "3361.75", 22: "9000" }), t4({ 14: "30000", 16: "1576.75", 22: "4000" }, "s2")]);
+    expect(twoJobs.line("p1", "T1.44800").status).toBe("missing");
+    expect(twoJobs.result().people[0]!.unhandled[0]).toMatch(/More CPP was deducted than the 2025 maximum/);
   });
 
   it("phase out the basic personal amount between the 26% and 33% brackets", () => {

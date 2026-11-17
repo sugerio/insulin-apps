@@ -23,6 +23,12 @@ export interface BracketRow {
   /** The top of the bracket; null for the last one. */
   upTo: Dec | null;
   rate: Dec;
+  /**
+   * The tax on the income below this bracket, as the CRA's form prints it (rounded to the cent). When every row has
+   * one, the tax is the base of the amount's bracket plus its rate on the part above the bracket's floor, which is
+   * exactly how the form computes it.
+   */
+  base?: Dec;
 }
 export type ParamValue = Dec | BracketRow[];
 
@@ -79,7 +85,7 @@ export interface RuleSet {
 // The compiled form (JSON)
 
 const decimalText = z.string().regex(/^-?\d+(\.\d+)?$/);
-const bracketRowSchema = z.strictObject({ upTo: decimalText.nullable(), rate: decimalText });
+const bracketRowSchema = z.strictObject({ upTo: decimalText.nullable(), rate: decimalText, base: decimalText.optional() });
 export const compiledRulesSchema = z.strictObject({
   country: z.string().regex(/^[a-z]{2}$/),
   year: z.number().int(),
@@ -116,7 +122,11 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     const value: ParamValue =
       typeof param.value === "string"
         ? Dec.from(param.value)
-        : param.value.map((row) => ({ upTo: row.upTo === null ? null : Dec.from(row.upTo), rate: Dec.from(row.rate) }));
+        : param.value.map((row) => ({
+            upTo: row.upTo === null ? null : Dec.from(row.upTo),
+            rate: Dec.from(row.rate),
+            ...(row.base === undefined ? {} : { base: Dec.from(row.base) }),
+          }));
     if (Array.isArray(value)) checkBrackets(value, (message) => fail(`params.${id}`, message));
     params.set(id, { id, label: param.label, value, source: param.source });
   }
@@ -165,12 +175,20 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
 }
 
 function checkBrackets(rows: BracketRow[], fail: (message: string) => never) {
+  const withBase = rows.filter((row) => row.base !== undefined).length;
+  if (withBase !== 0 && withBase !== rows.length) fail("Give a base for every bracket or for none");
+  let exact = Dec.ZERO;
   rows.forEach((row, index) => {
     const last = index === rows.length - 1;
     if (last !== (row.upTo === null)) fail("Every bracket but the last needs upTo; the last has none");
-    const previous = rows[index - 1]?.upTo;
+    const previous = rows[index - 1]?.upTo ?? null;
     if (row.upTo && previous && !row.upTo.gt(previous)) fail("Brackets must go up");
     if (row.rate.isNegative()) fail("A rate can't be negative");
+    // A printed base is the exact tax below the bracket, rounded to the cent: anything else is a typo.
+    if (row.base !== undefined && !row.base.eq(exact.roundTo(2, "HALF_UP"))) {
+      fail(`The base of bracket ${index + 1} is ${row.base.toString()}; the brackets below it give ${exact.roundTo(2, "HALF_UP").toString()}`);
+    }
+    if (row.upTo) exact = exact.add(row.upTo.sub(previous ?? Dec.ZERO).mul(row.rate));
   });
 }
 
@@ -202,6 +220,11 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
     },
   },
   bracket: { args: [2, 2], check: (types) => (types[0] === "table" && types[1] === "number" ? "number" : "takes a bracket table and an amount") },
+  // A case the rules know about but the app can't compute yet: the value is missing, and the text says why.
+  unsupported: {
+    args: [1, 1],
+    check: (_types, args) => (args[0]?.kind === "string" ? "number" : "takes the reason, as text in quotes"),
+  },
 };
 
 export const FUNCTION_NAMES = Object.keys(FUNCTIONS);

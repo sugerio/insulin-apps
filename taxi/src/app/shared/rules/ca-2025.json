@@ -6,9 +6,12 @@
     "T1.15000",
     "T1.23600",
     "T1.26000",
-    "T1.35000",
     "T1.42000",
-    "T1.43700"
+    "T1.42800",
+    "T1.43500",
+    "T1.43700",
+    "T1.48400",
+    "T1.48500"
   ],
   "params": {
     "taxBrackets": {
@@ -16,66 +19,297 @@
       "value": [
         {
           "upTo": "57375",
-          "rate": "0.145"
+          "rate": "0.145",
+          "base": "0"
         },
         {
           "upTo": "114750",
-          "rate": "0.205"
+          "rate": "0.205",
+          "base": "8319.38"
         },
         {
           "upTo": "177882",
-          "rate": "0.26"
+          "rate": "0.26",
+          "base": "20081.25"
         },
         {
           "upTo": "253414",
-          "rate": "0.29"
+          "rate": "0.29",
+          "base": "36495.57"
         },
         {
           "upTo": null,
-          "rate": "0.33"
+          "rate": "0.33",
+          "base": "58399.85"
         }
       ],
-      "source": "Federal rates for 2025. The lowest rate went from 15% to 14% on July 1, 2025, so 14.5% applies for the year."
+      "source": "T1 Step 5 Part A. The lowest rate went from 15% to 14% on July 1, 2025, so 14.5% applies for the year. Bases as printed on the form."
     },
     "creditRate": {
       "label": "Federal credit rate",
       "value": "0.145",
-      "source": "Rate for federal non-refundable tax credits in 2025 (the 2025 lowest rate)"
+      "source": "T1 line 114: federal non-refundable tax credit rate for 2025"
     },
     "basicPersonalAmountMax": {
       "label": "Basic personal amount, full",
       "value": "16129",
-      "source": "Basic personal amount for 2025, net income up to the start of the 26% bracket"
+      "source": "T1 line 30000 and Federal Worksheet: $16,129 when net income is $177,882 or less"
     },
     "basicPersonalAmountMin": {
       "label": "Basic personal amount, minimum",
       "value": "14538",
-      "source": "Basic personal amount for 2025, net income from the start of the 33% bracket"
+      "source": "T1 line 30000 and Federal Worksheet: $14,538 when net income is $253,414 or more"
     },
     "basicPersonalAmountPhaseStart": {
-      "label": "Net income where the amount starts to go down",
+      "label": "Net income where the basic personal amount starts to go down",
       "value": "177882",
-      "source": "Start of the 26% bracket for 2025: the basic personal amount goes down from here"
+      "source": "Federal Worksheet, line 30000: income threshold"
     },
     "basicPersonalAmountPhaseEnd": {
-      "label": "Net income where the amount reaches its minimum",
+      "label": "Net income where the basic personal amount reaches its minimum",
       "value": "253414",
-      "source": "Start of the 33% bracket for 2025: the basic personal amount reaches its minimum here"
+      "source": "Federal Worksheet, line 30000: threshold plus the 75,532 range"
+    },
+    "ageAmountMax": {
+      "label": "Age amount, full",
+      "value": "9028",
+      "source": "T1 line 30100 and Federal Worksheet: maximum $9,028 for people born in 1960 or earlier"
+    },
+    "ageAmountThreshold": {
+      "label": "Net income where the age amount starts to go down",
+      "value": "45522",
+      "source": "Federal Worksheet, line 30100: income threshold"
+    },
+    "ageAmountRate": {
+      "label": "Age amount reduction rate",
+      "value": "0.15",
+      "source": "Federal Worksheet, line 30100: applicable rate"
     },
     "canadaEmploymentAmount": {
       "label": "Canada employment amount",
       "value": "1471",
-      "source": "Canada employment amount for 2025 (line 31260)"
+      "source": "T1 line 31260: whichever is less, $1,471 or employment income"
     },
     "cppBaseRate": {
       "label": "CPP base rate",
       "value": "0.0495",
-      "source": "CPP base contribution rate for employees (4.95%): this part is a credit, line 30800"
+      "source": "Schedule 8: the base part of the 5.95% employee rate (4.95%) is a credit on line 30800"
     },
     "cppTotalRate": {
       "label": "CPP rate for employees",
       "value": "0.0595",
-      "source": "CPP contribution rate for employees in 2025 (5.95%): base plus the first enhancement, which is a deduction, line 22215"
+      "source": "CRA payroll table, 2025: employee rate 5.95%"
+    },
+    "cppBaseMax": {
+      "label": "Most base CPP contributions",
+      "value": "3356.1",
+      "source": "4.95% of the 2025 maximum contributory earnings ($67,800)"
+    },
+    "cppEmployeeMax": {
+      "label": "Most CPP contributions for an employee",
+      "value": "4034.1",
+      "source": "CRA payroll table, 2025: maximum employee contribution $4,034.10"
+    },
+    "cpp2EmployeeMax": {
+      "label": "Most second CPP contributions for an employee",
+      "value": "396",
+      "source": "CRA payroll table, 2025: CPP2 maximum employee contribution $396"
+    },
+    "enhancedCppDeductionMax": {
+      "label": "Most deduction for enhanced CPP contributions",
+      "value": "1074",
+      "source": "T1 line 22215: maximum $1,074.00"
+    },
+    "eiPremiumMax": {
+      "label": "Most EI premiums",
+      "value": "1077.48",
+      "source": "T1 line 31200: maximum $1,077.48"
+    },
+    "medicalThresholdRate": {
+      "label": "Medical expense threshold rate",
+      "value": "0.03",
+      "source": "T1 line 108: 3% of net income"
+    },
+    "medicalThresholdMax": {
+      "label": "Medical expense threshold, most",
+      "value": "2834",
+      "source": "T1 line 109: whichever is less, $2,834 or 3% of net income"
+    },
+    "donationLowRate": {
+      "label": "Donation credit rate on the first $200",
+      "value": "0.145",
+      "source": "Schedule 9 line 22: 14.5%"
+    },
+    "donationHighRate": {
+      "label": "Donation credit rate above $200",
+      "value": "0.29",
+      "source": "Schedule 9 line 21: 29%"
+    },
+    "donationTopRate": {
+      "label": "Donation credit rate on income in the top bracket",
+      "value": "0.33",
+      "source": "Schedule 9 line 20: 33% on the part of donations up to taxable income over $253,414"
+    },
+    "donationLowLimit": {
+      "label": "Donations at the low rate",
+      "value": "200",
+      "source": "Schedule 9 line 13: the first $200"
+    },
+    "donationTopThreshold": {
+      "label": "Taxable income where the top donation rate starts",
+      "value": "253414",
+      "source": "Schedule 9 line 18"
+    },
+    "donationIncomeLimit": {
+      "label": "Donation limit, share of net income",
+      "value": "0.75",
+      "source": "Schedule 9 line 6: 75% of net income"
+    },
+    "topUpThreshold": {
+      "label": "Credits that the 14.5% rate fully covers",
+      "value": "8319.38",
+      "source": "Federal Worksheet, line 34990, line 4"
+    },
+    "topUpRate": {
+      "label": "Top-up tax credit rate",
+      "value": "0.0345",
+      "source": "Federal Worksheet, line 34990, line 6"
+    },
+    "tuitionIncomeThreshold": {
+      "label": "Taxable income up to which tuition is limited by taxable income",
+      "value": "57375",
+      "source": "Schedule 11 line 11: $57,375"
+    },
+    "capitalGainsInclusionRate": {
+      "label": "Capital gains inclusion rate",
+      "value": "0.5",
+      "source": "Schedule 3 line 23: 50%"
+    },
+    "onTaxBrackets": {
+      "label": "Ontario tax brackets",
+      "value": [
+        {
+          "upTo": "52886",
+          "rate": "0.0505",
+          "base": "0"
+        },
+        {
+          "upTo": "105775",
+          "rate": "0.0915",
+          "base": "2670.74"
+        },
+        {
+          "upTo": "150000",
+          "rate": "0.1116",
+          "base": "7510.09"
+        },
+        {
+          "upTo": "220000",
+          "rate": "0.1216",
+          "base": "12445.6"
+        },
+        {
+          "upTo": null,
+          "rate": "0.1316",
+          "base": "20957.6"
+        }
+      ],
+      "source": "ON428 Part A, bases as printed on the form"
+    },
+    "onCreditRate": {
+      "label": "Ontario credit rate",
+      "value": "0.0505",
+      "source": "ON428 line 45: Ontario non-refundable tax credit rate"
+    },
+    "onBasicPersonalAmount": {
+      "label": "Ontario basic personal amount",
+      "value": "12747",
+      "source": "ON428 line 58040: claim $12,747"
+    },
+    "onAgeAmountMax": {
+      "label": "Ontario age amount, full",
+      "value": "6223",
+      "source": "Worksheet ON428, line 58080: $6,223"
+    },
+    "onAgeAmountThreshold": {
+      "label": "Net income where the Ontario age amount starts to go down",
+      "value": "46330",
+      "source": "Worksheet ON428, line 58080: income threshold"
+    },
+    "onAgeAmountRate": {
+      "label": "Ontario age amount reduction rate",
+      "value": "0.15",
+      "source": "Worksheet ON428, line 58080: applicable rate"
+    },
+    "onMedicalThresholdMax": {
+      "label": "Ontario medical expense threshold, most",
+      "value": "2885",
+      "source": "ON428 line 40: whichever is less, $2,885 or 3% of net income"
+    },
+    "onDonationLowRate": {
+      "label": "Ontario donation credit rate on the first $200",
+      "value": "0.0505",
+      "source": "ON428 line 47"
+    },
+    "onDonationHighRate": {
+      "label": "Ontario donation credit rate above $200",
+      "value": "0.1116",
+      "source": "ON428 line 48"
+    },
+    "onDividendEligibleRate": {
+      "label": "Ontario dividend tax credit rate, eligible dividends",
+      "value": "0.1",
+      "source": "Worksheet ON428, line 61520: 10% of the taxable amount of eligible dividends"
+    },
+    "onDividendOtherRate": {
+      "label": "Ontario dividend tax credit rate, other dividends",
+      "value": "0.029863",
+      "source": "Worksheet ON428, line 61520: 2.9863% of the taxable amount of other than eligible dividends"
+    },
+    "onSurtaxThreshold1": {
+      "label": "Ontario surtax, first threshold",
+      "value": "5710",
+      "source": "ON428 line 66: 20% of Ontario tax over $5,710"
+    },
+    "onSurtaxRate1": {
+      "label": "Ontario surtax, first rate",
+      "value": "0.2",
+      "source": "ON428 line 66"
+    },
+    "onSurtaxThreshold2": {
+      "label": "Ontario surtax, second threshold",
+      "value": "7307",
+      "source": "ON428 line 67: 36% of Ontario tax over $7,307"
+    },
+    "onSurtaxRate2": {
+      "label": "Ontario surtax, second rate",
+      "value": "0.36",
+      "source": "ON428 line 67"
+    },
+    "onTaxReductionBasic": {
+      "label": "Ontario tax reduction, basic amount",
+      "value": "294",
+      "source": "ON428 line 74: $294"
+    },
+    "liftMax": {
+      "label": "LIFT credit, most",
+      "value": "875",
+      "source": "ON428-A line 5: maximum $875"
+    },
+    "liftRate": {
+      "label": "LIFT credit, share of employment income",
+      "value": "0.0505",
+      "source": "ON428-A line 4: 5.05%"
+    },
+    "liftThreshold": {
+      "label": "LIFT credit, individual income threshold",
+      "value": "32500",
+      "source": "ON428-A line 16: $32,500"
+    },
+    "liftReductionRate": {
+      "label": "LIFT credit reduction rate",
+      "value": "0.05",
+      "source": "ON428-A line 18: 5%"
     }
   },
   "lines": {
@@ -83,26 +317,67 @@
       "label": "Employment income",
       "formula": "sum(T4.box14)"
     },
+    "T1.12000": {
+      "label": "Taxable amount of dividends (eligible and other than eligible)",
+      "formula": "sum(T5.box11) + sum(T5.box25) + sum(T3.box32) + sum(T3.box50)",
+      "source": "Federal Worksheet, line 12000: boxes 11 and 25 of T5 slips, boxes 32 and 50 of T3 slips"
+    },
+    "T1.12010": {
+      "label": "Taxable amount of dividends other than eligible",
+      "formula": "sum(T5.box11) + sum(T3.box32)",
+      "source": "Federal Worksheet, line 12010"
+    },
+    "T1.12100": {
+      "label": "Interest and other investment income",
+      "formula": "sum(T5.box13) + sum(T3.box25)",
+      "source": "Federal Worksheet, line 12100: box 13 of T5 slips, box 25 of T3 slips"
+    },
+    "T1.12700": {
+      "label": "Taxable capital gains",
+      "formula": "max(0, line.S3.19900)",
+      "source": "Schedule 3. A net capital loss isn't entered here; it carries forward"
+    },
+    "T1.13000": {
+      "label": "Other income",
+      "formula": "sum(T3.box26)",
+      "source": "Box 26 of T3 slips"
+    },
     "T1.15000": {
       "label": "Total income",
-      "formula": "line.T1.10100"
+      "formula": "line.T1.10100 + line.T1.12000 + line.T1.12100 + line.T1.12700 + line.T1.13000"
+    },
+    "T1.20700": {
+      "label": "Registered pension plan (RPP) deduction",
+      "formula": "sum(T4.box20)"
     },
     "T1.20800": {
       "label": "RRSP deduction",
       "formula": "answer.rrspDeduction"
     },
+    "T1.20805": {
+      "label": "FHSA deduction",
+      "formula": "answer.fhsaDeduction"
+    },
+    "T1.21200": {
+      "label": "Annual union, professional, or like dues",
+      "formula": "sum(T4.box44)"
+    },
     "T1.22215": {
       "label": "Deduction for CPP enhanced contributions on employment income",
-      "formula": "round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A)",
+      "formula": "min(param.enhancedCppDeductionMax, round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A))",
       "source": "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
     },
     "T1.23300": {
       "label": "Total deductions",
-      "formula": "line.T1.20800 + line.T1.22215"
+      "formula": "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.22215"
+    },
+    "T1.23400": {
+      "label": "Net income before adjustments",
+      "formula": "line.T1.15000 - line.T1.23300"
     },
     "T1.23600": {
       "label": "Net income",
-      "formula": "max(0, line.T1.15000 - line.T1.23300)"
+      "formula": "max(0, line.T1.23400)"
     },
     "T1.26000": {
       "label": "Taxable income",
@@ -111,51 +386,341 @@
     "T1.30000": {
       "label": "Basic personal amount",
       "formula": "round(param.basicPersonalAmountMax\n  - (param.basicPersonalAmountMax - param.basicPersonalAmountMin)\n  * clamp(line.T1.23600 - param.basicPersonalAmountPhaseStart, 0, param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart)\n  / (param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart), 2)",
-      "source": "Line 30000 worksheet: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+      "source": "Federal Worksheet, line 30000: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+    },
+    "T1.30100": {
+      "label": "Age amount",
+      "formula": "if(person.age >= 65, max(0, param.ageAmountMax - round(max(0, line.T1.23600 - param.ageAmountThreshold) * param.ageAmountRate, 2)), 0)",
+      "source": "Federal Worksheet, line 30100: for people born in 1960 or earlier"
     },
     "T1.30800": {
       "label": "Base CPP contributions through employment",
-      "formula": "round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2)",
+      "formula": "min(param.cppBaseMax, round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2))",
       "source": "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit"
     },
     "T1.31200": {
       "label": "Employment insurance premiums through employment",
-      "formula": "sum(T4.box18)"
+      "formula": "min(param.eiPremiumMax, sum(T4.box18))"
     },
     "T1.31260": {
       "label": "Canada employment amount",
       "formula": "min(param.canadaEmploymentAmount, line.T1.10100)"
     },
+    "T1.T101": {
+      "label": "Credit amounts before tuition (T1 line 101)",
+      "formula": "line.T1.30000 + line.T1.30100 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+    },
+    "T1.32300": {
+      "label": "Federal tuition amount",
+      "formula": "line.S11.17"
+    },
+    "T1.33099": {
+      "label": "Medical expenses for you",
+      "formula": "answer.medicalExpenses"
+    },
+    "T1.33200": {
+      "label": "Allowable medical expenses",
+      "formula": "max(0, line.T1.33099 - min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))",
+      "source": "T1 lines 107 to 112: expenses over whichever is less, $2,834 or 3% of net income"
+    },
     "T1.33500": {
       "label": "Federal non-refundable credit amounts",
-      "formula": "line.T1.30000 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+      "formula": "line.T1.T101 + line.T1.32300 + line.T1.33200"
     },
     "T1.33800": {
       "label": "Credit amounts at the credit rate",
       "formula": "round(line.T1.33500 * param.creditRate, 2)"
     },
+    "T1.34900": {
+      "label": "Donations and gifts",
+      "formula": "line.S9.23"
+    },
+    "T1.34990": {
+      "label": "Top-up tax credit",
+      "formula": "round(max(0, line.T1.33800 + line.S9.22 - param.topUpThreshold) * param.topUpRate, 2)",
+      "source": "Federal Worksheet, line 34990: keeps credit amounts above the first bracket at 15%"
+    },
     "T1.35000": {
       "label": "Total federal non-refundable tax credits",
-      "formula": "line.T1.33800"
+      "formula": "line.T1.33800 + line.T1.34900 + line.T1.34990"
     },
     "T1.40400": {
       "label": "Federal tax on taxable income",
       "formula": "round(bracket(param.taxBrackets, line.T1.26000), 2)"
     },
+    "T1.40425": {
+      "label": "Federal dividend tax credit",
+      "formula": "sum(T5.box12) + sum(T5.box26) + sum(T3.box39) + sum(T3.box51)",
+      "source": "Federal Worksheet, line 40425: the credit as shown on the slips"
+    },
+    "T1.42900": {
+      "label": "Basic federal tax",
+      "formula": "max(0, line.T1.40400 - line.T1.35000 - line.T1.40425)"
+    },
+    "T1.40600": {
+      "label": "Federal tax",
+      "formula": "line.T1.42900"
+    },
     "T1.42000": {
       "label": "Net federal tax",
-      "formula": "max(0, line.T1.40400 - line.T1.35000)"
+      "formula": "line.T1.40600"
+    },
+    "T1.42800": {
+      "label": "Provincial tax",
+      "formula": "if(person.province == \"ON\", line.ON428.90, unsupported(\"Provincial tax for British Columbia and Alberta comes in the next version of this app\"))"
+    },
+    "T1.43500": {
+      "label": "Total payable",
+      "formula": "line.T1.42000 + line.T1.42800"
     },
     "T1.43700": {
       "label": "Total income tax deducted",
-      "formula": "sum(T4.box22)",
-      "source": "Federal and provincial tax together, as the T4 shows it"
+      "formula": "sum(T4.box22)"
+    },
+    "T1.44800": {
+      "label": "CPP overpayment",
+      "formula": "if(sum(T4.box16) > param.cppEmployeeMax or sum(T4.box16A) > param.cpp2EmployeeMax, unsupported(\"More CPP was deducted than the 2025 maximum. The overpayment (Schedule 8) isn't handled by this app yet\"), 0)"
+    },
+    "T1.45000": {
+      "label": "Employment insurance overpayment",
+      "formula": "if(sum(T4.box18) > param.eiPremiumMax, unsupported(\"More EI was deducted than the 2025 maximum. The overpayment isn't handled by this app yet\"), 0)"
+    },
+    "T1.48200": {
+      "label": "Total credits",
+      "formula": "line.T1.43700 + line.T1.44800 + line.T1.45000"
+    },
+    "T1.48400": {
+      "label": "Refund",
+      "formula": "max(0, line.T1.48200 - line.T1.43500)"
+    },
+    "T1.48500": {
+      "label": "Balance owing",
+      "formula": "max(0, line.T1.43500 - line.T1.48200)"
+    },
+    "S3.13200": {
+      "label": "Gain or loss on publicly traded shares and mutual fund units",
+      "formula": "sum(T5008.box20) - sum(T5008.box21)",
+      "source": "Schedule 3 line 4: proceeds (T5008 box 20) minus cost (box 21)"
+    },
+    "S3.17400": {
+      "label": "Capital gains from T5 slips",
+      "formula": "sum(T5.box18)"
+    },
+    "S3.17600": {
+      "label": "Capital gains from T3 slips",
+      "formula": "sum(T3.box21)"
+    },
+    "S3.19700": {
+      "label": "Total capital gains or losses",
+      "formula": "line.S3.13200 + line.S3.17400 + line.S3.17600"
+    },
+    "S3.19900": {
+      "label": "Taxable capital gains or net capital loss",
+      "formula": "round(line.S3.19700 * param.capitalGainsInclusionRate, 2)"
+    },
+    "S9.5": {
+      "label": "Total eligible amount of charitable donations",
+      "formula": "answer.donations + sum(T4.box46)",
+      "source": "Schedule 9 line 5: official receipts, and box 46 of T4 slips"
+    },
+    "S9.10": {
+      "label": "Donations claimed (within the limit)",
+      "formula": "min(line.S9.5, round(line.T1.23600 * param.donationIncomeLimit, 2))",
+      "source": "Schedule 9 lines 6 to 10: up to 75% of net income"
+    },
+    "S9.13": {
+      "label": "Donations at the low rate",
+      "formula": "min(line.S9.10, param.donationLowLimit)"
+    },
+    "S9.14": {
+      "label": "Donations above the first $200",
+      "formula": "line.S9.10 - line.S9.13"
+    },
+    "S9.19": {
+      "label": "Taxable income in the top bracket",
+      "formula": "max(0, line.T1.26000 - param.donationTopThreshold)"
+    },
+    "S9.F": {
+      "label": "Donations at the top rate",
+      "formula": "min(line.S9.14, line.S9.19)"
+    },
+    "S9.20": {
+      "label": "Credit at the top rate",
+      "formula": "round(line.S9.F * param.donationTopRate, 2)"
+    },
+    "S9.21": {
+      "label": "Credit at the high rate",
+      "formula": "round((line.S9.14 - line.S9.F) * param.donationHighRate, 2)"
+    },
+    "S9.22": {
+      "label": "Credit on the first $200",
+      "formula": "round(line.S9.13 * param.donationLowRate, 2)"
+    },
+    "S9.23": {
+      "label": "Allowable donations credit",
+      "formula": "line.S9.20 + line.S9.21 + line.S9.22"
+    },
+    "S11.8": {
+      "label": "Tuition fees for 2025",
+      "formula": "sum(T2202.box26)",
+      "source": "Schedule 11 lines 1 to 8: eligible fees from T2202 box 26. The Canada training credit isn't claimed"
+    },
+    "S11.9": {
+      "label": "Unused federal tuition from your 2024 notice of assessment",
+      "formula": "answer.unusedTuition"
+    },
+    "S11.11": {
+      "label": "Income the tuition amount can reduce to zero tax",
+      "formula": "if(line.T1.26000 <= param.tuitionIncomeThreshold, line.T1.26000, round(line.T1.40400 / param.creditRate, 2))",
+      "source": "Schedule 11 line 11: taxable income, or above $57,375, federal tax on taxable income ÷ 14.5%"
+    },
+    "S11.13": {
+      "label": "Room left after other credits",
+      "formula": "max(0, line.S11.11 - line.T1.T101)"
+    },
+    "S11.14": {
+      "label": "Unused tuition claimed for 2025",
+      "formula": "min(line.S11.9, line.S11.13)"
+    },
+    "S11.16": {
+      "label": "2025 tuition claimed",
+      "formula": "min(line.S11.8, line.S11.13 - line.S11.14)"
+    },
+    "S11.17": {
+      "label": "Federal tuition amount",
+      "formula": "line.S11.14 + line.S11.16"
+    },
+    "ON428.8": {
+      "label": "Ontario tax on taxable income",
+      "formula": "round(bracket(param.onTaxBrackets, line.T1.26000), 2)"
+    },
+    "ON428.9": {
+      "label": "Ontario basic personal amount",
+      "formula": "param.onBasicPersonalAmount"
+    },
+    "ON428.10": {
+      "label": "Ontario age amount",
+      "formula": "if(person.age >= 65, max(0, param.onAgeAmountMax - round(max(0, line.T1.23600 - param.onAgeAmountThreshold) * param.onAgeAmountRate, 2)), 0)",
+      "source": "Worksheet ON428, line 58080: for people born in 1960 or earlier"
+    },
+    "ON428.24": {
+      "label": "CPP and EI credit amounts",
+      "formula": "line.T1.30800 + line.T1.31200",
+      "source": "ON428 lines 19 to 24: the federal amounts from lines 30800 and 31200"
+    },
+    "ON428.36": {
+      "label": "Medical expenses",
+      "formula": "line.T1.33099"
+    },
+    "ON428.41": {
+      "label": "Allowable medical expenses",
+      "formula": "max(0, line.ON428.36 - min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))",
+      "source": "ON428 lines 36 to 41: expenses over whichever is less, $2,885 or 3% of net income"
+    },
+    "ON428.44": {
+      "label": "Ontario credit amounts",
+      "formula": "line.ON428.9 + line.ON428.10 + line.ON428.24 + line.ON428.41"
+    },
+    "ON428.46": {
+      "label": "Ontario credit amounts at the credit rate",
+      "formula": "round(line.ON428.44 * param.onCreditRate, 2)"
+    },
+    "ON428.49": {
+      "label": "Ontario donations credit",
+      "formula": "round(line.S9.13 * param.onDonationLowRate, 2) + round(line.S9.14 * param.onDonationHighRate, 2)",
+      "source": "ON428 lines 47 to 49: Schedule 9 lines 13 and 14 at 5.05% and 11.16%"
+    },
+    "ON428.50": {
+      "label": "Ontario non-refundable tax credits",
+      "formula": "line.ON428.46 + line.ON428.49"
+    },
+    "ON428.53": {
+      "label": "Ontario tax after credits",
+      "formula": "max(0, line.ON428.8 - line.ON428.50)"
+    },
+    "ON428.57": {
+      "label": "Ontario dividend tax credit",
+      "formula": "round(line.T1.12010 * param.onDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.onDividendEligibleRate, 2)",
+      "source": "Worksheet ON428, line 61520"
+    },
+    "ON428.68": {
+      "label": "Ontario surtax",
+      "formula": "round(max(0, line.ON428.53 - param.onSurtaxThreshold1) * param.onSurtaxRate1, 2) + round(max(0, line.ON428.53 - param.onSurtaxThreshold2) * param.onSurtaxRate2, 2)",
+      "source": "ON428 lines 63 to 68, on Ontario tax after credits (line 62)"
+    },
+    "ON428.73": {
+      "label": "Ontario tax after surtax and the dividend credit",
+      "formula": "max(0, line.ON428.53 + line.ON428.68 - line.ON428.57)",
+      "source": "ON428 lines 69 to 73"
+    },
+    "ON428.80": {
+      "label": "Ontario tax reduction",
+      "formula": "if(line.ON428.73 == 0, 0, max(0, 2 * param.onTaxReductionBasic - line.ON428.73))",
+      "source": "ON428 lines 74 to 80: twice the reductions, less Ontario tax. Dependent children come with dependants"
+    },
+    "ON428.81": {
+      "label": "Ontario tax after the reduction",
+      "formula": "max(0, line.ON428.73 - line.ON428.80)"
+    },
+    "ON428.85": {
+      "label": "Low-income individuals and families tax (LIFT) credit",
+      "formula": "line.ON428A.20"
+    },
+    "ON428.86": {
+      "label": "Ontario tax after the LIFT credit",
+      "formula": "max(0, line.ON428.81 - line.ON428.85)"
+    },
+    "ON428.89": {
+      "label": "Ontario health premium",
+      "formula": "round(min(300, max(0, line.T1.26000 - 20000) * 6%), 2) + round(min(150, max(0, line.T1.26000 - 36000) * 6%), 2) + round(min(150, max(0, line.T1.26000 - 48000) * 25%), 2) + round(min(150, max(0, line.T1.26000 - 72000) * 25%), 2) + round(min(150, max(0, line.T1.26000 - 200000) * 25%), 2)",
+      "source": "ON428 line 89 chart: $0 to $900 by taxable income, in steps at $20,000, $36,000, $48,000, $72,000 and $200,000"
+    },
+    "ON428.90": {
+      "label": "Ontario tax",
+      "formula": "line.ON428.86 + line.ON428.89"
+    },
+    "ON428A.5": {
+      "label": "LIFT credit before the income test",
+      "formula": "min(param.liftMax, round(line.T1.10100 * param.liftRate, 2))"
+    },
+    "ON428A.13": {
+      "label": "Adjusted net income",
+      "formula": "max(0, line.T1.23400)",
+      "source": "ON428-A lines 6 to 13: net income before it was floored at zero"
+    },
+    "ON428A.19": {
+      "label": "LIFT credit reduction",
+      "formula": "round(max(0, line.ON428A.13 - param.liftThreshold) * param.liftReductionRate, 2)"
+    },
+    "ON428A.20": {
+      "label": "LIFT credit",
+      "formula": "max(0, line.ON428A.5 - line.ON428A.19)"
     }
   },
   "questions": {
     "rrspDeduction": {
       "type": "money",
       "ask": "RRSP contributions to deduct for 2025",
+      "default": "0"
+    },
+    "fhsaDeduction": {
+      "type": "money",
+      "ask": "FHSA contributions to deduct for 2025",
+      "default": "0"
+    },
+    "medicalExpenses": {
+      "type": "money",
+      "ask": "Medical expenses you paid for yourself",
+      "default": "0"
+    },
+    "donations": {
+      "type": "money",
+      "ask": "Donations on official receipts (not on a T4)",
+      "default": "0"
+    },
+    "unusedTuition": {
+      "type": "money",
+      "ask": "Unused federal tuition from your 2024 notice of assessment",
       "default": "0"
     }
   },
@@ -167,6 +732,7 @@
         "14": "Employment income",
         "16": "Employee's CPP contributions",
         "18": "Employee's EI premiums",
+        "20": "RPP contributions",
         "22": "Income tax deducted",
         "24": "EI insurable earnings",
         "26": "CPP pensionable earnings",
@@ -180,7 +746,66 @@
         "26",
         "52"
       ]
+    },
+    "T5": {
+      "title": "T5 Statement of Investment Income",
+      "about": "Interest, dividends and capital gains dividends from a bank, broker or corporation",
+      "boxes": {
+        "10": "Actual amount of dividends other than eligible dividends",
+        "11": "Taxable amount of dividends other than eligible dividends",
+        "12": "Dividend tax credit for dividends other than eligible dividends",
+        "13": "Interest from Canadian sources",
+        "18": "Capital gains dividends",
+        "24": "Actual amount of eligible dividends",
+        "25": "Taxable amount of eligible dividends",
+        "26": "Dividend tax credit for eligible dividends"
+      },
+      "informational": [
+        "10",
+        "24"
+      ]
+    },
+    "T3": {
+      "title": "T3 Statement of Trust Income Allocations and Designations",
+      "about": "Income a trust or mutual fund allocated to you, such as capital gains, dividends and other income",
+      "boxes": {
+        "21": "Capital gains",
+        "23": "Actual amount of dividends other than eligible dividends",
+        "25": "Foreign non-business income",
+        "26": "Other income",
+        "32": "Taxable amount of dividends other than eligible dividends",
+        "39": "Dividend tax credit for dividends other than eligible dividends",
+        "49": "Actual amount of eligible dividends",
+        "50": "Taxable amount of eligible dividends",
+        "51": "Dividend tax credit for eligible dividends"
+      },
+      "informational": [
+        "23",
+        "49"
+      ]
+    },
+    "T5008": {
+      "title": "T5008 Statement of Securities Transactions",
+      "about": "A sale of shares, bonds or fund units through a broker, with the proceeds and, when the broker knows it, the cost",
+      "boxes": {
+        "20": "Proceeds of disposition or settlement amount",
+        "21": "Cost or book value"
+      },
+      "informational": []
+    },
+    "T2202": {
+      "title": "T2202 Tuition and Enrolment Certificate",
+      "about": "Eligible tuition fees a college or university received, and the months of study",
+      "boxes": {
+        "24": "Number of months part-time",
+        "25": "Number of months full-time",
+        "26": "Eligible tuition fees"
+      },
+      "informational": [
+        "24",
+        "25"
+      ]
     }
   },
-  "version": "7311308e5b987faa"
+  "version": "72bd03c34530642c"
 }

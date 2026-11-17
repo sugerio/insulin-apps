@@ -23,7 +23,7 @@ export function EstimateCard() {
     <Card size="sm">
       <CardHeader>
         <CardTitle>
-          <h2 className="text-sm font-semibold">Federal estimate</h2>
+          <h2 className="text-sm font-semibold">Estimate</h2>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -49,13 +49,8 @@ function EstimateBody({ estimate }: { estimate: Estimate }) {
                 <ResultLine key={line.id} line={line} explain={() => evaluation.explain(person.personId, `line.${line.id}`)} rules={rules} />
               ))}
             </ul>
-            {person.estimates.length + person.missing.length + person.unhandled.length > 0 ? (
+            {person.missing.length + person.unhandled.length > 0 ? (
               <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                {person.estimates.map((item) => (
-                  <li key={item.question}>
-                    Assumed: {item.ask}, {typeof item.assumed === "boolean" ? (item.assumed ? "yes" : "no") : rules.questions.get(item.question)?.type === "money" ? formatMoney(item.assumed) : item.assumed}
-                  </li>
-                ))}
                 {person.missing.map((item) => (
                   <li key={item.question}>Needed: {item.ask}</li>
                 ))}
@@ -63,6 +58,20 @@ function EstimateBody({ estimate }: { estimate: Estimate }) {
                   <li key={note}>{note}</li>
                 ))}
               </ul>
+            ) : null}
+            {person.estimates.length > 0 ? (
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer">
+                  {person.estimates.length} {person.estimates.length === 1 ? "answer" : "answers"} assumed
+                </summary>
+                <ul className="mt-1 flex flex-col gap-0.5 pl-3">
+                  {person.estimates.map((item) => (
+                    <li key={item.question}>
+                      {item.ask}: {typeof item.assumed === "boolean" ? (item.assumed ? "yes" : "no") : rules.questions.get(item.question)?.type === "money" ? formatMoney(item.assumed) : item.assumed}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
           </section>
         );
@@ -140,6 +149,11 @@ function ExplanationBody({ explanation, rules }: { explanation: Explanation; rul
     <div className="flex flex-col gap-1 text-xs">
       {explanation.formula ? <code className="break-words text-[11px] text-muted-foreground">= {explanation.formula.replace(/\s+/g, " ")}</code> : null}
       {explanation.source ? <p className="text-muted-foreground">{explanation.source}</p> : null}
+      {explanation.notes?.map((note) => (
+        <p key={note} className="text-amber-700 dark:text-amber-400">
+          {note}
+        </p>
+      ))}
       {explanation.inputs.map((input, index) => (
         <ExplanationTree key={`${input.ref}-${index}`} explanation={input} rules={rules} />
       ))}

@@ -24,10 +24,16 @@ export async function holdOrganization(env: Bindings, org: string, until: number
   return deliverHold(env, org, now)
 }
 
-/** Lets go of an organization's hold: its limit was raised, or the month it was held for is over. */
-export async function releaseOrganization(env: Bindings, org: string, now: number): Promise<boolean> {
+/**
+ * Lets go of an organization's hold (its limit was raised, or the month it was held for is over), as it was when that
+ * was decided: only while it is still that `version`. 'changed' when it isn't (renewed, or let go, meanwhile): nothing
+ * is written, and the caller looks at it again as it is now.
+ */
+export async function releaseOrganization(env: Bindings, org: string, version: number, now: number): Promise<boolean | 'changed'> {
   if (!env.ENGINE) return false
-  await env.DB.prepare(`UPDATE org_holds SET until = 0, version = version + 1, held_at = ?2 WHERE org_id = ?1 AND until != 0`).bind(org, now).run()
+  const released = await env.DB.prepare(`UPDATE org_holds SET until = 0, version = version + 1, held_at = ?3 WHERE org_id = ?1 AND version = ?2 AND until != 0`)
+    .bind(org, version, now).run()
+  if (released.meta.changes !== 1) return 'changed'
   return deliverHold(env, org, now)
 }
 

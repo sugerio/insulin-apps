@@ -44,7 +44,7 @@ export interface ExportedDocument {
   truncated: boolean
   pages: Layout['pages']
   hidden: Layout['hidden']
-  outdated: { documentId: string; textHash: string; needsCheck: boolean }[] // a correcting note's marks
+  outdated: { documentId: string; textHash: string; needsCheck: boolean; seq: number }[] // a correcting note's marks, with the correction's number in the order they were made
 }
 
 /** One document of the export. Its page map and hidden values stay in the zip (`meta`) until its text is read. */
@@ -60,7 +60,7 @@ export interface ExportDocument {
 export interface ExportContents {
   from: { collectionId: string; version: number }
   documents: ExportDocument[]
-  marks: { documentId: string; textHash: string; noteDocumentId: string; needsCheck: boolean }[]
+  marks: { documentId: string; textHash: string; noteDocumentId: string; needsCheck: boolean; seq: number }[]
 }
 
 /** What a stored text (the container's /data/text/<id>.json, kept in R2) holds. */
@@ -198,8 +198,8 @@ export async function openExport(bytes: Uint8Array): Promise<ExportContents | nu
       const marks = meta.outdated ?? []
       if (!Array.isArray(marks) || (marks.length && info.kind !== 'note')) return null
       for (const mark of marks) {
-        if (typeof mark?.documentId !== 'string' || !isSha256(mark.textHash)) return null
-        outdated.push({ documentId: mark.documentId, textHash: mark.textHash, noteDocumentId: documentId, needsCheck: mark.needsCheck === true })
+        if (typeof mark?.documentId !== 'string' || !isSha256(mark.textHash) || !isInt(mark.seq ?? 0)) return null
+        outdated.push({ documentId: mark.documentId, textHash: mark.textHash, noteDocumentId: documentId, needsCheck: mark.needsCheck === true, seq: mark.seq ?? 0 })
       }
       documents.push({
         info: { documentId, kind: info.kind, name: info.name, type: info.type, bytes: info.bytes, pages: info.pages, sha256: info.sha256, active: info.active },

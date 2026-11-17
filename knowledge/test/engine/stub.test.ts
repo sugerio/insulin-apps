@@ -49,7 +49,7 @@ describe('the in-memory engine', () => {
     const routes: [string, string, unknown?][] = [
       ['PUT', '/v1/collections/c1', { settings: SETTINGS }], ['GET', '/v1/collections/c1'], ['POST', '/v1/collections/c1/wake'],
       ['PUT', '/v1/collections/c1/inbox/file0001', new TextEncoder().encode('x')], ['POST', '/v1/collections/c1/inbox/keep', {}], ['POST', '/v1/collections/c1/imports', {}],
-      ['GET', '/v1/collections/c1/imports/i1'], ['POST', '/v1/collections/c1/search', { query: 'x' }], ['POST', '/v1/answer', { question: 'x', passages: [] }],
+      ['GET', '/v1/collections/c1/imports/i1'], ['DELETE', '/v1/collections/c1/imports/i1'], ['POST', '/v1/collections/c1/search', { query: 'x' }], ['POST', '/v1/answer', { question: 'x', passages: [] }],
       ['GET', '/v1/collections/c1/documents'], ['GET', '/v1/collections/c1/documents/d1'], ['PATCH', '/v1/collections/c1/documents/d1', { active: false }],
       ['DELETE', '/v1/collections/c1/documents/d1'], ['GET', '/v1/collections/c1/facts?cursor='], ['POST', '/v1/collections/c1/corrections', {}],
       ['GET', '/v1/collections/c1/restore-points'], ['GET', '/v1/collections/c1/restore-points/1/preview'], ['POST', '/v1/collections/c1/restore-points/1/go-back'],
@@ -556,8 +556,89 @@ describe('the in-memory engine, as the real engine behaves', () => {
     engine.control.runUntilIdle()
     const events = (await call<OutboxPage>('GET', `/v1/outbox?since=${since}&limit=500`, undefined, null)).body.events
     const checks = events.filter((event) => event.type === 'needs_check' && event.collectionId === 'c2')
-    expect(checks).toMatchObject([{ noteId: 'n1', documentId: passage.documentId }])
+    expect(checks).toMatchObject([{ noteId: 'n1', documentId: passage.documentId, previousTextHash: passage.textHash }])
     expect((checks[0] as { textHash: string }).textHash).not.toBe(passage.textHash)
+  })
+
+  it('cancels an import it hasn\'t started, remembers an id it never had as cancelled, and refuses one it is learning', async () => {
+    const { call, learn, engine } = engineFor({ importMs: 60_000 })
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    // An id it never had: remembered as cancelled, so a submission with it arriving later learns nothing, and the
+    // staged file it names goes.
+    const unknown = await call<ImportStatus>('DELETE', '/v1/collections/c1/imports/late1')
+    expect([unknown.status, unknown.body.state]).toEqual([200, 'cancelled'])
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/late1')).body.state).toBe('cancelled')
+    const since = (await call<OutboxPage>('GET', '/v1/outbox?since=&limit=500', undefined, null)).body.cursor
+    const late = await learn('c1', 'late1', [{ fileId: 'file0001', name: 'Late.md', text: 'Arrived late.' }])
+    expect([late.status, late.body.state]).toEqual([200, 'cancelled'])
+    expect((await call<OutboxPage>('GET', `/v1/outbox?since=${since}&limit=500`, undefined, null)).body.events).toMatchObject([{ type: 'import', import: { importId: 'late1', state: 'cancelled' } }])
+    const again = { importId: 'other1', small: false, notes: [], files: [{ fileId: 'file0001', name: 'Late.md', type: 'text/markdown', bytes: 13, sha256: sha256Hex('Arrived late.') }] }
+    expect((await call('POST', '/v1/collections/c1/imports', again)).status).toBe(400)
+    // One learning is refused; one queued behind it is cancelled, the same when asked again, and never learned.
+    await learn('c1', 'imp1', [{ fileId: 'file0002', name: 'One.md', text: 'The first rule.' }])
+    await learn('c1', 'imp2', [{ fileId: 'file0003', name: 'Two.md', text: 'The second rule.' }])
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp1')).body.state).toBe('learning')
+    const busy = await call<{ error: string }>('DELETE', '/v1/collections/c1/imports/imp1')
+    expect([busy.status, busy.body.error]).toEqual([409, 'busy_learning'])
+    expect((await call<ImportStatus>('DELETE', '/v1/collections/c1/imports/imp2')).body.state).toBe('cancelled')
+    expect((await call<ImportStatus>('DELETE', '/v1/collections/c1/imports/imp2')).body.state).toBe('cancelled')
+    engine.control.runUntilIdle()
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('cancelled')
+    expect((await call<{ documents: { name: string }[] }>('GET', '/v1/collections/c1/documents')).body.documents.map((document) => document.name)).toEqual(['One.md'])
+    expect((await call('POST', '/v1/collections/c1/imports', { ...again, importId: 'other2', files: [{ ...again.files[0], fileId: 'file0003' }] })).status).toBe(400)
+    // Finished: refused as well.
+    expect((await call('DELETE', '/v1/collections/c1/imports/imp1')).status).toBe(409)
+  })
+
+  it('keeps the newer correction of a passage through exports and back: the order corrections were made goes with them', async () => {
+    const { call, learn, engine } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Doors.md', text: 'Code alpha opens the north door.\n\nCode bravo opens the north door.' }])
+    engine.control.runUntilIdle()
+    const find = async (query: string) => (await call<{ passages: { documentId: string; textHash: string }[] }>('POST', '/v1/collections/c1/search', { query })).body.passages[0]!
+    const [alpha, bravo] = [await find('code alpha north door'), await find('code bravo north door')]
+    expect(alpha.textHash).not.toBe(bravo.textHash)
+    await call('POST', '/v1/collections/c1/corrections', { importId: 'fix1', note: { noteId: 'n1', title: 'Older', text: 'Code alpha opens the south door.', outdated: [{ documentId: alpha.documentId, textHash: alpha.textHash }] } })
+    engine.control.runUntilIdle()
+    await call('POST', '/v1/collections/c1/corrections', { importId: 'fix2', note: { noteId: 'n2', title: 'Newer', text: 'Code bravo opens the east door.', outdated: [{ documentId: bravo.documentId, textHash: bravo.textHash }] } })
+    engine.control.runUntilIdle()
+    // Out to an export and back into a new collection, twice.
+    const roundTrip = async (from: string, to: string) => {
+      await call('POST', `/v1/collections/${from}/exports`, { exportId: `e${from}` })
+      const zip = new Uint8Array(await (await engine.fetch(new Request(`https://engine.test/v1/collections/${from}/exports/e${from}?download=1`, { headers: { [ORG_HEADER]: 'org-a' } }))).arrayBuffer())
+      await call('PUT', `/v1/collections/${to}`, { settings: SETTINGS })
+      const staged = await call<{ sha256: string }>('PUT', `/v1/collections/${to}/inbox/file0009`, zip, 'org-a', { 'content-type': 'application/zip' })
+      expect((await call('POST', `/v1/collections/${to}/import-export`, { importId: `restore${to}`, fileId: 'file0009', sha256: staged.body.sha256 })).status).toBe(202)
+      engine.control.runUntilIdle()
+      return zip
+    }
+    const first = await roundTrip('c1', 'c2')
+    const reader = new URL('../../engine/src/exportfile.ts', import.meta.url).href
+    const { openExport } = (await import(/* @vite-ignore */ reader)) as { openExport: (bytes: Uint8Array) => Promise<{ marks: { seq: number }[] } | null> }
+    expect((await openExport(first))?.marks.map((mark) => mark.seq).sort()).toEqual([1, 2])
+    await roundTrip('c2', 'c3')
+    // A stricter rule makes the two passages one: the newer correction keeps it, the older is no longer used.
+    await call('PUT', '/v1/collections/c3', { settings: { ...SETTINGS, hiding: { ...SETTINGS.hiding, words: ['alpha', 'bravo'] }, revision: 2 } })
+    engine.control.runUntilIdle()
+    const notes = (await call<{ documents: { name: string; kind: string; active: boolean }[] }>('GET', '/v1/collections/c3/documents')).body.documents
+      .filter((document) => document.kind === 'note').map(({ name, active }) => ({ name, active })).sort((a, b) => a.name.localeCompare(b.name))
+    expect(notes).toEqual([{ name: 'Newer', active: true }, { name: 'Older', active: false }])
+  })
+
+  it('checks an export\'s hidden values before building any: millions of starts in a small zip are refused at once', async () => {
+    const { call } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    const documentId = 'd_000000000000000000000001'
+    const details = JSON.stringify({ document: { documentId, kind: 'file', name: 'a.md', type: 'text/markdown', bytes: 8, pages: null, sha256: 'a'.repeat(64), active: true }, noteId: null, truncated: false, pages: [], hidden: { word: new Array(1_900_000).fill(0) }, outdated: [] })
+    expect(details.length).toBeLessThan(4 * 1024 * 1024)
+    const zip = await writeZip([['README.txt', 'x'], ['collection.json', '{"format":2,"collectionId":"c0","version":1}'], [`documents/${documentId}.json`, details], [`documents/${documentId}.txt`, '[hidden]']])
+    expect(zip.byteLength).toBeLessThan(64 * 1024)
+    const staged = await call<{ sha256: string }>('PUT', '/v1/collections/c1/inbox/file0001', zip, 'org-a', { 'content-type': 'application/zip' })
+    const before = process.memoryUsage().heapUsed
+    const started = await call('POST', '/v1/collections/c1/import-export', { importId: 'restore1', fileId: 'file0001', sha256: staged.body.sha256 })
+    const grown = process.memoryUsage().heapUsed - before
+    expect(started.status).toBe(409)
+    expect(grown).toBeLessThan(48 * 1024 * 1024)
   })
 
   it('clears staged files nobody imported after a day, unless kept for a waiting import, at most 45 days', async () => {

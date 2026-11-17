@@ -472,3 +472,46 @@ test("upload and export parts meet R2's 5 MiB minimum, so a real multipart uploa
   assert.equal(t.files.objects.get('exports/big.zip')!.body.length, 12 * 1024 * 1024)
   assert.ok(t.files.multipart >= 1)
 })
+
+test('F145 cancelling an import: a queued one is cancelled; an id the engine never saw is remembered, so a late send learns nothing; a started one answers 409', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  // An id the engine never saw: the send still in flight arrives after the cancel.
+  const early = await t.api('DELETE', '/v1/collections/c1/imports/late-1')
+  assert.deepEqual([early.status, early.body.state, early.body.importId], [200, 'cancelled', 'late-1'])
+  const late = await startImport(t, 'c1', 'late-1', [doc(1)])
+  assert.deepEqual([late.status, late.body.state], [200, 'cancelled'])
+  const lateFix = await t.api('DELETE', '/v1/collections/c1/imports/late-fix')
+  assert.equal(lateFix.body.state, 'cancelled')
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, 0, 'the late send learned nothing')
+  assert.deepEqual(t.files.keys('inbox/org-acme/c1/'), [], 'its staged file is deleted')
+  // A queued import (another learns first) is cancelled and never learned.
+  t.cloud.jobPolls = 5
+  await startImport(t, 'c1', 'first', [doc(2)])
+  await t.drain('c1', { steps: 2 })
+  await startImport(t, 'c1', 'queued', [doc(3)])
+  const cancelled = await t.api('DELETE', '/v1/collections/c1/imports/queued')
+  assert.deepEqual([cancelled.status, cancelled.body.state], [200, 'cancelled'])
+  assert.deepEqual((await t.api('DELETE', '/v1/collections/c1/imports/queued')).body.state, 'cancelled', 'again: the same answer')
+  const started = await t.api('DELETE', '/v1/collections/c1/imports/first')
+  assert.deepEqual([started.status, started.body.error], [409, 'busy_learning'])
+  t.cloud.jobPolls = 1
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/queued')).body.state, 'cancelled')
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.counts.documents, 1, 'only the first was learned')
+  assert.deepEqual([(await t.api('DELETE', '/v1/collections/c1/imports/first')).status], [409], 'a finished import is not cancelled')
+  // A correction sent with a cancelled id learns nothing either.
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents[0]
+  const correction = await t.api('POST', '/v1/collections/c1/corrections', { importId: 'late-fix', note: { noteId: 'n', title: 'Fix', text: 'Fixed.', outdated: [] } })
+  assert.equal(correction.body.state, 'cancelled', target.name)
+  // A remembered id is kept 30 days, then forgotten.
+  await t.api('DELETE', '/v1/collections/c1/imports/never-sent')
+  t.advance(29 * 24 * 60 * 60_000)
+  await t.object('c1').alarm() // the daily housekeeping
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/never-sent')).body.state, 'cancelled')
+  t.advance(2 * 24 * 60 * 60_000)
+  await t.object('c1').alarm()
+  assert.equal(await t.storage('c1').get('cancelled:never-sent'), undefined)
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/never-sent')).status, 404)
+})

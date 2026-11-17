@@ -110,26 +110,60 @@ describe('cancelling a waiting import while the tick sends it', () => {
     expect(await stateOf(importId)).toBe('committed')
   })
 
-  it('a 404 from the engine proves nothing about a send made after it was asked', async () => {
+  it('a cancel the engine confirmed stands though the tick sends it again meanwhile: the engine learns nothing', async () => {
     const { id, importId } = await waitingNote()
     loseNextStart(false)
     await h.tick()
-    const gate = gateDb(`SET state = 'cancelled'`)
-    const cancelling = h.json<{ error: string }>(PEOPLE.maya, 'DELETE', `/api/collections/${id}/imports/${importId}`)
+    // The engine never had it and now remembers it as cancelled; before Knowledge writes that, the tick sends it again
+    // (its answer lost).
+    const gate = gateDb(`SET state = ?3, version = COALESCE`)
+    const cancelling = h.json<{ import: { state: string } }>(PEOPLE.maya, 'DELETE', `/api/collections/${id}/imports/${importId}`)
     await gate.reached
-    // The engine said it never had it; then the tick sends it again, and this time the engine takes it.
-    h.engine.control.hold(true)
     loseNextStart(true)
     await h.tick()
     gate.release()
-    expect((await cancelling).status).toBe(409)
-    expect(await held(importId)).toBeGreaterThan(0)
-    h.engine.control.hold(false)
+    const cancel = await cancelling
+    expect([cancel.status, cancel.body.import.state]).toEqual([200, 'cancelled'])
+    expect(await held(importId)).toBe(0)
     h.engine.control.runUntilIdle()
     await h.tick()
     await h.tick()
-    expect(await stateOf(importId)).toBe('committed')
+    expect(await stateOf(importId)).toBe('cancelled')
+    expect((await engineStatus(id)).counts.documents).toBe(0)
   })
+
+  it('a send still on its way when the cancel comes learns nothing: the engine answers it cancelled', async () => {
+    const { id, importId } = await waitingNote()
+    // The tick's send is slow to reach the engine; the tick gives up waiting for its answer.
+    const real = h.env.ENGINE!
+    let arrive!: () => void
+    const arrived = new Promise<void>((resolve) => { arrive = resolve })
+    let late: Promise<Response> | null = null
+    h.env.ENGINE = {
+      fetch: async (request: Request) => {
+        if (!late && request.method === 'POST' && new URL(request.url).pathname.endsWith('/imports')) {
+          const copy = request.clone()
+          late = arrived.then(() => real.fetch(copy))
+          return Response.json({ error: 'internal', message: 'No answer in time.' }, { status: 504 })
+        }
+        return real.fetch(request)
+      },
+    }
+    await h.tick()
+    expect(await stateOf(importId)).toBe('waiting')
+    const cancel = await h.json<{ import: { state: string } }>(PEOPLE.maya, 'DELETE', `/api/collections/${id}/imports/${importId}`)
+    expect([cancel.status, cancel.body.import?.state]).toEqual([200, 'cancelled'])
+    expect(await held(importId)).toBe(0)
+    // Now the send arrives.
+    arrive()
+    expect(((await (await late!).json()) as { state: string }).state).toBe('cancelled')
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    await h.tick()
+    expect(await stateOf(importId)).toBe('cancelled')
+    expect((await engineStatus(id)).counts.documents).toBe(0)
+  })
+
   it('hiding kept text again while the tick sends it can\'t erase the send: the cancel is refused', async () => {
     const { id, importId } = await waitingNote()
     // Stricter rules hide the waiting note again; their write waits while the tick sends the import (the engine
@@ -235,6 +269,41 @@ describe('the awake-hours hold', () => {
     expect(kept?.until).toBeGreaterThan(h.clock.now)
     expect(kept?.delivered).toBe(kept?.version)
   })
+
+  it('a hold renewed while the tick lets go of the one that ended stays, in Knowledge and in the engine', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await setLimit('awake_hours_month', 0)
+    const ask = () => h.json(PEOPLE.maya, 'POST', '/api/ask', { collections: [id], question: 'Who signs off?' })
+    expect((await ask()).status).toBe(429)
+    // December 1: the tick reads November's hold, over now, and is about to let go of it...
+    h.clock.now = Date.UTC(2026, 11, 1, 0, 5)
+    const gate = gateDb(`SET until = 0`)
+    const ticking = h.tick()
+    await gate.reached
+    // ...when a question renews it until January 1.
+    expect((await ask()).status).toBe(429)
+    gate.release()
+    await ticking
+    const kept = await h.db.prepare(`SELECT until, version, delivered FROM org_holds WHERE org_id = ?`).bind(ORG).first<{ until: number; version: number; delivered: number }>()
+    expect(kept?.until).toBe(Date.UTC(2027, 0, 1))
+    expect(kept?.delivered).toBe(kept?.version)
+    expect((await engineStatus(id)).state).toBe('held')
+  })
+
+  it('looks at every hold in turn: a raised limit frees an organization behind a hundred others still held', async () => {
+    const until = Date.UTC(2026, 11, 1)
+    const orgs = Array.from({ length: 101 }, (_, index) => `org-held-${String(index).padStart(3, '0')}`)
+    for (const [index, org] of orgs.entries()) {
+      await h.db.prepare(`INSERT INTO org_holds (org_id, until, version, delivered, held_at) VALUES (?, ?, 1, 1, ?)`).bind(org, until, index).run()
+      // All but the last are still at the awake-hours stop; the last one's limit was raised.
+      if (index < 100) await h.db.prepare(`INSERT INTO org_limits (org_id, key, value, until, updated_at) VALUES (?, 'awake_hours_month', 0, NULL, 0)`).bind(org).run()
+    }
+    await h.tick()
+    await h.tick()
+    const holds = (await h.db.prepare(`SELECT org_id, until FROM org_holds WHERE org_id LIKE 'org-held-%' ORDER BY org_id`).all<{ org_id: string; until: number }>()).results
+    expect(holds.at(-1)).toEqual({ org_id: 'org-held-100', until: 0 })
+    expect(holds.slice(0, 100).every((hold) => hold.until === until)).toBe(true)
+  })
 })
 
 describe('an export replaced after it was read', () => {
@@ -333,5 +402,33 @@ describe('a correction\'s import asked about later', () => {
     h.engine.control.runUntilIdle()
     await h.tick()
     expect((await checks()).map((row) => row.note_id)).toEqual([second])
+  })
+
+  it('a correction whose passage changes twice asks to be checked once, at its newest text', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await h.note(PEOPLE.maya, id, 'The Cobalt gateway listens on port 8001.', 'Ports')
+    const found = await h.json<{ passages: { documentId: string; textHash: string }[] }>(PEOPLE.maya, 'POST', '/api/search', { collections: [id], query: 'Cobalt gateway port' })
+    const passage = found.body.passages[0]!
+    await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text: 'The gateway listens on port 9001.', outdated: [{ documentId: passage.documentId, textHash: passage.textHash }] })
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    const rules = (words: string[]) => h.json(PEOPLE.dana, 'PUT', '/api/rules', { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words } })
+    const checks = async () => (await h.db.prepare(`SELECT document_id, text_hash FROM correction_checks WHERE collection_id = ?`).bind(id).all<{ document_id: string; text_hash: string }>()).results
+    // Two stricter rules, one after the other, each read the file again.
+    await rules(['Cobalt'])
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    const first = await checks()
+    await rules(['Cobalt', '8001'])
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    const now = await checks()
+    expect(now).toHaveLength(1)
+    expect(now[0]!.text_hash).not.toBe(first[0]!.text_hash)
+    // Written again from it: nothing is left to check.
+    await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text: 'The gateway listens on port 9002.', outdated: [{ documentId: now[0]!.document_id, textHash: now[0]!.text_hash }] })
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    expect(await checks()).toEqual([])
   })
 })

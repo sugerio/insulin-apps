@@ -75,9 +75,18 @@ And from the design:
   app's "Try it" box (`hiding.ts`) uses the same patterns, checked against the shared fixtures.
 - **The newest correction of a passage wins**: a correction written again for a passage takes it over from the
   earlier one, and an earlier correction left correcting nothing is kept but no longer used. The same holds when
-  stricter hiding makes two corrected passages read the same: the newer correction keeps the passage.
+  stricter hiding makes two corrected passages read the same: the newer correction keeps the passage. Each
+  correction is numbered in the order corrections were made, exports carry the number and imports restore it, so
+  the order survives any number of export and import round trips.
+- **An import id is claimed once**: every submission (imports, corrections, import-export) ends in one storage
+  transaction that answers the import another submission with the id already made, or `cancelled` when the id was
+  cancelled, and only otherwise writes the record and its place in the queue; the same id answers the existing import
+  before anything else a submission finds wrong. `DELETE .../imports/:importId` cancels a queued import that hasn't
+  started learning (409 `busy_learning` once it has, or once it finished); an id the engine has no import with is
+  remembered as cancelled for 30 days, so a send still in flight learns nothing and its staged files are deleted.
 - **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
-  the correction keeps applying and a `needs_check` event asks a person to check it.
+  the correction keeps applying and a `needs_check` event asks a person to check it; its `previousTextHash` is the hash
+  the mark had before this re-read moved it (null when it couldn't follow), so each check replaces the one before.
 - **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
   failed its check twice (`damaged`), the collection comes back from its latest backup if that backup was taken from
   the same snapshot (matched by snapshot id, not the version) in the running image's database format

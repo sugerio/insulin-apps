@@ -20,6 +20,7 @@ export const ROUTES: Route[] = [
   { name: 'keepStaged', method: 'POST', path: '/v1/collections/:cid/inbox/keep', scope: 'collection', orgHeader: true },
   { name: 'startImport', method: 'POST', path: '/v1/collections/:cid/imports', scope: 'collection', orgHeader: true },
   { name: 'getImport', method: 'GET', path: '/v1/collections/:cid/imports/:importId', scope: 'collection', orgHeader: true },
+  { name: 'cancelImport', method: 'DELETE', path: '/v1/collections/:cid/imports/:importId', scope: 'collection', orgHeader: true },
   { name: 'search', method: 'POST', path: '/v1/collections/:cid/search', scope: 'collection', orgHeader: true },
   { name: 'answer', method: 'POST', path: '/v1/answer', scope: 'service', orgHeader: true },
   { name: 'listDocuments', method: 'GET', path: '/v1/collections/:cid/documents', scope: 'collection', orgHeader: true },

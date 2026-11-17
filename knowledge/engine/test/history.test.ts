@@ -443,3 +443,33 @@ test('FIX-02 a re-read that changes a corrected passage asks for the correction 
   assert.deepEqual([checks[0].noteId, checks[0].documentId], ['n1', old.documentId])
   assert.equal(typeof checks[0].textHash, 'string')
 })
+
+test('F162 a needs_check says which hash the mark had before the re-read moved it, so each check replaces the one before', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1, 'Second paragraph.')])
+  t.advance(SIX_MINUTES)
+  const h0 = (await ask(t, 'c1', 'topic number 1 gateway port')).body.passages.find((p: any) => p.text.includes('8001'))
+  await t.api('POST', '/v1/collections/c1/corrections', {
+    importId: 'fix-1',
+    note: { noteId: 'n1', title: 'Port', text: 'Topic number 1: the gateway port is now 9001.', outdated: [{ documentId: h0.documentId, textHash: h0.textHash }] },
+  })
+  await t.drain('c1')
+  const hiding = (words: string[]) => ({ settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words } } })
+  const reread = async (words: string[]) => {
+    t.advance(SIX_MINUTES)
+    await t.api('PUT', '/v1/collections/c1', hiding(words))
+    await t.drain('c1')
+    return (await outboxEvents(t)).filter((e) => e.type === 'needs_check')
+  }
+  // H0 -> H1 -> H2: the corrected passage loses a word, then another.
+  const first = await reread(['gateway'])
+  assert.equal(first.length, 1)
+  assert.equal(first[0].previousTextHash, h0.textHash)
+  const h1 = first[0].textHash
+  assert.notEqual(h1, h0.textHash)
+  const second = await reread(['gateway', 'Topic'])
+  assert.equal(second.length, 2)
+  assert.deepEqual([second[1].previousTextHash, second[1].noteId], [h1, 'n1'], 'the second check replaces the first')
+  assert.notEqual(second[1].textHash, h1)
+})

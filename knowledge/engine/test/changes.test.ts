@@ -342,3 +342,46 @@ test('stricter hiding that makes two corrected passages one: the newer correctio
   const { openExport } = await import('../src/exportfile.ts')
   assert.notEqual(await openExport(zip), null, 'its own export can start a collection')
 })
+
+test('F154 the order of corrections survives export, import, export, import: the newer still wins a collision', async () => {
+  const { documentIdFor } = await import('../src/util.ts')
+  const { createHash } = await import('node:crypto')
+  // Ids picked so the newer correction's note sorts first: an order kept only by position would flip.
+  let k = 0
+  while ((await documentIdFor('note', `fix-new-${k}`, 'n-new')) > (await documentIdFor('note', `fix-old-${k}`, 'n-old'))) k++
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [{ fileId: 'codes', name: 'codes.md', text: 'The gate code is Bluewater.\n\nThe gate code is Redwater.' }])
+  const passages = (await ask(t, 'c1', 'gate code')).body.passages
+  const [blue, red] = ['Bluewater', 'Redwater'].map((w) => passages.find((p: any) => p.text.includes(w)))
+  for (const [importId, noteId, passage, code] of [[`fix-old-${k}`, 'n-old', blue, '1111'], [`fix-new-${k}`, 'n-new', red, '2222']] as const) {
+    t.advance(6 * 60_000)
+    await t.api('POST', '/v1/collections/c1/corrections', {
+      importId,
+      note: { noteId, title: noteId === 'n-new' ? 'Newer' : 'Older', text: `The gate code is now ${code}.`, outdated: [{ documentId: passage.documentId, textHash: passage.textHash }] },
+    })
+    await t.drain('c1')
+  }
+  // Twice through an export and an import.
+  for (const [from, to] of [['c1', 'c2'], ['c2', 'c3']]) {
+    await t.api('POST', `/v1/collections/${from}/exports`, { exportId: `exp-${from}` })
+    await t.drain(from)
+    const zip = new Uint8Array(await (await t.api('GET', `/v1/collections/${from}/exports/exp-${from}?download=1`)).response.arrayBuffer())
+    await createCollection(t, to)
+    const sha = createHash('sha256').update(zip).digest('hex')
+    await t.api('PUT', `/v1/collections/${to}/inbox/zip`, zip, { headers: { 'content-type': 'application/zip', 'x-file-name': 'export.zip', 'x-file-sha256': sha } })
+    assert.equal((await t.api('POST', `/v1/collections/${to}/import-export`, { importId: 'from-export', fileId: 'zip', sha256: sha })).status, 202)
+    await t.drain(to)
+    assert.equal((await t.api('GET', `/v1/collections/${to}/imports/from-export`)).body.state, 'committed')
+  }
+  t.advance(6 * 60_000)
+  await t.api('PUT', '/v1/collections/c3', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater', 'Redwater'] } } })
+  for (let i = 0; i < 5; i++) {
+    await t.drain('c3')
+    t.advance(60_000)
+  }
+  const notes = (await t.api('GET', '/v1/collections/c3/documents')).body.documents.filter((d: any) => d.kind === 'note')
+  assert.deepEqual(notes.map((d: any) => [d.name, d.active]).sort(), [['Newer', true], ['Older', false]])
+  const answer = (await ask(t, 'c3', 'gate code')).body.passages
+  assert.ok(answer.some((p: any) => p.text.includes('2222')) && !answer.some((p: any) => p.text.includes('1111')))
+})

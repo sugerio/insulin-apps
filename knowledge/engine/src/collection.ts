@@ -123,7 +123,8 @@ export class CollectionEngine {
       case 'deleteCollection':
         return json(await this.startDeletion(), 202)
       case 'getImport': {
-        const record = await this.store.getImport(requireId(params.importId, 'The import id'))
+        const importId = requireId(params.importId, 'The import id')
+        const record = (await this.store.getImport(importId)) ?? (await imports.cancelledId(this, importId))
         if (!record) return fail('not_found', 'No such import.')
         return json(await imports.view(this, record))
       }
@@ -159,6 +160,8 @@ export class CollectionEngine {
         const { status, record } = await imports.submitCorrection(this, await readJson(request))
         return json(await imports.view(this, record), status)
       }
+      case 'cancelImport':
+        return json(await imports.view(this, await imports.cancel(this, requireId(params.importId, 'The import id'))))
       case 'importExport': {
         const { status, record } = await imports.submitExportImport(this, await readJson(request))
         return json(await imports.view(this, record), status)
@@ -975,6 +978,7 @@ export class CollectionEngine {
     }
     await imports.retryRemovalCleanup(this)
     await imports.retryHiddenCleanup(this)
+    await imports.forgetCancelled(this)
     await exporter.expire(this)
   }
 

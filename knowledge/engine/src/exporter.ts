@@ -105,7 +105,9 @@ async function build(e: CollectionEngine, record: ExportRecord): Promise<void> {
       const stored = (await object.json()) as { text: string; pages: { page: number; start: number; end: number }[]; hidden: HiddenSpan[] }
       // Within the bounds the import holds an export to, so every export can start a collection again.
       const layout = layoutOf(stored.pages ?? [], stored.hidden ?? [])
-      const outdated = state.marks.filter((m) => m.noteDocumentId === doc.documentId).map((m) => ({ documentId: m.documentId, textHash: m.textHash, needsCheck: m.needsCheck }))
+      const outdated = state.marks
+        .filter((m) => m.noteDocumentId === doc.documentId)
+        .map((m) => ({ documentId: m.documentId, textHash: m.textHash, needsCheck: m.needsCheck, seq: m.seq ?? 0 }))
       const entries = layout && documentEntries({ document: publicDocument(doc), noteId: doc.noteId, truncated: doc.truncated, ...layout, outdated }, stored.text)
       if (!entries) throw new Error(`“${doc.name}” is larger than an export can hold`)
       await zip.add(`documents/${doc.documentId}.txt`, entries.text)

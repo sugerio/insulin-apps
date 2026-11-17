@@ -105,13 +105,18 @@ interface StoredDocument {
 /** An export's documents and outdated marks as they were exported, read and checked when the import is sent. */
 interface ExportedContent {
   documents: { info: DocumentInfo; noteId: string | null; text: string; pages: StoredDocument['pages']; hidden: HiddenSpan[] }[]
-  marks: { documentId: string; textHash: string; noteDocumentId: string; needsCheck: boolean }[]
+  marks: { documentId: string; textHash: string; noteDocumentId: string; needsCheck: boolean; seq: number }[]
 }
 
 interface Content {
   documents: Map<string, StoredDocument>
   /** Outdated passages, as `documentId:textHash`, each with the correction note that marked it. */
   outdated: Map<string, string>
+  /**
+   * Each correction note's number in the order corrections were made (exports carry it, as the real engine's do):
+   * when two marks come to one passage, the higher wins.
+   */
+  seqs: Map<string, number>
   corrections: number
 }
 
@@ -184,6 +189,8 @@ interface StubCollection {
   forced: { state: 'asleep' | 'waking' | 'learning' | 'busy' | 'ready'; until: number | null } | null
   /** Removals for good not yet committed: they go ahead of every import, with their version reserved. */
   removals: { documentId: string; name: string; version: number }[]
+  /** Ids cancelled before any import had them, and when: a submission with one learns nothing (kept 30 days). */
+  cancelled: Map<string, number>
 }
 
 interface Failure {
@@ -206,6 +213,8 @@ const OUTBOX_ID_WIDTH = 12
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 /** The engine buffers what it stages, up to 64 MB. */
 const MAX_STAGED_BYTES = 64 * 1024 * 1024
+/** An id cancelled before the engine had an import with it is remembered this long: no send stays on its way longer. */
+const CANCELLED_KEEP_MS = 30 * DAY_MS
 /** Staged files no import names are cleared a day after they arrived, or after the time they are kept until. */
 const STAGED_KEEP_MS = DAY_MS
 /** The longest a staged file is kept for an import waiting for the 1st. */
@@ -241,7 +250,7 @@ function copyContent(content: Content): Content {
   for (const [id, document] of content.documents) {
     documents.set(id, { ...document, info: { ...document.info }, pages: [...document.pages], hidden: [...document.hidden], passages: document.passages.map((passage) => ({ ...passage })), words: document.words })
   }
-  return { documents, outdated: new Map(content.outdated), corrections: content.corrections }
+  return { documents, outdated: new Map(content.outdated), seqs: new Map(content.seqs), corrections: content.corrections }
 }
 
 const refuse = (message: string): never => {
@@ -309,6 +318,36 @@ const EXPORT_COLLECTION_BYTES = 64 * 1024
 const EXPORT_DOCUMENT_BYTES = 4 * 1024 * 1024
 const EXPORT_TEXT_BYTES = 3 * 1024 * 1024
 const EXPORT_PAGES = 20_000
+/** The most hidden values a stored text can hold, each a "[hidden]" (exportfile.ts MOST_HIDDEN). */
+const MOST_HIDDEN = Math.floor(EXPORT_TEXT_BYTES / 8)
+
+/**
+ * Walks an exported document's hidden values in order of their starts, across kinds, checking as it goes what the
+ * real reader checks (exportfile.ts walkHidden): each start a whole number at least a "[hidden]" after the one before,
+ * so none repeats or overlaps and each kind's list is in order. Nothing is built: `visit` sees each value once and may
+ * refuse it. False when a check fails.
+ */
+function walkHidden(hidden: Record<string, unknown[]>, visit?: (start: number, kind: HiddenSpan['kind']) => boolean): boolean {
+  const kinds = Object.keys(hidden) as HiddenSpan['kind'][]
+  const lists = kinds.map((kind) => hidden[kind]!)
+  const at = kinds.map(() => 0)
+  const isStart = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
+  let previous = -8
+  for (;;) {
+    let next = -1
+    for (let k = 0; k < lists.length; k += 1) {
+      if (at[k]! < lists[k]!.length && (next < 0 || (lists[k]![at[k]!] as number) < (lists[next]![at[next]!] as number))) next = k
+    }
+    if (next < 0) return true
+    const start = lists[next]![at[next]!]
+    if (!isStart(start) || start < previous + 8) return false
+    const following = lists[next]![at[next]! + 1]
+    if (following !== undefined && (!isStart(following) || following < start + 8)) return false
+    if (visit && !visit(start, kinds[next]!)) return false
+    previous = start
+    at[next] = at[next]! + 1
+  }
+}
 
 function randomHex(bytes: number): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -692,7 +731,9 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     // The newest correction of a passage wins ("Write it again"), as in the real engine: it takes the passage over, and
     // an earlier correction left correcting nothing is kept but no longer used, so it can't answer instead.
     const superseded = new Set<string>()
+    let seq = Math.max(0, ...content.seqs.values())
     for (const note of item.request.notes) {
+      if (note.outdated.length) content.seqs.set(note.noteId, (seq += 1))
       for (const ref of note.outdated) {
         const key = `${ref.documentId}:${ref.textHash}`
         const earlier = content.outdated.get(key)
@@ -725,7 +766,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   function restoreFrom(collection: StubCollection, item: RunningImport, exported: ExportedContent): void {
     for (const file of item.request.files) collection.inbox.delete(file.fileId)
     const rules = collection.settings.hiding
-    const content: Content = { documents: new Map(), outdated: new Map(), corrections: 0 }
+    const content: Content = { documents: new Map(), outdated: new Map(), seqs: new Map(), corrections: 0 }
     const moved = new Map<string, string | null>()
     for (const doc of exported.documents) {
       const documentId = doc.info.documentId
@@ -738,6 +779,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       })
     }
     const marks = exported.marks.map((mark) => ({ documentId: mark.documentId, textHash: mark.textHash, noteId: exported.documents.find((doc) => doc.info.documentId === mark.noteDocumentId)?.noteId ?? '' }))
+    for (const [index, mark] of marks.entries()) content.seqs.set(mark.noteId, exported.marks[index]!.seq)
     const checks = followMarks(content, marks, moved)
     content.corrections = new Set(exported.marks.map((mark) => mark.noteDocumentId)).size
     const documents = [...content.documents.values()]
@@ -809,25 +851,33 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
         // The page map as [page, start, end]; where each "[hidden]" starts, by kind; never overlapping.
         const pages = meta.pages
         if (!Array.isArray(pages) || pages.length > EXPORT_PAGES || !pages.every((page: unknown) => Array.isArray(page) && page.length === 3 && page.every(isInt) && (page as number[])[1]! <= (page as number[])[2]!)) return null
+        // As the real reader: their number first, then their order, checked before anything is built from them.
         const kinds = meta.hidden
         if (typeof kinds !== 'object' || kinds === null || Array.isArray(kinds)) return null
-        const hidden: HiddenSpan[] = []
+        let count = 0
         for (const [kind, starts] of Object.entries(kinds)) {
-          if (!HIDDEN_KINDS.has(kind) || !Array.isArray(starts) || !starts.every(isInt)) return null
-          for (const start of starts as number[]) hidden.push({ start, end: start + 8, kind: kind as HiddenSpan['kind'] })
+          if (!HIDDEN_KINDS.has(kind) || !Array.isArray(starts)) return null
+          count += starts.length
         }
-        hidden.sort((a, b) => a.start - b.start)
-        for (let index = 1; index < hidden.length; index += 1) if (hidden[index]!.start < hidden[index - 1]!.end) return null
+        if (count > MOST_HIDDEN || !walkHidden(kinds as Record<string, unknown[]>)) return null
         const noteId = info.kind === 'note' ? meta.noteId : null
         if (info.kind === 'note' && (typeof noteId !== 'string' || !noteId)) return null
         const outdated = meta.outdated ?? []
         if (!Array.isArray(outdated) || (outdated.length && info.kind !== 'note')) return null
         for (const mark of outdated) {
-          if (typeof mark?.documentId !== 'string' || !isSha256(mark.textHash)) return null
-          exported.marks.push({ documentId: mark.documentId, textHash: mark.textHash, noteDocumentId: documentId, needsCheck: mark.needsCheck === true })
+          if (typeof mark?.documentId !== 'string' || !isSha256(mark.textHash) || !isInt(mark.seq ?? 0)) return null
+          exported.marks.push({ documentId: mark.documentId, textHash: mark.textHash, noteDocumentId: documentId, needsCheck: mark.needsCheck === true, seq: mark.seq ?? 0 })
         }
         const stored = await text(`documents/${documentId}.txt`)
-        if (pages.some((page: number[]) => page[2]! > stored.length) || hidden.some((span) => stored.slice(span.start, span.end) !== '[hidden]')) return null
+        if (pages.some((page: number[]) => page[2]! > stored.length)) return null
+        // Each value a "[hidden]" in the text, built only as it is found to be one.
+        const hidden: HiddenSpan[] = []
+        const found = walkHidden(kinds as Record<string, unknown[]>, (start, kind) => {
+          if (!stored.startsWith('[hidden]', start)) return false
+          hidden.push({ start, end: start + 8, kind })
+          return true
+        })
+        if (!found) return null
         exported.documents.push({
           info: {
             documentId, kind: info.kind, name: info.name, type: info.type, bytes: info.bytes, textBytes: new TextEncoder().encode(stored).byteLength, pages: info.pages,
@@ -851,7 +901,6 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     return exported
   }
 
-  /** A stored text hidden again with these rules: what it hid before stays hidden and moves with what is hidden now. */
   /**
    * Where each passage of a text is after more of it was hidden (`shift` takes an offset there to the new text): the
    * hash of the passage that holds most of it now, or null when none does, by the old passage's `documentId:textHash`.
@@ -876,29 +925,40 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   /**
    * Corrections' outdated marks follow their passage to its new text (a re-read, or an export hidden again), as in the
    * real engine (imports.ts followMarks): one whose passage changed, or can't be found, asks for its correction to be
-   * checked, under the hash its mark has now. Two marks that come to one passage keep the newer (`marks` are in the
-   * order they were made), and a correction left correcting nothing is kept but no longer used. The checks to ask for.
+   * checked, under the hash its mark has now (and the one it had, so the check asked for before is replaced). Two marks
+   * that come to one passage keep the newer correction by its number (`content.seqs`; an equal one: the later in
+   * `marks`), and a correction left correcting nothing is kept but no longer used. The checks to ask for.
    */
-  function followMarks(content: Content, marks: { documentId: string; textHash: string; noteId: string }[], moved: Map<string, string | null>): { noteId: string; documentId: string; textHash: string }[] {
+  function followMarks(content: Content, marks: { documentId: string; textHash: string; noteId: string }[], moved: Map<string, string | null>): { noteId: string; documentId: string; textHash: string; previousTextHash: string | null }[] {
     const superseded = new Set<string>()
-    const changed = new Set<string>()
+    // Each passage a mark that changed asks to be checked at, and the hash it had before (null: it couldn't follow).
+    const changed: { at: string; previousTextHash: string | null }[] = []
     content.outdated = new Map()
     for (const mark of marks) {
       const key = `${mark.documentId}:${mark.textHash}`
       const hash = (moved.has(key) ? moved.get(key) : mark.textHash) ?? mark.textHash
       const at = `${mark.documentId}:${hash}`
+      if (moved.has(key) && moved.get(key) !== mark.textHash) changed.push({ at, previousTextHash: hash === mark.textHash ? null : mark.textHash })
       const earlier = content.outdated.get(at)
-      if (earlier !== undefined && earlier !== mark.noteId) superseded.add(earlier)
+      if (earlier !== undefined && earlier !== mark.noteId) {
+        if ((content.seqs.get(mark.noteId) ?? 0) < (content.seqs.get(earlier) ?? 0)) {
+          superseded.add(mark.noteId)
+          continue
+        }
+        superseded.add(earlier)
+      }
       content.outdated.set(at, mark.noteId)
-      if (moved.has(key) && moved.get(key) !== mark.textHash) changed.add(at)
     }
     const stillCorrecting = new Set(content.outdated.values())
     for (const document of content.documents.values()) {
       if (document.noteId && superseded.has(document.noteId) && !stillCorrecting.has(document.noteId)) document.info = { ...document.info, active: false }
     }
-    return [...changed].map((at) => ({ noteId: content.outdated.get(at)!, documentId: at.slice(0, at.lastIndexOf(':')), textHash: at.slice(at.lastIndexOf(':') + 1) }))
+    // Asked for by the correction that holds the passage now, once for each mark that came to it.
+    const asked = new Map(changed.map(({ at, previousTextHash }) => [`${at}\u0000${previousTextHash}`, { at, previousTextHash }]))
+    return [...asked.values()].map(({ at, previousTextHash }) => ({ noteId: content.outdated.get(at)!, documentId: at.slice(0, at.lastIndexOf(':')), textHash: at.slice(at.lastIndexOf(':') + 1), previousTextHash }))
   }
 
+  /** A stored text hidden again with these rules: what it hid before stays hidden and moves with what is hidden now. */
   function hiddenAgain(text: string, pages: StoredDocument['pages'], hidden: HiddenSpan[], rules: HidingRuleSet): { text: string; pages: StoredDocument['pages']; hidden: HiddenSpan[]; shift: (offset: number) => number } {
     const result = applyHiding(text, rules)
     if (!result.found.length) return { text, pages, hidden, shift: (offset) => offset }
@@ -927,13 +987,13 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       ['collection.json', JSON.stringify({ format: EXPORT_FORMAT, collectionId: collection.id, version: collection.version, exportedAt: new Date(now()).toISOString(), settings: { hiding: { ...hiding, words: words.length }, awakeMinutes: collection.settings.awakeMinutes }, counts: counts(collection.content) }, null, 2)],
     ]
     // A mark whose correction note or file is gone (removed for good) isn't exported: nothing could read it back.
-    const marks = [...collection.content.outdated].map(([mark, noteId]) => ({ documentId: mark.slice(0, mark.lastIndexOf(':')), textHash: mark.slice(mark.lastIndexOf(':') + 1), noteDocumentId: noteDocument.get(noteId) ?? '', needsCheck: false }))
+    const marks = [...collection.content.outdated].map(([mark, noteId]) => ({ documentId: mark.slice(0, mark.lastIndexOf(':')), textHash: mark.slice(mark.lastIndexOf(':') + 1), noteDocumentId: noteDocument.get(noteId) ?? '', needsCheck: false, seq: collection.content.seqs.get(noteId) ?? 0 }))
       .filter((mark) => mark.noteDocumentId && collection.content.documents.has(mark.documentId))
     for (const document of documents) {
       // The real engine's format 2: a compact page map, where each "[hidden]" starts by kind, and a correcting note's marks.
       const hidden: Partial<Record<HiddenSpan['kind'], number[]>> = {}
       for (const span of document.hidden) (hidden[span.kind] ??= []).push(span.start)
-      const outdated = marks.filter((mark) => mark.noteDocumentId === document.info.documentId).map(({ documentId, textHash, needsCheck }) => ({ documentId, textHash, needsCheck }))
+      const outdated = marks.filter((mark) => mark.noteDocumentId === document.info.documentId).map(({ documentId, textHash, needsCheck, seq }) => ({ documentId, textHash, needsCheck, seq }))
       entries.push([`documents/${document.info.documentId}.txt`, document.text])
       entries.push([`documents/${document.info.documentId}.json`, JSON.stringify({ document: document.info, noteId: document.noteId, truncated: false, pages: document.pages.map((page) => [page.page, page.start, page.end]), hidden, outdated })])
     }
@@ -1017,6 +1077,69 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       importId, state, attempt: 1, queuePosition: null, waitingFor: null, files: [], notes: 0,
       version: collection.version, newFacts: 0, failedFileId: null, error: null, etaSeconds: null, createdAt: at, finishedAt: at,
     }
+  }
+
+  function cancelledStatus(importId: string, at: string): ImportStatus {
+    return {
+      importId, state: 'cancelled', attempt: 1, queuePosition: null, waitingFor: null, files: [], notes: 0,
+      version: null, newFacts: null, failedFileId: null, error: null, etaSeconds: null, createdAt: at, finishedAt: at,
+    }
+  }
+
+  /** When an id was cancelled before any import had it, while that is remembered (30 days, as the real engine). */
+  function cancelledBefore(collection: StubCollection, importId: string): number | null {
+    const at = collection.cancelled.get(importId)
+    if (at === undefined) return null
+    if (now() - at > CANCELLED_KEEP_MS) {
+      collection.cancelled.delete(importId)
+      return null
+    }
+    return at
+  }
+
+  /**
+   * What a submission answers when its id was seen before, whatever its body says now: the import that id names, or,
+   * for an id cancelled first (a send that was still on its way), a cancelled import that learns nothing, the staged
+   * files it names dropped. Null for a new id.
+   */
+  function submittedBefore(collection: StubCollection, importId: unknown, fileIds: unknown[]): ImportStatus | null {
+    if (typeof importId !== 'string') return null
+    const existing = collection.imports.get(importId)
+    if (existing) return existing.status
+    if (cancelledBefore(collection, importId) === null) return null
+    collection.cancelled.delete(importId)
+    const status = cancelledStatus(importId, new Date(now()).toISOString())
+    order += 1
+    collection.imports.set(importId, { status, request: { importId, files: [], notes: [], small: false }, correction: false, order, startedAt: null, finishAt: null })
+    for (const fileId of fileIds) if (typeof fileId === 'string') collection.inbox.delete(fileId)
+    emit({ org: collection.org, collectionId: collection.id, type: 'import', import: { ...status } })
+    return status
+  }
+
+  /**
+   * DELETE …/imports/:importId, as the real engine: a queued import that hasn't started is cancelled (it leaves the
+   * queue, its staged files go, and it learns nothing); an id no import has is remembered as cancelled, so a submission
+   * with it still on its way learns nothing. One learning or finished answers 409 busy_learning; asked again, a
+   * cancelled one answers the same.
+   */
+  function cancelImport(collection: StubCollection, importId: string): ImportStatus {
+    if (!ID.test(importId)) throw new StubError(400, 'bad_request', 'Send an import id.')
+    const item = collection.imports.get(importId)
+    if (!item) {
+      const at = cancelledBefore(collection, importId) ?? now()
+      collection.cancelled.set(importId, at)
+      return cancelledStatus(importId, new Date(at).toISOString())
+    }
+    if (item.status.state === 'cancelled') return item.status
+    if (collection.running === importId || !collection.queue.includes(importId)) {
+      throw new StubError(409, 'busy_learning', collection.running === importId ? 'This import is being learned; it can no longer be cancelled.' : 'This import is finished; it can no longer be cancelled.')
+    }
+    collection.queue = collection.queue.filter((id) => id !== importId)
+    for (const file of item.request.files) collection.inbox.delete(file.fileId)
+    Object.assign(item.status, { state: 'cancelled', queuePosition: null, waitingFor: null, etaSeconds: null, finishedAt: new Date(now()).toISOString() })
+    emit({ org: collection.org, collectionId: collection.id, type: 'import', import: { ...item.status, files: item.status.files.map((file) => ({ ...file })) } })
+    pump()
+    return item.status
   }
 
   function enqueue(collection: StubCollection, request: ImportRequest, correction: boolean): { status: ImportStatus; created: boolean } {
@@ -1231,9 +1354,9 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       if (collection && sent !== undefined && next.revision === collection.settings.revision && next.revision > 0) return json(statusOf(collection))
       if (!collection) {
         collection = {
-          org, id: collectionId, settings: next, deleted: false, content: { documents: new Map(), outdated: new Map(), corrections: 0 },
+          org, id: collectionId, settings: next, deleted: false, content: { documents: new Map(), outdated: new Map(), seqs: new Map(), corrections: 0 },
           version: 0, snapshots: new Map(), imports: new Map(), queue: [], running: null, exports: new Map(), inbox: new Map(),
-          awakeSince: null, awakeUntil: null, wakingUntil: null, lastQuestionAt: null, lastBackupAt: null, forced: null, removals: [],
+          awakeSince: null, awakeUntil: null, wakingUntil: null, lastQuestionAt: null, lastBackupAt: null, forced: null, removals: [], cancelled: new Map(),
         }
         collections.set(key(org, collectionId), collection)
       } else {
@@ -1289,10 +1412,10 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     }
     if (rest === '/import-export' && method === 'POST') {
       const raw = await body<{ importId?: unknown; fileId?: unknown; sha256?: unknown }>(request)
+      const before = submittedBefore(collection, raw?.importId, [raw?.fileId])
+      if (before) return json(before, 200)
       if (typeof raw?.importId !== 'string' || !ID.test(raw.importId) || typeof raw.fileId !== 'string' || !ID.test(raw.fileId)) throw new StubError(400, 'bad_request', 'Send an import id and the staged export\'s file id.')
       if (typeof raw.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(raw.sha256)) throw new StubError(400, 'bad_request', 'Send the SHA-256 of the export that was read.')
-      const existing = collection.imports.get(raw.importId)
-      if (existing) return json(existing.status, 200)
       if (collection.version > 0 || collection.content.documents.size || collection.queue.length || collection.running || collection.removals.length) {
         throw new StubError(409, 'bad_request', 'An export starts an empty collection only: this one already has something in it.')
       }
@@ -1311,9 +1434,9 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     }
     if (rest === '/imports' && method === 'POST') {
       const request_ = await body<ImportRequest>(request)
-      // The same import id answers the import it started, whatever the body says now.
-      const existing = typeof request_?.importId === 'string' ? collection.imports.get(request_.importId) : undefined
-      if (existing) return json(existing.status, 200)
+      // The same import id answers the import it started (or its cancel), whatever the body says now.
+      const before = submittedBefore(collection, request_?.importId, Array.isArray(request_?.files) ? request_.files.map((file) => file?.fileId) : [])
+      if (before) return json(before, 200)
       validateImport(request_)
       const { status, created } = enqueue(collection, request_, false)
       pump()
@@ -1321,10 +1444,14 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     }
     const oneImport = rest.match(/^\/imports\/([^/]+)$/)
     if (oneImport && method === 'GET') {
-      const item = collection.imports.get(decodeURIComponent(oneImport[1]!))
+      const importId = decodeURIComponent(oneImport[1]!)
+      const item = collection.imports.get(importId)
+      const cancelled = item ? null : cancelledBefore(collection, importId)
+      if (cancelled !== null) return json(cancelledStatus(importId, new Date(cancelled).toISOString()))
       if (!item) throw new StubError(404, 'not_found', 'There is no such import.')
       return json(item.status)
     }
+    if (oneImport && method === 'DELETE') return json(cancelImport(collection, decodeURIComponent(oneImport[1]!)))
     if (rest === '/search' && method === 'POST') {
       const { query, topK } = await body<{ query: string; topK?: number }>(request)
       if (typeof query !== 'string' || !query.trim()) throw new StubError(400, 'bad_request', 'Ask a question.')
@@ -1386,6 +1513,8 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     }
     if (rest === '/corrections' && method === 'POST') {
       const raw = await body<{ importId?: string; note?: ImportNote; notes?: ImportNote[] }>(request)
+      const before = submittedBefore(collection, raw?.importId, [])
+      if (before) return json(before, 200)
       const note = raw.note ?? raw.notes?.[0]
       if (typeof raw.importId !== 'string' || !ID.test(raw.importId) || !note || typeof note.text !== 'string' || !note.text.trim()) {
         throw new StubError(400, 'bad_request', 'Send the correction as a note.')
@@ -1497,7 +1626,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
 
   function remove(collection: StubCollection): void {
     collection.deleted = true
-    collection.content = { documents: new Map(), outdated: new Map(), corrections: 0 }
+    collection.content = { documents: new Map(), outdated: new Map(), seqs: new Map(), corrections: 0 }
     collection.snapshots.clear()
     collection.inbox.clear()
     collection.exports.clear()

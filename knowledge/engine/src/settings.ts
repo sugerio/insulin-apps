@@ -58,6 +58,7 @@ export const SETTINGS = {
   maxFileBytes: 64 * 1024 * 1024,
   // Uploads go to R2 in parts this large (R2's least is 5 MB): one part at a time is held in memory.
   uploadPartBytes: 8 * 1024 * 1024,
+  cancelledKeepMs: 30 * 24 * 60 * 60 * 1000, // an id cancelled before the engine saw it is remembered this long
   maxExportImportBytes: 32 * 1024 * 1024, // an export a collection starts from is read whole into memory
   maxFilesPerImport: 200,
   // Staged files nobody imported are deleted after a day, or at most this long when kept for a waiting import.

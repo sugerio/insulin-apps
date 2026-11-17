@@ -77,7 +77,8 @@ export class CollectionStore {
   putRuntime = (runtime: Runtime) => this.storage.put('runtime', runtime)
   deleteRuntime = () => this.storage.delete('runtime')
 
-  getImport = (importId: string) => this.storage.get<ImportRecord>(`imp:${importId}`)
+  getImport = (importId: string, reader: Pick<DurableObjectStorage, 'get'> | DurableObjectTransaction = this.storage) =>
+    reader.get<ImportRecord>(`imp:${importId}`)
   putImport = (record: ImportRecord, writer: Writer = this.storage) => writer.put(`imp:${record.status.importId}`, record)
   async listImports(): Promise<ImportRecord[]> {
     return [...(await this.storage.list<ImportRecord>({ prefix: 'imp:' })).values()]

@@ -4,7 +4,7 @@ import type { HidingRules, ImportFile, ImportStatus } from '../../../../engine/s
 import { authorize, ownerName, type CollectionRow } from '../access.ts'
 import { EngineCallError, type EngineClient } from '../engine/client.ts'
 import type { AppEnv, Bindings } from '../env.ts'
-import { ApiError, badRequest, notFound, readJson } from '../http.ts'
+import { ApiError, badRequest, logError, notFound, readJson } from '../http.ts'
 import { idempotent, stableId } from '../idempotency.ts'
 import type { Caller } from '../identity.ts'
 import { effectiveLimit, ensureAwakeBlock, formatBytes, quotaExceeded, release, reservationsOf, reserve, resetsAt, supportSentence, usageOf, type LimitKey } from '../limits.ts'
@@ -69,6 +69,10 @@ async function emptyCollection(db: D1Database, collection: CollectionRow, except
     .bind(collection.org_id, collection.id, except).first()
   return !busy
 }
+/** Why an import waiting for the 1st can't be cancelled (DELETE …/imports/:importId), in plain words. */
+const BEING_LEARNED = 'This is already being learned: it started when the month did, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.'
+const CANT_TELL = 'Insulin sent this to be learned on the 1st and can\'t tell yet whether it has started, so it can\'t be cancelled now. Try again in a few minutes.'
+const ONLY_WAITING = 'Only an import waiting for the 1st can be cancelled; this one has started or finished.'
 const NOT_EMPTY = 'Starting from an export works in a new, empty collection only: this one already has something in it. Start a new collection for the export.'
 export type ImportKind = 'files' | 'web_page' | 'note' | 'correction'
 
@@ -446,41 +450,43 @@ export function sourceRoutes() {
     const db = c.env.DB
     const at = now(c)
     const importId = param(c, 'importId')
-    const row = await db.prepare(`SELECT state, sends, sent_at FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
-      .first<{ state: string; sends: number; sent_at: number | null }>()
+    const row = await db.prepare(`SELECT state, sends FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
+      .first<{ state: string; sends: number }>()
     if (!row) throw notFound('There is no such import in this collection.')
-    // Sent to the engine on the 1st without an answer: it may be learning. The engine is asked; while it may have it,
-    // the import isn't cancelled and keeps what it reserved. The cancel is written only if no send was made since this
-    // request read the import (`sends`, which the tick counts up before each send and nothing else writes,
-    // unchanged): a send it didn't see, or one made after the engine said it had nothing, refuses it.
-    if (row.state === 'waiting' && row.sent_at !== null) {
-      let status: ImportStatus | null = null
+    if (row.state !== 'waiting') throw new ApiError('conflict', ONLY_WAITING)
+    if (row.sends > 0) {
+      // Sent on a 1st without an answer: it may be in the engine, or still on its way there. The engine cancels it, or
+      // remembers its id as cancelled so a send still on its way learns nothing; only once the engine says so is it
+      // cancelled here (whatever the tick is doing with it meanwhile: a send now answers `cancelled` too). While the
+      // engine may be learning it, it isn't cancelled and keeps what it reserved.
+      let status: ImportStatus
       try {
-        status = await engineFor(c).getImport(collection.id, importId)
+        status = await engineFor(c).cancelImport(collection.id, importId)
       } catch (error) {
-        if (!(error instanceof EngineCallError && error.status === 404)) {
-          throw new ApiError('conflict', 'Insulin sent this to be learned and can\'t tell yet whether it has started, so it can\'t be cancelled now. Try again in a few minutes.')
+        if (!(error instanceof EngineCallError && error.code === 'busy_learning')) throw new ApiError('conflict', CANT_TELL)
+        try {
+          await finishImport(c.env, caller.organizationId, collection, importId, await engineFor(c).getImport(collection.id, importId), at)
+        } catch (failure) {
+          logError('cancel_status_failed', failure, { org: caller.organizationId })
         }
+        throw new ApiError('conflict', BEING_LEARNED)
       }
-      if (status) {
-        await finishImport(c.env, caller.organizationId, collection, importId, status, at)
-        throw new ApiError('conflict', 'This is already being learned: Insulin sent it when the month started, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.')
-      }
-      // The engine never had it, as of the sends this request read.
+      if (status.state !== 'cancelled') throw new ApiError('conflict', BEING_LEARNED)
+      await finishImport(c.env, caller.organizationId, collection, importId, status, at)
+    } else {
+      // Never sent: cancelled only if the tick hasn't sent it since this request read it (`sends`, counted before each
+      // send, unchanged); otherwise it may be learning.
+      const [cancelled] = await db.batch([
+        db.prepare(
+          `UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting' AND sends = 0`,
+        ).bind(importId, caller.organizationId, at),
+        db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND state = 'held' AND EXISTS (SELECT 1 FROM imports WHERE id = ?4 AND state = 'cancelled')`)
+          .bind(caller.organizationId, `import:${importId}`, at, importId),
+      ])
+      if (cancelled?.meta.changes === 1) return json(c, { import: { importId, state: 'cancelled' } })
     }
-    const [cancelled] = await db.batch([
-      db.prepare(
-        `UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting' AND sends = ?4`,
-      ).bind(importId, caller.organizationId, at, row.sends),
-      db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND state = 'held' AND EXISTS (SELECT 1 FROM imports WHERE id = ?4 AND state = 'cancelled')`)
-        .bind(caller.organizationId, `import:${importId}`, at, importId),
-    ])
-    if (cancelled?.meta.changes !== 1) {
-      const current = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ?`).bind(importId, caller.organizationId).first<{ state: string }>()
-      throw new ApiError('conflict', current?.state === 'waiting'
-        ? 'This is already being learned: Insulin sent it when the month started, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.'
-        : 'Only an import waiting for the 1st can be cancelled; this one has started or finished.')
-    }
+    const current = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ?`).bind(importId, caller.organizationId).first<{ state: string }>()
+    if (current?.state !== 'cancelled') throw new ApiError('conflict', current?.state === 'waiting' || current?.state === 'queued' ? BEING_LEARNED : ONLY_WAITING)
     return json(c, { import: { importId, state: 'cancelled' } })
   })
 

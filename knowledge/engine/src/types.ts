@@ -59,6 +59,7 @@ export interface OutdatedMark {
   noteDocumentId: string
   correctionImportId: string
   needsCheck: boolean // the passage changed when the file was re-read: the correction asks to be checked
+  seq?: number // the correction's place in the order corrections were made: when two meet on a passage, the higher wins
 }
 
 /** Everything that changes answers, restored with each restore point. */

@@ -58,7 +58,7 @@ export const collectionsAndSources: DocTopic = {
           </p>
           <p>
             What waits for the 1st (your organization has learned this month's documents) is listed on <b>Sources</b>, under
-            <b> Waiting for the 1st</b>, with who added it and when it starts; its editors can <b>Cancel</b> it, and it is never learned. Once Insulin has sent it to be learned (on the 1st), it can't be cancelled: Knowledge says so, and it is learned.
+            <b> Waiting for the 1st</b>, with who added it and when it starts; its editors can <b>Cancel</b> it, and it is never learned. Sent on the 1st, it can still be cancelled until Insulin starts learning it; once learning has started, it can't be: Knowledge says so, and it is learned.
           </p>
           <p>
             Before Insulin reads anything, it hides e-mail addresses, phone numbers, card numbers, API keys and values labelled

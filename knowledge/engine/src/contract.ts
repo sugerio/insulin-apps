@@ -155,6 +155,11 @@ export interface ImportExportRequest {
   sha256: string // the staged zip's checksum the app read and reserved from; a different file answers 409 bad_request
 }
 
+// DELETE /v1/collections/:cid/imports/:importId: cancel an import the engine hasn't started learning, or, when the
+// engine has no import with that id, remember the id as cancelled so a later submission with it (a send still in
+// flight) answers `cancelled` and learns nothing. Answers ImportStatus with state `cancelled`; 409 `busy_learning`
+// once learning has started or the import is finished.
+
 export interface ImportRequest {
   importId: string // idempotent: the same id answers the existing import
   files: ImportFile[]
@@ -344,7 +349,7 @@ export type OutboxEvent =
   | { id: string; at: string; org: string; collectionId: string; type: 'backup'; version: number }
   | { id: string; at: string; org: string; collectionId: string; type: 'deleted' }
   // A file re-read changed a passage a correction marked outdated: the correction asks to be checked.
-  | { id: string; at: string; org: string; collectionId: string; type: 'needs_check'; noteId: string; documentId: string; textHash: string }
+  | { id: string; at: string; org: string; collectionId: string; type: 'needs_check'; noteId: string; documentId: string; textHash: string; previousTextHash: string | null } // previousTextHash: the hash the mark had before this re-read moved it, so an older check of the same mark can be replaced
 
 export interface OutboxPage {
   events: OutboxEvent[]

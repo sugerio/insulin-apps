@@ -145,33 +145,50 @@ interface ImportBody {
   note?: unknown
 }
 
-export async function submit(e: CollectionEngine, body: ImportBody): Promise<{ status: number; record: ImportRecord }> {
+export function submit(e: CollectionEngine, body: ImportBody): Promise<{ status: number; record: ImportRecord }> {
+  return sameIdFirst(e, body.importId, () => submitOnce(e, body))
+}
+
+async function submitOnce(e: CollectionEngine, body: ImportBody): Promise<{ status: number; record: ImportRecord }> {
   const importId = requireId(body.importId, 'importId')
   const existing = await e.store.getImport(importId)
   if (existing) return { status: 200, record: existing }
+  if (await e.state.storage.get(tombstoneKey(importId))) return claim(e, cancelledSubmission(importId, 'import', body.files))
   const files = parseFiles(body.files)
   const notes = parseNotes(body.notes)
   if (!files.length && !notes.length) return fail('bad_request', 'An import needs at least one file or note.')
   const small = body.small === true
   const kind: ImportKind = notes.some((n) => n.outdated.length) && !files.length ? 'correction' : 'import'
-  return { status: 202, record: await create(e, importId, kind, small || (!files.length && notes.length > 0), files, notes) }
+  return create(e, importId, kind, small || (!files.length && notes.length > 0), files, notes)
 }
 
 /** A correction: a small import of a note, with the passages it corrects marked outdated. */
-export async function submitCorrection(e: CollectionEngine, body: ImportBody): Promise<{ status: number; record: ImportRecord }> {
+export function submitCorrection(e: CollectionEngine, body: ImportBody): Promise<{ status: number; record: ImportRecord }> {
+  return sameIdFirst(e, body.importId, () => submitCorrectionOnce(e, body))
+}
+
+async function submitCorrectionOnce(e: CollectionEngine, body: ImportBody): Promise<{ status: number; record: ImportRecord }> {
   const importId = requireId(body.importId, 'importId')
   const existing = await e.store.getImport(importId)
   if (existing) return { status: 200, record: existing }
+  if (await e.state.storage.get(tombstoneKey(importId))) return claim(e, cancelledSubmission(importId, 'correction', undefined))
   const notes = parseNotes(body.notes ?? (body.note ? [body.note] : undefined))
   if (!notes.length) return fail('bad_request', 'A correction needs a note.')
   const state = await e.currentState()
   for (const ref of notes.flatMap((n) => n.outdated)) {
     if (!state.documents.some((d) => d.documentId === ref.documentId)) return fail('bad_request', 'A corrected passage names a document this collection does not have.')
   }
-  return { status: 202, record: await create(e, importId, 'correction', true, [], notes) }
+  return create(e, importId, 'correction', true, [], notes)
 }
 
-async function create(e: CollectionEngine, importId: string, kind: ImportKind, small: boolean, files: ImportFile[], notes: ImportNote[]): Promise<ImportRecord> {
+async function create(
+  e: CollectionEngine,
+  importId: string,
+  kind: ImportKind,
+  small: boolean,
+  files: ImportFile[],
+  notes: ImportNote[],
+): Promise<{ status: number; record: ImportRecord }> {
   const meta = await e.meta()
   for (const file of files) {
     const staged = await e.store.getStaged(file.fileId)
@@ -243,17 +260,173 @@ async function create(e: CollectionEngine, importId: string, kind: ImportKind, s
     record.status.state = 'duplicate'
     record.status.finishedAt = iso()
     record.phase = 'done'
-    await e.store.putImport(record)
-    await deleteOriginals(e, record.files.map((f) => f.fileId))
+  }
+  return claim(e, record)
+}
+
+// ==================================================================== claiming an import id, and cancelling
+
+/**
+ * "The same id answers the existing import" comes before anything else a submission finds wrong: one that gave up
+ * after an await (its staged zip learned and deleted meanwhile, say) answers the import another submission with the
+ * id made, or `cancelled` when the id was cancelled.
+ */
+async function sameIdFirst(
+  e: CollectionEngine,
+  importId: unknown,
+  submission: () => Promise<{ status: number; record: ImportRecord }>,
+): Promise<{ status: number; record: ImportRecord }> {
+  try {
+    return await submission()
+  } catch (error) {
+    if (typeof importId !== 'string' || !(error instanceof EngineFailure)) throw error
+    const existing = await e.store.getImport(importId)
+    if (existing) return { status: 200, record: existing }
+    if (await e.state.storage.get(tombstoneKey(importId))) return claim(e, cancelledSubmission(importId, 'import', undefined))
+    throw error
+  }
+}
+
+interface Tombstone {
+  at: string // when the id was cancelled before the engine saw it
+}
+
+const tombstoneKey = (importId: string) => `cancelled:${importId}`
+
+/** A submission of an id that was cancelled first: what it answers, and the staged files it named go. */
+function cancelledSubmission(importId: string, kind: ImportKind, files: unknown): ImportRecord {
+  const record = baseRecord(importId, kind, cancelledStatus(importId, iso()))
+  const named = Array.isArray(files) ? files.filter((f) => typeof f?.fileId === 'string').map((f) => String(f.fileId)) : []
+  record.files = named.map((fileId) => ({ fileId, name: '', type: '', bytes: 0, sha256: '', documentId: '', duplicateOf: null }))
+  return record
+}
+
+function cancelledStatus(importId: string, at: string): ImportStatus {
+  return {
+    importId,
+    state: 'cancelled',
+    attempt: 1,
+    queuePosition: null,
+    waitingFor: null,
+    files: [],
+    notes: 0,
+    version: null,
+    newFacts: null,
+    failedFileId: null,
+    error: null,
+    etaSeconds: null,
+    createdAt: at,
+    finishedAt: at,
+  }
+}
+
+/**
+ * The last step of every submission (imports, corrections, import-export), after all its reads: in one storage
+ * transaction, an import another submission already made under the id wins (its record is the answer), a cancel of
+ * the id wins (the submission answers `cancelled` and learns nothing), and otherwise the record and its place in the
+ * queue are written together. No request can come between the check and the claim.
+ */
+async function claim(e: CollectionEngine, record: ImportRecord): Promise<{ status: number; record: ImportRecord }> {
+  const importId = record.status.importId
+  const outcome = await e.state.storage.transaction(async (txn) => {
+    const existing = await e.store.getImport(importId, txn)
+    if (existing) return { won: 'other' as const, record: existing }
+    if (record.status.state === 'cancelled' || (await txn.get<Tombstone>(tombstoneKey(importId)))) {
+      const cancelled: ImportRecord = {
+        ...record,
+        phase: 'done',
+        notes: scrubbed(record.notes),
+        status: { ...record.status, state: 'cancelled', queuePosition: null, waitingFor: null, etaSeconds: null, finishedAt: iso() },
+      }
+      await e.store.putImport(cancelled, txn)
+      await txn.delete(tombstoneKey(importId))
+      return { won: 'cancel' as const, record: cancelled }
+    }
+    await e.store.putImport(record, txn)
+    if (record.phase === 'queued') {
+      const meta = (await txn.get<Meta>('meta'))!
+      meta.queue = await placed(e, meta.queue, importId, rankOf(record), txn)
+      await txn.put('meta', meta)
+    }
+    return { won: 'this' as const, record }
+  })
+  if (outcome.won === 'other') return { status: 200, record: outcome.record }
+  const files = record.files.map((f) => f.fileId)
+  if (outcome.won === 'cancel') {
+    await deleteOriginals(e, files)
+    await e.event(`import:${importId}:cancelled`, { type: 'import', import: outcome.record.status })
+    await e.store.log('import-cancelled', { importId, when: 'submitted after its cancel' })
+    return { status: 200, record: outcome.record }
+  }
+  if (record.phase === 'done') {
+    await deleteOriginals(e, files)
     await e.event(`import:${importId}:duplicate`, { type: 'import', import: record.status })
     await e.store.log('import-duplicate', { importId, files: files.length })
-    return record
+    return { status: 202, record }
   }
-  await e.store.putImport(record)
-  await enqueue(e, record)
-  await e.store.log('import-queued', { importId, kind, small, files: recordFiles.length, notes: recordNotes.length })
+  await e.store.log('import-queued', { importId, kind: record.kind, small: record.small, files: record.files.length, notes: record.notes.length })
   await e.state.storage.setAlarm(clock.now())
-  return record
+  return { status: 202, record }
+}
+
+/**
+ * DELETE .../imports/:importId: a queued import that hasn't started learning is cancelled; an id the engine has no
+ * import with is remembered as cancelled (SETTINGS.cancelledKeepMs), so a submission with it still in flight learns
+ * nothing. One that started or finished answers 409 busy_learning. The check and the change are one transaction.
+ */
+export async function cancel(e: CollectionEngine, importId: string): Promise<ImportRecord> {
+  const outcome = await e.state.storage.transaction(async (txn) => {
+    const record = await e.store.getImport(importId, txn)
+    if (!record) {
+      const at = iso()
+      await txn.put(tombstoneKey(importId), { at } satisfies Tombstone)
+      return { done: 'remembered' as const, record: baseRecord(importId, 'import', cancelledStatus(importId, at)) }
+    }
+    if (record.status.state === 'cancelled') return { done: 'already' as const, record }
+    const meta = (await txn.get<Meta>('meta'))!
+    const cancellable = ['import', 'correction', 'export'].includes(record.kind) && record.phase === 'queued' && meta.active !== importId
+    if (!cancellable) return { done: 'busy' as const, record }
+    const capacity = record.capacity
+    record.phase = 'done'
+    record.capacity = 'none'
+    record.notes = scrubbed(record.notes)
+    record.status = { ...record.status, state: 'cancelled', queuePosition: null, waitingFor: null, etaSeconds: null, finishedAt: iso() }
+    await e.store.putImport(record, txn)
+    meta.queue = meta.queue.filter((id) => id !== importId)
+    await txn.put('meta', meta)
+    return { done: 'cancelled' as const, record, capacity }
+  })
+  if (outcome.done === 'busy') {
+    const finished = outcome.record.phase === 'done'
+    return fail('busy_learning', finished ? 'This import is finished; it can no longer be cancelled.' : 'This import is being learned; it can no longer be cancelled.')
+  }
+  if (outcome.done === 'cancelled') {
+    const record = outcome.record
+    if (outcome.capacity !== 'none') await e.releaseCapacity(record)
+    await deleteOriginals(e, record.files.map((f) => f.fileId))
+    if (record.textsSaved) {
+      // Texts saved by an earlier try (stopped for a removal or a hold) that will never be learned.
+      const meta = await e.meta()
+      await deleteLater(e, [...record.files.filter((f) => !f.duplicateOf && f.documentId), ...record.notes].map((d) => textKey(meta, d.documentId)))
+    }
+    await e.event(`import:${importId}:cancelled`, { type: 'import', import: record.status })
+    await e.store.log('import-cancelled', { importId, when: 'queued' })
+  }
+  if (outcome.done === 'remembered') await e.store.log('import-cancelled', { importId, when: 'before it was sent' })
+  return outcome.record
+}
+
+/** Cancelled ids are remembered for SETTINGS.cancelledKeepMs: no send stays in flight that long. */
+export async function forgetCancelled(e: CollectionEngine): Promise<void> {
+  const cutoff = clock.now() - SETTINGS.cancelledKeepMs
+  const old = [...(await e.state.storage.list<Tombstone>({ prefix: 'cancelled:' })).entries()].filter(([, t]) => Date.parse(t.at) < cutoff).map(([key]) => key)
+  if (old.length) await e.state.storage.delete(old)
+}
+
+/** A cancelled id the engine never had an import for (GET answers it as cancelled). */
+export async function cancelledId(e: CollectionEngine, importId: string): Promise<ImportRecord | null> {
+  const tombstone = await e.state.storage.get<Tombstone>(tombstoneKey(importId))
+  return tombstone ? baseRecord(importId, 'import', cancelledStatus(importId, tombstone.at)) : null
 }
 
 /** Every file waiting again (a new try, or a stop). An export's import lists its documents, not its zip. */
@@ -276,10 +449,15 @@ function fileStatus(f: ImportRecord['files'][number]): ImportFileStatus {
  * texts are hidden again with this collection's rules, and one restore point holds the documents, which of them are
  * stopped, the notes and the corrections with their outdated marks.
  */
-export async function submitExportImport(e: CollectionEngine, body: { importId?: unknown; fileId?: unknown; sha256?: unknown }): Promise<{ status: number; record: ImportRecord }> {
+export function submitExportImport(e: CollectionEngine, body: { importId?: unknown; fileId?: unknown; sha256?: unknown }): Promise<{ status: number; record: ImportRecord }> {
+  return sameIdFirst(e, body.importId, () => submitExportImportOnce(e, body))
+}
+
+async function submitExportImportOnce(e: CollectionEngine, body: { importId?: unknown; fileId?: unknown; sha256?: unknown }): Promise<{ status: number; record: ImportRecord }> {
   const importId = requireId(body.importId, 'importId')
   const existing = await e.store.getImport(importId)
   if (existing) return { status: 200, record: existing }
+  if (await e.state.storage.get(tombstoneKey(importId))) return claim(e, cancelledSubmission(importId, 'export', [{ fileId: body.fileId }]))
   const fileId = requireId(body.fileId, 'fileId')
   if (!isSha256(body.sha256)) return fail('bad_request', "sha256 must be the staged export's SHA-256, in hex.")
   const sha256 = body.sha256
@@ -321,11 +499,8 @@ export async function submitExportImport(e: CollectionEngine, body: { importId?:
   record.rereadDocumentIds = contents.documents.map((d) => d.info.documentId) // its time limit counts them
   record.hiding = meta.settings.hiding
   record.fromExport = contents.from
-  await e.store.putImport(record)
-  await enqueue(e, record)
-  await e.store.log('import-queued', { importId, kind: 'export', documents: contents.documents.length, marks: contents.marks.length })
-  await e.state.storage.setAlarm(clock.now())
-  return { status: 202, record }
+  // The zip was read meanwhile: another submission with this id, or a cancel of it, may have come first.
+  return claim(e, record)
 }
 
 /** The staged export, read whole; 'replaced' when its bytes aren't the ones whose checksum was given. */
@@ -366,11 +541,17 @@ export function rankOf(record: Pick<ImportRecord, 'kind' | 'small'>): number {
 }
 
 /** The queue with `importId` placed after every import of the same or a higher rank, in order of arrival. */
-async function placed(e: CollectionEngine, queue: string[], importId: string, rank: number): Promise<string[]> {
+async function placed(
+  e: CollectionEngine,
+  queue: string[],
+  importId: string,
+  rank: number,
+  reader: Pick<DurableObjectStorage, 'get'> | DurableObjectTransaction = e.state.storage,
+): Promise<string[]> {
   const rest = queue.filter((id) => id !== importId)
   const ranks: number[] = []
   for (const id of rest) {
-    const record = await e.store.getImport(id)
+    const record = await e.store.getImport(id, reader)
     ranks.push(record ? rankOf(record) : 2)
   }
   const at = ranks.findIndex((r) => r > rank)
@@ -1215,6 +1396,8 @@ function applyResult(
   let documents = current.documents.slice()
   let marks = current.marks.slice()
   const superseded = new Set<string>()
+  // Each correction gets the next number in the order corrections were made (exports carry it), so a later one wins.
+  let seq = marks.reduce((most, m) => Math.max(most, m.seq ?? 0), 0)
   if (record.kind === 'import' || record.kind === 'correction') {
     for (const file of record.files) {
       if (file.duplicateOf) continue
@@ -1259,6 +1442,7 @@ function applyResult(
         noteId: note.noteId,
         hiddenCount: learned?.hidden ?? 0,
       })
+      if (note.outdated.length) seq += 1
       for (const ref of note.outdated) {
         // The newest correction of a passage wins ("Write it again"): it takes the passage over from an earlier one.
         const same = (m: OutdatedMark) => m.documentId === ref.documentId && m.textHash === ref.textHash
@@ -1266,7 +1450,7 @@ function applyResult(
         if (earlier?.noteDocumentId === note.documentId) continue
         if (earlier) superseded.add(earlier.noteDocumentId)
         marks = marks.filter((m) => !same(m))
-        marks.push({ ...ref, noteDocumentId: note.documentId, correctionImportId: record.status.importId, needsCheck: false })
+        marks.push({ ...ref, noteDocumentId: note.documentId, correctionImportId: record.status.importId, needsCheck: false, seq })
       }
     }
     // An earlier correction left correcting nothing is kept but no longer used, so it can't answer instead.
@@ -1325,11 +1509,16 @@ function followMarks(marks: OutdatedMark[], moves: NonNullable<IngestResult['mar
     const to = remap.get(key)
     return to ? { ...m, textHash: to, needsCheck: m.needsCheck || changed.has(key) } : { ...m, needsCheck: true }
   })
-  // Two passages that hiding made the same now carry two marks: one passage has one correction, the newer (marks are
-  // kept in the order they were made), as when a correction is written again.
-  const last = new Map(moved.map((m, i) => [`${m.documentId}:${m.textHash}`, i]))
+  // Two passages that hiding made the same now carry two marks: one passage has one correction, the newer by its
+  // number (an equal or missing number: the later in the list), as when a correction is written again.
+  const winner = new Map<string, number>()
+  moved.forEach((m, i) => {
+    const key = `${m.documentId}:${m.textHash}`
+    const best = winner.get(key)
+    if (best === undefined || (m.seq ?? 0) >= (moved[best].seq ?? 0)) winner.set(key, i)
+  })
   return moved.filter((m, i) => {
-    if (last.get(`${m.documentId}:${m.textHash}`) === i) return true
+    if (winner.get(`${m.documentId}:${m.textHash}`) === i) return true
     superseded.add(m.noteDocumentId)
     return false
   })
@@ -1510,7 +1699,16 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
           return [
             {
               key: `${meta.org}:${meta.collectionId}:needs_check:${version}:${mark.noteDocumentId}:${m.documentId}:${m.textHash}`,
-              event: { ...event, type: 'needs_check' as const, noteId: note.noteId, documentId: m.documentId, textHash: mark.textHash },
+              event: {
+                ...event,
+                type: 'needs_check' as const,
+                noteId: note.noteId,
+                documentId: m.documentId,
+                textHash: mark.textHash,
+                // The hash the mark had before this re-read moved it (none when it couldn't follow its passage), so the
+                // app replaces that mark's earlier check.
+                previousTextHash: m.newTextHash && m.newTextHash !== m.textHash ? m.textHash : null,
+              },
             },
           ]
         }),

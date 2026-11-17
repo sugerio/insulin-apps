@@ -138,10 +138,15 @@ export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: n
       if (applied) await notifyImport(env, org, collection, event.import.importId, event.import, now)
       return applied
     }
-    case 'needs_check':
-      // Not when another correction of that passage, as it reads now, was learned since: it took the passage over (its
-      // import may be recorded before this event is read), so there is nothing left to check.
-      return once(db, event, [db.prepare(
+    case 'needs_check': {
+      // A mark that moved again (read again twice) replaces the check its correction asked for where it was before.
+      const replaced = event.previousTextHash && event.previousTextHash !== event.textHash
+        ? [db.prepare(`DELETE FROM correction_checks WHERE collection_id = ? AND org_id = ? AND note_id = ? AND document_id = ? AND text_hash = ?`)
+          .bind(collection.id, org, event.noteId, event.documentId, event.previousTextHash)]
+        : []
+      // None is kept when another correction of that passage, as it reads now, was learned since: it took the passage
+      // over (its import may be recorded before this event is read), so there is nothing left to check.
+      return once(db, event, [...replaced, db.prepare(
         `INSERT INTO correction_checks (collection_id, note_id, document_id, text_hash, org_id, at) SELECT ?1, ?2, ?3, ?4, ?5, ?6
          WHERE NOT EXISTS (
            SELECT 1 FROM corrections k JOIN imports i ON i.id = k.import_id AND i.org_id = k.org_id, json_each(k.outdated) o
@@ -149,6 +154,7 @@ export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: n
              AND json_extract(o.value, '$.documentId') = ?3 AND json_extract(o.value, '$.textHash') = ?4)
          ON CONFLICT DO NOTHING`,
       ).bind(collection.id, event.noteId, event.documentId, event.textHash, org, Date.parse(event.at) || now)], now)
+    }
     case 'usage':
       return once(db, event, await consumeAwake(db, org, collection.id, Math.max(0, event.seconds), Date.parse(event.at) || now), now)
     case 'state':

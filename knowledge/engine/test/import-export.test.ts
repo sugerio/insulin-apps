@@ -412,3 +412,72 @@ test('the exporter writes nothing past the bounds: a stored text longer than an 
   assert.equal((await t.api('GET', '/v1/collections/c1/exports/exp-1')).body.state, 'failed')
   assert.ok((await t.api('GET', '/v1/collections/c1/__test/state')).body.log.some((e: any) => e.event === 'export-failed' && /larger than an export can hold/.test(e.error)))
 })
+
+/** Pauses the next read of the staged zip `fileId` until `release()`; `reached` resolves when it starts. */
+function pauseRead(t: TestEngine, fileId: string) {
+  const get = t.files.get.bind(t.files)
+  let release!: () => void
+  let reached!: () => void
+  const gate = new Promise<void>((r) => (release = r))
+  const started = new Promise<void>((r) => (reached = r))
+  let paused = false
+  t.files.get = async (key: string) => {
+    if (!paused && key === `inbox/org-acme/c2/${fileId}`) {
+      paused = true
+      reached()
+      await gate
+    }
+    return get(key)
+  }
+  return { started, release, restore: () => (t.files.get = get) }
+}
+
+test("F145 a cancel that comes while import-export's read of the zip is paused wins: the submission answers cancelled and nothing is learned", async () => {
+  const t = makeEngine()
+  const { zip } = await exported(t)
+  await createCollection(t, 'c2')
+  await stageBytes(t, 'c2', 'export-zip', zip)
+  const pause = pauseRead(t, 'export-zip')
+  const submission = t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))
+  await pause.started
+  const cancel = await t.api('DELETE', '/v1/collections/c2/imports/from-export')
+  assert.deepEqual([cancel.status, cancel.body.state], [200, 'cancelled'], 'the engine has no import with that id yet: it remembers the id')
+  pause.release()
+  const answer = await submission
+  pause.restore()
+  assert.deepEqual([answer.status, answer.body.state], [200, 'cancelled'])
+  await t.drain('c2')
+  assert.equal((await t.api('GET', '/v1/collections/c2')).body.version, 0, 'nothing learned')
+  assert.equal((await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state, 'cancelled')
+  assert.deepEqual(t.files.keys('inbox/org-acme/c2/'), [], 'its staged zip is deleted')
+})
+
+for (const when of ['while the first is learning', 'after the first committed (its zip is gone)'] as const) {
+  test(`F159 two import-export submissions with one id that overlap, the late one resuming ${when}: it answers the first, nothing is overwritten`, async () => {
+    const t = makeEngine()
+    const { zip } = await exported(t)
+    await createCollection(t, 'c2')
+    await stageBytes(t, 'c2', 'export-zip', zip)
+    const pause = pauseRead(t, 'export-zip')
+    const first = t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))
+    await pause.started
+    pause.restore()
+    const second = await t.api('POST', '/v1/collections/c2/import-export', exportRequest('c2', 'from-export', 'export-zip'))
+    assert.equal(second.status, 202)
+    if (when === 'while the first is learning') t.cloud.jobPolls = 1000
+    await t.drain('c2', { steps: 3 })
+    const running = (await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state
+    if (when === 'while the first is learning') assert.ok(['reading', 'learning'].includes(running), running)
+    else assert.equal(running, 'committed')
+    pause.release()
+    const late = await first
+    assert.equal(late.status, 200, `the submission that lost answers the record that won: ${JSON.stringify(late.body)}`)
+    assert.equal(late.body.state, running)
+    assert.equal((await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state, running, 'the running record is untouched')
+    assert.equal((await t.storage('c2').get<any>('meta')).queue.filter((id: string) => id === 'from-export').length, 0, 'not queued again')
+    t.cloud.jobPolls = 1
+    for (const job of (t.container('c2') as any).jobs.values()) job.polls = Math.min(job.polls, 1) // it finishes now
+    await t.drain('c2')
+    assert.deepEqual([(await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state, (await t.api('GET', '/v1/collections/c2')).body.version], ['committed', 1])
+  })
+}

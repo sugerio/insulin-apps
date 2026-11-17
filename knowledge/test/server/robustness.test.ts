@@ -552,7 +552,8 @@ describe('deleting', () => {
     await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/reports`, { question: 'Is it right?', note: 'Report text.' })
     // Held at the awake-hours stop, then let go: the hold's row stays until the organization goes.
     await holdOrganization(h.env, ORG, h.clock.now + 86_400_000, h.clock.now)
-    await releaseOrganization(h.env, ORG, h.clock.now)
+    const hold = await h.db.prepare(`SELECT version FROM org_holds WHERE org_id = ?`).bind(ORG).first<{ version: number }>()
+    await releaseOrganization(h.env, ORG, hold!.version, h.clock.now)
     await h.tick()
     h.gateway.addEvent({ type: 'org_deleted', org: ORG })
     await h.tick()

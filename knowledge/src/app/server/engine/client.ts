@@ -146,6 +146,15 @@ export class EngineClient {
     return this.json('GET', `/v1/collections/${EngineClient.id(collectionId)}/imports/${EngineClient.id(importId)}`)
   }
 
+  /**
+   * Cancels an import the engine hasn't started learning, or remembers an id it has no import for as cancelled, so a
+   * submission with it still on its way learns nothing: answers it `cancelled`. 409 busy_learning once learning has
+   * started or the import is finished.
+   */
+  cancelImport(collectionId: string, importId: string): Promise<ImportStatus> {
+    return this.json('DELETE', `/v1/collections/${EngineClient.id(collectionId)}/imports/${EngineClient.id(importId)}`)
+  }
+
   search(collectionId: string, request: SearchRequest): Promise<SearchResult> {
     return this.json('POST', `/v1/collections/${EngineClient.id(collectionId)}/search`, request)
   }

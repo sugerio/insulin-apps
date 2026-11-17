@@ -147,27 +147,29 @@ export async function endOverrides(db: D1Database, now: number): Promise<number>
 
 /**
  * The awake-hours stop held in the engine: organizations at 100% of the month's awake hours are held until the 1st
- * (holds.ts), and those held let go once a raised limit frees them or the month they were held for is over. Every
- * organization's use and limit are read in a few grouped queries.
+ * (holds.ts), and those held let go once a raised limit frees them or the month they were held for is over. Holds are
+ * looked at in turn, 100 a tick from where the last tick stopped (the cursor is saved), so each is looked at again
+ * within a few ticks however many stay held. Every organization's use and limit are read in a few grouped queries.
  */
 export async function awakeHolds(env: Bindings, now: number, deadline: number): Promise<{ held: number; released: number; resent: number }> {
   const db = env.DB
   let held = 0
   let released = 0
   let resent = 0
-  // Let go: the month it was held for is over, or a raised limit frees it.
-  const { results: holds } = await db.prepare(`SELECT org_id, until FROM org_holds WHERE until != 0 ORDER BY held_at LIMIT 100`).all<{ org_id: string; until: number }>()
-  for (const hold of holds) {
-    if (Date.now() > deadline) return { held, released, resent }
-    if (hold.until > now && (await atAwakeStop(db, hold.org_id, now)).stopped) continue
-    if (await releaseOrganization(env, hold.org_id, now)) released += 1
+  let last: string | null = null
+  for (const hold of await holdsInTurn(db, 100)) {
+    if (Date.now() > deadline) break
+    const outcome = await reassessHold(env, hold, now)
+    if (outcome === 'released') released += 1
+    if (outcome === 'resent') resent += 1
+    last = hold.org_id
   }
-  // What the engine hasn't taken yet (a send that failed, or an answer that came late): sent again.
-  const { results: behind } = await db.prepare(`SELECT org_id FROM org_holds WHERE delivered != version ORDER BY held_at LIMIT 100`).all<{ org_id: string }>()
-  for (const row of behind) {
-    if (Date.now() > deadline) return { held, released, resent }
-    if (await deliverHold(env, row.org_id, now)) resent += 1
+  if (last !== null) {
+    await db.prepare(
+      `INSERT INTO sync_state (name, cursor, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (name) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at`,
+    ).bind(HOLDS_CURSOR, last, now).run()
   }
+  if (Date.now() > deadline) return { held, released, resent }
   const period = periodOf(now)
   const { results: used } = await db.prepare(
     `SELECT org_id, SUM(used) AS used FROM usage_counters WHERE period = ?1 AND key = 'awake_hours_month' AND org_id NOT IN (SELECT org_id FROM org_holds WHERE until > ?2)
@@ -195,6 +197,39 @@ export async function awakeHolds(env: Bindings, now: number, deadline: number): 
 }
 
 const WAITING_CURSOR = 'waiting_imports'
+const HOLDS_CURSOR = 'org_holds'
+
+type HoldRow = { org_id: string; until: number; version: number; delivered: number }
+
+/** Holds to look at (held, or not yet taken by the engine), in order of organization after the saved cursor, wrapping round. */
+async function holdsInTurn(db: D1Database, batch: number): Promise<HoldRow[]> {
+  const cursor = (await db.prepare(`SELECT cursor FROM sync_state WHERE name = ?`).bind(HOLDS_CURSOR).first<{ cursor: string | null }>())?.cursor ?? ''
+  const page = (after: string, limit: number) => db.prepare(
+    `SELECT org_id, until, version, delivered FROM org_holds WHERE (until != 0 OR delivered != version) AND org_id > ? ORDER BY org_id LIMIT ?`,
+  ).bind(after, limit).all<HoldRow>().then((rows) => rows.results)
+  const holds = await page(cursor, batch)
+  if (holds.length < batch && cursor) for (const hold of await page('', batch - holds.length)) if (hold.org_id <= cursor) holds.push(hold)
+  return holds
+}
+
+/**
+ * One hold looked at: let go when the month it was held for is over or a raised limit frees it, and sent again while
+ * the engine hasn't taken the version wanted. A release written only while the hold is still the one looked at: one
+ * renewed meanwhile (a question at the stop) is looked at again as it is now, with the use and limit now.
+ */
+async function reassessHold(env: Bindings, hold: HoldRow, now: number): Promise<'released' | 'resent' | null> {
+  let current: HoldRow | null = hold
+  for (let attempt = 0; attempt < 3 && current; attempt += 1) {
+    if (current.until !== 0 && !(current.until > now && (await atAwakeStop(env.DB, current.org_id, now)).stopped)) {
+      const outcome = await releaseOrganization(env, current.org_id, current.version, now)
+      if (outcome !== 'changed') return outcome ? 'released' : null
+      current = await env.DB.prepare(`SELECT org_id, until, version, delivered FROM org_holds WHERE org_id = ?`).bind(current.org_id).first<HoldRow>()
+      continue
+    }
+    return current.delivered !== current.version && (await deliverHold(env, current.org_id, now)) ? 'resent' : null
+  }
+  return null
+}
 
 /** Organizations with imports waiting, in order of id after the saved cursor, wrapping round to the start. */
 async function waitingOrganizations(db: D1Database, batch: number): Promise<string[]> {

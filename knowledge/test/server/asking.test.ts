@@ -146,6 +146,36 @@ describe('fixing and reporting', () => {
     const factsAfter = await h.json<{ facts: { sentence: string }[] }>(PEOPLE.maya, 'GET', `/api/collections/${id}/facts`)
     expect(factsAfter.body.facts.some((entry) => /20 percent/.test(entry.sentence))).toBe(false)
   })
+
+  it('FIX-04 a fact\'s fix sends the engine only the right fact: the wrong sentence is in neither its title nor its text', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await h.note(PEOPLE.maya, id, RULES, 'Partner rules')
+    const facts = await h.json<{ facts: { factId: string; sentence: string }[] }>(PEOPLE.maya, 'GET', `/api/collections/${id}/facts`)
+    const wrong = facts.body.facts.find((entry) => /20 percent/.test(entry.sentence))!
+    const engine = h.env.ENGINE!
+    const sent: string[] = []
+    h.env.ENGINE = {
+      fetch: async (request: Request) => {
+        if (request.method === 'POST' && /\/(imports|corrections)$/.test(new URL(request.url).pathname)) sent.push(await request.clone().text())
+        return engine.fetch(request)
+      },
+    }
+    // As What it knows sends it; a title of the client's own is not taken (the server makes it).
+    expect((await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { factId: wrong.factId, text: 'Partner discounts stop at 15 percent for gold partners.', title: `Correction: ${wrong.sentence}` })).status).toBe(400)
+    const fixed = await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { factId: wrong.factId, text: 'Partner discounts stop at 15 percent for gold partners.', notifyAuthors: false })
+    expect(fixed.status).toBe(202)
+    expect(sent).toHaveLength(1)
+    const notes = (JSON.parse(sent[0]!) as { notes: { title: string; text: string }[] }).notes
+    // Must catch: the old sentence learned again inside its own correction.
+    expect(notes).toEqual([expect.objectContaining({ title: 'Correction to “Partner rules”', text: 'Partner discounts stop at 15 percent for gold partners.' })])
+    expect(sent[0]).not.toContain(wrong.sentence)
+    expect(sent[0]).not.toMatch(/20 percent/)
+    h.env.ENGINE = engine
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    const after = await answered(id, 'Where do partner discounts stop for gold partners?')
+    expect(JSON.stringify(after.body)).not.toMatch(/20 percent/)
+  })
 })
 
 describe('hiding before learning', () => {

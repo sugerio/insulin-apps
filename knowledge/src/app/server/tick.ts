@@ -537,7 +537,7 @@ export async function watchLimits(env: Bindings, now: number, options: { batch?:
         if (await claimAlert(db, org, period, `keep_ready:${collection.id}`, 'paused', now)) {
           const owner = await db.prepare(`SELECT email FROM members WHERE org_id = ? AND principal_type = 'person' AND principal_id = ?`).bind(org, collection.owner_id).first<{ email: string | null }>()
           const resets = new Date(resetsAt(now)).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
-          if (owner?.email) await sendMail(env, org, { to: owner.email, ...MAIL.keepReadyPaused(collection.name, Math.floor(awake), awakeLimit ?? 0, resets, appLink(env, `/collections/${collection.id}/sharing`)) }, 'keep_ready_paused')
+          if (owner?.email) await sendMail(env, org, { to: owner.email, ...MAIL.keepReadyPaused(collection.name, Math.floor(awake), awakeLimit ?? 0, resets, supportSentence(env), appLink(env, `/collections/${collection.id}/sharing`)) }, 'keep_ready_paused')
         }
       }
     }

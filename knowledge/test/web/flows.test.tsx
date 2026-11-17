@@ -40,7 +40,9 @@ describe('COL-01 from a new collection to a cited answer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save and learn it' }))
     // Step 3, learning, then step 4: what it learned.
     expect(await screen.findByRole('heading', { name: "Here's what Insulin learned" }, { timeout: 15_000 })).toBeTruthy()
-    expect(await screen.findByText(/Start the renewal conversation 120 days/)).toBeTruthy()
+    // The fact to check, and a question to try made from it.
+    await waitFor(() => expect(screen.getAllByText(/Start the renewal conversation 120 days/).some((node) => node.closest('[data-fact]'))).toBe(true))
+    expect(within(await screen.findByRole('list', { name: 'Questions to try' })).getByRole('button', { name: /Start the renewal conversation 120 days .* — is that right\?$/ })).toBeTruthy()
     const answer = await ask('When should we start the renewal conversation?')
     const citation = await within(answer).findByRole('button', { name: /^Source 1: Renewal timeline/ })
     expect(within(answer).getByText(/Written by Insulin Knowledge's built-in model/)).toBeTruthy()

@@ -21,7 +21,7 @@ export function AttentionPage() {
   const me = useMe()
   const [params] = useSearchParams()
   const only = params.get('collection')
-  const attention = useResource<{ collections: AttentionCollection[] }>(canEdit(me) ? `/api/attention${only ? `?collection=${encodeURIComponent(only)}` : ''}` : null)
+  const attention = useResource<{ collections: AttentionCollection[]; notice?: string | null }>(canEdit(me) ? `/api/attention${only ? `?collection=${encodeURIComponent(only)}` : ''}` : null)
   if (!canEdit(me)) {
     return <NoPermissionPage title="Needs attention" message="Needs attention is for people who can change collections. Your role in Knowledge can only read; you can still report a wrong answer from any answer." />
   }
@@ -42,6 +42,7 @@ export function AttentionPage() {
           </ul>
         </Card>
       ))}
+      {attention.data?.notice ? <Note>{attention.data.notice}</Note> : null}
       <Note>Files Insulin couldn't read and hidden values are listed for 30 days. A file leaves the list once a file with the same name is learned in that collection.</Note>
     </Page>
   )

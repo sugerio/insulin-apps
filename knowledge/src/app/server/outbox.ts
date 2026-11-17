@@ -20,9 +20,86 @@ import { memberOf } from './members.ts'
  * - `import`: the import's state; a failed, cancelled or duplicate import's reservations released, "import failed" mail;
  * - `usage`: running time counted against awake hours (and the collection's blocks used up);
  * - `state`, `backup`, `deleted`: what lists and Health show.
+ *
+ * An event that can't be applied (a statement D1 refuses, say) doesn't stop the outbox for everyone else: it is parked
+ * (table `parked_events`, as the engine sent it), with every later event of its collection behind it, so a
+ * collection's events are still applied in their order; other collections' go on. Each tick tries the parked ones
+ * again first, a collection's oldest first, stopping at one that fails again. Health shows the collections held up.
+ * Only when even parking fails (D1 not answering) does the outbox stop, at that event, as before.
  */
 const NAME = 'outbox'
 const TERMINAL = new Set(['committed', 'duplicate', 'failed', 'cancelled'])
+/** Collections whose parked events are tried again per tick, and events per collection. */
+const RETRY_COLLECTIONS = 25
+const RETRY_EVENTS = 200
+
+/** Why an event failed, for its row and the log: the error's own words, short. */
+const failureOf = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 500)
+
+/** Keeps an event to apply later: `error` when it failed itself, null when it only waits behind one that did. */
+async function park(db: D1Database, event: OutboxEvent, error: string | null, now: number): Promise<void> {
+  await db.prepare(
+    `INSERT INTO parked_events (id, org_id, collection_id, event, error, attempts, parked_at, tried_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) ON CONFLICT (id) DO NOTHING`,
+  ).bind(event.id, event.org, event.collectionId, JSON.stringify(event), error, error === null ? 0 : 1, now).run()
+}
+
+/**
+ * An event from the outbox, in its collection's order: behind a parked event of its collection it is parked too;
+ * one that fails is parked, and the outbox goes on. Parking that fails throws, and the outbox stops at this event.
+ */
+async function applyInOrder(env: Bindings, event: OutboxEvent, now: number): Promise<'applied' | 'seen' | 'parked'> {
+  const db = env.DB
+  const waiting = await db.prepare(`SELECT 1 AS waiting FROM parked_events WHERE org_id = ? AND collection_id = ? LIMIT 1`).bind(event.org, event.collectionId).first()
+  if (waiting) {
+    // Unless it was applied before (a page read again): then there is nothing to keep.
+    if (await db.prepare(`SELECT 1 AS seen FROM engine_events WHERE id = ?`).bind(event.id).first()) return 'seen'
+    await park(db, event, null, now)
+    return 'parked'
+  }
+  try {
+    return (await applyEngineEvent(env, event, now)) ? 'applied' : 'seen'
+  } catch (error) {
+    logError('outbox_event_failed', error, { org: event.org })
+    await park(db, event, failureOf(error), now)
+    return 'parked'
+  }
+}
+
+/**
+ * Parked events tried again, the collections tried longest ago first: each collection's in order, until one fails
+ * again (it and those behind it wait for the next tick). Returns how many were applied now.
+ */
+export async function retryParked(env: Bindings, now: number, deadline: number): Promise<number> {
+  const db = env.DB
+  const { results: held } = await db.prepare(
+    `SELECT org_id, collection_id FROM parked_events GROUP BY org_id, collection_id ORDER BY MIN(tried_at), org_id, collection_id LIMIT ${RETRY_COLLECTIONS}`,
+  ).all<{ org_id: string; collection_id: string }>()
+  let applied = 0
+  for (const collection of held) {
+    const { results: events } = await db.prepare(
+      `SELECT id, event FROM parked_events WHERE org_id = ? AND collection_id = ? ORDER BY length(id), id LIMIT ${RETRY_EVENTS}`,
+    ).bind(collection.org_id, collection.collection_id).all<{ id: string; event: string }>()
+    let committed = false
+    for (const row of events) {
+      if (Date.now() > deadline) return applied
+      const event = JSON.parse(row.event) as OutboxEvent
+      try {
+        if (await applyEngineEvent(env, event, now)) applied += 1
+      } catch (error) {
+        logError('outbox_event_failed', error, { org: collection.org_id })
+        await db.prepare(`UPDATE parked_events SET attempts = attempts + 1, error = ?, tried_at = ? WHERE id = ?`).bind(failureOf(error), now, row.id).run()
+        break
+      }
+      // Applied (or found applied before): it no longer waits.
+      await db.prepare(`DELETE FROM parked_events WHERE id = ?`).bind(row.id).run()
+      if (event.type === 'committed') committed = true
+    }
+    if (committed && Date.now() < deadline) {
+      await reconcileHistory(env, collection.org_id, collection.collection_id).catch((error) => logError('history_reconcile_failed', error, { org: collection.org_id }))
+    }
+  }
+  return applied
+}
 
 /**
  * Pulls the outbox and applies it, page after page, until `deadline`. The engine's event ids are ordered and each is
@@ -34,9 +111,10 @@ export async function syncOutbox(input: Bindings, now: number, deadline: number)
   const env: Bindings = { ...input, DEADLINE: Math.min(input.DEADLINE ?? deadline, deadline) }
   const db = env.DB
   const engine = new EngineClient(env.ENGINE!, SERVICE_ORG, env.DEADLINE)
+  // What waits behind an event that failed goes first: a collection's events stay in order.
+  let applied = await retryParked(env, now, deadline)
   const state = await db.prepare(`SELECT cursor FROM sync_state WHERE name = ?`).bind(NAME).first<{ cursor: string | null }>()
   let cursor = state?.cursor ?? null
-  let applied = 0
   let pages = 0
   const save = (value: string) => db.prepare(
     `INSERT INTO sync_state (name, cursor, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (name) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at`,
@@ -51,8 +129,10 @@ export async function syncOutbox(input: Bindings, now: number, deadline: number)
         done = false
         break
       }
-      if (await applyEngineEvent(env, event, now)) applied += 1
-      if (event.type === 'committed') committed.set(`${event.org}\u0000${event.collectionId}`, event.org)
+      const outcome = await applyInOrder(env, event, now)
+      if (outcome === 'applied') applied += 1
+      // A parked one is reconciled once it applies (retryParked), in its turn.
+      if (event.type === 'committed' && outcome !== 'parked') committed.set(`${event.org}\u0000${event.collectionId}`, event.org)
       if (/^\d{1,20}$/.test(event.id)) {
         cursor = event.id
         await save(cursor)

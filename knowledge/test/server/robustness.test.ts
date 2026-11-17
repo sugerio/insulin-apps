@@ -579,6 +579,48 @@ describe('deleting', () => {
     }
     expect(await h.db.prepare(`SELECT name || purpose AS words FROM collections WHERE id = ?`).bind(id).first('words')).not.toMatch(/Partner/)
   })
+
+  it('the tests refuse a LIKE or GLOB pattern over 50 bytes, as D1 does, and otherwise match as SQLite does', async () => {
+    const like = (value: string, pattern: string, escape?: string) => h.db.prepare(`SELECT ?1 LIKE ?2${escape ? ' ESCAPE ?3' : ''} AS hit`).bind(value, pattern, ...(escape ? [escape] : [])).first('hit')
+    expect(await like('x'.repeat(60), `%${'x'.repeat(48)}%`)).toBe(1)
+    await expect(like('x'.repeat(60), `%${'x'.repeat(49)}%`)).rejects.toThrow(/LIKE or GLOB pattern too complex/)
+    await expect(h.db.prepare(`SELECT ?1 GLOB ?2 AS hit`).bind('x', `*${'x'.repeat(50)}`).first('hit')).rejects.toThrow(/LIKE or GLOB pattern too complex/)
+    expect(await like('Partner_Programs', 'partner\\_%', '\\')).toBe(1)
+    expect(await like('PartnerXPrograms', 'partner\\_%', '\\')).toBe(0)
+    expect(await like('Émile', 'émile')).toBe(0)
+    expect(await h.db.prepare(`SELECT ?1 GLOB ?2 AS hit`).bind('Partner', 'P*r').first('hit')).toBe(1)
+  })
+
+  it('a deleted collection erases exactly its own saved answers to changes, and the tick goes on past it', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    const other = await h.collection(PEOPLE.maya, 'Pricing')
+    const kept = ['POST /api/ask', `POST /api/collections/${other}/notes`, `POST /api/collections/${id}-copy/notes`, `POST /api/collections/${id}x`]
+    const erased = [`POST /api/collections/${id}/notes`, `PATCH /api/collections/${id}`, `POST /api/collections/${id}/sharing/person/u-eli`, `POST /API/COLLECTIONS/${id.toUpperCase()}/NOTES`]
+    const statements = [...kept, ...erased].map((route, index) => h.db.prepare(
+      `INSERT INTO idempotency (org_id, actor, key, route, request_hash, status, body, created_at) VALUES (?, 'u-maya', ?, ?, 'h', 200, '{}', ?)`,
+    ).bind(ORG, `saved-key-${index}`, route, h.clock.now))
+    // Another organization's saved answer on the same path stays.
+    statements.push(h.db.prepare(`INSERT INTO idempotency (org_id, actor, key, route, request_hash, status, body, created_at) VALUES (?, 'u-olga', 'saved-elsewhere', ?, 'h', 200, '{}', ?)`)
+      .bind(OTHER_ORG, `POST /api/collections/${id}/notes`, h.clock.now))
+    await h.db.batch(statements)
+    // The delete doesn't hear that the engine finished, so the tick's outbox erases it (the "deleted" event).
+    const engine = h.env.ENGINE!
+    h.env.ENGINE = { fetch: async (request) => (request.method === 'GET' && new URL(request.url).pathname === `/v1/collections/${id}` ? Response.json({ error: 'internal', message: 'down' }, { status: 503 }) : engine.fetch(request)) }
+    expect((await h.json<{ state: string }>(PEOPLE.maya, 'DELETE', `/api/collections/${id}`, { confirmName: 'Partner Programs' })).body.state).toBe('deleting')
+    h.env.ENGINE = engine
+    expect((await h.tick()).outbox).toMatchObject({ applied: expect.any(Number) })
+    expect(await h.db.prepare(`SELECT state FROM collections WHERE id = ?`).bind(id).first('state')).toBe('deleted')
+    const left = (await h.db.prepare(`SELECT route FROM idempotency WHERE org_id = ? AND actor = 'u-maya' AND key LIKE 'saved-key-%' ORDER BY route`).bind(ORG).all<{ route: string }>()).results.map((row) => row.route)
+    expect(left).toEqual([...kept].sort())
+    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM idempotency WHERE org_id = ?`).bind(OTHER_ORG).first('n')).toBe(1)
+    // The one that created it named it, and went with it; the other collection's stays.
+    const creations = (await h.db.prepare(`SELECT body FROM idempotency WHERE org_id = ? AND route = 'POST /api/collections'`).bind(ORG).all<{ body: string }>()).results
+    expect(creations.map((row) => row.body).join()).not.toContain(id)
+    expect(creations.map((row) => row.body).join()).toContain(other)
+    // Must catch: the outbox goes on past the deletion (BUG-1 stopped every later event for every organization).
+    await h.note(PEOPLE.maya, other, 'Price lists change every quarter.')
+    expect(await h.db.prepare(`SELECT state FROM imports WHERE collection_id = ? ORDER BY created_at DESC LIMIT 1`).bind(other).first('state')).toBe('committed')
+  })
 })
 
 describe('Needs attention', () => {

@@ -18,6 +18,10 @@ import { Card } from './Page.tsx'
 type Role = 'VIEWER' | 'EDITOR' | 'ADMIN'
 const ROLES: Role[] = ['VIEWER', 'EDITOR', 'ADMIN']
 
+/**
+ * The member lookup as a list to pick from: a person with their address and role in Knowledge, an API client by its
+ * name only (the platform's lookup gives no address or role for one).
+ */
 export function MemberSearch({ onPick, label, filter, placeholder = 'Search people by name or e-mail' }: {
   onPick: (member: Member) => void
   label: string
@@ -59,7 +63,7 @@ export function MemberSearch({ onPick, label, filter, placeholder = 'Search peop
             <li key={`${member.type}:${member.id}`}>
               <button type="button" className="flex w-full min-w-0 flex-col items-start px-3 py-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none" onClick={() => onPick(member)}>
                 <span className="font-medium [overflow-wrap:anywhere]">{member.name}{member.type === 'client' ? ' (API client)' : ''}</span>
-                <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{[member.email, `${appRoleLabel(member.appRole)} in Knowledge`].filter(Boolean).join(' · ')}</span>
+                {member.type === 'person' ? <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{[member.email, `${appRoleLabel(member.appRole)} in Knowledge`].filter(Boolean).join(' · ')}</span> : null}
               </button>
             </li>
           ))}
@@ -109,7 +113,7 @@ export function SharePanel({ collection, canShare, roleNote }: { collection: Col
           {canShare ? (
             picked ? (
               <form className="flex flex-col gap-2 rounded-lg border p-3" onSubmit={(event) => void share(event)}>
-                <p className="text-sm"><b>{picked.name}</b>{picked.email ? ` · ${picked.email}` : ''} · {appRoleLabel(picked.appRole)} in Knowledge</p>
+                <p className="text-sm"><b>{picked.name}</b>{picked.type === 'client' ? ' (API client)' : `${picked.email ? ` · ${picked.email}` : ''} · ${appRoleLabel(picked.appRole)} in Knowledge`}</p>
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="share-role">Role</Label>

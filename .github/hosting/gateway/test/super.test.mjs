@@ -362,6 +362,19 @@ test('lists search by name, id, owner domain and address; pages show people, usa
   assert.equal((await reader.get(h.url('apex', '/super/orgs/00000000-0000-4000-8000-000000000000'))).status, 404)
   const users = await reader.get(h.url('apex', `/super/users?q=${encodeURIComponent(member.email)}`))
   assert.match(users.text, /Mo Member/)
+  // A long address, whole and in capitals, and the longest search (200 characters). Must catch: past 48 characters
+  // the search was a LIKE pattern over D1's 50 bytes, and the page failed.
+  const long = await h.user({ name: 'Lou Longaddress', email: `lou.with_a_rather_long_address.${'q'.repeat(30)}@example.test` })
+  await h.join(owner, orgId, long, 'VIEWER')
+  assert.ok(long.email.length > 60)
+  for (const path of ['/super/orgs', '/super/users']) {
+    const found = await reader.get(h.url('apex', `${path}?q=${encodeURIComponent(long.email.toUpperCase())}`))
+    assert.equal(found.status, 200, path)
+    assert.match(found.text, path === '/super/orgs' ? /Zebra Findable Co/ : /Lou Longaddress/, path)
+    const longest = await reader.get(h.url('apex', `${path}?q=${'x'.repeat(200)}`))
+    assert.equal(longest.status, 200, path)
+    assert.match(longest.text, path === '/super/orgs' ? /No organization matches\./ : /No account matches\./, path)
+  }
   const person = await reader.get(h.url('apex', `/super/users/${member.id}`))
   assert.match(person.text, /Zebra Findable Co/)
   assert.doesNotMatch(person.text, /password|google_sub|totp/i, 'nothing of the account but who it is')

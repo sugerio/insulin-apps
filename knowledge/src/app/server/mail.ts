@@ -113,13 +113,9 @@ export const MAIL = {
     subject: `Knowledge: 80% of ${label.toLowerCase()} used`,
     text: `Your organization has used ${used} of its ${limit} ${label.toLowerCase()}. ${support} Rules and data shows usage beside each limit.${open(link, 'Open Rules and data')}${footer}`,
   }),
-  keepReadyPaused: (collection: string, used: number, limit: number, resets: string, link: string | null) => ({
+  keepReadyPaused: (collection: string, used: number, limit: number, resets: string, support: string, link: string | null) => ({
     subject: `Keep-ready for ${quoted(collection)} is paused`,
-    text: `Keep-ready for ${quoted(collection)} is paused: your organization has used ${used} of its ${limit} awake hours this month. It starts again on ${resets}. Questions still wake the collection.${open(link)}${footer}`,
-  }),
-  importWaits: (collection: string, resets: string, link: string | null) => ({
-    subject: `${quoted(collection)} learns your files on ${resets}`,
-    text: `Your organization has learned this month's documents, so ${quoted(collection)} learns what you added on ${resets}, by itself. Everything already learned keeps answering.${open(link)}${footer}`,
+    text: `Keep-ready for ${quoted(collection)} is paused: your organization has used ${used} of its ${limit} awake hours this month. It starts again on ${resets}. Questions still wake the collection. ${support}${open(link)}${footer}`,
   }),
   askForMore: (org: string, by: string, note: string, usage: string) => ({
     subject: 'Knowledge: a request for higher limits',

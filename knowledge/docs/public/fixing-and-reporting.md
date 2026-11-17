@@ -47,10 +47,12 @@ Through the API: `POST /api/collections/{id}/reports` with `{ "question", "answe
 ## What it knows
 
 A collection's **What it knows** tab lists the facts Insulin found, each as one sentence taken from a file that a person
-can check, with the file it came from. Search them by word.
+can check, with the file it came from. Search them by word: the search looks through the facts shown, and when there
+are more, **Show more** at the end of the list adds them.
 
 - **Looks right** (owners, admins and editors) marks a fact as checked, with the person's name.
-- **Fix** writes the right sentence. It is saved as a correction, and answers that used the fact use the fix.
+- **Fix** writes the right sentence. It is saved as a correction named after the file the fact came from ("Correction
+  to …"), holding only the new sentence, never the old one, and answers that used the fact use the fix.
 - **Report a problem** (everyone else) tells the owner something is wrong, like a reported answer.
 
 Through the API: `POST /api/collections/{id}/facts/{factId}/check` marks a fact as checked, and
@@ -71,4 +73,9 @@ they are an owner, admin or editor:
   the new one.
 
 Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file with
-the same name is learned in that collection. Through the API: `GET /api/attention`, optionally `?collection=<id>`.
+the same name is learned in that collection.
+
+Every collection you can change is covered. Values hidden before learning are read for the 50 collections changed most
+recently; when you can change more, the answer says so, and a collection's own **Overview** lists everything for it.
+Through the API: `GET /api/attention`, optionally `?collection=<id>` (always read in full); a collection whose hidden
+values weren't read is marked `"partial": true`, and `notice` says how many.

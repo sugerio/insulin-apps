@@ -86,6 +86,7 @@ export const yourData: DocTopic = {
               ['Notes waiting for the 1st (the month\'s documents learned used up), with hidden values hidden', 'Until they are learned'],
               ['The activity log: collections deleted or transferred, by whom and when', 'As long as the organization uses Knowledge'],
               ['Answers to changes, kept so a change sent twice isn\'t done twice', 'A day'],
+              ['What the engine did that couldn\'t be recorded yet (file names and counts, never what the files say)', 'Until it is recorded, or the collection is deleted'],
             ]}
           />
           <p>

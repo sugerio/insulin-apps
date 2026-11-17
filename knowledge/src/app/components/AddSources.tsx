@@ -3,6 +3,7 @@ import { Archive, FileUp, Globe, NotebookPen } from 'lucide-react'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
+import { Spinner } from '@/components/ui/spinner.tsx'
 import { Textarea } from '@/components/ui/textarea.tsx'
 import { api, collectionPath } from '../lib/api.ts'
 import { formatBytes, plural } from '../lib/format.ts'
@@ -188,18 +189,23 @@ function UploadFiles({ collectionId, collectionName, onStarted, onCancel }: { co
           {phase === 'checking' ? <p className="text-sm text-muted-foreground" role="status">Checking and uploading…</p> : null}
         </>
       ) : null}
-      {phase === 'confirm' || phase === 'starting' ? (
+      {phase === 'starting' ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner role={undefined} aria-label={undefined} aria-hidden="true" />Starting to learn {plural(ready.length, 'file')}…</p>
+      ) : null}
+      {phase === 'confirm' ? (
         <>
-          <Banner kind="warn" title={`${refused.length} of ${plural(checked.length, 'file')} can't be learned`}>
-            <ul className="mt-1 list-disc pl-5">
-              {refused.map((entry) => <li key={entry.name}>{entry.reason ?? `“${entry.name}” can't be learned.`}</li>)}
-            </ul>
-          </Banner>
-          {ready.length ? (
-            <p className="text-sm">Learn the other {plural(ready.length, 'file')}? {checked.filter((entry) => entry.accepted).map((entry) => `${entry.name} (${formatBytes(entry.bytes)})`).join(', ')}.</p>
-          ) : <p className="text-sm">None of these files can be learned. Nothing was started.</p>}
+          {refused.length ? (
+            <Banner kind="warn" title={`${refused.length} of ${plural(checked.length, 'file')} can't be learned`}>
+              <ul className="mt-1 list-disc pl-5">
+                {refused.map((entry) => <li key={entry.name}>{entry.reason ?? `“${entry.name}” can't be learned.`}</li>)}
+              </ul>
+            </Banner>
+          ) : null}
+          {!ready.length ? <p className="text-sm">None of these files can be learned. Nothing was started.</p>
+            : refused.length ? <p className="text-sm">Learn the other {plural(ready.length, 'file')}? {checked.filter((entry) => entry.accepted).map((entry) => `${entry.name} (${formatBytes(entry.bytes)})`).join(', ')}.</p>
+              : <p className="text-sm">{plural(ready.length, 'file')} checked and uploaded: {checked.map((entry) => `${entry.name} (${formatBytes(entry.bytes)})`).join(', ')}.</p>}
           <div className="flex flex-wrap gap-2">
-            {ready.length ? <Button type="button" disabled={phase === 'starting'} onClick={() => void start(ready)}>Learn {plural(ready.length, 'file')}</Button> : null}
+            {ready.length ? <Button type="button" onClick={() => void start(ready)}>Learn {plural(ready.length, 'file')}</Button> : null}
             <Button type="button" variant="outline" onClick={() => { setPhase('pick'); setChecked([]); setReady([]); onCancel() }}>Cancel</Button>
           </div>
         </>

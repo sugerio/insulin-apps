@@ -115,6 +115,72 @@ describe('the tick within its time', () => {
     expect(await used(ORG, 'awake_hours_month')).toBe(before + 30 * 60)
   })
 
+  it('an outbox event that keeps failing holds up only its own collection, in order, and Health shows it until it applies', async () => {
+    const alpha = await h.collection(PEOPLE.maya, 'Alpha')
+    const beta = await h.collection(PEOPLE.eli, 'Beta')
+    await h.share(PEOPLE.maya, alpha, PEOPLE.dana, 'VIEWER')
+    await h.tick()
+    // D1 refuses whatever records Alpha's learned versions (as it refused BUG-1's LIKE pattern), and nothing else.
+    let refusing = true
+    const applied: string[] = []
+    const real = h.db as unknown as D1Database
+    type Local = D1PreparedStatement & { sql: string; params: unknown[] }
+    h.env.DB = new Proxy(real, {
+      get(target, name) {
+        if (name === 'batch') {
+          return async (statements: Local[]) => {
+            if (refusing && statements.some((statement) => statement.sql.includes('INSERT INTO history') && statement.params.includes(alpha))) throw new Error('D1_ERROR: refused')
+            const result = await target.batch(statements)
+            const mark = statements.find((statement) => statement.sql.startsWith('INSERT INTO engine_events'))
+            if (mark) applied.push(String(mark.params[0]))
+            return result
+          }
+        }
+        const value = Reflect.get(target, name)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    for (const [person, id, text] of [[PEOPLE.maya, alpha, 'Alpha ships in March.'], [PEOPLE.eli, beta, 'Beta ships in May.']] as const) {
+      expect((await h.call(person, 'POST', `/api/collections/${id}/notes`, { title: 'Plan', text })).status).toBe(202)
+    }
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    // Must catch: one event that keeps failing stopped every organization's events for good.
+    expect(await h.db.prepare(`SELECT state FROM imports WHERE collection_id = ?`).bind(beta).first('state')).toBe('committed')
+    expect(await h.db.prepare(`SELECT documents FROM collections WHERE id = ?`).bind(beta).first('documents')).toBe(1)
+    expect(await h.db.prepare(`SELECT documents FROM collections WHERE id = ?`).bind(alpha).first('documents')).toBe(0)
+    const parked = (await h.db.prepare(`SELECT id, error, attempts FROM parked_events WHERE collection_id = ? ORDER BY length(id), id`).bind(alpha).all<{ id: string; error: string | null; attempts: number }>()).results
+    expect(parked.length).toBeGreaterThanOrEqual(1)
+    // Tried after the request and on the tick: it failed each time, and what came after it in Alpha waits.
+    expect(parked[0]!.error).toBe('D1_ERROR: refused')
+    expect(parked[0]!.attempts).toBeGreaterThanOrEqual(1)
+    expect(parked.slice(1).every((row) => row.error === null && row.attempts === 0)).toBe(true)
+    // Another tick tries it again first, and Alpha's later events wait behind it.
+    expect((await h.call(PEOPLE.maya, 'POST', `/api/collections/${alpha}/notes`, { title: 'Plan', text: 'Alpha has two launches.' })).status).toBe(202)
+    h.engine.control.runUntilIdle()
+    h.clock.advance(5 * MINUTE_MS)
+    await h.tick()
+    const waiting = (await h.db.prepare(`SELECT id, attempts FROM parked_events WHERE collection_id = ? ORDER BY length(id), id`).bind(alpha).all<{ id: string; attempts: number }>()).results
+    expect(waiting.length).toBeGreaterThan(parked.length)
+    expect(waiting[0]!.id).toBe(parked[0]!.id)
+    expect(waiting[0]!.attempts).toBeGreaterThan(parked[0]!.attempts)
+    const ids = waiting.map((row) => row.id)
+    expect(applied.filter((id) => ids.includes(id))).toEqual([])
+    type HealthBody = { waiting: { collections: number; since: string | null }; collections: { id: string; waitingSince: string | null }[] }
+    const health = await h.json<HealthBody>(PEOPLE.dana, 'GET', '/api/health')
+    expect(health.body.waiting).toEqual({ collections: 1, since: new Date(h.clock.now - 5 * MINUTE_MS).toISOString() })
+    expect(health.body.collections.find((collection) => collection.id === alpha)!.waitingSince).toBe(health.body.waiting.since)
+    expect(health.body.collections.find((collection) => collection.id === beta)?.waitingSince ?? null).toBeNull()
+    // Once D1 takes it, Alpha's events apply in their order, and nothing waits.
+    refusing = false
+    await h.tick()
+    expect(applied.filter((id) => ids.includes(id))).toEqual(ids)
+    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM parked_events`).first('n')).toBe(0)
+    expect(await h.db.prepare(`SELECT documents FROM collections WHERE id = ?`).bind(alpha).first('documents')).toBe(2)
+    expect((await h.db.prepare(`SELECT state FROM imports WHERE collection_id = ?`).bind(alpha).all<{ state: string }>()).results.map((row) => row.state)).toEqual(['committed', 'committed'])
+    expect((await h.json<HealthBody>(PEOPLE.dana, 'GET', '/api/health')).body.waiting).toEqual({ collections: 0, since: null })
+  })
+
   it('an outbox event applied before is skipped before anything else is read', async () => {
     const id = await h.collection(PEOPLE.maya)
     const event = { id: '000000000777', at: new Date(h.clock.now).toISOString(), org: ORG, collectionId: id, type: 'usage', kind: 'awake', seconds: 60 } as OutboxEvent

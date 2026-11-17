@@ -21,11 +21,16 @@ export function SharingTab({ detail, reload, onDeleted }: TabProps & { onDeleted
   const me = useMe()
   const { collection, can } = detail
   const configure = can.share || can.settings
+  // Said here, not in the Owner only card: after a transfer the page reloads and the card is gone, since the person
+  // who sent it is an admin now.
+  const [transferred, setTransferred] = useState<string | null>(null)
   return (
     <div className="@container flex flex-col gap-4">
+      {transferred ? <Banner kind="ok">{transferred}</Banner> : null}
       {configure ? null : <Banner kind="info">Your role here is {ROLE_LABEL[detail.role]}. Only the collection's owner and admins change sharing and settings.</Banner>}
       <div className="grid items-start gap-4 @4xl:grid-cols-2">
-        <SharePanel collection={collection} canShare={can.share} roleNote={`Your role here: ${ROLE_LABEL[detail.role]} (${roleWhy(me, collection)}).`} />
+        {/* A new owner (a transfer) shows at once among the people with access. */}
+        <SharePanel key={collection.owner.id} collection={collection} canShare={can.share} roleNote={`Your role here: ${ROLE_LABEL[detail.role]} (${roleWhy(me, collection)}).`} />
         <div className="flex flex-col gap-4">
           {can.settings ? (
             <Card title="Collection settings">
@@ -45,7 +50,7 @@ export function SharingTab({ detail, reload, onDeleted }: TabProps & { onDeleted
           )}
           {can.export ? <ExportCard collectionId={collection.id} collectionName={collection.name} /> : null}
           {can.transfer || can.delete ? (
-            <OwnerCard detail={detail} onTransferred={() => void reload()} onDeleted={onDeleted} />
+            <OwnerCard detail={detail} onTransferred={(notice) => { setTransferred(notice); void reload() }} onDeleted={onDeleted} />
           ) : null}
         </div>
       </div>
@@ -109,13 +114,12 @@ function ExportCard({ collectionId, collectionName }: { collectionId: string; co
   )
 }
 
-function OwnerCard({ detail, onTransferred, onDeleted }: { detail: TabProps['detail']; onTransferred: () => void; onDeleted: () => void }) {
+function OwnerCard({ detail, onTransferred, onDeleted }: { detail: TabProps['detail']; onTransferred: (notice: string) => void; onDeleted: () => void }) {
   const { collection, can } = detail
   const [picking, setPicking] = useState(false)
   const [target, setTarget] = useState<Member | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
-  const [notice, setNotice] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   async function transfer() {
     if (!target) return
@@ -123,10 +127,9 @@ function OwnerCard({ detail, onTransferred, onDeleted }: { detail: TabProps['det
     setError(null)
     try {
       await api.create(collectionPath(collection.id, '/transfer'), { to: target.id })
-      setNotice(`${target.name} owns “${collection.name}” now. You are an admin of it.`)
       setTarget(null)
       setPicking(false)
-      onTransferred()
+      onTransferred(`${target.name} owns “${collection.name}” now. You are an admin of it.`)
     } catch (failure) {
       setError(failure)
     } finally {
@@ -135,7 +138,6 @@ function OwnerCard({ detail, onTransferred, onDeleted }: { detail: TabProps['det
   }
   return (
     <Card title="Owner only">
-      {notice ? <Banner kind="ok">{notice}</Banner> : null}
       {can.transfer ? (
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-start justify-between gap-2">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button.tsx'
 import { Checkbox } from '@/components/ui/checkbox.tsx'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog.tsx'
@@ -20,13 +20,15 @@ interface FactsPage {
   next: string | null
 }
 
-export function FactList({ collection, editor, onOpenSource, limit, search = true }: {
+export function FactList({ collection, editor, onOpenSource, limit, search = true, onLoaded }: {
   collection: CollectionSummary
   editor: boolean
   onOpenSource: (target: { documentId: string; find?: string | null }) => void
   /** Show only the first few (the new collection's "check the most important facts"). */
   limit?: number
   search?: boolean
+  /** Called with the facts loaded so far (all of them, not only those shown), after each load and change. */
+  onLoaded?: (facts: FactWithCheck[]) => void
 }) {
   const [facts, setFacts] = useState<FactWithCheck[]>([])
   const [next, setNext] = useState<string | null>(null)
@@ -39,6 +41,8 @@ export function FactList({ collection, editor, onOpenSource, limit, search = tru
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<unknown>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const loaded = useRef(onLoaded)
+  useEffect(() => { loaded.current = onLoaded })
 
   async function load(cursor: string | null) {
     setLoading(true)
@@ -62,6 +66,10 @@ export function FactList({ collection, editor, onOpenSource, limit, search = tru
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collection.id])
 
+  useEffect(() => {
+    if (!loading && !error) loaded.current?.(facts)
+  }, [facts, loading, error])
+
   const shown = useMemo(() => {
     const wanted = query.trim().toLowerCase()
     const list = wanted ? facts.filter((fact) => fact.sentence.toLowerCase().includes(wanted) || (names.get(fact.documentId) ?? '').toLowerCase().includes(wanted)) : facts
@@ -84,14 +92,14 @@ export function FactList({ collection, editor, onOpenSource, limit, search = tru
   return (
     <div className="flex flex-col gap-3" data-facts="">
       {search ? (
-        <Input type="search" aria-label="Search what it knows" placeholder="Search what it knows…" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Input type="search" aria-label="Search what it knows" placeholder="Search the facts shown…" value={query} onChange={(event) => setQuery(event.target.value)} />
       ) : null}
       {notice ? <Banner kind="ok">{notice}</Banner> : null}
       <ActionError error={actionError} />
       {error && !facts.length ? <ErrorState error={error} onRetry={() => void load(null)} /> : null}
       {loading && !facts.length ? <Loading /> : null}
       {!loading && !error && !facts.length ? <Note>Nothing learned yet. Facts appear here once files, web pages or notes are learned.</Note> : null}
-      {facts.length && !shown.length ? <Note>No facts match. Try another word, or ask a question instead.</Note> : null}
+      {facts.length && !shown.length ? <Note>No facts match.{next && !limit ? ' “Show more” at the end of the list adds the rest to search.' : ''} Try another word, or ask a question instead.</Note> : null}
       <ul className="flex flex-col divide-y rounded-xl bg-card ring-1 ring-foreground/10">
         {shown.map((fact) => (
           <li key={fact.factId} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:justify-between" data-fact="">
@@ -139,7 +147,7 @@ function FixFactDialog({ collection, fact, onClose, onFixed }: { collection: Col
     setBusy(true)
     setError(null)
     try {
-      const body = await api.create<{ import: ImportStatus }>(collectionPath(collection.id, '/corrections'), { text: text.trim(), factId: fact.factId, title: `Correction: ${fact.sentence}`.slice(0, 200), notifyAuthors: notify })
+      const body = await api.create<{ import: ImportStatus }>(collectionPath(collection.id, '/corrections'), { text: text.trim(), factId: fact.factId, notifyAuthors: notify })
       setStarted(body.import)
     } catch (failure) {
       setError(failure)

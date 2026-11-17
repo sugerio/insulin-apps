@@ -288,7 +288,7 @@ export function sourceRoutes() {
       const [file] = body.files
       const reason = !/\.zip$/i.test(file!.name) ? notAnExport(file!.name)
         : file!.bytes <= 0 ? `“${file!.name}” is empty.`
-          : fileLimit !== null && file!.bytes > fileLimit ? `“${file!.name}” is ${formatBytes(file!.bytes)}; the largest file your organization can add is ${formatBytes(fileLimit)}.` : null
+          : fileLimit !== null && file!.bytes > fileLimit ? `“${file!.name}” is ${formatBytes(file!.bytes)}; the largest file your organization can add is ${formatBytes(fileLimit)}. ${supportSentence(c.env)}` : null
       if (reason) return json(c, { files: [{ name: file!.name, bytes: file!.bytes, accepted: false, reason }], accepted: 0, refused: 1 })
       // What it brings back is counted against the limits when it starts, once its zip has been read.
       const fileId = crypto.randomUUID().replace(/-/g, '')
@@ -297,7 +297,8 @@ export function sourceRoutes() {
       return json(c, { files: [{ name: file!.name, bytes: file!.bytes, accepted: true, fileId }], accepted: 1, refused: 0 })
     }
     const { hiding } = await readOrgSettings(db, caller.organizationId, at)
-    const verdicts = body.files.map((file) => ({ file, verdict: verdictOf(file.name, file.bytes, fileLimit) }))
+    const support = supportSentence(c.env)
+    const verdicts = body.files.map((file) => ({ file, verdict: verdictOf(file.name, file.bytes, fileLimit, support) }))
     const accepted = verdicts.filter((entry) => entry.verdict.ok)
     // The rest must fit the organization's limits: documents and stored bytes. Past this month's documents learned
     // they are still taken: their import waits for the 1st (startImport).

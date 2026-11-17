@@ -88,6 +88,11 @@ export const history: DocTopic = {
             daily backups (30 by default; History's footer and Health say how many), and the latest one as long as the collection
             exists, so a collection is never lost by sitting unused. See <DocLink to="your-data">Your data</DocLink>.
           </p>
+          <p>
+            Health also says when what Knowledge's engine did in a collection is waiting to be recorded, and since when: its
+            lists, counts, history and usage may be behind until it is. Answers aren't affected, other collections go on, and
+            Knowledge tries again every five minutes, in the order things happened.
+          </p>
           <InApp>A collection › History: Go back to this version, then Undo. Admins see each collection's last restore point and last backup on Health.</InApp>
         </>
       ),

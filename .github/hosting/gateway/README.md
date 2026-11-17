@@ -338,12 +338,13 @@ attributes there anyway (it treats `*.localhost` as secure), but curl's cookie e
   (SELECT COUNT(*) …) < COALESCE(allowance, 2)`, batched with the OWNER membership, which is written only if the org
   was, so concurrent creations can't pass the limit. Migrations 0007 and 0009 filled rows in SQL, which can't write
   punycode or read the suffix list, so the count also takes the as-typed form of a non-ASCII domain and, for a
-  domain, rows under its subdomains (`LIKE '%.' || domain`, escaped). `users.orgs_created` is a record only. At the
-  limit, `/orgs/new` asks support for more (`POST /orgs/request`, mail kind `org_request`, Reply-To the requester,
-  `RL_AUTH`; a day's requests capped at three per person in `mail_log.user_id`, three per owner domain in
-  `mail_log.owner_domain_hash` and fifty in all, in the insert's own statement). The message's `allow-orgs.mjs`
-  command quotes the owner domain only when `checkOwnerDomain` takes it unchanged. Operators raise a domain's limit
-  with `.github/hosting/scripts/allow-orgs.mjs`.
+  domain, rows under its subdomains (ending in `.` and the domain, compared as text: D1 refuses a LIKE pattern over
+  50 bytes, so the gateway's SQL matches bound text with `instr()` or a suffix, never a LIKE pattern).
+  `users.orgs_created` is a record only. At the limit, `/orgs/new` asks support for more (`POST /orgs/request`, mail
+  kind `org_request`, Reply-To the requester, `RL_AUTH`; a day's requests capped at three per person in
+  `mail_log.user_id`, three per owner domain in `mail_log.owner_domain_hash` and fifty in all, in the insert's own
+  statement). The message's `allow-orgs.mjs` command quotes the owner domain only when `checkOwnerDomain` takes it
+  unchanged. Operators raise a domain's limit with `.github/hosting/scripts/allow-orgs.mjs`.
 - **One kind of access or the other.** Triggers keep `app_grants` to specific-apps (`APPS`) memberships and drop a
   member's grants the moment they get an organization role; composite foreign keys keep a grant's custom role in the
   same organization and app, and stop a custom role from being deleted while anything uses it.

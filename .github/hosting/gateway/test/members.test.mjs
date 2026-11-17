@@ -289,6 +289,16 @@ test('ACC-18: the member lookup shows no more than a sharing dialog needs, to pe
   // By address too, and wildcards are literal.
   assert.deepEqual(parsed(await lookup(findable[0].email, header)).members.map((member) => member.id), [findable[0].id])
   assert.deepEqual(parsed(await lookup('100%', header)).members, [])
+  // A whole long address, and the longest search (100 characters), in any case. Must catch: past 48 characters the
+  // search was a LIKE pattern over D1's 50 bytes, and answered 500.
+  const long = await h.user({ name: 'Searchable Long Address', email: `searchable.with_a_long_address.${'q'.repeat(30)}@example.test` })
+  await invite(owner, orgId, long, 'EDITOR')
+  assert.ok(long.email.length > 60)
+  assert.deepEqual(parsed(await lookup(long.email.toUpperCase(), header)).members.map((member) => member.id), [long.id])
+  assert.deepEqual(parsed(await lookup('with_a_long', header)).members.map((member) => member.id), [long.id])
+  const longest = await lookup(`searchable ${'x'.repeat(89)}`, header)
+  assert.equal(longest.status, 200, longest.text)
+  assert.deepEqual(parsed(longest).members, [])
 
   // At most 20.
   for (let index = 0; index < 22; index += 1) {

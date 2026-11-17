@@ -23,7 +23,9 @@ Admins and Editors in Knowledge can start collections. **New collection** takes 
    reason, before anything starts.
 3. **Learning.** Each file goes Waiting → Reading → Understanding → learned, with the time left. You can leave the
    page; Knowledge e-mails you when it is done.
-4. **What it learned.** Check the facts it found: **Looks right** marks one as checked, **Fix** corrects it.
+4. **What it learned.** Check the facts it found: **Looks right** marks one as checked, **Fix** corrects it. Then try a
+   question: pick one of up to three made from those facts (each reads "… — is that right?") to ask it and see the
+   answer with its sources, or type your own.
 5. **Share it.** Share it with everyone in your organization or with specific people, and choose whether AI assistants
    and API clients can ask it.
 

@@ -205,9 +205,12 @@ export interface Rules {
 export interface Health {
   engine: { reachable: boolean; label: string | null }
   organization: { collections: number; documents: number; bytes: number; awake: number | null; learning: number | null; kept_ready: number | null }
-  collections: { id: string; name: string; state: string; version: number; documents: number; lastRestorePointAt: string | null; lastBackupAt: string | null; lastUsedAt: string | null }[]
+  /** When set: since then, what the engine did in this collection is waiting to be recorded (lists, counts, history). */
+  collections: { id: string; name: string; state: string; version: number; documents: number; lastRestorePointAt: string | null; lastBackupAt: string | null; lastUsedAt: string | null; waitingSince?: string | null }[]
   /** Daily backups are kept this many days (the organization's backup_days). */
   backupDays?: number
+  /** The organization's collections with changes from the engine waiting to be recorded, and since when. */
+  waiting?: { collections: number; since: string | null }
 }
 
 export type AttentionItem =
@@ -221,4 +224,6 @@ export interface AttentionCollection {
   name: string
   role: CollectionRole
   items: AttentionItem[]
+  /** Values hidden before learning weren't read for it this time (the answer's `notice` says why). */
+  partial?: boolean
 }

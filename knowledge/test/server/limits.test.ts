@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { waitingMessage, type CollectionResult } from '../../src/app/server/ask.ts'
 import { effectiveLimit, LIMITS, reserve } from '../../src/app/server/limits.ts'
 import { ORGANIZATION_METRICS } from '../../src/app/server/usage-metrics.ts'
 import { createHarness, ORG, PEOPLE, SUPPORT, type Harness, type Person } from '../support/harness.ts'
@@ -30,7 +31,7 @@ describe('limits', () => {
     await h.tick()
     const paused = await h.json<{ settings: { keepReady: { paused: boolean } } }>(PEOPLE.maya, 'GET', `/api/collections/${id}`)
     expect((paused.body as unknown as { engine: { settings: { keepReady: { paused: boolean } } } }).engine.settings.keepReady.paused).toBe(true)
-    expect(h.gateway.mail.some((mail) => mail.to === PEOPLE.maya.email && /Keep-ready .* is paused/.test(mail.subject))).toBe(true)
+    expect(h.gateway.mail.find((mail) => mail.to === PEOPLE.maya.email && /Keep-ready .* is paused/.test(mail.subject))?.text).toContain(`contact Insulin Apps support at ${SUPPORT}`)
     h.engine.control.addUsage(ORG, id, 'awake', 10 * HOUR)
     await h.tick()
     for (const [person, path, body] of [
@@ -92,6 +93,11 @@ describe('limits', () => {
     const preflight = await h.json<{ files: { accepted: boolean; reason?: string }[] }>(PEOPLE.maya, 'POST', `/api/collections/${id}/preflight`, { files: [{ name: 'Big.pdf', bytes: 5000 }] })
     expect(preflight.body.files[0]).toMatchObject({ accepted: false })
     expect(preflight.body.files[0]!.reason).toMatch(/largest file your organization can add is 1000 bytes/)
+    // Must catch: the largest-file reason, the only limit message without support (BUG-4); an export's too.
+    expect(preflight.body.files[0]!.reason).toContain(`contact Insulin Apps support at ${SUPPORT}`)
+    const empty = await h.collection(PEOPLE.maya, 'Restored')
+    const exported = await h.json<{ files: { accepted: boolean; reason?: string }[] }>(PEOPLE.maya, 'POST', `/api/collections/${empty}/preflight`, { files: [{ name: 'Export.zip', bytes: 5000 }], export: true })
+    expect(exported.body.files[0]).toMatchObject({ accepted: false, reason: expect.stringContaining(`contact Insulin Apps support at ${SUPPORT}`) })
     await override({ questions_month: 1 })
     expect((await h.call(PEOPLE.maya, 'POST', '/api/search', { collections: [id], query: 'first note' })).status).toBe(200)
     expectQuota(await h.json(PEOPLE.maya, 'POST', '/api/search', { collections: [id], query: 'first note' }), 'questions_month', true)
@@ -100,6 +106,14 @@ describe('limits', () => {
     expect(sources.status).toBe(200)
     expect(sources.body).toMatchObject({ outcome: 'sources_only', text: null })
     expect(sources.body.message).toMatch(/written answers are used up/)
+    // Must catch: "written answers are used up" without support (BUG-4).
+    expect(sources.body.message).toContain(`contact Insulin Apps support at ${SUPPORT}`)
+  })
+
+  it('LIM-01 the awake-hours stop the engine answers names support too, or Insulin Apps support without an address', () => {
+    const held = [{ collectionId: 'c1', name: 'Partner Programs', status: 'held', retryAfterSeconds: null, covered: false, passages: [], facts: [] }] as CollectionResult[]
+    expect(waitingMessage({ SUPPORT_EMAIL: SUPPORT }, held)).toMatch(new RegExp(`stopped until the 1st.*contact Insulin Apps support at ${SUPPORT.replace('.', '\\.')}\\.$`))
+    expect(waitingMessage({}, held)).toMatch(/contact Insulin Apps support\.$/)
   })
 
   it('LIM-03 two imports at the same moment never pass the same last unit', async () => {

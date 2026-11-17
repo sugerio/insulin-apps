@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ORG_HEADER, type CollectionStatus } from '../../engine/src/contract.ts'
-import { createHarness, ORG, PEOPLE, type Harness } from '../support/harness.ts'
+import { createHarness, ORG, PEOPLE, type Harness, type Person } from '../support/harness.ts'
 
 // What the screens rely on and what the Docs promise: hidden values in any script, an empty member search, clearing
 // a correction that is still right, waiting imports listed and cancelled, "Yes, this was right", the days of backups,
@@ -31,6 +31,21 @@ describe('sharing', () => {
     const empty = await h.json<{ members: unknown[] }>(PEOPLE.maya, 'GET', '/api/members?q=')
     expect(empty).toEqual({ status: 200, body: { members: [] } })
     expect((await h.json<{ members: { id: string }[] }>(PEOPLE.maya, 'GET', '/api/members?q=eli')).body.members.map((member) => member.id)).toEqual([PEOPLE.eli.id])
+  })
+
+  it('without the platform, the search finds a long address by its whole text, and takes the text as typed', async () => {
+    h.close()
+    h = await createHarness({ gateway: false })
+    const long = { id: 'u-long', role: 'EDITOR', orgRole: 'EDITOR', name: 'Bartholomew Example', email: `bartholomew.longname_${'q'.repeat(40)}@example.test` } satisfies Person
+    await h.call(long, 'GET', '/api/me')
+    const search = (q: string) => h.json<{ members: { id: string }[] }>(PEOPLE.maya, 'GET', `/api/members?q=${encodeURIComponent(q)}`)
+    // Must catch: a search past 48 characters (a LIKE pattern over D1's 50 bytes) answered 500.
+    expect(long.email.length).toBeGreaterThan(60)
+    expect(await search(long.email.toUpperCase())).toEqual({ status: 200, body: { members: [expect.objectContaining({ id: 'u-long' })] } })
+    expect((await search(`${long.email}${'x'.repeat(100)}`)).body.members).toEqual([])
+    // "_" and "%" are what they are, not wildcards.
+    expect((await search('longname_')).body.members.map((member) => member.id)).toEqual(['u-long'])
+    expect((await search('bartholomew%')).body.members).toEqual([])
   })
 })
 

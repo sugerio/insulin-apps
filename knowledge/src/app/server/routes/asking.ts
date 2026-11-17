@@ -39,7 +39,7 @@ export function askingRoutes() {
     const answerId = crypto.randomUUID()
     if (!results.some((result) => result.status === 'ok')) {
       const retry = Math.max(...results.map((result) => result.retryAfterSeconds ?? 60))
-      return json(c, { answerId: null, outcome: 'waiting', status: waitingStatus(results), message: waitingMessage(results), retryAfterSeconds: retry, text: null, citations: [], sources: [], collections: perCollection(results), skipped })
+      return json(c, { answerId: null, outcome: 'waiting', status: waitingStatus(results), message: waitingMessage(c.env, results), retryAfterSeconds: retry, text: null, citations: [], sources: [], collections: perCollection(results), skipped })
     }
     const passages = bestPassages(results, TOP_K)
     const written = await writeAnswer(c.env, c.env.ENGINE, caller, body.question, results, passages, at)
@@ -94,7 +94,7 @@ export function askingRoutes() {
       return json(c, {
         status: waitingStatus(results),
         retryAfterSeconds: Math.max(...results.map((result) => result.retryAfterSeconds ?? 60)),
-        message: waitingMessage(results),
+        message: waitingMessage(c.env, results),
         covered: false,
         passages: [],
         facts: [],

@@ -407,6 +407,24 @@ export const engineEvents = sqliteTable('engine_events', {
 })
 
 /**
+ * Engine outbox events that couldn't be applied to D1 (outbox.ts), kept as the engine sent them so the outbox goes on
+ * for everything else; the later events of the same collection wait here behind them, in order. Each tick tries them
+ * again, oldest first; Health shows the collections they hold up. They go with their collection.
+ */
+export const parkedEvents = sqliteTable('parked_events', {
+  /** The engine's event id: it orders a collection's events. */
+  id: text('id').primaryKey().notNull(),
+  org_id: text('org_id').notNull(),
+  collection_id: text('collection_id').notNull(),
+  event: text('event').notNull(),
+  /** Why it failed the last time it was tried; null for one only waiting behind another. */
+  error: text('error'),
+  attempts: integer('attempts').notNull().default(0),
+  parked_at: integer('parked_at').notNull(),
+  tried_at: integer('tried_at').notNull(),
+}, (table) => [index('parked_events_by_collection').on(table.org_id, table.collection_id)])
+
+/**
  * The awake-hours hold Knowledge wants the engine to have for each organization (POST /v1/orgs/:org/hold): held until
  * `until` (the 1st), or let go (`until` 0). Each change is a new `version` (a new row's starts from the time, so versions
  * only grow), written before it is sent with it; `delivered` is the version the engine's answer showed it took (-1:

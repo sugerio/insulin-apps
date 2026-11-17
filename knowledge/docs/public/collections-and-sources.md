@@ -63,7 +63,9 @@ instead. Only the others are learned:
 - **A type Insulin can't read**, such as an Excel workbook with macros (`.xlsm`), an older Word or PowerPoint file
   (`.doc`, `.ppt`) or an image. Save it in one of the types above and add it again.
 - **An empty file**, or one **larger than the organization's largest file**. Split it, or save it smaller.
-- **A scanned PDF**: a PDF that is only an image, with no text, is named when it is uploaded, before learning.
+- **A scanned PDF**: a PDF whose pages draw only images, with no text, is named when it is uploaded, before learning,
+  even when it lists a font. One whose pages Insulin can't look into while it uploads (an unusual compression) is
+  accepted; if it has no text after all, its import fails and names it.
 - **The organization's limits**: if the files would go past its documents or stored files, nothing starts and
   Knowledge says which limit. Past this month's documents learned, they are taken and wait for the 1st. See
   [Limits](/docs/knowledge/limits).

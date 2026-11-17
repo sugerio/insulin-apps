@@ -152,10 +152,11 @@ export function sharingRoutes() {
     const found = await lookupMembers(c.env, caller, q, c.req.header('x-suger-member-lookup') ?? null, now(c))
     if (found) return json(c, { members: found })
     if (c.env.SUGER_MEMBERS_URL) throw new ApiError('not_configured', "The list of people isn't available right now. Try again in a minute.")
-    // The local preview has no platform: the people Knowledge has seen.
+    // The local preview has no platform: the people Knowledge has seen, whose name or address holds the text as typed
+    // (instr(), not LIKE: D1 refuses a LIKE pattern over 50 bytes, and the text may be 100 characters).
     const { results } = await c.env.DB.prepare(
-      `SELECT principal_type, principal_id, name, email, app_role FROM members WHERE org_id = ?1 AND away = 0 AND (?2 = '' OR lower(COALESCE(name, '')) LIKE ?3 OR lower(COALESCE(email, '')) LIKE ?3) ORDER BY lower(COALESCE(name, email, principal_id)) LIMIT 20`,
-    ).bind(caller.organizationId, q, `%${q.toLowerCase()}%`).all<{ principal_type: PrincipalType; principal_id: string; name: string | null; email: string | null; app_role: string | null }>()
+      `SELECT principal_type, principal_id, name, email, app_role FROM members WHERE org_id = ?1 AND away = 0 AND (instr(lower(COALESCE(name, '')), ?2) > 0 OR instr(lower(COALESCE(email, '')), ?2) > 0) ORDER BY lower(COALESCE(name, email, principal_id)) LIMIT 20`,
+    ).bind(caller.organizationId, q.toLowerCase()).all<{ principal_type: PrincipalType; principal_id: string; name: string | null; email: string | null; app_role: string | null }>()
     return json(c, { members: results.map((row) => ({ type: row.principal_type, id: row.principal_id, name: row.name ?? row.email ?? row.principal_id, email: row.principal_type === 'person' ? row.email : null, appRole: row.app_role })) })
   })
 

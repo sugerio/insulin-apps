@@ -1,8 +1,9 @@
-import { useCallback, useState, type FormEvent } from 'react'
+import { useCallback, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button.tsx'
 import { Input } from '@/components/ui/input.tsx'
 import { Label } from '@/components/ui/label.tsx'
+import { Spinner } from '@/components/ui/spinner.tsx'
 import { Textarea } from '@/components/ui/textarea.tsx'
 import { AddSources } from '../components/AddSources.tsx'
 import { AnswerView, AskBox } from '../components/Answer.tsx'
@@ -15,16 +16,23 @@ import { SharePanel } from '../components/SharePanel.tsx'
 import { SourceViewer, type SourceTarget } from '../components/SourceViewer.tsx'
 import { api, collectionPath, describeError, quotaOf } from '../lib/api.ts'
 import { plural } from '../lib/format.ts'
-import type { CollectionDetail, CollectionSummary, ImportStatus } from '../lib/types.ts'
+import { suggestedQuestions } from '../lib/suggestions.ts'
+import type { CollectionDetail, CollectionSummary, Fact, ImportStatus } from '../lib/types.ts'
 import { useAsk } from '../lib/useAsk.ts'
 import { canCreate, useMe, useSession } from '../session.tsx'
 import { NoPermissionPage } from './NotFoundPage.tsx'
 
-// A new collection (design J1, COL-03): what it is for, what it knows (files, a web page or a note, with files that
-// can't be learned named before anything starts), learning, what it learned (facts to check and a question to try),
-// and sharing. It is private to the person who starts it, its owner, until they share it.
+// A new collection (design J1, COL-01, COL-03): what it is for, what it knows (files, a web page or a note, with files
+// that can't be learned named before anything starts), learning, what it learned (facts to check, and questions to try
+// made from them) and sharing. It is private to the person who starts it, its owner, until they share it.
 
 const STEPS = ['What it is for', 'Add what you know', 'Learning', 'What it learned', 'Share it'] as const
+
+/** How many facts "What it learned" shows to check; the questions to try are made from these. */
+const FACTS_TO_CHECK = 8
+
+/** Whether "What it learned" has the collection's counts yet: they are read again once learning is done. */
+type Counts = 'counting' | 'counted' | 'unknown'
 
 export function NewCollectionPage() {
   const me = useMe()
@@ -34,10 +42,13 @@ export function NewCollectionPage() {
   const [collection, setCollection] = useState<CollectionSummary | null>(null)
   const [started, setStarted] = useState<ImportStatus | null>(null)
   const [target, setTarget] = useState<SourceTarget | null>(null)
+  const [counts, setCounts] = useState<Counts>('counting')
 
   const refresh = useCallback(async (id: string) => {
     const body = await api.get<CollectionDetail>(collectionPath(id))
-    setCollection(body.collection)
+    // The engine's counts are those of what it just learned; the collection's own catch up with them a moment later.
+    const learned = body.engine?.counts
+    setCollection(learned ? { ...body.collection, documents: learned.documents, facts: learned.facts } : body.collection)
   }, [])
 
   if (!canCreate(me)) {
@@ -66,11 +77,18 @@ export function NewCollectionPage() {
         </Card>
       ) : null}
       {step === 3 && collection && started ? (
-        <Learning collection={collection} started={started} onLearned={() => { void refresh(collection.id); void reloadCollections(); setStep(4) }} onRetry={() => setStep(2)}
+        <Learning collection={collection} started={started}
+          onLearned={() => {
+            setCounts('counting')
+            refresh(collection.id).then(() => setCounts('counted'), () => setCounts('unknown'))
+            void reloadCollections()
+            setStep(4)
+          }}
+          onRetry={() => setStep(2)}
           onContinue={() => { void reloadCollections(); setStep(5) }} />
       ) : null}
       {step === 4 && collection ? (
-        <Learned collection={collection} onOpenSource={setTarget} onNext={() => setStep(5)} />
+        <Learned collection={collection} counts={counts} onOpenSource={setTarget} onNext={() => setStep(5)} />
       ) : null}
       {step === 5 && collection ? (
         <div className="@container"><div className="grid items-start gap-4 @4xl:grid-cols-2">
@@ -150,16 +168,44 @@ function Learning({ collection, started, onLearned, onRetry, onContinue }: { col
   )
 }
 
-function Learned({ collection, onOpenSource, onNext }: { collection: CollectionSummary; onOpenSource: (target: SourceTarget) => void; onNext: () => void }) {
+function Learned({ collection, counts, onOpenSource, onNext }: { collection: CollectionSummary; counts: Counts; onOpenSource: (target: SourceTarget) => void; onNext: () => void }) {
   const { question, answer, error, busy, ask } = useAsk()
   const again = useCallback(() => { if (question) void ask([collection.id], question) }, [ask, collection.id, question])
+  // The facts shown to check, as the list loaded them, make the questions to try.
+  const [facts, setFacts] = useState<Fact[]>([])
+  const suggestions = useMemo(() => suggestedQuestions(facts.slice(0, FACTS_TO_CHECK)), [facts])
+  // A question picked is put in the box (a new box each time, so it replaces whatever was typed) and asked.
+  const [picked, setPicked] = useState({ text: '', times: 0 })
+  function pick(text: string) {
+    setPicked((current) => ({ text, times: current.times + 1 }))
+    void ask([collection.id], text)
+  }
   return (
     <Card title="Here's what Insulin learned">
-      <p className="text-sm">{collection.name} now has {plural(collection.documents, 'document')} and {plural(collection.facts, 'fact')}.</p>
+      {counts === 'counting' ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner role={undefined} aria-label={undefined} aria-hidden="true" />Counting what {collection.name} learned…</p>
+      ) : counts === 'counted' ? (
+        <p className="text-sm">{collection.name} now has {plural(collection.documents, 'document')} and {plural(collection.facts, 'fact')}.</p>
+      ) : null}
       <h3 className="text-sm font-semibold">Check the most important facts</h3>
-      <FactList collection={collection} editor limit={8} search={false} onOpenSource={(target) => onOpenSource({ collectionId: collection.id, ...target })} />
+      <FactList collection={collection} editor limit={FACTS_TO_CHECK} search={false} onLoaded={setFacts} onOpenSource={(target) => onOpenSource({ collectionId: collection.id, ...target })} />
       <h3 className="text-sm font-semibold">Try a question</h3>
-      <AskBox busy={busy} placeholder={`Ask a question about ${collection.name}…`} onAsk={(text) => void ask([collection.id], text)} />
+      {suggestions.length ? (
+        <div className="flex flex-col gap-2">
+          <Note>Pick one made from the facts above, or ask your own.</Note>
+          <ul className="flex flex-col items-start gap-2" aria-label="Questions to try">
+            {suggestions.map((text) => (
+              <li key={text} className="max-w-full">
+                <Button type="button" variant="outline" size="sm" className="h-auto max-w-full justify-start py-1.5 text-left whitespace-normal [overflow-wrap:anywhere]" disabled={busy}
+                  onClick={() => pick(text)}>
+                  {text}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <AskBox key={picked.times} initial={picked.text} busy={busy} placeholder={`Ask a question about ${collection.name}…`} onAsk={(text) => void ask([collection.id], text)} />
       {busy && !answer ? <Loading label={`Looking in ${collection.name}…`} /> : null}
       {error ? <Banner kind="danger" title="Couldn't ask">{describeError(error)}</Banner> : null}
       {answer ? <AnswerView question={question} answer={answer} collections={[collection]} onOpenSource={onOpenSource} onAskAgain={again} /> : null}

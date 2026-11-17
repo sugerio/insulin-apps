@@ -172,6 +172,11 @@ export function rulesRoutes() {
          SUM(CASE WHEN keep_ready IS NOT NULL THEN 1 ELSE 0 END) AS kept_ready
        FROM collections WHERE org_id = ? AND state = 'active'`,
     ).bind(caller.organizationId).first<Record<string, number>>()
+    // Engine events waiting to be recorded (outbox.ts parks one D1 couldn't apply, and its collection's later ones).
+    const { results: waiting } = await db.prepare(
+      `SELECT collection_id, MIN(parked_at) AS since FROM parked_events WHERE org_id = ? GROUP BY collection_id`,
+    ).bind(caller.organizationId).all<{ collection_id: string; since: number }>()
+    const waitingSince = new Map(waiting.map((row) => [row.collection_id, row.since]))
     let engine: { reachable: boolean; label: string | null } = { reachable: false, label: null }
     if (c.env.ENGINE) {
       try {
@@ -183,6 +188,8 @@ export function rulesRoutes() {
     return json(c, {
       engine,
       organization: totals,
+      // The organization's totals only: how many collections have changes waiting to be recorded, and since when.
+      waiting: { collections: waiting.length, since: iso(waiting.length ? Math.min(...waiting.map((row) => row.since)) : null) },
       backupDays: (await readOrgSettings(db, caller.organizationId)).backupDays,
       collections: collections.map((collection) => ({
         id: collection.id,
@@ -193,6 +200,7 @@ export function rulesRoutes() {
         lastRestorePointAt: iso(collection.last_restore_point_at),
         lastBackupAt: iso(collection.last_backup_at),
         lastUsedAt: iso(collection.last_used_at),
+        waitingSince: iso(waitingSince.get(collection.id) ?? null),
       })),
     })
   })

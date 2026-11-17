@@ -1,5 +1,5 @@
 import { owner, type GrantInput } from './grants.ts'
-import { ownerDomainOf, registrableDomain, subdomainPattern } from '../owner-domain.ts'
+import { ownerDomainOf, registrableDomain, subdomainSuffix } from '../owner-domain.ts'
 import type { Role } from '../roles.ts'
 
 export interface OrgRow {
@@ -40,7 +40,7 @@ export const ORGS_PER_DOMAIN = 2
 /**
  * The forms the organizations of the owner domain of `email` (owner-domain.ts ownerDomainOf) may be recorded in, as
  * the parameters ?1 to ?4 of OWNED: the owner domain itself; the form migrations 0007 and 0009 wrote for a non-ASCII
- * domain (SQL can't write punycode, so it stayed as typed); and LIKE patterns for the subdomains of both, as those
+ * domain (SQL can't write punycode, so it stayed as typed); and the endings of the subdomains of both, as those
  * migrations, and the gateway before 0009, recorded the creator's whole domain.
  */
 function ownedForms(email: string): [string, string, string | null, string | null] {
@@ -48,13 +48,13 @@ function ownedForms(email: string): [string, string, string | null, string | nul
   if (ownerDomain.includes('@')) return [ownerDomain, ownerDomain, null, null]
   const typed = email.slice(email.lastIndexOf('@') + 1).toLowerCase()
   const legacy = registrableDomain(typed) ?? typed
-  return [ownerDomain, legacy, subdomainPattern(ownerDomain), legacy === ownerDomain ? null : subdomainPattern(legacy)]
+  return [ownerDomain, legacy, subdomainSuffix(ownerDomain), legacy === ownerDomain ? null : subdomainSuffix(legacy)]
 }
 
 // The organizations of an owner domain (ownedForms: ?1 to ?4), and how many it may have (?5 by default). A subdomain
-// pattern applies to domains only, never to an address at a provider.
+// ending applies to domains only, never to an address at a provider; lower() keeps the case-blind match LIKE made.
 const OWNED = `(o.owner_domain IN (?1, ?2)
-  OR (instr(o.owner_domain, '@') = 0 AND (o.owner_domain LIKE ?3 ESCAPE '\\' OR o.owner_domain LIKE ?4 ESCAPE '\\')))`
+  OR (instr(o.owner_domain, '@') = 0 AND (substr(lower(o.owner_domain), -length(?3)) = ?3 OR substr(lower(o.owner_domain), -length(?4)) = ?4)))`
 const ALLOWED = 'COALESCE((SELECT a.max_orgs FROM org_domain_allowances a WHERE a.owner_domain = ?1), ?5)'
 
 /** The owner domain of someone with this address, its organizations now, and how many it may have. */

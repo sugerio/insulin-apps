@@ -64,11 +64,12 @@ export const fixingAndReporting: DocTopic = {
         <>
           <p>
             A collection's <b>What it knows</b> tab lists the facts Insulin found, each as one sentence taken from a file that a
-            person can check, with the file it came from. Search them by word.
+            person can check, with the file it came from. Search them by word: the search looks through the facts shown, and
+            when there are more, <b>Show more</b> at the end of the list adds them.
           </p>
           <ul>
             <li><b>Looks right</b> (owners, admins and editors) marks a fact as checked, with your name, so others can see someone checked it.</li>
-            <li><b>Fix</b> writes the right sentence. It is saved as a correction, like a fixed answer, and answers that used the fact use your fix.</li>
+            <li><b>Fix</b> writes the right sentence. It is saved as a correction, like a fixed answer, named after the file the fact came from (“Correction to …”) and holding only your sentence, never the old one, and answers that used the fact use your fix.</li>
             <li><b>Report a problem</b> (everyone else) tells the owner something is wrong, like a reported answer.</li>
           </ul>
           <InApp>A collection › What it knows. Reported answers and facts wait under Needs attention.</InApp>
@@ -93,6 +94,11 @@ export const fixingAndReporting: DocTopic = {
           <p>
             Insulin keeps answering while these wait. A file Insulin couldn't read stays listed for 30 days, or until a file
             with the same name is learned in that collection; a report stays until it is settled.
+          </p>
+          <p>
+            Every collection you can change is covered. Values hidden before learning are read for the 50 collections
+            changed most recently; when you can change more, the page says so, and a collection's own <b>Overview</b> lists
+            everything for it.
           </p>
         </>
       ),

@@ -2,16 +2,22 @@ import { fileURLToPath } from 'node:url'
 import { drizzle } from 'drizzle-orm/d1'
 import { migrate } from 'drizzle-orm/d1/migrator'
 import { createStubEngine, type StubEngine, type StubTiming } from '../../engine/src/stub/index.ts'
-import { type LocalD1, openLocalD1 } from '../../src/local-d1.ts'
+import { LocalD1 } from '../../src/local-d1.ts'
 import { createApp } from '../../src/app/server/app.ts'
 import type { Bindings } from '../../src/app/server/env.ts'
+import { withD1Limits } from './d1-limits.ts'
 
 /** The app's Drizzle Kit migrations. */
 export const MIGRATIONS_FOLDER = fileURLToPath(new URL('../../src/app/db/migrations', import.meta.url))
 
-/** A fresh, empty, migrated database (in-memory SQLite behind the preview's D1 stand-in). */
+/**
+ * A fresh, empty, migrated database: in-memory SQLite behind the preview's D1 stand-in, with D1's own limit on LIKE
+ * and GLOB patterns (d1-limits.ts), which SQLite doesn't have.
+ */
 export async function openMigratedDatabase(): Promise<LocalD1> {
-  const database = await openLocalD1(':memory:')
+  const { DatabaseSync } = await import('node:sqlite')
+  // As openLocalD1 opens it: D1 enforces foreign keys, as node:sqlite does by default.
+  const database = new LocalD1(await withD1Limits(new DatabaseSync(':memory:', { enableForeignKeyConstraints: true })))
   await migrate(drizzle(database), { migrationsFolder: MIGRATIONS_FOLDER })
   return database
 }

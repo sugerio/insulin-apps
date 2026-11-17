@@ -8,7 +8,7 @@ import { ActionError, Badge, Banner, ErrorState, Loading, Note } from '../../com
 import { ImportProgress, useImportWatch } from '../../components/ImportProgress.tsx'
 import { Card } from '../../components/Page.tsx'
 import { api, collectionPath } from '../../lib/api.ts'
-import { formatBytes, formatDay, formatWhen, plural, sourceKind } from '../../lib/format.ts'
+import { formatBytes, formatDay, formatResetDay, formatWhen, plural, sourceKind } from '../../lib/format.ts'
 import type { DocumentInfo, ImportStatus } from '../../lib/types.ts'
 import { useResource } from '../../lib/useResource.ts'
 import type { TabProps } from './CollectionPage.tsx'
@@ -212,7 +212,8 @@ const WAITING_LISTS = {
 /**
  * The collection's imports waiting for the 1st (its organization has learned this month's documents), or those Insulin
  * has but hasn't started learning (`queued`): each with what it brings, who added it and, for the 1st, when it starts
- * by itself; its editors can cancel one, and it is never learned.
+ * by itself (the day in UTC, as the limits' month and the learning progress name it); its editors can cancel one, and it
+ * is never learned.
  */
 function WaitingImports({ collectionId, state, editor, refresh, onCancelled }: { collectionId: string; state: keyof typeof WAITING_LISTS; editor: boolean; refresh: unknown; onCancelled: (what: string) => void }) {
   const waiting = useResource<{ imports: WaitingImport[] }>(collectionPath(collectionId, `/imports?state=${state}`))
@@ -242,7 +243,7 @@ function WaitingImports({ collectionId, state, editor, refresh, onCancelled }: {
           <li key={entry.importId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm" data-waiting-import={entry.importId}>
             <span className="min-w-0 grow basis-48 [overflow-wrap:anywhere]">
               <b>{waitingWhat(entry)}</b>
-              <span className="block text-xs text-muted-foreground">Added by {entry.createdBy.name ?? 'someone'} {formatWhen(entry.createdAt)}{entry.waitsFor ? ` · starts ${formatDay(entry.waitsFor)}` : ''}</span>
+              <span className="block text-xs text-muted-foreground">Added by {entry.createdBy.name ?? 'someone'} {formatWhen(entry.createdAt)}{entry.waitsFor ? ` · starts ${formatResetDay(entry.waitsFor)}` : ''}</span>
             </span>
             {editor ? <Button type="button" variant="outline" size="sm" disabled={busy === entry.importId} onClick={() => void cancel(entry)}>Cancel</Button> : null}
           </li>

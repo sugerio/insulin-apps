@@ -44,7 +44,7 @@ export const gettingStarted: DocTopic = {
             <li><b>What it is for.</b> Give it a name and say, in one sentence, what it is for. AI assistants read that sentence to decide when to use the collection.</li>
             <li><b>Add what you know.</b> Upload files, add a web page or write a note. Files Insulin can't read are named, with the reason, before anything starts. See <DocLink to="collections-and-sources">Collections and sources</DocLink>.</li>
             <li><b>Learning.</b> Each file goes Waiting → Reading → Understanding → learned, with the time left. You can leave the page; Knowledge e-mails you when it is done.</li>
-            <li><b>What it learned.</b> Check the facts it found, mark the ones that look right and fix the ones that don't.</li>
+            <li><b>What it learned.</b> Check the facts it found, mark the ones that look right and fix the ones that don't. Then try a question: pick one of up to three made from those facts (each reads “… — is that right?”) to ask it and see the answer with its sources, or type your own.</li>
             <li><b>Share it.</b> Share it with everyone in your organization, or with specific people, and choose whether AI assistants can ask it. See <DocLink to="sharing-and-roles">Sharing and roles</DocLink>.</li>
           </ol>
           <p>

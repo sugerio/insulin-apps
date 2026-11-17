@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { createHarness, PEOPLE, type Harness, type Person } from '../support/harness.ts'
+import { createHarness, ORG, PEOPLE, type Harness, type Person } from '../support/harness.ts'
 
 // Needs attention (design J6, the LAUNCH items): files Insulin couldn't read, values hidden before learning and reported
 // answers waiting, for the people who can change a collection; and "Looks right" on What it knows.
@@ -89,6 +89,71 @@ describe('Needs attention', () => {
     expect(catalog.body.endpoints.map((endpoint) => endpoint.path)).toContain('/api/attention')
     const viewerCatalog = await h.json<{ endpoints: { path: string }[] }>(PEOPLE.leo, 'GET', '/api/catalog')
     expect(viewerCatalog.body.endpoints.map((endpoint) => endpoint.path)).not.toContain('/api/attention')
+  })
+})
+
+describe('Needs attention across many collections', () => {
+  const roomFor = (collections: number) => h.db.prepare(`INSERT INTO org_limits (org_id, key, value, until, updated_at) VALUES (?, 'collections', ?, NULL, 0)`).bind(ORG, collections).run()
+  /** The statements D1 is sent while `work` runs. */
+  async function statements(work: () => Promise<unknown>): Promise<number> {
+    const prepare = h.db.prepare.bind(h.db)
+    let count = 0
+    h.db.prepare = (query: string) => { count += 1; return prepare(query) }
+    try {
+      await work()
+    } finally {
+      h.db.prepare = prepare
+    }
+    return count
+  }
+
+  it('covers every collection the person can change, past the 20th by name, with the same few queries for any number', async () => {
+    h = await createHarness()
+    await roomFor(100)
+    const ids: string[] = []
+    for (let index = 1; index <= 25; index += 1) ids.push(await h.collection(PEOPLE.maya, `Collection ${String(index).padStart(2, '0')}`))
+    await h.share(PEOPLE.maya, ids[24]!, PEOPLE.eli, 'EDITOR')
+    for (const id of [ids[0]!, ids[24]!]) await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/reports`, { question: 'Who signs off?', note: 'Wrong person.' })
+    const seen = await h.json<Attention>(PEOPLE.maya, 'GET', '/api/attention')
+    // Must catch: the collections after the 20th by name were left out, with no sign of them.
+    expect(seen.body.collections).toHaveLength(25)
+    expect(seen.body.collections.filter((collection) => collection.items.length).map((collection) => collection.name)).toEqual(['Collection 01', 'Collection 25'])
+    expect(seen.body.collections.find((collection) => collection.id === ids[24])!.items).toEqual([expect.objectContaining({ kind: 'reported', question: 'Who signs off?' })])
+    expect((seen.body as unknown as { notice: unknown }).notice).toBeNull()
+    // Eli's share is found in the same query: the 25th, as an Editor.
+    expect((await h.json<Attention>(PEOPLE.eli, 'GET', '/api/attention')).body.collections).toMatchObject([{ id: ids[24], role: 'EDITOR', items: [{ kind: 'reported' }] }])
+    // As many statements for 25 collections as for 1.
+    const many = await statements(() => h.json(PEOPLE.maya, 'GET', '/api/attention'))
+    const one = await statements(() => h.json(PEOPLE.eli, 'GET', '/api/attention'))
+    expect(many).toBe(one)
+  })
+
+  it('reads the engine for at most 50 collections, those changed most recently, and says so for the rest', async () => {
+    h = await createHarness()
+    await roomFor(100)
+    const ids: string[] = []
+    for (let index = 1; index <= 52; index += 1) {
+      const id = await h.collection(PEOPLE.maya, `Hidden ${String(index).padStart(2, '0')}`)
+      await h.note(PEOPLE.maya, id, `Write to person${index}@example.test about rule ${index}.`, `Note ${index}`)
+      h.clock.advance(60_000)
+      ids.push(id)
+    }
+    // A collection with nothing learned lately isn't read at all.
+    ids.push(await h.collection(PEOPLE.maya, 'Nothing lately'))
+    const engine = h.env.ENGINE!
+    const reads: string[] = []
+    h.env.ENGINE = { fetch: async (request) => { if (/\/documents$/.test(new URL(request.url).pathname)) reads.push(new URL(request.url).pathname); return engine.fetch(request) } }
+    const seen = await h.json<Attention & { notice: string | null }>(PEOPLE.maya, 'GET', '/api/attention')
+    expect(reads).toHaveLength(50)
+    expect(seen.body.collections).toHaveLength(53)
+    const partial = seen.body.collections.filter((collection) => (collection as { partial?: boolean }).partial).map((collection) => collection.name)
+    expect(partial).toEqual(['Hidden 01', 'Hidden 02'])
+    expect(seen.body.collections.filter((collection) => collection.items.some((item) => item.kind === 'hidden'))).toHaveLength(50)
+    expect(seen.body.notice).toMatch(/aren't listed here for 2 collections/)
+    // One collection on its own is always read in full.
+    const alone = await h.json<Attention & { notice: string | null }>(PEOPLE.maya, 'GET', `/api/attention?collection=${ids[0]}`)
+    expect(alone.body.collections[0]!.items).toEqual([expect.objectContaining({ kind: 'hidden', documentName: 'Note 1' })])
+    expect(alone.body.notice).toBeNull()
   })
 })
 

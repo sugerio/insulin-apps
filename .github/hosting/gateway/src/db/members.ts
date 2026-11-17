@@ -142,9 +142,12 @@ export interface LookupPersonRow {
   custom_permissions: string | null
 }
 
-/** A search box's text as a LIKE pattern (its wildcards escaped). */
-function likePattern(query: string): string {
-  return `%${query.toLowerCase().replace(/[\\%_]/g, (character) => `\\${character}`)}%`
+/**
+ * A search box's text, lower case, as instr() finds it in a lower-cased name or address: as typed, wildcards and all.
+ * Not LIKE: D1 refuses a LIKE pattern over 50 bytes, and the text may be 100 characters.
+ */
+function searchText(query: string): string {
+  return query.toLowerCase()
 }
 
 /**
@@ -152,7 +155,7 @@ function likePattern(query: string): string {
  * active account) and up to `limit` of the app's live API clients, whose name or address contains `query`.
  */
 export async function lookupMembers(db: D1Database, app: string, orgId: string, query: string, limit: number): Promise<{ people: LookupPersonRow[]; clients: { id: string; name: string }[] }> {
-  const pattern = likePattern(query)
+  const text = searchText(query)
   const [people, clients] = await db.batch([
     db.prepare(
       `SELECT u.id, u.name, u.email, m.role AS member_role, g.role AS grant_role, g.custom_role_id, c.name AS custom_role_name,
@@ -162,14 +165,14 @@ export async function lookupMembers(db: D1Database, app: string, orgId: string, 
        LEFT JOIN app_grants g ON g.org_id = m.org_id AND g.user_id = m.user_id AND g.app = ?1
        LEFT JOIN custom_roles c ON c.id = g.custom_role_id
        WHERE m.org_id = ?2 AND (m.role <> 'APPS' OR g.role IS NOT NULL)
-         AND (lower(u.name) LIKE ?3 ESCAPE '\\' OR u.email LIKE ?3 ESCAPE '\\')
+         AND (instr(lower(u.name), ?3) > 0 OR instr(lower(u.email), ?3) > 0)
        ORDER BY u.name COLLATE NOCASE, u.email LIMIT ?4`,
-    ).bind(app, orgId, pattern, limit),
+    ).bind(app, orgId, text, limit),
     db.prepare(
       `SELECT s.id, s.name FROM service_accounts s
-       WHERE s.org_id = ?2 AND s.app = ?1 AND s.revoked_at IS NULL AND lower(s.name) LIKE ?3 ESCAPE '\\'
+       WHERE s.org_id = ?2 AND s.app = ?1 AND s.revoked_at IS NULL AND instr(lower(s.name), ?3) > 0
        ORDER BY s.name COLLATE NOCASE, s.id LIMIT ?4`,
-    ).bind(app, orgId, pattern, limit),
+    ).bind(app, orgId, text, limit),
   ])
   return { people: (people?.results ?? []) as LookupPersonRow[], clients: (clients?.results ?? []) as { id: string; name: string }[] }
 }

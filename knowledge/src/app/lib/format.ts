@@ -39,7 +39,10 @@ export function formatDay(iso: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? '–' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/** "December 1" for a limit's reset. */
+/**
+ * "December 1": a limit's reset, or the day an import waiting for it starts. In UTC, as the limits' month is, so every
+ * screen names the same day wherever the browser is.
+ */
 export function formatResetDay(iso: string | null | undefined): string | null {
   if (!iso) return null
   const date = new Date(iso)

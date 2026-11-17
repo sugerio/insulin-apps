@@ -63,6 +63,11 @@ export function HealthPage() {
       {health.loading ? <Loading /> : health.error || !data ? <ErrorState error={health.error} onRetry={() => void health.reload()} /> : (
         <>
           {!data.engine.reachable ? <Banner kind="warn" title="Knowledge's engine isn't answering right now">Collections can't be asked or changed until it answers again. Everything already learned is kept.</Banner> : null}
+          {data.waiting?.collections ? (
+            <Banner kind="warn" title="Some of what happened isn't recorded yet">
+              In {plural(data.waiting.collections, 'collection')}, Knowledge couldn't record what its engine did since {formatWhenInline(data.waiting.since)}: their lists, counts, history and usage may be behind. Answers aren't affected. Knowledge tries again every five minutes; if this stays, tell Insulin Apps support.
+            </Banner>
+          ) : null}
           <Card title="Your collections">
             {data.collections.length ? (
               <div className="@container">
@@ -75,6 +80,7 @@ export function HealthPage() {
                     <span className={collection.state === 'repairing' ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}>
                       {collection.state === 'repairing' ? 'Answering from an earlier version while Insulin repairs it' : 'No repairs needed'}
                     </span>
+                    {collection.waitingSince ? <span className="text-amber-700 dark:text-amber-400">Changes since {formatWhenInline(collection.waitingSince)} aren't recorded yet</span> : null}
                     {engineTerms ? <span className="font-mono text-xs text-muted-foreground" data-engine-terms="">{collection.state} · version {collection.version} · {ENGINE_TERMS[collection.state] ?? ''}</span> : null}
                   </li>
                 ))}
@@ -96,6 +102,7 @@ export function HealthPage() {
                         <TableCell>{collection.lastBackupAt ? formatWhen(collection.lastBackupAt) : 'Not yet'}</TableCell>
                         <TableCell className={collection.state === 'repairing' ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}>
                           {collection.state === 'repairing' ? 'Answering from an earlier version while Insulin repairs it' : 'None needed'}
+                          {collection.waitingSince ? <div className="text-amber-700 dark:text-amber-400">Changes since {formatWhenInline(collection.waitingSince)} aren't recorded yet</div> : null}
                         </TableCell>
                         <TableCell className="text-muted-foreground">{formatWhen(collection.lastUsedAt)}</TableCell>
                         {engineTerms ? (

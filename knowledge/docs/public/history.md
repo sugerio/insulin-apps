@@ -47,3 +47,7 @@ Besides restore points, every collection is backed up daily. Daily backups are k
 daily backups (30 by default; History's footer and Health say how many), and the latest one as long as the collection
 exists, so a collection is never lost by sitting unused. Admins see each collection's last restore
 point and last backup on **Health**. See [Your data](/docs/knowledge/your-data).
+
+Health also says when what Knowledge's engine did in a collection is waiting to be recorded, and since when: its lists,
+counts, history and usage may be behind until it is. Answers aren't affected, other collections go on, and Knowledge
+tries again every five minutes, in the order things happened.

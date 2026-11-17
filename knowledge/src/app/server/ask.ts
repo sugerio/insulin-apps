@@ -4,7 +4,7 @@ import { EngineCallError, EngineClient } from './engine/client.ts'
 import type { Bindings, EngineFetcher } from './env.ts'
 import { ApiError, logError } from './http.ts'
 import type { Caller } from './identity.ts'
-import { ensureAwakeBlock, release, reserve, settle } from './limits.ts'
+import { ensureAwakeBlock, release, reserve, settle, supportSentence } from './limits.ts'
 import { integrationFetchOverGateway } from './platform-api.ts'
 import { readOrgSettings, type OrgSettings } from './settings.ts'
 
@@ -81,13 +81,14 @@ export interface CollectionResult {
   facts: (Fact & { collectionId: string })[]
 }
 
-export function waitingMessage(results: CollectionResult[]): string {
+/** Why no collection answered yet, in plain words; `env` names Insulin Apps support at the awake-hours stop. */
+export function waitingMessage(env: Pick<Bindings, 'SUPPORT_EMAIL'>, results: CollectionResult[]): string {
   const learning = results.filter((result) => result.status === 'learning')
   const waking = results.filter((result) => result.status === 'waking')
   const busy = results.filter((result) => result.status === 'busy')
   const held = results.filter((result) => result.status === 'held')
   const names = (list: CollectionResult[]) => list.map((result) => quoted(result.name)).join(', ')
-  if (held.length && !learning.length && !waking.length) return "Your organization has used this month's awake hours, so Knowledge has stopped until the 1st, or until Insulin Apps raises the limit. Everything it learned is kept."
+  if (held.length && !learning.length && !waking.length) return `Your organization has used this month's awake hours, so Knowledge has stopped until the 1st, or until Insulin Apps raises the limit. Everything it learned is kept. ${supportSentence(env)}`
   if (learning.length) return `${names(learning)} ${learning.length === 1 ? 'is' : 'are'} learning. Questions wait until it finishes; ask again in a minute.`
   if (waking.length) return `Waking up ${names(waking)}. This takes about a minute; ask again then.`
   if (busy.length) return 'Insulin Knowledge is busy. Ask again in a minute.'
@@ -252,7 +253,7 @@ export async function writeAnswer(env: Bindings, engine: EngineFetcher, caller: 
     ;[reservation] = await reserve(env, org, [{ key: 'answers_month', amount: 1 }], `answer:${crypto.randomUUID()}`, now, 60 * 60 * 1000)
   } catch (error) {
     if (error instanceof ApiError && error.code === 'quota_exceeded') {
-      return sourcesOnly("This month's written answers are used up, so here are the sources without a written answer. An admin can switch to your organization's own model in Rules and data.")
+      return sourcesOnly(`This month's written answers are used up, so here are the sources without a written answer. An admin can switch to your organization's own model in Rules and data. ${supportSentence(env)}`)
     }
     throw error
   }

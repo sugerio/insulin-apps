@@ -79,7 +79,7 @@ export const collectionsAndSources: DocTopic = {
           <ul>
             <li><b>A type Insulin can't read</b>, such as an Excel workbook with macros (.xlsm), an older Word or PowerPoint file (.doc, .ppt) or an image. Save it in one of the types above and add it again.</li>
             <li><b>An empty file</b>, or one <b>larger than your organization's largest file</b>. Split it, or save it in a smaller format.</li>
-            <li><b>A scanned PDF</b>: a PDF that is only an image, with no text in it, is named when it is uploaded. Upload a PDF with text, or a Word file.</li>
+            <li><b>A scanned PDF</b>: a PDF whose pages draw only images, with no text in them, is named when it is uploaded, even when it lists a font. Upload a PDF with text, or a Word file. One whose pages Insulin can't look into while it uploads (an unusual compression) is accepted; if it has no text after all, its import fails and names it.</li>
             <li><b>Your organization's limits</b>: if the files would go past the documents or stored files, nothing starts and Knowledge says which limit. Past this month's documents learned, they are taken and wait for the 1st. See <DocLink to="limits">Limits</DocLink>.</li>
           </ul>
         </>

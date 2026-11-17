@@ -66,6 +66,23 @@ export const gettingStarted: DocTopic = {
       ),
     },
     {
+      id: "estimate",
+      title: "The estimate and why each number is what it is",
+      body: (
+        <>
+          <p>
+            Beside the steps after the household, <b>Federal estimate</b> shows each return's key lines: total income, net income, taxable income,
+            federal credits, net federal tax, and the tax already deducted from pay. Provincial tax comes in a later version.
+          </p>
+          <p>
+            Select a line to see why it is what it is: its formula, the values that went into it, and each number's source, down to the box of
+            each slip. A number marked <b>est.</b> uses a usual answer for a question you haven't answered yet, such as no RRSP deduction; the
+            estimate lists what it assumed.
+          </p>
+        </>
+      ),
+    },
+    {
       id: "who-can-do-what",
       title: "Who can do what",
       body: (

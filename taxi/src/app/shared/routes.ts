@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { meSchema, type Permission } from "./access.ts";
+import { estimateSchema } from "./estimate.ts";
 import {
   createPersonSchema,
   idSchema,
@@ -99,6 +100,16 @@ export const routes = {
     params: yearParams,
     body: null,
     response: taxYearSchema,
+  }),
+  getEstimate: route({
+    method: "GET",
+    path: "/api/years/:year/estimate",
+    summary:
+      "What the tax engine computes for each return of the year from what is entered so far: the result lines, each one complete, estimated or missing, and the engine input to explain them.",
+    permission: "taxi.view",
+    params: yearParams,
+    body: null,
+    response: estimateSchema,
   }),
   setYearPeople: route({
     method: "PUT",

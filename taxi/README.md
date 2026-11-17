@@ -7,8 +7,8 @@ forms, filled in, to sign and mail, or numbers to copy into certified software.
 It is an Insulin app: you start from it in the Insulin console, change it with the AppBuilder if you want to, preview it
 and publish it. It brings its own database.
 
-**Status: early.** It is being built in parts. Today it has the household step; the rest of the year's steps say what
-they will do.
+**Status: early.** It is being built in parts. Today it has the household step and the tax engine with the 2025
+federal rules for employees; the rest of the year's steps say what they will do.
 
 ## What it does today
 
@@ -19,6 +19,10 @@ they will do.
   prepared together. Each year then records your marital status on December 31, and each adult's province and whether
   they lived in Canada all year. The app says what is still missing, and what it
   can't prepare (another province, or someone who moved to or from Canada during the year).
+- **The tax engine.** All tax rules are YAML files under `rules/`, one folder per year, each number with its source.
+  The engine computes every return of the year from them, marks each number complete, estimated (a default stood in
+  for an answer) or missing, and explains any number down to the slip boxes. Beside steps 2 to 6, a federal estimate
+  shows the result lines; select a line to see why. Slips can't be entered yet, so the estimate is $0 for now.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,
@@ -45,6 +49,8 @@ npm ci
 npm run dev        # http://localhost:3000, as a stand-in owner
 npm test
 npm run typecheck
+npm run rules      # after changing rules/: check the YAML, write the compiled JSON
+npm run rules:try -- test/golden/ca-2025/single-employee-on.json
 ```
 
 `AGENTS.md` has the layout, the access rules and what to run before finishing a change.

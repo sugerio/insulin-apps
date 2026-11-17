@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import type { Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { EstimateCard } from "../components/EstimateCard.tsx";
 import { Page, PageHead } from "../components/Page.tsx";
 import { STEP_LABELS, StepNav, stepPath, useYear } from "../components/YearFrame.tsx";
 
@@ -23,7 +24,7 @@ export function LaterStep({ step }: { step: Exclude<Step, "household"> }) {
   const { year } = useYear();
   return (
     <Page title={`${year.year} ${STEP_LABELS[step].toLowerCase()}`} crumbs={[["Returns", "/returns"], [String(year.year), `/returns/${year.year}`], [STEP_LABELS[step]]]} wide>
-      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_300px]">
         <StepNav />
         <div className="flex min-w-0 flex-col gap-5">
           <PageHead title={STEP_LABELS[step]} />
@@ -45,6 +46,9 @@ export function LaterStep({ step }: { step: Exclude<Step, "household"> }) {
             </CardContent>
           </Card>
         </div>
+        <aside className="lg:col-start-2 xl:col-start-auto">
+          <EstimateCard />
+        </aside>
       </div>
     </Page>
   );

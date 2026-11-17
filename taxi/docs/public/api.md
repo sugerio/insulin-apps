@@ -25,6 +25,7 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `GET /api/years` | View returns | The household's people and tax years, with each year's progress. |
 | `POST /api/years` | Prepare returns | Start a tax year with the people in it: `{"year": 2025, "people": ["…"]}`. You must be one of them; your spouse in it prepares both returns together. Starting one that exists returns it unchanged. |
 | `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, and open issues. |
+| `GET /api/years/{year}/estimate` | View returns | What the engine computes for each return of the year (below). |
 | `PUT /api/years/{year}/people` | Prepare returns | Change who is in the year: `{"revision", "people"}`. Someone taken out loses their facts for that year. |
 | `PUT /api/years/{year}/household` | Prepare returns | Save the year's facts (below). |
 | `GET /api/people` | View returns | Everyone in the household, the same every year. |
@@ -55,6 +56,20 @@ has a spouse, and `single`, `widowed`, `divorced` or `separated` when it has non
 
 A year's answer lists `issues`. Those of kind `blocking` keep the step from being done; those of kind `unsupported` say
 what the app can't prepare, such as a province other than Ontario, British Columbia or Alberta.
+
+## A year's estimate
+
+`GET /api/years/{year}/estimate` returns `input` and `result`. `input` is what the engine computed from: the year's
+adults (`id`, `name`, `role`, `birthDate`, `province`), their `answers` and their `slips`. `result.people` has one entry
+per return:
+
+- `lines`: the result lines (total income, net income, taxable income, credits, net federal tax, tax deducted), each
+  with a `value` as decimal text and a `status`: `complete`, `estimate` or `missing`.
+- `estimates`: questions with no answer whose usual answer was used, with the `assumed` value.
+- `missing`: questions with no answer and no usual answer.
+- `unhandled`: what was entered that the app doesn't use, such as a slip box.
+
+`result.rulesVersion` names the rules the result was computed with. Nothing is stored: each request computes again.
 
 ## Errors
 

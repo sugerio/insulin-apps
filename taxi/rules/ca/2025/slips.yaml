@@ -1,0 +1,19 @@
+# Slip types: what each one is, for the screens and for AI reading, and its boxes as printed. `informational` boxes
+# never change a return. Any other box no formula reads is kept on the slip and shown as not handled by this app.
+
+slips:
+  T4:
+    title: T4 Statement of Remuneration Paid
+    about: Employment income an employer paid, and the tax, CPP, EI and dues it withheld
+    boxes:
+      14: Employment income
+      16: Employee's CPP contributions
+      16A: Employee's second CPP contributions
+      18: Employee's EI premiums
+      22: Income tax deducted
+      24: EI insurable earnings
+      26: CPP pensionable earnings
+      44: Union dues
+      46: Charitable donations
+      52: Pension adjustment
+    informational: [24, 26, 52]   # used by the CRA to check the slip, and for next year's RRSP limit

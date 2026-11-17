@@ -1,0 +1,186 @@
+{
+  "country": "ca",
+  "year": 2025,
+  "filingUnit": "person",
+  "result": [
+    "T1.15000",
+    "T1.23600",
+    "T1.26000",
+    "T1.35000",
+    "T1.42000",
+    "T1.43700"
+  ],
+  "params": {
+    "taxBrackets": {
+      "label": "Federal tax brackets",
+      "value": [
+        {
+          "upTo": "57375",
+          "rate": "0.145"
+        },
+        {
+          "upTo": "114750",
+          "rate": "0.205"
+        },
+        {
+          "upTo": "177882",
+          "rate": "0.26"
+        },
+        {
+          "upTo": "253414",
+          "rate": "0.29"
+        },
+        {
+          "upTo": null,
+          "rate": "0.33"
+        }
+      ],
+      "source": "Federal rates for 2025. The lowest rate went from 15% to 14% on July 1, 2025, so 14.5% applies for the year."
+    },
+    "creditRate": {
+      "label": "Federal credit rate",
+      "value": "0.145",
+      "source": "Rate for federal non-refundable tax credits in 2025 (the 2025 lowest rate)"
+    },
+    "basicPersonalAmountMax": {
+      "label": "Basic personal amount, full",
+      "value": "16129",
+      "source": "Basic personal amount for 2025, net income up to the start of the 26% bracket"
+    },
+    "basicPersonalAmountMin": {
+      "label": "Basic personal amount, minimum",
+      "value": "14538",
+      "source": "Basic personal amount for 2025, net income from the start of the 33% bracket"
+    },
+    "basicPersonalAmountPhaseStart": {
+      "label": "Net income where the amount starts to go down",
+      "value": "177882",
+      "source": "Start of the 26% bracket for 2025: the basic personal amount goes down from here"
+    },
+    "basicPersonalAmountPhaseEnd": {
+      "label": "Net income where the amount reaches its minimum",
+      "value": "253414",
+      "source": "Start of the 33% bracket for 2025: the basic personal amount reaches its minimum here"
+    },
+    "canadaEmploymentAmount": {
+      "label": "Canada employment amount",
+      "value": "1471",
+      "source": "Canada employment amount for 2025 (line 31260)"
+    },
+    "cppBaseRate": {
+      "label": "CPP base rate",
+      "value": "0.0495",
+      "source": "CPP base contribution rate for employees (4.95%): this part is a credit, line 30800"
+    },
+    "cppTotalRate": {
+      "label": "CPP rate for employees",
+      "value": "0.0595",
+      "source": "CPP contribution rate for employees in 2025 (5.95%): base plus the first enhancement, which is a deduction, line 22215"
+    }
+  },
+  "lines": {
+    "T1.10100": {
+      "label": "Employment income",
+      "formula": "sum(T4.box14)"
+    },
+    "T1.15000": {
+      "label": "Total income",
+      "formula": "line.T1.10100"
+    },
+    "T1.20800": {
+      "label": "RRSP deduction",
+      "formula": "answer.rrspDeduction"
+    },
+    "T1.22215": {
+      "label": "Deduction for CPP enhanced contributions on employment income",
+      "formula": "round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A)",
+      "source": "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
+    },
+    "T1.23300": {
+      "label": "Total deductions",
+      "formula": "line.T1.20800 + line.T1.22215"
+    },
+    "T1.23600": {
+      "label": "Net income",
+      "formula": "max(0, line.T1.15000 - line.T1.23300)"
+    },
+    "T1.26000": {
+      "label": "Taxable income",
+      "formula": "line.T1.23600"
+    },
+    "T1.30000": {
+      "label": "Basic personal amount",
+      "formula": "round(param.basicPersonalAmountMax\n  - (param.basicPersonalAmountMax - param.basicPersonalAmountMin)\n  * clamp(line.T1.23600 - param.basicPersonalAmountPhaseStart, 0, param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart)\n  / (param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart), 2)",
+      "source": "Line 30000 worksheet: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+    },
+    "T1.30800": {
+      "label": "Base CPP contributions through employment",
+      "formula": "round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2)",
+      "source": "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit"
+    },
+    "T1.31200": {
+      "label": "Employment insurance premiums through employment",
+      "formula": "sum(T4.box18)"
+    },
+    "T1.31260": {
+      "label": "Canada employment amount",
+      "formula": "min(param.canadaEmploymentAmount, line.T1.10100)"
+    },
+    "T1.33500": {
+      "label": "Federal non-refundable credit amounts",
+      "formula": "line.T1.30000 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+    },
+    "T1.33800": {
+      "label": "Credit amounts at the credit rate",
+      "formula": "round(line.T1.33500 * param.creditRate, 2)"
+    },
+    "T1.35000": {
+      "label": "Total federal non-refundable tax credits",
+      "formula": "line.T1.33800"
+    },
+    "T1.40400": {
+      "label": "Federal tax on taxable income",
+      "formula": "round(bracket(param.taxBrackets, line.T1.26000), 2)"
+    },
+    "T1.42000": {
+      "label": "Net federal tax",
+      "formula": "max(0, line.T1.40400 - line.T1.35000)"
+    },
+    "T1.43700": {
+      "label": "Total income tax deducted",
+      "formula": "sum(T4.box22)",
+      "source": "Federal and provincial tax together, as the T4 shows it"
+    }
+  },
+  "questions": {
+    "rrspDeduction": {
+      "type": "money",
+      "ask": "RRSP contributions to deduct for 2025",
+      "default": "0"
+    }
+  },
+  "slips": {
+    "T4": {
+      "title": "T4 Statement of Remuneration Paid",
+      "about": "Employment income an employer paid, and the tax, CPP, EI and dues it withheld",
+      "boxes": {
+        "14": "Employment income",
+        "16": "Employee's CPP contributions",
+        "18": "Employee's EI premiums",
+        "22": "Income tax deducted",
+        "24": "EI insurable earnings",
+        "26": "CPP pensionable earnings",
+        "44": "Union dues",
+        "46": "Charitable donations",
+        "52": "Pension adjustment",
+        "16A": "Employee's second CPP contributions"
+      },
+      "informational": [
+        "24",
+        "26",
+        "52"
+      ]
+    }
+  },
+  "version": "7311308e5b987faa"
+}

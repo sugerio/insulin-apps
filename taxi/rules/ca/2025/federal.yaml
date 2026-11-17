@@ -1,0 +1,107 @@
+# Federal tax for an employee: total income, the deductions on T4 amounts, the basic credits, and federal tax.
+# Line ids are the T1's line numbers. Sources: the 2025 T1 General (5006-R) and Schedule 8 instructions, and the
+# CRA's indexation table for 2025.
+
+params:
+  taxBrackets:
+    label: Federal tax brackets
+    source: "Federal rates for 2025. The lowest rate went from 15% to 14% on July 1, 2025, so 14.5% applies for the year."
+    value:
+      - { upTo: 57375, rate: 14.5% }
+      - { upTo: 114750, rate: 20.5% }
+      - { upTo: 177882, rate: 26% }
+      - { upTo: 253414, rate: 29% }
+      - { rate: 33% }
+  creditRate:
+    label: Federal credit rate
+    source: "Rate for federal non-refundable tax credits in 2025 (the 2025 lowest rate)"
+    value: 14.5%
+  basicPersonalAmountMax:
+    label: Basic personal amount, full
+    source: "Basic personal amount for 2025, net income up to the start of the 26% bracket"
+    value: 16129
+  basicPersonalAmountMin:
+    label: Basic personal amount, minimum
+    source: "Basic personal amount for 2025, net income from the start of the 33% bracket"
+    value: 14538
+  basicPersonalAmountPhaseStart:
+    label: Net income where the amount starts to go down
+    source: "Start of the 26% bracket for 2025: the basic personal amount goes down from here"
+    value: 177882
+  basicPersonalAmountPhaseEnd:
+    label: Net income where the amount reaches its minimum
+    source: "Start of the 33% bracket for 2025: the basic personal amount reaches its minimum here"
+    value: 253414
+  canadaEmploymentAmount:
+    label: Canada employment amount
+    source: "Canada employment amount for 2025 (line 31260)"
+    value: 1471
+  cppBaseRate:
+    label: CPP base rate
+    source: "CPP base contribution rate for employees (4.95%): this part is a credit, line 30800"
+    value: 4.95%
+  cppTotalRate:
+    label: CPP rate for employees
+    source: "CPP contribution rate for employees in 2025 (5.95%): base plus the first enhancement, which is a deduction, line 22215"
+    value: 5.95%
+
+lines:
+  T1.10100:
+    label: Employment income
+    formula: "sum(T4.box14)"
+  T1.15000:
+    label: Total income
+    formula: "line.T1.10100"
+  T1.20800:
+    label: RRSP deduction
+    formula: "answer.rrspDeduction"
+  T1.22215:
+    label: Deduction for CPP enhanced contributions on employment income
+    formula: "round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A)"
+    source: "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
+  T1.23300:
+    label: Total deductions
+    formula: "line.T1.20800 + line.T1.22215"
+  T1.23600:
+    label: Net income
+    formula: "max(0, line.T1.15000 - line.T1.23300)"
+  T1.26000:
+    label: Taxable income
+    formula: "line.T1.23600"
+  T1.30000:
+    label: Basic personal amount
+    formula: >-
+      round(param.basicPersonalAmountMax
+        - (param.basicPersonalAmountMax - param.basicPersonalAmountMin)
+        * clamp(line.T1.23600 - param.basicPersonalAmountPhaseStart, 0, param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart)
+        / (param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart), 2)
+    source: "Line 30000 worksheet: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+  T1.30800:
+    label: Base CPP contributions through employment
+    formula: "round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2)"
+    source: "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit"
+  T1.31200:
+    label: Employment insurance premiums through employment
+    formula: "sum(T4.box18)"
+  T1.31260:
+    label: Canada employment amount
+    formula: "min(param.canadaEmploymentAmount, line.T1.10100)"
+  T1.33500:
+    label: Federal non-refundable credit amounts
+    formula: "line.T1.30000 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+  T1.33800:
+    label: Credit amounts at the credit rate
+    formula: "round(line.T1.33500 * param.creditRate, 2)"
+  T1.35000:
+    label: Total federal non-refundable tax credits
+    formula: "line.T1.33800"
+  T1.40400:
+    label: Federal tax on taxable income
+    formula: "round(bracket(param.taxBrackets, line.T1.26000), 2)"
+  T1.42000:
+    label: Net federal tax
+    formula: "max(0, line.T1.40400 - line.T1.35000)"
+  T1.43700:
+    label: Total income tax deducted
+    formula: "sum(T4.box22)"
+    source: "Federal and provincial tax together, as the T4 shows it"

@@ -1,0 +1,7 @@
+# Questions a formula reads as answer.<id>. A question with a default gives an estimate until it is answered.
+
+questions:
+  rrspDeduction:
+    type: money
+    ask: RRSP contributions to deduct for 2025
+    default: 0

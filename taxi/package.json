@@ -48,7 +48,9 @@
     "build": "vite build --configLoader native",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "rules": "node scripts/compile-rules.ts",
+    "rules:try": "node scripts/try-rules.ts"
   },
   "dependencies": {
     "@fours/app": "0.1.0-beta.0",
@@ -79,7 +81,8 @@
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vite": "8.3.4",
-    "vitest": "5.0.3"
+    "vitest": "5.0.3",
+    "yaml": "2.9.1"
   },
   "overrides": {
     "rolldown": "1.2.14",

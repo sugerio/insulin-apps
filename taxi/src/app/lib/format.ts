@@ -1,4 +1,5 @@
 import type { MaritalStatus, Province, Relationship } from "#shared";
+import { Dec } from "../shared/engine/decimal.ts";
 
 export const RELATIONSHIP_LABELS: Record<Relationship, string> = {
   self: "You",
@@ -38,4 +39,17 @@ const DATE = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "long", 
 export function formatDate(date: string): string {
   const parsed = new Date(`${date}T00:00:00Z`);
   return Number.isNaN(parsed.getTime()) ? date : DATE.format(parsed);
+}
+
+const GROUPED = new Intl.NumberFormat("en-CA", { maximumFractionDigits: 0 });
+
+/** Decimal text as "$5,641.47", rounded half up to the cent as the CRA rounds. */
+export function formatMoney(value: string): string {
+  const [whole = "0", cents = "00"] = Dec.from(value).abs().toFixed(2, "HALF_UP").split(".");
+  return `${value.startsWith("-") ? "-" : ""}$${GROUPED.format(BigInt(whole))}.${cents}`;
+}
+
+/** A rate as "14.5%". */
+export function formatRate(value: string): string {
+  return `${Dec.from(value).mul(100).toString()}%`;
 }

@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { ROUTE_TABLE, SUPPORTED_YEARS, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
+import { getEstimate } from "./lib/estimate.ts";
 import * as household from "./lib/household.ts";
 import { ApiError, forbidden, logError, notFound, parseOr400, readJson } from "./lib/http.ts";
 import { isScheduleTick, readCaller, type Caller } from "./lib/identity.ts";
@@ -84,6 +85,7 @@ export function createApp(options: AppOptions = {}) {
     return created ? { status: 201, body: view } : view;
   });
   mount(routes.getYear, async ({ caller, params, db }) => household.getYear(db, caller.orgId, params.year));
+  mount(routes.getEstimate, async ({ caller, params, db }) => getEstimate(db, caller.orgId, params.year));
   mount(routes.setYearPeople, async ({ caller, params, body, db, now }) => household.setYearPeople(db, caller, params.year, body, now));
   mount(routes.saveHousehold, async ({ caller, params, body, db, now }) => household.saveHousehold(db, caller, params.year, body, now));
   mount(routes.listPeople, async ({ caller, db }) => ({ people: await household.listPeople(db, caller.orgId) }));

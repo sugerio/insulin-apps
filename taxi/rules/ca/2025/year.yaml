@@ -1,0 +1,14 @@
+# The 2025 Canadian rules. Each number names its source; check it there before changing it.
+country: ca
+year: 2025
+filingUnit: person   # one return per adult; a couple's returns read each other through spouse.
+extends: null        # the first year; 2026 will say `extends: 2025` and list only what changed
+
+# The lines a summary shows, in order.
+result:
+  - T1.15000
+  - T1.23600
+  - T1.26000
+  - T1.35000
+  - T1.42000
+  - T1.43700

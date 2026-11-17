@@ -29,7 +29,14 @@
         "medicalExpenses": "0",
         "donations": "0",
         "unusedTuition": "0",
-        "tuitionTransfer": "0"
+        "tuitionTransfer": "0",
+        "hasSelfEmployment": false,
+        "hasRentalIncome": false,
+        "hasPensionIncome": false,
+        "hasEiBenefits": false,
+        "hasForeignIncome": false,
+        "soldProperty": false,
+        "hasChildCare": false
       },
       "p2": {
         "rrspDeduction": "0",
@@ -37,7 +44,14 @@
         "medicalExpenses": "0",
         "donations": "0",
         "unusedTuition": "0",
-        "tuitionTransfer": "0"
+        "tuitionTransfer": "0",
+        "hasSelfEmployment": false,
+        "hasRentalIncome": false,
+        "hasPensionIncome": false,
+        "hasEiBenefits": false,
+        "hasForeignIncome": false,
+        "soldProperty": false,
+        "hasChildCare": false
       }
     },
     "slips": [

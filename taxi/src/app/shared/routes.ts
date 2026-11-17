@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { meSchema, type Permission } from "./access.ts";
 import { estimateSchema } from "./estimate.ts";
+import { createSlipSchema, revisionBodySchema, saveAnswersSchema, slipListSchema, updateSlipSchema } from "./returns.ts";
 import {
   createPersonSchema,
   idSchema,
@@ -39,6 +40,7 @@ const route = <P extends z.ZodType | null, B extends z.ZodType | null, R extends
 
 const yearParams = z.strictObject({ year: yearSchema });
 const personParams = z.strictObject({ id: idSchema });
+const slipParams = z.strictObject({ year: yearSchema, id: idSchema });
 
 export const apiCatalogSchema = z.strictObject({
   endpoints: z.array(
@@ -129,6 +131,61 @@ export const routes = {
     permission: "taxi.prepare",
     params: yearParams,
     body: saveHouseholdSchema,
+    response: taxYearSchema,
+  }),
+  saveAnswers: route({
+    method: "PUT",
+    path: "/api/years/:year/answers",
+    summary:
+      "Save an adult's answers to the year's questions: {question: value}, money as decimal text, yes/no as true/false, null to clear. The questions are in GET /api/years/{year}/estimate. Send the revision you read.",
+    permission: "taxi.prepare",
+    params: yearParams,
+    body: saveAnswersSchema,
+    response: taxYearSchema,
+  }),
+  listSlips: route({
+    method: "GET",
+    path: "/api/years/:year/slips",
+    summary: "Every slip of the year's adults: type, issuer, boxes as printed, and whether it was confirmed against the paper slip.",
+    permission: "taxi.view",
+    params: yearParams,
+    body: null,
+    response: slipListSchema,
+  }),
+  addSlip: route({
+    method: "POST",
+    path: "/api/years/:year/slips",
+    summary: "Add a slip for an adult of the year: its type (T4, T5, T3, T5008, T2202), issuer and boxes as printed. It starts unconfirmed.",
+    permission: "taxi.prepare",
+    params: yearParams,
+    body: createSlipSchema,
+    response: taxYearSchema,
+  }),
+  updateSlip: route({
+    method: "PATCH",
+    path: "/api/years/:year/slips/:id",
+    summary: "Change a slip's issuer or boxes. The slip goes back to unconfirmed.",
+    permission: "taxi.prepare",
+    params: slipParams,
+    body: updateSlipSchema,
+    response: taxYearSchema,
+  }),
+  removeSlip: route({
+    method: "DELETE",
+    path: "/api/years/:year/slips/:id",
+    summary: "Remove a slip. Send the revision you read.",
+    permission: "taxi.prepare",
+    params: slipParams,
+    body: revisionBodySchema,
+    response: taxYearSchema,
+  }),
+  confirmSlips: route({
+    method: "POST",
+    path: "/api/years/:year/slips/confirm",
+    summary: "Confirm every unconfirmed slip of the year: someone checked each one against the paper slip.",
+    permission: "taxi.prepare",
+    params: yearParams,
+    body: revisionBodySchema,
     response: taxYearSchema,
   }),
   listPeople: route({

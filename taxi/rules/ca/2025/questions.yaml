@@ -1,30 +1,88 @@
-# Questions a formula reads as answer.<id>. A question with a default gives an estimate until it is answered.
+# Questions a formula reads as answer.<id>. A question with a default gives an estimate until it is answered. `step`
+# is the step of the year that asks it; the screens build their forms from these entries.
 
 questions:
+  # Step 3 – What applies: anything the app doesn't handle is named, never ignored.
+  hasSelfEmployment:
+    type: boolean
+    step: applies
+    ask: Self-employment or business income
+    help: Income from your own business, freelancing or gig work (T2125).
+    default: false
+  hasRentalIncome:
+    type: boolean
+    step: applies
+    ask: Rental income
+    help: Rent from a property you own (T776).
+    default: false
+  hasPensionIncome:
+    type: boolean
+    step: applies
+    ask: Pension or government benefits
+    help: A workplace pension, RRIF withdrawals, Old Age Security or CPP benefits.
+    default: false
+  hasEiBenefits:
+    type: boolean
+    step: applies
+    ask: Employment insurance benefits
+    help: EI regular, sickness, maternity or parental benefits (T4E).
+    default: false
+  hasForeignIncome:
+    type: boolean
+    step: applies
+    ask: Income or property outside Canada
+    help: Foreign income, or foreign property that cost more than $100,000 in total (T1135).
+    default: false
+  soldProperty:
+    type: boolean
+    step: applies
+    ask: Sold your home or other real estate
+    help: The sale of a home, cottage or rental property (Schedule 3, T2091).
+    default: false
+  hasChildCare:
+    type: boolean
+    step: applies
+    ask: Child care expenses
+    help: Daycare, before- and after-school programs or day camps (T778).
+    default: false
+
+  # Step 5 – Deductions and credits
   rrspDeduction:
     type: money
+    step: deductions
     ask: RRSP contributions to deduct for 2025
+    help: Contributions from March 4, 2025 to March 2, 2026, up to your limit on last year's notice of assessment.
     default: 0
   fhsaDeduction:
     type: money
+    step: deductions
     ask: FHSA contributions to deduct for 2025
     default: 0
   medicalExpenses:
     type: money
+    step: deductions
     ask: Medical expenses you paid for yourself
+    help: Either spouse can claim the family's medical expenses; it usually saves more on the lower income.
     default: 0
   donations:
     type: money
+    step: deductions
     ask: Donations on official receipts (not on a T4)
-    default: 0
-  spouseNetIncome:
-    type: money
-    ask: Your spouse's or partner's 2025 net income (line 23600 of their return)
-  tuitionTransfer:
-    type: money
-    ask: Tuition to transfer to your spouse or partner (from the back of your T2202)
+    help: Either spouse can claim both spouses' donations; claiming them together usually saves more.
     default: 0
   unusedTuition:
     type: money
+    step: deductions
     ask: Unused federal tuition from your 2024 notice of assessment
     default: 0
+  tuitionTransfer:
+    type: money
+    step: deductions
+    ask: Tuition to transfer to your spouse or partner
+    help: Up to $5,000 of this year's tuition, as designated on the back of your T2202.
+    default: 0
+  spouseNetIncome:
+    type: money
+    step: deductions
+    ask: Your spouse's or partner's 2025 net income
+    help: Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it.

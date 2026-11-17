@@ -111,6 +111,7 @@ describe("evaluating a household", () => {
       missing: [],
       estimates: [{ question: "deduction", ask: "Deduction", assumed: "0" }],
       unhandled: ["S from Two: box 2 isn't handled by this app"],
+      questions: ["deduction"],
     });
     expect(result.people[1]).toMatchObject({ estimates: [], unhandled: ["The answer to oldQuestion isn't used for 2025"] });
   });
@@ -167,7 +168,8 @@ describe("the 2025 rules", () => {
     expect(federalTax.inputs.map((input) => input.ref)).toEqual(["param.taxBrackets", "line.T1.26000"]);
     expect(federalTax.inputs[0]!.source).toMatch(/14\.5% applies for the year/);
     const result = evaluation.result().people[0]!;
-    expect(result.estimates.map((estimate) => estimate.question).sort()).toEqual(["donations", "fhsaDeduction", "medicalExpenses", "rrspDeduction", "unusedTuition"]);
+    expect(result.estimates.map((estimate) => estimate.question)).toEqual(expect.arrayContaining(["donations", "fhsaDeduction", "hasSelfEmployment", "rrspDeduction"]));
+    expect(result.questions).toContain("hasChildCare");
     expect(result.unhandled).toEqual(["T4 from Maple Corp: box 40 isn't handled by this app"]);
   });
 

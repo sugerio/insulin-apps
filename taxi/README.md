@@ -7,8 +7,9 @@ forms, filled in, to sign and mail, or numbers to copy into certified software.
 It is an Insulin app: you start from it in the Insulin console, change it with the AppBuilder if you want to, preview it
 and publish it. It brings its own database.
 
-**Status: early.** It is being built in parts. Today it has the household step and the tax engine with the 2025
-federal and Ontario rules; the rest of the year's steps say what they will do.
+**Status: early.** It is being built in parts. Today a year can be prepared from start to finish with slips entered
+by hand: the household, what applies, the slips, deductions and the results. Uploading documents for AI to read, and
+the filled-in CRA forms, come later.
 
 ## What it does today
 
@@ -25,9 +26,11 @@ federal and Ontario rules; the rest of the year's steps say what they will do.
   employment, interest, dividends, trust income and capital gains (T4, T5, T3, T5008), RRSP, FHSA, RPP and union dues,
   the basic, age, CPP, EI, employment, tuition (T2202), medical and donation credits, the spouse and eligible
   dependant amounts, transfers between spouses (Schedule 2), and provincial tax: ON428 (surtax, tax reduction, LIFT
-  credit, health premium), BC428 (BC tax reduction) and AB428 (supplemental credit). Beside steps 2 to 6,
-  an estimate shows each return's result lines; select a line to see why. Slips can't be entered yet, so the estimate
-  is $0 for now.
+  credit, health premium), BC428 (BC tax reduction) and AB428 (supplemental credit). Beside steps 2 to 5,
+  an estimate shows each return's result lines; select a line to see why.
+- **Steps 3 to 6.** What applies (yes or no to kinds of income the app may not handle), Confirm (each slip entered box by
+  box, then confirmed), Deductions (only the questions a return reads), and Finish (each refund or balance owing, the
+  key lines with why, and what to check before filing).
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,

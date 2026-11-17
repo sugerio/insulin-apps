@@ -15,6 +15,10 @@ Taxi keeps its own database. Each organization has one household, with:
 - **Tax years:** who is in each one, the marital status on December 31, and a revision number that changes with each
   save. Both returns are prepared together when your spouse is in the year.
 - **Returns:** for each adult and year, the province on December 31 and whether they lived in Canada all year.
+- **Slips:** each adult's slips for the year, box by box as printed, and whether someone confirmed them against the
+  paper slip (who and when).
+- **Answers:** each adult's answers to the year's questions, such as an RRSP deduction or whether they had rental
+  income.
 - **History:** who made each change, when, and whether they used the browser, an AI agent or an API client.
 
 It never stores a SIN, a home address or bank details.
@@ -54,7 +58,7 @@ a name, a birth date, an amount or a document.
 
 ## Limits today
 
-- Only the household step works; the other steps of a year come later. Slips can't be entered yet.
+- Slips are entered by hand; reading them from uploaded files comes later, and so do the filled-in CRA forms.
 - The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults: employment,
   interest, dividends, trust income and capital gains; RRSP, FHSA, pension plan and union dues; the basic, age, CPP,
   EI, employment, tuition, medical and donation credits; the spouse and eligible dependant amounts; and a spouse's

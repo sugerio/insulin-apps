@@ -53,3 +53,9 @@ export function formatMoney(value: string): string {
 export function formatRate(value: string): string {
   return `${Dec.from(value).mul(100).toString()}%`;
 }
+
+/** Slip boxes in the order printed: by number, then letter (14, 16, 16A, 18). */
+export function byBox<T>(entries: [string, T][]): [string, T][] {
+  const key = (box: string) => [Number.parseInt(box, 10), box.replace(/^\d+/, "")] as const;
+  return [...entries].sort(([a], [b]) => key(a)[0] - key(b)[0] || key(a)[1].localeCompare(key(b)[1]));
+}

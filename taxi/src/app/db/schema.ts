@@ -91,10 +91,7 @@ export const taxYearPeople = sqliteTable(
   (table) => [primaryKey({ columns: [table.taxYearId, table.personId] }), index("tax_year_people_org").on(table.orgId)],
 );
 
-/**
- * An adult's return for a tax year: their province on December 31 and whether they lived in Canada all year. Slips,
- * answers and results join it in later parts.
- */
+/** An adult's return for a tax year: their province on December 31 and whether they lived in Canada all year. */
 export const returns = sqliteTable(
   "returns",
   {
@@ -115,6 +112,71 @@ export const returns = sqliteTable(
     uniqueIndex("returns_year_person").on(table.taxYearId, table.personId),
     index("returns_org").on(table.orgId),
     check("returns_province", sql`province IS NULL OR ${inList("province", PROVINCES)}`),
+  ],
+);
+
+/**
+ * An adult's answer to a question of the year's rules (`rules/<country>/<year>/questions.yaml`): money as decimal text,
+ * yes/no, or a choice, as JSON. One row per person and question; clearing an answer deletes it.
+ */
+export const answers = sqliteTable(
+  "answers",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id").notNull(),
+    taxYearId: text("tax_year_id")
+      .notNull()
+      .references(() => taxYears.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    question: text("question").notNull(),
+    value: text("value").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("answers_year_person_question").on(table.taxYearId, table.personId, table.question),
+    index("answers_org").on(table.orgId),
+    check("answers_value_json", sql`json_valid(value)`),
+  ],
+);
+
+export const SLIP_STATUSES = ["unconfirmed", "confirmed"] as const;
+export const SLIP_SOURCES = ["manual"] as const;
+
+/**
+ * A tax slip of an adult for the year: its type (a slip type of the year's rules), who issued it, and its boxes as
+ * printed, as a JSON object of box → decimal text. Any change sets it back to unconfirmed.
+ */
+export const slips = sqliteTable(
+  "slips",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id").notNull(),
+    taxYearId: text("tax_year_id")
+      .notNull()
+      .references(() => taxYears.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    issuer: text("issuer").notNull(),
+    boxes: text("boxes").notNull(),
+    status: text("status", { enum: SLIP_STATUSES }).notNull(),
+    source: text("source", { enum: SLIP_SOURCES }).notNull(),
+    confirmedAt: integer("confirmed_at"),
+    confirmedBy: text("confirmed_by"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("slips_year_person").on(table.taxYearId, table.personId),
+    index("slips_org").on(table.orgId),
+    check("slips_boxes_json", sql`json_valid(boxes) AND json_type(boxes) = 'object'`),
+    check("slips_status", inList("status", SLIP_STATUSES)),
+    check("slips_source", inList("source", SLIP_SOURCES)),
+    check("slips_issuer_length", sql`length(issuer) BETWEEN 1 AND 100`),
   ],
 );
 

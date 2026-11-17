@@ -1,6 +1,5 @@
 import {
   SUPPORTED_PROVINCES,
-  STEPS,
   maritalStatusesFor,
   isAdult,
   type AdultYear,
@@ -12,12 +11,12 @@ import {
   type Relationship,
   type SaveHousehold,
   type SetYearPeople,
-  type Step,
   type TaxYear,
   type UpdatePerson,
   type YearList,
 } from "#shared";
 import { ApiError, conflict, isConstraintError, notFound } from "./http.ts";
+import { loadWorkspace, stepStatuses } from "./workspace.ts";
 import type { Caller } from "./identity.ts";
 
 // The household and its tax years in D1. People are the household's, the same every year; a year names who is in it
@@ -33,7 +32,7 @@ interface PersonRow {
   relationship: Relationship;
   birth_date: string;
 }
-interface YearRow {
+export interface YearRow {
   id: string;
   year: number;
   marital_status: MaritalStatus | null;
@@ -50,7 +49,7 @@ const RELATIONSHIP_ORDER: Record<Relationship, number> = { self: 0, spouse: 1, c
 
 const toPerson = (row: PersonRow): Person => ({ id: row.id, name: row.name, relationship: row.relationship, birthDate: row.birth_date });
 
-function audit(db: Db, caller: Caller, action: string, subjectId: string | null, now: number): D1PreparedStatement {
+export function audit(db: Db, caller: Caller, action: string, subjectId: string | null, now: number): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO audit_events (id, org_id, at, actor_id, actor_name, access_via, action, subject_id)
@@ -142,19 +141,10 @@ export function assess(people: Person[], members: ReadonlySet<string>, maritalSt
   return issues;
 }
 
-/** Each step's state: the household's from its issues; the later steps are built in later parts. */
-export function stepStatuses(issues: Issue[]): Record<Step, "done" | "todo" | "not_built"> {
-  const household = issues.some((issue) => issue.kind === "blocking") ? "todo" : "done";
-  return Object.fromEntries(STEPS.map((step) => [step, step === "household" ? household : "not_built"])) as Record<
-    Step,
-    "done" | "todo" | "not_built"
-  >;
-}
-
 // ---------------------------------------------------------------------------
 // Reads
 
-async function yearRow(db: Db, orgId: string, year: number): Promise<YearRow | null> {
+export async function yearRow(db: Db, orgId: string, year: number): Promise<YearRow | null> {
   return db
     .prepare(
       `SELECT id, year, marital_status, revision, updated_at
@@ -165,7 +155,7 @@ async function yearRow(db: Db, orgId: string, year: number): Promise<YearRow | n
 }
 
 async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
-  const [people, members, returns] = await Promise.all([
+  const [people, memberRows, returns] = await Promise.all([
     listPeople(db, orgId),
     db.prepare("SELECT person_id FROM tax_year_people WHERE org_id = ? AND tax_year_id = ?").bind(orgId, row.id).all<{ person_id: string }>(),
     db
@@ -173,7 +163,7 @@ async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
       .bind(orgId, row.id)
       .all<ReturnRow>(),
   ]);
-  const memberIds = new Set(members.results.map((entry) => entry.person_id));
+  const memberIds = new Set(memberRows.results.map((entry) => entry.person_id));
   const byPerson = new Map(returns.results.map((entry) => [entry.person_id, entry]));
   const adults: AdultYear[] = people
     .filter((person) => isAdult(person.relationship) && memberIds.has(person.id))
@@ -187,16 +177,18 @@ async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
       };
     });
   const issues = assess(people, memberIds, row.marital_status, adults);
+  const members = people.filter((person) => memberIds.has(person.id)).map((person) => person.id);
+  const workspace = await loadWorkspace(db, orgId, row.id);
   return {
     year: row.year,
     revision: row.revision,
     maritalStatus: row.marital_status,
     prepareTogether: people.some((person) => person.relationship === "spouse" && memberIds.has(person.id)),
     people,
-    members: people.filter((person) => memberIds.has(person.id)).map((person) => person.id),
+    members,
     adults,
     issues,
-    steps: stepStatuses(issues),
+    steps: stepStatuses({ year: row.year, maritalStatus: row.marital_status, people, members, adults }, issues, workspace),
     updatedAt: row.updated_at,
   };
 }
@@ -299,7 +291,7 @@ export async function startYear(
  * which `CHECK (revision >= 1)` refuses: the whole batch then rolls back and the caller gets a 409 to reload. It goes
  * first in every batch that changes a year.
  */
-function bumpRevision(db: Db, orgId: string, taxYearId: string, revision: number, now: number, set = "", values: unknown[] = []) {
+export function bumpRevision(db: Db, orgId: string, taxYearId: string, revision: number, now: number, set = "", values: unknown[] = []) {
   return db
     .prepare(
       `UPDATE tax_years SET ${set}updated_at = ?, revision = CASE WHEN revision = ? THEN revision + 1 ELSE -1 END
@@ -308,7 +300,7 @@ function bumpRevision(db: Db, orgId: string, taxYearId: string, revision: number
     .bind(...values, now, revision, taxYearId, orgId);
 }
 
-async function runGuarded(db: Db, statements: D1PreparedStatement[]): Promise<void> {
+export async function runGuarded(db: Db, statements: D1PreparedStatement[]): Promise<void> {
   try {
     await db.batch(statements);
   } catch (error) {
@@ -319,7 +311,7 @@ async function runGuarded(db: Db, statements: D1PreparedStatement[]): Promise<vo
   }
 }
 
-/** Changes who is in a year. Someone taken out loses their facts for that year (their province and residency). */
+/** Changes who is in a year. Someone taken out loses their facts, answers and slips for that year. */
 export async function setYearPeople(db: Db, caller: Caller, year: number, input: SetYearPeople, now: number): Promise<TaxYear> {
   const row = await yearRow(db, caller.orgId, year);
   if (!row) throw notFound(`The ${year} tax year hasn't been started`);
@@ -330,9 +322,12 @@ export async function setYearPeople(db: Db, caller: Caller, year: number, input:
     db
       .prepare("DELETE FROM tax_year_people WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))")
       .bind(caller.orgId, row.id, keep),
-    db
-      .prepare("DELETE FROM returns WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))")
-      .bind(caller.orgId, row.id, keep),
+    // Someone taken out of the year takes their facts, answers and slips for that year with them.
+    ...["returns", "answers", "slips"].map((table) =>
+      db
+        .prepare(`DELETE FROM ${table} WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))`)
+        .bind(caller.orgId, row.id, keep),
+    ),
     ...input.people.map((personId) => insertMember(db, caller.orgId, row.id, personId, now)),
     audit(db, caller, "tax_year.people_changed", row.id, now),
   ]);
@@ -453,6 +448,8 @@ export async function removePerson(db: Db, caller: Caller, id: string, now: numb
   if (current.relationship === "self") throw conflict("You can't remove yourself from the household.");
   await db.batch([
     db.prepare("DELETE FROM returns WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
+    db.prepare("DELETE FROM answers WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
+    db.prepare("DELETE FROM slips WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM tax_year_people WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM people WHERE id = ? AND org_id = ?").bind(id, caller.orgId),
     audit(db, caller, "person.removed", id, now),

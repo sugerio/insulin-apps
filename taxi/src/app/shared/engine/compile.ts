@@ -38,6 +38,8 @@ const sourceLine = z.strictObject({ label: z.string().min(1), formula: z.string(
 const sourceQuestion = z.strictObject({
   type: z.enum(["money", "boolean", "choice"]),
   ask: z.string().min(1),
+  step: z.enum(["applies", "deductions"]).optional(),
+  help: z.string().min(1).optional(),
   default: z.union([sourceNumber, z.boolean()]).optional(),
   options: z.array(z.string()).optional(),
 });

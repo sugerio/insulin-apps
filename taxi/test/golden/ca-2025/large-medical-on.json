@@ -22,7 +22,14 @@
         "medicalExpenses": "52000",
         "donations": "0",
         "unusedTuition": "0",
-        "tuitionTransfer": "0"
+        "tuitionTransfer": "0",
+        "hasSelfEmployment": false,
+        "hasRentalIncome": false,
+        "hasPensionIncome": false,
+        "hasEiBenefits": false,
+        "hasForeignIncome": false,
+        "soldProperty": false,
+        "hasChildCare": false
       }
     },
     "slips": [

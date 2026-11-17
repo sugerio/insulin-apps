@@ -28,6 +28,12 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `GET /api/years/{year}/estimate` | View returns | What the engine computes for each return of the year (below). |
 | `PUT /api/years/{year}/people` | Prepare returns | Change who is in the year: `{"revision", "people"}`. Someone taken out loses their facts for that year. |
 | `PUT /api/years/{year}/household` | Prepare returns | Save the year's facts (below). |
+| `PUT /api/years/{year}/answers` | Prepare returns | Save an adult's answers: `{"revision", "personId", "answers": {"rrspDeduction": "5000", "hasRentalIncome": false}}`. `null` clears an answer. |
+| `GET /api/years/{year}/slips` | View returns | Every slip of the year's adults, with its boxes and whether it is confirmed. |
+| `POST /api/years/{year}/slips` | Prepare returns | Add a slip: `{"revision", "personId", "type": "T4", "issuer", "boxes": {"14": "60000.00"}}`. It starts unconfirmed. |
+| `PATCH /api/years/{year}/slips/{id}` | Prepare returns | Change a slip's issuer or boxes: `{"revision", "issuer"?, "boxes"?}`. It goes back to unconfirmed. |
+| `DELETE /api/years/{year}/slips/{id}` | Prepare returns | Remove a slip: `{"revision"}`. |
+| `POST /api/years/{year}/slips/confirm` | Prepare returns | Confirm every unconfirmed slip of the year: `{"revision"}`. |
 | `GET /api/people` | View returns | Everyone in the household, the same every year. |
 | `POST /api/people` | Prepare returns | Add a person: `{"name", "relationship", "birthDate"}`. |
 | `PATCH /api/people/{id}` | Prepare returns | Change a person's name, relationship or birth date. |
@@ -72,6 +78,9 @@ per return:
   yet, such as a CPP overpayment from two jobs. A line those cases reach is `missing`.
 
 `result.rulesVersion` names the rules the result was computed with. Nothing is stored: each request computes again.
+Each entry of `result.people` also lists `questions`: every question its result lines read. The year's rules say what
+each question asks and its type (money as decimal text, yes/no, a choice); the slip types and their boxes come from
+the same rules. A slip's box must be one its type has, and an amount is dollars and cents such as `1234.56`.
 
 ## Errors
 

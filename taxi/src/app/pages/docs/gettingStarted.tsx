@@ -44,24 +44,26 @@ export const gettingStarted: DocTopic = {
               <DocLink to="household">The household</DocLink>.
             </li>
             <li>
-              <b>Upload documents.</b> One folder of slips and receipts, read by AI.
+              <b>Upload documents.</b> One folder of slips and receipts, read by AI. This step comes in a later version; until then, enter slips in
+              step 4.
             </li>
             <li>
-              <b>What applies.</b> What the documents show, and anything that is missing.
+              <b>What applies.</b> For each adult, yes or no to kinds of income and expenses such as self-employment, rent or child care. A yes to
+              something the app doesn't handle makes the return say so.
             </li>
             <li>
-              <b>Confirm.</b> One table of every number AI read, to check against your papers.
+              <b>Confirm.</b> Each adult's slips (T4, T5, T3, T5008, T2202), entered box by box as printed. Check each one against the paper slip,
+              then confirm them. Changing a slip makes it unconfirmed again.
             </li>
             <li>
-              <b>Deductions.</b> Deductions and credits, and who claims each one.
+              <b>Deductions.</b> RRSP and FHSA contributions, medical expenses, donations, unused tuition, and the other amounts each return
+              needs. Only the questions that can change a return appear.
             </li>
             <li>
-              <b>Finish.</b> The results, and the filled-in forms to download.
+              <b>Finish.</b> Each return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
+              The filled-in CRA forms to download come in a later version.
             </li>
           </ol>
-          <p>
-            <b>Today, only step 1 works.</b> Steps 2 to 6 say what they will do, and come in later versions of the app.
-          </p>
         </>
       ),
     },
@@ -93,7 +95,7 @@ export const gettingStarted: DocTopic = {
             label="Roles"
             columns={["Role", "In Taxi"]}
             rows={[
-              ["Owner, Admin, Editor", "Add and change the household's people, start a tax year, and (later) add documents and download forms."],
+              ["Owner, Admin, Editor", "Add and change the household's people, start a tax year, enter and confirm slips, and answer the questions."],
               ["Viewer", "See the household and every return, but change nothing."],
               ["Custom role", "What its permissions allow: Prepare returns, or View returns."],
             ]}

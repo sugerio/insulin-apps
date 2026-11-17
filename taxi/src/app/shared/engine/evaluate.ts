@@ -76,6 +76,8 @@ export interface PersonResult {
   estimates: { question: string; ask: string; assumed: string | boolean }[];
   /** What the person entered that the rules don't use: a slip box, or an answer to a question the year doesn't ask. */
   unhandled: string[];
+  /** Every question a result line reads for this person, answered or not, in the order the rules reach them. */
+  questions: string[];
 }
 export interface EvaluationResult {
   year: number;
@@ -198,7 +200,7 @@ export class Evaluation {
         for (const key of reached) {
           if (key.startsWith(`${person.id}:`)) for (const note of this.node(key).notes ?? []) if (!unhandled.includes(note)) unhandled.push(note);
         }
-        return { personId: person.id, lines, missing, estimates, unhandled };
+        return { personId: person.id, lines, missing, estimates, unhandled, questions: asked };
       }),
     };
   }

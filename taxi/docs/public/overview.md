@@ -37,8 +37,8 @@ so when one of these applies.
 ## What it stores
 
 For each person: their name, their relationship to you and their birth date. For each tax year: who is in it (your
-spouse in it means both returns are prepared together), the marital status on December 31, and each adult's province
-and whether they lived in Canada all year. Every change records who made it and when.
+spouse in it means both returns are prepared together), the marital status on December 31, each adult's province
+and whether they lived in Canada all year, their slips and their answers. Every change records who made it and when.
 
 Taxi never stores a social insurance number (SIN), a home address or bank details. You write those on the paper
 return when you sign it.

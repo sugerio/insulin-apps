@@ -166,7 +166,21 @@ lines:
     source: "Box 26 of T3 slips"
   T1.15000:
     label: Total income
-    formula: "line.T1.10100 + line.T1.12000 + line.T1.12100 + line.T1.12700 + line.T1.13000"
+    formula: "line.T1.10100 + line.T1.12000 + line.T1.12100 + line.T1.12700 + line.T1.13000 + line.SCOPE.income"
+
+  # What applies: income and deductions this app doesn't handle yet. Answering yes makes the return say so.
+  SCOPE.income:
+    label: Income this app doesn't handle
+    formula: >-
+      if(answer.hasSelfEmployment, unsupported("Self-employment income (T2125) isn't handled by this app yet"), 0)
+      + if(answer.hasRentalIncome, unsupported("Rental income (T776) isn't handled by this app yet"), 0)
+      + if(answer.hasPensionIncome, unsupported("Pension income and government benefits aren't handled by this app yet"), 0)
+      + if(answer.hasEiBenefits, unsupported("Employment insurance benefits (T4E) aren't handled by this app yet"), 0)
+      + if(answer.hasForeignIncome, unsupported("Foreign income and foreign property (T1135) aren't handled by this app yet"), 0)
+      + if(answer.soldProperty, unsupported("The sale of a home or other real estate isn't handled by this app yet"), 0)
+  SCOPE.deductions:
+    label: Deductions this app doesn't handle
+    formula: 'if(answer.hasChildCare, unsupported("Child care expenses (T778) aren''t handled by this app yet"), 0)'
 
   # Step 3 – Net income
   T1.20700:
@@ -187,7 +201,7 @@ lines:
     source: "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
   T1.23300:
     label: Total deductions
-    formula: "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.22215"
+    formula: "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.22215 + line.SCOPE.deductions"
   T1.23400:
     label: Net income before adjustments
     formula: "line.T1.15000 - line.T1.23300"
@@ -410,5 +424,5 @@ lines:
     source: "Schedule 11 lines 21 to 23: this year's tuition up to $5,000, less what you used"
   S11.24:
     label: Tuition transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, min(answer.tuitionTransfer, line.S11.23), 0)"
+    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)"
     source: "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"

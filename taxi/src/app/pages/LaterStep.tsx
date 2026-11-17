@@ -1,26 +1,18 @@
 import { Link } from "react-router";
-import type { Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { EstimateCard } from "../components/EstimateCard.tsx";
 import { Page, PageHead } from "../components/Page.tsx";
 import { STEP_LABELS, StepNav, stepPath, useYear } from "../components/YearFrame.tsx";
 
-// Steps 2 to 6 of a year: not available yet. Each says what it will do, so the whole flow reads the same today as it
-// will once the step is built; the household (step 1) is the only step that works so far.
+// Step 2 of a year (upload documents): not available yet. It says what it will do; slips are entered in step 4.
 
-const WHAT_IT_WILL_DO: Record<Exclude<Step, "household">, string> = {
+const WHAT_IT_WILL_DO: Record<"upload", string> = {
   upload:
-    "Choose one folder with this year's slips and receipts and last year's notices of assessment. AI sorts each file by type and person, and skips duplicates and files that aren't tax documents.",
-  applies:
-    "See what your documents show applies to the household, with the file each finding came from. Tick anything that wasn't found and add its file right there.",
-  confirm: "One table of every number AI read, grouped by person. Check the flagged ones against the file, then confirm them all.",
-  deductions:
-    "The deductions and credits from your documents, who claims each one and what it saves, then questions about the ones documents don't show, such as working from home.",
-  finish: "Each person's refund or balance owing, the checks, why each key number is what it is, and the CRA forms filled in to download.",
+    "Choose one folder with this year's slips and receipts and last year's notices of assessment. AI sorts each file by type and person, and skips duplicates and files that aren't tax documents. Until then, enter slips in step 4.",
 };
 
-export function LaterStep({ step }: { step: Exclude<Step, "household"> }) {
+export function LaterStep({ step }: { step: "upload" }) {
   const { year } = useYear();
   return (
     <Page title={`${year.year} ${STEP_LABELS[step].toLowerCase()}`} crumbs={[["Returns", "/returns"], [String(year.year), `/returns/${year.year}`], [STEP_LABELS[step]]]} wide>

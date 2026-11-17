@@ -19,6 +19,7 @@ export const estimateSchema = z.strictObject({
         missing: z.array(z.strictObject({ question: z.string(), ask: z.string() })),
         estimates: z.array(z.strictObject({ question: z.string(), ask: z.string(), assumed: z.union([z.string(), z.boolean()]) })),
         unhandled: z.array(z.string()),
+        questions: z.array(z.string()),
       }),
     ),
   }),

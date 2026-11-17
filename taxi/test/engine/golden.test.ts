@@ -22,6 +22,8 @@ const ALWAYS_ZERO: Record<string, string> = {
   "T1.45000": "an EI overpayment is not handled yet: the line is zero or says so",
   "BC428.44": "a spouse's unused British Columbia age amount is not handled yet: the line is zero or says so",
   "AB428.42": "a spouse's unused Alberta age amount is not handled yet: the line is zero or says so",
+  "SCOPE.income": "income this app doesn't handle: the line is zero or says so",
+  "SCOPE.deductions": "deductions this app doesn't handle: the line is zero or says so",
 };
 
 for (const folder of readdirSync(ROOT)) {

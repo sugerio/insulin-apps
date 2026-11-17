@@ -54,6 +54,10 @@ export interface Question {
   id: string;
   type: QuestionType;
   ask: string;
+  /** The step of the year that asks it (`applies`, `deductions`); the screens build their forms from this. */
+  step?: string;
+  /** A sentence under the question. */
+  help?: string;
   /** Used, and the result marked an estimate, while the question has no answer. */
   default?: string | boolean;
   options?: string[];
@@ -102,6 +106,8 @@ export const compiledRulesSchema = z.strictObject({
     z.strictObject({
       type: z.enum(["money", "boolean", "choice"]),
       ask: z.string(),
+      step: z.string().optional(),
+      help: z.string().optional(),
       default: z.union([z.string(), z.boolean()]).optional(),
       options: z.array(z.string()).optional(),
     }),

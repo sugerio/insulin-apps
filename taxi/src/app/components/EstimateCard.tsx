@@ -1,24 +1,20 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { routes, type Estimate } from "#shared";
+import type { Estimate } from "#shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { cn } from "@/lib/utils.ts";
-import { apiRequest } from "../api/client.ts";
 import { Evaluation, type Explanation } from "../shared/engine/evaluate.ts";
 import type { RuleSet, Status } from "../shared/engine/rules.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 import { formatMoney, formatRate } from "../lib/format.ts";
-import { useResource } from "../lib/useResource.ts";
+import { useEstimate } from "../lib/useYearData.ts";
 import { ResourceView } from "./Feedback.tsx";
-import { useYear } from "./YearFrame.tsx";
 
 // The year's estimate beside a step: each return's result lines from the server, and "why" for each line, which the
 // browser works out with the same engine and the input the server sent.
 
 export function EstimateCard() {
-  const { year } = useYear();
-  // The revision is in the key, so a saved change to the year loads the estimate again.
-  const resource = useResource(`estimate-${year.year}-${year.revision}`, (signal) => apiRequest(routes.getEstimate, { params: { year: year.year }, signal }));
+  const resource = useEstimate();
   return (
     <Card size="sm">
       <CardHeader>
@@ -80,7 +76,7 @@ function EstimateBody({ estimate }: { estimate: Estimate }) {
   );
 }
 
-function ResultLine({ line, explain, rules }: { line: Estimate["result"]["people"][number]["lines"][number]; explain: () => Explanation; rules: RuleSet }) {
+export function ResultLine({ line, explain, rules }: { line: Estimate["result"]["people"][number]["lines"][number]; explain: () => Explanation; rules: RuleSet }) {
   const [open, setOpen] = useState(false);
   return (
     <li className="border-b last:border-b-0">
@@ -144,7 +140,7 @@ function ExplanationTree({ explanation, rules }: { explanation: Explanation; rul
 }
 
 /** What a value is made of: its formula, its source, and the values that went into it. */
-function ExplanationBody({ explanation, rules }: { explanation: Explanation; rules: RuleSet }) {
+export function ExplanationBody({ explanation, rules }: { explanation: Explanation; rules: RuleSet }) {
   return (
     <div className="flex flex-col gap-1 text-xs">
       {explanation.formula ? <code className="break-words text-[11px] text-muted-foreground">= {explanation.formula.replace(/\s+/g, " ")}</code> : null}

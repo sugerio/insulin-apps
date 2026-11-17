@@ -5,6 +5,10 @@ import { YearFrame, YearIndex } from "./components/YearFrame.tsx";
 import { DocsPage } from "./pages/DocsPage.tsx";
 import { HouseholdPage } from "./pages/HouseholdPage.tsx";
 import { HouseholdStep } from "./pages/HouseholdStep.tsx";
+import { AppliesStep } from "./pages/AppliesStep.tsx";
+import { ConfirmStep } from "./pages/ConfirmStep.tsx";
+import { DeductionsStep } from "./pages/DeductionsStep.tsx";
+import { FinishStep } from "./pages/FinishStep.tsx";
 import { LaterStep } from "./pages/LaterStep.tsx";
 import { NotFoundPage, RouteErrorPage } from "./pages/Pages.tsx";
 import { ReturnsPage } from "./pages/ReturnsPage.tsx";
@@ -28,10 +32,10 @@ export const routes: RouteObject[] = [
               { index: true, element: <YearIndex /> },
               { path: "household", element: <HouseholdStep /> },
               { path: "upload", element: <LaterStep step="upload" /> },
-              { path: "applies", element: <LaterStep step="applies" /> },
-              { path: "confirm", element: <LaterStep step="confirm" /> },
-              { path: "deductions", element: <LaterStep step="deductions" /> },
-              { path: "finish", element: <LaterStep step="finish" /> },
+              { path: "applies", element: <AppliesStep /> },
+              { path: "confirm", element: <ConfirmStep /> },
+              { path: "deductions", element: <DeductionsStep /> },
+              { path: "finish", element: <FinishStep /> },
               { path: "*", element: <NotFoundPage /> },
             ],
           },

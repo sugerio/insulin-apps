@@ -80,11 +80,13 @@ export function createApp(options: AppOptions = {}) {
   mount(routes.getCatalog, async ({ caller }) => catalogFor(caller));
   mount(routes.listYears, async ({ caller, db }) => household.listYears(db, caller.orgId, SUPPORTED_YEARS));
   mount(routes.startYear, async ({ caller, body, db, now }) => {
-    const { view, created } = await household.startYear(db, caller, body.year, now);
+    const { view, created } = await household.startYear(db, caller, body.year, body.people, now);
     return created ? { status: 201, body: view } : view;
   });
   mount(routes.getYear, async ({ caller, params, db }) => household.getYear(db, caller.orgId, params.year));
+  mount(routes.setYearPeople, async ({ caller, params, body, db, now }) => household.setYearPeople(db, caller, params.year, body, now));
   mount(routes.saveHousehold, async ({ caller, params, body, db, now }) => household.saveHousehold(db, caller, params.year, body, now));
+  mount(routes.listPeople, async ({ caller, db }) => ({ people: await household.listPeople(db, caller.orgId) }));
   mount(routes.addPerson, async ({ caller, body, db, now }) => ({ status: 201, body: await household.addPerson(db, caller, body, now) }));
   mount(routes.updatePerson, async ({ caller, params, body, db, now }) => household.updatePerson(db, caller, params.id, body, now));
   mount(routes.removePerson, async ({ caller, params, db, now }) => household.removePerson(db, caller, params.id, now));

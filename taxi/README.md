@@ -15,8 +15,9 @@ they will do.
 - **Tax years.** Start a year (2025) and follow its six steps: household, upload documents, what applies, confirm,
   deductions, finish.
 - **The household.** Add yourself, your spouse or common-law partner, and your children and other dependants, with
-  their birth dates. Each year records your marital status on December 31, whether both returns are prepared together,
-  and each adult's province and whether they lived in Canada all year. The app says what is still missing, and what it
+  their birth dates, on the Household page. Starting a year asks who is in it: your spouse in it means both returns are
+  prepared together. Each year then records your marital status on December 31, and each adult's province and whether
+  they lived in Canada all year. The app says what is still missing, and what it
   can't prepare (another province, or someone who moved to or from Canada during the year).
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.

@@ -6,8 +6,8 @@ const NOW = Date.UTC(2026, 2, 1, 10, 5);
 let server: TestServer;
 beforeEach(async () => {
   server = await startServer({ now: () => NOW });
-  await server.call("POST", "/api/years", { body: { year: 2025 } });
-  await server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } });
+  const alex = (await (await server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as { id: string };
+  await server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } });
   await server.call("POST", "/api/people", { body: { name: "Jamie Martin", relationship: "child", birthDate: "2019-06-20" } });
   await server.call("POST", "/api/people", { as: OTHER_ORG, body: { name: "Olive Other", relationship: "self", birthDate: "1980-01-01" } });
 });

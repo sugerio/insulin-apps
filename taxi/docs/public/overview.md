@@ -16,7 +16,7 @@ You can also copy the numbers into certified tax software.
 
 A tax year has six steps:
 
-1. **Household.** Who is in the household, and the facts no document shows.
+1. **Household.** Who is in the year, and the facts no document shows.
 2. **Upload documents.** One folder of slips and receipts, read by AI.
 3. **What applies.** What the documents show, and anything missing.
 4. **Confirm.** One table of every number AI read, to check against the papers.
@@ -36,9 +36,9 @@ so when one of these applies.
 
 ## What it stores
 
-For each person: their name, their relationship to you and their birth date. For each tax year: the marital status on
-December 31, whether both returns are prepared together, and each adult's province and whether they lived in Canada all
-year. Every change records who made it and when.
+For each person: their name, their relationship to you and their birth date. For each tax year: who is in it (your
+spouse in it means both returns are prepared together), the marital status on December 31, and each adult's province
+and whether they lived in Canada all year. Every change records who made it and when.
 
 Taxi never stores a social insurance number (SIN), a home address or bank details. You write those on the paper
 return when you sign it.

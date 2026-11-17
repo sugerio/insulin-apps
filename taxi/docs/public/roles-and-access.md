@@ -11,8 +11,8 @@ permissions a custom role can be given, and how AI agents and API clients are li
 
 | Role | In Taxi |
 |---|---|
-| Owner, Admin, Editor | Start a tax year, add and change people, and save the household's facts. |
-| Viewer | See the household and every tax year, and change nothing. |
+| Owner, Admin, Editor | Add and change the household's people, start a tax year and choose who is in it, and save its facts. |
+| Viewer | See the household's people and every tax year, and change nothing. |
 | Custom role | What its permissions allow (below). |
 
 People and roles are managed on Insulin Apps, under **Settings › People**. Taxi has no sign-in or user list of

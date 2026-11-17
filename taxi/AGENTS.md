@@ -36,7 +36,7 @@ Run from `taxi/` unless noted.
 | `src/app/server/app.ts` | The Hono app: security headers, the tick (`POST /api/scheduled`), same-origin and identity checks, and every route of the table mounted with its permission, params, body and answer checked |
 | `src/app/server/lib/` | `identity.ts` (the platform's headers, the only reader of them), `household.ts` (D1 reads and writes, the issues of a year), `usage-metrics.ts` (the hourly report), `http.ts` (errors, JSON bodies) |
 | `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated) |
-| `src/app/router.tsx`, `src/app/pages/`, `src/app/components/` | The React app: Returns (`/returns`), a year's steps (`/returns/:year/:step`, framed by `YearFrame.tsx`), Docs |
+| `src/app/router.tsx`, `src/app/pages/`, `src/app/components/` | The React app: Returns (`/returns`, with Start a year), Household (`/household`, the people), a year's steps (`/returns/:year/:step`, framed by `YearFrame.tsx`), Docs; `PeopleEditor.tsx` holds the people list and the picker of who is in a year |
 | `src/app/components/AppLayout.tsx`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation, Docs and Settings, the organization switcher and the person |
 | `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic |
 | `docs/public/` | The public docs at `insulinapps.com/docs/taxi/` |
@@ -76,9 +76,11 @@ the Insulin template and stay byte-identical to it (`test/server/framework-templ
 ## Data
 
 - **Never store** a SIN, a home address or bank details. The person writes them on the paper return.
-- **One batch per write**, with its audit event in the same batch. A year's household facts save under the year's
-  `revision`: the first statement writes -1 to `revision` on a stale one, which `CHECK (revision >= 1)` refuses, so
-  the whole batch rolls back and the caller gets a 409 (`saveHousehold`).
+- **People are the household's; a year picks among them** (`tax_year_people`). Your spouse in a year is what "prepare
+  both returns together" means: it isn't stored apart.
+- **One batch per write**, with its audit event in the same batch. A year's changes (who is in it, its facts) save
+  under the year's `revision`: the first statement writes -1 to `revision` on a stale one, which
+  `CHECK (revision >= 1)` refuses, so the whole batch rolls back and the caller gets a 409 (`bumpRevision`).
 - **Migrations are generated.** Edit `schema.ts` and run `npm run db:generate`; never edit a published migration.
 
 ## Docs, required by default

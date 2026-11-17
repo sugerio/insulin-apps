@@ -3,8 +3,10 @@ import { meSchema, type Permission } from "./access.ts";
 import {
   createPersonSchema,
   idSchema,
+  peopleListSchema,
   personSchema,
   saveHouseholdSchema,
+  setYearPeopleSchema,
   startYearSchema,
   taxYearSchema,
   updatePersonSchema,
@@ -82,7 +84,8 @@ export const routes = {
   startYear: route({
     method: "POST",
     path: "/api/years",
-    summary: "Start a tax year (only supported years). Starting one that exists returns it unchanged.",
+    summary:
+      "Start a tax year (only supported years) with the people in it: you, your spouse to prepare both returns together, and the dependants who lived with you. Starting one that exists returns it unchanged.",
     permission: "taxi.prepare",
     params: null,
     body: startYearSchema,
@@ -91,21 +94,40 @@ export const routes = {
   getYear: route({
     method: "GET",
     path: "/api/years/:year",
-    summary: "A tax year: the household's people, marital status, each adult's province and residency, and open issues.",
+    summary: "A tax year: who is in it, the marital status, each adult's province and residency, and open issues.",
     permission: "taxi.view",
     params: yearParams,
     body: null,
+    response: taxYearSchema,
+  }),
+  setYearPeople: route({
+    method: "PUT",
+    path: "/api/years/:year/people",
+    summary:
+      "Change who is in a tax year. Including your spouse prepares both returns together. Send the revision you read; a stale one is refused with 409.",
+    permission: "taxi.prepare",
+    params: yearParams,
+    body: setYearPeopleSchema,
     response: taxYearSchema,
   }),
   saveHousehold: route({
     method: "PUT",
     path: "/api/years/:year/household",
     summary:
-      "Save the year's household facts: marital status on December 31, whether both adults' returns are prepared together, and each adult's province and residency. Send the revision you read; a stale one is refused with 409.",
+      "Save the year's facts: marital status on December 31, and each adult's province and residency. Send the revision you read; a stale one is refused with 409.",
     permission: "taxi.prepare",
     params: yearParams,
     body: saveHouseholdSchema,
     response: taxYearSchema,
+  }),
+  listPeople: route({
+    method: "GET",
+    path: "/api/people",
+    summary: "Everyone in the household, the same every year.",
+    permission: "taxi.view",
+    params: null,
+    body: null,
+    response: peopleListSchema,
   }),
   addPerson: route({
     method: "POST",

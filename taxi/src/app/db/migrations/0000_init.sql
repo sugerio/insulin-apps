@@ -57,13 +57,23 @@ CREATE TABLE `returns` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `returns_year_person` ON `returns` (`tax_year_id`,`person_id`);--> statement-breakpoint
 CREATE INDEX `returns_org` ON `returns` (`org_id`);--> statement-breakpoint
+CREATE TABLE `tax_year_people` (
+	`tax_year_id` text NOT NULL,
+	`person_id` text NOT NULL,
+	`org_id` text NOT NULL,
+	`created_at` integer NOT NULL,
+	PRIMARY KEY(`tax_year_id`, `person_id`),
+	FOREIGN KEY (`tax_year_id`) REFERENCES `tax_years`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`person_id`) REFERENCES `people`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `tax_year_people_org` ON `tax_year_people` (`org_id`);--> statement-breakpoint
 CREATE TABLE `tax_years` (
 	`id` text PRIMARY KEY NOT NULL,
 	`org_id` text NOT NULL,
 	`household_id` text NOT NULL,
 	`year` integer NOT NULL,
 	`marital_status` text,
-	`prepare_together` integer DEFAULT true NOT NULL,
 	`revision` integer DEFAULT 1 NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,

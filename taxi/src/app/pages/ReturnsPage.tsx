@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
-import { ArrowRight, Check } from "lucide-react";
-import { STEPS, canPrepare, filingDeadline, routes, type YearList } from "#shared";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { ArrowRight, Check, Plus } from "lucide-react";
+import { STEPS, canPrepare, filingDeadline, routes, type Person, type YearList } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -9,6 +9,7 @@ import { apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
 import { Page, PageHead } from "../components/Page.tsx";
+import { MemberPicker } from "../components/PeopleEditor.tsx";
 import { STEP_LABELS, nextStep, stepPath } from "../components/YearFrame.tsx";
 import { RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
 import { useResource } from "../lib/useResource.ts";
@@ -87,7 +88,7 @@ function Years({ data }: { data: YearList }) {
           );
         })}
         {notStarted.map((year) => (
-          <StartYear key={year} year={year} />
+          <StartYear key={year} year={year} people={data.people} />
         ))}
       </div>
       <aside className="flex flex-col gap-4">
@@ -96,10 +97,15 @@ function Years({ data }: { data: YearList }) {
             <CardTitle>
               <h2 className="text-base font-semibold">Household</h2>
             </CardTitle>
+            <CardAction>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/household">{canPrepare(me) ? "Edit" : "Open"}</Link>
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             {data.people.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No one yet. Start a tax year to add the household.</p>
+              <p className="text-sm text-muted-foreground">No one yet.</p>
             ) : (
               <ul className="flex flex-col gap-2 text-sm">
                 {data.people.map((person) => (
@@ -128,38 +134,81 @@ function Years({ data }: { data: YearList }) {
   );
 }
 
-function StartYear({ year }: { year: number }) {
+/**
+ * A supported year not started yet. Starting it asks who is in it: you always, your spouse to prepare both returns
+ * together, and the dependants who lived with you. `?start=<year>` opens the choice (the way back from the Household).
+ */
+function StartYear({ year, people }: { year: number; people: Person[] }) {
   const me = useMe();
   const navigate = useNavigate();
+  const [search] = useSearchParams();
+  const [choosing, setChoosing] = useState(search.get("start") === String(year));
+  // Everyone ticked to begin with: most households file with the same people every year.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(people.map((person) => person.id)));
   const [state, setState] = useState<{ status: "idle" | "starting" } | { status: "error"; error: unknown }>({ status: "idle" });
+  const self = people.find((person) => person.relationship === "self");
+  const addPerson = `/household?back=${encodeURIComponent(`/returns?start=${year}`)}`;
+
   async function start() {
     setState({ status: "starting" });
     try {
-      await apiRequest(routes.startYear, { body: { year } });
+      const ids = people.filter((person) => person.relationship === "self" || selected.has(person.id)).map((person) => person.id);
+      await apiRequest(routes.startYear, { body: { year, people: ids } });
       navigate(stepPath(year, "household"));
     } catch (error) {
       setState({ status: "error", error });
     }
   }
+
   return (
-    <Card className="border-dashed">
+    <Card className={choosing ? undefined : "border-dashed"}>
       <CardHeader>
         <CardTitle>
-          <h2 className="text-lg font-semibold">{year} tax year</h2>
+          <h2 className="text-lg font-semibold">{choosing ? `Start ${year}: who is in this year?` : `${year} tax year`}</h2>
         </CardTitle>
         <CardDescription>
-          Not started. File by {formatDate(filingDeadline(year))}.
+          {choosing ? "Tick your spouse or partner to prepare both returns together, and the dependants who lived with you." : `Not started. File by ${formatDate(filingDeadline(year))}.`}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {canPrepare(me) ? (
-          <div>
-            <Button onClick={() => void start()} disabled={state.status === "starting"}>
-              {state.status === "starting" ? "Starting…" : `Start ${year}`}
-            </Button>
-          </div>
-        ) : (
+      <CardContent className="flex flex-col gap-4">
+        {!canPrepare(me) ? (
           <p className="text-sm text-muted-foreground">Someone who prepares returns starts the year. Your role can view returns.</p>
+        ) : !self ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">First add yourself, and anyone else in the household.</p>
+            <div>
+              <Button asChild>
+                <Link to={addPerson}>Go to Household</Link>
+              </Button>
+            </div>
+          </div>
+        ) : choosing ? (
+          <>
+            <MemberPicker
+              people={people}
+              selected={selected}
+              onChange={setSelected}
+              disabled={state.status === "starting"}
+              footer={
+                <Link to={addPerson} className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm font-medium hover:bg-muted">
+                  <Plus className="size-4" aria-hidden="true" />
+                  Add a new person
+                </Link>
+              }
+            />
+            <div className="flex gap-2">
+              <Button onClick={() => void start()} disabled={state.status === "starting"}>
+                {state.status === "starting" ? "Starting…" : `Start ${year}`}
+              </Button>
+              <Button variant="ghost" onClick={() => setChoosing(false)} disabled={state.status === "starting"}>
+                Cancel
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div>
+            <Button onClick={() => setChoosing(true)}>Start {year}</Button>
+          </div>
         )}
         {state.status === "error" ? <Banner kind="error" title="The year wasn't started">{describeError(state.error)}</Banner> : null}
       </CardContent>

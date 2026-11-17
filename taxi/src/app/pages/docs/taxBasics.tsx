@@ -81,7 +81,7 @@ export const taxBasics: DocTopic = {
           </p>
           <p>
             Each spouse files their own return. Some amounts can be claimed by either one, such as donations and medical expenses, so it can matter
-            who claims them. See <DocLink to="household" section="together">Preparing both returns together</DocLink>.
+            who claims them. See <DocLink to="household" section="start-a-year">Start a year: who is in it</DocLink>.
           </p>
         </>
       ),

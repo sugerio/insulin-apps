@@ -9,9 +9,10 @@ beforeEach(async () => {
 afterEach(() => server.close());
 
 async function seed(): Promise<Person> {
-  expect((await server.call("POST", "/api/years", { body: { year: 2025 } })).status).toBe(201);
   const response = await server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } });
-  return (await response.json()) as Person;
+  const alex = (await response.json()) as Person;
+  expect((await server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } })).status).toBe(201);
+  return alex;
 }
 
 describe("identity", () => {
@@ -35,16 +36,16 @@ describe("permissions", () => {
     expect((await server.call("GET", "/api/years/2025", { as: VIEWER })).status).toBe(200);
     expect((await server.call("POST", "/api/people", { as: VIEWER, body: { name: "X", relationship: "child", birthDate: "2020-01-01" } })).status).toBe(403);
     expect((await server.call("DELETE", `/api/people/${alex.id}`, { as: VIEWER })).status).toBe(403);
-    expect((await server.call("POST", "/api/years", { as: VIEWER, body: { year: 2025 } })).status).toBe(403);
+    expect((await server.call("POST", "/api/years", { as: VIEWER, body: { year: 2025, people: [alex.id] } })).status).toBe(403);
   });
 
   it("narrows a role with x-suger-app-permissions, and never widens one", async () => {
-    await seed();
+    const alex = await seed();
     const viewOnlyEditor = { ...OWNER, role: "EDITOR" as const, permissions: "taxi.view" };
     expect((await server.call("GET", "/api/years", { as: viewOnlyEditor })).status).toBe(200);
-    expect((await server.call("POST", "/api/years", { as: viewOnlyEditor, body: { year: 2025 } })).status).toBe(403);
+    expect((await server.call("POST", "/api/years", { as: viewOnlyEditor, body: { year: 2025, people: [alex.id] } })).status).toBe(403);
     const forged = { ...VIEWER, permissions: "taxi.prepare taxi.view" };
-    expect((await server.call("POST", "/api/years", { as: forged, body: { year: 2025 } })).status).toBe(403);
+    expect((await server.call("POST", "/api/years", { as: forged, body: { year: 2025, people: [alex.id] } })).status).toBe(403);
     const nothing = { ...OWNER, permissions: "" };
     expect((await server.call("GET", "/api/years", { as: nothing })).status).toBe(403);
   });
@@ -59,7 +60,10 @@ describe("permissions", () => {
   });
 
   it("blocks a cross-site write", async () => {
-    const response = await server.call("POST", "/api/years", { body: { year: 2025 }, headers: { Origin: "https://elsewhere.example" } });
+    const response = await server.call("POST", "/api/people", {
+      body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" },
+      headers: { Origin: "https://elsewhere.example" },
+    });
     expect(response.status).toBe(403);
   });
 });

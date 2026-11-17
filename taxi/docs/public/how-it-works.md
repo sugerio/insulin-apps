@@ -12,8 +12,8 @@ and for AI agents answering questions about the app.
 Taxi keeps its own database. Each organization has one household, with:
 
 - **People:** name, relationship and birth date.
-- **Tax years:** the marital status on December 31, whether both returns are prepared together, and a revision number
-  that changes with each save.
+- **Tax years:** who is in each one, the marital status on December 31, and a revision number that changes with each
+  save. Both returns are prepared together when your spouse is in the year.
 - **Returns:** for each adult and year, the province on December 31 and whether they lived in Canada all year.
 - **History:** who made each change, when, and whether they used the browser, an AI agent or an API client.
 

@@ -7,7 +7,7 @@
 //
 // Never stored: a SIN, a home address or bank details. People write those on the paper return when they sign it.
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { MARITAL_STATUSES, PROVINCES, RELATIONSHIPS } from "../shared/household.ts";
 
 const inList = (column: string, values: readonly string[]) =>
@@ -49,7 +49,10 @@ export const people = sqliteTable(
   ],
 );
 
-/** A tax year of the household: the facts that change from year to year, under one revision. */
+/**
+ * A tax year of the household: the facts that change from year to year, under one revision. Whether the two adults'
+ * returns are prepared together isn't stored: it is whether the spouse is one of the year's people.
+ */
 export const taxYears = sqliteTable(
   "tax_years",
   {
@@ -60,7 +63,6 @@ export const taxYears = sqliteTable(
       .references(() => households.id, { onDelete: "cascade" }),
     year: integer("year").notNull(),
     maritalStatus: text("marital_status", { enum: MARITAL_STATUSES }),
-    prepareTogether: integer("prepare_together", { mode: "boolean" }).notNull().default(true),
     revision: integer("revision").notNull().default(1),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
@@ -71,6 +73,22 @@ export const taxYears = sqliteTable(
     check("tax_years_marital_status", sql`marital_status IS NULL OR ${inList("marital_status", MARITAL_STATUSES)}`),
     check("tax_years_revision", sql`revision >= 1`),
   ],
+);
+
+/** Who is in a tax year: the person preparing always, their spouse when prepared together, and the dependants. */
+export const taxYearPeople = sqliteTable(
+  "tax_year_people",
+  {
+    taxYearId: text("tax_year_id")
+      .notNull()
+      .references(() => taxYears.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    orgId: text("org_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.taxYearId, table.personId] }), index("tax_year_people_org").on(table.orgId)],
 );
 
 /**

@@ -1,9 +1,10 @@
 import { z } from "zod";
 
-// The household and its tax years, as the browser, the server and API clients see them. A household is the people a
-// return is prepared for in one organization; each tax year records the facts that can change from year to year
-// (marital status on December 31, each adult's province, whether they lived in Canada all year) and whether the two
-// adults' returns are prepared together.
+// The household and its tax years, as the browser, the server and API clients see them. A household is the people of
+// one organization, the same every year. Each tax year names who is in it (the person preparing always; their spouse
+// when the two returns are prepared together; the dependants who lived with them) and records the facts that can
+// change from year to year: marital status on December 31, each adult's province, whether they lived in Canada all
+// year.
 
 /** The years the app prepares returns for. A year is data for the tax engine; adding one adds its rule files. */
 export const SUPPORTED_YEARS = [2025] as const;
@@ -63,7 +64,7 @@ export const adultYearSchema = z.strictObject({
   personId: idSchema,
   province: provinceSchema.nullable(),
   residentAllYear: z.boolean().nullable(),
-  /** Prepared in this app: always the person preparing; their spouse only when the returns are prepared together. */
+  /** Prepared in this app: the person preparing, and their spouse when the spouse is in the year. */
   prepared: z.boolean(),
 });
 export type AdultYear = z.infer<typeof adultYearSchema>;
@@ -73,7 +74,6 @@ export const issueSchema = z.strictObject({
   code: z.enum([
     "no_self",
     "no_marital_status",
-    "no_spouse",
     "spouse_without_partner_status",
     "no_province",
     "no_residency",
@@ -98,8 +98,13 @@ export const taxYearSchema = z.strictObject({
   /** Bumped on every change to the year's household facts; a save names the revision it started from. */
   revision: z.number().int().min(1),
   maritalStatus: maritalStatusSchema.nullable(),
+  /** Whether both adults' returns are prepared: the spouse is one of the year's people. */
   prepareTogether: z.boolean(),
+  /** Everyone in the household, in or out of this year. */
   people: z.array(personSchema),
+  /** The ids of the year's people, in the household's order. */
+  members: z.array(idSchema),
+  /** The year's adults (you, and your spouse when in the year). */
   adults: z.array(adultYearSchema),
   issues: z.array(issueSchema),
   steps: z.record(stepSchema, stepStatusSchema),
@@ -107,12 +112,22 @@ export const taxYearSchema = z.strictObject({
 });
 export type TaxYear = z.infer<typeof taxYearSchema>;
 
-export const startYearSchema = z.strictObject({ year: yearSchema });
+const memberIdsSchema = z
+  .array(idSchema)
+  .min(1, "Choose at least yourself")
+  .max(30)
+  .refine((ids) => new Set(ids).size === ids.length, { message: "A person is listed twice" });
+
+/** Start a year with the people in it: you, and whoever else is in this year. */
+export const startYearSchema = z.strictObject({ year: yearSchema, people: memberIdsSchema });
+
+/** Change who is in a year, from the revision you read. */
+export const setYearPeopleSchema = z.strictObject({ revision: z.number().int().min(1), people: memberIdsSchema });
+export type SetYearPeople = z.infer<typeof setYearPeopleSchema>;
 
 export const saveHouseholdSchema = z.strictObject({
   revision: z.number().int().min(1),
   maritalStatus: maritalStatusSchema.nullable(),
-  prepareTogether: z.boolean(),
   adults: z
     .array(
       z.strictObject({
@@ -132,6 +147,8 @@ export const yearSummarySchema = z.strictObject({
   steps: z.record(stepSchema, stepStatusSchema),
   updatedAt: z.number().int(),
 });
+export const peopleListSchema = z.strictObject({ people: z.array(personSchema) });
+
 export const yearListSchema = z.strictObject({
   supportedYears: z.array(z.number().int()),
   years: z.array(yearSummarySchema),

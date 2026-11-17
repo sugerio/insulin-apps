@@ -34,12 +34,13 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Open <b>Returns</b> and start the tax year. Each year has six steps. The list of steps is beside every page of the year, and a step that
+            First add the household's people under <b>Household</b>. Then open <b>Returns</b> and start the tax year, choosing who is in it.
+            Each year has six steps. The list of steps is beside every page of the year, and a step that
             is done shows a check mark.
           </p>
           <ol>
             <li>
-              <b>Household.</b> Who is in the household, your marital status on December 31, and each adult's province. See{" "}
+              <b>Household.</b> Who is in the year, your marital status on December 31, and each adult's province. See{" "}
               <DocLink to="household">The household</DocLink>.
             </li>
             <li>
@@ -74,7 +75,7 @@ export const gettingStarted: DocTopic = {
             label="Roles"
             columns={["Role", "In Taxi"]}
             rows={[
-              ["Owner, Admin, Editor", "Start a tax year, change the household, and (later) add documents and download forms."],
+              ["Owner, Admin, Editor", "Add and change the household's people, start a tax year, and (later) add documents and download forms."],
               ["Viewer", "See the household and every return, but change nothing."],
               ["Custom role", "What its permissions allow: Prepare returns, or View returns."],
             ]}
@@ -92,8 +93,8 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            For each person: their name, their relationship to you and their birth date. For each tax year: your marital status on December 31,
-            whether both returns are prepared together, and each adult's province and whether they lived in Canada all year. Every change records who
+            For each person: their name, their relationship to you and their birth date. For each tax year: who is in it, your marital status on
+            December 31, and each adult's province and whether they lived in Canada all year. Every change records who
             made it and when.
           </p>
           <p>

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ebba544e-ff96-4164-a9d3-9a76c53b9913",
+  "id": "9bc63f00-25d0-4320-96aa-cb2e1270558d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audit_events": {
@@ -380,6 +380,87 @@
         }
       }
     },
+    "tax_year_people": {
+      "name": "tax_year_people",
+      "columns": {
+        "tax_year_id": {
+          "name": "tax_year_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tax_year_people_org": {
+          "name": "tax_year_people_org",
+          "columns": [
+            "org_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tax_year_people_tax_year_id_tax_years_id_fk": {
+          "name": "tax_year_people_tax_year_id_tax_years_id_fk",
+          "tableFrom": "tax_year_people",
+          "tableTo": "tax_years",
+          "columnsFrom": [
+            "tax_year_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tax_year_people_person_id_people_id_fk": {
+          "name": "tax_year_people_person_id_people_id_fk",
+          "tableFrom": "tax_year_people",
+          "tableTo": "people",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tax_year_people_tax_year_id_person_id_pk": {
+          "columns": [
+            "tax_year_id",
+            "person_id"
+          ],
+          "name": "tax_year_people_tax_year_id_person_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "tax_years": {
       "name": "tax_years",
       "columns": {
@@ -417,14 +498,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "prepare_together": {
-          "name": "prepare_together",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
         },
         "revision": {
           "name": "revision",

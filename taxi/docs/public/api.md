@@ -23,9 +23,11 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `GET /api/me` | any | Who is calling: their role and permissions. |
 | `GET /api/catalog` | any | The endpoints the caller may use, with request bodies as JSON Schema. |
 | `GET /api/years` | View returns | The household's people and tax years, with each year's progress. |
-| `POST /api/years` | Prepare returns | Start a tax year: `{"year": 2025}`. Starting one that exists returns it unchanged. |
-| `GET /api/years/{year}` | View returns | A tax year: people, marital status, each adult's province and residency, and open issues. |
-| `PUT /api/years/{year}/household` | Prepare returns | Save the year's household facts (below). |
+| `POST /api/years` | Prepare returns | Start a tax year with the people in it: `{"year": 2025, "people": ["…"]}`. You must be one of them; your spouse in it prepares both returns together. Starting one that exists returns it unchanged. |
+| `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, and open issues. |
+| `PUT /api/years/{year}/people` | Prepare returns | Change who is in the year: `{"revision", "people"}`. Someone taken out loses their facts for that year. |
+| `PUT /api/years/{year}/household` | Prepare returns | Save the year's facts (below). |
+| `GET /api/people` | View returns | Everyone in the household, the same every year. |
 | `POST /api/people` | Prepare returns | Add a person: `{"name", "relationship", "birthDate"}`. |
 | `PATCH /api/people/{id}` | Prepare returns | Change a person's name, relationship or birth date. |
 | `DELETE /api/people/{id}` | Prepare returns | Remove a person, with their facts in every year. You can't remove yourself. |
@@ -33,20 +35,20 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 `relationship` is `self`, `spouse`, `child` or `other_dependant`; there can be one `self` and one `spouse`. Dates are
 `YYYY-MM-DD`.
 
-## Saving a year's household facts
+## Saving a year's facts
 
 ```json
 {
   "revision": 1,
   "maritalStatus": "married",
-  "prepareTogether": true,
   "adults": [
     { "personId": "…", "province": "ON", "residentAllYear": true }
   ]
 }
 ```
 
-Send the `revision` from your last read of the year. If someone changed the year since, the save is refused with `409`
+`adults` are you, and your spouse when they are in the year. Send the `revision` from your last read of the year (the
+same for `PUT /api/years/{year}/people`). If someone changed the year since, the save is refused with `409`
 and nothing is changed: read the year again and retry. `maritalStatus` is `married`, `common_law`, `widowed`,
 `divorced`, `separated` or `single`; `province` is a two-letter code.
 

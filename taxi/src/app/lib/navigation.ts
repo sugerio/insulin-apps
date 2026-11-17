@@ -57,15 +57,11 @@ export function groupNavigation<T extends NavItem>(items: readonly T[]): { headi
   return groups;
 }
 
-/**
- * The item a page belongs to: the longest manifest path it starts with. A year's household step is under Household;
- * every other page of a year under Returns.
- */
+/** The item a page belongs to: the longest manifest path it starts with (a year's pages are under Returns). */
 export function matchNavigation(items: readonly NavItem[], pathname: string): NavItem | null {
-  const root = /^\/returns\/\d{4}\/household$/.test(pathname) ? "/household" : pathname;
   let best: NavItem | null = null;
   for (const item of items) {
-    if ((root === item.path || root.startsWith(`${item.path}/`)) && item.path.length > (best?.path.length ?? -1)) best = item;
+    if ((pathname === item.path || pathname.startsWith(`${item.path}/`)) && item.path.length > (best?.path.length ?? -1)) best = item;
   }
   return best;
 }

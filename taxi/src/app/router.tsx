@@ -1,29 +1,13 @@
 import { Navigate, createBrowserRouter, type RouteObject } from "react-router";
-import { routes as api } from "#shared";
-import { apiRequest } from "./api/client.ts";
 import { RequireAuth } from "./auth/guards.tsx";
 import { AppLayout } from "./components/AppLayout.tsx";
-import { ResourceView } from "./components/Feedback.tsx";
-import { YearFrame, YearIndex, stepPath } from "./components/YearFrame.tsx";
-import { useResource } from "./lib/useResource.ts";
+import { YearFrame, YearIndex } from "./components/YearFrame.tsx";
 import { DocsPage } from "./pages/DocsPage.tsx";
+import { HouseholdPage } from "./pages/HouseholdPage.tsx";
 import { HouseholdStep } from "./pages/HouseholdStep.tsx";
 import { LaterStep } from "./pages/LaterStep.tsx";
 import { NotFoundPage, RouteErrorPage } from "./pages/Pages.tsx";
 import { ReturnsPage } from "./pages/ReturnsPage.tsx";
-
-/** `/household` (the navigation's Household): the latest year's household step, or the list of years before one starts. */
-function HouseholdRedirect() {
-  const resource = useResource("years", (signal) => apiRequest(api.listYears, { signal }));
-  return (
-    <ResourceView resource={resource}>
-      {(data) => {
-        const latest = data.years[0];
-        return <Navigate to={latest ? stepPath(latest.year, "household") : "/returns"} replace />;
-      }}
-    </ResourceView>
-  );
-}
 
 export const routes: RouteObject[] = [
   {
@@ -36,7 +20,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/returns" replace /> },
           { path: "/returns", element: <ReturnsPage /> },
-          { path: "/household", element: <HouseholdRedirect /> },
+          { path: "/household", element: <HouseholdPage /> },
           {
             path: "/returns/:year",
             element: <YearFrame />,

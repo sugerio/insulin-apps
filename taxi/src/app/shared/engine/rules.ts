@@ -58,6 +58,8 @@ export interface Question {
   step?: string;
   /** A sentence under the question. */
   help?: string;
+  /** For a question about a kind of income or expense: the slip type that shows it. Found slips answer it. */
+  slip?: string;
   /** Used, and the result marked an estimate, while the question has no answer. */
   default?: string | boolean;
   options?: string[];
@@ -108,6 +110,7 @@ export const compiledRulesSchema = z.strictObject({
       ask: z.string(),
       step: z.string().optional(),
       help: z.string().optional(),
+      slip: z.string().optional(),
       default: z.union([z.string(), z.boolean()]).optional(),
       options: z.array(z.string()).optional(),
     }),
@@ -244,6 +247,9 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     const entry = `questions.${id}`;
     if (question.type === "choice" && !question.options?.length) fail(entry, "A choice needs options");
     if (question.type !== "choice" && question.options) fail(entry, "Only a choice has options");
+    if (question.slip !== undefined && (question.type !== "boolean" || !ruleSet.slips.has(question.slip))) {
+      fail(entry, "A question's slip must be a slip type, on a yes/no question");
+    }
     if (question.default !== undefined) {
       const ok =
         question.type === "money"

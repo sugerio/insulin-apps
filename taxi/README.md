@@ -30,7 +30,8 @@ uploaded slips read by AI (or typed in), what applies, deductions and the result
 - **Step 2, AI reading.** Upload a folder or files; Claude reads each one into slips for the person named on it, using
   the organization's Anthropic credential (Settings › Integrations, key `anthropic`). Duplicates are skipped, and every
   slip starts unconfirmed.
-- **Steps 3 to 6.** What applies (yes or no to kinds of income the app may not handle), Confirm (each slip entered box by
+- **Steps 3 to 6.** What applies (the slips found, the kinds not found and whether you have them, what is still missing, and what the app
+  doesn't handle), Confirm (each slip entered box by
   box, then confirmed), Deductions (only the questions a return reads), and Finish (each refund or balance owing, the
   key lines with why, and what to check before filing).
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick

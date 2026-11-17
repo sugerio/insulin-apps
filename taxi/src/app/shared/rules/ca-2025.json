@@ -1212,6 +1212,41 @@
     }
   },
   "questions": {
+    "hasEmploymentIncome": {
+      "type": "boolean",
+      "ask": "Employment income",
+      "step": "applies",
+      "help": "A T4 from each employer you worked for in 2025.",
+      "slip": "T4"
+    },
+    "hasInvestmentIncome": {
+      "type": "boolean",
+      "ask": "Interest or dividends",
+      "step": "applies",
+      "help": "A T5 from each bank, credit union or broker that paid you $50 or more.",
+      "slip": "T5"
+    },
+    "hasTrustIncome": {
+      "type": "boolean",
+      "ask": "Mutual fund or trust income",
+      "step": "applies",
+      "help": "A T3 from each mutual fund or trust held outside an RRSP or TFSA.",
+      "slip": "T3"
+    },
+    "hasSoldInvestments": {
+      "type": "boolean",
+      "ask": "Sold shares, bonds or fund units",
+      "step": "applies",
+      "help": "A T5008 from each broker, for sales outside an RRSP or TFSA.",
+      "slip": "T5008"
+    },
+    "hasTuition": {
+      "type": "boolean",
+      "ask": "Tuition at a college or university",
+      "step": "applies",
+      "help": "A T2202 from each school, for 2025.",
+      "slip": "T2202"
+    },
     "hasSelfEmployment": {
       "type": "boolean",
       "ask": "Self-employment or business income",
@@ -1391,5 +1426,5 @@
       ]
     }
   },
-  "version": "4a3807a24db9f767"
+  "version": "86902f6a6b9295f2"
 }

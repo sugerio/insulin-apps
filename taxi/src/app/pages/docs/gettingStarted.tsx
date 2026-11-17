@@ -48,8 +48,10 @@ export const gettingStarted: DocTopic = {
               the same file or the same slip twice is skipped. You can also type slips in step 4.
             </li>
             <li>
-              <b>What applies.</b> For each adult, yes or no to kinds of income and expenses such as self-employment, rent or child care. A yes to
-              something the app doesn't handle makes the return say so.
+              <b>What applies.</b> For each adult: the slips found in your documents, with their files; for the kinds of slips not found
+              (employment, interest and dividends, mutual funds, sales of investments, tuition), whether you have one, and a yes without the slip
+              is missing, to upload right there or type in at step 4; and yes or no to what the app doesn't handle yet, such as self-employment or
+              rent.
             </li>
             <li>
               <b>Confirm.</b> Each adult's slips (T4, T5, T3, T5008, T2202), read by AI or entered box by box. Check each one against the paper

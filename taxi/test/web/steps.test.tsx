@@ -3,9 +3,23 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Estimate, Person, TaxYear } from "#shared";
 import { OWNER, VIEWER, type TestServer } from "../support/server.ts";
+import type { SlipReader } from "../../src/app/server/lib/reader.ts";
 import { renderApp } from "./support.tsx";
 
-const APPLIES = ["hasSelfEmployment", "hasRentalIncome", "hasPensionIncome", "hasEiBenefits", "hasForeignIncome", "soldProperty", "hasChildCare"];
+const APPLIES = [
+  "hasEmploymentIncome",
+  "hasInvestmentIncome",
+  "hasTrustIncome",
+  "hasSoldInvestments",
+  "hasTuition",
+  "hasSelfEmployment",
+  "hasRentalIncome",
+  "hasPensionIncome",
+  "hasEiBenefits",
+  "hasForeignIncome",
+  "soldProperty",
+  "hasChildCare",
+];
 
 /** Alex alone, single, in Ontario, step 1 saved; optionally with What applies answered and a T4. */
 async function seed(server: TestServer, { applies = false, slip = false } = {}) {
@@ -33,17 +47,47 @@ async function seed(server: TestServer, { applies = false, slip = false } = {}) 
 const estimate = async (server: TestServer) => (await (await server.call("GET", "/api/years/2025/estimate")).json()) as Estimate;
 
 describe("What applies", () => {
-  it("asks yes or no for each kind of income, and moves on once all are answered", async () => {
+  it("lists the slips found, and asks only about the kinds of income not found", async () => {
+    await renderApp("/returns/2025/applies", { seed: (s) => seed(s, { slip: true }).then(() => undefined) });
+    const found = await screen.findByRole("region", { name: "Found in Alex Martin's documents" });
+    expect(within(found).getByText("Employment income")).toBeTruthy();
+    expect(within(found).getByText(/T4 from Maple Corp/)).toBeTruthy();
+    expect(within(found).getByText("Typed in")).toBeTruthy();
+    const notFound = screen.getByRole("region", { name: "Not found for Alex Martin" });
+    expect(within(notFound).queryByText("Employment income")).toBeNull();
+    expect(within(notFound).getByText("Interest or dividends")).toBeTruthy();
+  });
+
+  it("marks a yes without its slip as missing, and moves on once everything is answered", async () => {
     const { router, server } = await renderApp("/returns/2025/applies", { seed: (s) => seed(s).then(() => undefined) });
-    const continueButton = await screen.findByRole("button", { name: "Save and continue" });
-    expect((continueButton as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getAllByRole("radio", { name: "Yes" })[0]!);
-    for (const radio of screen.getAllByRole("radio", { name: "No" }).slice(1)) fireEvent.click(radio);
+    const notFound = await screen.findByRole("region", { name: "Not found for Alex Martin" });
+    const [employmentYes] = within(notFound).getAllByRole("radio", { name: "Yes" });
+    fireEvent.click(employmentYes!);
+    expect(screen.getByText("Missing: the T4")).toBeTruthy();
+    expect(screen.getByText(/T4 for Alex Martin\. Upload each one below/)).toBeTruthy();
+    for (const radio of screen.getAllByRole("radio", { name: "No" })) fireEvent.click(radio);
+    expect(screen.queryByText("Missing: the T4")).toBeNull();
+    const notHandled = screen.getByRole("region", { name: "Not handled for Alex Martin" });
+    fireEvent.click(within(notHandled).getAllByRole("radio", { name: "Yes" })[0]!);
     expect(screen.getByText("Not handled by this app yet.")).toBeTruthy();
-    fireEvent.click(continueButton);
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/returns/2025/confirm"));
     const answers = Object.values((await estimate(server)).input.answers)[0]!;
-    expect(answers).toMatchObject({ hasSelfEmployment: true, hasChildCare: false });
+    expect(answers).toMatchObject({ hasSelfEmployment: true, hasEmploymentIncome: false, hasChildCare: false });
+  });
+
+  it("takes the missing slip right there", async () => {
+    const reader: SlipReader = {
+      read: async () => ({ kind: "read", taxYear: 2025, model: "m", slips: [{ type: "T5", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 13: "1250.00" }, unsure: [] }] }),
+    };
+    await renderApp("/returns/2025/applies", { seed: (s) => seed(s).then(() => undefined), server: { reader: () => reader } });
+    const notFound = await screen.findByRole("region", { name: "Not found for Alex Martin" });
+    fireEvent.click(within(notFound).getAllByRole("radio", { name: "Yes" })[1]!);
+    fireEvent.change(screen.getByLabelText("Upload the T5"), { target: { files: [new File(["%PDF-1.4 t5"], "t5.pdf", { type: "application/pdf" })] } });
+    // Saving the answers, the upload and reloading the year take a moment.
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Found in Alex Martin's documents" })).getByText("Interest or dividends")).toBeTruthy(), { timeout: 5000 });
+    const found = screen.getByRole("region", { name: "Found in Alex Martin's documents" });
+    expect(within(found).getByRole("link", { name: "View file" })).toBeTruthy();
   });
 });
 

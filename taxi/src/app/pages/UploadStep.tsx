@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { FileUp, FolderUp } from "lucide-react";
-import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, canPrepare, routes, type DocumentList, type DocumentRecord } from "#shared";
+import { MAX_DOCUMENT_BYTES, canPrepare, routes, type DocumentList, type DocumentRecord } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -11,6 +11,7 @@ import { useMe } from "../auth/AuthProvider.tsx";
 import { ResourceView } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useYear } from "../components/YearFrame.tsx";
+import { uploadFile, uploadType } from "../lib/upload.ts";
 import { useResource } from "../lib/useResource.ts";
 
 // Step 2, `/returns/:year/upload`: pick a folder (or files, or drop them), and each PDF, PNG or JPEG is sent on its own,
@@ -52,14 +53,9 @@ function Uploader() {
 
   async function send(files: File[]) {
     const batch = files.map((file, index) => ({ file, key: `${Date.now()}-${index}-${file.name}` }));
-    const typeOf = (file: File) => {
-      if ((DOCUMENT_TYPES as readonly string[]).includes(file.type)) return file.type;
-      const extension = file.name.toLowerCase().split(".").pop();
-      return extension === "pdf" ? "application/pdf" : extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : null;
-    };
     const queued: { file: File; key: string; type: string }[] = [];
     const initial: Row[] = batch.map(({ file, key }) => {
-      const type = typeOf(file);
+      const type = uploadType(file);
       if (!type) return { key, name: file.name, state: "skipped", message: "Not a PDF, PNG or JPEG." };
       if (file.size > MAX_DOCUMENT_BYTES) return { key, name: file.name, state: "skipped", message: "Larger than 10 MiB." };
       if (file.size === 0) return { key, name: file.name, state: "skipped", message: "Empty file." };
@@ -73,10 +69,7 @@ function Uploader() {
       if (!item) return;
       update(item.key, { key: item.key, name: item.file.name, state: "reading" });
       try {
-        const result = await apiRequest(routes.uploadDocument, {
-          params: { year: year.year },
-          raw: { body: item.file, contentType: item.type, headers: { "X-File-Name": encodeURIComponent(item.file.name) } },
-        });
+        const result = await uploadFile(year.year, item.file, item.type);
         update(item.key, { key: item.key, name: item.file.name, state: "done", document: result.document });
         // Uploads finish in any order: keep the newest year.
         if (result.year.revision > latest.current) {
@@ -185,7 +178,7 @@ const STATUS_LABELS: Record<DocumentRecord["status"], string> = {
   not_available: "AI reading not set up",
 };
 
-function DocumentStatus({ document }: { document: DocumentRecord }) {
+export function DocumentStatus({ document }: { document: DocumentRecord }) {
   return (
     <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-2 sm:basis-auto">
       <Badge variant={document.status === "read" ? "secondary" : document.status === "failed" || document.status === "not_available" ? "destructive" : "outline"}>

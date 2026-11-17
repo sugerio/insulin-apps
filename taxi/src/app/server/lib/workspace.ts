@@ -113,21 +113,30 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
 }
 
 /**
- * Each step's state. Household: no blocking issue. What applies: every adult answered each of its questions.
- * Upload: at least one file was read into slips (slips can also be typed in step 4). Confirm: there are slips and all
+ * Each step's state. Household: no blocking issue.
+ * Upload: at least one file was read into slips (slips can also be typed in step 4). What applies: each of its
+ * questions is answered, or answered by a slip found, and no slip said to exist is missing. Confirm: there are slips and all
  * are confirmed. Deductions: no question of the step that a result line reads is left unanswered. Finish comes with
  * the filled-in forms.
  */
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): Record<Step, "done" | "todo" | "not_built"> {
   const rules = rulesFor(facts.year);
   const questionsOf = (step: string) => [...(rules?.questions.values() ?? [])].filter((question) => question.step === step).map((question) => question.id);
+  // What applies: a question about a slip is answered by the slip itself; a yes without the slip is still missing.
+  const applies = [...(rules?.questions.values() ?? [])].filter((question) => question.step === "applies");
+  const appliesDone = (personId: string) =>
+    applies.every((question) => {
+      if (question.slip && workspace.slips.some((slip) => slip.personId === personId && slip.type === question.slip)) return true;
+      const answer = workspace.answers[personId]?.[question.id];
+      return answer !== undefined && !(question.slip && answer === true);
+    });
   const answered = (personId: string, id: string) => workspace.answers[personId]?.[id] !== undefined;
   const evaluation = evaluateYear(facts, workspace);
   const deductions = new Set(questionsOf("deductions"));
   const status: Record<Step, "done" | "todo" | "not_built"> = {
     household: issues.some((issue) => issue.kind === "blocking") ? "todo" : "done",
     upload: workspace.documentsRead > 0 ? "done" : "todo",
-    applies: facts.adults.length > 0 && facts.adults.every((adult) => questionsOf("applies").every((id) => answered(adult.personId, id))) ? "done" : "todo",
+    applies: facts.adults.length > 0 && facts.adults.every((adult) => appliesDone(adult.personId)) ? "done" : "todo",
     confirm: workspace.slips.length > 0 && workspace.slips.every((slip) => slip.status === "confirmed") ? "done" : "todo",
     deductions:
       evaluation !== null &&

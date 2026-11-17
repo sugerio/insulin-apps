@@ -2,7 +2,40 @@
 # is the step of the year that asks it; the screens build their forms from these entries.
 
 questions:
-  # Step 3 – What applies: anything the app doesn't handle is named, never ignored.
+  # Step 3 – What applies: the kinds of income and expenses each adult has. A question with a `slip` is answered by
+  # finding that slip in the person's documents; asked only when none was found, and a yes without the slip is missing.
+  hasEmploymentIncome:
+    type: boolean
+    step: applies
+    slip: T4
+    ask: Employment income
+    help: A T4 from each employer you worked for in 2025.
+  hasInvestmentIncome:
+    type: boolean
+    step: applies
+    slip: T5
+    ask: Interest or dividends
+    help: A T5 from each bank, credit union or broker that paid you $50 or more.
+  hasTrustIncome:
+    type: boolean
+    step: applies
+    slip: T3
+    ask: Mutual fund or trust income
+    help: A T3 from each mutual fund or trust held outside an RRSP or TFSA.
+  hasSoldInvestments:
+    type: boolean
+    step: applies
+    slip: T5008
+    ask: Sold shares, bonds or fund units
+    help: A T5008 from each broker, for sales outside an RRSP or TFSA.
+  hasTuition:
+    type: boolean
+    step: applies
+    slip: T2202
+    ask: Tuition at a college or university
+    help: A T2202 from each school, for 2025.
+
+  # Step 3 – What applies, continued: anything the app doesn't handle is named, never ignored.
   hasSelfEmployment:
     type: boolean
     step: applies

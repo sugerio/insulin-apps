@@ -40,6 +40,7 @@ const sourceQuestion = z.strictObject({
   ask: z.string().min(1),
   step: z.enum(["applies", "deductions"]).optional(),
   help: z.string().min(1).optional(),
+  slip: z.string().min(1).optional(),
   default: z.union([sourceNumber, z.boolean()]).optional(),
   options: z.array(z.string()).optional(),
 });

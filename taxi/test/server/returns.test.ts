@@ -127,7 +127,20 @@ describe("slips", () => {
 describe("the steps", () => {
   it("are done once their questions are answered and the slips confirmed", async () => {
     const { alex, revision } = await year();
-    const applies = { hasSelfEmployment: false, hasRentalIncome: false, hasPensionIncome: false, hasEiBenefits: false, hasForeignIncome: false, soldProperty: false, hasChildCare: false };
+    const applies = {
+      hasEmploymentIncome: false,
+      hasInvestmentIncome: false,
+      hasTrustIncome: false,
+      hasSoldInvestments: false,
+      hasTuition: false,
+      hasSelfEmployment: false,
+      hasRentalIncome: false,
+      hasPensionIncome: false,
+      hasEiBenefits: false,
+      hasForeignIncome: false,
+      soldProperty: false,
+      hasChildCare: false,
+    };
     let current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: applies } }));
     expect(current.steps).toMatchObject({ household: "done", upload: "todo", applies: "done", confirm: "todo", deductions: "todo", finish: "todo" });
     current = await json<TaxYear>(
@@ -139,5 +152,22 @@ describe("the steps", () => {
     expect(current.steps.deductions).toBe("todo");
     current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current.revision, personId: alex.id, answers: { spouseNetIncome: "12000" } } }));
     expect(current.steps.deductions).toBe("done");
+  });
+
+  it("count a slip found as the answer to its question, and a yes without the slip as missing", async () => {
+    const { alex, revision } = await year();
+    const notHandled = { hasSelfEmployment: false, hasRentalIncome: false, hasPensionIncome: false, hasEiBenefits: false, hasForeignIncome: false, soldProperty: false, hasChildCare: false };
+    let current = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/answers", {
+        body: { revision, personId: alex.id, answers: { ...notHandled, hasInvestmentIncome: false, hasTrustIncome: false, hasSoldInvestments: false, hasTuition: false, hasEmploymentIncome: true } },
+      }),
+    );
+    // A T4 is said to exist but isn't here yet.
+    expect(current.steps.applies).toBe("todo");
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: current.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: T4 } }), 201);
+    expect(current.steps.applies).toBe("done");
+    // With the T4 here, the employment question needs no answer at all.
+    current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current.revision, personId: alex.id, answers: { hasEmploymentIncome: null } } }));
+    expect(current.steps.applies).toBe("done");
   });
 });

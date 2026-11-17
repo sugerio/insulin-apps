@@ -139,10 +139,12 @@ export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: n
       return applied
     }
     case 'needs_check': {
-      // A mark that moved again (read again twice) replaces the check its correction asked for where it was before.
-      const replaced = event.previousTextHash && event.previousTextHash !== event.textHash
+      // A mark that moved again (read again twice) replaces the check asked for where it was before: its own
+      // correction's, or, when two passages became one and the newer correction kept it, the other correction's.
+      const previousNoteId = event.previousNoteId ?? event.noteId
+      const replaced = event.previousTextHash && (event.previousTextHash !== event.textHash || previousNoteId !== event.noteId)
         ? [db.prepare(`DELETE FROM correction_checks WHERE collection_id = ? AND org_id = ? AND note_id = ? AND document_id = ? AND text_hash = ?`)
-          .bind(collection.id, org, event.noteId, event.documentId, event.previousTextHash)]
+          .bind(collection.id, org, previousNoteId, event.documentId, event.previousTextHash)]
         : []
       // None is kept when another correction of that passage, as it reads now, was learned since: it took the passage
       // over (its import may be recorded before this event is read), so there is nothing left to check.

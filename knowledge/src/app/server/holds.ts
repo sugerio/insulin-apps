@@ -16,10 +16,15 @@ import { logError } from './http.ts'
  */
 export async function holdOrganization(env: Bindings, org: string, until: number, now: number): Promise<boolean> {
   if (!env.ENGINE) return false
-  // Versions only grow, even for an organization deleted and made again: a new row starts from the time.
+  // Versions only grow, even for an organization deleted and made again: a new row starts from the time. Each time the
+  // stop holds it, the hold is a new version, the same end date included, so a release decided before (the limit
+  // raised, then lowered again) no longer matches and is looked at again. The same hold the engine took already
+  // counts as taken: nothing is sent again for it.
   await env.DB.prepare(
     `INSERT INTO org_holds (org_id, until, version, delivered, held_at) VALUES (?1, ?2, ?3, 0, ?3)
-     ON CONFLICT (org_id) DO UPDATE SET until = excluded.until, version = org_holds.version + 1, held_at = excluded.held_at WHERE org_holds.until < excluded.until`,
+     ON CONFLICT (org_id) DO UPDATE SET until = excluded.until, version = org_holds.version + 1, held_at = excluded.held_at,
+       delivered = CASE WHEN org_holds.until = excluded.until AND org_holds.delivered = org_holds.version THEN org_holds.version + 1 ELSE org_holds.delivered END
+     WHERE org_holds.until <= excluded.until`,
   ).bind(org, until, now).run()
   return deliverHold(env, org, now)
 }

@@ -470,6 +470,6 @@ test('F162 a needs_check says which hash the mark had before the re-read moved i
   assert.notEqual(h1, h0.textHash)
   const second = await reread(['gateway', 'Topic'])
   assert.equal(second.length, 2)
-  assert.deepEqual([second[1].previousTextHash, second[1].noteId], [h1, 'n1'], 'the second check replaces the first')
+  assert.deepEqual([second[1].previousTextHash, second[1].noteId, second[1].previousNoteId], [h1, 'n1', 'n1'], 'the second check replaces the first')
   assert.notEqual(second[1].textHash, h1)
 })

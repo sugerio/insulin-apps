@@ -349,7 +349,7 @@ export type OutboxEvent =
   | { id: string; at: string; org: string; collectionId: string; type: 'backup'; version: number }
   | { id: string; at: string; org: string; collectionId: string; type: 'deleted' }
   // A file re-read changed a passage a correction marked outdated: the correction asks to be checked.
-  | { id: string; at: string; org: string; collectionId: string; type: 'needs_check'; noteId: string; documentId: string; textHash: string; previousTextHash: string | null } // previousTextHash: the hash the mark had before this re-read moved it, so an older check of the same mark can be replaced
+  | { id: string; at: string; org: string; collectionId: string; type: 'needs_check'; noteId: string; documentId: string; textHash: string; previousTextHash: string | null; previousNoteId: string | null } // previousTextHash/previousNoteId: the hash the mark had before this re-read moved it and the correction it belonged to (another note's when passages merged and the newer correction won), so the older check can be replaced
 
 export interface OutboxPage {
   events: OutboxEvent[]

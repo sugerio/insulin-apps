@@ -385,3 +385,35 @@ test('F154 the order of corrections survives export, import, export, import: the
   const answer = (await ask(t, 'c3', 'gate code')).body.passages
   assert.ok(answer.some((p: any) => p.text.includes('2222')) && !answer.some((p: any) => p.text.includes('1111')))
 })
+
+test('F166 when stricter hiding merges two corrected passages, each move says which correction its mark belonged to', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [{ fileId: 'codes', name: 'codes.md', text: 'The gate code is Bluewater.\n\nThe gate code is Redwater.' }])
+  const passages = (await ask(t, 'c1', 'gate code')).body.passages
+  const [blue, red] = ['Bluewater', 'Redwater'].map((w) => passages.find((p: any) => p.text.includes(w)))
+  for (const [importId, noteId, passage] of [['fix-1', 'n-old', blue], ['fix-2', 'n-new', red]] as const) {
+    t.advance(6 * 60_000)
+    await t.api('POST', '/v1/collections/c1/corrections', {
+      importId,
+      note: { noteId, title: noteId, text: `Corrected by ${noteId}.`, outdated: [{ documentId: passage.documentId, textHash: passage.textHash }] },
+    })
+    await t.drain('c1')
+  }
+  t.advance(6 * 60_000)
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater', 'Redwater'] } } })
+  for (let i = 0; i < 5; i++) {
+    await t.drain('c1')
+    t.advance(60_000)
+  }
+  const checks = (await outboxEvents(t)).filter((e: any) => e.type === 'needs_check')
+  const merged = checks[0]?.textHash
+  // One check per mark that moved, each replacing that mark's own: both now under the newer correction, one passage.
+  assert.deepEqual(
+    checks.map((e: any) => [e.noteId, e.textHash, e.previousNoteId, e.previousTextHash]).sort(),
+    [
+      ['n-new', merged, 'n-new', red.textHash],
+      ['n-new', merged, 'n-old', blue.textHash],
+    ].sort(),
+  )
+})

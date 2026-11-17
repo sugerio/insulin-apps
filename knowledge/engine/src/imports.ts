@@ -356,6 +356,7 @@ async function claim(e: CollectionEngine, record: ImportRecord): Promise<{ statu
     await deleteOriginals(e, files)
     await e.event(`import:${importId}:cancelled`, { type: 'import', import: outcome.record.status })
     await e.store.log('import-cancelled', { importId, when: 'submitted after its cancel' })
+    await e.scheduleSoon() // the event goes out from the alarm
     return { status: 200, record: outcome.record }
   }
   if (record.phase === 'done') {
@@ -411,6 +412,7 @@ export async function cancel(e: CollectionEngine, importId: string): Promise<Imp
     }
     await e.event(`import:${importId}:cancelled`, { type: 'import', import: record.status })
     await e.store.log('import-cancelled', { importId, when: 'queued' })
+    await e.scheduleSoon() // the event goes out from the alarm
   }
   if (outcome.done === 'remembered') await e.store.log('import-cancelled', { importId, when: 'before it was sent' })
   return outcome.record
@@ -883,25 +885,39 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
     await e.store.log('capacity-unreachable', { error: errorText(error) })
     return false
   }
-  if (!answer.granted) {
-    record.capacity = 'waiting'
-    record.status.waitingFor = answer.waitingFor
-    record.status.queuePosition = answer.position
-    await e.store.putImport(record)
+  // The guard answered after an await: a cancel may have won meanwhile. The import is claimed only if it is still the
+  // one waiting, read again and written with meta.active in one transaction; otherwise what the guard gave goes back.
+  const id = importId
+  const claimed = await e.state.storage.transaction(async (txn) => {
+    const current = await e.store.getImport(id, txn)
+    const latest = (await txn.get<Meta>('meta'))!
+    if (!current || current.phase !== 'queued' || !latest.queue.includes(id) || latest.active) return null
+    if (!answer.granted) {
+      current.capacity = 'waiting'
+      current.status.waitingFor = answer.waitingFor
+      current.status.queuePosition = answer.position
+      await e.store.putImport(current, txn)
+      return { started: false, record: current }
+    }
+    current.capacity = 'granted'
+    current.phase = 'staging'
+    current.status.state = 'reading'
+    current.status.waitingFor = null
+    current.status.queuePosition = null
+    await e.store.putImport(current, txn)
+    latest.queue = latest.queue.filter((q) => q !== id)
+    latest.active = id
+    await txn.put('meta', latest)
+    return { started: true, record: current }
+  })
+  if (!claimed) {
+    await e.releaseCapacity(record) // the slot just given, or the place in the waiting list
+    await e.store.log('capacity-claim-lost', { importId: id, granted: answer.granted })
     return false
   }
-  record.capacity = 'granted'
-  record.phase = 'staging'
-  record.status.state = 'reading'
-  record.status.waitingFor = null
-  record.status.queuePosition = null
-  await e.store.putImport(record)
-  await e.updateMeta((m) => {
-    m.queue = m.queue.filter((id) => id !== importId)
-    m.active = importId
-  })
-  await e.store.log('import-started', { importId, kind: record.kind, attempt: record.status.attempt })
-  await advance(e, record)
+  if (!claimed.started) return false
+  await e.store.log('import-started', { importId: id, kind: claimed.record.kind, attempt: claimed.record.status.attempt })
+  await advance(e, claimed.record)
   return true
 }
 
@@ -1353,6 +1369,7 @@ async function commitImport(
         ? (await exportedState(e, meta, record)).state
         : null
   const next = applyResult(meta, current, record, result, version, facts, stats, extra)
+  const before = record.kind === 'export' ? (extra?.marks ?? []) : current.marks
   const changes = emptyChanges()
   changes.files = record.files.filter((f) => !f.duplicateOf).length
   changes.notes = record.kind === 'correction' ? 0 : record.notes.length
@@ -1377,7 +1394,10 @@ async function commitImport(
     changedDocumentIds: result.changed ?? [],
     ...(record.kind === 'relearn' ? { summary: 'Learned everything again from its saved text' } : {}),
     ...(record.kind === 'export' ? { summary: `Started from an export (${describe(changes).toLowerCase()})` } : {}),
-    needsCheck: (result.marks ?? []).filter((m) => m.changed || m.newTextHash === null),
+    // Each moved mark with the correction it belonged to before (another than its owner now when passages merged).
+    needsCheck: (result.marks ?? [])
+      .filter((m) => m.changed || m.newTextHash === null)
+      .map((m) => ({ ...m, noteDocumentId: before.find((b) => b.documentId === m.documentId && b.textHash === m.textHash)?.noteDocumentId ?? null })),
   })
 }
 
@@ -1573,7 +1593,7 @@ export interface PointCommit {
   summary?: string
   previous?: number | null
   importEvent?: boolean // false for going back, undo and repairs: no import of the app's is involved
-  needsCheck?: { documentId: string; textHash: string; newTextHash?: string | null }[] // corrected passages a re-read changed
+  needsCheck?: { documentId: string; textHash: string; newTextHash?: string | null; noteDocumentId?: string | null }[] // corrected passages a re-read changed, and whose correction each mark was
 }
 
 /**
@@ -1696,6 +1716,8 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
           const mark = c.state.marks.find((x) => x.documentId === m.documentId && (x.textHash === m.newTextHash || x.textHash === m.textHash))
           const note = mark && c.state.documents.find((d) => d.documentId === mark.noteDocumentId)
           if (!mark || !note?.noteId) return []
+          const moved = !!m.newTextHash && m.newTextHash !== m.textHash
+          const was = m.noteDocumentId ? c.state.documents.find((d) => d.documentId === m.noteDocumentId) : undefined
           return [
             {
               key: `${meta.org}:${meta.collectionId}:needs_check:${version}:${mark.noteDocumentId}:${m.documentId}:${m.textHash}`,
@@ -1705,9 +1727,11 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
                 noteId: note.noteId,
                 documentId: m.documentId,
                 textHash: mark.textHash,
-                // The hash the mark had before this re-read moved it (none when it couldn't follow its passage), so the
-                // app replaces that mark's earlier check.
-                previousTextHash: m.newTextHash && m.newTextHash !== m.textHash ? m.textHash : null,
+                // The hash the mark had before this re-read moved it (none when it couldn't follow its passage), and the
+                // correction it belonged to (the retired one when merged passages went to a newer correction), so the
+                // app replaces that mark's earlier check: one check per mark, none left over for a dropped one.
+                previousTextHash: moved ? m.textHash : null,
+                previousNoteId: moved ? (was?.noteId ?? note.noteId) : null,
               },
             },
           ]

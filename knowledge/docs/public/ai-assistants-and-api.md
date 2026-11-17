@@ -115,8 +115,8 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 | `PUT /api/collections/{id}/uploads/{fileId}` | Editor | Upload a file preflight accepted (raw bytes; optionally `x-file-sha256`) |
 | `POST /api/collections/{id}/imports` | Editor | Learn uploaded files, all or nothing |
 | `GET /api/collections/{id}/imports/{importId}` | Viewer | An import's progress, file by file, with the time left |
-| `GET /api/collections/{id}/imports?state=waiting` | Viewer | Imports waiting for the 1st: what each brings, who added it, when it starts |
-| `DELETE /api/collections/{id}/imports/{importId}` | Editor | Cancel an import waiting for the 1st: it is never learned |
+| `GET /api/collections/{id}/imports?state=waiting` | Viewer | Imports waiting for the 1st: what each brings, who added it, when it starts (`?state=queued`: those Insulin has but hasn't started learning) |
+| `DELETE /api/collections/{id}/imports/{importId}` | Editor | Cancel an import waiting for the 1st, or one Insulin hasn't started learning: it is never learned |
 | `POST /api/collections/{id}/import-export` | Editor | Start an empty collection from a Knowledge export (`{ fileId }`, after preflight with `"export": true` and the upload) |
 | `POST /api/collections/{id}/notes` | Editor | Add a note |
 | `POST /api/collections/{id}/web-pages` | Editor | Add a public web page; add it again to read it again |

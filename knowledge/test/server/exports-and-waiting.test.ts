@@ -76,6 +76,37 @@ describe('cancelling a waiting import whose start may have been sent', () => {
   })
 })
 
+describe('cancelling an import Insulin has but hasn\'t started', () => {
+  it('is listed as waiting to be learned and cancelled through the engine; once learning has started, it is refused', async () => {
+    h.close()
+    h = await createHarness({ timing: { importMs: 60_000 } })
+    const id = await h.collection(PEOPLE.maya)
+    const add = async (title: string) => (await h.json<{ import: { importId: string } }>(PEOPLE.maya, 'POST', `/api/collections/${id}/notes`, { title, text: `${title} partners renew every March.` })).body.import.importId
+    // The first is learning; the other two wait their turn.
+    await add('Gold')
+    const second = await add('Silver')
+    const third = await add('Bronze')
+    const listed = await h.json<{ imports: { importId: string; kind: string; waitsFor: string | null }[] }>(PEOPLE.maya, 'GET', `/api/collections/${id}/imports?state=queued`)
+    expect(listed.body.imports).toMatchObject([{ importId: second, kind: 'note', waitsFor: null }, { importId: third, kind: 'note', waitsFor: null }])
+    const cancel = await h.json<{ import: { state: string } }>(PEOPLE.maya, 'DELETE', `/api/collections/${id}/imports/${second}`)
+    expect([cancel.status, cancel.body.import?.state]).toEqual([200, 'cancelled'])
+    expect(await held(second)).toBe(0)
+    // The first is learned and the third starts learning before Knowledge hears of it: its cancel is refused, and
+    // what it reserved is kept.
+    h.clock.advance(61_000)
+    h.engine.control.advance(0)
+    const late = await h.json<{ message: string }>(PEOPLE.maya, 'DELETE', `/api/collections/${id}/imports/${third}`)
+    expect(late.status).toBe(409)
+    expect(late.body.message).toMatch(/already being learned/)
+    expect(await held(third)).toBeGreaterThan(0)
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    const sources = (await h.json<{ sources: { name: string }[] }>(PEOPLE.maya, 'GET', `/api/collections/${id}/sources`)).body.sources.map((source) => source.name)
+    expect(sources.sort()).toEqual(['Bronze', 'Gold'])
+    expect(await stateOf(second)).toBe('cancelled')
+  })
+})
+
 describe('a collection started from an export', () => {
   /** A collection of five files and a note, exported; the export's bytes. */
   async function exported() {

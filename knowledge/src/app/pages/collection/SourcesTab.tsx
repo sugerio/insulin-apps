@@ -113,7 +113,8 @@ export function SourcesTab({ detail, reload, openSource }: TabProps) {
         <Banner kind="info">Your role here is Viewer: you can read this list and open every source. The collection's owner, admins and editors add or remove sources.</Banner>
       )}
       {watch.status ? <ImportProgress status={watch.status} collectionName={collection.name} error={watch.error} /> : null}
-      <WaitingImports collectionId={collection.id} editor={editor} refresh={started} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
+      <WaitingImports collectionId={collection.id} state="waiting" editor={editor} refresh={started} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
+      <WaitingImports collectionId={collection.id} state="queued" editor={editor} refresh={started} onCancelled={(what) => setNotice(`Cancelled ${what}: it won't be learned.`)} />
       {notice ? <Banner kind="ok">{notice}</Banner> : null}
       <ActionError error={error} />
       {sources.loading ? <Loading /> : sources.error ? <ErrorState error={sources.error} onRetry={() => void sources.reload()} /> : (
@@ -190,7 +191,8 @@ interface WaitingImport {
   files: string[]
   notes: number
   titles: string[]
-  waitsFor: string
+  /** When one waiting for the 1st starts by itself; null for one Insulin has and learns in turn. */
+  waitsFor: string | null
 }
 
 /** What a waiting import brings, in plain words: its files' names, or its notes' titles. */
@@ -201,12 +203,19 @@ function waitingWhat(entry: WaitingImport): string {
   return entry.notes === 1 ? 'a note' : plural(entry.notes, 'note')
 }
 
+/** The two lists of imports not learned yet that can still be cancelled: their titles and what they say. */
+const WAITING_LISTS = {
+  waiting: { title: 'Waiting for the 1st', description: "Your organization has learned this month's documents. These are learned on the 1st, by themselves; everything already learned keeps answering." },
+  queued: { title: 'Waiting to be learned', description: 'Insulin has these and learns them in turn. Until it starts on one, it can be cancelled.' },
+} as const
+
 /**
- * The collection's imports waiting for the 1st (its organization has learned this month's documents): each with what
- * it brings, who added it and when it starts by itself; its editors can cancel one, and it is never learned.
+ * The collection's imports waiting for the 1st (its organization has learned this month's documents), or those Insulin
+ * has but hasn't started learning (`queued`): each with what it brings, who added it and, for the 1st, when it starts
+ * by itself; its editors can cancel one, and it is never learned.
  */
-function WaitingImports({ collectionId, editor, refresh, onCancelled }: { collectionId: string; editor: boolean; refresh: unknown; onCancelled: (what: string) => void }) {
-  const waiting = useResource<{ imports: WaitingImport[] }>(collectionPath(collectionId, '/imports?state=waiting'))
+function WaitingImports({ collectionId, state, editor, refresh, onCancelled }: { collectionId: string; state: keyof typeof WAITING_LISTS; editor: boolean; refresh: unknown; onCancelled: (what: string) => void }) {
+  const waiting = useResource<{ imports: WaitingImport[] }>(collectionPath(collectionId, `/imports?state=${state}`))
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<unknown>(null)
   const { reload } = waiting
@@ -227,13 +236,13 @@ function WaitingImports({ collectionId, editor, refresh, onCancelled }: { collec
     }
   }
   return (
-    <Card title="Waiting for the 1st" description="Your organization has learned this month's documents. These are learned on the 1st, by themselves; everything already learned keeps answering.">
-      <ul className="flex flex-col divide-y rounded-lg border" aria-label="Waiting for the 1st">
+    <Card title={WAITING_LISTS[state].title} description={WAITING_LISTS[state].description}>
+      <ul className="flex flex-col divide-y rounded-lg border" aria-label={WAITING_LISTS[state].title}>
         {list.map((entry) => (
           <li key={entry.importId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm" data-waiting-import={entry.importId}>
             <span className="min-w-0 grow basis-48 [overflow-wrap:anywhere]">
               <b>{waitingWhat(entry)}</b>
-              <span className="block text-xs text-muted-foreground">Added by {entry.createdBy.name ?? 'someone'} {formatWhen(entry.createdAt)} · starts {formatDay(entry.waitsFor)}</span>
+              <span className="block text-xs text-muted-foreground">Added by {entry.createdBy.name ?? 'someone'} {formatWhen(entry.createdAt)}{entry.waitsFor ? ` · starts ${formatDay(entry.waitsFor)}` : ''}</span>
             </span>
             {editor ? <Button type="button" variant="outline" size="sm" disabled={busy === entry.importId} onClick={() => void cancel(entry)}>Cancel</Button> : null}
           </li>

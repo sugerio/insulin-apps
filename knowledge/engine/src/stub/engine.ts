@@ -925,20 +925,22 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   /**
    * Corrections' outdated marks follow their passage to its new text (a re-read, or an export hidden again), as in the
    * real engine (imports.ts followMarks): one whose passage changed, or can't be found, asks for its correction to be
-   * checked, under the hash its mark has now (and the one it had, so the check asked for before is replaced). Two marks
-   * that come to one passage keep the newer correction by its number (`content.seqs`; an equal one: the later in
-   * `marks`), and a correction left correcting nothing is kept but no longer used. The checks to ask for.
+   * checked, under the hash its mark has now (and the hash and correction it had, so the check asked for before is
+   * replaced). Two marks that come to one passage keep the newer correction by its number (`content.seqs`; an equal
+   * one: the later in `marks`), and a correction left correcting nothing is kept but no longer used. The checks to ask
+   * for.
    */
-  function followMarks(content: Content, marks: { documentId: string; textHash: string; noteId: string }[], moved: Map<string, string | null>): { noteId: string; documentId: string; textHash: string; previousTextHash: string | null }[] {
+  function followMarks(content: Content, marks: { documentId: string; textHash: string; noteId: string }[], moved: Map<string, string | null>): { noteId: string; documentId: string; textHash: string; previousTextHash: string | null; previousNoteId: string | null }[] {
     const superseded = new Set<string>()
-    // Each passage a mark that changed asks to be checked at, and the hash it had before (null: it couldn't follow).
-    const changed: { at: string; previousTextHash: string | null }[] = []
+    // Each passage a mark that changed asks to be checked at, the hash it had before (null: it couldn't follow) and the
+    // correction it belonged to then.
+    const changed: { at: string; previousTextHash: string | null; previousNoteId: string | null }[] = []
     content.outdated = new Map()
     for (const mark of marks) {
       const key = `${mark.documentId}:${mark.textHash}`
       const hash = (moved.has(key) ? moved.get(key) : mark.textHash) ?? mark.textHash
       const at = `${mark.documentId}:${hash}`
-      if (moved.has(key) && moved.get(key) !== mark.textHash) changed.push({ at, previousTextHash: hash === mark.textHash ? null : mark.textHash })
+      if (moved.has(key) && moved.get(key) !== mark.textHash) changed.push({ at, ...(hash === mark.textHash ? { previousTextHash: null, previousNoteId: null } : { previousTextHash: mark.textHash, previousNoteId: mark.noteId }) })
       const earlier = content.outdated.get(at)
       if (earlier !== undefined && earlier !== mark.noteId) {
         if ((content.seqs.get(mark.noteId) ?? 0) < (content.seqs.get(earlier) ?? 0)) {
@@ -954,8 +956,8 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       if (document.noteId && superseded.has(document.noteId) && !stillCorrecting.has(document.noteId)) document.info = { ...document.info, active: false }
     }
     // Asked for by the correction that holds the passage now, once for each mark that came to it.
-    const asked = new Map(changed.map(({ at, previousTextHash }) => [`${at}\u0000${previousTextHash}`, { at, previousTextHash }]))
-    return [...asked.values()].map(({ at, previousTextHash }) => ({ noteId: content.outdated.get(at)!, documentId: at.slice(0, at.lastIndexOf(':')), textHash: at.slice(at.lastIndexOf(':') + 1), previousTextHash }))
+    const asked = new Map(changed.map((change) => [`${change.at}\u0000${change.previousTextHash}\u0000${change.previousNoteId}`, change]))
+    return [...asked.values()].map(({ at, previousTextHash, previousNoteId }) => ({ noteId: content.outdated.get(at)!, documentId: at.slice(0, at.lastIndexOf(':')), textHash: at.slice(at.lastIndexOf(':') + 1), previousTextHash, previousNoteId }))
   }
 
   /** A stored text hidden again with these rules: what it hid before stays hidden and moves with what is hidden now. */

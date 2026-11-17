@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ImportProgress, useImportWatch } from '../../src/app/components/ImportProgress.tsx'
+import { ORG_HEADER } from '../../engine/src/contract.ts'
 import type { ImportStatus } from '../../src/app/lib/types.ts'
 import { ORG, PEOPLE } from '../support/harness.ts'
 import { liveApi, renderApp, type Live } from './support/live.tsx'
@@ -168,6 +169,19 @@ describe('imports waiting for the 1st', () => {
     expect(within(list).getByText(/Tiers/)).toBeTruthy()
     fireEvent.click(within(list).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Waiting for the 1st' })).toBeNull())
+  })
+
+  it('Sources lists what Insulin has but hasn\'t started learning, and one can be cancelled', async () => {
+    live = await liveApi(PEOPLE.maya)
+    const id = await collectionWithNote()
+    // The organization is held in the engine (its awake hours used up): what Insulin is given waits its turn there.
+    await live.h.engine.fetch(new Request(`https://engine.test/v1/orgs/${ORG}/hold`, { method: 'POST', headers: { [ORG_HEADER]: ORG, 'content-type': 'application/json' }, body: JSON.stringify({ until: '2026-12-01T00:00:00Z', version: 1 }) }))
+    await live.h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/notes`, { title: 'Rates', text: 'Silver partners renew every June.' })
+    renderApp(`/collections/${id}/sources`)
+    const list = await screen.findByRole('list', { name: 'Waiting to be learned' })
+    fireEvent.click(within(list).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Waiting to be learned' })).toBeNull())
+    expect(await screen.findByText(/Cancelled a note: it won't be learned/)).toBeTruthy()
   })
 
   it('a waiting import is checked again when the page comes back into view, and follows a newer status for the same import', async () => {

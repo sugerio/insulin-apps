@@ -515,3 +515,86 @@ test('F145 cancelling an import: a queued one is cancelled; an id the engine nev
   assert.equal(await t.storage('c1').get('cancelled:never-sent'), undefined)
   assert.equal((await t.api('GET', '/v1/collections/c1/imports/never-sent')).status, 404)
 })
+
+/** The capacity guard's slots and waiting list. */
+async function guard(t: ReturnType<typeof makeEngine>) {
+  const res = await t.capacity.get(t.capacity.idFromName('capacity')).fetch('https://engine.internal/state')
+  const state = (await res.json()) as { running: Record<string, unknown>; waiting: { importId: string }[] }
+  return { running: Object.keys(state.running), waiting: state.waiting.map((w) => w.importId) }
+}
+
+/** Runs `during` once, while the collection's next /acquire call is under way (before the guard answers). */
+function duringAcquire(t: ReturnType<typeof makeEngine>, during: () => Promise<unknown>) {
+  const get = t.capacity.get.bind(t.capacity)
+  let ran = false
+  t.capacity.get = (id: { name: string }) => {
+    const stub = get(id)
+    return {
+      fetch: async (input: RequestInfo, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!ran && url.endsWith('/acquire')) {
+          ran = true
+          await during()
+        }
+        return stub.fetch(input, init)
+      },
+    }
+  }
+  return () => ran
+}
+
+for (const answer of ['granted', 'denied'] as const) {
+  test(`F163 a cancel that wins while the alarm asks for the import's slot (${answer}): it stays cancelled, learns nothing, and the guard keeps nothing for it`, async () => {
+    const t = makeEngine()
+    await createCollection(t)
+    await learn(t, 'c1', 'imp-0', [doc(1)])
+    if (answer === 'denied') {
+      // The organization's two slots are taken by imports elsewhere.
+      t.cloud.jobPolls = 100000
+      for (const cid of ['c2', 'c3']) {
+        await createCollection(t, cid)
+        await startImport(t, cid, `big-${cid}`, [doc(5)])
+        await t.drain(cid, { steps: 3 })
+      }
+    }
+    t.advance(6 * 60_000)
+    await startImport(t, 'c1', 'imp-1', [doc(2)])
+    let cancelled: any = null
+    const ran = duringAcquire(t, async () => (cancelled = await t.api('DELETE', '/v1/collections/c1/imports/imp-1')))
+    await t.drain('c1', { steps: 5 })
+    assert.ok(ran())
+    assert.deepEqual([cancelled.status, cancelled.body.state], [200, 'cancelled'])
+    t.advance(60 * 60_000)
+    await t.drain('c1', { steps: 20 })
+    const status = (await t.api('GET', '/v1/collections/c1/imports/imp-1')).body
+    assert.deepEqual([status.state, status.version], ['cancelled', null], 'the cancel stands')
+    const collection = (await t.api('GET', '/v1/collections/c1')).body
+    assert.deepEqual([collection.version, collection.counts.documents], [1, 1], 'nothing learned')
+    const meta = await t.storage('c1').get<any>('meta')
+    assert.deepEqual([meta.queue, meta.active], [[], null])
+    const slots = await guard(t)
+    assert.ok(!slots.running.some((k) => k.endsWith(':imp-1')) && !slots.waiting.includes('imp-1'), JSON.stringify(slots))
+  })
+}
+
+test("F163 cancelling an import waiting for a slot gives up its place in the guard's queue, deletes its originals and leaves the queue", async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  t.cloud.jobPolls = 100000
+  for (const cid of ['c2', 'c3']) {
+    await createCollection(t, cid)
+    await startImport(t, cid, `big-${cid}`, [doc(5)])
+    await t.drain(cid, { steps: 3 })
+  }
+  await startImport(t, 'c1', 'imp-1', [doc(2), doc(3)])
+  await t.drain('c1', { steps: 3 })
+  assert.ok((await guard(t)).waiting.includes('imp-1'), 'it waits for a slot')
+  assert.equal(t.files.keys('inbox/org-acme/c1/').length, 2)
+  const cancelled = await t.api('DELETE', '/v1/collections/c1/imports/imp-1')
+  assert.equal(cancelled.body.state, 'cancelled')
+  assert.ok(!(await guard(t)).waiting.includes('imp-1'), 'its place in the waiting list is given up')
+  assert.deepEqual(t.files.keys('inbox/org-acme/c1/'), [], 'its staged originals are deleted')
+  assert.deepEqual((await t.storage('c1').get<any>('meta')).queue, [])
+  await t.drain('c1', { steps: 2 }) // the event goes out from the alarm
+  assert.ok((await outboxEvents(t)).some((e: any) => e.type === 'import' && e.import.importId === 'imp-1' && e.import.state === 'cancelled'))
+})

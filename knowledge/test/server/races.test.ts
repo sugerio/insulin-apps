@@ -290,6 +290,32 @@ describe('the awake-hours hold', () => {
     expect((await engineStatus(id)).state).toBe('held')
   })
 
+  it('a hold asserted again for the same month while the tick lets go of it stays, and isn\'t sent again for that', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await setLimit('awake_hours_month', 0)
+    const ask = () => h.json(PEOPLE.maya, 'POST', '/api/ask', { collections: [id], question: 'Who signs off?' })
+    expect((await ask()).status).toBe(429)
+    // The limit is raised: the tick decides to let go, and is about to write it...
+    await setLimit('awake_hours_month', 100)
+    const gate = gateDb(`SET until = 0`)
+    const ticking = h.tick()
+    await gate.reached
+    // ...when the limit is lowered again and a question meets the stop: the same hold, until the same 1st.
+    await setLimit('awake_hours_month', 0)
+    const real = h.env.ENGINE!
+    let sent = 0
+    h.env.ENGINE = { fetch: (request: Request) => { if (new URL(request.url).pathname.endsWith('/hold')) sent += 1; return real.fetch(request) } }
+    expect((await ask()).status).toBe(429)
+    expect(sent).toBe(0)
+    h.env.ENGINE = real
+    gate.release()
+    await ticking
+    const kept = await h.db.prepare(`SELECT until, version, delivered FROM org_holds WHERE org_id = ?`).bind(ORG).first<{ until: number; version: number; delivered: number }>()
+    expect(kept?.until).toBe(Date.UTC(2026, 11, 1))
+    expect(kept?.delivered).toBe(kept?.version)
+    expect((await engineStatus(id)).state).toBe('held')
+  })
+
   it('looks at every hold in turn: a raised limit frees an organization behind a hundred others still held', async () => {
     const until = Date.UTC(2026, 11, 1)
     const orgs = Array.from({ length: 101 }, (_, index) => `org-held-${String(index).padStart(3, '0')}`)
@@ -402,6 +428,34 @@ describe('a correction\'s import asked about later', () => {
     h.engine.control.runUntilIdle()
     await h.tick()
     expect((await checks()).map((row) => row.note_id)).toEqual([second])
+  })
+
+  it('two corrected passages that hiding makes one leave one check, the newer correction\'s', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await h.note(PEOPLE.maya, id, 'Door codes, as they stand.\n\nCode alpha opens the north door.\n\nCode bravo opens the north door.', 'Doors')
+    const passageOf = async (query: string) => (await h.json<{ passages: { documentId: string; textHash: string }[] }>(PEOPLE.maya, 'POST', '/api/search', { collections: [id], query })).body.passages[0]!
+    const [alpha, bravo] = [await passageOf('code alpha north door'), await passageOf('code bravo north door')]
+    expect(alpha.textHash).not.toBe(bravo.textHash)
+    const correct = async (text: string, ref: { documentId: string; textHash: string }) => {
+      const made = await h.json<{ correction: { id: string } }>(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text, outdated: [{ documentId: ref.documentId, textHash: ref.textHash }] })
+      h.engine.control.runUntilIdle()
+      await h.tick()
+      return made.body.correction.id.replace(/-/g, '')
+    }
+    const older = await correct('Code alpha opens the south door.', alpha)
+    const newer = await correct('Code bravo opens the east door.', bravo)
+    const rules = (words: string[]) => h.json(PEOPLE.dana, 'PUT', '/api/rules', { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words } })
+    const checks = async () => (await h.db.prepare(`SELECT note_id FROM correction_checks WHERE collection_id = ? ORDER BY note_id`).bind(id).all<{ note_id: string }>()).results.map((row) => row.note_id)
+    // A stricter rule changes both passages: both corrections ask to be checked.
+    await rules(['north'])
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    expect(await checks()).toEqual([older, newer].sort())
+    // A stricter one still makes the two passages one: the newer correction keeps it, and only its check is left.
+    await rules(['north', 'alpha', 'bravo'])
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    expect(await checks()).toEqual([newer])
   })
 
   it('a correction whose passage changes twice asks to be checked once, at its newest text', async () => {

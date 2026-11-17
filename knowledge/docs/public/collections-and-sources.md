@@ -51,8 +51,9 @@ and what it holds counts toward the organization's limits before anything starts
 
 What waits for the 1st (the organization has learned this month's documents) is listed on **Sources**, under
 **Waiting for the 1st**, with who added it and when it starts; its editors can **Cancel** it, and it is never learned.
-Sent on the 1st, it can still be cancelled until Insulin starts learning it; once learning has started, it can't be:
-Knowledge says so, and it is learned.
+What Insulin has but hasn't started learning yet (sent on the 1st, or waiting its turn behind other imports) is
+listed under **Waiting to be learned**, and its editors can **Cancel** it too. Once learning has started, it can't be
+cancelled: Knowledge says so, and it is learned.
 
 ## Files that can't be learned
 

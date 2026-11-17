@@ -69,10 +69,14 @@ async function emptyCollection(db: D1Database, collection: CollectionRow, except
     .bind(collection.org_id, collection.id, except).first()
   return !busy
 }
-/** Why an import waiting for the 1st can't be cancelled (DELETE …/imports/:importId), in plain words. */
-const BEING_LEARNED = 'This is already being learned: it started when the month did, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.'
-const CANT_TELL = 'Insulin sent this to be learned on the 1st and can\'t tell yet whether it has started, so it can\'t be cancelled now. Try again in a few minutes.'
-const ONLY_WAITING = 'Only an import waiting for the 1st can be cancelled; this one has started or finished.'
+/**
+ * Imports that can be cancelled (DELETE …/imports/:importId): waiting for the 1st, or with the engine but not started
+ * (queued, or interrupted and waiting its turn again); and why one can't be, in plain words.
+ */
+const CANCELLABLE = new Set(['waiting', 'queued', 'interrupted'])
+const BEING_LEARNED = 'This is already being learned, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.'
+const CANT_TELL = 'Insulin can\'t tell yet whether this has started learning, so it can\'t be cancelled now. Try again in a few minutes.'
+const NOT_CANCELLABLE = 'Only an import Insulin hasn\'t started learning can be cancelled; this one has started or finished.'
 const NOT_EMPTY = 'Starting from an export works in a new, empty collection only: this one already has something in it. Start a new collection for the export.'
 export type ImportKind = 'files' | 'web_page' | 'note' | 'correction'
 
@@ -421,29 +425,37 @@ export function sourceRoutes() {
     })
   })
 
-  // The collection's imports waiting for the 1st (the month's documents learned used up): what each brings, who added
-  // it and when it starts by itself.
+  // The collection's imports waiting for the 1st (the month's documents learned used up), or those Insulin has but
+  // hasn't started learning (?state=queued: sent on the 1st, or waiting their turn): what each brings, who added it,
+  // and for one waiting for the 1st, when it starts by itself. Either can be cancelled (DELETE below).
   app.get('/:id/imports', async (c) => {
     const caller = callerOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'read')
-    if (c.req.query('state') !== 'waiting') throw badRequest('List the imports waiting for the 1st: ?state=waiting.')
+    const state = c.req.query('state')
+    if (state !== 'waiting' && state !== 'queued') throw badRequest('List the imports waiting for the 1st (?state=waiting), or those Insulin hasn\'t started learning (?state=queued).')
     const { results } = await c.env.DB.prepare(
-      `SELECT i.id, i.kind, i.created_at, i.created_by, i.request, COALESCE(m.name, m.email) AS name FROM imports i
+      `SELECT i.id, i.kind, i.created_at, i.created_by, i.request, i.detail, COALESCE(m.name, m.email) AS name FROM imports i
        LEFT JOIN members m ON m.org_id = i.org_id AND m.principal_type = 'person' AND m.principal_id = i.created_by
-       WHERE i.org_id = ? AND i.collection_id = ? AND i.state = 'waiting' ORDER BY i.created_at, i.rowid LIMIT 100`,
-    ).bind(caller.organizationId, collection.id).all<{ id: string; kind: string; created_at: number; created_by: string; request: string | null; name: string | null }>()
+       WHERE i.org_id = ?1 AND i.collection_id = ?2 AND (i.state = ?3 OR (?3 = 'queued' AND i.state = 'interrupted')) ORDER BY i.created_at, i.rowid LIMIT 100`,
+    ).bind(caller.organizationId, collection.id, state).all<{ id: string; kind: string; created_at: number; created_by: string; request: string | null; detail: string; name: string | null }>()
     return json(c, {
       imports: results.map((row) => {
-        const request = JSON.parse(row.request ?? '{"files":[],"notes":[]}') as WaitingRequest
+        // A waiting import keeps its request; one sent has its files' names (`detail`), and a note's title no more.
+        const request = row.request ? (JSON.parse(row.request) as WaitingRequest) : null
+        const sent = request ? null : (JSON.parse(row.detail || '{}') as { files?: string[] })
         return {
           importId: row.id, kind: row.kind, createdAt: new Date(row.created_at).toISOString(), createdBy: { id: row.created_by, name: row.name },
-          files: request.files.map((file) => file.name), notes: request.notes.length, titles: request.notes.map((note) => note.title).filter(Boolean), waitsFor: request.waitsFor ?? resetsAt(now(c)),
+          files: request ? request.files.map((file) => file.name) : sent?.files ?? [],
+          notes: request ? request.notes.length : row.kind === 'note' || row.kind === 'correction' ? 1 : 0,
+          titles: request ? request.notes.map((note) => note.title).filter(Boolean) : [],
+          waitsFor: state === 'waiting' ? request?.waitsFor ?? resetsAt(now(c)) : null,
         }
       }),
     })
   })
 
-  // Cancel an import waiting for the 1st: it is never learned, and what it held of the limits is free again.
+  // Cancel an import waiting for the 1st, or one Insulin has but hasn't started learning: it is never learned, and what
+  // it held of the limits is free again.
   app.delete('/:id/imports/:importId', async (c) => {
     const caller = callerOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
@@ -453,12 +465,13 @@ export function sourceRoutes() {
     const row = await db.prepare(`SELECT state, sends FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
       .first<{ state: string; sends: number }>()
     if (!row) throw notFound('There is no such import in this collection.')
-    if (row.state !== 'waiting') throw new ApiError('conflict', ONLY_WAITING)
-    if (row.sends > 0) {
-      // Sent on a 1st without an answer: it may be in the engine, or still on its way there. The engine cancels it, or
-      // remembers its id as cancelled so a send still on its way learns nothing; only once the engine says so is it
-      // cancelled here (whatever the tick is doing with it meanwhile: a send now answers `cancelled` too). While the
-      // engine may be learning it, it isn't cancelled and keeps what it reserved.
+    if (!CANCELLABLE.has(row.state)) throw new ApiError('conflict', NOT_CANCELLABLE)
+    if (row.state !== 'waiting' || row.sends > 0) {
+      // Sent to the engine (on a 1st without an answer, or queued there): it may be in the engine, or still on its way
+      // there. The engine cancels it if it hasn't started learning it, or remembers its id as cancelled so a send still
+      // on its way learns nothing; only once the engine says so is it cancelled here (whatever the tick is doing with
+      // it meanwhile: a send now answers `cancelled` too). While the engine may be learning it, it isn't cancelled and
+      // keeps what it reserved.
       let status: ImportStatus
       try {
         status = await engineFor(c).cancelImport(collection.id, importId)
@@ -486,7 +499,7 @@ export function sourceRoutes() {
       if (cancelled?.meta.changes === 1) return json(c, { import: { importId, state: 'cancelled' } })
     }
     const current = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ?`).bind(importId, caller.organizationId).first<{ state: string }>()
-    if (current?.state !== 'cancelled') throw new ApiError('conflict', current?.state === 'waiting' || current?.state === 'queued' ? BEING_LEARNED : ONLY_WAITING)
+    if (current?.state !== 'cancelled') throw new ApiError('conflict', current?.state && CANCELLABLE.has(current.state) ? BEING_LEARNED : NOT_CANCELLABLE)
     return json(c, { import: { importId, state: 'cancelled' } })
   })
 

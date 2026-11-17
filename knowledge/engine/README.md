@@ -84,9 +84,13 @@ And from the design:
   before anything else a submission finds wrong. `DELETE .../imports/:importId` cancels a queued import that hasn't
   started learning (409 `busy_learning` once it has, or once it finished); an id the engine has no import with is
   remembered as cancelled for 30 days, so a send still in flight learns nothing and its staged files are deleted.
+  The alarm takes a queued import only in one transaction with `meta.active`, after the capacity guard answers: if a
+  cancel won meanwhile, the slot (or the place in the guard's waiting list) is given back and nothing starts.
 - **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
   the correction keeps applying and a `needs_check` event asks a person to check it; its `previousTextHash` is the hash
-  the mark had before this re-read moved it (null when it couldn't follow), so each check replaces the one before.
+  the mark had before this re-read moved it (null when it couldn't follow) and `previousNoteId` the correction it
+  belonged to (the retired one when merged passages went to a newer correction), so each check replaces the one before
+  and a dropped mark leaves none behind.
 - **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
   failed its check twice (`damaged`), the collection comes back from its latest backup if that backup was taken from
   the same snapshot (matched by snapshot id, not the version) in the running image's database format

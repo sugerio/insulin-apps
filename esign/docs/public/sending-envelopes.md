@@ -48,9 +48,10 @@ as if you sent it now, and stays a draft until then; Esign sends it, as you, wit
 **Envelopes** it shows **Sends** and the time. **Continue** opens it: **Send now** sends it at once, **Send later** picks
 another time, and **Save draft** cancels the scheduled send. **Discard** deletes it.
 
-If it can't be sent then (its template was made a draft, a signer no longer matches it, or you can no longer send it),
-it stays a draft, no longer scheduled, and **Envelopes** says **Not sent** and why. Fix it, then send or schedule it
-again.
+If it can't be sent then (its template was made a draft, a signer no longer matches it, or you can no longer send it:
+you left the organization or Esign, or your role there no longer sends), it stays a draft, no longer scheduled, and
+**Envelopes** says **Not sent** and why. Fix it, then send or schedule it again. Esign asks the platform who can use it
+at that time; while the platform can't be asked, the envelope waits for the next try.
 
 ## Upload and send
 
@@ -212,9 +213,10 @@ happen, for example after a time limit or an outage, the envelope stays **Finish
 
 Due work:
 
+- sends the drafts scheduled with **Send later** whose time has come (up to 25 a run);
 - expires envelopes past a deadline;
 - finishes envelopes left half done (a signature not yet drawn, or an envelope not yet sealed);
-- retries the signed-copy emails that didn't go out.
+- retries the signed-copy emails and the signers' invitations that didn't go out.
 
 **The platform runs it every five minutes for every organization**, so there is nothing to schedule. To run it at once
 for your organization, call `POST /api/process-due` with an OAuth client or an AI agent whose role can send and manage
@@ -226,14 +228,15 @@ One run looks at up to 25 envelopes to finish and 25 owing signed copies, so a b
 
 **Contacts** is your organization's address book. Everyone an envelope names as a signer is added, or refreshed with the
 name, title and company you gave this time, and listed most recently used first, with how many envelopes named them since they were added.
-Search it by name or email.
+Search it by name or email. Everyone in the organization who can use Esign sees every contact, Viewers included, also
+the signers of envelopes only others see; a contact's own page lists only the envelopes you see.
 
 - To add someone before you send to them, choose **Add contact**. Adding an email that is already there changes that
   contact.
 - To delete a contact, choose **Delete** on their row, then **Delete for good**. The next envelope you send them adds them
   again.
-- To change a contact, open them. Their page also lists every envelope that names them (those from before they were
-  added too), and can delete them.
+- To change a contact, open them. Their page also lists the envelopes you see that name them (those from before they
+  were added too, at most 50), and can delete them.
 - When you send, a contact suggested under **Name** or **Email** as you type fills in the signer's name, email, title and
   company.
 - A contact's page lists only the envelopes you see.

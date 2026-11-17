@@ -72,18 +72,18 @@ export function TemplatesPage({ me }: { me: Me }) {
   const [creating, setCreating] = useState(false)
   const [templateName, setTemplateName] = useState('')
 
-  /** Loads a page: `at.before`, else (no argument) the page being shown again. */
-  async function load(at: { before: number | undefined } = { before: pager.before }) {
+  /** Loads a page: `at.cursor`, else (no argument) the page being shown again. */
+  async function load(at: { cursor: string | undefined } = { cursor: pager.cursor }) {
     const ask = ++latest.current
     try {
-      const data = await apiJson<{ templates: TemplateSummary[]; next?: number }>(listPath('/api/templates', { status: filters.status || 'all', q: filters.q, scope: filters.scope, tags: filters.tags, ...sinceOf(filters.date), limit: pageSize, before: at.before }))
+      const data = await apiJson<{ templates: TemplateSummary[]; next?: string }>(listPath('/api/templates', { status: filters.status || 'all', q: filters.q, scope: filters.scope, tags: filters.tags, ...sinceOf(filters.date), limit: pageSize, cursor: at.cursor }))
       if (ask !== latest.current) return
       setTemplates(data.templates)
       pager.setNext(data.next)
     } catch (error) { if (ask === latest.current) setMessage({ text: describeError(error), error: true }) }
   }
   // A new filter or page size starts again on page 1.
-  useEffect(() => { pager.reset(); setTemplates(null); void load({ before: undefined }) }, [filters.q, filters.date, filters.scope, filters.status, filters.tags.join('\n'), pageSize])
+  useEffect(() => { pager.reset(); setTemplates(null); void load({ cursor: undefined }) }, [filters.q, filters.date, filters.scope, filters.status, filters.tags.join('\n'), pageSize])
   const set = (change: Partial<typeof filters>) => setFilters((f) => ({ ...f, ...change }))
   const OWNERS: Record<Exclude<Scope, ''>, string> = { mine: 'Mine', shared: 'Shared with me' }
   const STATUSES: Record<'active' | 'draft', string> = { active: 'Ready to use', draft: 'Draft' }
@@ -101,8 +101,14 @@ export function TemplatesPage({ me }: { me: Me }) {
     void load(at)
   }
   function saveTags(id: string, tags: string[]) {
-    setTemplates((old) => old?.map((t) => t.id === id ? { ...t, tags } : t) ?? null)
-    void run(async () => { await apiJson(`/api/templates/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }); reloadTags() })
+    const before = templates?.find((t) => t.id === id)?.tags
+    const show = (shown: string[] | undefined) => setTemplates((old) => old?.map((t) => t.id === id ? { ...t, tags: shown } : t) ?? null)
+    show(tags)
+    // Refused, the tags are shown as they were: only what was saved stays.
+    void run(async () => {
+      try { await apiJson(`/api/templates/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }) } catch (error) { show(before); throw error }
+      reloadTags()
+    })
   }
   async function run(work: () => Promise<void>) {
     setBusy(true)

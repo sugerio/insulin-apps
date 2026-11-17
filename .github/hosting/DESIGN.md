@@ -78,8 +78,8 @@ Apps without a catalog have no custom roles.
 
 ### 2.4 What the app receives
 
-The gateway forwards each request with the identity contract of `@fours/app` plus three headers. Every incoming
-`x-suger-*` header is removed first. (Accepted, not built: the organization role too, §12.3.)
+The gateway forwards each request with the identity contract of `@fours/app` plus four headers. Every incoming
+`x-suger-*` header is removed first.
 
 | Header | Value |
 |---|---|
@@ -89,10 +89,18 @@ The gateway forwards each request with the identity contract of `@fours/app` plu
 | `x-suger-app-role` | `ADMIN`, `EDITOR` or `VIEWER`. For a custom role: the least built-in role that covers its permissions |
 | `x-suger-app-permissions` | Apps with a catalog only: the permissions, space-separated. For built-in roles, every permission at or below the role; for a custom role, its own |
 | `x-suger-access-via` | `browser`, `mcp` or `api`; `public` on an app's public paths (§8.1), where it and `x-suger-app-id` are the only headers |
+| `x-suger-org-role` | A person's organization role (`browser` and `mcp`): `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for a specific-apps member. Never an API client's |
 
 Apps treat `x-suger-app-permissions` as a **narrowing** of the role, never a widening: effective permissions are the
 role's permissions intersected with the header. Behind the gateway the header is always set; elsewhere (the Insulin
 console) it may be missing, and then the role alone decides. A forged header can only take access away.
+
+**The organization role.** An app may give organization owners or admins powers over its records that no app role
+gives (Esign: taking over what someone owns, and who sees an API client's documents), and must still enforce them on
+the server. An app Admin by a specific-apps grant is `ADMIN` in `x-suger-app-role` but `APPS` here. Unlike the other
+headers, this one can give powers rather than only take them away, so an app honours it only when the deploy sets
+`SUGER_TRUST_ORG_ROLE` (this gateway's deploy and local stack do), and treats a missing or unknown value as no
+organization role.
 
 Apps refuse mutations of their own people, roles, billing or integrations unless `x-suger-access-via` is `browser`
 (§4). The gateway's own pages already never accept a token.
@@ -656,11 +664,15 @@ in `x-suger-organization-id`; the deploy gives it the address as `SUGER_MEMBERS_
 
 - **Who is listed.** The organization's people who can use the app, as its People page counts them: owners, admins,
   editors and viewers of the organization, and the specific-apps members given the app (a built-in or custom role).
-  Each with their id (the `x-suger-user-id` their requests carry), name and email; nothing about their roles. Nobody
-  of another organization, and nothing for a suspended or disabled organization (403) or an unknown one (404).
+  Each with their id (the `x-suger-user-id` their requests carry), name and email, and their `role` and `permissions`
+  in the app as their requests carry them (§2.4), so an app can check that someone may still do what they asked for
+  earlier (Esign sends a scheduled envelope only while whoever scheduled it may still send). Nobody of another
+  organization, no account Insulin Apps suspended or disabled (§11.3), and nothing for a suspended or disabled
+  organization (403) or an unknown one (404).
 - **Narrowing.** `q` keeps those whose name or email contains it, without regard to case (at most 100 characters);
   `limit` caps the answer (1 to 500, 500 by default). The answer is never cached (`Cache-Control: no-store`).
-- **Who may ask.** An app, with its own token (401 otherwise), on the apex only, by GET, under the per-app rate limit.
+- **Who may ask.** An app, with its own token (401 otherwise), on the apex only, by GET, under the app rate limit,
+  counted for each organization apart.
   The app still checks what it is given: Esign falls back on the people it has seen when the gateway can't be asked.
 
 ## 9. Data
@@ -843,7 +855,7 @@ assets and the cron triggers.
 organization or account (with its name or address at the time) and the reason. It is kept for good, shown at
 `/super/audit` and on each organization's and account's page. Reading pages isn't recorded.
 
-## 12. Accepted, not built yet: engines, limits, organization roles and resource access
+## 12. Accepted, not built yet: engines, limits, members and resource access
 
 Accepted on 2026-11-16 for Insulin Knowledge, a planned app (`knowledge/`, not in the repository yet) that keeps a
 team's documents in collections, each served by its own Cloudflare Container. Nothing in this section is built. When
@@ -948,19 +960,15 @@ enforces them.
   `null` for a limit that doesn't reset by itself (stored bytes, a count of records).
 - **Self-hosted.** A deployment starts with the catalog's defaults; its own operators change them.
 
-### 12.3 Organization role, members and member events
+### 12.3 Members and member events
+
+(The organization role header accepted here is built: §2.4. Until this lookup is, apps use §8.7's answer at the same
+address, with their token alone.)
 
 The endpoints below take only `SUGER_APP_TOKEN`, over `SUGER_GATEWAY`. The gateway takes the app from the token,
 answers only about organizations where that app is used (from the gateway's first request to the app for the
 organization), and accepts no session, OAuth or client token.
 
-- **Header.** Requests also carry `x-suger-org-role`: `OWNER`, `ADMIN`, `EDITOR`, `VIEWER` or `APPS` (specific apps).
-  It is removed from incoming requests like every `x-suger-*` header, and absent for API clients, on public paths and
-  on the tick. An app may give organization owners powers over its records that no app role gives (Knowledge lets
-  them see every collection's basic information and delete one), and must still enforce them on the server. Unlike
-  the other `x-suger-*` headers, it can give powers rather than only take them away (§2.4), so an app honours it only
-  when the deploy sets `SUGER_TRUST_ORG_ROLE`, as this gateway's deploy does, and treats a missing or unknown value as
-  no organization role.
 - **Member lookup.** `GET https://insulinapps.com/__insulin/members?q=<text>`, with the `x-suger-member-lookup` header
   of the browser request the app is serving. The gateway adds that header to every request with
   `x-suger-access-via: browser`: the organization, the person and an expiry five minutes ahead, signed with an HMAC

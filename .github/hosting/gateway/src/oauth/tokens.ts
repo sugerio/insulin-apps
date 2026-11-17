@@ -116,7 +116,7 @@ export async function resolveBearer(ctx: Context, app: HostedApp, token: string 
     const name = row.sa_name ?? 'Service account'
     return {
       kind: 'service', serviceAccountId: row.service_account_id, orgId: row.sa_org_id,
-      actor: { id: row.service_account_id, email: serviceAccountEmail(row.service_account_id), name }, access: { ...access, admin: false }, row,
+      actor: { id: row.service_account_id, email: serviceAccountEmail(row.service_account_id), name }, access: { ...access, admin: false, orgRole: null }, row,
     }
   }
   return { refused: 'invalid_token' }

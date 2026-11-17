@@ -18,7 +18,7 @@ export const signers: DocTopic = {
           [b('From the invitation Esign emails them. '), 'Every envelope sent from Esign\'s own pages works this way; the envelope\'s page can resend the invitation, but never opens a signer\'s page itself.'],
           [b('In your host product. '), 'The system your organization uses Esign from shows the signing page inside its own pages, to the signer it has signed in.'],
         ),
-        p('Either way, the page is opened with a one-time link that works once, within two minutes, and only for that signer. The page then stays usable for 15 minutes; after that, the signer opens it again the same way. The code that confirms who they are still goes to the signer\'s own email address.'),
+        p('The invitation\'s link opens the page each time it is used, for as long as it is the signer\'s turn, until the sender sends it again; a host product\'s link is a one-time link that works once, within two minutes, and only for that signer. Either way, the page then stays usable for 15 minutes; after that, the signer opens it again the same way. The code that confirms who they are still goes to the signer\'s own email address.'),
         p('A signer whose turn hasn\'t come yet, or whose envelope has ended, can\'t open it.'),
       ],
     },

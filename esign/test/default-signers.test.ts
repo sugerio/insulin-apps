@@ -81,6 +81,17 @@ test('a template uploaded with default signers returns them, and a recipient tha
   } finally { await mf.dispose(); }
 });
 
+test('a role named like something every object has is only a role: no default signer comes of its name', async () => {
+  const { mf, upload, send } = await setup();
+  try {
+    const created = await upload(['constructor', 'toString']);
+    assert.equal(created.status, 201, await created.clone().text());
+    const { id } = await created.json() as { id: string };
+    const sent = await send(id, [{ role: 'constructor', email: 'cora@partner.example' }, { role: 'toString', name: 'Toby Example', email: 'toby@partner.example' }]);
+    assert.deepEqual([sent.status, await sent.json()], [422, { error: 'invalid_recipient' }], 'a name is still needed');
+  } finally { await mf.dispose(); }
+});
+
 test('default signers can be replaced or cleared later; envelopes already sent keep their signers', async () => {
   const { mf, post, upload, send, signers } = await setup();
   try {

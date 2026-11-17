@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { EDITOR, json, me, renderMember, visibleText } from './helpers/member.ts';
 
 const TEMPLATE = { id: 'tpl-1', name: 'Mutual NDA', roles: ['partner'], fields: [], createdAt: Date.parse('2026-11-07T00:00:00Z'), owner: { id: 'u1', kind: 'person', name: 'Sam Example', email: 'sam@example.com' }, myRole: 'owner', tags: ['NDA'] };
-const OWNER = me('OWNER', ['esign.manage', 'esign.view']);
+// As /api/me says it behind the gateway: an Admin in Esign, and an owner of the organization (x-suger-org-role).
+const OWNER = me('ADMIN', ['esign.manage', 'esign.view'], { orgRole: 'OWNER' });
 /** Opens a row's ⋯ menu and chooses an item. */
 async function choose(app: Awaited<ReturnType<typeof renderMember>>, row: string, item: string) {
   await app.click(app.byLabel(`More for ${row}`), 'the row\'s menu');
@@ -156,7 +157,7 @@ test('the Ownership page, for organization owners: taking over what someone owns
     assert.match(app.text(), /You now own 2 templates and 3 envelopes that were Lee Left's/);
   } finally { await app.unmount(); }
   // An organization admin who isn't an owner is told the page isn't theirs, and asks nothing.
-  const admin = await renderMember('/ownership', (c) => c.path === '/api/me' ? json(me('ADMIN', ['esign.manage', 'esign.view'])) : undefined);
+  const admin = await renderMember('/ownership', (c) => c.path === '/api/me' ? json(me('ADMIN', ['esign.manage', 'esign.view'], { orgRole: 'ADMIN' })) : undefined);
   try { assert.match(admin.text(), /Only your organization's owners take over what someone owns\. Who sees what an API client creates is set for each OAuth client on API access/); } finally { await admin.unmount(); }
 });
 
@@ -178,7 +179,7 @@ test('Who sees it: a document an API client owns shows the people its settings n
 test("an API client's page, reached from API access: owners and admins choose who sees what it creates, and save", async () => {
   let people: { email: string; name?: string }[] = [{ email: 'sam@example.com', name: 'Sam Example' }];
   const app = await renderMember('/client-settings/sa-1?name=Host%20product', (c) => {
-    if (c.path === '/api/me') return json(me('ADMIN', ['esign.manage', 'esign.view']));
+    if (c.path === '/api/me') return json(me('ADMIN', ['esign.manage', 'esign.view'], { orgRole: 'ADMIN' }));
     if (c.path === '/api/client-settings/sa-1?name=Host%20product') return json({ id: 'sa-1', name: 'Host product', people });
     if (c.path === '/api/client-settings/sa-1' && c.method === 'POST') { people = JSON.parse(String(c.body)).people.map((email: string) => ({ email })); return json({ id: 'sa-1', name: 'Host product', people }); }
     if (c.path.startsWith('/api/members?')) return json({ members: [{ id: 'u2', email: 'bo@example.com', name: 'Bo Example' }] });
@@ -188,8 +189,17 @@ test("an API client's page, reached from API access: owners and admins choose wh
     assert.match(app.text(), /Who sees what it creates/);
     assert.match(app.text(), /Sam Example/);
     assert.equal(app.button('Save').props.disabled, true, 'nothing to save yet');
+    // Suggestions are chosen with the keyboard too: an arrow key, then Enter; Escape closes them.
     await app.type(app.byId('client-person-email'), 'bo');
-    await app.click(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Choose Bo Example (bo@example.com)')[0], 'suggestion');
+    assert.equal(app.byId('client-person-email').props.role, 'combobox');
+    await app.keyDown(app.byId('client-person-email'), 'Escape');
+    assert.equal(app.byId('client-person-email').props['aria-expanded'], false);
+    await app.type(app.byId('client-person-email'), 'bo ');
+    await app.type(app.byId('client-person-email'), 'bo');
+    await app.keyDown(app.byId('client-person-email'), 'ArrowDown');
+    assert.equal(app.byId('client-person-email').props['aria-activedescendant'], 'client-person-email-suggestions-0');
+    await app.keyDown(app.byId('client-person-email'), 'Enter');
+    assert.equal(app.byId('client-person-email').props.value, 'bo@example.com');
     await app.click(app.button('Add'), 'Add');
     await app.click(app.byLabel('Remove sam@example.com'), 'Remove');
     await app.click(app.button('Save'), 'Save');
@@ -208,12 +218,14 @@ test("an API client's page, reached from API access: owners and admins choose wh
     await owner.click(owner.link('Ownership'), 'Ownership');
     assert.equal(owner.location.pathname, '/ownership');
   } finally { await owner.unmount(); }
-  // Anyone else is told whose it is, and nothing is asked of the server.
-  const editor = await renderMember('/client-settings/sa-1', (c) => c.path === '/api/me' ? json(EDITOR) : undefined);
-  try {
-    assert.match(editor.text(), /Only your organization's owners and admins choose who sees what an API client creates/);
-    assert.ok(!editor.calls.some((c) => c.path.startsWith('/api/client-settings')));
-  } finally { await editor.unmount(); }
+  // Anyone else is told whose it is, and nothing is asked of the server: an Admin of Esign by grant too.
+  for (const other of [EDITOR, me('ADMIN', ['esign.manage', 'esign.view'], { orgRole: 'APPS' })]) {
+    const editor = await renderMember('/client-settings/sa-1', (c) => c.path === '/api/me' ? json(other) : undefined);
+    try {
+      assert.match(editor.text(), /Only your organization's owners and admins choose who sees what an API client creates/);
+      assert.ok(!editor.calls.some((c) => c.path.startsWith('/api/client-settings')));
+    } finally { await editor.unmount(); }
+  }
 });
 
 test('a tag typed and left (Done, without Enter) is saved; a save that fails says so in the dialog', async () => {
@@ -242,5 +254,36 @@ test('a tag typed and left (Done, without Enter) is saved; a save that fails say
     await app.type(app.byId('list-envelope-tags'), 'nda');
     await app.keyDown(app.byId('list-envelope-tags'), 'Enter');
     assert.match(visibleText(app.byLabel('Your tags').children), /Your role in Esign doesn't allow that/);
+    assert.equal(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Remove tag nda').length, 0, 'a tag that wasn\'t saved isn\'t shown');
+    assert.equal(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Remove tag q4').length > 0, true);
+  } finally { await app.unmount(); }
+});
+
+test('tag suggestions are chosen with the keyboard; Escape closes them alone, keeping what was typed', async () => {
+  const ENV = '33333333-3333-4333-8333-333333333333';
+  const row = { id: ENV, templateId: 'tpl-1', status: 'IN_PROGRESS', createdAt: 0, documentName: 'Reseller agreement', signers: [], progress: { signed: 0, total: 1 }, owner: { id: 'u1', kind: 'person', name: 'Sam Example' }, myRole: 'owner', tags: [] };
+  const app = await renderMember('/envelopes', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [{ tag: 'partners', uses: 2 }, { tag: 'pa-review', uses: 1 }] });
+    if (c.path.startsWith('/api/envelopes?') || c.path === '/api/envelopes') return json({ envelopes: [row] });
+    if (c.path === `/api/envelopes/${ENV}/tags`) return json({ id: ENV, tags: JSON.parse(String(c.body)).tags });
+  });
+  try {
+    await app.click(app.byLabel('More for Reseller agreement'), 'menu');
+    await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitem' && visibleText(n.children).trim() === 'Tags')[0], 'Tags');
+    const field = () => app.byId('list-envelope-tags');
+    await app.type(field(), 'pa');
+    assert.equal(field().props.role, 'combobox');
+    let prevented = false;
+    await app.act(async () => { field().props.onKeyDown({ key: 'Escape', nativeEvent: {}, preventDefault() { prevented = true; } }); });
+    assert.equal(prevented, true, 'the dialog leaves an Escape that was used alone');
+    assert.deepEqual([field().props['aria-expanded'], field().props.value], [false, 'pa']);
+    await app.type(field(), 'par');
+    await app.keyDown(field(), 'ArrowDown');
+    assert.equal(field().props['aria-activedescendant'], 'list-envelope-tags-suggestions-0');
+    await app.act(async () => { field().props.onKeyDown({ key: 'Enter', nativeEvent: {}, preventDefault() {} }); });
+    await app.settle();
+    const saved = app.calls.filter((c) => c.path === `/api/envelopes/${ENV}/tags`);
+    assert.deepEqual(JSON.parse(String(saved.at(-1)!.body)), { tags: ['partners'] }, 'the suggestion, not what was typed');
   } finally { await app.unmount(); }
 });

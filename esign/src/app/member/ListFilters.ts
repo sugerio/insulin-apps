@@ -101,20 +101,20 @@ export function Pager({ id, page, pageSize, hasNext, busy, onPageSize, onTurn }:
 }
 
 /**
- * A list's pages: the `before` of each page seen so far (the first has none) and the next page's, when there is one.
- * `reset` starts again on page 1; `turn` moves, returning the `before` to load (or undefined when it can't move).
+ * A list's pages: the `cursor` of each page seen so far (the first has none) and the next page's, when there is one.
+ * `reset` starts again on page 1; `turn` moves, returning the `cursor` to load (or undefined when it can't move).
  */
 export function usePages() {
-  const [pages, setPages] = useState<(number | undefined)[]>([undefined])
-  const [next, setNext] = useState<number | undefined>(undefined)
+  const [pages, setPages] = useState<(string | undefined)[]>([undefined])
+  const [next, setNext] = useState<string | undefined>(undefined)
   return {
-    page: pages.length, before: pages[pages.length - 1], next, setNext,
+    page: pages.length, cursor: pages[pages.length - 1], next, setNext,
     reset: () => setPages([undefined]),
-    turn: (to: 'next' | 'previous'): { before: number | undefined } | null => {
+    turn: (to: 'next' | 'previous'): { cursor: string | undefined } | null => {
       const stack = to === 'next' && next !== undefined ? [...pages, next] : pages.slice(0, -1)
       if (!stack.length || (to === 'next' && next === undefined)) return null
       setPages(stack)
-      return { before: stack[stack.length - 1] }
+      return { cursor: stack[stack.length - 1] }
     },
   }
 }

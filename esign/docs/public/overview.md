@@ -30,17 +30,18 @@ before it and to the PDF it was made on, so a later change to any step shows.
 - **AI agents**: an assistant connected over MCP can list templates and envelopes, send envelopes and read their status,
   with the role of the person who connected it.
 
-Signers don't need an account and don't need to belong to your organization. Their one-time link and the code emailed
-to them give access to their own turn, and nothing else.
+Signers don't need an account and don't need to belong to your organization. Their link (the invitation's, or a host
+product's one-time link) and the code emailed to them give access to their own turn, and nothing else.
 
 ## The pages
 
-Members open Esign at `https://esign.insulinapps.com`. Its navigation has four entries:
+Members open Esign at `https://esign.insulinapps.com`. Its navigation has five entries:
 
 | Page | What it shows |
 | --- | --- |
 | **Envelopes** | The envelopes you own or that are shared with you, newest first, with where each stands, searched and filtered by date, status, sender and quick views. Open one to see its signers, its audit trail and, once completed, the signed PDF and the certificate. Those who manage also start new ones here, with **New envelope**: from a template, or upload and send. |
-| **Templates** | The PDFs your organization sends, with their signer roles and placed fields. Those who manage upload new ones here. |
+| **Templates** | The templates you own or that are shared with you: PDFs with their signer roles and placed fields. Those who manage upload new ones here. |
+| **Contacts** | Your organization's address book: everyone its envelopes named as signers, and anyone added by hand. Everyone who can use Esign sees it; those who manage add, change and delete contacts. |
 | **Docs** | The built-in help: getting started, the main tasks, what signers see, statuses, evidence, roles, background on electronic signatures and a glossary. Every role can open it. |
 | **Settings** | Esign's **People**, **Integrations**, **API access** and **Connect AI** pages, which are the platform's pages on `https://insulinapps.com/apps/esign/settings/` (see [Roles and access](/docs/esign/roles-and-access#people-and-integrations-live-on-the-platform)). |
 
@@ -51,7 +52,7 @@ signed copy (`/copy`) and, for host products, the embedded field editor (`/edito
 
 The navigation on the left has two columns, as in every Insulin app. The first column has the organization switcher at
 the top (your organization's name; choose it to switch to another of your organizations, go to **All apps** or create one), then
-**Envelopes** and **Templates** under the heading Esign, then **Docs** and **Settings**, and at the bottom your name and
+**Envelopes**, **Templates** and **Contacts** under the heading Esign, then **Docs** and **Settings**, and at the bottom your name and
 role, with your Insulin Apps **Account** and **Sign out**. The second column lists what the open section holds:
 
 | Section | Second column |
@@ -80,8 +81,9 @@ Esign is an open-source Insulin app. On insulinapps.com it runs at `https://esig
   See [Roles and access](/docs/esign/roles-and-access).
 - **One organization at a time.** Everything you see in Esign belongs to your active organization. Switch organization
   in the top bar to see another one's templates and envelopes.
-- **Due work runs every five minutes.** The platform calls Esign every five minutes so it can expire envelopes past
-  their deadline, finish envelopes a request left unfinished and retry signed-copy emails, for every organization.
+- **Due work runs every five minutes.** The platform calls Esign every five minutes so it can send drafts scheduled
+  with Send later, expire envelopes past their deadline, finish envelopes a request left unfinished and retry
+  signed-copy emails and invitations, for every organization.
 - **Usage is reported every hour.** Esign sends Insulin Apps counts of each organization's envelopes, templates and
   signatures and the storage its documents take, never names, email addresses or documents. See
   [What Esign reports to Insulin Apps](/docs/esign/how-it-works#what-esign-reports-to-insulin-apps-every-hour).

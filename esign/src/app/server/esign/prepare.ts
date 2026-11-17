@@ -12,6 +12,11 @@ const sha256 = async (bytes: ArrayBuffer) => hex(new Uint8Array(await crypto.sub
 
 /** The R2 key of an envelope's initial document. */
 export const initialDocumentKey = (envelopeId: string) => `envelopes/${envelopeId}/d0.pdf`;
+/**
+ * The key of a draft's initial document, by its hash: a draft's document may change until it is sent, so each one is
+ * written once under its own key, and the artifact row says which is current.
+ */
+export const draftDocumentKey = (envelopeId: string, sha256: string) => `envelopes/${envelopeId}/d0-${sha256}.pdf`;
 
 /**
  * The id of the envelope a creation request makes: the first 16 bytes of the SHA-256 of
@@ -33,14 +38,15 @@ export class InitialDocumentConflict extends Error {}
  * Copies the template's source object to the envelope's initial document key, unless an earlier
  * attempt already stored the same bytes there. Returns the artifact row to insert with the envelope.
  */
-export async function storeInitialDocument(bucket: BlobStore, sourceKey: string, envelopeId: string, transform?: (source: Uint8Array) => Promise<Uint8Array>): Promise<{ id: string; objectKey: string; sha256: string }> {
+export async function storeInitialDocument(bucket: BlobStore, sourceKey: string, envelopeId: string, transform?: (source: Uint8Array) => Promise<Uint8Array>, { draft = false } = {}): Promise<{ id: string; objectKey: string; sha256: string }> {
   const source = await bucket.get(sourceKey);
   if (!source) throw new Error('Source artifact missing');
   // With `transform` (pre-filled values drawn on it, prefill.ts): the same source and values give the same bytes, so a
   // retry stores, or finds, the very same document.
   const bytes: ArrayBuffer = transform ? (await transform(new Uint8Array(await source.arrayBuffer()))).slice().buffer as ArrayBuffer : await source.arrayBuffer();
   const hash = await sha256(bytes);
-  const key = initialDocumentKey(envelopeId);
+  // A draft sent again with other values after a try that failed halfway gets a document of its own.
+  const key = draft ? draftDocumentKey(envelopeId, hash) : initialDocumentKey(envelopeId);
   const stored = await bucket.put(key, bytes, { onlyIf: { etagDoesNotMatch: '*' } });
   if (!stored) {
     const previous = await bucket.get(key);

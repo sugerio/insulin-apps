@@ -66,6 +66,8 @@ export function SendLaterDialog({ open, initial, signBy, note, busy, onClose, on
   function schedule() {
     const at = new Date(`${day}T${time}`)
     if (!day || !time || Number.isNaN(at.getTime())) { setProblem('Choose a day and a time.'); return }
+    // A time the clocks skip (they spring forward) would become another one: asked for again instead.
+    if (localDay(at) !== day || localTime(at) !== time) { setProblem('That time doesn\'t exist on that day, because the clocks change: choose another.'); return }
     if (at.getTime() < Date.now() + SOONEST_MS) { setProblem('Choose a time at least five minutes from now.'); return }
     if (at.getTime() > Date.now() + LATEST_MS) { setProblem('Choose a time within 400 days.'); return }
     if (signBy && at.getTime() >= Date.parse(signByTime(signBy))) { setProblem('Choose a time before the sign-by day ends, or change the sign-by day.'); return }

@@ -8,7 +8,7 @@
 // The gateway's config is wrangler.local.jsonc with a service binding (APP_<NAME>) and a SITE_APPS entry per app, the
 // entries read from each app's package.json by list-apps.mjs, as the deploy does. An app's config is shaped like the
 // one .github/scripts/workerd-smoke/smoke.mjs writes: Nitro's generated wrangler.json plus the name, absolute paths, a
-// local D1 with the app's migrations and SUGER_ACCESS_MODE=console. Every config lands in .dev/.
+// local D1 with the app's migrations, SUGER_ACCESS_MODE=console and SUGER_TRUST_ORG_ROLE. Every config lands in .dev/.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -53,7 +53,7 @@ export async function appConfig(app = 'stub', vars = {}) {
     assets: { ...generated.assets, directory: join(output, 'public') },
     // Its own local id, so its state never mixes with the gateway's (both bind DB).
     d1_databases: [{ binding: 'DB', database_name: workerName(app), database_id: `local-${workerName(app)}`, migrations_dir: join(appDir, 'src', 'app', 'db', 'migrations') }],
-    vars: { SUGER_ACCESS_MODE: 'console', ...vars },
+    vars: { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: 'true', ...vars },
     workers_dev: false,
   }
 }

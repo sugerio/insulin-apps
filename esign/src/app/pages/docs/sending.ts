@@ -25,7 +25,7 @@ export const sending: DocTopic = {
         'Choose the template.',
         ['For each role, name the signer and give their email address, or choose them from your contacts. The signers sign in this order.'],
         'Add what the signers should see about the document, and a sign-by day if there is one. Both are optional.',
-        ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn. Or choose ', b('Save draft'), ' to finish it later: nobody is asked to sign until it is sent, and Envelopes lists it as a draft, with Continue and Discard. ', b('Send later…'), ', under the arrow beside the send button, picks a day and a time instead: it is checked now, stays a draft, and Esign sends it then, as you, within a few minutes; Continue opens it to send it now, pick another time, or cancel with Save draft. If it can\'t be sent then, Envelopes says Not sent, and why.'],
+        ['Choose ', b('Send for signature'), '. The envelope opens, and it is the first signer\'s turn. Or choose ', b('Save draft'), ' to finish it later: nobody is asked to sign until it is sent, and Envelopes lists it as a draft, with Continue and Discard. ', b('Send later…'), ', under the arrow beside the send button, picks a day and a time instead: it is checked now, stays a draft, and Esign sends it then, as you, within a few minutes; Continue opens it to send it now, pick another time, or cancel with Save draft. If it can\'t be sent then (you can no longer send in Esign, say), Envelopes says Not sent, and why.'],
       ),
     },
     {
@@ -82,7 +82,7 @@ export const sending: DocTopic = {
       id: 'contacts',
       title: 'Contacts',
       body: [
-        p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; delete one with ', b('Delete'), ' on their row (you confirm it); open a contact to change them or to see the envelopes you see that name them.'),
+        p(h(PageLink, { to: '/contacts' }, 'Contacts'), ' is your organization\'s address book, and everyone who can use Esign sees all of it, Viewers included: the signers of envelopes only others see too. Everyone an envelope names as a signer is added, or refreshed with the name, title and company given that time, most recently used first. Search it by name or email; add someone with ', b('Add contact'), '; delete one with ', b('Delete'), ' on their row (you confirm it); open a contact to change them or to see the envelopes you see that name them.'),
         p('When you send, matching contacts are suggested under a signer\'s Name and Email as you type (from two characters on); choosing one fills in that signer\'s name, email, title and company.'),
         p('A contact only fills in the form. An envelope keeps the name and email it was sent with: changing or deleting a contact changes no envelope, and the next envelope that names them adds them again.'),
       ],

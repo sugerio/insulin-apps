@@ -46,10 +46,10 @@ test('each envelope says how far along it is and whose turn it is, and offers Re
 });
 
 test('the search, its suggested filters, the filter buttons, their chips and Clear all, and pages', async () => {
-  const pages: Record<string, unknown> = { '': { envelopes: [OUT], next: 111 }, '111': { envelopes: [DONE] } };
+  const pages: Record<string, unknown> = { '': { envelopes: [OUT], next: '111.env-out' }, '111.env-out': { envelopes: [DONE] } };
   const app = await renderMember('/envelopes', (c) => {
     if (c.path === '/api/me') return json(EDITOR);
-    if (c.path.startsWith('/api/envelopes?')) return json(pages[new URL(c.path, 'https://x.test').searchParams.get('before') ?? ''] ?? { envelopes: [] });
+    if (c.path.startsWith('/api/envelopes?')) return json(pages[new URL(c.path, 'https://x.test').searchParams.get('cursor') ?? ''] ?? { envelopes: [] });
     if (c.path.startsWith('/api/tags?')) return json({ tags: [{ tag: 'NDA', uses: 3 }, { tag: 'partners', uses: 1 }] });
   });
   const listed = () => app.calls.filter((c) => c.path.startsWith('/api/envelopes?')).map((c) => new URL(c.path, 'https://x.test').searchParams)
@@ -58,12 +58,12 @@ test('the search, its suggested filters, the filter buttons, their chips and Cle
     // Pages: next, then back.
     assert.match(app.text(), /Page 1/);
     await app.click(app.byLabel('Next page'), 'next');
-    assert.equal(lastQuery().get('before'), '111');
+    assert.equal(lastQuery().get('cursor'), '111.env-out');
     assert.match(app.text(), /Page 2/);
     assert.match(app.text(), /Order form/);
     assert.equal(app.byLabel('Next page').props.disabled, true, 'the last page');
     await app.click(app.byLabel('Previous page'), 'previous');
-    assert.equal(lastQuery().get('before'), null);
+    assert.equal(lastQuery().get('cursor'), null);
     // The search is text only: no menu of filters while it is empty (the filter buttons are beside it).
     await app.act(async () => { app.byId('envelope-search').props.onFocus?.(); });
     assert.equal(app.renderer.root.findAll((n: any) => n.props?.['aria-label'] === 'Filter by').length, 0);

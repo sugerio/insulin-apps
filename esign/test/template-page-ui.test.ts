@@ -16,7 +16,7 @@ const TEMPLATE = {
     { type: 'Signature', role: 'seller', page: 2, required: true, rect: { x: 0.5, y: 0.7, width: 0.3, height: 0.05 } },
     { type: 'Date signed', role: 'seller', page: 2, required: true, rect: { x: 0.5, y: 0.8, width: 0.3, height: 0.04 } },
   ],
-  createdAt: Date.parse('2026-11-01T00:00:00Z'), owner: OWNER, myRole: 'viewer', tags: ['NDA'],
+  createdAt: new Date(2026, 10, 1, 12).getTime(), owner: OWNER, myRole: 'viewer', tags: ['NDA'],
 };
 const PDF = '%PDF-1.7 synthetic';
 
@@ -55,7 +55,7 @@ test('a template\'s page: its details, read only, and its PDF below them; its na
 test('a template\'s page: View in its menu; without placed fields, a signature page; archived, said so and not sent; for a viewer, no Send', async () => {
   const render = pdfView.render;
   pdfView.render = async () => [];
-  const app = await renderMember('/templates', routes({ ...TEMPLATE, fields: [], archivedAt: Date.parse('2026-11-05T00:00:00Z') }, VIEWER));
+  const app = await renderMember('/templates', routes({ ...TEMPLATE, fields: [], archivedAt: new Date(2026, 10, 5, 12).getTime() }, VIEWER));
   try {
     await app.click(app.byLabel('More for Mutual NDA'), 'the row\'s menu');
     await app.click(app.renderer.root.findAll((n: any) => n.props?.role === 'menuitem' && visibleText(n.children).trim() === 'View')[0], 'View');

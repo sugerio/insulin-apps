@@ -27,10 +27,14 @@ async function setup() {
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex');
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(hash).run();
   await setEditorOrigins(db, 'tenant', [HOST]);
-  const env = { DB: db, ARTIFACTS: await blobStore(mf, 'artifacts') };
+  const env = { DB: db, ARTIFACTS: await blobStore(mf, 'artifacts'), TRUST_ORG_ROLE: true };
   // People of the organization, in the browser; and the host's API client, by its key.
   const person = (name: string, options: Identity = {}) => identity('tenant', { userId: `user-${name}`, email: `${name}@example.test`, role: 'EDITOR', ...options });
-  const ana = person('ana'), bo = person('bo'), cy = person('cy'), owner = person('olga', { role: 'OWNER' }), viewer = person('vic', { role: 'VIEWER' });
+  // As the gateway sends them: an organization owner or admin is an Admin in every app, and says so in x-suger-org-role.
+  const ana = person('ana', { orgRole: 'EDITOR' }), bo = person('bo', { orgRole: 'EDITOR' }), cy = person('cy', { orgRole: 'EDITOR' }), viewer = person('vic', { role: 'VIEWER', orgRole: 'VIEWER' });
+  const owner = person('olga', { role: 'ADMIN', orgRole: 'OWNER' }), admin = person('ada', { role: 'ADMIN', orgRole: 'ADMIN' });
+  // An Admin of Esign by a specific-apps grant: an admin in the app, not of the organization.
+  const appAdmin = person('gus', { role: 'ADMIN', orgRole: 'APPS' });
   const host = { authorization: `Bearer ${KEY}` };
   const req = (path: string, headers: Record<string, string>, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> ?? {}) } }), env);
   const post = (path: string, headers: Record<string, string>, body: unknown, extra: Record<string, string> = {}) => req(path, headers, { method: 'POST', headers: { 'content-type': 'application/json', ...extra }, body: JSON.stringify(body) });
@@ -53,7 +57,7 @@ async function setup() {
   }
   const templates = async (headers: Record<string, string>, query = '') => (await get<{ templates: Listed[] }>(`/api/templates${query}`, headers)).templates;
   const envelopes = async (headers: Record<string, string>, query = '') => (await get<{ envelopes: Listed[] }>(`/api/envelopes${query}`, headers)).envelopes;
-  return { mf, db, req, post, get, template, send, envelope, templates, envelopes, ana, bo, cy, owner, viewer, host };
+  return { mf, db, env, req, post, get, template, send, envelope, templates, envelopes, ana, bo, cy, owner, admin, appAdmin, viewer, host };
 }
 
 test('a document is its owner\'s alone until shared, the organization\'s owners and admins included', async () => {
@@ -250,15 +254,24 @@ test('an API client\'s documents are seen, as admins, by the people its settings
     type Settings = { id: string; name?: string; people: { email: string; name?: string }[] };
     const settings = (headers: Record<string, string>, id = CLIENT, name = 'Host product') => h.req(`/api/client-settings/${id}?name=${encodeURIComponent(name)}`, headers);
     const save = (headers: Record<string, string>, people: unknown, id = CLIENT) => h.post(`/api/client-settings/${id}`, headers, { people });
-    for (const who of [h.ana, h.host]) assert.equal((await settings(who)).status, 403);
+    for (const who of [h.ana, h.host, h.appAdmin]) assert.equal((await settings(who)).status, 403);
+    assert.equal((await save(h.appAdmin, ['gus@example.test'])).status, 403, 'an Admin of Esign by grant is no organization admin');
+    // The organization role counts only when the deploy says the gateway sends it, and never an API client's.
+    const untrusted = (path: string, headers: Record<string, string>) => app.fetch(new Request(ORIGIN + path, { headers }), { ...h.env, TRUST_ORG_ROLE: false });
+    assert.equal((await untrusted(`/api/client-settings/${CLIENT}`, h.owner)).status, 403);
+    assert.equal((await settings(identity('tenant', { userId: 'sa-forged', role: 'ADMIN', orgRole: 'OWNER', via: 'api' }))).status, 403);
+    assert.equal((await settings(h.admin)).status, 200, 'an organization admin');
     assert.deepEqual(await (await settings(h.owner)).json(), { id: CLIENT, name: 'Host product', people: [] });
     assert.equal((await settings(h.owner, 'user-ana')).status, 404, 'a person is not an API client');
     for (const bad of [[`${CLIENT}@service-accounts.invalid`], ['not an email'], Array.from({ length: 51 }, (_, i) => `p${i}@example.test`), 'ana@example.test']) assert.equal((await save(h.owner, bad)).status, 422);
     assert.equal((await h.post(`/api/client-settings/${CLIENT}`, h.owner, { people: [], extra: 1 })).status, 422);
     assert.equal((await save(h.ana, ['ana@example.test'])).status, 403);
-    // Named: everything it owns, before and after, is theirs to see as admins, at once.
+    // Named: everything it owns, before and after, is theirs to see as admins, at once. Without the platform to ask
+    // (directory.ts), only people Esign has seen can be named.
+    assert.deepEqual([(await save(h.owner, ['vic@example.test'])).status], [422], 'never seen');
+    await h.req('/api/me', h.viewer);
     const saved = await (await save(h.owner, ['Ana@example.test', 'vic@example.test', 'ana@example.test'])).json() as Settings;
-    assert.deepEqual(saved.people, [{ email: 'Ana@example.test', name: 'Synthetic Member' }, { email: 'vic@example.test' }], 'each person once, as first spelled; named once Esign has seen them');
+    assert.deepEqual(saved.people, [{ email: 'Ana@example.test', name: 'Synthetic Member' }, { email: 'vic@example.test', name: 'Synthetic Member' }], 'each person once, as first spelled, with the name Esign knows');
     const later = await h.template(h.host);
     const envelope = await h.envelope(h.host, later, { share: [{ email: 'bo@example.test', role: 'viewer' }] });
     assert.deepEqual((await h.templates(h.ana)).map(t => [t.id, t.myRole]).sort(), [[early, 'admin'], [later, 'admin']].sort());
@@ -290,16 +303,83 @@ test('an API client\'s documents are seen, as admins, by the people its settings
   } finally { await h.mf.dispose(); }
 });
 
+test('an editor of a draft saves and sends it as it is shared: sharing it more is for its admins and owner', async () => {
+  const h = await setup();
+  try {
+    const id = await h.template(h.ana, { share: [{ email: 'bo@example.test', role: 'viewer' }] });
+    const created = await h.post('/api/envelopes', h.ana, { draft: true, templateId: id, share: [{ email: 'bo@example.test', role: 'editor' }] }, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal(created.status, 201, await created.clone().text());
+    const draft = (await created.json() as { id: string }).id;
+    const recipients = [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example' }];
+    for (const share of [[{ email: 'cy@example.test', role: 'admin' }], [{ organization: true, role: 'editor' }]]) {
+      assert.equal((await h.post(`/api/envelopes/${draft}`, h.bo, { draft: true, templateId: id, recipients, share })).status, 403, 'saving it');
+      assert.equal((await h.post(`/api/envelopes/${draft}`, h.bo, { templateId: id, recipients, share })).status, 403, 'sending it');
+    }
+    assert.equal((await h.req(`/api/envelopes/${draft}`, h.cy)).status, 404, 'nobody else sees it');
+    assert.equal((await h.post(`/api/envelopes/${draft}`, h.bo, { draft: true, templateId: id, recipients })).status, 200, 'saved as it is shared');
+    assert.equal((await h.post(`/api/envelopes/${draft}`, h.ana, { draft: true, templateId: id, recipients, share: [{ email: 'cy@example.test', role: 'viewer' }] })).status, 200, 'its owner shares it');
+    assert.equal((await h.req(`/api/envelopes/${draft}`, h.cy)).status, 200);
+  } finally { await h.mf.dispose(); }
+});
+
+test('a draft save that is refused shares nothing and tags nothing', async () => {
+  const h = await setup();
+  try {
+    const id = await h.template(h.ana);
+    const recipients = [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example' }];
+    // A draft begun as an upload stays one: saved with a template, it is refused.
+    const created = await h.post('/api/envelopes', h.ana, { draft: true, recipients, tags: ['kept'] }, { 'idempotency-key': crypto.randomUUID() });
+    const draft = (await created.json() as { id: string }).id;
+    const refused = await h.post(`/api/envelopes/${draft}`, h.ana, { draft: true, templateId: id, recipients, tags: ['replaced'], share: [{ email: 'cy@example.test', role: 'viewer' }] });
+    assert.equal(refused.status, 409);
+    assert.equal((await h.req(`/api/envelopes/${draft}`, h.cy)).status, 404, 'not shared');
+    assert.deepEqual((await h.envelopes(h.ana, '?status=DRAFT')).find(e => e.id === draft)?.tags, ['kept'], 'its tags as they were');
+  } finally { await h.mf.dispose(); }
+});
+
+test('a draft sent without tags keeps the sender\'s tags on it', async () => {
+  const h = await setup();
+  try {
+    const id = await h.template(h.ana);
+    const recipients = [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example' }];
+    const created = await h.post('/api/envelopes', h.ana, { draft: true, templateId: id, recipients }, { 'idempotency-key': crypto.randomUUID() });
+    const draft = (await created.json() as { id: string }).id;
+    assert.equal((await h.post(`/api/envelopes/${draft}/tags`, h.ana, { tags: ['From the menu'] })).status, 200);
+    assert.equal((await h.post(`/api/envelopes/${draft}`, h.ana, { templateId: id, recipients })).status, 200);
+    assert.deepEqual((await h.envelopes(h.ana)).find(e => e.id === draft)?.tags, ['From the menu']);
+  } finally { await h.mf.dispose(); }
+});
+
+test('pages follow `next` to the end: documents made in the same millisecond are each listed once', async () => {
+  const h = await setup();
+  try {
+    const templates = [await h.template(h.ana), await h.template(h.ana), await h.template(h.ana)];
+    const envelopes = [await h.envelope(h.ana, templates[0]), await h.envelope(h.ana, templates[0]), await h.envelope(h.ana, templates[0])];
+    await h.db.batch([h.db.prepare('UPDATE templates SET created_at = 1700000000000'), h.db.prepare('UPDATE envelopes SET created_at = 1700000000000')]);
+    for (const [kind, made] of [['templates', templates], ['envelopes', envelopes]] as const) {
+      const seen: string[] = [];
+      let next: string | undefined, pages = 0;
+      do {
+        const page = await h.get<Record<string, Listed[]> & { next?: string }>(`/api/${kind}?limit=1${next ? `&cursor=${encodeURIComponent(next)}` : ''}`, h.ana);
+        seen.push(...page[kind]!.map((d) => d.id));
+        next = page.next;
+      } while (next && ++pages < 10);
+      assert.deepEqual(seen.sort(), [...made].sort(), kind);
+    }
+    assert.equal((await h.req('/api/templates?cursor=nonsense', h.ana)).status, 400);
+  } finally { await h.mf.dispose(); }
+});
+
 test('an organization owner takes over everything someone owns; shares stay', async () => {
   const h = await setup();
   try {
     const id = await h.template(h.ana, { share: [{ email: 'bo@example.test', role: 'editor' }, { email: 'olga@example.test', role: 'viewer' }] });
     const envelope = await h.envelope(h.ana, id);
     await h.template(h.host);
-    assert.equal((await h.req('/api/owners', h.ana)).status, 403);
+    for (const who of [h.ana, h.admin, h.appAdmin]) assert.equal((await h.req('/api/owners', who)).status, 403, 'organization owners only');
     const owners = (await h.get<{ owners: { id: string; kind: string; templates: number; envelopes: number }[] }>('/api/owners', h.owner)).owners;
     assert.deepEqual(owners.map(o => [o.id, o.kind, o.templates, o.envelopes]).sort(), [[CLIENT, 'client', 1, 0], ['user-ana', 'person', 1, 1]]);
-    assert.equal((await h.post('/api/owners/user-ana/transfer', h.bo, {})).status, 403);
+    for (const who of [h.bo, h.admin, h.appAdmin]) assert.equal((await h.post('/api/owners/user-ana/transfer', who, {})).status, 403);
     assert.equal((await h.post('/api/owners/user-olga/transfer', h.owner, {})).status, 422);
     assert.equal((await h.post('/api/owners/nobody/transfer', h.owner, {})).status, 404);
     assert.deepEqual(await (await h.post('/api/owners/user-ana/transfer', h.owner, {})).json(), { from: 'user-ana', to: 'user-olga', templates: 1, envelopes: 1 });
@@ -386,17 +466,21 @@ test('editing a template\'s fields saves a new version that replaces it, with it
     await h.post(`/api/templates/${source}`, h.ana, { name: 'Mutual NDA' });
     await h.post(`/api/templates/${source}/tags`, h.bo, { tags: ['legal'] });
     const sent = await h.envelope(h.ana, source);
-    const open = (who: Record<string, string>, extra: Record<string, unknown> = {}) => h.post('/api/template-editing-sessions', who, { allowedParentOrigin: HOST, sourceTemplateId: source, replace: true, ...extra });
+    const open = (who: Record<string, string>, extra: Record<string, unknown> = {}, from = source) => h.post('/api/template-editing-sessions', who, { allowedParentOrigin: HOST, sourceTemplateId: from, replace: true, ...extra });
     assert.equal((await open(h.cy)).status, 403, 'a viewer copies, but doesn\'t replace');
     assert.equal((await h.post('/api/template-editing-sessions', h.bo, { allowedParentOrigin: HOST, replace: true })).status, 422, 'replace needs a source');
-    const save = async (who: Record<string, string>) => {
-      const session = await (await open(who)).json() as { sessionId: string; url: string };
+    /** A session opened to replace `from`: its save. */
+    const opened = async (who: Record<string, string>, from = source) => {
+      const session = await (await open(who, {}, from)).json() as { sessionId: string; url: string };
       const exchanged = await h.req('/api/public/editor/exchange', {}, { method: 'POST', headers: { 'content-type': 'application/json', origin: ORIGIN }, body: JSON.stringify({ pageId: session.sessionId, code: new URL(session.url).hash.slice(1), embedded: true, embedder: HOST }) });
-      const form = new FormData(); form.set('roles', JSON.stringify(['partner']));
-      form.set('fields', JSON.stringify([{ id: 'f1', type: 'Signature', role: 'partner', page: 1, required: true, rect: { x: 0.1, y: 0.2, width: 0.2, height: 0.1 } }]));
-      return h.req('/api/public/editor/save', { 'x-esign-session': (await exchanged.json() as { token: string }).token, origin: ORIGIN }, { method: 'POST', body: form });
+      const token = (await exchanged.json() as { token: string }).token;
+      return () => {
+        const form = new FormData(); form.set('roles', JSON.stringify(['partner']));
+        form.set('fields', JSON.stringify([{ id: 'f1', type: 'Signature', role: 'partner', page: 1, required: true, rect: { x: 0.1, y: 0.2, width: 0.2, height: 0.1 } }]));
+        return h.req('/api/public/editor/save', { 'x-esign-session': token, origin: ORIGIN }, { method: 'POST', body: form });
+      };
     };
-    const saved = await save(h.bo);
+    const saved = await (await opened(h.bo))();
     assert.equal(saved.status, 201, await saved.clone().text());
     const { id } = await saved.json() as { id: string };
     // Listed in its place, Ana's still, with the same name, people and tags.
@@ -408,6 +492,12 @@ test('editing a template\'s fields saves a new version that replaces it, with it
     assert.equal(typeof (await h.get<{ archivedAt?: number }>(`/api/templates/${source}`, h.cy)).archivedAt, 'number');
     assert.equal((await h.req(`/api/envelopes/${sent}`, h.ana)).status, 200);
     assert.equal((await h.send(h.ana, source)).status, 201);
+    // Only the current version is replaced: not an earlier one, nor one another session replaced meanwhile.
+    assert.equal((await open(h.bo)).status, 409, 'the earlier version');
+    const first = await opened(h.bo, id), second = await opened(h.ana, id);
+    assert.equal((await first()).status, 201);
+    assert.equal((await second()).status, 409, 'replaced meanwhile');
+    assert.equal((await h.templates(h.ana)).length, 1, 'one current version');
   } finally { await h.mf.dispose(); }
 });
 
@@ -428,7 +518,7 @@ test('the envelope list searches, filters by date, statuses and quick views, and
     await h.post(`/api/envelopes/${bos}/shares`, h.bo, { email: 'ana@example.test', role: 'viewer' });
     await h.post(`/api/envelopes/${msa}/void`, h.ana, {});
     type Row = { id: string; status: string; signers: { name: string; status: string }[]; progress: { signed: number; total: number }; current?: { taskId: string; name: string; delivery: string }; lastChangeAt: number; createdAt: number };
-    const list = async (query = '') => (await h.get<{ envelopes: Row[]; next?: number }>(`/api/envelopes${query}`, h.ana));
+    const list = async (query = '') => (await h.get<{ envelopes: Row[]; next?: string }>(`/api/envelopes${query}`, h.ana));
     const ids = async (query = '') => (await list(query)).envelopes.map((e) => e.id);
     // Each row: its signers, progress, whose turn it is and how they are invited, and its last change.
     const row = (await list()).envelopes.find((e) => e.id === nda)!;
@@ -450,10 +540,10 @@ test('the envelope list searches, filters by date, statuses and quick views, and
     assert.deepEqual(await ids('?view=waiting'), [nda]);
     const expiring = await sendAs(h.ana, 'Order form', 'Sol Signer', 'sol@buyer.example', soon);
     assert.deepEqual(await ids('?view=expiring'), [expiring]);
-    // Pages: `next` is the following page's `before`.
+    // Pages: `next` is the following page's `cursor`.
     const first = await list('?limit=2');
     assert.equal(first.envelopes.length, 2);
-    const second = await list(`?limit=2&before=${first.next}`);
+    const second = await list(`?limit=2&cursor=${first.next}`);
     assert.deepEqual([...first.envelopes, ...second.envelopes].map((e) => e.id).length, 4);
     for (const bad of ['?status=DONE', `?q=${'x'.repeat(101)}`, '?since=-1', '?view=mine']) assert.equal((await h.req(`/api/envelopes${bad}`, h.ana)).status, 400, bad);
   } finally { await h.mf.dispose(); }
@@ -471,8 +561,8 @@ test('the template list searches names and ids, filters by date, and pages', asy
     assert.deepEqual(await ids(`?q=${msa}`), [msa]);
     assert.deepEqual(await ids('?q=100%25'), [msa], '% is literal');
     assert.deepEqual(await ids(`?since=${Date.now() + 60_000}`), []);
-    const first = await h.get<{ templates: { id: string }[]; next?: number }>('/api/templates?limit=1', h.ana);
-    const second = await h.get<{ templates: { id: string }[]; next?: number }>(`/api/templates?limit=1&before=${first.next}`, h.ana);
+    const first = await h.get<{ templates: { id: string }[]; next?: string }>('/api/templates?limit=1', h.ana);
+    const second = await h.get<{ templates: { id: string }[]; next?: string }>(`/api/templates?limit=1&cursor=${first.next}`, h.ana);
     assert.deepEqual([...first.templates, ...second.templates].map((t) => t.id).sort(), [nda, msa].sort());
     for (const bad of [`?q=${'x'.repeat(101)}`, '?since=x']) assert.equal((await h.req(`/api/templates${bad}`, h.ana)).status, 400, bad);
   } finally { await h.mf.dispose(); }

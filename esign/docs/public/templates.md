@@ -125,7 +125,7 @@ Each template's row has **Use** (send an envelope from it), or **Edit** for a dr
 - **View** (anyone who sees it), or a click on its name: its page, read only. **Details** shows its name, id, owner,
   your role in it, when it was uploaded, its signer roles in signing order with their default signers and fields, your
   tags and its metadata; below, **Document** shows its PDF as uploaded, with the box of each placed field, in its role's
-  colour and named by role and type (dashed when optional). Those who manage find **Send** there too.
+  colour and named by role and type (dashed when optional). Those who manage find **Use** there too.
 - **Edit** (its editors, admins and owner): on **Details**, its **Name** and its default signers; on **Fields**, the field
   editor. Saving the fields makes a new version of the template, which takes its place in the list with the same name,
   owner, people and tags.

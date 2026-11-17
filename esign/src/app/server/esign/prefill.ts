@@ -46,7 +46,8 @@ export function resolvePrefill(definitions: PrefillDefinition[], given: PrefillI
   if (unknown.length) return { error: 'unknown_prefill', fields: unknown };
   const invalid = Object.entries(given ?? {}).filter(([, value]) => !validPrefillValue(value)).map(([name]) => name);
   if (invalid.length) return { error: 'invalid_prefill', fields: invalid };
-  const values = definitions.map((d) => ({ name: d.name, label: d.label, value: given?.[d.name] ?? d.default ?? '' }));
+  // Own values only: a name like `toString` is the field's, not something the values' object inherits.
+  const values = definitions.map((d) => ({ name: d.name, label: d.label, value: (given && Object.hasOwn(given, d.name) ? given[d.name] : undefined) ?? d.default ?? '' }));
   const missing = definitions.filter((d, i) => d.required && !values[i]!.value).map((d) => d.name);
   if (missing.length) return { error: 'prefill_missing', fields: missing };
   return { values };

@@ -10,7 +10,7 @@ need an account.
 
 ## Opening the signing page
 
-When it is a signer's turn, they open the signing page in one of three ways:
+When it is a signer's turn, they open the signing page in one of two ways:
 
 - **From an invitation.** When Esign invites the signer (always, for envelopes sent from Esign's own pages), Esign emails them when their turn comes,
   with a link to the signing page and the sender's message. The link works while it is their turn; when the sender
@@ -18,9 +18,10 @@ When it is a signer's turn, they open the signing page in one of three ways:
 - **In a host product.** The system your organization uses Esign from shows the signing page inside its own pages, to
   the signer it has signed in, whose account must have the signer's email. Esign emails such a signer no invitation.
 
-Each way, the page is opened with a one-time link that works once, within two minutes, and only for that signer. The
-page then stays usable for 15 minutes; after that, the signer opens it again the same way. A signer whose turn hasn't come
-yet, or whose envelope has ended, can't open it.
+The invitation's link opens the page each time it is used, for as long as it is the signer's turn (until the sign-by
+day, if there is one), until the sender sends the invitation again. A host product's link is a one-time link that works
+once, within two minutes, and only for that signer. Either way, the page then stays usable for 15 minutes; after that,
+the signer opens it again the same way. A signer whose turn hasn't come yet, or whose envelope has ended, can't open it.
 
 The page is titled **Sign document** and shows the three steps at the top: **Review**, **Confirm it's you** and **Sign**.
 **About signing**, in its top corner, explains the steps in plain words.

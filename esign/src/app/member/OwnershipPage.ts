@@ -15,7 +15,7 @@ type OwnerRow = Owner & { templates: number; envelopes: number; lastSeenAt?: num
 
 export function OwnershipPage({ me }: { me: Me }) {
   const manage = canManage(me)
-  const orgOwner = me.role === 'OWNER' && manage
+  const orgOwner = me.orgRole === 'OWNER' && manage
   const [owners, setOwners] = useState<OwnerRow[] | null>(null)
   const [confirming, setConfirming] = useState('')
   const [message, setMessage] = useState({ text: '', error: false })

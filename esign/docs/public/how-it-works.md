@@ -12,7 +12,7 @@ developers of host products, and for AI agents answering questions about a signi
 
 ```diagram
 title: From template to sealed PDF
-description: A template is a PDF with its signer roles and either placed fields or an added signature page. Sending it makes an envelope with one recipient per role, signed in order. For each signer in turn, a one-time link opens the signing page, a six-digit code emailed to the signer confirms who they are, and they agree to sign electronically and sign; the signature is drawn into the PDF and hash-chained to the previous one. After the last signer, Esign checks the chain, seals it with a seal key signature and an RFC 3161 timestamp, and the envelope is completed with the signed PDF, a certificate of completion and a copy link emailed to each signer.
+description: A template is a PDF with its signer roles and either placed fields or an added signature page. Sending it makes an envelope with one recipient per role, signed in order. For each signer in turn, the invitation Esign emails (or a host product's one-time link) opens the signing page, a six-digit code emailed to the signer confirms who they are, and they agree to sign electronically and sign; the signature is drawn into the PDF and hash-chained to the previous one. After the last signer, Esign checks the chain, seals it with a seal key signature and an RFC 3161 timestamp, and the envelope is completed with the signed PDF, a certificate of completion and a copy link emailed to each signer.
 size: 740 x 550
 box template 20 20 260 70 "Template" "a PDF and its signer roles, with" "fields or an added signature page"
 box envelope 380 20 340 70 "Envelope" "one recipient per role, signed in order;" "document name, sender, sign-by date"
@@ -38,8 +38,8 @@ arrow seal.r -> done.l
 2. **Envelope.** Sending names one recipient per role. In the same request, Esign copies the template's PDF to the
    envelope as its initial document, makes the first signer's task active and marks the envelope **Out for signature**
    (`IN_PROGRESS`).
-3. **The signing page.** For the active signer, a host product (or someone who manages, from the envelope's page) gets a
-   one-time code and opens the signing page with it.
+3. **The signing page.** The active signer opens it from the invitation Esign emails them, or a host product gets a
+   one-time code for the signer signed in to it and opens the page with it.
 4. **Review, confirm, sign.** The signer reviews the document, enters the 6-digit code emailed to them, agrees to sign
    electronically and signs. Reading the document needs only the page session; previews, declining and signing also need
    the code.
@@ -124,15 +124,16 @@ What the certificate doesn't establish, it says:
 
 ## Codes and sessions
 
-Signers never sign in. Two kinds of short-lived credentials give them access to their own turn only:
+Signers never sign in. These credentials give them access to their own turn only:
 
 | Credential | What it is | Lifetime |
 | --- | --- | --- |
-| **One-time link code** | 64 hex characters in the signing link's fragment, for one signer's active task and one page origin | Once, within 2 minutes |
+| **Invitation link** | 64 hex characters in the invited signer's link (`/sign#invite=…`), traded for a one-time link code each time it is opened | While the task is active, the envelope out for signature and the deadline not passed; a resend replaces it |
+| **One-time link code** | 64 hex characters in the signing link's fragment (a host product's, or the one an invitation is traded for), for one signer's active task and one page origin | Once, within 2 minutes |
 | **Page session** | The token the page gets for that code, sent in its own header | 15 minutes, and only while the task is active and the envelope out for signature |
 | **Emailed code** | 6 digits sent to the signer's email address | 10 minutes, once; up to 3 sends and 5 tries per 15 minutes per signer, 60 seconds between sends |
 
-Esign stores only hashes of link codes and sessions. The emailed code is stored as a keyed hash over the task, its
+Esign stores only hashes (SHA-256) of invitation links, link codes and sessions. The emailed code is stored as a keyed hash over the task, its
 email address and the code, so it works only for the address it was sent to, and a task's email address can't be changed.
 Only the page session the code was sent for can enter it, and only the session that entered the latest code can sign.
 
@@ -149,8 +150,9 @@ Everything is in Esign's one database, scoped to your organization:
 - hashed link codes, sessions and emailed codes;
 - the signed-copy links (as hashes) and when each was sent and used.
 
-There is no retention policy yet: nothing is deleted automatically, and there is no endpoint to delete templates or
-envelopes.
+There is no retention policy yet: nothing is deleted automatically, and nothing sent can be deleted. Deleting a template
+only archives it (off the lists; envelopes sent from it are kept), and only an envelope draft, never sent, is discarded
+for good.
 
 ## What Esign reports to Insulin Apps every hour
 
@@ -185,8 +187,10 @@ sends nothing.
   public pages.
 - **Retention and integrity.** No retention policy; storage writes are create-only but not write-once storage; privileged
   changes to the database or keys remain possible and are detected only where the checks above run again.
-- **Due work.** Between the platform's five-minute runs, deadlines, unfinished envelopes and unsent copies wait for the
-  next request on the envelope or a call to `POST /api/process-due`. One run handles up to 25 envelopes to finish and 25 owing copies.
+- **Due work.** Between the platform's five-minute runs, scheduled drafts, deadlines, unfinished envelopes and unsent
+  copies and invitations wait for the next request on the envelope or a call to `POST /api/process-due`. One run starts
+  scheduled sends for up to 10 seconds (at most 25 drafts) and handles up to 25 envelopes to finish, 25 owing copies and
+  25 owing invitations.
 - **Display.** The signing page draws the PDF as images, without selectable text, so it isn't an accessible reader. None
   of this proves a person read the document: Esign checks the session, the code, the consent and the current input, not
   the display.

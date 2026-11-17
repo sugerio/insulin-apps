@@ -21,8 +21,9 @@ export const gettingStarted: DocTopic = {
       id: 'the-pages',
       title: 'The pages',
       body: ul(
-        [b('Envelopes'), ' (', h(PageLink, { to: '/envelopes' }, 'open'), '): every envelope in your organization, newest first, with its status. Open one to see its signers, its audit trail and, once it is completed, the signed PDF and the certificate.'],
+        [b('Envelopes'), ' (', h(PageLink, { to: '/envelopes' }, 'open'), '): the envelopes you own and those shared with you, newest first, with their status. Open one to see its signers, its audit trail and, once it is completed, the signed PDF and the certificate.'],
         [b('Templates'), ' (', h(PageLink, { to: '/templates' }, 'open'), '): the PDFs your organization sends, with their signer roles and fields.'],
+        [b('Contacts'), ' (', h(PageLink, { to: '/contacts' }, 'open'), '): your organization\'s address book, everyone its envelopes named as signers and anyone added by hand; everyone who can use Esign sees it.'],
         [b('Docs'), ': these pages. Everyone in the organization can read them, whatever their role.'],
         [b('Settings'), ': Esign\'s People, Integrations, API access and Connect AI pages. They are Insulin Apps pages, on insulinapps.com, where your organization manages who can use Esign, its stored credentials, its API clients and the AI agents connected to it.'],
       ),
@@ -48,17 +49,17 @@ export const gettingStarted: DocTopic = {
         ol(
           [b('Upload a template. '), 'On Templates, choose a PDF and name the roles that sign it, in signing order (for example ', code('partner'), ' and ', code('seller'), '), and place their fields on its pages. See ', h(DocLink, { to: 'templates' }, 'Templates and fields'), '.'],
           [b('Send an envelope. '), 'On Envelopes, choose New envelope › From a template, pick the template and name one signer for each role. See ', h(DocLink, { to: 'sending' }, 'Sending an envelope'), '.'],
-          [b('Have each signer sign. '), 'The signer opens the signing page from the invitation Esign emails them, in your host product, the system your organization uses Esign from, or you open it for them from the envelope\'s page. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '.'],
+          [b('Have each signer sign. '), 'The signer opens the signing page from the invitation Esign emails them when their turn comes (Resend invitation on the envelope\'s page sends it again), or in your host product, the system your organization uses Esign from. See ', h(DocLink, { to: 'signers' }, 'What signers see and do'), '.'],
           [b('Keep the result. '), 'When the envelope is completed, download the signed PDF with its certificate from the envelope\'s page. Each signer also gets a link to their copy by email.'],
         ),
-        p('Esign emails a signer their invitation (unless you open the page for them), their verification code and, at the end, the link to their signed copy.'),
+        p('Esign emails a signer their invitation (unless a host product opens the page for them), their verification code and, at the end, the link to their signed copy.'),
       ],
     },
     {
       id: 'if-you-only-view',
       title: 'If your role only views',
       body: [
-        p('With the User or Viewer role, you see the same pages: every envelope and its status, signers and audit trail, the templates, and the signed PDF and certificate of a completed envelope. You can\'t upload templates, send, void or open a signing page; those buttons aren\'t shown, and Esign refuses them if they are tried another way.'),
+        p('With the User or Viewer role, you see the same pages, for what is shared with you: each envelope\'s status, signers and audit trail, the templates, and the signed PDF and certificate of a completed envelope. You can\'t upload templates, send, void or resend an invitation; those buttons aren\'t shown, and Esign refuses them if they are tried another way.'),
         p('If there are no templates or envelopes yet, the pages say so. Nothing is missing: someone who sends hasn\'t started yet.'),
       ],
     },
@@ -69,7 +70,7 @@ export const gettingStarted: DocTopic = {
         p('This is for whoever runs Esign for your organization.'),
         ul(
           [b('Signing settings. '), 'A published Esign signs nothing until its code pepper, mail relay and seal key are configured. Until then, the Envelopes page says that signing isn\'t set up.'],
-          [b('Due work every five minutes. '), 'The platform runs Esign\'s due work for every organization every five minutes; there is nothing to set up. It expires envelopes past their sign-by deadline, finishes any envelope a signing request couldn\'t finish (for example after a time limit or an outage), and retries the signed-copy emails. To finish due work at once, a host can call ', code('POST /api/process-due'), ' with a service account, for its own organization.'],
+          [b('Due work every five minutes. '), 'The platform runs Esign\'s due work for every organization every five minutes; there is nothing to set up. It sends the drafts scheduled with Send later whose time has come, expires envelopes past their sign-by deadline, finishes any envelope a signing request couldn\'t finish (for example after a time limit or an outage), and retries the signed-copy emails and invitations that didn\'t go out. To finish due work at once, a host can call ', code('POST /api/process-due'), ' with a service account, for its own organization.'],
           [b('Usage reports every hour. '), 'Once an hour, Esign sends Insulin Apps a few numbers for each organization, so that Insulin Apps can watch usage and plan capacity: how many envelopes it has, in all and in each status (out for signature, finishing, completed, declined, expired and voided), how many templates and signatures, and how much storage its documents take. For the whole deployment it adds the size of its database and how many organizations have data in it. These are counts and sizes only: Esign never sends names, email addresses, document titles or contents. There is nothing to set up.'],
           [b('Embedding. '), 'A host product can show the signing page and the field editor inside its own pages, from the origins the deployment allows.'],
         ),

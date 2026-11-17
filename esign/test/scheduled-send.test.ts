@@ -14,11 +14,15 @@ const ORIGIN = 'https://esign.example.test';
 const TICK = { 'x-suger-app-id': 'insulin-apps-esign', 'x-suger-access-via': 'schedule' };
 const HOUR = 60 * 60 * 1000;
 
-async function setup() {
+async function setup(platform: { members?: () => Response } = {}, accepts: (url: URL) => boolean = () => true) {
   const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] });
   const db = await mf.getD1Database('DB');
   for (const name of (await readdir(MIGRATIONS_DIR)).filter((n) => n.endsWith('.sql')).sort()) await db.batch(splitSql(await readFile(new URL(name, MIGRATIONS_DIR), 'utf8')).map((s) => db.prepare(s)));
-  const env = { DB: db, ARTIFACTS: await blobStore(mf, 'artifacts'), TEST_MAIL: await blobStore(mf, 'test-mail'), OTP_KEY: 'scheduled-pepper-at-least-32-bytes-long', TEST_SEAL_KEY: 'scheduled-seal-key-at-least-32-bytes-long' };
+  const env = {
+    DB: db, ARTIFACTS: await blobStore(mf, 'artifacts'), TEST_MAIL: await blobStore(mf, 'test-mail'), OTP_KEY: 'scheduled-pepper-at-least-32-bytes-long', TEST_SEAL_KEY: 'scheduled-seal-key-at-least-32-bytes-long',
+    // Who can use Esign now, as the platform's members endpoint answers (directory.ts); without it, as they scheduled.
+    ...(platform.members ? { SUGER_MEMBERS_URL: 'https://apps.example.test/__insulin/members', SUGER_APP_TOKEN: 'app-token-for-esign', MEMBERS_FETCH: (async (input: string) => accepts(new URL(input)) ? platform.members!() : Response.json({ error: 'invalid_request' }, { status: 400 })) as unknown as typeof fetch } : {}),
+  };
   const person = (name: string, role: 'EDITOR' | 'VIEWER' = 'EDITOR') => identity('tenant', { userId: `user-${name}`, email: `${name}@example.test`, role });
   const ana = person('ana'), bo = person('bo');
   const req = (path: string, headers: Record<string, string>, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> ?? {}) } }), env);
@@ -136,6 +140,77 @@ test('one that can\'t be sent stays a draft, unscheduled, with why; Save draft u
     await h.due(id);
     assert.equal((await h.tick()).scheduledSent, 0);
     assert.equal((await h.row(id))!.status, 'IN_PROGRESS');
+  } finally { await h.mf.dispose(); }
+});
+
+test('when due, it is sent only while whoever scheduled it can still send: the platform says who can use Esign now', async () => {
+  let members: () => Response = () => Response.json({ members: [{ id: 'user-ana', name: 'Ana', email: 'ana@example.test', role: 'EDITOR', permissions: ['esign.manage', 'esign.view'] }] });
+  const h = await setup({ members: () => members() });
+  try {
+    const schedule = async (key: string) => {
+      const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': key });
+      assert.equal(r.status, 201, await r.clone().text());
+      const { id } = await r.json() as { id: string };
+      await h.due(id);
+      return id;
+    };
+    // Gone from the organization, or from Esign.
+    members = () => Response.json({ members: [] });
+    const removed = await schedule('removed');
+    const ran = await h.tick();
+    assert.deepEqual([ran.scheduledSent, ran.scheduledFailed], [0, 1]);
+    assert.deepEqual([(await h.row(removed))?.status, JSON.parse((await h.row(removed))!.draft_json!).schedule.error], ['DRAFT', 'not_allowed']);
+    // Made a Viewer, or given a custom role that only views.
+    for (const now of [{ role: 'VIEWER', permissions: ['esign.view'] }, { role: 'EDITOR', permissions: ['esign.view'] }]) {
+      members = () => Response.json({ members: [{ id: 'user-ana', name: 'Ana', email: 'ana@example.test', ...now }] });
+      const demoted = await schedule(`demoted-${now.role}-${now.permissions.length}`);
+      await h.tick();
+      assert.equal(JSON.parse((await h.row(demoted))!.draft_json!).schedule.error, 'not_allowed', JSON.stringify(now));
+    }
+    // The platform can't be asked: it waits for the next tick, unchanged, and is sent once it can.
+    members = () => new Response('unavailable', { status: 503 });
+    const waiting = await schedule('waiting');
+    await h.tick();
+    assert.deepEqual([(await h.row(waiting))?.status, JSON.parse((await h.row(waiting))!.draft_json!).schedule.error], ['DRAFT', undefined]);
+    members = () => Response.json({ members: [{ id: 'user-ana', name: 'Ana', email: 'ana@example.test', role: 'EDITOR', permissions: ['esign.manage', 'esign.view'] }] });
+    await h.tick();
+    assert.equal((await h.row(waiting))?.status, 'IN_PROGRESS', 'still an editor: sent');
+    // A platform that lists people without their roles (one deployed before this): still a member, sent as scheduled.
+    members = () => Response.json({ members: [{ id: 'user-ana', name: 'Ana', email: 'ana@example.test' }] });
+    const older = await schedule('older-platform');
+    await h.tick();
+    assert.equal((await h.row(older))?.status, 'IN_PROGRESS');
+  } finally { await h.mf.dispose(); }
+});
+
+test('a scheduler with a long email address is looked up within the platform\'s query limit', async () => {
+  const long = `${'a'.repeat(110)}@example.test`;
+  // As the platform answers: a query over 100 characters is refused.
+  const h = await setup({ members: () => Response.json({ members: [{ id: 'user-long', name: 'Long', email: long, role: 'EDITOR', permissions: ['esign.manage', 'esign.view'] }] }) }, (url) => (url.searchParams.get('q') ?? '').length <= 100);
+  try {
+    const who = identity('tenant', { userId: 'user-long', email: long, role: 'EDITOR' });
+    await h.req('/api/templates/' + h.templateId + '/shares', h.ana, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: long, role: 'viewer' }) });
+    const r = await h.post('/api/envelopes', who, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': 'long-email' });
+    assert.equal(r.status, 201, await r.clone().text());
+    const { id } = await r.json() as { id: string };
+    await h.due(id);
+    await h.tick();
+    assert.equal((await h.row(id))?.status, 'IN_PROGRESS');
+  } finally { await h.mf.dispose(); }
+});
+
+test('sent when due, it is shared as the draft is then: a share removed after scheduling stays removed', async () => {
+  const h = await setup();
+  try {
+    const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), share: [{ email: 'bo@example.test', role: 'viewer' }], sendAt: later() }, { 'idempotency-key': 'unshared' });
+    assert.equal(r.status, 201, await r.clone().text());
+    const { id } = await r.json() as { id: string };
+    assert.equal((await h.req(`/api/envelopes/${id}`, h.bo)).status, 200, 'shared when scheduled');
+    assert.equal((await h.post(`/api/envelopes/${id}/shares/delete`, h.ana, { email: 'bo@example.test' })).status, 200);
+    await h.due(id);
+    await h.tick();
+    assert.equal((await h.row(id))?.status, 'IN_PROGRESS');
+    assert.equal((await h.req(`/api/envelopes/${id}`, h.bo)).status, 404, 'still not shared with them');
   } finally { await h.mf.dispose(); }
 });
 

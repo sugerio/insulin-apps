@@ -19,7 +19,7 @@ type Person = { email: string; name?: string }
 type ClientSettings = { id: string; name?: string; people: Person[] }
 
 /** The organization's owners and admins, as the server checks them. */
-const orgAdmin = (me: Me) => (me.role === 'OWNER' || me.role === 'ADMIN') && canManage(me)
+const orgAdmin = (me: Me) => (me.orgRole === 'OWNER' || me.orgRole === 'ADMIN') && canManage(me)
 
 export function ClientSettingsPage({ me, id, name }: { me: Me; id: string; name?: string }) {
   const allowed = orgAdmin(me)
@@ -84,6 +84,6 @@ export function ClientSettingsPage({ me, id, name }: { me: Me; id: string; name?
         h(CardFooter, { className: 'flex items-center gap-3 border-t' },
           h(Button, { disabled: busy || !changed, onClick: () => void save() }, busy ? 'Saving…' : 'Save'),
           changed ? h(Button, { variant: 'ghost', disabled: busy, onClick: () => { setPeople(settings.people); setMessage({ text: '', error: false }) } }, 'Discard changes') : null)),
-    settings && me.role === 'OWNER' ? h('p', { className: 'text-sm text-muted-foreground' }, 'No longer used? Take over everything it owns on ',
+    settings && me.orgRole === 'OWNER' ? h('p', { className: 'text-sm text-muted-foreground' }, 'No longer used? Take over everything it owns on ',
       h(Link, { to: '/ownership', className: 'font-medium text-foreground underline underline-offset-4' }, 'Ownership'), '.') : null)
 }

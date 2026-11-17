@@ -118,6 +118,7 @@ test('POST /api/scheduled answers only the platform tick: schedule and no identi
     assert.equal((await tick({ ...TICK, 'x-suger-organization-id': 'org-a' })).status, 403, 'an organization alone');
     assert.equal((await tick({ ...TICK, 'x-suger-user-id': 'user-1' })).status, 403, 'a person alone');
     assert.equal((await tick({ ...TICK, 'x-suger-app-permissions': 'esign.manage' })).status, 403, 'permissions alone');
+    assert.equal((await tick({ ...TICK, 'x-suger-org-role': 'OWNER' })).status, 403, 'an organization role alone');
     const ran = await tick(TICK);
     assert.equal(ran.status, 200);
     assert.deepEqual(await ran.json(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 });
@@ -165,4 +166,32 @@ test('the tick finishes due work for every organization at once; process-due sta
     assert.deepEqual(await due.json(), { expired: 1, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, "a manager's process-due is their organization's only");
     assert.equal((await db.prepare("SELECT status FROM envelopes WHERE id = 'stuck-org-b'").first<{ status: string }>())?.status, 'IN_PROGRESS');
   } finally { await mf.dispose(); }
+});
+
+test('the catalog lists every management route, as the routes take it', async () => {
+  const { apiCatalog } = await import('../src/app/server/esign/catalog.ts');
+  // Not for agents or API clients: the signing and editor pages' public paths, the health check, the tick, the local
+  // preview's mail, an API client's settings (browser only, like people) and the host's legacy prepare step.
+  const unlisted = /^(?:GET|POST) \/api\/(?:public\/|health$|scheduled$|test-mail\/|client-settings\/|envelopes\/\{id\}\/prepare$)/;
+  const routes = (app.routes as { method: string; path: string }[]).filter((r) => r.method !== 'ALL' && r.path.startsWith('/api/'))
+    .map((r) => `${r.method} ${r.path.replace(/:([A-Za-z]+)/g, '{$1}')}`).filter((r) => !unlisted.test(r));
+  const owner = { userId: 'u', organizationId: 'o', email: 'olga@example.test', name: 'Olga', role: 'ADMIN' as const, orgRole: 'OWNER' as const, permissions: new Set(['esign.manage', 'esign.view'] as const), accessVia: 'browser' as const, preview: false };
+  const endpoints = apiCatalog(owner).endpoints as { method: string; path: string; body: Record<string, unknown> | null }[];
+  const listed = new Set(endpoints.map((e) => `${e.method} ${e.path}`));
+  assert.deepEqual([...new Set(routes)].filter((r) => !listed.has(r)), [], 'every route is listed');
+  assert.deepEqual([...listed].filter((r) => !routes.includes(r)), [], 'and nothing that is not one');
+  const body = (method: string, path: string) => endpoints.find((e) => e.method === method && e.path === path)!.body!;
+  assert.equal(body('POST', '/api/envelopes').required, undefined, 'a draft may leave out its template and its signers for now');
+  const shareItems = JSON.stringify((body('POST', '/api/envelopes').properties as { share: unknown }).share);
+  assert.match(shareItems, /"organization"/, 'sharing with everyone');
+  assert.match(JSON.stringify(body('POST', '/api/envelopes/{id}/shares')), /"organization"/);
+  // Uploading a template (multipart) or saving an uploaded envelope as one (JSON): either body, as each is taken.
+  const template = body('POST', '/api/templates') as { oneOf: { required: string[]; properties: Record<string, { type?: unknown }> }[] };
+  assert.deepEqual(template.oneOf.map((b) => b.required), [['file', 'roles'], ['fromEnvelope']]);
+  assert.deepEqual([template.oneOf[1]!.properties.roles!.type, template.oneOf[1]!.properties.defaultSigners!.type], ['array', 'boolean']);
+  // A draft's body is a new envelope's, closed as the route takes it; a host's signing link names its signed-in account.
+  const draft = body('POST', '/api/envelopes/{id}') as { additionalProperties: boolean; properties: Record<string, unknown> };
+  assert.equal(draft.additionalProperties, false);
+  assert.deepEqual(Object.keys(draft.properties), Object.keys(body('POST', '/api/envelopes').properties as object));
+  assert.deepEqual(body('POST', '/api/envelopes/{id}/tasks/{taskId}/recipient-view').required, ['signedInEmail']);
 });

@@ -75,13 +75,13 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
   const latest = useRef(0)
   const statusKey = status === 'FINALIZING' ? 'IN_PROGRESS' : status
 
-  /** Loads a page: `at.before`, else (no argument) the page being shown again. */
-  async function load(at: { before: number | undefined } = { before: pager.before }) {
+  /** Loads a page: `at.cursor`, else (no argument) the page being shown again. */
+  async function load(at: { cursor: string | undefined } = { cursor: pager.cursor }) {
     const ask = ++latest.current
     try {
-      const data = await apiJson<{ envelopes: EnvelopeSummary[]; next?: number }>(listPath('/api/envelopes', {
+      const data = await apiJson<{ envelopes: EnvelopeSummary[]; next?: string }>(listPath('/api/envelopes', {
         status: STATUSES[statusKey]?.query ?? EVERY_STATUS, scope: filters.scope, tags: filters.tags, q: filters.q, view: filters.view,
-        ...sinceOf(filters.date), limit: pageSize, before: at.before,
+        ...sinceOf(filters.date), limit: pageSize, cursor: at.cursor,
       }))
       if (ask !== latest.current) return
       setEnvelopes(data.envelopes)
@@ -89,7 +89,7 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     } catch (error) { if (ask === latest.current) setMessage({ text: describeError(error), error: true }) }
   }
   // A new filter or page size starts again on page 1.
-  useEffect(() => { pager.reset(); setEnvelopes(null); void load({ before: undefined }) }, [statusKey, filters.q, filters.date, filters.scope, filters.view, filters.tags.join('\n'), pageSize])
+  useEffect(() => { pager.reset(); setEnvelopes(null); void load({ cursor: undefined }) }, [statusKey, filters.q, filters.date, filters.scope, filters.view, filters.tags.join('\n'), pageSize])
 
   function set(change: Partial<Filters>) { setFilters((f) => ({ ...f, ...change })) }
   function clearAll() { setFilters(NONE); if (status) navigate(envelopesPath('')) }
@@ -131,9 +131,16 @@ export function EnvelopesPage({ me, status = '' }: { me: Me; status?: string }) 
     })
   }
   function saveTags(e: EnvelopeSummary, tags: string[]) {
-    setEnvelopes((old) => old?.map((x) => x.id === e.id ? { ...x, tags } : x) ?? null)
-    setOpened((o) => o && { ...o, envelope: { ...o.envelope, tags } })
-    void run(async () => { await apiJson(`/api/envelopes/${e.id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }); reloadTags() })
+    const show = (shown: string[] | undefined) => {
+      setEnvelopes((old) => old?.map((x) => x.id === e.id ? { ...x, tags: shown } : x) ?? null)
+      setOpened((o) => o && { ...o, envelope: { ...o.envelope, tags: shown } })
+    }
+    show(tags)
+    // Refused, the tags are shown as they were: only what was saved stays.
+    void run(async () => {
+      try { await apiJson(`/api/envelopes/${e.id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }) } catch (error) { show(e.tags); throw error }
+      reloadTags()
+    })
   }
 
   /** The one action that fits the envelope's state, for those its role allows. */

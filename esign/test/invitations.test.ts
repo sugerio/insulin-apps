@@ -175,3 +175,32 @@ test('a delivery or message E-sign does not know is refused', async () => {
     assert.equal((await send({ message: { subject: 'x'.repeat(101) } })).status, 422);
   } finally { await h.mf.dispose(); }
 });
+
+test('an invitation is reserved only while it is still the signer\'s turn: voided meanwhile, nothing is emailed', async () => {
+  const h = await setup();
+  try {
+    const id = await h.envelope([{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example', delivery: 'email' }]);
+    assert.equal(h.invitations().length, 1);
+    const [task] = (await h.db.prepare('SELECT id FROM tasks WHERE envelope_id = ?').bind(id).all<{ id: string }>()).results;
+    // The envelope is voided between the resend's check and its reservation.
+    const real = h.env.DB;
+    let voided = false;
+    h.env.DB = new Proxy(real, { get(target, prop) {
+      if (prop !== 'prepare') { const value = (target as unknown as Record<string | symbol, unknown>)[prop]; return typeof value === 'function' ? value.bind(target) : value; }
+      return (sql: string) => {
+        const statement = target.prepare(sql);
+        if (voided || !sql.startsWith('SELECT t.id,t.envelope_id,t.recipient_name')) return statement;
+        const wrap = (s: D1PreparedStatement): D1PreparedStatement => new Proxy(s, { get(inner, name) {
+          if (name === 'bind') return (...values: unknown[]) => wrap(inner.bind(...values));
+          if (name === 'first') return async () => { const row = await inner.first(); voided = true; await real.prepare("UPDATE envelopes SET status = 'VOIDED' WHERE id = ?").bind(id).run(); return row; };
+          const value = (inner as unknown as Record<string | symbol, unknown>)[name]; return typeof value === 'function' ? value.bind(inner) : value;
+        } });
+        return wrap(statement);
+      };
+    } }) as D1Database;
+    const resent = await h.req(`/api/envelopes/${id}/tasks/${task!.id}/invitation`, { method: 'POST', headers: h.auth });
+    assert.equal(voided, true);
+    assert.notEqual(resent.status, 204);
+    assert.equal(h.invitations().length, 1, 'no invitation for an envelope voided meanwhile');
+  } finally { await h.mf.dispose(); }
+});

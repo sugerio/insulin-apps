@@ -1,5 +1,6 @@
 // A member's own tags on a template or an envelope (server/esign/tags.ts): nobody else sees them. Each tag is a badge
-// that can be removed; typing adds one with Enter, a comma or leaving the field, and suggests the member's tags already in use.
+// that can be removed; typing adds one with Enter, a comma or leaving the field, and suggests the member's tags already
+// in use: arrow keys move through them, Enter or a click chooses one, Escape closes them alone (as ContactField).
 import React, { useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { Badge } from '../components/ui/badge.ts'
@@ -15,12 +16,14 @@ const MAX_TAG = 50
 export function TagsField({ id, label = 'Your tags', hint = 'Only you see your tags. Press Enter or type a comma to add one.', value, onChange, disabled = false }: { id: string; label?: string; hint?: string; value: string[]; onChange: (tags: string[]) => void; disabled?: boolean }) {
   const [text, setText] = useState('')
   const [found, setFound] = useState<string[]>([])
+  const [active, setActive] = useState(-1)
   const latest = useRef(0)
+  const listId = `${id}-suggestions`
   const has = (tag: string) => value.some((t) => t.toLowerCase() === tag.toLowerCase())
 
   function add(raw: string) {
     const tag = raw.trim().slice(0, MAX_TAG)
-    setText(''); setFound([]); latest.current++
+    setText(''); setFound([]); setActive(-1); latest.current++
     if (tag && !has(tag) && value.length < MAX_TAGS) onChange([...value, tag])
   }
   function typed(next: string) {
@@ -29,8 +32,22 @@ export function TagsField({ id, label = 'Your tags', hint = 'Only you see your t
     const ask = ++latest.current
     if (!next.trim()) { setFound([]); return }
     apiJson<{ tags: { tag: string }[] }>(`/api/tags?limit=6&q=${encodeURIComponent(next.trim())}`)
-      .then((data) => { if (ask === latest.current) setFound(data.tags.map((t) => t.tag).filter((t) => !has(t))) })
+      .then((data) => { if (ask === latest.current) { setFound(data.tags.map((t) => t.tag).filter((t) => !has(t))); setActive(-1) } })
       .catch(() => { if (ask === latest.current) setFound([]) })
+  }
+
+  function keyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (found.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      setActive((i) => e.key === 'ArrowDown' ? (i + 1) % found.length : (i <= 0 ? found.length - 1 : i - 1))
+    } else if (found.length && e.key === 'Escape') {
+      e.preventDefault()
+      setFound([]); setActive(-1)
+    // Enter adds the suggestion chosen, or the tag typed, unless it confirms an input method's composition (pinyin, kana).
+    } else if (e.key === 'Enter' && !e.nativeEvent?.isComposing) {
+      e.preventDefault()
+      add(found.length && active >= 0 ? found[active]! : text)
+    }
   }
 
   return h(Field, { label, htmlFor: id, hint },
@@ -41,14 +58,15 @@ export function TagsField({ id, label = 'Your tags', hint = 'Only you see your t
       h(Input, {
         id, value: text, maxLength: MAX_TAG + 1, autoComplete: 'off', placeholder: value.length >= MAX_TAGS ? 'At most 20 tags' : 'Add a tag',
         disabled: value.length >= MAX_TAGS,
+        role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': found.length > 0, 'aria-controls': listId,
+        ...(found.length && active >= 0 ? { 'aria-activedescendant': `${listId}-${active}` } : {}),
         onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value),
-        // Enter adds the tag typed, unless it confirms an input method's composition (pinyin, kana).
-        onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); add(text) } },
+        onKeyDown: keyDown,
         // Leaving the field (Done, Save, elsewhere) adds what was typed, so a tag never stays unsaved in it.
         onBlur: () => { if (text.trim()) add(text); else setFound([]) },
       }),
-      found.length ? h('ul', { role: 'listbox', 'aria-label': 'Your tags', className: 'absolute z-20 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
-        ...found.map((tag) => h('li', { key: tag, role: 'option', 'aria-selected': false, className: 'cursor-pointer rounded-sm px-2 py-1.5 text-sm hover:bg-accent', onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => add(tag) }, tag))) : null))
+      found.length ? h('ul', { id: listId, role: 'listbox', 'aria-label': 'Your tags', className: 'absolute z-20 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
+        ...found.map((tag, i) => h('li', { key: tag, id: `${listId}-${i}`, role: 'option', 'aria-selected': i === active, className: `cursor-pointer rounded-sm px-2 py-1.5 text-sm ${i === active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent'}`, onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => add(tag) }, tag))) : null))
 }
 
 /** Tags as small badges, for a list's rows. */

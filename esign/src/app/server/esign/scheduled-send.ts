@@ -9,7 +9,8 @@
 // `envelopes_scheduled` (migration 0004) is on `json_extract(draft_json, '$.schedule.at')` for drafts only: every
 // query here spells that expression exactly, so the index serves it.
 import type { AppRole } from '@fours/app/server';
-import type { AccessVia, Caller, Permission } from './identity.ts';
+import { rolePermissions, type AccessVia, type Caller, type Permission } from './identity.ts';
+import { directoryConfigured, directoryMembers, type DirectoryEnv } from './directory.ts';
 
 /** The expression the index is on: write it only as this. */
 export const SCHEDULE_AT = "json_extract(draft_json, '$.schedule.at')";
@@ -19,6 +20,11 @@ export const MAX_SCHEDULE_MS = 400 * 24 * 60 * 60 * 1000;
 export const MIN_SCHEDULE_MS = 60 * 1000;
 /** Drafts sent per tick (or per process-due), oldest time first: the rest wait for the next. */
 export const SCHEDULED_PER_RUN = 25;
+/**
+ * How long a run goes on starting sends: the platform gives the tick 25 seconds, and what is left is for expiring
+ * envelopes, the sweep and the usage report. The drafts not reached wait for the next run.
+ */
+export const SCHEDULED_BUDGET_MS = 10_000;
 
 /** Who scheduled a send: the caller then, as the send needs them when no one is calling. */
 export interface ScheduledBy {
@@ -45,8 +51,29 @@ export const scheduledBy = (caller: Caller): ScheduledBy => ({
 
 /** The caller a scheduled send runs as: whoever scheduled it, as they were then. */
 export const callerOf = (by: ScheduledBy, organizationId: string): Caller => ({
-  userId: by.userId, organizationId, email: by.email, name: by.name, role: by.role, permissions: new Set(by.permissions), accessVia: by.accessVia, preview: false,
+  userId: by.userId, organizationId, email: by.email, name: by.name, role: by.role, orgRole: null, permissions: new Set(by.permissions), accessVia: by.accessVia, preview: false,
 });
+
+/**
+ * Whoever scheduled a send, as they are now: with their role and permissions in Esign as the platform says them
+ * (directory.ts), so that someone removed from the organization or from Esign, or who may no longer send, sends
+ * nothing (null). 'unavailable' when the platform didn't answer: asked again at the next tick. Without the platform
+ * to ask (the local preview), and for an API client, which the platform doesn't list, as they were when they
+ * scheduled it; so too, still listed, by a platform that doesn't say people's roles (one deployed before it did).
+ */
+export async function scheduledCaller(env: DirectoryEnv, by: ScheduledBy, organizationId: string): Promise<Caller | null | 'unavailable'> {
+  const then = callerOf(by, organizationId);
+  if (by.accessVia === 'api' || !by.email || !directoryConfigured(env)) return then;
+  // Found by id among those whose email contains its first 100 characters (the most the platform takes).
+  const found = await directoryMembers(env, organizationId, { q: by.email.slice(0, 100), limit: 20 });
+  if (!found) return 'unavailable';
+  const now = found.find((m) => m.id === by.userId);
+  if (!now) return null;
+  if (now.role === undefined) return then;
+  if (now.role !== 'ADMIN' && now.role !== 'EDITOR' && now.role !== 'VIEWER') return null;
+  const own = rolePermissions(now.role);
+  return { ...then, role: now.role, permissions: new Set(now.permissions ? own.filter((p) => now.permissions!.includes(p)) : own) };
+}
 
 /** A draft's request and its schedule, apart: the request is what was asked to be sent, as given. */
 export function splitDraft(raw: string | null): { request: Record<string, unknown>; schedule: Schedule | null } {

@@ -61,11 +61,12 @@ export async function blobStore(mf: { getD1Database(name: string): Promise<unkno
   return new D1BlobStore(await mf.getD1Database('DB') as D1Database, bucket);
 }
 
-export type Identity = { role?: 'OWNER' | 'ADMIN' | 'EDITOR' | 'USER' | 'VIEWER'; permissions?: string; via?: string; userId?: string; email?: string };
+export type Identity = { role?: 'OWNER' | 'ADMIN' | 'EDITOR' | 'USER' | 'VIEWER'; orgRole?: string; permissions?: string; via?: string; userId?: string; email?: string };
 
 /**
  * The platform identity of a member of organization `tenant`, as request headers: an ADMIN by
- * default; `permissions` is the gateway's narrowing header (a custom role), `via` how the request came.
+ * default; `permissions` is the gateway's narrowing header (a custom role), `via` how the request came, `orgRole`
+ * the organization role (x-suger-org-role), which the app reads only with TRUST_ORG_ROLE.
  */
 export function identity(tenant: string, options: Identity = {}): Record<string, string> {
   const userId = options.userId ?? `user-${tenant}`;
@@ -78,5 +79,6 @@ export function identity(tenant: string, options: Identity = {}): Record<string,
     'x-suger-user-name': encodeURIComponent('Synthetic Member'),
     ...(options.permissions === undefined ? {} : { 'x-suger-app-permissions': options.permissions }),
     ...(options.via === undefined ? {} : { 'x-suger-access-via': options.via }),
+    ...(options.orgRole === undefined ? {} : { 'x-suger-org-role': options.orgRole }),
   };
 }

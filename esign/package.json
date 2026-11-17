@@ -32,7 +32,7 @@
       {
         "key": "esign.manage",
         "label": "Send and manage envelopes",
-        "description": "Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing.",
+        "description": "Upload templates and place their fields, send envelopes, void them, resend invitations and finish due work. Includes viewing.",
         "role": "EDITOR"
       },
       {

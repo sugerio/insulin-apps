@@ -81,8 +81,12 @@ export function EnvelopePage({ me, id }: { me: Me; id: string }) {
     })
   }
   function saveTags(tags: string[]) {
+    const before = envelope?.tags
     setEnvelope((old) => old && { ...old, tags })
-    void run(async () => { await apiJson(`/api/envelopes/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }) })
+    // Refused, the tags are shown as they were: only what was saved stays.
+    void run(async () => {
+      try { await apiJson(`/api/envelopes/${id}/tags`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags }) }) } catch (error) { setEnvelope((old) => old && { ...old, tags: before }); throw error }
+    })
   }
   function downloadPdf() {
     void run(async () => {

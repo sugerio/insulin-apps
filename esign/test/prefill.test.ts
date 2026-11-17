@@ -58,6 +58,12 @@ test('the values: as given or by default; unknown names, undrawable values and m
   assert.deepEqual(resolvePrefill(definitions, { 'partner.legalName': ' padded ' }), { error: 'invalid_prefill', fields: ['partner.legalName'] });
   for (const bad of [[], 'x', { a: 1 }]) assert.equal(parsePrefill(bad), 'invalid');
   assert.equal(parsePrefill(undefined), null);
+  // A name every object has is only a name: its default stands, whatever the values' object inherits.
+  const named = (name: string) => ({ name, label: 'Inherited', required: false, default: 'N/A' });
+  assert.deepEqual(resolvePrefill([named('toString'), named('constructor')], {}), { values: [
+    { name: 'toString', label: 'Inherited', value: 'N/A' },
+    { name: 'constructor', label: 'Inherited', value: 'N/A' },
+  ] });
 });
 
 test('drawn the same every time: the same values give the same bytes', async () => {

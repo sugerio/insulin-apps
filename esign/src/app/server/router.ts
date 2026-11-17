@@ -27,6 +27,7 @@ async function bindings(request: Request): Promise<Bindings> {
     ...(dev ? { TEST_MAIL: new D1BlobStore(db, 'test-mail') } : {}),
     ESIGN_ENV: dev ? 'dev' : 'prod',
     IDENTITY_PREVIEW: dev,
+    TRUST_ORG_ROLE: secret('SUGER_TRUST_ORG_ROLE') === 'true',
     COMPLETE_AFTER_SIGN: 'true',
     // Nitro on Workers puts the invocation's waitUntil on the request (srvx does in the local preview, when it has one).
     WAIT_UNTIL: waitUntilOf(request),

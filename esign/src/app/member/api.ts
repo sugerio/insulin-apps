@@ -2,7 +2,7 @@
 // platform's identity; no key of our own).
 
 export type Permission = 'esign.manage' | 'esign.view'
-export type Me = { organizationId: string; user?: { id: string; email: string | null; name: string | null }; role?: string; permissions: Permission[]; signingEnabled?: boolean }
+export type Me = { organizationId: string; user?: { id: string; email: string | null; name: string | null }; role?: string; orgRole?: string | null; permissions: Permission[]; signingEnabled?: boolean }
 /** The host's own labels for a template or envelope (server/esign/metadata.ts): kept, returned, never used. */
 export type Metadata = Record<string, string>
 /** Who usually signs as a template's role (server/esign/default-signers.ts): the send form fills them in. */
@@ -115,7 +115,7 @@ export const ownerName = (owner: Owner | undefined, me?: Me | null) =>
 /** Which documents a list shows: all the member sees, theirs, or those shared with them. */
 export type Scope = '' | 'mine' | 'shared'
 /** A list's address: `/api/templates` or `/api/envelopes` with the filters given, and nothing else when there are none. */
-export function listPath(base: string, filters: { status?: string; scope?: Scope; tags?: string[]; q?: string; since?: number; view?: string; limit?: number; before?: number }): string {
+export function listPath(base: string, filters: { status?: string; scope?: Scope; tags?: string[]; q?: string; since?: number; view?: string; limit?: number; cursor?: string }): string {
   const query = new URLSearchParams()
   if (filters.status) query.set('status', filters.status)
   if (filters.scope) query.set('scope', filters.scope)
@@ -124,7 +124,7 @@ export function listPath(base: string, filters: { status?: string; scope?: Scope
   if (filters.since !== undefined) query.set('since', String(filters.since))
   if (filters.view) query.set('view', filters.view)
   if (filters.limit !== undefined) query.set('limit', String(filters.limit))
-  if (filters.before !== undefined) query.set('before', String(filters.before))
+  if (filters.cursor !== undefined) query.set('cursor', filters.cursor)
   const text = query.toString()
   return text ? `${base}?${text}` : base
 }

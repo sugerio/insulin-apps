@@ -5,7 +5,7 @@ import type { Env } from './app.ts';
 import type { BlobStore } from './blob-store.ts';
 import { validateFieldsPdf } from './fields.ts';
 import { requireRole } from './ownership.ts';
-import { initialDocumentKey } from './prepare.ts';
+import { draftDocumentKey } from './prepare.ts';
 
 /**
  * An envelope whose document is uploaded with it, not taken from a template (template_id null): "Upload and send". It
@@ -45,6 +45,13 @@ export async function envelopeDocument(db: D1Database, bucket: BlobStore, envelo
   return object && object.size <= MAX_DOCUMENT_BYTES ? new Uint8Array(await object.arrayBuffer()) : null;
 }
 
+/** Once a draft is sent, the initial documents it no longer has (replaced uploads, a try that failed halfway). */
+export async function deleteReplacedDocuments(bucket: BlobStore, envelopeId: string, keep: string): Promise<void> {
+  const { objects } = await bucket.list({ prefix: `envelopes/${envelopeId}/d0` });
+  const replaced = objects.map((o) => o.key).filter((key) => key !== keep);
+  if (replaced.length) await bucket.delete(replaced);
+}
+
 /** Deletes everything an envelope's draft stored under its key (its uploaded document): when the draft is discarded. */
 export async function deleteDraftObjects(bucket: BlobStore, envelopeId: string): Promise<void> {
   const { objects } = await bucket.list({ prefix: `envelopes/${envelopeId}/` });
@@ -72,16 +79,23 @@ export function mountEnvelopeDocumentRoutes(app: Hono<Env>) {
       if (!pages || pages > 100) throw new Error('pages');
       validateFieldsPdf(pdf);
     } catch { return context.json({ error: 'unsupported_pdf' }, 422); }
-    const key = initialDocumentKey(id), hash = await sha256(bytes);
-    // The document of a draft may change: what was stored before is replaced.
-    await context.env.ARTIFACTS.delete(key);
-    if (!await context.env.ARTIFACTS.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' } })) return context.json({ error: 'storage_conflict' }, 503);
+    const hash = await sha256(bytes), key = draftDocumentKey(id, hash);
+    // Each document is written once, under its own key (the same bytes, the same key), and becomes the draft's only
+    // while it is a draft whose document is still the one read here: an upload that loses a race with a send, or with
+    // another upload, never touches the document the envelope has. The one it replaces stays until the draft is sent or
+    // discarded, for a send that has read it already.
+    const current = await db.prepare('SELECT object_key FROM artifacts WHERE id = ? AND envelope_id = ? AND object_key IS NOT NULL').bind(initialDocumentId(id), id).first<{ object_key: string }>();
+    await context.env.ARTIFACTS.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, onlyIf: { etagDoesNotMatch: '*' } });
     const [stored] = await db.batch([
-      db.prepare("UPDATE envelopes SET roles_json = NULL, fields_json = NULL WHERE id = ? AND tenant_id = ? AND status = 'DRAFT' AND template_id IS NULL").bind(id, tenantId),
+      db.prepare(`UPDATE envelopes SET roles_json = NULL, fields_json = NULL WHERE id = ? AND tenant_id = ? AND status = 'DRAFT' AND template_id IS NULL
+        AND (SELECT a.object_key FROM artifacts a WHERE a.id = ? AND a.envelope_id = envelopes.id) IS ?`).bind(id, tenantId, initialDocumentId(id), current?.object_key ?? null),
       db.prepare(`INSERT INTO artifacts (id, envelope_id, object_key, sha256) SELECT ?, ?, ?, ? WHERE changes() = 1
         ON CONFLICT (id) DO UPDATE SET object_key = excluded.object_key, sha256 = excluded.sha256`).bind(initialDocumentId(id), id, key, hash),
     ]);
-    if (stored!.meta.changes !== 1) return context.json({ error: 'not_an_upload_draft' }, 409);
+    if (stored!.meta.changes !== 1) {
+      if (!await db.prepare('SELECT 1 FROM artifacts WHERE object_key = ?').bind(key).first()) await context.env.ARTIFACTS.delete(key);
+      return context.json({ error: 'not_an_upload_draft' }, 409);
+    }
     return context.json({ id, pages, sha256: hash }, 201);
   });
 }

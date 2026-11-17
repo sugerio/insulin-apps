@@ -168,6 +168,8 @@ export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {},
     ],
     vars: {
       SUGER_ACCESS_MODE: 'console',
+      // This gateway sends x-suger-org-role, which apps honour only with this (DESIGN.md §2.4).
+      SUGER_TRUST_ORG_ROLE: 'true',
       ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}),
       ...(mailUrl ? { SUGER_MAIL_URL: mailUrl } : {}),
       // Where the app reports its usage every hour (DESIGN.md §8.6).

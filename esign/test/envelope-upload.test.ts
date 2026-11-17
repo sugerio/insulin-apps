@@ -123,7 +123,7 @@ test('only an upload draft takes a document; a new envelope needs a template; re
     const two = await PDFDocument.create(); two.addPage(); two.addPage();
     assert.equal((await h.upload(id, await two.save())).status, 201);
     assert.deepEqual((await h.shown(id)).upload!.fields, []);
-    assert.equal((await h.bucket.list({ prefix: `envelopes/${id}/` })).objects.length, 1);
+    assert.equal((await h.bucket.list({ prefix: `envelopes/${id}/` })).objects.length, 2, 'the one it replaced stays until the draft is sent or discarded');
     // Discarded: the draft, its document's record and its stored file.
     assert.deepEqual(await (await h.post(`/api/envelopes/${id}/void`, {})).json(), { id, status: 'DISCARDED' });
     assert.equal((await h.db.prepare('SELECT count(*) AS n FROM artifacts WHERE envelope_id = ?').bind(id).first<{ n: number }>())!.n, 0);

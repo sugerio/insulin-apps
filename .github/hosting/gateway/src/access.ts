@@ -12,6 +12,11 @@ export interface AppAccess {
   role: AppRole
   /** What the app is told (x-suger-app-permissions); empty for an app without a catalog. */
   permissions: string[]
+  /**
+   * What the app is told (x-suger-org-role): the organization role, or APPS for a specific-apps member; null for a
+   * service account, which has none (DESIGN.md §2.4).
+   */
+  orgRole: Role | null
   /** For people: "Admin", "Editor", "Viewer", or the custom role's name. */
   label: string
   /** Where it comes from: the organization role, or a grant for this app. */
@@ -38,6 +43,7 @@ export function orgAccess(app: HostedApp, role: Role): AppAccess | null {
   return {
     role: appRole,
     permissions: permissionsOf(app, appRole),
+    orgRole: role,
     label: APP_ROLE_LABELS[appRole],
     source: 'org',
     admin: role === 'OWNER' || role === 'ADMIN',
@@ -48,13 +54,14 @@ export function orgAccess(app: HostedApp, role: Role): AppAccess | null {
 /** Access from a grant: a built-in role, or a custom role and its permissions. */
 export function grantAccess(app: HostedApp, grant: { role: GrantRole; customRoleId: string | null; customRoleName: string | null; customPermissions: string | null }): AppAccess | null {
   if (isAppRole(grant.role)) {
-    return { role: grant.role, permissions: permissionsOf(app, grant.role), label: APP_ROLE_LABELS[grant.role], source: 'app', admin: grant.role === 'ADMIN', customRole: null }
+    return { role: grant.role, permissions: permissionsOf(app, grant.role), orgRole: 'APPS', label: APP_ROLE_LABELS[grant.role], source: 'app', admin: grant.role === 'ADMIN', customRole: null }
   }
   if (grant.role !== 'CUSTOM' || !grant.customRoleId) return null
   const keys = knownPermissions(app, parseKeys(grant.customPermissions)).map((permission) => permission.key)
   return {
     role: baseRoleFor(app, keys),
     permissions: keys,
+    orgRole: 'APPS',
     label: grant.customRoleName ?? 'Custom role',
     source: 'app',
     admin: false,

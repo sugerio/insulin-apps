@@ -13,7 +13,7 @@ import {parseMetadata,parseTemplateName,unknownKeys} from './metadata.ts';
 import {storedDefaultSigners} from './default-signers.ts';
 import {atLeast,documentRole,parseShares,shareInserts,sharesFor} from './ownership.ts';
 import {mergeTags,parseTags,tagsOf,tagWrites} from './tags.ts';
-import {draftRoleLabels,draftRoles,envelopeDocument} from './envelope-documents.ts';
+import {draftRoleLabels,draftRoles,envelopeDocument,initialDocumentId} from './envelope-documents.ts';
 
 const limit=5*1024*1024;
 const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),n=>n.toString(16).padStart(2,'0')).join('');
@@ -74,7 +74,8 @@ export function mountEditorRoutes(app:Hono<Env>){
    if(!found)return c.json({error:'not_found'},404);
    if(replace&&!atLeast(found.role,'editor'))return c.json({error:'forbidden',role:found.role},403);
   }
-  if(input.sourceTemplateId){const source=await c.env.DB.prepare('SELECT object_key FROM templates WHERE id=? AND tenant_id=?').bind(input.sourceTemplateId,tenant).first<{object_key:string}>();if(!source)return c.json({error:'not_found'},404);
+  if(input.sourceTemplateId){const source=await c.env.DB.prepare('SELECT object_key,archived_at FROM templates WHERE id=? AND tenant_id=?').bind(input.sourceTemplateId,tenant).first<{object_key:string;archived_at:number|null}>();if(!source)return c.json({error:'not_found'},404);
+   if(replace&&source.archived_at!==null)return c.json({error:'not_current'},409);
    try{const object=await c.env.ARTIFACTS.get(source.object_key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');sourceHash=await sha256(new Uint8Array(await object.arrayBuffer()));}catch{return c.json({error:'source_unavailable'},503);}
   }
   const given=sharesFor(shares,caller);
@@ -146,9 +147,12 @@ export function mountEditorRoutes(app:Hono<Env>){
    // An uploaded document has no pre-filled fields: its sender writes on it before uploading it.
    if(placed.some(f=>f.type==='Prefill'))return c.json({error:'prefill_not_supported'},422);
    if(!draft)try{assertEditorSigningFields(placed,roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
+   // Only on the document they were placed on: an upload meanwhile cleared the fields, for its own document.
+   const documentHash=await sha256(document);
    const saved=await c.env.DB.prepare(`UPDATE envelopes SET roles_json=?,fields_json=? WHERE id=? AND tenant_id=? AND status='DRAFT' AND template_id IS NULL
+     AND (SELECT a.sha256 FROM artifacts a WHERE a.id=? AND a.envelope_id=envelopes.id)=?
      AND EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND x.envelope_id=envelopes.id AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`)
-     .bind(JSON.stringify(roles),JSON.stringify(placed),session.envelopeId,session.tenantId,session.pageId,session.tenantId,session.tokenHash,Date.now()).run();
+     .bind(JSON.stringify(roles),JSON.stringify(placed),session.envelopeId,session.tenantId,initialDocumentId(session.envelopeId),documentHash,session.pageId,session.tenantId,session.tokenHash,Date.now()).run();
    if(saved.meta.changes!==1)return c.json({error:'not_draft'},409);
    return c.json({id:session.envelopeId,status:draft?'draft':'ready'},200);
   }
@@ -205,13 +209,17 @@ export function mountEditorRoutes(app:Hono<Env>){
    ...(session.replacesSource?[
     c.env.DB.prepare(`INSERT INTO document_shares (tenant_id,resource_type,resource_id,grantee_email_key,grantee_email,role,granted_by,granted_at) SELECT tenant_id,'template',?,grantee_email_key,grantee_email,role,granted_by,granted_at FROM document_shares WHERE tenant_id=? AND resource_type='template' AND resource_id=?`).bind(id,session.tenantId,session.sourceTemplateId),
     c.env.DB.prepare(`INSERT INTO document_tags (tenant_id,user_id,resource_type,resource_id,tag_key,tag) SELECT tenant_id,user_id,'template',?,tag_key,tag FROM document_tags WHERE tenant_id=? AND resource_type='template' AND resource_id=?`).bind(id,session.tenantId,session.sourceTemplateId),
-    c.env.DB.prepare('UPDATE templates SET archived_at=? WHERE id=? AND tenant_id=? AND archived_at IS NULL').bind(Date.now(),session.sourceTemplateId,session.tenantId),
+    // Only while the source is the current version: one archived meanwhile (another session replaced it) would get a
+    // null status, which the table refuses, and nothing in the batch is written.
+    c.env.DB.prepare('UPDATE templates SET status=CASE WHEN archived_at IS NULL THEN status ELSE NULL END,archived_at=? WHERE id=? AND tenant_id=?').bind(Date.now(),session.sourceTemplateId,session.tenantId),
    ]:[
     ...shareInserts(c.env.DB,session.tenantId,'template',id,session.shares,session.ownerUserId,Date.now()),
     ...tagWrites(c.env.DB,session.tenantId,session.ownerUserId,'template',id,session.tags),
    ]),
   ]);}catch{saved={meta:{changes:0}} as D1Result;}
-  if(saved.meta.changes!==1){const result=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=?').bind(session.pageId).first<{result_template_id:string|null}>();if(result?.result_template_id)return c.json({error:'already_saved'},409);return c.json({error:'save_failed'},503);}
+  if(saved.meta.changes!==1){const result=await c.env.DB.prepare('SELECT result_template_id FROM editor_sessions WHERE id=?').bind(session.pageId).first<{result_template_id:string|null}>();if(result?.result_template_id)return c.json({error:'already_saved'},409);
+   if(session.replacesSource&&await c.env.DB.prepare('SELECT 1 FROM templates WHERE id=? AND tenant_id=? AND archived_at IS NOT NULL').bind(session.sourceTemplateId,session.tenantId).first())return c.json({error:'not_current'},409);
+   return c.json({error:'save_failed'},503);}
   return c.json({id,status},201);
  });
 }

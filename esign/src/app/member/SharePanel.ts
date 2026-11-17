@@ -17,25 +17,50 @@ type Member = { id: string; email: string; name?: string }
 /** General access: only the people it is shared with, or everyone in the organization, as viewers or editors. */
 const ACCESS: Record<'' | 'viewer' | 'editor', string> = { '': 'Only the people below', viewer: 'Everyone in your organization can view', editor: 'Everyone in your organization can edit' }
 
-/** An email field that suggests the organization's people who can use Esign (server directory.ts), by name or email. */
+/**
+ * An email field that suggests the organization's people who can use Esign (server directory.ts), by name or email:
+ * arrow keys move through them, Enter or a click chooses one, Escape or leaving the field closes them (as ContactField).
+ */
 export function MemberEmailField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
   const [found, setFound] = useState<Member[]>([])
+  const [active, setActive] = useState(-1)
   const latest = useRef(0)
+  const listId = `${id}-suggestions`
   function typed(text: string) {
     onChange(text)
     const ask = ++latest.current
     if (text.trim().length < 2) { setFound([]); return }
     apiJson<{ members: Member[] }>(`/api/members?limit=6&q=${encodeURIComponent(text.trim())}`)
-      .then((data) => { if (ask === latest.current) setFound(data.members.filter((m) => m.email.toLowerCase() !== text.trim().toLowerCase())) })
+      .then((data) => { if (ask === latest.current) { setFound(data.members.filter((m) => m.email.toLowerCase() !== text.trim().toLowerCase())); setActive(-1) } })
       .catch(() => { if (ask === latest.current) setFound([]) })
+  }
+  function choose(member: Member) { latest.current++; setFound([]); setActive(-1); onChange(member.email) }
+  function keyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!found.length) return
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((i) => e.key === 'ArrowDown' ? (i + 1) % found.length : (i <= 0 ? found.length - 1 : i - 1))
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault()
+      choose(found[active]!)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setFound([]); setActive(-1)
+    }
   }
   return h(Field, { label, htmlFor: id },
     h('div', { className: 'relative' },
-      h(Input, { id, type: 'email', value, autoComplete: 'off', onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value), onBlur: () => setFound([]) }),
-      found.length ? h('ul', { role: 'listbox', 'aria-label': 'Members', className: 'absolute z-20 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
-        ...found.map((member) => h('li', {
-          key: member.id, role: 'option', 'aria-selected': false, 'aria-label': `Choose ${member.name ?? member.email} (${member.email})`, className: 'flex cursor-pointer flex-col rounded-sm px-2 py-1.5 text-sm hover:bg-accent',
-          onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => { latest.current++; setFound([]); onChange(member.email) },
+      h(Input, {
+        id, type: 'email', value, autoComplete: 'off',
+        role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': found.length > 0, 'aria-controls': listId,
+        ...(found.length && active >= 0 ? { 'aria-activedescendant': `${listId}-${active}` } : {}),
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value), onKeyDown: keyDown, onBlur: () => setFound([]),
+      }),
+      found.length ? h('ul', { id: listId, role: 'listbox', 'aria-label': 'Members', className: 'absolute z-20 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
+        ...found.map((member, i) => h('li', {
+          key: member.id, id: `${listId}-${i}`, role: 'option', 'aria-selected': i === active, 'aria-label': `Choose ${member.name ?? member.email} (${member.email})`,
+          className: `flex cursor-pointer flex-col rounded-sm px-2 py-1.5 text-sm ${i === active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent'}`,
+          onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => choose(member),
         }, h('span', { className: 'font-medium' }, member.name ?? member.email), member.name ? h('span', { className: 'text-xs text-muted-foreground' }, member.email) : null))) : null))
 }
 

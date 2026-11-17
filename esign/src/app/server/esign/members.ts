@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from './app.ts';
 import { can, type Caller } from './identity.ts';
-import { directoryMembers } from './directory.ts';
+import { DIRECTORY_MAX, directoryMembers } from './directory.ts';
 import { emailKey, isClient, ownerSummary, shareableEmail } from './ownership.ts';
 import { unknownKeys } from './metadata.ts';
 
@@ -36,9 +36,12 @@ export function recordMember(db: D1Database, tenantId: string, caller: Caller, n
 }
 
 const likeContaining = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-/** An organization owner, or owner or admin, who may also manage Esign (a custom role that only views may not). */
-const orgOwner = (caller: Caller) => caller.role === 'OWNER' && can(caller, 'esign.manage');
-const orgAdmin = (caller: Caller) => (caller.role === 'OWNER' || caller.role === 'ADMIN') && can(caller, 'esign.manage');
+/**
+ * An organization owner, or owner or admin (x-suger-org-role, identity.ts: an Admin of Esign by grant is neither), who
+ * may also manage Esign (a custom role that only views may not).
+ */
+export const orgOwner = (caller: Caller) => caller.orgRole === 'OWNER' && can(caller, 'esign.manage');
+const orgAdmin = (caller: Caller) => (caller.orgRole === 'OWNER' || caller.orgRole === 'ADMIN') && can(caller, 'esign.manage');
 
 export function mountMemberRoutes(app: Hono<Env>) {
   // People to share with: the organization's people who can use Esign, as the platform says (directory.ts), whose name
@@ -48,7 +51,8 @@ export function mountMemberRoutes(app: Hono<Env>) {
     const q = (context.req.query('q') ?? '').trim();
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || q.length > MAX_QUERY) return context.json({ error: 'invalid_query' }, 400);
     const directory = await directoryMembers(context.env, context.get('tenantId'), { q, limit });
-    if (directory) return context.json({ members: directory });
+    // Who they are, not their roles, which only the scheduled sends' check reads (scheduled-send.ts).
+    if (directory) return context.json({ members: directory.map(({ id, email, name }) => ({ id, email, ...(name ? { name } : {}) })) });
     const pattern = q ? likeContaining(q.toLowerCase()) : null;
     const { results } = await context.env.DB.prepare(`SELECT user_id, email, name FROM members WHERE tenant_id = ? AND kind = 'person' AND email IS NOT NULL
         AND (? IS NULL OR email_key LIKE ? ESCAPE '\\' OR lower(name) LIKE ? ESCAPE '\\') ORDER BY last_seen_at DESC, user_id LIMIT ?`)
@@ -131,13 +135,27 @@ export function mountMemberRoutes(app: Hono<Env>) {
     const people = (body as { people?: unknown }).people;
     if (!Array.isArray(people) || people.length > MAX_CLIENT_PEOPLE || people.some((email) => !shareableEmail(email))) return context.json({ error: 'invalid_people' }, 422);
     if (!await db.prepare("SELECT 1 FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'client'").bind(tenantId, id).first()) return context.json({ error: 'not_found' }, 404);
-    // Only people who can use Esign, when the platform can say who they are (directory.ts).
-    const directory = (people as string[]).length ? await directoryMembers(context.env, tenantId) : null;
+    // Only people who can use Esign, as the platform says (directory.ts); when it can't be asked, people Esign has seen.
+    let outside = people as string[], answered = false;
+    const directory = outside.length ? await directoryMembers(context.env, tenantId) : null;
     if (directory) {
       const allowed = new Set(directory.map((m) => emailKey(m.email)));
-      const outside = (people as string[]).filter((email) => !allowed.has(emailKey(email)));
-      if (outside.length) return context.json({ error: 'not_members', emails: outside }, 422);
+      outside = outside.filter((email) => !allowed.has(emailKey(email)));
+      answered = true;
+      // An organization larger than one answer: those it left out, asked for by email.
+      if (outside.length && directory.length >= DIRECTORY_MAX) {
+        const found = await Promise.all(outside.map((email) => directoryMembers(context.env, tenantId, { q: email.trim().slice(0, 100), limit: 20 })));
+        if (found.some((members) => members === null)) answered = false;
+        else outside = outside.filter((email, i) => !found[i]!.some((m) => emailKey(m.email) === emailKey(email)));
+      }
     }
+    if (outside.length && !answered) {
+      const { results } = await db.prepare("SELECT email_key FROM members WHERE tenant_id = ? AND kind = 'person' AND email_key IN (SELECT value FROM json_each(?))")
+        .bind(tenantId, JSON.stringify(outside.map(emailKey))).all<{ email_key: string }>();
+      const seen = new Set(results.map((row) => row.email_key));
+      outside = outside.filter((email) => !seen.has(emailKey(email)));
+    }
+    if (outside.length) return context.json({ error: 'not_members', emails: outside }, 422);
     const byKey = new Map<string, string>();
     for (const email of people as string[]) if (!byKey.has(emailKey(email))) byKey.set(emailKey(email), email.trim());
     const now = Date.now();

@@ -106,8 +106,10 @@ export async function resendInvitation(db: D1Database, tenantId: string, envelop
 
 async function sendInvitation(db: D1Database, tenantId: string, task: InvitedTask, mailer: Mailer, origin: string, now: number, resend: boolean): Promise<boolean> {
   const token = hex(crypto.getRandomValues(new Uint8Array(32))), hash = await tokenHash(token);
-  // Reserved with the new token: a first send, a retry of one that failed a while ago, or a resend.
-  const reserved = await db.prepare(`INSERT INTO invitations (task_id,tenant_id,envelope_id,token_hash,reserved_at,sent_at) VALUES (?,?,?,?,?,NULL)
+  // Reserved with the new token: a first send, a retry of one that failed a while ago, or a resend; and only while it
+  // is still this signer's turn, by email, in an envelope out for signature (voided meanwhile, nobody is emailed).
+  const reserved = await db.prepare(`INSERT INTO invitations (task_id,tenant_id,envelope_id,token_hash,reserved_at,sent_at) SELECT ?1,?2,?3,?4,?5,NULL
+      WHERE EXISTS (SELECT 1 FROM tasks t JOIN envelopes e ON e.id=t.envelope_id WHERE t.id=?1 AND e.id=?3 AND e.tenant_id=?2 AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND json_extract(t.details_json,'$.delivery')='email')
       ON CONFLICT(task_id) DO UPDATE SET token_hash=excluded.token_hash,reserved_at=excluded.reserved_at,sent_at=NULL
       WHERE ?6=1 OR (invitations.sent_at IS NULL AND invitations.reserved_at<?7)`)
     .bind(task.id, tenantId, task.envelope_id, hash, now, resend ? 1 : 0, now - RETRY_AFTER_MS).run();

@@ -14,7 +14,7 @@ Esign has two permissions:
 
 | Permission | Key | What it allows |
 | --- | --- | --- |
-| **Send and manage envelopes** | `esign.manage` | Upload templates and place their fields, send envelopes, void them, open a signer's signing page, share them, and run due work. It includes viewing. |
+| **Send and manage envelopes** | `esign.manage` | Upload templates and place their fields, send envelopes, void them, resend a signer's invitation, share them, and run due work (a host product also gets signing links for its own signers). It includes viewing. |
 | **View envelopes** | `esign.view` | See the templates and envelopes shared with them, their statuses and audit trails, and download completed envelopes' signed PDFs and certificates. |
 
 Every role can read the built-in **Docs** and the [public docs](/docs/esign/overview).
@@ -49,21 +49,25 @@ A change applies at once, to what the client created before too. Nothing in Esig
 **Ownership** (`/ownership`, not in the navigation), for organization owners: **Owners** lists everyone who owns
 templates or envelopes. **Take over** makes you the owner of everything someone owns, for someone who left or a client
 no longer used; the people it is shared with keep their roles. An API client's page links to it; otherwise open
-`https://esign.insulinapps.com/ownership`.
+`https://esign.insulinapps.com/ownership`. Organization owners and admins here are those with that organization role:
+someone given Esign as Admin through **Specific apps** is an Admin of Esign, not of the organization, and can't.
 
 ## Who can do what
 
 People get access on insulinapps.com in one of two ways: an organization role, which reaches every app, or access to
 specific apps, with a role in each. See [Organizations and roles](/docs/platform/organizations-and-roles).
 
+Every role works on the templates and envelopes it owns or that are shared with it (above), organization owners and
+admins included; "everything" below means every action, on those.
+
 | Access | Role in Esign | Permissions | In Esign |
 | --- | --- | --- | --- |
 | Organization **Owner** or **Admin** | Admin | Send and manage | Everything in Esign, and they manage Esign's people and integrations on the platform. |
 | Organization **Editor** | Editor | Send and manage | Everything in Esign. |
-| Organization **Viewer** | Viewer | View | Templates and envelopes, read only. |
+| Organization **Viewer** | Viewer | View | The templates and envelopes shared with them, read only. |
 | Specific apps, Esign **Admin** | Admin | Send and manage | Everything in Esign, and Esign's people and integrations. |
 | Specific apps, Esign **Editor** | Editor | Send and manage | Everything in Esign. |
-| Specific apps, Esign **Viewer** | Viewer | View | Templates and envelopes, read only. |
+| Specific apps, Esign **Viewer** | Viewer | View | The templates and envelopes shared with them, read only. |
 | Specific apps, an Esign custom role | The least built-in role that covers it | Those the custom role has | What those permissions allow. |
 | Specific apps, without Esign | None | None | Esign isn't available to them. |
 
@@ -102,7 +106,8 @@ admins also give them to OAuth clients.
 
 Signers don't need an account and don't need to be in your organization. They reach only Esign's public pages:
 
-- their one-time link opens the signing page for their own turn in their own envelope, once, within two minutes;
+- their invitation's link opens the signing page for their own turn in their own envelope while it is their turn (a
+  host product's one-time link: once, within two minutes);
 - the page session it starts lasts 15 minutes;
 - the 6-digit code emailed to them confirms they control the signer's email address, and is needed to see previews,
   decline or sign;

@@ -1270,8 +1270,7 @@ function applyResult(
       }
     }
     // An earlier correction left correcting nothing is kept but no longer used, so it can't answer instead.
-    const stillCorrecting = new Set(marks.map((m) => m.noteDocumentId))
-    documents = documents.map((d) => (superseded.has(d.documentId) && !stillCorrecting.has(d.documentId) ? { ...d, active: false } : d))
+    documents = retireCorrections(documents, marks, superseded)
   } else if (record.kind === 'remove') {
     const gone = new Set(record.removeDocumentIds)
     documents = documents.filter((d) => !gone.has(d.documentId))
@@ -1281,7 +1280,8 @@ function applyResult(
       const learned = byId.get(d.documentId)
       return learned?.changed ? { ...d, textBytes: learned.textBytes, hiddenCount: learned.hidden } : d
     })
-    marks = followMarks(marks, result.marks ?? [])
+    marks = followMarks(marks, result.marks ?? [], superseded)
+    documents = retireCorrections(documents, marks, superseded)
   } else if (record.kind === 'export') {
     // An empty collection started from an export: its documents as learned now, stopped ones still stopped, and the
     // corrections' marks on them.
@@ -1292,7 +1292,8 @@ function applyResult(
         return { ...d, textBytes: learned.textBytes, hiddenCount: learned.hidden ?? d.hiddenCount, pages: learned.pages ?? d.pages, addedAt: now, version }
       })
     const kept = new Set(documents.map((d) => d.documentId))
-    marks = followMarks((extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId)), result.marks ?? [])
+    marks = followMarks((extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId)), result.marks ?? [], superseded)
+    documents = retireCorrections(documents, marks, superseded)
   } else if (record.kind === 'relearn' && record.restoreFrom !== null) {
     // A repair's re-learning also brings back the documents of the version that failed its check.
     const learned = new Set((result.documents ?? []).map((d) => d.documentId))
@@ -1315,15 +1316,29 @@ function applyResult(
  * Outdated marks follow their passage to its new text (a re-read, or an export hidden again): one whose passage
  * changed, or can't be found, asks to be checked.
  */
-function followMarks(marks: OutdatedMark[], moves: NonNullable<IngestResult['marks']>): OutdatedMark[] {
+function followMarks(marks: OutdatedMark[], moves: NonNullable<IngestResult['marks']>, superseded: Set<string>): OutdatedMark[] {
   const remap = new Map(moves.map((m) => [`${m.documentId}:${m.textHash}`, m.newTextHash]))
   const changed = new Set(moves.filter((m) => m.changed).map((m) => `${m.documentId}:${m.textHash}`))
-  return marks.map((m): OutdatedMark => {
+  const moved = marks.map((m): OutdatedMark => {
     const key = `${m.documentId}:${m.textHash}`
     if (!remap.has(key)) return m
-    const moved = remap.get(key)
-    return moved ? { ...m, textHash: moved, needsCheck: m.needsCheck || changed.has(key) } : { ...m, needsCheck: true }
+    const to = remap.get(key)
+    return to ? { ...m, textHash: to, needsCheck: m.needsCheck || changed.has(key) } : { ...m, needsCheck: true }
   })
+  // Two passages that hiding made the same now carry two marks: one passage has one correction, the newer (marks are
+  // kept in the order they were made), as when a correction is written again.
+  const last = new Map(moved.map((m, i) => [`${m.documentId}:${m.textHash}`, i]))
+  return moved.filter((m, i) => {
+    if (last.get(`${m.documentId}:${m.textHash}`) === i) return true
+    superseded.add(m.noteDocumentId)
+    return false
+  })
+}
+
+/** Corrections another took every passage from are kept but no longer used, so they can't answer instead. */
+function retireCorrections(documents: DocRecord[], marks: OutdatedMark[], superseded: Set<string>): DocRecord[] {
+  const stillCorrecting = new Set(marks.map((m) => m.noteDocumentId))
+  return documents.map((d) => (superseded.has(d.documentId) && !stillCorrecting.has(d.documentId) ? { ...d, active: false } : d))
 }
 
 export function countsOf(state: AnswerState): CollectionCounts {

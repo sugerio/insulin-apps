@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ORG_HEADER, type CollectionStatus } from '../../engine/src/contract.ts'
 import { createHarness, ORG, PEOPLE, type Harness } from '../support/harness.ts'
 
-// Requests and ticks that overlap: a cancel and the tick's send, a hold renewed while the old one is lifted, an export
-// replaced between being read and being learned, and a correction's import asked about after newer checks arrived.
+// Requests and ticks that overlap: a cancel (or stricter rules rewriting a waiting note) and the tick's send, a hold
+// renewed while the old one is lifted or a lift arriving late, an export replaced between being read and being learned,
+// and corrections' checks arriving before or after the correction of their passage is learned.
 
 let h: Harness
 beforeEach(async () => { h = await createHarness() })
@@ -129,6 +130,28 @@ describe('cancelling a waiting import while the tick sends it', () => {
     await h.tick()
     expect(await stateOf(importId)).toBe('committed')
   })
+  it('hiding kept text again while the tick sends it can\'t erase the send: the cancel is refused', async () => {
+    const { id, importId } = await waitingNote()
+    // Stricter rules hide the waiting note again; their write waits while the tick sends the import (the engine
+    // takes it, and its answer is lost).
+    const gate = gateDb(`UPDATE imports SET request = ? WHERE id = ? AND org_id = ? AND request IS NOT NULL`)
+    const rules = h.json(PEOPLE.dana, 'PUT', '/api/rules', { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['discounts'] } })
+    await gate.reached
+    h.engine.control.hold(true)
+    loseNextStart(true)
+    await h.tick()
+    expect(await stateOf(importId)).toBe('waiting')
+    gate.release()
+    expect((await rules).status).toBe(200)
+    const cancel = await h.json<{ error: string }>(PEOPLE.maya, 'DELETE', `/api/collections/${id}/imports/${importId}`)
+    expect(cancel.status).toBe(409)
+    expect(await held(importId)).toBeGreaterThan(0)
+    h.engine.control.hold(false)
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    await h.tick()
+    expect(await stateOf(importId)).toBe('committed')
+  })
 })
 
 describe('the awake-hours hold', () => {
@@ -169,6 +192,48 @@ describe('the awake-hours hold', () => {
     const kept = await h.db.prepare(`SELECT until FROM org_holds WHERE org_id = ?`).bind(ORG).first<{ until: number | null }>()
     expect((await engineStatus(id)).state).toBe('held')
     expect(kept?.until).toBe(Date.UTC(2027, 0, 1))
+  })
+
+  it('an older lift that reaches the engine after a newer hold, its answer lost, leaves the engine and Knowledge held', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await setLimit('awake_hours_month', 0)
+    const ask = () => h.json(PEOPLE.maya, 'POST', '/api/ask', { collections: [id], question: 'Who signs off?' })
+    expect((await ask()).status).toBe(429)
+    expect((await engineStatus(id)).state).toBe('held')
+    // A raised limit: the tick lets go, and its lift is slow to reach the engine.
+    await clearLimits()
+    const real = h.env.ENGINE!
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let seen = false
+    h.env.ENGINE = {
+      fetch: async (request: Request) => {
+        if (!seen && request.method === 'POST' && new URL(request.url).pathname.endsWith('/hold')) {
+          const body = (await request.clone().json()) as { until: string | null }
+          if (body.until === null) {
+            seen = true
+            await gate
+            // It reaches the engine after the newer hold; its answer is lost.
+            await real.fetch(request)
+            return Response.json({ error: 'internal', message: 'The answer was lost.' }, { status: 502 })
+          }
+        }
+        return real.fetch(request)
+      },
+    }
+    const ticking = h.tick()
+    for (let wait = 0; wait < 100 && !seen; wait += 1) await later()
+    expect(seen).toBe(true)
+    // Meanwhile the limit is lowered again, and the next question holds the organization once more.
+    await setLimit('awake_hours_month', 0)
+    expect((await ask()).status).toBe(429)
+    release()
+    await ticking
+    await h.tick()
+    expect((await engineStatus(id)).state).toBe('held')
+    const kept = await h.db.prepare(`SELECT until, version, delivered FROM org_holds WHERE org_id = ?`).bind(ORG).first<{ until: number; version: number; delivered: number }>()
+    expect(kept?.until).toBeGreaterThan(h.clock.now)
+    expect(kept?.delivered).toBe(kept?.version)
   })
 })
 
@@ -218,5 +283,55 @@ describe('a correction\'s import asked about later', () => {
     expect(await checks()).toBe(1)
     expect((await h.call(PEOPLE.maya, 'GET', `/api/collections/${id}/imports/${fix.body.import.importId}`)).status).toBe(200)
     expect(await checks()).toBe(1)
+  })
+
+  it('a check for an earlier correction that arrives after a newer one of the passage was learned doesn\'t stay', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await h.note(PEOPLE.maya, id, 'The Cobalt gateway listens on port 8001.', 'Ports')
+    const found = await h.json<{ passages: { documentId: string; textHash: string }[] }>(PEOPLE.maya, 'POST', '/api/search', { collections: [id], query: 'Cobalt gateway port' })
+    const passage = found.body.passages[0]!
+    await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text: 'The gateway listens on port 9001.', outdated: [{ documentId: passage.documentId, textHash: passage.textHash }] })
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    // A stricter rule reads the file again and the engine asks for the correction to be checked; Knowledge hasn't
+    // read that yet when the correction is written again, from the passage as it reads now.
+    await h.json(PEOPLE.dana, 'PUT', '/api/rules', { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Cobalt'] } })
+    h.engine.control.runUntilIdle()
+    const outbox = (await (await h.engine.fetch(new Request('https://engine.test/v1/outbox?since=&limit=100'))).json()) as { events: { type: string; documentId?: string; textHash?: string }[] }
+    const asked = outbox.events.find((event) => event.type === 'needs_check')!
+    const again = await h.json<{ import: { importId: string } }>(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text: 'The gateway listens on port 9002.', outdated: [{ documentId: asked.documentId, textHash: asked.textHash }] })
+    h.engine.control.runUntilIdle()
+    // Asked about first; the delayed check comes after.
+    expect((await h.call(PEOPLE.maya, 'GET', `/api/collections/${id}/imports/${again.body.import.importId}`)).status).toBe(200)
+    expect(await stateOf(again.body.import.importId)).toBe('committed')
+    await h.tick()
+    expect(await h.db.prepare(`SELECT COUNT(*) AS n FROM correction_checks WHERE collection_id = ?`).bind(id).first('n')).toBe(0)
+  })
+
+  it('writing one corrected passage again clears only its check, not the others in the file', async () => {
+    const id = await h.collection(PEOPLE.maya)
+    await h.note(PEOPLE.maya, id, 'The Cobalt gateway listens on port 8001.\n\nThe Cobalt relay forwards to port 7001.', 'Ports')
+    const passageOf = async (query: string) => (await h.json<{ passages: { documentId: string; textHash: string }[] }>(PEOPLE.maya, 'POST', '/api/search', { collections: [id], query })).body.passages[0]!
+    const gateway = await passageOf('Cobalt gateway listens 8001')
+    const relay = await passageOf('Cobalt relay forwards 7001')
+    expect(gateway.textHash).not.toBe(relay.textHash)
+    const correct = async (text: string, ref: { documentId: string; textHash: string }) =>
+      (await h.json<{ correction: { id: string } }>(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text, outdated: [{ documentId: ref.documentId, textHash: ref.textHash }] })).body.correction.id.replace(/-/g, '')
+    const first = await correct('The gateway listens on port 9001.', gateway)
+    const second = await correct('The relay forwards to port 6001.', relay)
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    // A stricter rule reads the file again: both corrections ask to be checked.
+    await h.json(PEOPLE.dana, 'PUT', '/api/rules', { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Cobalt'] } })
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    const checks = async () => (await h.db.prepare(`SELECT note_id, document_id, text_hash FROM correction_checks WHERE collection_id = ? ORDER BY note_id`).bind(id).all<{ note_id: string; document_id: string; text_hash: string }>()).results
+    expect((await checks()).map((check) => check.note_id).sort()).toEqual([first, second].sort())
+    // The gateway's correction is written again; the relay's still asks to be checked.
+    const check = (await checks()).find((row) => row.note_id === first)!
+    await correct('The gateway listens on port 9002.', { documentId: check.document_id, textHash: check.text_hash })
+    h.engine.control.runUntilIdle()
+    await h.tick()
+    expect((await checks()).map((row) => row.note_id)).toEqual([second])
   })
 })

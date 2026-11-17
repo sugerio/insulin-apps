@@ -4,7 +4,7 @@ import { ORG_HEADER, type CollectionStatus, type ImportStatus, type OutboxPage, 
 import { createStubEngine, STUB_MARKER } from '../../engine/src/stub/index.ts'
 import { sha256Hex } from '../../engine/src/stub/text.ts'
 import worker from '../../engine/src/stub/worker.ts'
-import { readZip, writeZip, zipStats } from '../../engine/src/stub/zip.ts'
+import { readZip, writeZip, zipEntries, zipStats } from '../../engine/src/stub/zip.ts'
 
 // The in-memory engine against the contract (knowledge/engine/src/contract.ts): every route answers in its shapes,
 // organizations are kept apart, and it keeps the real engine's rules the app relies on.
@@ -54,7 +54,7 @@ describe('the in-memory engine', () => {
       ['DELETE', '/v1/collections/c1/documents/d1'], ['GET', '/v1/collections/c1/facts?cursor='], ['POST', '/v1/collections/c1/corrections', {}],
       ['GET', '/v1/collections/c1/restore-points'], ['GET', '/v1/collections/c1/restore-points/1/preview'], ['POST', '/v1/collections/c1/restore-points/1/go-back'],
       ['POST', '/v1/collections/c1/undo'], ['POST', '/v1/collections/c1/exports', { exportId: 'e1' }], ['GET', '/v1/collections/c1/exports/e1'],
-      ['POST', '/v1/collections/c1/import-export', {}], ['GET', '/v1/outbox?since=&limit=10'], ['GET', '/v1/health'], ['POST', '/v1/orgs/org-a/hold', { until: null }], ['POST', '/v1/orgs/org-a/purge'], ['DELETE', '/v1/collections/c1'],
+      ['POST', '/v1/collections/c1/import-export', {}], ['GET', '/v1/outbox?since=&limit=10'], ['GET', '/v1/health'], ['POST', '/v1/orgs/org-a/hold', { until: null, version: 1 }], ['POST', '/v1/orgs/org-a/purge'], ['DELETE', '/v1/collections/c1'],
     ]
     for (const [method, path, body] of routes) {
       const answer = await call(method, path, body)
@@ -314,7 +314,7 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('learning')
     expect((await call('POST', '/v1/orgs/org-b/hold', { until: '2026-12-01T00:00:00Z' })).status).toBe(404)
     expect((await call('POST', '/v1/orgs/org-a/hold', { until: 'soon' })).status).toBe(400)
-    expect((await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z' })).body).toEqual({ held: true, until: '2026-12-01T00:00:00.000Z' })
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z', version: 1 })).body).toEqual({ held: true, until: '2026-12-01T00:00:00.000Z' })
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('held')
     expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('queued')
     const page = await call<OutboxPage>('GET', '/v1/outbox?since=&limit=100', undefined, null)
@@ -333,12 +333,12 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call('DELETE', `/v1/collections/c1/documents/${documents.body.documents[0]!.documentId}`)).status).toBe(200)
     engine.control.runUntilIdle()
     expect((await call<{ documents: unknown[] }>('GET', '/v1/collections/c1/documents')).body.documents).toHaveLength(0)
-    expect((await call('POST', '/v1/orgs/org-a/hold', { until: null })).body).toEqual({ held: false, until: null })
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: null, version: 2 })).body).toEqual({ held: false, until: null })
     advance(1)
     engine.control.runUntilIdle()
     expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/imp2')).body.state).toBe('committed')
     // A hold ends by itself at its time.
-    await call('POST', '/v1/orgs/org-a/hold', { until: new Date(Date.UTC(2026, 10, 16, 10)).toISOString() })
+    await call('POST', '/v1/orgs/org-a/hold', { until: new Date(Date.UTC(2026, 10, 16, 10)).toISOString(), version: 3 })
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('held')
     advance(2 * 60 * 60 * 1000)
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).not.toBe('held')
@@ -408,11 +408,11 @@ describe('the in-memory engine, as the real engine behaves', () => {
     const zip = new Uint8Array(await (await engine.fetch(new Request('https://engine.test/v1/collections/c1/exports/e1?download=1', { headers: { [ORG_HEADER]: 'org-a' } }))).arrayBuffer())
     // Queued while the organization is held; the rules get stricter before it learns.
     await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
-    await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z' })
+    await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z', version: 1 })
     await call('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip' })
     expect((await call('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009', sha256: sha256Hex(zip) })).status).toBe(202)
     await call('PUT', '/v1/collections/c2', { settings: { ...SETTINGS, hiding: { ...SETTINGS.hiding, words: ['Cobalt', '8001'] }, revision: 5 } })
-    await call('POST', '/v1/orgs/org-a/hold', { until: null })
+    await call('POST', '/v1/orgs/org-a/hold', { until: null, version: 2 })
     engine.control.runUntilIdle()
     expect((await call<ImportStatus>('GET', '/v1/collections/c2/imports/restore1')).body.state).toBe('committed')
     const documents = (await call<{ documents: { documentId: string; name: string }[] }>('GET', '/v1/collections/c2/documents')).body.documents
@@ -486,6 +486,42 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call('POST', '/v1/collections/c3/import-export', { importId: 'restore3', fileId: 'file0003', sha256: stagedHeavy.body.sha256 })).status).toBe(409)
     expect(zipStats.inflated - start).toBeLessThan(64 * 1024)
   })
+
+  it('takes the newest hold the app wants: an older one, late, changes nothing and is answered with the state the newer made', async () => {
+    const { call } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z' })).status).toBe(400)
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z', version: 3 })).body).toEqual({ held: true, until: '2026-12-01T00:00:00.000Z' })
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: null, version: 2 })).body).toEqual({ held: true, until: '2026-12-01T00:00:00.000Z' })
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).toBe('held')
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: null, version: 4 })).body).toEqual({ held: false, until: null })
+    // The same version sent again changes nothing either.
+    expect((await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z', version: 4 })).body).toEqual({ held: false, until: null })
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.state).not.toBe('held')
+  })
+
+  it('starts from a valid export whose notes list for people is past 8 MiB, as the real engine\'s reader does', async () => {
+    const { call, engine } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    // 450 notes of 20,000 characters: notes.json, which neither reader reads back, is over 8 MiB.
+    for (let batch = 0; batch < 450; batch += 50) {
+      const notes = Array.from({ length: 50 }, (_, index) => ({ noteId: `note${batch + index}`, title: `Note ${batch + index}`, text: `Note ${String(batch + index).padStart(3, '0')}. ` + 'lorem ipsum '.repeat(1665), outdated: [] }))
+      expect((await call('POST', '/v1/collections/c1/imports', { importId: `notes${batch}`, small: true, files: [], notes })).status).toBe(202)
+      engine.control.runUntilIdle()
+    }
+    await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })
+    const zip = new Uint8Array(await (await engine.fetch(new Request('https://engine.test/v1/collections/c1/exports/e1?download=1', { headers: { [ORG_HEADER]: 'org-a' } }))).arrayBuffer())
+    expect(zipEntries(zip)!.get('notes.json')!.size).toBeGreaterThan(8 * 1024 * 1024)
+    const reader = new URL('../../engine/src/exportfile.ts', import.meta.url).href
+    const { openExport } = (await import(/* @vite-ignore */ reader)) as { openExport: (bytes: Uint8Array) => Promise<{ documents: unknown[] } | null> }
+    expect((await openExport(zip))?.documents).toHaveLength(450)
+    await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
+    await call('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip' })
+    expect((await call('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009', sha256: sha256Hex(zip) })).status).toBe(202)
+    engine.control.runUntilIdle()
+    expect((await call<ImportStatus>('GET', '/v1/collections/c2/imports/restore1')).body.state).toBe('committed')
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c2')).body.counts).toEqual((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.counts)
+  }, 60_000)
 
   it('a correction of a passage already corrected wins over the earlier one', async () => {
     const { call, learn, engine } = engineFor()

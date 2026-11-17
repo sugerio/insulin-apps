@@ -74,7 +74,8 @@ And from the design:
   detectors run in time linear in the text (a 2 MB text built to make them backtrack takes under a second); the
   app's "Try it" box (`hiding.ts`) uses the same patterns, checked against the shared fixtures.
 - **The newest correction of a passage wins**: a correction written again for a passage takes it over from the
-  earlier one, and an earlier correction left correcting nothing is kept but no longer used.
+  earlier one, and an earlier correction left correcting nothing is kept but no longer used. The same holds when
+  stricter hiding makes two corrected passages read the same: the newer correction keeps the passage.
 - **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
   the correction keeps applying and a `needs_check` event asks a person to check it.
 - **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
@@ -108,7 +109,9 @@ And from the design:
   itself). The hold lifts at its `until` time or with `until: null`. A collection made while held is held. The
   registry keeps the hold and tells every collection; one it can't reach is told again every minute until it has.
   Every hold change (a lift too) is numbered, and a collection refuses a delivery older than the change it holds, so
-  two calls whose deliveries overlap leave every collection with the newer one.
+  two calls whose deliveries overlap leave every collection with the newer one. Each request carries the app's
+  `version` of its hold wish: the registry and every collection keep the highest, and a request with a lower one
+  (delayed, or sent again after a lost answer) changes nothing and is answered with the current state.
 - **Imports hold their capacity slot or stop**: an import whose slot the capacity guard says has lapsed stops, keeps
   nothing and waits for a new slot, so no more than the allowed imports ever run. A renewal call that fails (the
   guard unreachable for a moment) is tried again on the next step.
@@ -126,9 +129,10 @@ And from the design:
 - **Every export can be imported again**: the exporter and the import share one set of bounds (`EXPORT_LIMITS` in
   `src/exportfile.ts`): a stored text is at most 3 MiB (the container cuts one that hiding lengthened past it, never
   inside a `[hidden]`) and a page map at most 20,000 pages (`extract.py`); each `documents/<id>.json` holds its page
-  map and hidden values compactly (8 MiB at the most for the densest text) and, for a note, its id and the passages
-  it corrects, so the import reads neither `notes.json` nor `corrections.json` (they are for people). The import
-  inflates no entry past those bounds, so a forged zip costs no memory.
+  map and hidden values compactly (under 4 MiB for the densest text) and, for a note, its id and the passages it
+  corrects, so the import reads neither `notes.json` nor `corrections.json` (they are for people). The import
+  inflates no entry past those bounds, and counts a document's hidden values and checks their order (each a
+  `[hidden]` after the last) before building anything from them, so a forged zip costs little memory.
 
 ## Service settings
 

@@ -77,23 +77,24 @@ export class CollectionEngine {
       if (request.method === 'POST' && url.pathname === '/internal/hold') {
         // Hold changes are numbered by the registry: one older than the change this collection holds is refused, so
         // deliveries that overlap can't undo a newer hold or lift.
-        const body = await readJson<{ until: string | null; seq?: number }>(request)
-        const hold: PendingHold = { org: request.headers.get(ORG_HEADER) ?? '', until: body.until, seq: body.seq ?? 0 }
+        const body = await readJson<{ until: string | null; seq?: number; version?: number }>(request)
+        const hold: PendingHold = { org: request.headers.get(ORG_HEADER) ?? '', until: body.until, seq: body.seq ?? 0, version: body.version ?? 0 }
         const meta = await this.store.getMeta()
         if (!meta) {
           // Registered, not stored yet: the collection takes the newer of this and what registering said.
           const pending = await this.state.storage.get<PendingHold>('pendingHold')
-          if (!pending || hold.seq >= pending.seq) await this.state.storage.put('pendingHold', hold)
+          if (!pending || (hold.version >= pending.version && hold.seq >= pending.seq)) await this.state.storage.put('pendingHold', hold)
           return json({ ok: true })
         }
         if (meta.org !== hold.org) return json({ ok: true })
-        if (hold.seq < (meta.holdSeq ?? 0)) {
-          await this.store.log('hold-stale', { seq: hold.seq, holding: meta.holdSeq })
+        if (hold.version < (meta.holdVersion ?? 0) || hold.seq < (meta.holdSeq ?? 0)) {
+          await this.store.log('hold-stale', { seq: hold.seq, version: hold.version, holding: meta.holdSeq, holdingVersion: meta.holdVersion })
           return json({ ok: true, stale: true })
         }
         await this.updateMeta((m) => {
           m.heldUntil = hold.until
           m.holdSeq = hold.seq
+          m.holdVersion = hold.version
         })
         await this.store.log(hold.until ? 'held' : 'hold-lifted', { until: hold.until, seq: hold.seq })
         if (isHeld(await this.meta())) await this.dropGoBackForHold()
@@ -222,13 +223,16 @@ export class CollectionEngine {
     }
     if (existing && sent !== undefined && settings.revision === held && held > 0) return this.status()
     if (!existing) {
-      const entry = await callObject<{ state: string; holdUntil?: string | null; holdSeq?: number }>(this.env.REGISTRY, REGISTRY_NAME, '/register', {
+      const entry = await callObject<{ state: string; holdUntil?: string | null; holdSeq?: number; holdVersion?: number }>(this.env.REGISTRY, REGISTRY_NAME, '/register', {
         body: { org, collectionId },
       })
       if (entry.state !== 'live') return fail('deleting', 'This collection was deleted; make a new one.')
       // A hold change that reached this collection while it registered is newer than what registering said.
       const pending = await this.state.storage.get<PendingHold>('pendingHold')
-      const hold = pending && pending.org === org && pending.seq > (entry.holdSeq ?? 0) ? pending : { until: entry.holdUntil ?? null, seq: entry.holdSeq ?? 0 }
+      const hold =
+        pending && pending.org === org && pending.seq > (entry.holdSeq ?? 0)
+          ? pending
+          : { until: entry.holdUntil ?? null, seq: entry.holdSeq ?? 0, version: entry.holdVersion ?? 0 }
       if (pending) await this.state.storage.delete('pendingHold')
       const now = iso()
       await this.store.putMeta({
@@ -255,6 +259,7 @@ export class CollectionEngine {
         repairNote: null,
         heldUntil: hold.until,
         holdSeq: hold.seq,
+        holdVersion: hold.version,
       })
       await this.store.log('created')
     } else {
@@ -1137,6 +1142,7 @@ interface PendingHold {
   org: string
   until: string | null
   seq: number
+  version: number
 }
 
 export const isHeld = (meta: Meta): boolean => !!meta.heldUntil && Date.parse(meta.heldUntil) > clock.now()

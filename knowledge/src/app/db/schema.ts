@@ -162,6 +162,13 @@ export const imports = sqliteTable('imports', {
   detail: text('detail').notNull().default('{}'),
   /** JSON: the request of an import waiting for next month's documents learned, sent to the engine on the 1st. */
   request: text('request'),
+  /**
+   * How many times the tick has sent it from waiting, counted before each send; kept apart from `request`, which other
+   * writers rewrite. A cancel stands only if no send came after it read the import.
+   */
+  sends: integer('sends').notNull().default(0),
+  /** When the tick last sent it from waiting; cleared when the engine says it never had it. Until then it may be learning. */
+  sent_at: integer('sent_at'),
   notified_at: integer('notified_at'),
   finished_at: integer('finished_at'),
 }, (table) => [
@@ -401,8 +408,9 @@ export const engineEvents = sqliteTable('engine_events', {
 
 /**
  * The awake-hours hold Knowledge wants the engine to have for each organization (POST /v1/orgs/:org/hold): held until
- * `until` (the 1st), or let go (`until` 0). Each change is a new `version`, written before it is sent; `delivered` is
- * the version the engine last took. The tick sends again while the two differ.
+ * `until` (the 1st), or let go (`until` 0). Each change is a new `version` (a new row's starts from the time, so versions
+ * only grow), written before it is sent with it; `delivered` is the version the engine's answer showed it took (-1:
+ * unknown, after a send that failed or went unanswered). The tick sends again while the two differ.
  */
 export const orgHolds = sqliteTable('org_holds', {
   org_id: text('org_id').primaryKey().notNull(),

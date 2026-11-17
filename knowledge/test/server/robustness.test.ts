@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkCitations } from '../../src/app/server/ask.ts'
+import { holdOrganization, releaseOrganization } from '../../src/app/server/holds.ts'
 import { applyEngineEvent } from '../../src/app/server/outbox.ts'
 import { watchLimits } from '../../src/app/server/tick.ts'
 import { createHarness, GATEWAY, ORG, OTHER_ORG, PEOPLE, type Harness, type Person } from '../support/harness.ts'
@@ -549,6 +550,9 @@ describe('deleting', () => {
     await h.json(PEOPLE.maya, 'POST', '/api/ask', { collections: [id], question: 'Where do partner discounts stop?' })
     await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/corrections`, { text: 'Secret correction text about discounts.' })
     await h.json(PEOPLE.maya, 'POST', `/api/collections/${id}/reports`, { question: 'Is it right?', note: 'Report text.' })
+    // Held at the awake-hours stop, then let go: the hold's row stays until the organization goes.
+    await holdOrganization(h.env, ORG, h.clock.now + 86_400_000, h.clock.now)
+    await releaseOrganization(h.env, ORG, h.clock.now)
     await h.tick()
     h.gateway.addEvent({ type: 'org_deleted', org: ORG })
     await h.tick()

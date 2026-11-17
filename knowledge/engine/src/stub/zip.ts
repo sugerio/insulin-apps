@@ -95,9 +95,9 @@ export async function writeZip(entries: [string, string][]): Promise<Uint8Array>
   return out
 }
 
-/** What one entry may inflate to, as the real engine reads an export (exportfile.ts): a text 3 MB, anything else 8 MB. */
+/** What readZip lets one entry inflate to unless told otherwise: a text 3 MB, anything else 8 MB. */
 const TEXT_BYTES = 3 * 1024 * 1024
-const METADATA_BYTES = 8 * 1024 * 1024
+const OTHER_BYTES = 8 * 1024 * 1024
 /** Compressed bytes are fed to the inflater this many at a time, only as its output is taken. */
 const SLICE = 16 * 1024
 
@@ -150,10 +150,10 @@ export interface ZipEntry {
 
 /**
  * The entries of a zip by name, read from its central directory without inflating anything; null when the bytes
- * aren't a zip this reader can open, or an entry is larger than it may be (`entryBytes`, else 3 MB for a document's
- * text and 8 MB for anything else), encrypted, or listed twice.
+ * aren't a zip this reader can open, or an entry is encrypted or listed twice. Sizes are bounded where an entry is
+ * read (readEntry), so one nobody reads may be of any size.
  */
-export function zipEntries(bytes: Uint8Array, limits: { entryBytes?: number } = {}): Map<string, ZipEntry> | null {
+export function zipEntries(bytes: Uint8Array): Map<string, ZipEntry> | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   let end = -1
   for (let at = bytes.length - 22; at >= Math.max(0, bytes.length - 22 - 0xffff); at -= 1) {
@@ -181,7 +181,6 @@ export function zipEntries(bytes: Uint8Array, limits: { entryBytes?: number } = 
     const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength))
     at += 46 + nameLength + extra + comment
     if (flags & 0x1 || (method !== 0 && method !== 8) || entries.has(name)) return null
-    if (size > (limits.entryBytes ?? (name.endsWith('.txt') ? TEXT_BYTES : METADATA_BYTES))) return null
     if (local + 30 > bytes.length || view.getUint32(local, true) !== 0x04034b50) return null
     const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true)
     if (start + packed > bytes.length) return null
@@ -190,23 +189,27 @@ export function zipEntries(bytes: Uint8Array, limits: { entryBytes?: number } = 
   return entries
 }
 
-/** One entry's content, checked against its size and CRC; null when it isn't what the zip says. */
-export async function readEntry(entry: ZipEntry): Promise<Uint8Array | null> {
+/** One entry's content, checked against its size and CRC; null when it isn't what the zip says or is past `maxBytes`. */
+export async function readEntry(entry: ZipEntry, maxBytes: number): Promise<Uint8Array | null> {
+  if (entry.size > maxBytes) return null
   if (entry.method === 0) return entry.data.length === entry.size && crc32(entry.data) === entry.crc ? entry.data : null
   return inflate(entry.data, entry.size, entry.crc)
 }
 
 /**
- * Every entry of a zip, read, or null (see zipEntries; and when the entries hold more than `totalBytes` in all, 64 MB
- * unless said otherwise, nothing is inflated).
+ * Every entry of a zip, read, or null (see zipEntries; when an entry is larger than `entryBytes`, else 3 MB for a
+ * text and 8 MB for anything else; and when the entries hold more than `totalBytes` in all, 64 MB unless said
+ * otherwise: then nothing is inflated).
  */
 export async function readZip(bytes: Uint8Array, limits: { entryBytes?: number; totalBytes?: number } = {}): Promise<Map<string, Uint8Array> | null> {
-  const entries = zipEntries(bytes, limits)
+  const entries = zipEntries(bytes)
   if (!entries) return null
+  const bound = (entry: ZipEntry) => limits.entryBytes ?? (entry.name.endsWith('.txt') ? TEXT_BYTES : OTHER_BYTES)
+  if ([...entries.values()].some((entry) => entry.size > bound(entry))) return null
   if ([...entries.values()].reduce((sum, entry) => sum + entry.size, 0) > (limits.totalBytes ?? 64 * 1024 * 1024)) return null
   const files = new Map<string, Uint8Array>()
   for (const entry of entries.values()) {
-    const content = await readEntry(entry)
+    const content = await readEntry(entry, bound(entry))
     if (!content) return null
     files.set(entry.name, content)
   }

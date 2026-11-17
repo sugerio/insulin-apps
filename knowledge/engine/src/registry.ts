@@ -21,6 +21,7 @@ const HOLD_RETRY_MS = 60 * 1000
 interface HoldState {
   until: string | null
   seq: number
+  version?: number // the app's version of the wish this came from: an older one is ignored
 }
 
 /** Collections still to be told of hold change `seq`. */
@@ -50,7 +51,10 @@ export class Registry {
     if (route === 'POST /register') return json(await this.register(body.org, body.collectionId ?? ''))
     if (route === 'POST /state') return json(await this.setState(body.org, body.collectionId ?? '', body.state ?? 'live'))
     if (route === 'POST /purge') return json(await this.purge(body.org), 202)
-    if (route === 'POST /hold') return json(await this.hold(body.org, (body as { until?: string | null }).until ?? null))
+    if (route === 'POST /hold') {
+      const { until, version } = body as { until?: string | null; version?: number }
+      return json(await this.hold(body.org, until ?? null, version ?? 0))
+    }
     return json({ error: 'not_found', message: 'No such registry route.' }, 404)
   }
 
@@ -61,13 +65,25 @@ export class Registry {
    * Each change is numbered (lifts too) and collections refuse a number older than the one they hold, so two calls
    * whose deliveries overlap leave every collection with the newer one.
    */
-  async hold(org: string, until: string | null): Promise<{ held: boolean; until: string | null }> {
-    const kept = until && Date.parse(until) > clock.now() ? until : null
+  async hold(org: string, until: string | null, version: number): Promise<{ held: boolean; until: string | null }> {
     const previous = await this.holdState(org)
-    await this.storage.put(`hold:${org}`, { until: kept, seq: previous.seq + 1 } satisfies HoldState)
-    const live = (await this.entries(org)).filter((e) => e.state === 'live').map((e) => e.collectionId)
-    await this.tellHold(org, live)
-    return { held: kept !== null, until: kept }
+    const live = async () => (await this.entries(org)).filter((e) => e.state === 'live').map((e) => e.collectionId)
+    // The app's wishes are versioned: an older one (delayed, or sent again after a lost answer) changes nothing and is
+    // answered with the state the newest made; the newest one sent again is told to every collection again.
+    if (version < (previous.version ?? 0)) return this.answer(org)
+    if (version === previous.version) {
+      await this.tellHold(org, await live())
+      return this.answer(org)
+    }
+    const kept = until && Date.parse(until) > clock.now() ? until : null
+    await this.storage.put(`hold:${org}`, { until: kept, seq: previous.seq + 1, version } satisfies HoldState)
+    await this.tellHold(org, await live())
+    return this.answer(org)
+  }
+
+  async answer(org: string): Promise<{ held: boolean; until: string | null }> {
+    const until = await this.holdOf(org)
+    return { held: until !== null, until }
   }
 
   /** Tells collections the organization's current hold change; those not reached are kept to be told again. */
@@ -81,7 +97,7 @@ export class Registry {
         const response = await stub(this.env.COLLECTIONS, collectionName(org, collectionId)).fetch('https://engine.internal/internal/hold', {
           method: 'POST',
           headers: { 'x-knowledge-org': org, 'content-type': 'application/json' },
-          body: JSON.stringify({ until, seq: state.seq }),
+          body: JSON.stringify({ until, seq: state.seq, version: state.version ?? 0 }),
         })
         if (!response.ok) throw new Error(`the collection answered ${response.status}`)
         told.push(collectionId)
@@ -116,15 +132,15 @@ export class Registry {
     return until && Date.parse(until) > clock.now() ? until : null
   }
 
-  async register(org: string, collectionId: string): Promise<RegistryEntry & { holdUntil: string | null; holdSeq: number }> {
+  async register(org: string, collectionId: string): Promise<RegistryEntry & { holdUntil: string | null; holdSeq: number; holdVersion: number }> {
     const holdUntil = await this.holdOf(org)
-    const holdSeq = (await this.holdState(org)).seq
+    const { seq: holdSeq, version: holdVersion = 0 } = await this.holdState(org)
     const existing = await this.storage.get<RegistryEntry>(key(org, collectionId))
-    if (existing) return { ...existing, holdUntil, holdSeq }
+    if (existing) return { ...existing, holdUntil, holdSeq, holdVersion }
     const entry: RegistryEntry = { org, collectionId, state: 'live', createdAt: iso(), deletedAt: null }
     const count = ((await this.storage.get<number>('count')) ?? 0) + 1
     await this.storage.put({ [key(org, collectionId)]: entry, count })
-    return { ...entry, holdUntil, holdSeq }
+    return { ...entry, holdUntil, holdSeq, holdVersion }
   }
 
   async setState(org: string, collectionId: string, state: RegistryEntry['state']): Promise<RegistryEntry | null> {

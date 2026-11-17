@@ -299,9 +299,15 @@ const DOCUMENT_ID = /^[dn]_[0-9a-f]{24}$/
 const HIDDEN_KINDS = new Set(['email', 'phone', 'card', 'api_key', 'secret', 'word'])
 /** The largest export a collection starts from (it is read whole), and what it may bring back in all. */
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024
-/** The real engine's export format (exportfile.ts EXPORT_FORMAT) and its bounds. */
+/**
+ * The real engine's export format (exportfile.ts EXPORT_FORMAT) and its bounds (EXPORT_LIMITS), each for an entry the
+ * import reads: collection.json, a document's .json and its .txt. Entries it doesn't read (notes.json and the other
+ * lists for people) are of any size.
+ */
 const EXPORT_FORMAT = 2
 const EXPORT_COLLECTION_BYTES = 64 * 1024
+const EXPORT_DOCUMENT_BYTES = 4 * 1024 * 1024
+const EXPORT_TEXT_BYTES = 3 * 1024 * 1024
 const EXPORT_PAGES = 20_000
 
 function randomHex(bytes: number): string {
@@ -324,8 +330,9 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   let sequence = 0
   let failures: Failure[] = []
   let held = false
-  /** Organizations on hold (the app's awake-hours stop), until when. */
+  /** Organizations on hold (the app's awake-hours stop), until when; and the newest version of the app's wish taken. */
   let holds = new Map<string, number>()
+  let holdVersions = new Map<string, number>()
   let answerMode: 'ok' | 'bad_citation' | 'fail' = 'ok'
   let order = 0
 
@@ -724,38 +731,14 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       const documentId = doc.info.documentId
       const again = hiddenAgain(doc.text, doc.pages, doc.hidden, rules)
       const passages = passagesFor(documentId, doc.info.name, doc.info.kind, again.text, again.pages)
-      if (again.text !== doc.text) {
-        // Where each exported passage is now, and the hash of the passage that holds most of it.
-        for (const span of passagesOf(doc.text, doc.pages)) {
-          const start = again.shift(span.start)
-          const end = again.shift(span.end)
-          let best: Passage | null = null
-          let overlap = 0
-          for (const passage of passages) {
-            const shared = Math.min(end, passage.end) - Math.max(start, passage.start)
-            if (shared > overlap) {
-              overlap = shared
-              best = passage
-            }
-          }
-          moved.set(`${documentId}:${sha256Hex(span.text)}`, best?.textHash ?? null)
-        }
-      }
+      if (again.text !== doc.text) movePassages(documentId, doc, again.shift, passages, moved)
       content.documents.set(documentId, {
         info: { ...doc.info, textBytes: new TextEncoder().encode(again.text).byteLength, hiddenValues: again.hidden.length, version: collection.version + 1, addedAt: new Date(now()).toISOString() },
         text: again.text, pages: again.pages, hidden: again.hidden, passages, words: passages.map((passage) => keywords(passage.text)), setAside: false, noteId: doc.noteId,
       })
     }
-    const checks: { noteId: string; documentId: string; textHash: string }[] = []
-    for (const mark of exported.marks) {
-      const noteId = exported.documents.find((doc) => doc.info.documentId === mark.noteDocumentId)?.noteId ?? ''
-      const key = `${mark.documentId}:${mark.textHash}`
-      const hash = moved.has(key) ? moved.get(key)! : mark.textHash
-      content.outdated.set(`${mark.documentId}:${hash ?? mark.textHash}`, noteId)
-      // As the real engine: a corrected passage hidden again under its new hash, or no longer found, asks for its
-      // correction to be checked (under the hash its mark has now).
-      if (hash !== mark.textHash) checks.push({ noteId, documentId: mark.documentId, textHash: hash ?? mark.textHash })
-    }
+    const marks = exported.marks.map((mark) => ({ documentId: mark.documentId, textHash: mark.textHash, noteId: exported.documents.find((doc) => doc.info.documentId === mark.noteDocumentId)?.noteId ?? '' }))
+    const checks = followMarks(content, marks, moved)
     content.corrections = new Set(exported.marks.map((mark) => mark.noteDocumentId)).size
     const documents = [...content.documents.values()]
     const files = documents.filter((document) => document.info.kind === 'file')
@@ -778,28 +761,30 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   }
 
   /**
-   * What an export brings back, read and checked as the real engine reads it (exportfile.ts): README.txt and
-   * collection.json, the notes and corrections lists, each document's .json and .txt (ids shaped as the real engine's,
-   * a file's SHA-256, page maps and hidden spans within the text), notes named in notes.json, and marks on documents of
-   * the export from one of its notes. Its texts are hidden again when it learns (restoreFrom). Null when the zip isn't a
-   * Knowledge export.
+   * What an export brings back, read and checked as the real engine reads it (exportfile.ts): collection.json (beside
+   * a README.txt) and each document's .json and .txt (ids shaped as the real engine's, a file's SHA-256, page maps and
+   * hidden values within the text, a note's id, and its marks on documents of the export). The lists for people
+   * (notes.json and the others) aren't read. Its texts are hidden again when it learns (restoreFrom). Null when the
+   * zip isn't a Knowledge export.
    */
   async function contentOfExport(bytes: Uint8Array): Promise<ExportedContent | null> {
     const files = zipEntries(bytes)
     if (!files || !files.has('README.txt') || !files.has('collection.json')) return null
     // Every name is checked before anything is inflated, and only what an export brings back is read (collection.json
-    // and its documents), within one budget for all of it: anything else stays packed.
+    // and its documents), each within its own bound and all of it within one budget: anything else stays packed,
+    // whatever its size.
     const needed = [...files.values()].filter((entry) => entry.name === 'collection.json' || entry.name.startsWith('documents/'))
+    const bound = (name: string) => (name === 'collection.json' ? EXPORT_COLLECTION_BYTES : name.endsWith('.txt') ? EXPORT_TEXT_BYTES : EXPORT_DOCUMENT_BYTES)
     for (const entry of needed) {
       const match = /^documents\/(.+)\.(json|txt)$/.exec(entry.name)
       if (entry.name.startsWith('documents/') && (!match || !DOCUMENT_ID.test(match[1]!))) return null
+      if (entry.size > bound(entry.name)) return null
     }
-    if (files.get('collection.json')!.size > EXPORT_COLLECTION_BYTES) return null
     if (needed.reduce((sum, entry) => sum + entry.size, 0) > MAX_EXPORT_BYTES) return null
     const isInt = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
     const isSha256 = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
     const text = async (name: string) => {
-      const content = await readEntry(files.get(name)!)
+      const content = await readEntry(files.get(name)!, bound(name))
       if (!content) throw new Error(`${name} is damaged`)
       return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(content)
     }
@@ -867,6 +852,53 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   }
 
   /** A stored text hidden again with these rules: what it hid before stays hidden and moves with what is hidden now. */
+  /**
+   * Where each passage of a text is after more of it was hidden (`shift` takes an offset there to the new text): the
+   * hash of the passage that holds most of it now, or null when none does, by the old passage's `documentId:textHash`.
+   */
+  function movePassages(documentId: string, before: { text: string; pages: StoredDocument['pages'] }, shift: (offset: number) => number, passages: Passage[], moved: Map<string, string | null>): void {
+    for (const span of passagesOf(before.text, before.pages)) {
+      const start = shift(span.start)
+      const end = shift(span.end)
+      let best: Passage | null = null
+      let overlap = 0
+      for (const passage of passages) {
+        const shared = Math.min(end, passage.end) - Math.max(start, passage.start)
+        if (shared > overlap) {
+          overlap = shared
+          best = passage
+        }
+      }
+      moved.set(`${documentId}:${sha256Hex(span.text)}`, best?.textHash ?? null)
+    }
+  }
+
+  /**
+   * Corrections' outdated marks follow their passage to its new text (a re-read, or an export hidden again), as in the
+   * real engine (imports.ts followMarks): one whose passage changed, or can't be found, asks for its correction to be
+   * checked, under the hash its mark has now. Two marks that come to one passage keep the newer (`marks` are in the
+   * order they were made), and a correction left correcting nothing is kept but no longer used. The checks to ask for.
+   */
+  function followMarks(content: Content, marks: { documentId: string; textHash: string; noteId: string }[], moved: Map<string, string | null>): { noteId: string; documentId: string; textHash: string }[] {
+    const superseded = new Set<string>()
+    const changed = new Set<string>()
+    content.outdated = new Map()
+    for (const mark of marks) {
+      const key = `${mark.documentId}:${mark.textHash}`
+      const hash = (moved.has(key) ? moved.get(key) : mark.textHash) ?? mark.textHash
+      const at = `${mark.documentId}:${hash}`
+      const earlier = content.outdated.get(at)
+      if (earlier !== undefined && earlier !== mark.noteId) superseded.add(earlier)
+      content.outdated.set(at, mark.noteId)
+      if (moved.has(key) && moved.get(key) !== mark.textHash) changed.add(at)
+    }
+    const stillCorrecting = new Set(content.outdated.values())
+    for (const document of content.documents.values()) {
+      if (document.noteId && superseded.has(document.noteId) && !stillCorrecting.has(document.noteId)) document.info = { ...document.info, active: false }
+    }
+    return [...changed].map((at) => ({ noteId: content.outdated.get(at)!, documentId: at.slice(0, at.lastIndexOf(':')), textHash: at.slice(at.lastIndexOf(':') + 1) }))
+  }
+
   function hiddenAgain(text: string, pages: StoredDocument['pages'], hidden: HiddenSpan[], rules: HidingRuleSet): { text: string; pages: StoredDocument['pages']; hidden: HiddenSpan[]; shift: (offset: number) => number } {
     const result = applyHiding(text, rules)
     if (!result.found.length) return { text, pages, hidden, shift: (offset) => offset }
@@ -1155,17 +1187,20 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     if (hold && method === 'POST') {
       const org = decodeURIComponent(hold[1]!)
       if (request.headers.get(ORG_HEADER)?.trim() !== org) throw new StubError(404, 'not_found', 'No such organization.')
-      const { until } = await body<{ until?: unknown }>(request)
-      if (until === null) {
-        holds.delete(org)
-        pump()
-        return json({ held: false, until: null })
-      }
+      const { until, version } = await body<{ until?: unknown; version?: unknown }>(request)
       const at = typeof until === 'string' ? Date.parse(until) : NaN
-      if (!Number.isFinite(at)) throw new StubError(400, 'bad_request', 'until must be a date and time, such as 2026-12-01T00:00:00Z, or null.')
-      holds.set(org, at)
-      pump()
-      return json({ held: onHold(org), until: onHold(org) ? new Date(at).toISOString() : null })
+      if (until !== null && !Number.isFinite(at)) throw new StubError(400, 'bad_request', 'until must be a date and time, such as 2026-12-01T00:00:00Z, or null.')
+      if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) throw new StubError(400, 'bad_request', "version must be the app's version of the hold, a whole number.")
+      // As the real engine: the app's wishes are versioned, and one older than the newest taken (delayed, or sent
+      // again after a lost answer), or that one again, changes nothing and is answered with the state the newest made.
+      if (!holdVersions.has(org) || version > holdVersions.get(org)!) {
+        holdVersions.set(org, version)
+        if (until === null) holds.delete(org)
+        else holds.set(org, at)
+        pump()
+      }
+      const held = onHold(org)
+      return json({ held, until: held ? new Date(holds.get(org)!).toISOString() : null })
     }
     const purge = path.match(/^\/v1\/orgs\/([^/]+)\/purge$/)
     if (purge && method === 'POST') {
@@ -1433,22 +1468,23 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     if (!stricter || collection.content.documents.size === 0) return
     const content = copyContent(collection.content)
     const changed = new Set<string>()
+    const moved = new Map<string, string | null>()
     for (const [id, document] of content.documents) {
-      const result = applyHiding(document.text, after)
-      if (result.found.length === 0) continue
-      const rebuilt = buildDocument(document.info.kind, document.info.name, document.info.type, document.info.bytes, document.info.sha256, document.text, document.pages, after, document.info.version)
-      content.documents.set(id, { ...rebuilt, info: { ...rebuilt.info, documentId: id, active: document.info.active, addedAt: document.info.addedAt }, passages: rebuilt.passages.map((passage) => ({ ...passage, documentId: id, passageId: passage.passageId.replace(rebuilt.info.documentId, id) })), hidden: [...document.hidden, ...rebuilt.hidden] })
+      const again = hiddenAgain(document.text, document.pages, document.hidden, after)
+      if (again.text === document.text) continue
+      const passages = passagesFor(id, document.info.name, document.info.kind, again.text, again.pages)
+      movePassages(id, document, again.shift, passages, moved)
+      content.documents.set(id, {
+        ...document, info: { ...document.info, textBytes: new TextEncoder().encode(again.text).byteLength, hiddenValues: again.hidden.length },
+        text: again.text, pages: again.pages, hidden: again.hidden, passages, words: passages.map((passage) => keywords(passage.text)),
+      })
       changed.add(id)
     }
     if (changed.size === 0) return
-    // A passage a correction marked outdated that now reads differently: the correction asks to be checked.
-    for (const [mark, noteId] of [...content.outdated]) {
-      const documentId = mark.slice(0, mark.lastIndexOf(':'))
-      const textHash = mark.slice(mark.lastIndexOf(':') + 1)
-      if (!changed.has(documentId)) continue
-      if (content.documents.get(documentId)?.passages.some((passage) => passage.textHash === textHash)) continue
-      emit({ org: collection.org, collectionId: collection.id, type: 'needs_check', noteId, documentId, textHash })
-    }
+    // A passage a correction marked outdated that now reads differently: its mark follows it, and the correction asks
+    // to be checked.
+    const marks = [...content.outdated].map(([mark, noteId]) => ({ documentId: mark.slice(0, mark.lastIndexOf(':')), textHash: mark.slice(mark.lastIndexOf(':') + 1), noteId }))
+    const checks = followMarks(content, marks, moved)
     for (const snapshot of collection.snapshots.values()) {
       if ([...changed].some((id) => snapshot.content.documents.has(id))) {
         snapshot.restorable = false
@@ -1456,6 +1492,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       }
     }
     commit(collection, content, 'reread', NO_CHANGES, { summary: 'Hid information under the new rules' })
+    for (const check of checks) emit({ org: collection.org, collectionId: collection.id, type: 'needs_check', ...check })
   }
 
   function remove(collection: StubCollection): void {
@@ -1531,6 +1568,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     reset() {
       collections = new Map()
       holds = new Map()
+      holdVersions = new Map()
       outbox = []
       failures = []
       held = false

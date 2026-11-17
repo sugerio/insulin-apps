@@ -84,6 +84,7 @@ export interface CollectionSettings {
 // re-learning is pending; search answers status `held`.
 export interface OrgHoldRequest {
   until: string | null // ISO time
+  version: number // the app's version of the organization's hold wish; the engine ignores a request older than the one it holds and answers its current state
 }
 
 export interface CollectionCounts {

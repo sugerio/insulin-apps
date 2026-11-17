@@ -19,9 +19,9 @@ export const EXPORT_LIMITS = {
   textBytes: 3 * 1024 * 1024, // a stored text (container/ops.py STORED_TEXT_BYTES)
   pages: 20_000, // page-map entries of a document (container/extract.py MAX_PAGES)
   // documents/<id>.json: the details, the page map ([page, start, end] each) and the hidden values' starts by kind.
-  // A text of textBytes holds at most textBytes / 8 values ("[hidden]" is 8 long), each start under 8 characters:
-  // about 3 MiB of starts and 0.6 MiB of page map at the most.
-  documentBytes: 8 * 1024 * 1024,
+  // A text of textBytes holds at most textBytes / 8 values ("[hidden]" is 8 long), each start at most 7 digits and
+  // a comma: 3 MiB of starts and under 0.5 MiB of page map at the most.
+  documentBytes: 4 * 1024 * 1024,
   collectionBytes: 64 * 1024, // collection.json
 }
 
@@ -112,22 +112,56 @@ async function jsonOf(entry: ZipEntry | undefined, maxBytes: number): Promise<an
   return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes))
 }
 
-/** A page map and hidden values read back, checked; null when they aren't well formed or pass the bounds. */
-function readLayout(meta: any): { pages: Page[]; hidden: HiddenSpan[] } | null {
+/** The most hidden values a stored text can hold: each is a "[hidden]". */
+const MOST_HIDDEN = Math.floor(EXPORT_LIMITS.textBytes / MARK_LENGTH)
+
+/**
+ * Walks the hidden values in order of their starts, across kinds, checking as it goes that each start comes at least a
+ * "[hidden]" after the one before (no duplicates, no overlaps, each kind's list in order). Nothing is built: `visit`
+ * sees each value once. False when a check fails.
+ */
+function walkHidden(hidden: Record<string, number[]>, visit?: (start: number, kind: HiddenSpan['kind']) => void): boolean {
+  const kinds = Object.keys(hidden) as HiddenSpan['kind'][]
+  const at = kinds.map(() => 0)
+  let previous = -MARK_LENGTH
+  for (;;) {
+    let next = -1
+    for (let k = 0; k < kinds.length; k++) {
+      const list = hidden[kinds[k]]
+      if (at[k] < list.length && (next < 0 || list[at[k]] < hidden[kinds[next]][at[next]])) next = k
+    }
+    if (next < 0) return true
+    const start = hidden[kinds[next]][at[next]]
+    if (!isInt(start) || start < previous + MARK_LENGTH) return false
+    // Within a kind, starts rise too: a later one smaller than this would have come first.
+    const following = hidden[kinds[next]][at[next] + 1]
+    if (following !== undefined && (!isInt(following) || following < start + MARK_LENGTH)) return false
+    visit?.(start, kinds[next])
+    previous = start
+    at[next] += 1
+  }
+}
+
+/**
+ * A page map and hidden values read back, checked before anything is built from them (their number first, then
+ * their order); null when they aren't well formed or pass the bounds. `build: false` only checks and counts.
+ */
+function readLayout(meta: any, build = true): { pages: Page[]; hidden: HiddenSpan[]; count: number } | null {
   const pages = meta?.pages
   const hidden = meta?.hidden
   if (!Array.isArray(pages) || pages.length > EXPORT_LIMITS.pages) return null
   if (!pages.every((p: unknown) => Array.isArray(p) && p.length === 3 && p.every(isInt) && p[1] <= p[2])) return null
   if (typeof hidden !== 'object' || hidden === null || Array.isArray(hidden)) return null
-  const spans: HiddenSpan[] = []
+  let count = 0
   for (const [kind, starts] of Object.entries(hidden)) {
-    if (!HIDDEN_KINDS.includes(kind as HiddenSpan['kind']) || !Array.isArray(starts) || !starts.every(isInt)) return null
-    for (const start of starts) spans.push({ start, end: start + MARK_LENGTH, kind: kind as HiddenSpan['kind'] })
+    if (!HIDDEN_KINDS.includes(kind as HiddenSpan['kind']) || !Array.isArray(starts)) return null
+    count += starts.length
   }
-  spans.sort((a, b) => a.start - b.start)
-  // Hidden values never overlap.
-  for (let i = 1; i < spans.length; i++) if (spans[i].start < spans[i - 1].end) return null
-  return { pages: pages.map(([page, start, end]: number[]) => ({ page, start, end })), hidden: spans }
+  if (count > MOST_HIDDEN) return null
+  const spans: HiddenSpan[] = []
+  const ok = walkHidden(hidden as Record<string, number[]>, build ? (start, kind) => spans.push({ start, end: start + MARK_LENGTH, kind }) : undefined)
+  if (!ok) return null
+  return { pages: build ? pages.map(([page, start, end]: number[]) => ({ page, start, end })) : [], hidden: spans, count }
 }
 
 /**
@@ -157,7 +191,7 @@ export async function openExport(bytes: Uint8Array): Promise<ExportContents | nu
       if (!isInt(info.bytes) || !(info.pages === null || isInt(info.pages))) return null
       // A file's checksum finds the same content when it is added again; a note has none.
       if (info.kind === 'file' ? !isSha256(info.sha256) : !(info.sha256 === '' || isSha256(info.sha256))) return null
-      const layout = readLayout(meta)
+      const layout = readLayout(meta, false)
       if (!layout) return null
       const noteId = info.kind === 'note' ? meta.noteId : null
       if (info.kind === 'note' && (typeof noteId !== 'string' || !noteId)) return null
@@ -170,7 +204,7 @@ export async function openExport(bytes: Uint8Array): Promise<ExportContents | nu
       documents.push({
         info: { documentId, kind: info.kind, name: info.name, type: info.type, bytes: info.bytes, pages: info.pages, sha256: info.sha256, active: info.active },
         noteId,
-        hiddenCount: layout.hidden.length,
+        hiddenCount: layout.count,
         truncated: meta.truncated === true,
         meta: metaEntry,
         text: entries.get(`documents/${documentId}.txt`)!,

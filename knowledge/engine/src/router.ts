@@ -28,11 +28,14 @@ export async function handle(request: Request, env: Env): Promise<Response> {
       case 'org': {
         if (params.org !== org) return fail('not_found', 'No such organization.')
         if (route.name === 'holdOrg') {
-          const { until } = await readJson<{ until?: unknown }>(request)
+          const { until, version } = await readJson<{ until?: unknown; version?: unknown }>(request)
           if (until !== null && (typeof until !== 'string' || !Number.isFinite(Date.parse(until)))) {
             return fail('bad_request', 'until must be a date and time, or null to lift the hold.')
           }
-          return json(await callObject(env.REGISTRY, REGISTRY_NAME, '/hold', { body: { org, until } }))
+          if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) {
+            return fail('bad_request', "version must be the app's version of the hold, a whole number.")
+          }
+          return json(await callObject(env.REGISTRY, REGISTRY_NAME, '/hold', { body: { org, until, version } }))
         }
         const result = await callObject<{ collections: number }>(env.REGISTRY, REGISTRY_NAME, '/purge', { body: { org } })
         return json({ state: 'deleting', collections: result.collections }, 202)

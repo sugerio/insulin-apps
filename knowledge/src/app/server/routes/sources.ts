@@ -77,7 +77,7 @@ export type ImportKind = 'files' | 'web_page' | 'note' | 'correction'
  * files the engine no longer had when asked to keep them, taken out of it to be added again. Its notes are kept with
  * the organization's hidden values hidden (`hidden`: an older row without it is hidden by the tick).
  */
-export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[]; hidden?: boolean; sentAt?: number; sends?: number }
+export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[]; hidden?: boolean }
 
 /** An import kept for the 1st of next month, when the organization has used this month's documents learned. */
 export interface Waiting {
@@ -101,10 +101,10 @@ export function keptUntil(at: number): number {
  * import's files until a little past the 1st; files it no longer had are taken out of the import, as `lost`.
  */
 export async function waitForNextMonth(engine: EngineClient, collectionId: string, request: WaitingRequest, at: number): Promise<WaitingRequest> {
-  // An export stays an export, and an import already sent to the engine stays marked sent, through every month it waits.
+  // An export stays an export through every month it waits.
   const waiting: WaitingRequest = {
     files: request.files, notes: request.notes, waitsFor: resetsAt(at), lost: request.lost ?? [],
-    ...(request.export ? { export: request.export } : {}), ...(request.sentAt ? { sentAt: request.sentAt } : {}), ...(request.sends ? { sends: request.sends } : {}),
+    ...(request.export ? { export: request.export } : {}),
   }
   if (!request.files.length) return waiting
   const { kept } = await engine.keepStaged(collectionId, { fileIds: request.files.map((file) => file.fileId), until: new Date(keptUntil(at)).toISOString() })
@@ -446,16 +446,14 @@ export function sourceRoutes() {
     const db = c.env.DB
     const at = now(c)
     const importId = param(c, 'importId')
-    const row = await db.prepare(`SELECT state, request FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
-      .first<{ state: string; request: string | null }>()
+    const row = await db.prepare(`SELECT state, sends, sent_at FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
+      .first<{ state: string; sends: number; sent_at: number | null }>()
     if (!row) throw notFound('There is no such import in this collection.')
     // Sent to the engine on the 1st without an answer: it may be learning. The engine is asked; while it may have it,
     // the import isn't cancelled and keeps what it reserved. The cancel is written only if no send was made since this
-    // request read the import (`sends`, which the tick counts up before each send, unchanged): a send it didn't see, or
-    // one made after the engine said it had nothing, refuses it.
-    const request = row.state === 'waiting' && row.request ? (JSON.parse(row.request) as WaitingRequest) : null
-    const sends = request?.sends ?? 0
-    if (request?.sentAt) {
+    // request read the import (`sends`, which the tick counts up before each send and nothing else writes,
+    // unchanged): a send it didn't see, or one made after the engine said it had nothing, refuses it.
+    if (row.state === 'waiting' && row.sent_at !== null) {
       let status: ImportStatus | null = null
       try {
         status = await engineFor(c).getImport(collection.id, importId)
@@ -472,9 +470,8 @@ export function sourceRoutes() {
     }
     const [cancelled] = await db.batch([
       db.prepare(
-        `UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting'
-           AND COALESCE(json_extract(request, '$.sends'), 0) = ?4`,
-      ).bind(importId, caller.organizationId, at, sends),
+        `UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting' AND sends = ?4`,
+      ).bind(importId, caller.organizationId, at, row.sends),
       db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND state = 'held' AND EXISTS (SELECT 1 FROM imports WHERE id = ?4 AND state = 'cancelled')`)
         .bind(caller.organizationId, `import:${importId}`, at, importId),
     ])

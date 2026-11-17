@@ -4,6 +4,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ORG, OTHER_ORG, ask, createCollection, doc, learn, log, makeEngine, outboxEvents, startImport } from './helpers.ts'
 
+/** A hold request as the app sends it: each a newer version of the organization's hold wish. */
+let wishes = 0
+const wish = (until: string | null, version = ++wishes) => ({ until, version })
+
 const DAY = 24 * 60 * 60_000
 
 test('a held organization starts no container: questions answer "held", running ones stop, and the hold lifts', async () => {
@@ -14,9 +18,9 @@ test('a held organization starts no container: questions answer "held", running 
   await learn(t, 'other', 'imp-o', [doc(9)], OTHER_ORG)
   assert.equal(t.container('c1').running, true)
   const until = new Date(t.now() + DAY).toISOString()
-  const held = await t.api('POST', `/v1/orgs/${ORG}/hold`, { until })
+  const held = await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(until))
   assert.deepEqual([held.status, held.body], [200, { held: true, until }])
-  assert.equal((await t.api('POST', `/v1/orgs/${ORG}/hold`, { until }, { org: OTHER_ORG })).status, 404, 'the header names the organization')
+  assert.equal((await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(until), { org: OTHER_ORG })).status, 404, 'the header names the organization')
   await t.drain('c1')
   assert.equal(t.container('c1').running, false, 'the running container stopped')
   assert.equal((await t.api('GET', '/v1/collections/c1')).body.state, 'held')
@@ -40,7 +44,7 @@ test('a held organization starts no container: questions answer "held", running 
   assert.equal(t.container('c1').running, false, 'and stops again afterwards')
 
   // Lifted with until: null, the import runs and questions are answered.
-  assert.deepEqual((await t.api('POST', `/v1/orgs/${ORG}/hold`, { until: null })).body, { held: false, until: null })
+  assert.deepEqual((await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(null))).body, { held: false, until: null })
   await t.drain('c1')
   assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-2')).body.state, 'committed')
   assert.equal((await ask(t, 'c1', 'topic number 2 gateway port')).body.status, 'ok')
@@ -55,7 +59,7 @@ test('a hold stops an import mid-way without keeping anything, and lifts by itse
   await startImport(t, 'c1', 'imp-2', [doc(2), doc(3)])
   await t.drain('c1', { steps: 2 })
   assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-2')).body.state, 'learning')
-  await t.api('POST', `/v1/orgs/${ORG}/hold`, { until: new Date(t.now() + 60 * 60_000).toISOString() })
+  await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(new Date(t.now() + 60 * 60_000).toISOString()))
   await t.drain('c1', { steps: 3 })
   const stopped = (await t.api('GET', '/v1/collections/c1/imports/imp-2')).body
   assert.deepEqual([stopped.state, stopped.attempt], ['queued', 1])
@@ -96,7 +100,7 @@ test('settings carry a revision: an older one is refused with 409 stale_settings
 })
 
 const DAY_MS = 24 * 60 * 60_000
-const holdFor = (t: any, days = 14) => t.api('POST', `/v1/orgs/${ORG}/hold`, { until: new Date(t.now() + days * DAY_MS).toISOString() })
+const holdFor = (t: any, days = 14) => t.api('POST', `/v1/orgs/${ORG}/hold`, wish(new Date(t.now() + days * DAY_MS).toISOString()))
 
 async function twoVersions() {
   const t = makeEngine()
@@ -228,7 +232,7 @@ for (const order of ['a hold, then a lift', 'a lift, then a hold'] as const) {
     const until = new Date(t.now() + DAY_MS).toISOString()
     if (order === 'a lift, then a hold') {
       // The older call lifts a hold the organization had; the newer one holds it again.
-      await t.api('POST', `/v1/orgs/${ORG}/hold`, { until })
+      await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(until))
     }
     const [older, newer] = order === 'a hold, then a lift' ? [until, null] : [null, until]
     // The older call's delivery to c1 is answered only after the newer call has told everyone.
@@ -252,9 +256,9 @@ for (const order of ['a hold, then a lift', 'a lift, then a hold'] as const) {
         },
       }
     }
-    const first = t.api('POST', `/v1/orgs/${ORG}/hold`, { until: older })
+    const first = t.api('POST', `/v1/orgs/${ORG}/hold`, wish(older))
     await atC1
-    const second = await t.api('POST', `/v1/orgs/${ORG}/hold`, { until: newer })
+    const second = await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(newer))
     assert.equal(second.body.held, newer !== null)
     paused!()
     await first
@@ -345,4 +349,39 @@ test('a hold that arrives while an import takes its snapshot: the import keeps n
   t.advance(DAY_MS)
   await t.drain('c1')
   assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-2')).body.state, 'committed')
+})
+
+for (const order of ['a hold, then an older lift', 'a lift, then an older hold'] as const) {
+  test(`the app's hold wish is versioned (${order}, its response lost): the older request changes nothing`, async () => {
+    const t = makeEngine()
+    await createCollection(t, 'c1')
+    await createCollection(t, 'c2')
+    const until = new Date(t.now() + DAY_MS).toISOString()
+    // Version 5 reaches the engine and its answer is lost; version 4, sent earlier, arrives after it.
+    const [newer, older] = order === 'a hold, then an older lift' ? [until, null] : [null, until]
+    if (newer === null) await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(until, 3))
+    await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(newer, 5))
+    const late = await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(older, 4))
+    assert.equal(late.status, 200)
+    assert.deepEqual(late.body, { held: newer !== null, until: newer }, 'it answers the state the newer wish made')
+    for (const cid of ['c1', 'c2']) assert.equal((await t.storage(cid).get<any>('meta')).heldUntil, newer, cid)
+    // The app sends version 5 again (its answer was lost): the same answer, nothing changes.
+    assert.deepEqual((await t.api('POST', `/v1/orgs/${ORG}/hold`, wish(newer, 5))).body, { held: newer !== null, until: newer })
+    // A collection refuses a delivery of an older wish too.
+    const delivered = await t.collections.get(t.collections.idFromName(`${ORG}:c1`)).fetch('https://engine.internal/internal/hold', {
+      method: 'POST',
+      headers: { 'x-knowledge-org': ORG, 'content-type': 'application/json' },
+      body: JSON.stringify({ until: older, seq: 99, version: 4 }),
+    })
+    assert.equal((await delivered.json()).stale, true)
+    assert.equal((await t.storage('c1').get<any>('meta')).heldUntil, newer)
+  })
+}
+
+test('a hold request names its version', async () => {
+  const t = makeEngine()
+  for (const body of [{ until: null }, { until: null, version: -1 }, { until: null, version: 1.5 }]) {
+    const res = await t.api('POST', `/v1/orgs/${ORG}/hold`, body)
+    assert.deepEqual([res.status, res.body.error], [400, 'bad_request'], JSON.stringify(body))
+  }
 })

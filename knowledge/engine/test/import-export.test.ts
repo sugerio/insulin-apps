@@ -333,3 +333,82 @@ test("import-export names the staged zip by its checksum: another file under tha
     assert.equal(res.status, 409, 'or the staged file is refused while an import names it')
   }
 })
+
+test("a document's hidden values are counted and checked before anything is built from them: duplicates and too many are refused cheaply", async () => {
+  const { openExport, EXPORT_LIMITS } = await import('../src/exportfile.ts')
+  const id = 'd_' + 'b'.repeat(24)
+  const exportWith = (hidden: unknown) =>
+    forge([
+      { name: 'README.txt', data: Buffer.from('export') },
+      { name: 'collection.json', data: Buffer.from(JSON.stringify({ format: 2, collectionId: 'src', version: 1 })) },
+      {
+        name: `documents/${id}.json`,
+        data: Buffer.from(JSON.stringify({ document: { documentId: id, kind: 'file', name: 'a.md', type: 'text/markdown', bytes: 1, pages: null, sha256: 'a'.repeat(64), active: true }, noteId: null, truncated: false, pages: [], hidden, outdated: [] })),
+      },
+      { name: `documents/${id}.txt`, data: Buffer.from('x') },
+    ])
+  const most = EXPORT_LIMITS.textBytes / 8
+  const cases: [string, unknown][] = [
+    ['two million copies of one start (a 4 MB entry that compresses to a few KB)', { word: new Array(1_900_000).fill(0) }],
+    ['as many duplicate starts as a text may hold values', { word: new Array(most).fill(0) }],
+    ['more starts than a text can hold', { word: Array.from({ length: most + 1 }, (_, i) => i * 8) }],
+    ['starts closer than a [hidden]', { word: [0, 7] }],
+    ['starts out of order', { word: [16, 8] }],
+    ['the same start under two kinds', { word: [8], email: [8] }],
+  ]
+  for (const [why, hidden] of cases) {
+    const zip = exportWith(hidden)
+    globalThis.gc?.()
+    const before = process.memoryUsage().heapUsed
+    let peak = before
+    const timer = setInterval(() => (peak = Math.max(peak, process.memoryUsage().heapUsed)), 1)
+    const contents = await openExport(zip)
+    peak = Math.max(peak, process.memoryUsage().heapUsed)
+    clearInterval(timer)
+    assert.equal(contents, null, why)
+    assert.ok(peak - before < 48 * 1024 * 1024, `${why}: ${Math.round((peak - before) / 1048576)} MB of heap`)
+  }
+  // The most a text can hold, 8 apart, is accepted.
+  assert.notEqual(await openExport(exportWith({ word: Array.from({ length: most }, (_, i) => i * 8) })), null)
+})
+
+test('an export whose hidden values are not where its text says, or whose passage has two corrections, is not learned', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  const file = 'd_' + 'a'.repeat(24)
+  const note = 'n_' + 'b'.repeat(24)
+  const json = (v: unknown) => Buffer.from(JSON.stringify(v))
+  const fileInfo = { documentId: file, kind: 'file', name: 'a.md', type: 'text/markdown', bytes: 10, pages: null, sha256: 'c'.repeat(64), active: true }
+  const noteInfo = { documentId: note, kind: 'note', name: 'Fix', type: 'text/markdown', bytes: 4, pages: null, sha256: '', active: true }
+  const exportOf = (hidden: unknown, outdated: unknown[]) =>
+    forge([
+      { name: 'README.txt', data: Buffer.from('export') },
+      { name: 'collection.json', data: json({ format: 2, collectionId: 'src', version: 2 }) },
+      { name: `documents/${file}.json`, data: json({ document: fileInfo, noteId: null, truncated: false, pages: [], hidden, outdated: [] }) },
+      { name: `documents/${file}.txt`, data: Buffer.from('Plain words, nothing hidden here.') },
+      { name: `documents/${note}.json`, data: json({ document: noteInfo, noteId: 'fix', truncated: false, pages: [], hidden: {}, outdated }) },
+      { name: `documents/${note}.txt`, data: Buffer.from('Fix.') },
+    ])
+  const mark = { documentId: file, textHash: 'e'.repeat(64), needsCheck: false }
+  await stageBytes(t, 'c1', 'twice', exportOf({}, [mark, mark]))
+  const twice = await t.api('POST', '/v1/collections/c1/import-export', exportRequest('c1', 'from-twice', 'twice'))
+  assert.deepEqual([twice.status, twice.body.error], [409, 'bad_request'], 'one passage, two corrections')
+  await stageBytes(t, 'c1', 'misplaced', exportOf({ word: [0] }, [mark]))
+  const misplaced = await t.api('POST', '/v1/collections/c1/import-export', exportRequest('c1', 'from-misplaced', 'misplaced'))
+  assert.equal(misplaced.status, 202, 'well formed: only its text shows the value is not hidden there')
+  await t.drain('c1')
+  const status = (await t.api('GET', '/v1/collections/c1/imports/from-misplaced')).body
+  assert.deepEqual([status.state, (await t.api('GET', '/v1/collections/c1')).body.version], ['failed', 0])
+  assert.match(status.error.message, /damaged/)
+})
+
+test('the exporter writes nothing past the bounds: a stored text longer than an export holds fails the export', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  // The fake container doesn't cut texts as the real one does (hide.bounded), so this one passes the bound.
+  await learn(t, 'c1', 'big', [{ fileId: 'big', name: 'big.md', text: 'word '.repeat(700_000) }])
+  await t.api('POST', '/v1/collections/c1/exports', { exportId: 'exp-1' })
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/exports/exp-1')).body.state, 'failed')
+  assert.ok((await t.api('GET', '/v1/collections/c1/__test/state')).body.log.some((e: any) => e.event === 'export-failed' && /larger than an export can hold/.test(e.error)))
+})

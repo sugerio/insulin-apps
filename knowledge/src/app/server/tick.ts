@@ -166,7 +166,7 @@ export async function awakeHolds(env: Bindings, now: number, deadline: number): 
   const { results: behind } = await db.prepare(`SELECT org_id FROM org_holds WHERE delivered != version ORDER BY held_at LIMIT 100`).all<{ org_id: string }>()
   for (const row of behind) {
     if (Date.now() > deadline) return { held, released, resent }
-    if (await deliverHold(env, row.org_id)) resent += 1
+    if (await deliverHold(env, row.org_id, now)) resent += 1
   }
   const period = periodOf(now)
   const { results: used } = await db.prepare(
@@ -293,9 +293,9 @@ async function startWaiting(env: Bindings, row: WaitingRow, now: number): Promis
     if (error instanceof ApiError && error.code === 'quota_exceeded') return 'stopped'
     throw error
   }
-  // Marked sent before it goes: from now on it may be in the engine, so it can't be cancelled until the engine says not.
-  await db.prepare(`UPDATE imports SET request = json_set(request, '$.sentAt', ?, '$.sends', COALESCE(json_extract(request, '$.sends'), 0) + 1) WHERE id = ? AND org_id = ? AND request IS NOT NULL`)
-    .bind(now, row.id, org).run()
+  // Marked sent and counted before it goes, in columns of their own that nothing rewriting the request touches: from
+  // now on it may be in the engine, so it can't be cancelled until the engine says not.
+  await db.prepare(`UPDATE imports SET sends = sends + 1, sent_at = ? WHERE id = ? AND org_id = ?`).bind(now, row.id, org).run()
   try {
     await submitImport(env, new EngineClient(env.ENGINE!, org, env.DEADLINE), org, collection, row.kind, request, row.id, now, { onRefused: 'fail' })
   } catch (error) {
@@ -343,15 +343,16 @@ async function waitAnotherMonth(env: Bindings, engine: EngineClient, collection:
 }
 
 /**
- * Imports the engine's answer to never reached (a dropped connection), asked again after an hour. One the engine
- * never had: a waiting import (it still has its request) waits again and is sent again; any other fails, nothing
- * learned and what it reserved free again, and whoever added it is told to add it again.
+ * Imports the engine's answer to never reached (a dropped connection), asked again an hour after they were sent (a
+ * send still on its way isn't taken for lost). One the engine never had: a waiting import (it still has its request)
+ * waits again and is sent again; any other fails, nothing learned and what it reserved free again, and whoever added
+ * it is told to add it again.
  */
 async function askAboutStaleImports(env: Bindings, now: number, deadline: number): Promise<number> {
   if (!env.ENGINE) return 0
   const db = env.DB
   const { results } = await db.prepare(
-    `SELECT id, org_id, collection_id, request IS NOT NULL AS waited FROM imports WHERE state = 'queued' AND created_at < ? ORDER BY created_at LIMIT 10`,
+    `SELECT id, org_id, collection_id, request IS NOT NULL AS waited FROM imports WHERE state = 'queued' AND COALESCE(sent_at, created_at) < ? ORDER BY created_at LIMIT 10`,
   ).bind(now - 60 * 60 * 1000).all<{ id: string; org_id: string; collection_id: string; waited: number }>()
   let settled = 0
   for (const row of results) {
@@ -368,7 +369,7 @@ async function askAboutStaleImports(env: Bindings, now: number, deadline: number
       }
       if (row.waited) {
         // The engine never had it: it waits again, no longer sent, and can be cancelled.
-        await db.prepare(`UPDATE imports SET state = 'waiting', request = json_remove(request, '$.sentAt') WHERE id = ? AND org_id = ? AND state = 'queued'`).bind(row.id, row.org_id).run()
+        await db.prepare(`UPDATE imports SET state = 'waiting', sent_at = NULL WHERE id = ? AND org_id = ? AND state = 'queued'`).bind(row.id, row.org_id).run()
       } else {
         const message = 'Insulin Knowledge never received this, so nothing was learned. Add it again.'
         await finishImport(env, row.org_id, collection, row.id, { state: 'failed', error: { error: 'internal', message } }, now)

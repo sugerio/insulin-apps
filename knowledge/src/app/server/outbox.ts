@@ -139,8 +139,15 @@ export async function applyEngineEvent(env: Bindings, event: OutboxEvent, now: n
       return applied
     }
     case 'needs_check':
+      // Not when another correction of that passage, as it reads now, was learned since: it took the passage over (its
+      // import may be recorded before this event is read), so there is nothing left to check.
       return once(db, event, [db.prepare(
-        `INSERT INTO correction_checks (collection_id, note_id, document_id, text_hash, org_id, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+        `INSERT INTO correction_checks (collection_id, note_id, document_id, text_hash, org_id, at) SELECT ?1, ?2, ?3, ?4, ?5, ?6
+         WHERE NOT EXISTS (
+           SELECT 1 FROM corrections k JOIN imports i ON i.id = k.import_id AND i.org_id = k.org_id, json_each(k.outdated) o
+           WHERE k.org_id = ?5 AND k.collection_id = ?1 AND replace(k.id, '-', '') != ?2 AND i.state = 'committed' AND i.finished_at >= ?6
+             AND json_extract(o.value, '$.documentId') = ?3 AND json_extract(o.value, '$.textHash') = ?4)
+         ON CONFLICT DO NOTHING`,
       ).bind(collection.id, event.noteId, event.documentId, event.textHash, org, Date.parse(event.at) || now)], now)
     case 'usage':
       return once(db, event, await consumeAwake(db, org, collection.id, Math.max(0, event.seconds), Date.parse(event.at) || now), now)
@@ -205,12 +212,14 @@ export async function finishImportStatements(db: D1Database, org: string, collec
          correction_id = (SELECT id FROM corrections WHERE import_id = ?1 AND org_id = ?2)
        WHERE org_id = ?2 AND status = 'open' AND id IN (SELECT report_id FROM corrections WHERE import_id = ?1 AND org_id = ?2 AND report_id IS NOT NULL)`,
     ).bind(importId, org, now))
-    // A new correction of a file settles the checks earlier corrections of it asked for, in its collection: those that
-    // came before it was learned, not one a later re-read asks for.
+    // A new correction of a passage settles the checks earlier corrections of that passage asked for, in its
+    // collection: those for the passages it marks outdated (not others of the file), that came before it was learned
+    // (not one a later re-read asks for).
     const learnedAt = (status.finishedAt && Date.parse(status.finishedAt)) || now
     statements.push(db.prepare(
-      `DELETE FROM correction_checks WHERE org_id = ?2 AND collection_id = ?3 AND at <= ?4 AND document_id IN (
-         SELECT json_extract(o.value, '$.documentId') FROM corrections k, json_each(k.outdated) o WHERE k.import_id = ?1 AND k.org_id = ?2)`,
+      `DELETE FROM correction_checks WHERE org_id = ?2 AND collection_id = ?3 AND at <= ?4 AND EXISTS (
+         SELECT 1 FROM corrections k, json_each(k.outdated) o WHERE k.import_id = ?1 AND k.org_id = ?2
+           AND json_extract(o.value, '$.documentId') = correction_checks.document_id AND json_extract(o.value, '$.textHash') = correction_checks.text_hash)`,
     ).bind(importId, org, collection.id, learnedAt))
   } else {
     statements.push(...releaseStatements(db, org, held.map((reservation) => reservation.id), now))

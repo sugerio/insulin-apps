@@ -14,7 +14,7 @@ const COLLECTION_TABLES = [
 
 const ORGANIZATION_TABLES = [
   ...COLLECTION_TABLES, 'collections', 'members', 'org_settings', 'org_limits', 'usage_counters', 'reservations', 'limit_alerts',
-  'activity', 'idempotency',
+  'activity', 'idempotency', 'org_holds',
 ] as const
 
 /** What a collection's imports hold of the limits, released: they will never count. Before its imports go. */

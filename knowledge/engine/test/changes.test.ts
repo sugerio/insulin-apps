@@ -307,3 +307,38 @@ test("a retried clean-up after stricter hiding leaves an export made since alone
   assert.equal((await t.api('GET', '/v1/collections/c1/exports/after')).body.state, 'ready', 'the export made after the change holds the hidden text')
   assert.ok(t.backups.keys(`backups/${ORG}/c1/`).some((k) => k.endsWith('latest.json')), 'the new latest backup stays')
 })
+
+test('stricter hiding that makes two corrected passages one: the newer correction keeps it, and the export goes round trip', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [{ fileId: 'codes', name: 'codes.md', text: 'The gate code is Bluewater.\n\nThe gate code is Redwater.' }])
+  const passages = (await ask(t, 'c1', 'gate code')).body.passages
+  const [blue, red] = ['Bluewater', 'Redwater'].map((w) => passages.find((p: any) => p.text.includes(w)))
+  let n = 0
+  for (const [passage, code] of [[blue, '1111'], [red, '2222']] as const) {
+    t.advance(6 * 60_000)
+    n += 1
+    await t.api('POST', '/v1/collections/c1/corrections', {
+      importId: `fix-${n}`,
+      note: { noteId: `n-${n}`, title: `Code ${n}`, text: `The gate code is now ${code}.`, outdated: [{ documentId: passage.documentId, textHash: passage.textHash }] },
+    })
+    await t.drain('c1')
+  }
+  // Both values are hidden now: the two passages read the same, "The gate code is [hidden]."
+  t.advance(6 * 60_000)
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater', 'Redwater'] } } })
+  for (let i = 0; i < 5; i++) {
+    await t.drain('c1')
+    t.advance(60_000)
+  }
+  assert.match((await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints[0].summary, /stricter hiding/)
+  const notes = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.filter((d: any) => d.kind === 'note')
+  assert.deepEqual(notes.map((d: any) => [d.name, d.active]).sort(), [['Code 1', false], ['Code 2', true]], 'the newer correction keeps the passage')
+  const answer = (await ask(t, 'c1', 'gate code')).body.passages
+  assert.ok(answer.some((p: any) => p.text.includes('2222')) && !answer.some((p: any) => p.text.includes('1111')))
+  await t.api('POST', '/v1/collections/c1/exports', { exportId: 'exp-1' })
+  await t.drain('c1')
+  const zip = new Uint8Array(await (await t.api('GET', '/v1/collections/c1/exports/exp-1?download=1')).response.arrayBuffer())
+  const { openExport } = await import('../src/exportfile.ts')
+  assert.notEqual(await openExport(zip), null, 'its own export can start a collection')
+})

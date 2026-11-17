@@ -129,7 +129,7 @@ describe("the steps", () => {
     const { alex, revision } = await year();
     const applies = { hasSelfEmployment: false, hasRentalIncome: false, hasPensionIncome: false, hasEiBenefits: false, hasForeignIncome: false, soldProperty: false, hasChildCare: false };
     let current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: applies } }));
-    expect(current.steps).toMatchObject({ household: "done", upload: "not_built", applies: "done", confirm: "todo", deductions: "todo", finish: "todo" });
+    expect(current.steps).toMatchObject({ household: "done", upload: "todo", applies: "done", confirm: "todo", deductions: "todo", finish: "todo" });
     current = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/answers", {
         body: { revision: current.revision, personId: alex.id, answers: { rrspDeduction: "0", fhsaDeduction: "0", medicalExpenses: "0", donations: "0", unusedTuition: "0" } },

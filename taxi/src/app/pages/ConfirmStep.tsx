@@ -110,10 +110,22 @@ function PersonSlips({ personId, name, slips, editable }: { personId: string; na
                     {slip.type} · {slip.issuer}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {byBox(Object.entries(slip.boxes))
-                      .map(([box, amount]) => `Box ${box} ${types.get(slip.type)?.boxes[box] ?? ""}: ${formatMoney(amount)}`)
-                      .join(" · ")}
+                    {byBox(Object.entries(slip.boxes)).map(([box, amount], index) => (
+                      <span key={box} className={slip.unsure.includes(box) && slip.status !== "confirmed" ? "font-medium text-amber-700 dark:text-amber-400" : undefined}>
+                        {index > 0 ? " · " : ""}
+                        Box {box} {types.get(slip.type)?.boxes[box] ?? ""}: {formatMoney(amount)}
+                        {slip.unsure.includes(box) && slip.status !== "confirmed" ? " (check)" : ""}
+                      </span>
+                    ))}
                   </p>
+                  {slip.source === "ai" && slip.documentId ? (
+                    <p className="text-xs text-muted-foreground">
+                      Read by AI from{" "}
+                      <a className="underline underline-offset-2" href={`/api/years/${year.year}/documents/${slip.documentId}/file`} target="_blank" rel="noreferrer">
+                        the uploaded file
+                      </a>
+                    </p>
+                  ) : null}
                 </div>
                 <Badge variant={slip.status === "confirmed" ? "secondary" : "outline"}>{slip.status === "confirmed" ? "Confirmed" : "To confirm"}</Badge>
                 {editable && editing === null ? (
@@ -163,6 +175,8 @@ function RemoveSlip({ slip }: { slip: Slip }) {
 function SlipForm({ personId, slip, onDone }: { personId: string; slip?: Slip; onDone: () => void }) {
   const id = useId();
   const { year, replace } = useYear();
+  const adults = useAdults();
+  const [owner, setOwner] = useState(personId);
   const types = [...rulesFor(year.year)!.slips.values()];
   const [type, setType] = useState(slip?.type ?? types[0]!.id);
   const [issuer, setIssuer] = useState(slip?.issuer ?? "");
@@ -176,7 +190,10 @@ function SlipForm({ personId, slip, onDone }: { personId: string; slip?: Slip; o
     const filled = Object.fromEntries(Object.entries(boxes).map(([box, amount]) => [box, amount.replace(/[$,\s]/g, "")]).filter(([, amount]) => amount !== ""));
     try {
       const saved = slip
-        ? await apiRequest(routes.updateSlip, { params: { year: year.year, id: slip.id }, body: { revision: year.revision, issuer, boxes: filled } })
+        ? await apiRequest(routes.updateSlip, {
+            params: { year: year.year, id: slip.id },
+            body: { revision: year.revision, issuer, boxes: filled, ...(owner !== slip.personId ? { personId: owner } : {}) },
+          })
         : await apiRequest(routes.addSlip, { params: { year: year.year }, body: { revision: year.revision, personId, type, issuer, boxes: filled } });
       replace(saved);
       onDone();
@@ -189,7 +206,19 @@ function SlipForm({ personId, slip, onDone }: { personId: string; slip?: Slip; o
 
   return (
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} aria-label={slip ? `Edit ${slip.type} from ${slip.issuer}` : "Add a slip"}>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={slip && adults.length > 1 ? "grid gap-4 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-2"}>
+        {slip && adults.length > 1 ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${id}-owner`}>Whose slip</Label>
+            <NativeSelect id={`${id}-owner`} value={owner} onChange={(event) => setOwner(event.target.value)}>
+              {adults.map((adult) => (
+                <NativeSelectOption key={adult.personId} value={adult.personId}>
+                  {adult.person.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-type`}>Slip</Label>
           <NativeSelect id={`${id}-type`} value={type} onChange={(event) => setType(event.target.value)} disabled={slip !== undefined}>

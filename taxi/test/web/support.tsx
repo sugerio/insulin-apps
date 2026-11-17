@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, vi } from "vitest";
 import { AuthProvider } from "../../src/app/auth/AuthProvider.tsx";
 import { routes } from "../../src/app/router.tsx";
+import type { AppOptions } from "../../src/app/server/app.ts";
 import { ORIGIN, OWNER, identityHeaders, startServer, type Identity, type TestServer } from "../support/server.ts";
 
 // Renders the whole app (router, auth, shell) at a path, with the browser's fetch answered by the real server and a
@@ -15,8 +16,8 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-export async function renderApp(path: string, options: { as?: Identity; seed?: (server: TestServer) => Promise<void> } = {}) {
-  server = await startServer({ enforceSameOrigin: false });
+export async function renderApp(path: string, options: { as?: Identity; seed?: (server: TestServer) => Promise<void>; server?: AppOptions } = {}) {
+  server = await startServer({ enforceSameOrigin: false, ...options.server });
   await options.seed?.(server);
   const as = options.as ?? OWNER;
   const app = server;
@@ -24,7 +25,9 @@ export async function renderApp(path: string, options: { as?: Identity; seed?: (
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, ORIGIN);
     const headers = new Headers(init.headers);
     for (const [name, value] of Object.entries(identityHeaders(as))) headers.set(name, value);
-    return app.app.fetch(new Request(url, { method: init.method ?? "GET", headers, body: init.body ?? null }), { DB: app.db });
+    // A file from jsdom is jsdom's own Blob, which Node's Request can't read: pass its bytes.
+    const body = init.body && typeof init.body === "object" && "arrayBuffer" in init.body ? await (init.body as Blob).arrayBuffer() : (init.body ?? null);
+    return app.app.fetch(new Request(url, { method: init.method ?? "GET", headers, body }), { DB: app.db });
   });
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   render(

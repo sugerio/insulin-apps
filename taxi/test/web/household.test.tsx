@@ -106,7 +106,7 @@ describe("step 1 of a year", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/returns/2025/upload"));
-    expect(await screen.findByText("Not available yet")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Upload documents" })).toBeTruthy();
     const stored = await (await server.call("GET", "/api/years/2025")).json();
     expect(stored).toMatchObject({ maritalStatus: "single", steps: { household: "done" } });
   });

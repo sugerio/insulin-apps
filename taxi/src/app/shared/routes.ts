@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { meSchema, type Permission } from "./access.ts";
+import { documentListSchema, uploadResultSchema } from "./documents.ts";
 import { estimateSchema } from "./estimate.ts";
 import { createSlipSchema, revisionBodySchema, saveAnswersSchema, slipListSchema, updateSlipSchema } from "./returns.ts";
 import {
@@ -132,6 +133,25 @@ export const routes = {
     params: yearParams,
     body: saveHouseholdSchema,
     response: taxYearSchema,
+  }),
+  listDocuments: route({
+    method: "GET",
+    path: "/api/years/:year/documents",
+    summary: "The files uploaded for the year, newest first, with what reading each one found.",
+    permission: "taxi.view",
+    params: yearParams,
+    body: null,
+    response: documentListSchema,
+  }),
+  uploadDocument: route({
+    method: "POST",
+    path: "/api/years/:year/documents",
+    summary:
+      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded). Slips found are added unconfirmed to the adult they name; the same file or the same slips twice are skipped.",
+    permission: "taxi.prepare",
+    params: yearParams,
+    body: null,
+    response: uploadResultSchema,
   }),
   saveAnswers: route({
     method: "PUT",

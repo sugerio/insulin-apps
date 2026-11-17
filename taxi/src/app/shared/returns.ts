@@ -22,6 +22,11 @@ export const slipSchema = z.strictObject({
   boxes: z.record(z.string(), z.string()),
   /** `unconfirmed` until someone checks it against the paper slip; any change sets it back. */
   status: z.enum(SLIP_STATUSES),
+  /** `manual`: typed in. `ai`: read from an uploaded file. */
+  source: z.enum(["manual", "ai"]),
+  documentId: idSchema.nullable(),
+  /** Boxes AI wasn't sure it read right: check these first. */
+  unsure: z.array(z.string()),
   confirmedAt: z.number().int().nullable(),
   updatedAt: z.number().int(),
 });
@@ -42,10 +47,14 @@ export type CreateSlip = z.infer<typeof createSlipSchema>;
 export const updateSlipSchema = z
   .strictObject({
     revision: revisionSchema,
+    /** Whose slip it is, when AI matched it to the wrong person. */
+    personId: idSchema.optional(),
     issuer: z.string().trim().min(1, "Enter who issued the slip").max(100).optional(),
     boxes: slipBoxesSchema.refine((boxes) => Object.keys(boxes).length > 0, { message: "Enter at least one box" }).optional(),
   })
-  .refine((value) => value.issuer !== undefined || value.boxes !== undefined, { message: "Change the issuer or the boxes" });
+  .refine((value) => value.issuer !== undefined || value.boxes !== undefined || value.personId !== undefined, {
+    message: "Change the person, the issuer or the boxes",
+  });
 export type UpdateSlip = z.infer<typeof updateSlipSchema>;
 
 /** A change that needs nothing but the revision it is based on: removing a slip, confirming the slips. */

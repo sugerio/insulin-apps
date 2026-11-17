@@ -13,6 +13,9 @@ interface SlipRow {
   issuer: string;
   boxes: string;
   status: Slip["status"];
+  source: Slip["source"];
+  document_id: string | null;
+  unsure: string;
   confirmed_at: number | null;
   updated_at: number;
 }
@@ -21,13 +24,15 @@ export interface Workspace {
   slips: Slip[];
   /** Per person, their answers by question. */
   answers: Record<string, Record<string, string | boolean>>;
+  /** How many uploaded files were read into slips. */
+  documentsRead: number;
 }
 
 export async function loadWorkspace(db: D1Database, orgId: string, taxYearId: string): Promise<Workspace> {
-  const [slips, answers] = await Promise.all([
+  const [slips, answers, documents] = await Promise.all([
     db
       .prepare(
-        `SELECT id, person_id, type, issuer, boxes, status, confirmed_at, updated_at
+        `SELECT id, person_id, type, issuer, boxes, status, source, document_id, unsure, confirmed_at, updated_at
          FROM slips WHERE org_id = ? AND tax_year_id = ? ORDER BY created_at, id`,
       )
       .bind(orgId, taxYearId)
@@ -36,6 +41,10 @@ export async function loadWorkspace(db: D1Database, orgId: string, taxYearId: st
       .prepare("SELECT person_id, question, value FROM answers WHERE org_id = ? AND tax_year_id = ?")
       .bind(orgId, taxYearId)
       .all<{ person_id: string; question: string; value: string }>(),
+    db
+      .prepare("SELECT count(*) AS read FROM documents WHERE org_id = ? AND tax_year_id = ? AND status = 'read'")
+      .bind(orgId, taxYearId)
+      .first<{ read: number }>(),
   ]);
   const byPerson: Workspace["answers"] = {};
   for (const row of answers.results) {
@@ -49,10 +58,14 @@ export async function loadWorkspace(db: D1Database, orgId: string, taxYearId: st
       issuer: row.issuer,
       boxes: JSON.parse(row.boxes) as Record<string, string>,
       status: row.status,
+      source: row.source,
+      documentId: row.document_id,
+      unsure: JSON.parse(row.unsure) as string[],
       confirmedAt: row.confirmed_at,
       updatedAt: row.updated_at,
     })),
     answers: byPerson,
+    documentsRead: documents?.read ?? 0,
   };
 }
 
@@ -101,8 +114,9 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
 
 /**
  * Each step's state. Household: no blocking issue. What applies: every adult answered each of its questions.
- * Confirm: there are slips and all are confirmed. Deductions: no question of the step that a result line reads is
- * left unanswered. Upload and Finish come in later parts.
+ * Upload: at least one file was read into slips (slips can also be typed in step 4). Confirm: there are slips and all
+ * are confirmed. Deductions: no question of the step that a result line reads is left unanswered. Finish comes with
+ * the filled-in forms.
  */
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): Record<Step, "done" | "todo" | "not_built"> {
   const rules = rulesFor(facts.year);
@@ -112,7 +126,7 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
   const deductions = new Set(questionsOf("deductions"));
   const status: Record<Step, "done" | "todo" | "not_built"> = {
     household: issues.some((issue) => issue.kind === "blocking") ? "todo" : "done",
-    upload: "not_built",
+    upload: workspace.documentsRead > 0 ? "done" : "todo",
     applies: facts.adults.length > 0 && facts.adults.every((adult) => questionsOf("applies").every((id) => answered(adult.personId, id))) ? "done" : "todo",
     confirm: workspace.slips.length > 0 && workspace.slips.every((slip) => slip.status === "confirmed") ? "done" : "todo",
     deductions:

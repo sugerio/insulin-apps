@@ -113,19 +113,24 @@ async function slipType(db: Db, orgId: string, taxYearId: string, id: string): P
   return slip.type;
 }
 
-/** Changes a slip's issuer or boxes; it goes back to unconfirmed, since nobody checked the new numbers yet. */
+/**
+ * Changes whose slip it is, its issuer or its boxes; it goes back to unconfirmed, since nobody checked the change yet.
+ * New boxes clear the boxes AI was unsure of: the person just entered them.
+ */
 export async function updateSlip(db: Db, caller: Caller, year: number, id: string, input: UpdateSlip, now: number): Promise<TaxYear> {
-  const { row } = await openYear(db, caller.orgId, year);
+  const { row, view } = await openYear(db, caller.orgId, year);
+  if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
   const boxes = checkSlip(year, await slipType(db, caller.orgId, row.id, id), input.boxes);
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
     db
       .prepare(
-        `UPDATE slips SET issuer = coalesce(?, issuer), boxes = coalesce(?, boxes), status = 'unconfirmed',
-           confirmed_at = NULL, confirmed_by = NULL, updated_at = ?
+        `UPDATE slips SET person_id = coalesce(?, person_id), issuer = coalesce(?, issuer), boxes = coalesce(?, boxes),
+           unsure = CASE WHEN ? IS NULL THEN unsure ELSE '[]' END,
+           status = 'unconfirmed', confirmed_at = NULL, confirmed_by = NULL, updated_at = ?
          WHERE id = ? AND org_id = ? AND tax_year_id = ?`,
       )
-      .bind(input.issuer ?? null, boxes ? JSON.stringify(boxes) : null, now, id, caller.orgId, row.id),
+      .bind(input.personId ?? null, input.issuer ?? null, boxes ? JSON.stringify(boxes) : null, boxes ? 1 : null, now, id, caller.orgId, row.id),
     audit(db, caller, "slip.changed", id, now),
   ]);
   return getYear(db, caller.orgId, year);

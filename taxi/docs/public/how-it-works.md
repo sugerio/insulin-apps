@@ -19,9 +19,24 @@ Taxi keeps its own database. Each organization has one household, with:
   paper slip (who and when).
 - **Answers:** each adult's answers to the year's questions, such as an RRSP deduction or whether they had rental
   income.
+- **Uploaded files:** each file uploaded for a year, its name, size and fingerprint (SHA-256), and what reading it
+  found. Slips read from a file link to it.
 - **History:** who made each change, when, and whether they used the browser, an AI agent or an API client.
 
 It never stores a SIN, a home address or bank details.
+
+## How AI reads a slip
+
+Each uploaded file (PDF, PNG or JPEG, up to 10 MiB) is sent on its own to Anthropic's Claude, with the organization's
+own Anthropic credential: an admin stores it on the app's **Integrations** page under the key `anthropic` (base URL
+`https://api.anthropic.com`, sent as the named header `x-api-key`). Insulin Apps adds the key to each request, so Taxi
+never holds it. Without that credential, files are stored but not read, and slips can be typed in by hand.
+
+With the file, Claude gets the year, the names of the people in the year, and the slip types the app reads with their
+boxes. It answers in a fixed shape: each slip's type, the name on it, the issuer, its boxes and the boxes it couldn't
+read clearly. It is told never to return a social insurance number. Taxi then checks the answer itself: only known slip
+types and boxes are kept, amounts must be numbers, a slip for another year is refused, and the same slip twice is
+skipped. Every slip read this way starts unconfirmed: someone checks it against the paper slip in step 4.
 
 ## How a return is computed
 
@@ -58,7 +73,7 @@ a name, a birth date, an amount or a document.
 
 ## Limits today
 
-- Slips are entered by hand; reading them from uploaded files comes later, and so do the filled-in CRA forms.
+- The filled-in CRA forms to download come later.
 - The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults: employment,
   interest, dividends, trust income and capital gains; RRSP, FHSA, pension plan and union dues; the basic, age, CPP,
   EI, employment, tuition, medical and donation credits; the spouse and eligible dependant amounts; and a spouse's

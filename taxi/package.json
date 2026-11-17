@@ -54,6 +54,7 @@
     "sample-slips": "node scripts/sample-slips.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.4.0",
     "@fours/app": "0.1.0-beta.0",
     "class-variance-authority": "0.7.1",
     "cn": "0.5.0",

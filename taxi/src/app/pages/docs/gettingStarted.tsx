@@ -44,16 +44,16 @@ export const gettingStarted: DocTopic = {
               <DocLink to="household">The household</DocLink>.
             </li>
             <li>
-              <b>Upload documents.</b> One folder of slips and receipts, read by AI. This step comes in a later version; until then, enter slips in
-              step 4.
+              <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file into slips for the person named on it;
+              the same file or the same slip twice is skipped. You can also type slips in step 4.
             </li>
             <li>
               <b>What applies.</b> For each adult, yes or no to kinds of income and expenses such as self-employment, rent or child care. A yes to
               something the app doesn't handle makes the return say so.
             </li>
             <li>
-              <b>Confirm.</b> Each adult's slips (T4, T5, T3, T5008, T2202), entered box by box as printed. Check each one against the paper slip,
-              then confirm them. Changing a slip makes it unconfirmed again.
+              <b>Confirm.</b> Each adult's slips (T4, T5, T3, T5008, T2202), read by AI or entered box by box. Check each one against the paper
+              slip (a box AI wasn't sure of is marked), then confirm them. Changing a slip makes it unconfirmed again.
             </li>
             <li>
               <b>Deductions.</b> RRSP and FHSA contributions, medical expenses, donations, unused tuition, and the other amounts each return

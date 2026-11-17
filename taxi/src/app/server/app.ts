@@ -1,11 +1,14 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { ROUTE_TABLE, SUPPORTED_YEARS, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
+import { platformReader } from "./lib/ai.ts";
+import * as documents from "./lib/documents.ts";
 import { getEstimate } from "./lib/estimate.ts";
 import * as household from "./lib/household.ts";
 import * as returns from "./lib/returns.ts";
 import { ApiError, forbidden, logError, notFound, parseOr400, readJson } from "./lib/http.ts";
 import { isScheduleTick, readCaller, type Caller } from "./lib/identity.ts";
+import type { SlipReader } from "./lib/reader.ts";
 import { reportUsage, type MetricsEnv } from "./lib/usage-metrics.ts";
 import { requireSameOrigin } from "./middleware/same-origin.ts";
 import { securityHeaders } from "./middleware/security-headers.ts";
@@ -18,6 +21,8 @@ export type AppEnv = {
 
 export interface AppOptions {
   now?: () => number;
+  /** What reads an uploaded slip for an organization; tests pass recorded answers. */
+  reader?: (orgId: string) => SlipReader;
   /** The same-origin check on writes; off only in the dev server, where the console preview's origin differs. */
   enforceSameOrigin?: boolean;
 }
@@ -29,11 +34,14 @@ interface Call<R extends AnyRoute> {
   body: R["body"] extends z.ZodType ? z.infer<R["body"]> : undefined;
   db: D1Database;
   now: number;
+  /** The raw request, for a route that takes a file rather than JSON. */
+  request: Request;
 }
 type Answer<R extends AnyRoute> = R["response"] extends z.ZodType ? z.infer<R["response"]> | { status: 201; body: z.infer<R["response"]> } : void;
 
 export function createApp(options: AppOptions = {}) {
   const now = options.now ?? Date.now;
+  const readerFor = options.reader ?? platformReader;
   const app = new Hono<AppEnv>();
 
   app.use("*", securityHeaders());
@@ -70,7 +78,7 @@ export function createApp(options: AppOptions = {}) {
       const params = route.params ? (route.params as z.ZodType).safeParse(c.req.param()) : null;
       if (params && !params.success) throw notFound();
       const body = route.body ? parseOr400(route.body as z.ZodType, await readJson(c.req.raw), "request body") : undefined;
-      const answer = await handle({ caller, params: params?.data ?? {}, body, db: c.env.DB, now: now() } as Call<R>);
+      const answer = await handle({ caller, params: params?.data ?? {}, body, db: c.env.DB, now: now(), request: c.req.raw } as Call<R>);
       if (route.response === null) return c.body(null, 204);
       const created = typeof answer === "object" && answer !== null && "status" in answer && answer.status === 201;
       const payload = (route.response as z.ZodType).parse(created ? (answer as { body: unknown }).body : answer);
@@ -89,6 +97,26 @@ export function createApp(options: AppOptions = {}) {
   mount(routes.getEstimate, async ({ caller, params, db }) => getEstimate(db, caller.orgId, params.year));
   mount(routes.setYearPeople, async ({ caller, params, body, db, now }) => household.setYearPeople(db, caller, params.year, body, now));
   mount(routes.saveHousehold, async ({ caller, params, body, db, now }) => household.saveHousehold(db, caller, params.year, body, now));
+  mount(routes.listDocuments, async ({ caller, params, db }) => documents.listDocuments(db, caller.orgId, params.year));
+  mount(routes.uploadDocument, async ({ caller, params, db, now, request }) =>
+    documents.uploadDocument(db, caller, params.year, request, readerFor(caller.orgId), now),
+  );
+  // A stored file's bytes, to show it beside the numbers read from it: not JSON, so outside the route table.
+  app.get("/api/years/:year/documents/:id/file", async (c) => {
+    const caller = c.get("caller");
+    if (!caller.permissions.has("taxi.view")) throw forbidden();
+    const year = Number(c.req.param("year"));
+    if (!(SUPPORTED_YEARS as readonly number[]).includes(year)) throw notFound();
+    const file = await documents.documentFile(c.env.DB, caller.orgId, year, c.req.param("id"));
+    return new Response(file.bytes, {
+      headers: {
+        "Content-Type": file.contentType,
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  });
   mount(routes.saveAnswers, async ({ caller, params, body, db, now }) => returns.saveAnswers(db, caller, params.year, body, now));
   mount(routes.listSlips, async ({ caller, params, db }) => returns.listSlips(db, caller.orgId, params.year));
   mount(routes.addSlip, async ({ caller, params, body, db, now }) => ({ status: 201, body: await returns.addSlip(db, caller, params.year, body, now) }));

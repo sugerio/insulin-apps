@@ -9,7 +9,7 @@ import { AppliesStep } from "./pages/AppliesStep.tsx";
 import { ConfirmStep } from "./pages/ConfirmStep.tsx";
 import { DeductionsStep } from "./pages/DeductionsStep.tsx";
 import { FinishStep } from "./pages/FinishStep.tsx";
-import { LaterStep } from "./pages/LaterStep.tsx";
+import { UploadStep } from "./pages/UploadStep.tsx";
 import { NotFoundPage, RouteErrorPage } from "./pages/Pages.tsx";
 import { ReturnsPage } from "./pages/ReturnsPage.tsx";
 
@@ -31,7 +31,7 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <YearIndex /> },
               { path: "household", element: <HouseholdStep /> },
-              { path: "upload", element: <LaterStep step="upload" /> },
+              { path: "upload", element: <UploadStep /> },
               { path: "applies", element: <AppliesStep /> },
               { path: "confirm", element: <ConfirmStep /> },
               { path: "deductions", element: <DeductionsStep /> },

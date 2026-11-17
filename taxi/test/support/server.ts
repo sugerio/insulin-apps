@@ -48,7 +48,7 @@ export interface TestServer {
   db: LocalD1;
   app: ReturnType<typeof createApp>;
   /** Sends a request as `identity` (null: no identity), with a JSON body when given. */
-  call(method: string, path: string, options?: { as?: Identity | null; body?: unknown; headers?: Record<string, string> }): Promise<Response>;
+  call(method: string, path: string, options?: { as?: Identity | null; body?: unknown; raw?: Uint8Array<ArrayBuffer>; headers?: Record<string, string> }): Promise<Response>;
   close(): void;
 }
 
@@ -58,7 +58,7 @@ export async function startServer(options: AppOptions = {}): Promise<TestServer>
   return {
     db,
     app,
-    call(method, path, { as = OWNER, body, headers = {} } = {}) {
+    call(method, path, { as = OWNER, body, raw, headers = {} } = {}) {
       return Promise.resolve(
         app.fetch(
           new Request(`${ORIGIN}${path}`, {
@@ -69,7 +69,7 @@ export async function startServer(options: AppOptions = {}): Promise<TestServer>
               ...(body === undefined ? {} : { "Content-Type": "application/json" }),
               ...headers,
             },
-            body: body === undefined ? undefined : JSON.stringify(body),
+            body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
           }),
           { DB: db },
         ),

@@ -7,7 +7,7 @@
 //
 // Never stored: a SIN, a home address or bank details. People write those on the paper return when they sign it.
 import { sql } from "drizzle-orm";
-import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { MARITAL_STATUSES, PROVINCES, RELATIONSHIPS } from "../shared/household.ts";
 
 const inList = (column: string, values: readonly string[]) =>
@@ -143,7 +143,7 @@ export const answers = sqliteTable(
 );
 
 export const SLIP_STATUSES = ["unconfirmed", "confirmed"] as const;
-export const SLIP_SOURCES = ["manual"] as const;
+export const SLIP_SOURCES = ["manual", "ai"] as const;
 
 /**
  * A tax slip of an adult for the year: its type (a slip type of the year's rules), who issued it, and its boxes as
@@ -165,6 +165,10 @@ export const slips = sqliteTable(
     boxes: text("boxes").notNull(),
     status: text("status", { enum: SLIP_STATUSES }).notNull(),
     source: text("source", { enum: SLIP_SOURCES }).notNull(),
+    /** The uploaded file AI read it from, for a slip with source `ai`. */
+    documentId: text("document_id"),
+    /** The boxes AI wasn't sure it read right, as a JSON array; checked first when confirming. */
+    unsure: text("unsure").notNull().default("[]"),
     confirmedAt: integer("confirmed_at"),
     confirmedBy: text("confirmed_by"),
     createdAt: integer("created_at").notNull(),
@@ -177,7 +181,56 @@ export const slips = sqliteTable(
     check("slips_status", inList("status", SLIP_STATUSES)),
     check("slips_source", inList("source", SLIP_SOURCES)),
     check("slips_issuer_length", sql`length(issuer) BETWEEN 1 AND 100`),
+    check("slips_unsure_json", sql`json_valid(unsure) AND json_type(unsure) = 'array'`),
   ],
+);
+
+export const DOCUMENT_STATUSES = ["read", "duplicate", "not_a_slip", "failed", "not_available"] as const;
+
+/**
+ * A file uploaded for a tax year (step 2): what it is, its SHA-256 (the same file uploaded twice is found by it), and
+ * what reading it gave. The bytes are in `document_chunks`.
+ */
+export const documents = sqliteTable(
+  "documents",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id").notNull(),
+    taxYearId: text("tax_year_id")
+      .notNull()
+      .references(() => taxYears.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    sha256: text("sha256").notNull(),
+    status: text("status", { enum: DOCUMENT_STATUSES }).notNull(),
+    /** What reading found or why it didn't, for people. */
+    message: text("message").notNull(),
+    /** The model that read it, when one did. */
+    modelId: text("model_id"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("documents_year").on(table.taxYearId, table.createdAt),
+    index("documents_year_sha").on(table.taxYearId, table.sha256),
+    index("documents_org").on(table.orgId),
+    check("documents_status", inList("status", DOCUMENT_STATUSES)),
+    check("documents_name_length", sql`length(name) BETWEEN 1 AND 200`),
+  ],
+);
+
+/** An uploaded file's bytes, in pieces of at most 256 KiB (a D1 row is limited in size). */
+export const documentChunks = sqliteTable(
+  "document_chunks",
+  {
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    chunkIndex: integer("chunk_index").notNull(),
+    orgId: text("org_id").notNull(),
+    bytes: blob("bytes").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.documentId, table.chunkIndex] })],
 );
 
 /** Who changed what, and when: one row per change, never updated. */

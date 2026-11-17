@@ -7,9 +7,8 @@ forms, filled in, to sign and mail, or numbers to copy into certified software.
 It is an Insulin app: you start from it in the Insulin console, change it with the AppBuilder if you want to, preview it
 and publish it. It brings its own database.
 
-**Status: early.** It is being built in parts. Today a year can be prepared from start to finish with slips entered
-by hand: the household, what applies, the slips, deductions and the results. Uploading documents for AI to read, and
-the filled-in CRA forms, come later.
+**Status: early.** It is being built in parts. Today a year can be prepared from start to finish: the household,
+uploaded slips read by AI (or typed in), what applies, deductions and the results. The filled-in CRA forms come later.
 
 ## What it does today
 
@@ -28,6 +27,9 @@ the filled-in CRA forms, come later.
   dependant amounts, transfers between spouses (Schedule 2), and provincial tax: ON428 (surtax, tax reduction, LIFT
   credit, health premium), BC428 (BC tax reduction) and AB428 (supplemental credit). Beside steps 2 to 5,
   an estimate shows each return's result lines; select a line to see why.
+- **Step 2, AI reading.** Upload a folder or files; Claude reads each one into slips for the person named on it, using
+  the organization's Anthropic credential (Settings › Integrations, key `anthropic`). Duplicates are skipped, and every
+  slip starts unconfirmed.
 - **Steps 3 to 6.** What applies (yes or no to kinds of income the app may not handle), Confirm (each slip entered box by
   box, then confirmed), Deductions (only the questions a return reads), and Finish (each refund or balance owing, the
   key lines with why, and what to check before filing).

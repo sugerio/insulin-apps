@@ -95,7 +95,7 @@ describe("starting a tax year", () => {
     expect(year).toMatchObject({ year: 2025, revision: 1, maritalStatus: null, prepareTogether: true, members: [alex.id, sam.id, jamie.id] });
     expect(year.adults.map((adult) => adult.personId)).toEqual([alex.id, sam.id]);
     expect(year.steps.household).toBe("todo");
-    expect(year.steps.upload).toBe("not_built");
+    expect(year.steps.upload).toBe("todo");
   });
 
   it("prepares only your return when your spouse isn't chosen", async () => {

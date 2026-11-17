@@ -29,21 +29,29 @@ export function onUnauthorized(listener: () => void): () => void {
 type ParamsOf<R extends AnyRoute> = R["params"] extends z.ZodType ? { params: z.input<R["params"]> } : { params?: undefined };
 type BodyOf<R extends AnyRoute> = R["body"] extends z.ZodType ? { body: z.input<R["body"]> } : { body?: undefined };
 type ResultOf<R extends AnyRoute> = R["response"] extends z.ZodType ? z.infer<R["response"]> : void;
-export type RequestOf<R extends AnyRoute> = ParamsOf<R> & BodyOf<R> & { signal?: AbortSignal };
+/** A route that takes a file rather than JSON (uploadDocument) gets its bytes, type and extra headers here. */
+export interface RawBody {
+  body: Blob;
+  contentType: string;
+  headers?: Record<string, string>;
+}
+export type RequestOf<R extends AnyRoute> = ParamsOf<R> & BodyOf<R> & { signal?: AbortSignal; raw?: RawBody };
 
 export function routePath(route: AnyRoute, params: Record<string, unknown> = {}): string {
   return route.path.replace(/:([A-Za-z][A-Za-z0-9]*)/g, (_, name: string) => encodeURIComponent(String(params[name])));
 }
 
 export async function apiRequest<R extends AnyRoute>(route: R, request: RequestOf<R>): Promise<ResultOf<R>> {
-  const { params, body, signal } = request as { params?: Record<string, unknown>; body?: unknown; signal?: AbortSignal };
+  const { params, body, signal, raw } = request as { params?: Record<string, unknown>; body?: unknown; signal?: AbortSignal; raw?: RawBody };
   let response: Response;
   try {
     response = await fetch(routePath(route, params), {
       method: route.method,
       credentials: "same-origin",
-      headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: raw
+        ? { Accept: "application/json", "Content-Type": raw.contentType, ...raw.headers }
+        : { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      body: raw ? raw.body : body === undefined ? undefined : JSON.stringify(body),
       signal,
     });
   } catch (error) {

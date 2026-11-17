@@ -68,7 +68,11 @@ And from the design:
   of an import is read and hidden, their redacted texts are saved and the originals, and notes as written, are
   deleted; a later try learns from the saved texts. Queued imports and saved texts are hidden with the rules in
   force when learning starts, and stricter rules re-read every document, those of imports running at the time
-  included. Only redacted text is stored, in the container, R2, backups and exports.
+  included. When stricter rules change a text, the facts files, ready exports and backups of earlier versions that
+  hold its old words are deleted (tried again from the alarm until they are), and a new latest backup is written;
+  earlier restore points are blocked. Only redacted text is stored, in the container, R2, backups and exports. The
+  detectors run in time linear in the text (a 2 MB text built to make them backtrack takes under a second); the
+  app's "Try it" box (`hiding.ts`) uses the same patterns, checked against the shared fixtures.
 - **Corrections follow their passage** when a file is re-read. If the passage's words changed (or it can't be found),
   the correction keeps applying and a `needs_check` event asks a person to check it.
 - **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
@@ -100,6 +104,8 @@ And from the design:
   waits in the queue, ahead of a re-learning and of a pending wake from a backup or repair (it brings the files back
   itself). The hold lifts at its `until` time or with `until: null`. A collection made while held is held. The
   registry keeps the hold and tells every collection; one it can't reach is told again every minute until it has.
+  Every hold change (a lift too) is numbered, and a collection refuses a delivery older than the change it holds, so
+  two calls whose deliveries overlap leave every collection with the newer one.
 - **Imports hold their capacity slot or stop**: an import whose slot the capacity guard says has lapsed stops, keeps
   nothing and waits for a new slot, so no more than the allowed imports ever run. A renewal call that fails (the
   guard unreachable for a moment) is tried again on the next step.
@@ -108,8 +114,12 @@ And from the design:
 - **An export starts a new collection** (`POST .../import-export`, DEL-03): an empty collection learns a Knowledge
   export staged in its inbox like an import. Each document's redacted text and page map come back under the same
   document id, hidden again with the new collection's rules; stopped sources stay stopped; notes and corrections come
-  back with their outdated marks. Facts are found again as it learns, and History starts with one restore point. A
-  collection that isn't empty, or a file that isn't an export, answers 409 `bad_request`; an export over 64 MB, 413.
+  back with their outdated marks, which follow their passage if hiding again changed it (the correction then asks to
+  be checked, as after a re-read). Facts are found again as it learns, and History starts with one restore point. Its
+  ImportStatus lists the export's files in `files` (by document id) and counts its notes, corrections included, in
+  `notes`; the zip itself isn't listed. A collection that isn't empty, or a file that isn't an export, answers 409
+  `bad_request`; an export over 32 MB, 413. Each entry is inflated only up to the size it says, and at most 3 MB
+  for a text, so a forged zip costs no memory.
 
 ## Service settings
 

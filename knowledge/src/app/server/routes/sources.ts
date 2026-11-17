@@ -77,7 +77,7 @@ export type ImportKind = 'files' | 'web_page' | 'note' | 'correction'
  * files the engine no longer had when asked to keep them, taken out of it to be added again. Its notes are kept with
  * the organization's hidden values hidden (`hidden`: an older row without it is hidden by the tick).
  */
-export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[]; hidden?: boolean }
+export type WaitingRequest = ImportRequestBody & { waitsFor?: string; lost?: { fileId: string; name: string }[]; hidden?: boolean; sentAt?: number }
 
 /** An import kept for the 1st of next month, when the organization has used this month's documents learned. */
 export interface Waiting {
@@ -101,7 +101,11 @@ export function keptUntil(at: number): number {
  * import's files until a little past the 1st; files it no longer had are taken out of the import, as `lost`.
  */
 export async function waitForNextMonth(engine: EngineClient, collectionId: string, request: WaitingRequest, at: number): Promise<WaitingRequest> {
-  const waiting: WaitingRequest = { files: request.files, notes: request.notes, waitsFor: resetsAt(at), lost: request.lost ?? [] }
+  // An export stays an export, and an import already sent to the engine stays marked sent, through every month it waits.
+  const waiting: WaitingRequest = {
+    files: request.files, notes: request.notes, waitsFor: resetsAt(at), lost: request.lost ?? [],
+    ...(request.export ? { export: request.export } : {}), ...(request.sentAt ? { sentAt: request.sentAt } : {}),
+  }
   if (!request.files.length) return waiting
   const { kept } = await engine.keepStaged(collectionId, { fileIds: request.files.map((file) => file.fileId), until: new Date(keptUntil(at)).toISOString() })
   const held = new Set(kept)
@@ -182,7 +186,7 @@ export async function startImport(
       : request.files.reduce((sum, file) => sum + storedBound(file, hiding), 0) + request.notes.reduce((sum, note) => sum + noteBound(note, hiding), 0)
     const ref = `import:${importId}`
     const standing = await reserve(env, org, [{ key: 'documents', amount: documents }, { key: 'storage_bytes', amount: stored }], ref, at)
-    const detail = JSON.stringify({ files: request.files.map((file) => file.name) })
+    const detail = JSON.stringify({ files: request.files.map((file) => file.name), ...(request.export ? { export: true } : {}) })
     try {
       await reserve(env, org, [{ key: 'learned_month', amount: documents }], ref, at)
     } catch (error) {
@@ -441,8 +445,28 @@ export function sourceRoutes() {
     const db = c.env.DB
     const at = now(c)
     const importId = param(c, 'importId')
-    const row = await db.prepare(`SELECT state FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id).first<{ state: string }>()
+    const row = await db.prepare(`SELECT state, request FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
+      .first<{ state: string; request: string | null }>()
     if (!row) throw notFound('There is no such import in this collection.')
+    // Sent to the engine on the 1st without an answer: it may be learning. The engine is asked; while it may have it,
+    // the import isn't cancelled and keeps what it reserved.
+    const request = row.state === 'waiting' && row.request ? (JSON.parse(row.request) as WaitingRequest) : null
+    if (request?.sentAt) {
+      let status: ImportStatus | null = null
+      try {
+        status = await engineFor(c).getImport(collection.id, importId)
+      } catch (error) {
+        if (!(error instanceof EngineCallError && error.status === 404)) {
+          throw new ApiError('conflict', 'Insulin sent this to be learned and can\'t tell yet whether it has started, so it can\'t be cancelled now. Try again in a few minutes.')
+        }
+      }
+      if (status) {
+        await finishImport(c.env, caller.organizationId, collection, importId, status, at)
+        throw new ApiError('conflict', 'This is already being learned: Insulin sent it when the month started, so it can\'t be cancelled now. Once it is learned, you can stop using or remove what it added.')
+      }
+      // The engine never had it.
+      await db.prepare(`UPDATE imports SET request = json_remove(request, '$.sentAt') WHERE id = ? AND org_id = ? AND state = 'waiting'`).bind(importId, caller.organizationId).run()
+    }
     const [cancelled] = await db.batch([
       db.prepare(`UPDATE imports SET state = 'cancelled', request = NULL, finished_at = ?3 WHERE id = ?1 AND org_id = ?2 AND state = 'waiting'`).bind(importId, caller.organizationId, at),
       db.prepare(`UPDATE reservations SET state = 'released', settled_at = ?3 WHERE org_id = ?1 AND ref = ?2 AND state = 'held' AND EXISTS (SELECT 1 FROM imports WHERE id = ?4 AND state = 'cancelled')`)

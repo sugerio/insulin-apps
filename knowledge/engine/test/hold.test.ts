@@ -219,3 +219,93 @@ test('while held: imports and corrections wait, stop using commits, go back, und
   await t.drain('c1')
   assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-3')).body.state, 'queued', 'it waits for the hold to end')
 })
+
+for (const order of ['a hold, then a lift', 'a lift, then a hold'] as const) {
+  test(`hold changes whose deliveries overlap (${order}): every collection ends with the newer one`, async () => {
+    const t = makeEngine()
+    await createCollection(t, 'c1')
+    await createCollection(t, 'c2')
+    const until = new Date(t.now() + DAY_MS).toISOString()
+    if (order === 'a lift, then a hold') {
+      // The older call lifts a hold the organization had; the newer one holds it again.
+      await t.api('POST', `/v1/orgs/${ORG}/hold`, { until })
+    }
+    const [older, newer] = order === 'a hold, then a lift' ? [until, null] : [null, until]
+    // The older call's delivery to c1 is answered only after the newer call has told everyone.
+    const get = t.collections.get.bind(t.collections)
+    let paused: (() => void) | null = null
+    let reached!: () => void
+    const atC1 = new Promise<void>((resolve) => (reached = resolve))
+    t.collections.get = (id: { name: string }) => {
+      const stub = get(id)
+      return {
+        fetch: async (input: RequestInfo, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input)
+          const response = await stub.fetch(input, init)
+          if (url.endsWith('/internal/hold') && id.name.endsWith(':c1') && paused === null) {
+            await new Promise<void>((resolve) => {
+              paused = resolve
+              reached()
+            })
+          }
+          return response
+        },
+      }
+    }
+    const first = t.api('POST', `/v1/orgs/${ORG}/hold`, { until: older })
+    await atC1
+    const second = await t.api('POST', `/v1/orgs/${ORG}/hold`, { until: newer })
+    assert.equal(second.body.held, newer !== null)
+    paused!()
+    await first
+    t.collections.get = get
+    for (const cid of ['c1', 'c2']) {
+      assert.equal((await t.storage(cid).get<any>('meta')).heldUntil, newer, `${cid} holds the newer change`)
+      assert.equal((await t.api('GET', `/v1/collections/${cid}`)).body.state === 'held', newer !== null, cid)
+    }
+    assert.ok((await log(t, 'c2')).some((e: any) => e.event === 'hold-stale'), "c2 refused the older call's delivery")
+    assert.equal(await t.registry.instance('registry').state.storage.get(`holdTodo:${ORG}`), undefined, 'nothing left to retry')
+  })
+}
+
+test('a go back asked for before a hold lands is dropped: nothing goes back, and the app hears the collection is held', async () => {
+  const t = await twoVersions()
+  await t.api('POST', '/v1/collections/c1/restore-points/1/go-back')
+  assert.equal((await t.storage('c1').get<any>('meta')).op?.kind, 'go_back')
+  await holdFor(t, 1)
+  assert.equal((await t.storage('c1').get<any>('meta')).op, null)
+  assert.ok((await log(t, 'c1')).some((e: any) => e.event === 'go-back-dropped-for-hold'))
+  await t.drain('c1')
+  assert.ok((await outboxEvents(t)).some((e: any) => e.type === 'state' && e.state === 'held' && e.collectionId === 'c1'))
+  t.advance(DAY_MS + 60_000) // the hold ends by itself
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, 2, 'still at version 2')
+  assert.ok(!(await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints.some((p: any) => /Went back/.test(p.summary)))
+})
+
+test('a go back whose container is starting when the hold lands commits nothing', async () => {
+  const t = await twoVersions()
+  await t.api('POST', '/v1/collections/c1/restore-points/1/go-back')
+  // The hold arrives while the go back's container is checked, before anything commits.
+  const box = t.container('c1') as any
+  const port = box.getTcpPort.bind(box)
+  let landed = false
+  box.getTcpPort = (n: number) => {
+    const inner = port(n)
+    return {
+      fetch: async (input: RequestInfo, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!landed && url.endsWith('/jobs') && init?.method === 'POST') {
+          landed = true
+          await holdFor(t, 1)
+        }
+        return inner.fetch(input, init)
+      },
+    }
+  }
+  await t.drain('c1')
+  assert.ok(landed)
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, 2)
+  assert.equal(t.container('c1').running, false, 'its container was stopped')
+  assert.ok(!(await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints.some((p: any) => /Went back/.test(p.summary)))
+})

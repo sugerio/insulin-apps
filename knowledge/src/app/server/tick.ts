@@ -285,6 +285,8 @@ async function startWaiting(env: Bindings, row: WaitingRow, now: number): Promis
     if (error instanceof ApiError && error.code === 'quota_exceeded') return 'stopped'
     throw error
   }
+  // Marked sent before it goes: from now on it may be in the engine, so it can't be cancelled until the engine says not.
+  await db.prepare(`UPDATE imports SET request = json_set(request, '$.sentAt', ?) WHERE id = ? AND org_id = ? AND request IS NOT NULL`).bind(now, row.id, org).run()
   try {
     await submitImport(env, new EngineClient(env.ENGINE!, org, env.DEADLINE), org, collection, row.kind, request, row.id, now, { onRefused: 'fail' })
   } catch (error) {
@@ -356,7 +358,8 @@ async function askAboutStaleImports(env: Bindings, now: number, deadline: number
         continue
       }
       if (row.waited) {
-        await db.prepare(`UPDATE imports SET state = 'waiting' WHERE id = ? AND org_id = ? AND state = 'queued'`).bind(row.id, row.org_id).run()
+        // The engine never had it: it waits again, no longer sent, and can be cancelled.
+        await db.prepare(`UPDATE imports SET state = 'waiting', request = json_remove(request, '$.sentAt') WHERE id = ? AND org_id = ? AND state = 'queued'`).bind(row.id, row.org_id).run()
       } else {
         const message = 'Insulin Knowledge never received this, so nothing was learned. Add it again.'
         await finishImport(env, row.org_id, collection, row.id, { state: 'failed', error: { error: 'internal', message } }, now)

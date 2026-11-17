@@ -95,8 +95,52 @@ export async function writeZip(entries: [string, string][]): Promise<Uint8Array>
   return out
 }
 
-/** The entries of a zip by name, or null when the bytes aren't a zip this reader can open. */
-export async function readZip(bytes: Uint8Array): Promise<Map<string, Uint8Array> | null> {
+/** What one entry may inflate to, as the real engine reads an export (exportfile.ts): a text 3 MB, anything else 4 MB. */
+const TEXT_BYTES = 3 * 1024 * 1024
+const METADATA_BYTES = 4 * 1024 * 1024
+/** Compressed bytes are fed to the inflater this many at a time, only as its output is taken. */
+const SLICE = 16 * 1024
+
+/**
+ * One entry inflated, never past what the central directory says it holds (nor `limit`): the inflating stops as soon
+ * as the output passes it, so a small zip claiming a small entry can't unfold into gigabytes. Null when it is larger,
+ * shorter, or its CRC doesn't match.
+ */
+async function inflate(data: Uint8Array, size: number, crc: number): Promise<Uint8Array | null> {
+  let at = 0
+  const input = new ReadableStream<BufferSource>({
+    pull(controller) {
+      if (at >= data.length) return controller.close()
+      controller.enqueue(data.slice(at, at + SLICE))
+      at += SLICE
+    },
+  }, { highWaterMark: 0 })
+  const reader = input.pipeThrough(new DecompressionStream('deflate-raw') as ReadableWritablePair<Uint8Array, BufferSource>).getReader()
+  const out = new Uint8Array(size)
+  let length = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (length + value.byteLength > size) {
+        await reader.cancel().catch(() => undefined)
+        return null
+      }
+      out.set(value, length)
+      length += value.byteLength
+    }
+  } catch {
+    return null
+  }
+  return length === size && crc32(out) === crc ? out : null
+}
+
+/**
+ * The entries of a zip by name, or null when the bytes aren't a zip this reader can open, or an entry is larger than
+ * it may be (`entryBytes`, else 3 MB for a document's text and 4 MB for anything else), isn't what it claims, or comes
+ * twice.
+ */
+export async function readZip(bytes: Uint8Array, limits: { entryBytes?: number } = {}): Promise<Map<string, Uint8Array> | null> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   let end = -1
   for (let at = bytes.length - 22; at >= Math.max(0, bytes.length - 22 - 0xffff); at -= 1) {
@@ -112,20 +156,26 @@ export async function readZip(bytes: Uint8Array): Promise<Map<string, Uint8Array
   const decoder = new TextDecoder()
   for (let index = 0; index < count; index += 1) {
     if (at + 46 > bytes.length || view.getUint32(at, true) !== 0x02014b50) return null
+    const flags = view.getUint16(at + 8, true)
     const method = view.getUint16(at + 10, true)
+    const crc = view.getUint32(at + 16, true)
     const packed = view.getUint32(at + 20, true)
+    const size = view.getUint32(at + 24, true)
     const nameLength = view.getUint16(at + 28, true)
     const extra = view.getUint16(at + 30, true)
     const comment = view.getUint16(at + 32, true)
     const local = view.getUint32(at + 42, true)
     const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength))
     at += 46 + nameLength + extra + comment
+    if (flags & 0x1 || (method !== 0 && method !== 8) || files.has(name)) return null
+    if (size > (limits.entryBytes ?? (name.endsWith('.txt') ? TEXT_BYTES : METADATA_BYTES))) return null
     if (local + 30 > bytes.length || view.getUint32(local, true) !== 0x04034b50) return null
     const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true)
+    if (start + packed > bytes.length) return null
     const data = bytes.subarray(start, start + packed)
-    if (method === 0) files.set(name, data)
-    else if (method === 8) files.set(name, await through(data, new DecompressionStream('deflate-raw')))
-    else return null
+    const content = method === 0 ? (data.length === size && crc32(data) === crc ? data : null) : await inflate(data, size, crc)
+    if (!content) return null
+    files.set(name, content)
   }
   return files
 }

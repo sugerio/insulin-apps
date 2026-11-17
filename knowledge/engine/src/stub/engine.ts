@@ -102,6 +102,12 @@ interface StoredDocument {
   noteId: string | null
 }
 
+/** An export's documents and outdated marks as they were exported, read and checked when the import is sent. */
+interface ExportedContent {
+  documents: { info: DocumentInfo; noteId: string | null; text: string; pages: StoredDocument['pages']; hidden: HiddenSpan[] }[]
+  marks: { documentId: string; textHash: string; noteDocumentId: string }[]
+}
+
 interface Content {
   documents: Map<string, StoredDocument>
   /** Outdated passages, as `documentId:textHash`, each with the correction note that marked it. */
@@ -149,8 +155,8 @@ interface RunningImport {
   status: ImportStatus
   request: ImportRequest
   correction: boolean
-  /** An empty collection started from an export (POST .../import-export): what it brings back. */
-  restore?: Content
+  /** An empty collection started from an export (POST .../import-export): what it brings back, as exported. */
+  restore?: ExportedContent
   /** Arrival order, for who goes first among equals. */
   order: number
   startedAt: number | null
@@ -685,37 +691,87 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
   }
 
   /** An export's content committed as the collection's first restore point. */
-  function restoreFrom(collection: StubCollection, item: RunningImport, restored: Content): void {
+  /**
+   * An export learned as the collection's first restore point, when it learns (not when it was sent): its texts hidden
+   * again with the rules in force now. A passage a correction marked outdated keeps its mark under the hash its text
+   * has now; one that no longer reads the same asks for the correction to be checked. Its status lists each document
+   * it restored, files in `files` and notes counted in `notes`, as the real engine reports them.
+   */
+  function restoreFrom(collection: StubCollection, item: RunningImport, exported: ExportedContent): void {
     for (const file of item.request.files) collection.inbox.delete(file.fileId)
-    const content = copyContent(restored)
-    for (const document of content.documents.values()) {
-      document.info = { ...document.info, version: collection.version + 1, addedAt: new Date(now()).toISOString() }
+    const rules = collection.settings.hiding
+    const content: Content = { documents: new Map(), outdated: new Map(), corrections: 0 }
+    const moved = new Map<string, string | null>()
+    for (const doc of exported.documents) {
+      const documentId = doc.info.documentId
+      const again = hiddenAgain(doc.text, doc.pages, doc.hidden, rules)
+      const passages = passagesFor(documentId, doc.info.name, doc.info.kind, again.text, again.pages)
+      if (again.text !== doc.text) {
+        // Where each exported passage is now, and the hash of the passage that holds most of it.
+        for (const span of passagesOf(doc.text, doc.pages)) {
+          const start = again.shift(span.start)
+          const end = again.shift(span.end)
+          let best: Passage | null = null
+          let overlap = 0
+          for (const passage of passages) {
+            const shared = Math.min(end, passage.end) - Math.max(start, passage.start)
+            if (shared > overlap) {
+              overlap = shared
+              best = passage
+            }
+          }
+          moved.set(`${documentId}:${sha256Hex(span.text)}`, best?.textHash ?? null)
+        }
+      }
+      content.documents.set(documentId, {
+        info: { ...doc.info, textBytes: new TextEncoder().encode(again.text).byteLength, hiddenValues: again.hidden.length, version: collection.version + 1, addedAt: new Date(now()).toISOString() },
+        text: again.text, pages: again.pages, hidden: again.hidden, passages, words: passages.map((passage) => keywords(passage.text)), setAside: false, noteId: doc.noteId,
+      })
     }
+    const checks: { noteId: string; documentId: string; textHash: string }[] = []
+    for (const mark of exported.marks) {
+      const noteId = exported.documents.find((doc) => doc.info.documentId === mark.noteDocumentId)?.noteId ?? ''
+      const key = `${mark.documentId}:${mark.textHash}`
+      const hash = moved.has(key) ? moved.get(key)! : mark.textHash
+      content.outdated.set(`${mark.documentId}:${hash ?? mark.textHash}`, noteId)
+      if (!hash) checks.push({ noteId, documentId: mark.documentId, textHash: mark.textHash })
+    }
+    content.corrections = new Set(exported.marks.map((mark) => mark.noteDocumentId)).size
     const documents = [...content.documents.values()]
-    const filesAdded = documents.filter((document) => document.info.kind === 'file').length
-    commit(collection, content, 'import', { ...NO_CHANGES, files: filesAdded, notes: documents.length - filesAdded }, { importId: item.status.importId })
-    // As the real engine: the import's one file is the export's zip.
-    item.status.files = item.request.files.map((file) => ({ fileId: file.fileId, name: file.name, state: 'learned' }))
+    const files = documents.filter((document) => document.info.kind === 'file')
+    commit(collection, content, 'import', { ...NO_CHANGES, files: files.length, notes: documents.length - files.length }, { importId: item.status.importId })
+    item.status.files = files.map((document) => ({ fileId: document.info.documentId, name: document.info.name, state: 'learned', documentId: document.info.documentId }))
+    item.status.notes = documents.length - files.length
     item.status.state = 'committed'
     item.status.version = collection.version
     item.status.newFacts = documents.reduce((sum, document) => sum + document.passages.length, 0)
     finished(collection, item)
+    for (const check of checks) emit({ org: collection.org, collectionId: collection.id, type: 'needs_check', ...check })
     keepAwake(collection)
   }
 
+  function passagesFor(documentId: string, name: string, kind: 'file' | 'note', text: string, pages: StoredDocument['pages']): Passage[] {
+    return passagesOf(text, pages).map((span, index) => ({
+      passageId: `${documentId}:${index + 1}`, documentId, documentName: name, kind, page: span.page, start: span.start, end: span.end,
+      text: span.text, textHash: sha256Hex(span.text), score: 0, outdated: false,
+    }))
+  }
+
   /**
-   * What an export brings back, read as the real engine reads it (exportfile.ts): README.txt and collection.json, the
-   * notes and corrections lists, each document's .json and .txt (ids shaped as the real engine's, page maps and hidden
-   * spans within the text), notes named in notes.json and marks naming documents that are there. Its texts are hidden
-   * again with this collection's rules. Null when the zip isn't a Knowledge export.
+   * What an export brings back, read and checked as the real engine reads it (exportfile.ts): README.txt and
+   * collection.json, the notes and corrections lists, each document's .json and .txt (ids shaped as the real engine's,
+   * a file's SHA-256, page maps and hidden spans within the text), notes named in notes.json, and marks on documents of
+   * the export from one of its notes. Its texts are hidden again when it learns (restoreFrom). Null when the zip isn't a
+   * Knowledge export.
    */
-  async function contentOfExport(bytes: Uint8Array, rules: HidingRuleSet): Promise<Content | null> {
+  async function contentOfExport(bytes: Uint8Array): Promise<ExportedContent | null> {
     const files = await readZip(bytes).catch(() => null)
     if (!files || !files.has('README.txt') || !files.has('collection.json')) return null
     const isInt = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
+    const isSha256 = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
     const text = (name: string) => new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(files.get(name)!)
     const read = (name: string) => JSON.parse(text(name)) as any
-    const content: Content = { documents: new Map(), outdated: new Map(), corrections: 0 }
+    const exported: ExportedContent = { documents: [], marks: [] }
     try {
       const collection = read('collection.json')
       if (typeof collection?.collectionId !== 'string' || !isInt(collection.version)) return null
@@ -737,8 +793,10 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
         const meta = read(name)
         const info = meta?.document
         if (info?.documentId !== documentId || (info.kind !== 'file' && info.kind !== 'note')) return null
+        if (documentId[0] !== (info.kind === 'file' ? 'd' : 'n')) return null
         if (typeof info.name !== 'string' || typeof info.type !== 'string' || typeof info.active !== 'boolean') return null
-        if (!isInt(info.bytes) || !(info.pages === null || isInt(info.pages)) || typeof info.sha256 !== 'string') return null
+        if (!isInt(info.bytes) || !(info.pages === null || isInt(info.pages))) return null
+        if (info.kind === 'file' ? !isSha256(info.sha256) : !(info.sha256 === '' || isSha256(info.sha256))) return null
         const pages = meta.pages ?? []
         const hidden = meta.hidden ?? []
         if (!Array.isArray(pages) || !pages.every((page: any) => isInt(page?.page) && isInt(page.start) && isInt(page.end) && page.start <= page.end)) return null
@@ -747,35 +805,32 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
         if (info.kind === 'note' && !noteId) return null
         const stored = text(`documents/${documentId}.txt`)
         if (pages.some((page: any) => page.end > stored.length) || hidden.some((span: any) => span.end > stored.length)) return null
-        const again = hiddenAgain(stored, pages, hidden, rules)
-        const passages = passagesOf(again.text, again.pages).map((span, index) => ({
-          passageId: `${documentId}:${index + 1}`, documentId, documentName: info.name, kind: info.kind, page: span.page, start: span.start, end: span.end,
-          text: span.text, textHash: sha256Hex(span.text), score: 0, outdated: false,
-        }))
-        content.documents.set(documentId, {
+        exported.documents.push({
           info: {
-            documentId, kind: info.kind, name: info.name, type: info.type, bytes: info.bytes, textBytes: new TextEncoder().encode(again.text).byteLength, pages: info.pages,
-            sha256: info.sha256, active: info.active, hiddenValues: again.hidden.length, addedAt: new Date(now()).toISOString(), version: 0,
+            documentId, kind: info.kind, name: info.name, type: info.type, bytes: info.bytes, textBytes: new TextEncoder().encode(stored).byteLength, pages: info.pages,
+            sha256: info.sha256, active: info.active, hiddenValues: hidden.length, addedAt: new Date(now()).toISOString(), version: 0,
           },
-          text: again.text, pages: again.pages, hidden: again.hidden, passages, words: passages.map((passage) => keywords(passage.text)), setAside: false, noteId,
+          noteId, text: stored, pages: pages.map((page: any) => ({ page: page.page, start: page.start, end: page.end })), hidden: hidden.map((span: any) => ({ start: span.start, end: span.end, kind: span.kind })),
         })
       }
+      const kinds = new Map(exported.documents.map((doc) => [doc.info.documentId, doc.info.kind]))
       for (const mark of marks) {
-        if (typeof mark?.documentId !== 'string' || typeof mark.textHash !== 'string' || !/^[0-9a-f]{64}$/.test(mark.textHash) || typeof mark.noteDocumentId !== 'string') return null
-        if (!content.documents.has(mark.documentId) || !content.documents.has(mark.noteDocumentId)) return null
-        content.outdated.set(`${mark.documentId}:${mark.textHash}`, content.documents.get(mark.noteDocumentId)!.noteId ?? '')
+        if (typeof mark?.documentId !== 'string' || !isSha256(mark.textHash) || typeof mark.noteDocumentId !== 'string') return null
+        if (!kinds.has(mark.documentId) || kinds.get(mark.noteDocumentId) !== 'note') return null
+        if (exported.marks.some((known) => known.documentId === mark.documentId && known.textHash === mark.textHash)) continue
+        exported.marks.push({ documentId: mark.documentId, textHash: mark.textHash, noteDocumentId: mark.noteDocumentId })
       }
-      content.corrections = new Set(marks.map((mark: { noteDocumentId: string }) => mark.noteDocumentId)).size
+      exported.documents.sort((a, b) => (a.info.documentId < b.info.documentId ? -1 : 1))
     } catch {
       return null
     }
-    return content
+    return exported
   }
 
   /** A stored text hidden again with these rules: what it hid before stays hidden and moves with what is hidden now. */
-  function hiddenAgain(text: string, pages: StoredDocument['pages'], hidden: HiddenSpan[], rules: HidingRuleSet): { text: string; pages: StoredDocument['pages']; hidden: HiddenSpan[] } {
+  function hiddenAgain(text: string, pages: StoredDocument['pages'], hidden: HiddenSpan[], rules: HidingRuleSet): { text: string; pages: StoredDocument['pages']; hidden: HiddenSpan[]; shift: (offset: number) => number } {
     const result = applyHiding(text, rules)
-    if (!result.found.length) return { text, pages, hidden }
+    if (!result.found.length) return { text, pages, hidden, shift: (offset) => offset }
     const shift = (offset: number) => {
       let delta = 0
       for (const range of result.found) if (range.end <= offset) delta += 8 - (range.end - range.start)
@@ -787,6 +842,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       text: result.text,
       pages: pages.map((page) => ({ page: page.page, start: shift(page.start), end: shift(page.end) })),
       hidden: [...result.hidden, ...carried].sort((a, b) => a.start - b.start),
+      shift,
     }
   }
 
@@ -838,7 +894,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       outdated: false,
     }))
     return {
-      info: { documentId, kind, name, type, bytes, textBytes: new TextEncoder().encode(hidden.text).byteLength, pages: mapped.length || null, sha256: sha256 || documentId, active: true, addedAt: new Date(now()).toISOString(), version, hiddenValues: hidden.hidden.length },
+      info: { documentId, kind, name, type, bytes, textBytes: new TextEncoder().encode(hidden.text).byteLength, pages: mapped.length || null, sha256, active: true, addedAt: new Date(now()).toISOString(), version, hiddenValues: hidden.hidden.length },
       text: hidden.text,
       pages: mapped,
       hidden: hidden.hidden,
@@ -1163,7 +1219,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       const staged = collection.inbox.get(raw.fileId)
       if (!staged) throw new StubError(400, 'bad_request', 'The export wasn\'t received. Add it again.')
       if (staged.bytes.byteLength > MAX_EXPORT_BYTES) throw new StubError(413, 'too_large', 'That export is too large to start a collection from.')
-      const restored = await contentOfExport(staged.bytes, collection.settings.hiding)
+      const restored = await contentOfExport(staged.bytes)
       if (!restored) throw new StubError(409, 'bad_request', 'That file isn\'t a Knowledge export.')
       const request_: ImportRequest = { importId: raw.importId, files: [{ fileId: raw.fileId, name: staged.name, type: staged.type, bytes: staged.bytes.byteLength, sha256: staged.sha256 }], notes: [], small: false }
       const { status } = enqueue(collection, request_, false)

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { bestPassages, logQuestion, requireCollections, searchTargets, targetsOf, TOP_K, waitingMessage, writeAnswer, type CollectionResult } from '../ask.ts'
 import type { AppEnv } from '../env.ts'
+import { authorize } from '../access.ts'
 import { ApiError, readJson } from '../http.ts'
 import { callerOf, json, now } from './common.ts'
 
@@ -67,6 +68,12 @@ export function askingRoutes() {
     const caller = callerOf(c)
     const answerId = c.req.param('answerId')
     if (!/^[0-9a-f-]{36}$/.test(answerId)) throw new ApiError('not_found', 'There is no such answer.')
+    // Checked now, against each collection the answer came from: the caller's role there today, and the switch for
+    // assistants and API clients.
+    const { results } = await c.env.DB.prepare(`SELECT DISTINCT collection_id FROM questions WHERE answer_id = ? AND org_id = ? AND asked_by = ?`)
+      .bind(answerId, caller.organizationId, caller.id).all<{ collection_id: string }>()
+    if (!results.length) throw new ApiError('not_found', 'There is no such answer of yours.')
+    for (const row of results) await authorize(c.env.DB, caller, row.collection_id, 'read')
     const marked = await c.env.DB.prepare(`UPDATE questions SET marked_right_at = COALESCE(marked_right_at, ?) WHERE answer_id = ? AND org_id = ? AND asked_by = ?`)
       .bind(now(c), answerId, caller.organizationId, caller.id).run()
     if (marked.meta.changes < 1) throw new ApiError('not_found', 'There is no such answer of yours.')

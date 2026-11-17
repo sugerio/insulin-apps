@@ -155,18 +155,45 @@ export function zipEntries(bytes: Uint8Array): Map<string, ZipEntry> | null {
   return entries
 }
 
-/** An entry's content, checked against its size and CRC; null when it is larger than `maxBytes` or damaged. */
+/** How much compressed data is handed to the inflater at a time: deflate expands at most about 1032 times. */
+const INFLATE_SLICE = 1024
+
+/**
+ * An entry's content, checked against its size and CRC; null when it says it is larger than `maxBytes`, inflates to
+ * more than it says (it stops there, so a forged size never costs more than `maxBytes` of memory), or is damaged.
+ */
 export async function unzipEntry(entry: ZipEntry, maxBytes: number): Promise<Uint8Array | null> {
   if (entry.size > maxBytes) return null
-  let out: Uint8Array
-  if (entry.method === 0) out = entry.data
-  else {
-    try {
-      const stream = new Blob([entry.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-      out = new Uint8Array(await new Response(stream).arrayBuffer())
-    } catch {
-      return null
+  if (entry.method === 0) return entry.data.length === entry.size && crc32(entry.data) === entry.crc ? entry.data : null
+  // The compressed bytes go in small slices, read only as the output is taken, and the output is counted as it
+  // comes: past the entry's own size, the inflating stops.
+  let at = 0
+  const input = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (at >= entry.data.length) return controller.close()
+        controller.enqueue(entry.data.slice(at, at + INFLATE_SLICE))
+        at += INFLATE_SLICE
+      },
+    },
+    { highWaterMark: 0 },
+  )
+  const reader = input.pipeThrough(new DecompressionStream('deflate-raw')).getReader()
+  const out = new Uint8Array(entry.size)
+  let length = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (length + value.length > entry.size) {
+        await reader.cancel().catch(() => undefined)
+        return null
+      }
+      out.set(value, length)
+      length += value.length
     }
+  } catch {
+    return null
   }
-  return out.length === entry.size && crc32(out) === entry.crc ? out : null
+  return length === entry.size && crc32(out) === entry.crc ? out : null
 }

@@ -274,6 +274,7 @@ interface FakeJob {
   progress?: any
   prepared?: any
   newlyHidden?: string[]
+  before?: Record<string, string> // relearn: each text before it was hidden again
 }
 
 export class FakeContainer {
@@ -557,8 +558,14 @@ export class FakeContainer {
       return { ...s, text: more.text, hidden: [...s.hidden, ...more.hidden] }
     }
     if (batch.kind === 'relearn') {
-      // Saved texts are hidden again with the rules in force, as ops.py does.
-      for (const d of batch.documents) prepared.push({ stored: { ...again(stored(d.documentId)), documentId: d.documentId, kind: d.kind, name: d.name }, fileId: null })
+      // Saved texts are hidden again with the rules in force, as ops.py does; the words before are kept for an
+      // export's marks to follow.
+      job.before = {}
+      for (const d of batch.documents) {
+        const s = stored(d.documentId)
+        job.before[d.documentId] = s.text
+        prepared.push({ stored: { ...again(s), documentId: d.documentId, kind: d.kind, name: d.name }, fileId: null })
+      }
     } else {
       for (const f of batch.files ?? []) {
         if (f.stored) {
@@ -599,7 +606,15 @@ export class FakeContainer {
     const ledger = JSON.parse(this.data.get('ledger.json') ?? '{"batches":{}}')
     ledger.batches[batch.importId] = documents.map((d) => d.documentId)
     this.data.set('ledger.json', JSON.stringify(ledger))
-    return { documents, marks: [], facts, newFacts: documents.length, changed: job.newlyHidden ?? [], files: Object.fromEntries((batch.files ?? []).map((f: any) => [f.fileId, 'learned'])) }
+    // An export's marks follow their passage (the fake's passages are paragraphs: the same one by its place).
+    const marks = (batch.marks ?? []).map((mark: any) => {
+      const now = JSON.parse(this.data.get(`passages/${mark.documentId}.json`) ?? '[]')
+      if (now.some((p: any) => p.textHash === mark.textHash)) return { ...mark, newTextHash: mark.textHash, changed: false }
+      const old = paragraphs(mark.documentId, job.before?.[mark.documentId] ?? '').find((p: any) => p.textHash === mark.textHash)
+      const moved = old ? now.find((p: any) => p.index === old.index) : null
+      return { ...mark, newTextHash: moved?.textHash ?? null, changed: true }
+    })
+    return { documents, marks, facts, newFacts: documents.length, changed: job.newlyHidden ?? [], files: Object.fromEntries((batch.files ?? []).map((f: any) => [f.fileId, 'learned'])) }
   }
 
   remove(job: FakeJob) {

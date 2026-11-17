@@ -205,6 +205,7 @@ export interface Meta {
   hidingAppliedAt: string | null
   repairNote: string | null // "answering from version n", while repairing
   heldUntil?: string | null // the organization's hold: no container starts until then, but to remove or delete
+  holdSeq?: number // which of the registry's hold changes heldUntil comes from: an older delivery is refused
 }
 
 export type { CollectionSettings }

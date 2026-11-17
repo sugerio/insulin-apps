@@ -219,7 +219,7 @@ export async function finishImportStatements(db: D1Database, org: string, collec
 async function notifyImport(env: Bindings, org: string, collection: { id: string; name: string }, importId: string, status: Pick<ImportStatus, 'state'> & Partial<ImportStatus>, now: number): Promise<void> {
   if (!TERMINAL.has(status.state)) return
   const db = env.DB
-  const row = await db.prepare(`SELECT created_by, kind, files FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ created_by: string; kind: string; files: number }>()
+  const row = await db.prepare(`SELECT created_by, kind, files, detail FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ created_by: string; kind: string; files: number; detail: string }>()
   if (!row) return
   const claimed = await db.prepare(`UPDATE imports SET notified_at = ?3 WHERE id = ?1 AND org_id = ?2 AND notified_at IS NULL`).bind(importId, org, now).run()
   // A correction's starter sees it learned where they wrote it; only its failure is mailed.
@@ -228,7 +228,18 @@ async function notifyImport(env: Bindings, org: string, collection: { id: string
   if (!starter?.email) return
   const link = appLink(env, `/collections/${collection.id}/sources`)
   try {
-    if (status.state === 'committed') {
+    const fromExport = (() => {
+      try {
+        return (JSON.parse(row.detail) as { export?: boolean }).export === true
+      } catch {
+        return false
+      }
+    })()
+    if (status.state === 'committed' && fromExport) {
+      // A collection started from an export: every document it restored, files and notes.
+      const documents = (status.files?.filter((file) => file.state === 'learned').length ?? 0) + (status.notes ?? 0)
+      await sendMail(env, org, { to: starter.email, ...MAIL.restored(collection.name, documents, link) }, 'restored')
+    } else if (status.state === 'committed') {
       const files = status.files?.filter((file) => file.state === 'learned').length ?? row.files
       await sendMail(env, org, { to: starter.email, ...MAIL.learned(collection.name, files, status.newFacts ?? null, link) }, 'learned')
     } else if (status.state === 'failed') {

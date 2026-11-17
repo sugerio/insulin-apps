@@ -297,7 +297,7 @@ test('HIS-07 remove for good: the text is gone from the engine and the latest ba
   const latest = JSON.parse(t.backups.text(t.backups.keys().find((k) => k.endsWith('latest.json'))!)!)
   assert.equal(latest.version, 4)
   const grep = (await t.api('POST', '/v1/collections/c1/__test/grep', { values: [secret] })).body
-  assert.deepEqual(grep[secret], { container: 0, text: 0, backups: 0 })
+  assert.deepEqual(grep[secret], { container: 0, text: 0, backups: 0, exports: 0 })
   const answer = await ask(t, 'c1', 'topic number 3 gateway port 8003')
   assert.ok(!answer.body.passages.some((p: any) => p.text.includes('8003')))
 })

@@ -89,6 +89,10 @@ export const MAIL = {
     subject: `${quoted(collection)} learned ${files === 1 ? 'your file' : files > 0 ? `${files} files` : 'your note'}`,
     text: `${quoted(collection)} learned ${files === 1 ? '1 file' : files > 0 ? `${files} files` : 'your note'}${facts ? ` (${facts} new fact${facts === 1 ? '' : 's'})` : ''}. New questions use them now. If something is wrong, go back from its History.${open(link)}${footer}`,
   }),
+  restored: (collection: string, documents: number, link: string | null) => ({
+    subject: `${quoted(collection)} restored ${documents === 1 ? '1 document' : `${documents} documents`} from an export`,
+    text: `${quoted(collection)} started from the export you added: it restored ${documents === 1 ? '1 document' : `${documents} documents`}, with the files it had stopped using and its corrections. New questions use them now.${open(link)}${footer}`,
+  }),
   importFailed: (collection: string, reason: string, link: string | null) => ({
     subject: `${quoted(collection)} couldn't learn your files`,
     text: `${reason}\n\nNothing from this import was kept, so ${quoted(collection)} is exactly as it was before. Open its Sources to learn the other files without the one that failed.${open(link, 'Open its Sources')}${footer}`,

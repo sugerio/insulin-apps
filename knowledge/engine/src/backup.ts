@@ -7,6 +7,7 @@ import type { CollectionEngine } from './collection.ts'
 import type { AnswerState, Manifest, Meta, Runtime, SnapshotRecord } from './types.ts'
 import { SETTINGS } from './settings.ts'
 import { clock, errorText, iso, utcDay } from './util.ts'
+import { unzipEntry, zipEntries } from './zip.ts'
 
 export interface BackupIndex {
   format: 1
@@ -186,20 +187,41 @@ export async function dropDocument(e: CollectionEngine, documentId: string): Pro
   })
 }
 
-/** HID-01's evidence, test controls only: where each planted value can still be found. */
+/**
+ * Stricter hiding changed these documents' texts in version `before`: every backup of an earlier version that holds
+ * one of them holds its words unhidden, so it is dropped; the caller writes a new latest one.
+ */
+export async function dropOlder(e: CollectionEngine, before: number, documentIds: string[]): Promise<void> {
+  const meta = await e.meta()
+  const changed = new Set(documentIds)
+  for (const key of [...(await dailyIndexes(e)), `${prefix(meta)}latest.json`]) {
+    const object = await e.env.BACKUPS.get(key)
+    if (!object) continue
+    const index = (await object.json()) as BackupIndex
+    if (index.version < before && index.state.documents.some((d) => changed.has(d.documentId))) await e.env.BACKUPS.delete(key)
+  }
+  await collectGarbage(e)
+  await e.updateMeta((m) => {
+    m.backupDue = true
+  })
+}
+
+/** HID-01's and HID-04's evidence, test controls only: where each planted value can still be found. */
 export async function grep(e: CollectionEngine, values: string[]): Promise<Record<string, Record<string, number>>> {
   const meta = await e.meta()
   const found: Record<string, Record<string, number>> = {}
-  for (const value of values) found[value] = { container: 0, text: 0, backups: 0 }
+  for (const value of values) found[value] = { container: 0, text: 0, backups: 0, exports: 0 }
   const count = (haystack: string, needle: string) => (needle ? haystack.split(needle).length - 1 : 0)
   const runtime = await e.store.getRuntime()
   if (runtime && e.box.running) {
     const job = await e.box.runJob('grep', { values })
     for (const value of values) found[value].container = Number(job.result?.counts?.[value] ?? 0)
   }
+  const decode = (bytes: Uint8Array) => new TextDecoder('utf-8', { fatal: false, ignoreBOM: false }).decode(bytes)
   for (const [bucket, area, start] of [
     [e.env.FILES, 'text', `text/${meta.org}/${meta.collectionId}/`],
     [e.env.BACKUPS, 'backups', prefix(meta)],
+    [e.env.FILES, 'exports', `exports/${meta.org}/${meta.collectionId}/`],
   ] as const) {
     let cursor: string | undefined
     do {
@@ -207,8 +229,16 @@ export async function grep(e: CollectionEngine, values: string[]): Promise<Recor
       for (const object of listed.objects) {
         const body = await bucket.get(object.key)
         if (!body) continue
-        const text = new TextDecoder('utf-8', { fatal: false, ignoreBOM: false }).decode(await body.arrayBuffer())
-        for (const value of values) found[value][area] += count(text, value)
+        const bytes = new Uint8Array(await body.arrayBuffer())
+        // An export's entries are deflated: each is read.
+        const texts: string[] = [decode(bytes)]
+        if (area === 'exports') {
+          for (const entry of zipEntries(bytes)?.values() ?? []) {
+            const inflated = await unzipEntry(entry, 64 * 1024 * 1024)
+            if (inflated) texts.push(decode(inflated))
+          }
+        }
+        for (const value of values) for (const text of texts) found[value][area] += count(text, value)
       }
       cursor = listed.truncated ? listed.cursor : undefined
     } while (cursor)

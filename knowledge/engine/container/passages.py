@@ -105,3 +105,42 @@ def remap_marks(marks: list[dict], old_text: str, old_index: list[dict], new_tex
                     break
         out.append({"documentId": mark["documentId"], "textHash": mark["textHash"], "newTextHash": new_hash, "changed": changed})
     return out
+
+
+MARK = "[hidden]"
+
+
+def old_position(position: int, spans: list) -> int:
+    """Where a code-point position of a text hidden again sat in the text before. `spans` are the values hidden now,
+    in the old text (sorted, merged); a position inside one's MARK goes to the value's start or end."""
+    shift = 0  # new position minus old, after the spans passed
+    for span in spans:
+        new_start = span.start + shift
+        if position < new_start:
+            break
+        if position < new_start + len(MARK):
+            return span.start if position == new_start else span.end
+        shift += len(MARK) - (span.end - span.start)
+    return position - shift
+
+
+def remap_after_rehide(marks: list[dict], old_text: str, spans: list, new_text: str, new_index: list[dict]) -> list[dict]:
+    """An export's outdated marks once its text is hidden again with stricter rules (import-export): the old passages
+    aren't here, so each new passage is mapped back to the words it held before, and a mark follows the passage whose
+    old words carry its hash. As after a re-read: [{documentId, textHash, newTextHash, changed}], newTextHash None
+    when no passage is found, `changed` when its words changed (the correction then asks to be checked)."""
+    units = Utf16(new_text)
+    out = []
+    for mark in marks:
+        new_hash, changed = None, True
+        if any(p["textHash"] == mark["textHash"] for p in new_index):
+            new_hash, changed = mark["textHash"], False
+        else:
+            for passage in new_index:
+                start = old_position(units.from_utf16(passage["start"]), spans)
+                end = old_position(units.from_utf16(passage["end"]), spans)
+                if text_hash(old_text[start:end]) == mark["textHash"]:
+                    new_hash = passage["textHash"]
+                    break
+        out.append({"documentId": mark["documentId"], "textHash": mark["textHash"], "newTextHash": new_hash, "changed": changed})
+    return out

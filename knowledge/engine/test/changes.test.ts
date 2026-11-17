@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { inflateRawSync } from 'node:zlib'
 import { sha256 } from './fakes.ts'
-import { ask, createCollection, doc, learn, makeEngine, outboxEvents } from './helpers.ts'
+import { ORG, ask, createCollection, doc, learn, makeEngine, outboxEvents } from './helpers.ts'
 
 const SIX_MINUTES = 6 * 60_000
 
@@ -182,4 +182,34 @@ test('daily backups are kept backupDays days; the latest is kept for good', asyn
   const daily = t.backups.keys().filter((k) => k.includes('/daily/'))
   assert.ok(daily.length <= 3 && daily.length >= 1, daily.join(', '))
   assert.ok(t.backups.keys().some((k) => k.endsWith('latest.json')))
+})
+
+test('HID-04 stricter hiding: ready exports and backups that hold the newly hidden word are dropped, and a new latest backup is written', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-1', [doc(1, 'The codename is Bluewater.'), doc(2)])
+  t.advance(11 * 60_000)
+  await t.drain('c1') // asleep: a daily backup and the latest
+  await t.api('POST', '/v1/collections/c1/exports', { exportId: 'exp-1' })
+  await t.drain('c1')
+  assert.equal((await t.api('GET', '/v1/collections/c1/exports/exp-1')).body.state, 'ready')
+  t.advance(6 * 60_000)
+  await t.api('PUT', '/v1/collections/c1', { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['Bluewater'] } } })
+  for (let i = 0; i < 5; i++) {
+    await t.drain('c1')
+    t.advance(60_000)
+  }
+  const version = (await t.api('GET', '/v1/collections/c1')).body.version
+  assert.match((await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints[0].summary, /stricter hiding/)
+  const holding = (r2: any, prefix: string) =>
+    r2.keys(prefix).filter((k: string) => {
+      const raw = r2.objects.get(k).body as Uint8Array
+      return new TextDecoder().decode(raw).includes('Bluewater') || (k.endsWith('.zip') && [...unzip(raw).values()].some((v) => v.includes('Bluewater')))
+    })
+  assert.deepEqual(holding(t.files, 'exports/'), [], 'no export holds it')
+  assert.equal((await t.api('GET', '/v1/collections/c1/exports/exp-1')).body.state, 'failed', 'the export that held it is gone')
+  assert.deepEqual(holding(t.backups, 'backups/'), [], 'no backup holds it')
+  const latest = JSON.parse(t.backups.text(`backups/${ORG}/c1/latest.json`)!)
+  assert.equal(latest.version, version, 'a new latest backup holds the version read again')
+  assert.deepEqual(holding(t.files, 'text/'), [])
 })

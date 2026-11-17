@@ -256,6 +256,12 @@ async function create(e: CollectionEngine, importId: string, kind: ImportKind, s
   return record
 }
 
+/** Every file waiting again (a new try, or a stop). An export's import lists its documents, not its zip. */
+function waitingFiles(record: ImportRecord): ImportFileStatus[] {
+  if (record.kind !== 'export') return record.files.map((f) => fileStatus(f))
+  return record.status.files.map((f) => ({ fileId: f.fileId, name: f.name, state: 'waiting', ...(f.documentId ? { documentId: f.documentId } : {}) }))
+}
+
 function fileStatus(f: ImportRecord['files'][number]): ImportFileStatus {
   if (f.duplicateOf) return { fileId: f.fileId, name: f.name, state: 'already_here', reason: 'The same content is already in this collection.', documentId: f.duplicateOf }
   // An export's zip is not a document of its own.
@@ -300,8 +306,13 @@ export async function submitExportImport(e: CollectionEngine, body: { importId?:
     createdAt: iso(),
     finishedAt: null,
   })
+  // The zip is the import's only staged file (kept until the commit, then deleted). What the import says it learns
+  // are the export's files and notes, as an import of them would, so the app counts and names them.
   record.files = [{ fileId, name: staged.name, type: staged.type, bytes: staged.bytes, sha256: staged.sha256, documentId: '', duplicateOf: null }]
-  record.status.files = record.files.map((f) => fileStatus(f))
+  record.status.files = contents.documents
+    .filter((d) => d.info.kind === 'file')
+    .map((d) => ({ fileId: d.info.documentId, name: d.info.name, state: 'waiting', documentId: d.info.documentId }))
+  record.status.notes = contents.documents.filter((d) => d.info.kind === 'note').length
   record.rereadDocumentIds = contents.documents.map((d) => d.info.documentId) // its time limit counts them
   record.hiding = meta.settings.hiding
   record.fromExport = contents.from
@@ -332,7 +343,7 @@ async function exportedState(e: CollectionEngine, meta: Meta, record: ImportReco
     textKey: textKey(meta, d.info.documentId),
     truncated: d.truncated,
     noteId: d.noteId,
-    hiddenCount: d.hidden.length,
+    hiddenCount: d.hiddenCount,
   }))
   const marks: OutdatedMark[] = contents.marks.map((m) => ({ ...m, correctionImportId: importId }))
   return { contents, state: { ...EMPTY_STATE, documents, marks } }
@@ -403,7 +414,8 @@ function parseNotes(value: unknown): ImportNote[] {
 // ==================================================================== the contract's view
 
 export function etaSeconds(record: ImportRecord): number {
-  const left = record.files.filter((f, i) => !f.duplicateOf && !['learned', 'already_here'].includes(record.status.files[i]?.state)).length
+  // An export's import counts its documents (rereadDocumentIds), not its zip.
+  const left = record.kind === 'export' ? 0 : record.files.filter((f, i) => !f.duplicateOf && !['learned', 'already_here'].includes(record.status.files[i]?.state)).length
   const items = left + record.notes.length + record.removeDocumentIds.length + record.rereadDocumentIds.length
   let seconds = SETTINGS.importBaseSeconds + SETTINGS.perDocumentSeconds * items
   if (record.learningStartedAt) seconds = Math.max(5, seconds - (clock.now() - record.learningStartedAt) / 1000)
@@ -758,7 +770,7 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
   record.capacity = 'none'
   record.jobId = null
   record.status.state = 'queued'
-  record.status.files = record.files.map((f) => fileStatus(f))
+  record.status.files = waitingFiles(record)
   await e.store.putImport(record)
   await e.updateMeta((m) => {
     m.active = null
@@ -909,7 +921,14 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
       if (!stored) throw new AttemptFailure(`The export's text of “${doc.info.name}” is damaged.`, record.files[0].fileId, true, 'bad_request')
       await e.box.putInbox(importId, `${doc.info.documentId}.json`, JSON.stringify(stored))
     }
-    batch = { importId, kind: 'relearn', hiding: record.hiding, documents: contents.documents.map((d) => ({ documentId: d.info.documentId, kind: d.info.kind, name: d.info.name })) }
+    batch = {
+      importId,
+      kind: 'relearn',
+      hiding: record.hiding,
+      documents: contents.documents.map((d) => ({ documentId: d.info.documentId, kind: d.info.kind, name: d.info.name })),
+      // Hiding again can change a corrected passage: its mark follows it, as after a re-read.
+      marks: contents.marks.map((m) => ({ documentId: m.documentId, textHash: m.textHash })),
+    }
   } else if (record.kind === 'relearn') {
     const { current, extra } = await relearnDocuments(e, record, meta)
     const docs = [...current.documents, ...extra]
@@ -1237,15 +1256,7 @@ function applyResult(
       const learned = byId.get(d.documentId)
       return learned?.changed ? { ...d, textBytes: learned.textBytes, hiddenCount: learned.hidden } : d
     })
-    // Outdated marks follow their passage to its new text; one whose passage changed asks to be checked.
-    const remap = new Map((result.marks ?? []).map((m) => [`${m.documentId}:${m.textHash}`, m.newTextHash]))
-    const changed = new Set((result.marks ?? []).filter((m) => m.changed).map((m) => `${m.documentId}:${m.textHash}`))
-    marks = marks.map((m): OutdatedMark => {
-      const key = `${m.documentId}:${m.textHash}`
-      if (!remap.has(key)) return m
-      const moved = remap.get(key)
-      return moved ? { ...m, textHash: moved, needsCheck: m.needsCheck || changed.has(key) } : { ...m, needsCheck: true }
-    })
+    marks = followMarks(marks, result.marks ?? [])
   } else if (record.kind === 'export') {
     // An empty collection started from an export: its documents as learned now, stopped ones still stopped, and the
     // corrections' marks on them.
@@ -1256,7 +1267,7 @@ function applyResult(
         return { ...d, textBytes: learned.textBytes, hiddenCount: learned.hidden ?? d.hiddenCount, pages: learned.pages ?? d.pages, addedAt: now, version }
       })
     const kept = new Set(documents.map((d) => d.documentId))
-    marks = (extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId))
+    marks = followMarks((extra?.marks ?? []).filter((m) => kept.has(m.documentId) && kept.has(m.noteDocumentId)), result.marks ?? [])
   } else if (record.kind === 'relearn' && record.restoreFrom !== null) {
     // A repair's re-learning also brings back the documents of the version that failed its check.
     const learned = new Set((result.documents ?? []).map((d) => d.documentId))
@@ -1273,6 +1284,21 @@ function applyResult(
     passages: stats.passages ?? result.passages ?? current.passages,
     textBytes: documents.reduce((sum, d) => sum + d.textBytes, 0),
   }
+}
+
+/**
+ * Outdated marks follow their passage to its new text (a re-read, or an export hidden again): one whose passage
+ * changed, or can't be found, asks to be checked.
+ */
+function followMarks(marks: OutdatedMark[], moves: NonNullable<IngestResult['marks']>): OutdatedMark[] {
+  const remap = new Map(moves.map((m) => [`${m.documentId}:${m.textHash}`, m.newTextHash]))
+  const changed = new Set(moves.filter((m) => m.changed).map((m) => `${m.documentId}:${m.textHash}`))
+  return marks.map((m): OutdatedMark => {
+    const key = `${m.documentId}:${m.textHash}`
+    if (!remap.has(key)) return m
+    const moved = remap.get(key)
+    return moved ? { ...m, textHash: moved, needsCheck: m.needsCheck || changed.has(key) } : { ...m, needsCheck: true }
+  })
 }
 
 export function countsOf(state: AnswerState): CollectionCounts {
@@ -1415,6 +1441,14 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
       const owed = (await txn.get<string[]>('removalCleanup')) ?? []
       await txn.put('removalCleanup', [...new Set([...owed, ...c.record.removeDocumentIds])])
     }
+    if (c.changedDocumentIds?.length) {
+      // Texts hidden more than before: exports and backups of earlier versions still hold their words.
+      const owed = await txn.get<HiddenCleanup>('hiddenCleanup')
+      await txn.put('hiddenCleanup', {
+        before: Math.max(owed?.before ?? 0, version),
+        documentIds: [...new Set([...(owed?.documentIds ?? []), ...c.changedDocumentIds])],
+      } satisfies HiddenCleanup)
+    }
     const event = { at: now, org: meta.org, collectionId: meta.collectionId }
     const appImport = c.importEvent !== false
     await e.store.addEvents(
@@ -1457,14 +1491,40 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   if (c.record.capacity === 'granted') await step('capacity', () => e.releaseCapacity(c.record))
   await deleteOriginals(e, c.record.files.map((f) => f.fileId))
   if (c.changedDocumentIds?.length) await step('facts', () => dropUnusedFacts(e))
+  if (c.changedDocumentIds?.length) await retryHiddenCleanup(e)
   if (c.record.kind === 'remove') {
     // Facts files and backups written while the removal waited may still hold the file: they go too (tried again
     // from the alarm until they have), and the latest backup is written again without it.
     await retryRemovalCleanup(e)
+  }
+  if (c.record.kind === 'remove' || c.changedDocumentIds?.length) {
     const runtime = await e.store.getRuntime()
     if (runtime && e.box.running) await step('backup', () => backup.run(e, runtime))
   }
   return true
+}
+
+interface HiddenCleanup {
+  before: number // the version whose texts are hidden more: backups of earlier ones hold the words
+  documentIds: string[]
+}
+
+/**
+ * Stricter hiding changed documents' texts: ready exports that hold one are deleted, and the backups of earlier
+ * versions that hold one are dropped (as a removal drops those holding its file). Tried again from the alarm.
+ */
+export async function retryHiddenCleanup(e: CollectionEngine): Promise<void> {
+  const owed = await e.state.storage.get<HiddenCleanup>('hiddenCleanup')
+  if (!owed) return
+  try {
+    for (const documentId of owed.documentIds) await exporter.dropContaining(e, documentId)
+    await backup.dropOlder(e, owed.before, owed.documentIds)
+    const now = await e.state.storage.get<HiddenCleanup>('hiddenCleanup')
+    if (now && (now.before !== owed.before || now.documentIds.length !== owed.documentIds.length)) return // more came meanwhile
+    await e.state.storage.delete('hiddenCleanup')
+  } catch (error) {
+    await e.store.log('after-commit-failed', { step: 'hidden clean-up', error: errorText(error) })
+  }
 }
 
 /** The clean-up a committed removal still owes: its facts in older facts files, and backups that hold it. */
@@ -1514,7 +1574,7 @@ async function attemptFailed(e: CollectionEngine, record: ImportRecord, failure:
     record.status.attempt += 1
     record.phase = 'staging'
     record.retryAt = clock.now() + 15_000 * (record.status.attempt - 1)
-    record.status.files = record.files.map((f) => fileStatus(f))
+    record.status.files = waitingFiles(record)
     await e.store.putImport(record)
     await e.chargeUsage(null)
     return
@@ -1526,12 +1586,18 @@ async function attemptFailed(e: CollectionEngine, record: ImportRecord, failure:
       ? `Couldn't learn “${name}” after ${SETTINGS.maxAttempts} tries. The other files can be learned without it.`
       : `Couldn't learn this import after ${SETTINGS.maxAttempts} tries. Nothing from it was kept.`
   record.status.state = 'failed'
-  record.status.failedFileId = failure.failedFileId
   record.status.error = { error: failure.code, message }
   record.status.finishedAt = iso()
-  record.status.files = record.files.map((f) =>
-    f.fileId === failure.failedFileId ? { fileId: f.fileId, name: f.name, state: 'failed', reason: failure.message } : fileStatus(f),
-  )
+  if (record.kind === 'export') {
+    // The export as a whole failed (its zip goes): none of its documents was learned.
+    record.status.failedFileId = null
+    record.status.files = record.status.files.map((f) => ({ ...f, state: 'failed', reason: failure.message }))
+  } else {
+    record.status.failedFileId = failure.failedFileId
+    record.status.files = record.files.map((f) =>
+      f.fileId === failure.failedFileId ? { fileId: f.fileId, name: f.name, state: 'failed', reason: failure.message } : fileStatus(f),
+    )
+  }
   record.phase = 'done'
   record.retryAt = null
   record.notes = scrubbed(record.notes)

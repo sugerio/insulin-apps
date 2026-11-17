@@ -75,16 +75,29 @@ export class CollectionEngine {
         return json({ ok: true })
       }
       if (request.method === 'POST' && url.pathname === '/internal/hold') {
-        const { until } = await readJson<{ until: string | null }>(request)
+        // Hold changes are numbered by the registry: one older than the change this collection holds is refused, so
+        // deliveries that overlap can't undo a newer hold or lift.
+        const body = await readJson<{ until: string | null; seq?: number }>(request)
+        const hold: PendingHold = { org: request.headers.get(ORG_HEADER) ?? '', until: body.until, seq: body.seq ?? 0 }
         const meta = await this.store.getMeta()
-        if (meta && meta.org === request.headers.get(ORG_HEADER)) {
-          await this.updateMeta((m) => {
-            m.heldUntil = until
-          })
-          await this.store.log(until ? 'held' : 'hold-lifted', { until })
-          if (isHeld(await this.meta())) await this.dropGoBackForHold()
-          await this.state.storage.setAlarm(clock.now())
+        if (!meta) {
+          // Registered, not stored yet: the collection takes the newer of this and what registering said.
+          const pending = await this.state.storage.get<PendingHold>('pendingHold')
+          if (!pending || hold.seq >= pending.seq) await this.state.storage.put('pendingHold', hold)
+          return json({ ok: true })
         }
+        if (meta.org !== hold.org) return json({ ok: true })
+        if (hold.seq < (meta.holdSeq ?? 0)) {
+          await this.store.log('hold-stale', { seq: hold.seq, holding: meta.holdSeq })
+          return json({ ok: true, stale: true })
+        }
+        await this.updateMeta((m) => {
+          m.heldUntil = hold.until
+          m.holdSeq = hold.seq
+        })
+        await this.store.log(hold.until ? 'held' : 'hold-lifted', { until: hold.until, seq: hold.seq })
+        if (isHeld(await this.meta())) await this.dropGoBackForHold()
+        await this.state.storage.setAlarm(clock.now())
         return json({ ok: true })
       }
       const match = matchRoute(request.method, url.pathname, testControls(this.env) ? [...TEST_ROUTES, ...ROUTES] : ROUTES)
@@ -209,10 +222,14 @@ export class CollectionEngine {
     }
     if (existing && sent !== undefined && settings.revision === held && held > 0) return this.status()
     if (!existing) {
-      const entry = await callObject<{ state: string; holdUntil?: string | null }>(this.env.REGISTRY, REGISTRY_NAME, '/register', {
+      const entry = await callObject<{ state: string; holdUntil?: string | null; holdSeq?: number }>(this.env.REGISTRY, REGISTRY_NAME, '/register', {
         body: { org, collectionId },
       })
       if (entry.state !== 'live') return fail('deleting', 'This collection was deleted; make a new one.')
+      // A hold change that reached this collection while it registered is newer than what registering said.
+      const pending = await this.state.storage.get<PendingHold>('pendingHold')
+      const hold = pending && pending.org === org && pending.seq > (entry.holdSeq ?? 0) ? pending : { until: entry.holdUntil ?? null, seq: entry.holdSeq ?? 0 }
+      if (pending) await this.state.storage.delete('pendingHold')
       const now = iso()
       await this.store.putMeta({
         org,
@@ -236,7 +253,8 @@ export class CollectionEngine {
         removals: [],
         hidingAppliedAt: now,
         repairNote: null,
-        heldUntil: entry.holdUntil ?? null,
+        heldUntil: hold.until,
+        holdSeq: hold.seq,
       })
       await this.store.log('created')
     } else {
@@ -551,7 +569,8 @@ export class CollectionEngine {
       const next = nextWindowStart(meta.settings.keepReady, now)
       if (next) times.push(next)
     }
-    const pendingWork = (await this.state.storage.get('pendingDeletes')) || (await this.state.storage.get('removalCleanup'))
+    const pendingWork =
+      (await this.state.storage.get('pendingDeletes')) || (await this.state.storage.get('removalCleanup')) || (await this.state.storage.get('hiddenCleanup'))
     if ((await this.store.pendingEvents()).length || pendingWork) times.push(now + 30_000)
     for (const staged of await this.store.listStaged()) times.push(imports.stagedExpiry(staged))
     for (const record of await this.store.listExports()) {
@@ -950,6 +969,7 @@ export class CollectionEngine {
       await imports.deleteLater(this, [])
     }
     await imports.retryRemovalCleanup(this)
+    await imports.retryHiddenCleanup(this)
     await exporter.expire(this)
   }
 
@@ -1112,6 +1132,12 @@ export class CollectionEngine {
 }
 
 // ==================================================================== helpers
+
+interface PendingHold {
+  org: string
+  until: string | null
+  seq: number
+}
 
 export const isHeld = (meta: Meta): boolean => !!meta.heldUntil && Date.parse(meta.heldUntil) > clock.now()
 

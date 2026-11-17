@@ -672,6 +672,16 @@ plan('HID-04', 'A stricter rule applies to old files', async () => {
   await sleep(SHARE_WINDOW_MS)
   const word = 'Ledgerline'
   await learn(cid, 'with-word', [corpus('batch-001')[0]], { org })
+  // A backup and a ready export that hold the word, before the rule hides it.
+  await control(cid, 'backup', {}, org)
+  const exportId = `exp-hid-${stamp}`
+  await must('POST', `/v1/collections/${cid}/exports`, { exportId }, [200], { org })
+  let before
+  do {
+    await sleep(2000)
+    before = await must('GET', `/v1/collections/${cid}/exports/${exportId}`, undefined, [200], { org })
+  } while (before.state === 'queued' || before.state === 'running')
+  const heldBefore = (await control(cid, 'grep', { values: [word] }, org))[word]
   await sleep(SHARE_WINDOW_MS)
   await must('PUT', `/v1/collections/${cid}`, { settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: [word] } } }, [200], { org })
   await sleep(5000)
@@ -679,9 +689,17 @@ plan('HID-04', 'A stricter rule applies to old files', async () => {
   await search(cid, 'billing gateway owner', { org })
   const found = (await control(cid, 'grep', { values: [word] }, org))[word]
   const list = await points(cid, org)
+  const exportAfter = await must('GET', `/v1/collections/${cid}/exports/${exportId}`, undefined, [200], { org })
+  const latest = (await state(cid, org)).log.filter((e) => e.event === 'backup-done' || e.event === 'backup').pop()
   return {
-    checks: { wordGone: found.container + found.text === 0, earlierBlocked: list.slice(1).some((p) => p.reason === 'newly_hidden') },
-    evidence: { summary: list[0].summary, version: idle.version },
+    checks: {
+      heldBeforeInBackupAndExport: before.state === 'ready' && heldBefore.backups > 0 && heldBefore.exports > 0,
+      wordGone: found.container + found.text + found.backups + found.exports === 0,
+      exportDropped: exportAfter.state === 'failed',
+      newLatestBackup: latest?.version === idle.version,
+      earlierBlocked: list.slice(1).some((p) => p.reason === 'newly_hidden'),
+    },
+    evidence: { summary: list[0].summary, version: idle.version, heldBefore, found, latest },
   }
 })
 
@@ -706,7 +724,7 @@ plan('HIS-07', 'Remove for good', async () => {
     refused.push(res.status === 409 && res.body.error === 'not_restorable')
   }
   return {
-    checks: { textGoneEverywhere: found.container + found.text + found.backups === 0, blockedPointsRefused: refused.length > 0 && refused.every(Boolean) },
+    checks: { textGoneEverywhere: found.container + found.text + found.backups + found.exports === 0, blockedPointsRefused: refused.length > 0 && refused.every(Boolean) },
     evidence: { removed, found },
   }
 })

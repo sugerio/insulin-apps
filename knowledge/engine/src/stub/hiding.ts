@@ -52,6 +52,12 @@ const SPACE = '[\\t\\n\\v\\f\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u202
 const START = `(?<!${WORD})`
 const END = `(?!${WORD})`
 const re = (source: string, flags = 'gu') => new RegExp(source, flags)
+/**
+ * Python's IGNORECASE also takes the Turkish dotted and dotless i (U+0130, U+0131) for i, which the `iu` flags don't: every i
+ * of a label, or of the organization's own words, matches all four.
+ */
+const I = '[iI\u0131\u0130]'
+const folded = (source: string) => source.replace(/i/g, I)
 
 const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}(?![A-Za-z0-9-])/gu
 const API_KEYS = [
@@ -62,14 +68,17 @@ const API_KEYS = [
   re(`${START}AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])`), // Google API keys
   re(`${START}sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])`), // OpenAI and Anthropic style
   re(`${START}eyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}`), // JSON Web Tokens
-  re('-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-{5}[\\s\\S]*?-{5}END (?:[A-Z0-9]+ )*PRIVATE KEY-{5}'), // PEM private keys
 ]
+// PEM private keys, from a BEGIN line to the first END line after it: found in one pass (pemKeys), the same matches
+// as hide.py's PEM pattern, without trying every unmatched BEGIN again to the end of the text.
+const PEM_BEGIN = /-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-{5}/gu
+const PEM_END = /-{5}END (?:[A-Z0-9]+ )*PRIVATE KEY-{5}/gu
 const BEARER = re(`${START}[Bb]earer${SPACE}+([A-Za-z0-9._~+/-]{20,}=*)`)
 // A label, then ":" or "=" (or "is" and something that looks like a secret), then the value.
 const SECRET = re(
-  `${START}(?:password|passwd|pwd|passphrase|passcode|pin code|secret(?:[ _-]?key)?|client[ _-]?secret|api[ _-]?key`
-    + `|access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|private[ _-]?key|token)${END}`
-    + `(?<sep>${SPACE}*(?::|=>|=)${SPACE}*|${SPACE}+is${SPACE}+)["'\`]?(?<value>[^\\t\\n\\v\\f\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000"'\`<>]{4,200})`,
+  `${START}(?:${folded('password|passwd|pwd|passphrase|passcode|pin code|secret(?:[ _-]?key)?|client[ _-]?secret|api[ _-]?key')}`
+    + `|${folded('access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|private[ _-]?key|token')})${END}`
+    + `(?<sep>${SPACE}*(?::|=>|=)${SPACE}*|${SPACE}+${folded('is')}${SPACE}+)["'\`]?(?<value>[^\\t\\n\\v\\f\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000"'\`<>]{4,200})`,
   'giu',
 )
 const NOT_SECRETS = new Set(['none', 'null', 'required', 'optional', 'true', 'false', 'n/a', 'tbd', 'redacted', 'hidden', '[hidden]', 'unset', 'empty'])
@@ -78,8 +87,11 @@ const PHONES = [
   re(`(?<![\\p{L}\\p{N}_+])\\+${DIGIT}{1,3}(?:[ .-]?\\(?${DIGIT}{1,4}\\)?){2,5}(?!${WORD})`), // +49 30 1234 5678, +1 (555) 010-4477
   re(`(?<![\\p{L}\\p{N}_(])\\(?${DIGIT}{3}\\)?[ .-]${DIGIT}{3}[ .-]${DIGIT}{4}(?!${WORD})`), // (555) 010-4477, 555-010-4477
 ]
+// After the label, one run of spaces either side of an optional ":" or "#" (`\s*(?:[:#]\s*)?`, which matches what
+// hide.py's `\s*[:#]?\s*` matches): two runs next to each other could split the same spaces every way, which on a long run
+// of spaces takes time in its square.
 const LABELLED_PHONE = re(
-  `${START}(?:phone|tel|telephone|mobile|cell|fax)${END}\\.?(?:${SPACE}*(?:number|no\\.?))?${SPACE}*[:#]?${SPACE}*(?<value>\\+?${DIGIT}[${DIGIT} ().-]{5,}${DIGIT})`,
+  `${START}(?:${folded('phone|tel|telephone|mobile|cell|fax')})${END}\\.?(?:${SPACE}*(?:number|no\\.?))?${SPACE}*(?:[:#]${SPACE}*)?(?<value>\\+?${DIGIT}[${DIGIT} ().-]{5,}${DIGIT})`,
   'giu',
 )
 /** Earlier kinds win when two finds overlap at the same start. */
@@ -131,8 +143,29 @@ function escapeRegExp(text: string): string {
 
 type Found = [number, number]
 
+/**
+ * PEM private keys: each BEGIN line with the first END line after it, as hide.py's lazy pattern finds them. Once a BEGIN
+ * has no END after it, no later BEGIN has one either, so the search stops there: one pass over the text.
+ */
+function* pemKeys(text: string): Generator<Found> {
+  const begin = new RegExp(PEM_BEGIN)
+  const end = new RegExp(PEM_END)
+  let at = 0
+  for (;;) {
+    begin.lastIndex = at
+    const head = begin.exec(text)
+    if (!head) return
+    end.lastIndex = head.index + head[0].length
+    const foot = end.exec(text)
+    if (!foot) return
+    yield [head.index, foot.index + foot[0].length]
+    at = foot.index + foot[0].length
+  }
+}
+
 function* apiKeys(text: string): Generator<Found> {
   for (const pattern of API_KEYS) for (const match of text.matchAll(pattern)) yield [match.index, match.index + match[0].length]
+  yield* pemKeys(text)
   for (const match of text.matchAll(BEARER)) {
     const start = match.index + match[0].length - match[1]!.length
     yield [start, start + match[1]!.length]
@@ -182,7 +215,9 @@ function* words(text: string, list: string[]): Generator<Found> {
   for (const raw of list) {
     const word = raw.trim()
     if (!word) continue
-    for (const match of text.matchAll(new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(word)}(?![\\p{L}\\p{N}_])`, 'giu'))) yield [match.index, match.index + match[0].length]
+    // Each i of the word (or I, or a Turkish dotted or dotless i) matches the four, as Python's IGNORECASE has it.
+    const source = [...word].map((char) => (/[iI\u0131\u0130]/u.test(char) ? I : escapeRegExp(char))).join('')
+    for (const match of text.matchAll(new RegExp(`(?<![\\p{L}\\p{N}_])${source}(?![\\p{L}\\p{N}_])`, 'giu'))) yield [match.index, match.index + match[0].length]
   }
 }
 

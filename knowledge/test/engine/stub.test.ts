@@ -396,6 +396,55 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call('POST', '/v1/collections/c3/import-export', { importId: 'restore4', fileId: 'file0012' })).status).toBe(409)
   })
 
+  it('a queued export learns with the hiding rules in force when it learns, and keeps corrected passages corrected', async () => {
+    const { call, learn, engine } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'Ports.md', text: 'The Cobalt gateway listens on port 8001.' }])
+    engine.control.runUntilIdle()
+    const found = await call<{ passages: { documentId: string; textHash: string }[] }>('POST', '/v1/collections/c1/search', { query: 'Cobalt gateway port' })
+    await call('POST', '/v1/collections/c1/corrections', { importId: 'fix1', note: { noteId: 'n1', title: 'Correction', text: 'The gateway listens on port 9001 now.', outdated: [found.body.passages[0]] } })
+    engine.control.runUntilIdle()
+    await call('POST', '/v1/collections/c1/exports', { exportId: 'e1' })
+    const zip = new Uint8Array(await (await engine.fetch(new Request('https://engine.test/v1/collections/c1/exports/e1?download=1', { headers: { [ORG_HEADER]: 'org-a' } }))).arrayBuffer())
+    // Queued while the organization is held; the rules get stricter before it learns.
+    await call('PUT', '/v1/collections/c2', { settings: SETTINGS })
+    await call('POST', '/v1/orgs/org-a/hold', { until: '2026-12-01T00:00:00Z' })
+    await call('PUT', '/v1/collections/c2/inbox/file0009', zip, 'org-a', { 'content-type': 'application/zip' })
+    expect((await call('POST', '/v1/collections/c2/import-export', { importId: 'restore1', fileId: 'file0009' })).status).toBe(202)
+    await call('PUT', '/v1/collections/c2', { settings: { ...SETTINGS, hiding: { ...SETTINGS.hiding, words: ['Cobalt', '8001'] }, revision: 5 } })
+    await call('POST', '/v1/orgs/org-a/hold', { until: null })
+    engine.control.runUntilIdle()
+    expect((await call<ImportStatus>('GET', '/v1/collections/c2/imports/restore1')).body.state).toBe('committed')
+    const documents = (await call<{ documents: { documentId: string; name: string }[] }>('GET', '/v1/collections/c2/documents')).body.documents
+    const ports = await call<{ text: string }>('GET', `/v1/collections/c2/documents/${documents.find((document) => document.name === 'Ports.md')!.documentId}`)
+    expect(ports.body.text).toBe('The [hidden] gateway listens on port [hidden].')
+    // The passage the correction marked is still outdated under its new hash: only the correction answers.
+    const answers = (await call<{ passages: { text: string }[] }>('POST', '/v1/collections/c2/search', { query: 'gateway listens on port' })).body.passages.map((passage) => passage.text)
+    expect(answers.some((text) => text.includes('9001'))).toBe(true)
+    expect(answers.some((text) => text.includes('[hidden] gateway'))).toBe(false)
+  })
+
+  it('reads an export within what its entries claim: an entry that inflates past its size is no export', async () => {
+    const { call } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    const good = await writeZip([['README.txt', 'x'], ['collection.json', '{"collectionId":"c0","version":1}'], ['notes.json', '{"notes":[]}'], ['corrections.json', '{"corrections":[]}'], ['documents/d_000000000000000000000001.json', '0'.repeat(8 * 1024 * 1024)], ['documents/d_000000000000000000000001.txt', 'a']])
+    // The central directory says the big entry is one byte; it inflates to 8 MB.
+    const forged = good.slice()
+    const view = new DataView(forged.buffer)
+    let at = view.getUint32(forged.length - 22 + 16, true)
+    for (let entry = 0; entry < 6; entry += 1) {
+      const nameLength = view.getUint16(at + 28, true)
+      const name = new TextDecoder().decode(forged.subarray(at + 46, at + 46 + nameLength))
+      if (name.endsWith('.json') && name.startsWith('documents/')) view.setUint32(at + 24, 1, true)
+      at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true)
+    }
+    expect(await readZip(forged)).toBeNull()
+    expect(await readZip(good, { entryBytes: 1024 * 1024 })).toBeNull()
+    await call('PUT', '/v1/collections/c1/inbox/file0009', forged, 'org-a', { 'content-type': 'application/zip' })
+    const started = await call<{ error: string }>('POST', '/v1/collections/c1/import-export', { importId: 'restore1', fileId: 'file0009' })
+    expect(started.status).toBe(409)
+  })
+
   it('clears staged files nobody imported after a day, unless kept for a waiting import, at most 45 days', async () => {
     const { call, stage, advance } = engineFor()
     await call('PUT', '/v1/collections/c1', { settings: SETTINGS })

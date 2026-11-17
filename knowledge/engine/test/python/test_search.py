@@ -69,6 +69,32 @@ class Passages(unittest.TestCase):
         gone = passages.remap_marks(marks[1:], old_text, old_index, changed, changed_index, rehide)
         self.assertIsNone(gone[0]["newTextHash"], "a changed passage asks to be checked")
 
+    def test_del03_an_exports_marks_follow_their_passage_when_hidden_again(self):
+        import hide
+
+        # The exported text (its passages aren't in the export) and the new collection's stricter rule.
+        old_text = "Rule one: ask the 8001 desk.\n\nPort 8001 is for Bluewater \U0001F600 only.\n\nRule three: none."
+        rules = {"emails": True, "phones": True, "cards": True, "apiKeys": True, "secrets": True, "words": ["Bluewater", "8001"]}
+        spans = hide.find_spans(old_text, rules)
+        new_text = hide.apply(old_text, rules).text
+        paragraphs = lambda text: [{"id": str(i), "index": i, "text": p} for i, p in enumerate(text.split("\n\n"))]  # noqa: E731
+        old_index = passages.build_index("d1", old_text, [], paragraphs(old_text))
+        new_index = passages.build_index("d1", new_text, [], paragraphs(new_text))
+        marks = [{"documentId": "d1", "textHash": p["textHash"]} for p in old_index] + [{"documentId": "d1", "textHash": "f" * 64}]
+        moved = passages.remap_after_rehide(marks, old_text, spans, new_text, new_index)
+        self.assertEqual([m["newTextHash"] for m in moved[:3]], [p["textHash"] for p in new_index], "each mark follows its passage")
+        self.assertEqual([m["changed"] for m in moved[:3]], [True, True, False], "the passages hidden again ask to be checked")
+        self.assertEqual((moved[3]["newTextHash"], moved[3]["changed"]), (None, True), "a mark no passage carries asks to be checked")
+
+    def test_old_position_maps_through_each_mark(self):
+        import hide
+
+        old_text = "ab Bluewater cd"
+        spans = hide.find_spans(old_text, {"words": ["Bluewater"]})
+        new_text = hide.apply(old_text, {"words": ["Bluewater"]}).text
+        self.assertEqual(new_text, "ab [hidden] cd")
+        self.assertEqual([passages.old_position(i, spans) for i in (0, 3, 4, 11, 12, 14)], [0, 3, 12, 12, 13, 15])
+
 
 def hit(pid, doc, text_hash, score):
     return {"passageId": pid, "documentId": doc, "textHash": text_hash, "score": score, "text": pid, "start": 0, "end": 1}

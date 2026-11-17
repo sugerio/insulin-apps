@@ -4,6 +4,8 @@ too (HID-05), and the rules around them: fails closed (HID-02), page maps follow
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import unittest
 
 import _paths  # noqa: F401
@@ -81,3 +83,62 @@ class StoredTexts(unittest.TestCase):
         again = ops.rehide(stored, {"words": ["Bluewater"]})
         self.assertEqual(again.text, "Mail [hidden] about [hidden].")
         self.assertEqual([(s.start, s.kind) for s in again.hidden], [(5, "email"), (20, "word")])
+
+
+ALL_RULES = {"emails": True, "phones": True, "cards": True, "apiKeys": True, "secrets": True, "words": ["Bluewater"]}
+TIMED = """
+import sys, time
+sys.path.insert(0, sys.argv[1])
+import hide
+text = sys.stdin.read()
+started = time.perf_counter()
+hide.find_spans(text, %r)
+print(time.perf_counter() - started)
+""" % ALL_RULES
+
+
+def seconds_to_hide(text: str, limit: float = 10.0) -> float:
+    """Hides `text` in a process of its own, so a detector that runs away is stopped at `limit` seconds."""
+    try:
+        done = subprocess.run([sys.executable, "-c", TIMED, str(_paths.CONTAINER)], input=text, capture_output=True, text=True, timeout=limit, check=True)
+    except subprocess.TimeoutExpired:
+        return float("inf")
+    return float(done.stdout.strip())
+
+
+def pem(line: str, kind: str = "") -> str:
+    """A PEM marker line, spelled in pieces so this file holds no key header for scanners to flag."""
+    return "-" * 5 + line + " " + kind + "PRIVATE" + " KEY" + "-" * 5
+
+
+class Hostile(unittest.TestCase):
+    """Texts built to make a detector backtrack: 2 MB, the most a file gives, each hidden in under a second (F134, F138)."""
+
+    MB2 = 2 * 1024 * 1024
+
+    def test_labelled_phone_followed_by_a_long_whitespace_run(self):
+        for space in ("\u0085", " ", "\t"):
+            text = "phone" + space * self.MB2 + "!"
+            self.assertLess(seconds_to_hide(text), 1.0, repr(space))
+
+    def test_many_labels_each_followed_by_whitespace_and_digits(self):
+        text = ("phone no." + " " * 1000 + "1 2" + " " * 1000) * (self.MB2 // 2012)
+        self.assertLess(seconds_to_hide(text), 1.0)
+
+    def test_private_key_headers_without_an_end(self):
+        text = (pem("BEGIN") + "\n") * (self.MB2 // 28)
+        self.assertLess(seconds_to_hide(text), 1.0)
+        text = pem("BEGIN", "RSA ") + "A" * self.MB2
+        self.assertLess(seconds_to_hide(text), 1.0)
+
+    def test_what_they_find_is_unchanged(self):
+        found = lambda text: [text[s.start : s.end] for s in hide.find_spans(text, ALL_RULES)]  # noqa: E731
+        self.assertEqual(found("Phone number: +1 555 010 4477."), ["+1 555 010 4477"])
+        self.assertEqual(found("tel.\t\t# 030 1234 5678"), ["030 1234 5678"])
+        key = pem("BEGIN", "RSA ") + "\nMIIEowIBAAKCAQEA\n" + pem("END", "RSA ")
+        # As before: a header runs to the first footer after it.
+        lone = pem("BEGIN")
+        self.assertEqual(found(f"A header alone: {lone}. Then a key:\n{key}\nDone."), [f"{lone}. Then a key:\n{key}"])
+        self.assertEqual(found(f"Key:\n{key}\nDone."), [key])
+        two = f"{key}\n\n{key}"
+        self.assertEqual(found(two), [key, key], "two keys are two values")

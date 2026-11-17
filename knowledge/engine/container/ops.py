@@ -287,6 +287,12 @@ async def op_ingest(args) -> dict:
         rules["_fail"] = True
 
     newly_hidden: list[str] = []  # saved texts the rules in force hid more of: older restore points hold them unhidden
+    # Import-export: the export's outdated marks, and for each marked text hidden again, its words before and the
+    # values hidden now, so the marks can follow their passages.
+    export_marks: dict[str, list[dict]] = {}
+    for mark in batch.get("marks") or []:
+        export_marks.setdefault(mark["documentId"], []).append(mark)
+    before_hiding: dict[str, tuple[str, list]] = {}
 
     def saved(document_id: str, name: str) -> dict:
         """A text an earlier step saved (already redacted), hidden again with the rules in force now."""
@@ -300,6 +306,8 @@ async def op_ingest(args) -> dict:
             raise Stop("Hiding sensitive information failed, so nothing from this import was stored.") from error
         if redaction.text != stored["text"]:
             newly_hidden.append(document_id)
+            if document_id in export_marks:
+                before_hiding[document_id] = (stored["text"], hide.find_spans(stored["text"], rules))
         return to_stored(document_id, stored.get("kind", "file"), name, stored.get("type", ""), redaction, stored.get("pageCount"), stored.get("truncated"), stored.get("note"))
 
     if batch["kind"] == "relearn":
@@ -387,6 +395,19 @@ async def op_ingest(args) -> dict:
         for ref in n.get("outdated") or []:
             index = read_json(PASSAGES_DIR / f"{ref['documentId']}.json", [])
             marks.append({**ref, "found": any(p["textHash"] == ref["textHash"] for p in index)})
+    if export_marks:
+        from passages import remap_after_rehide
+
+        for document_id, document_marks in export_marks.items():
+            index = read_json(PASSAGES_DIR / f"{document_id}.json", [])
+            stored = load_text(document_id)
+            if document_id in before_hiding and stored:
+                old_text, spans = before_hiding[document_id]
+                marks.extend(remap_after_rehide(document_marks, old_text, spans, stored["text"], index))
+            else:
+                for m in document_marks:
+                    found = any(p["textHash"] == m["textHash"] for p in index)
+                    marks.append({"documentId": document_id, "textHash": m["textHash"], "newTextHash": m["textHash"] if found else None, "changed": not found})
     total_facts = await rebuild_facts()
 
     ledger["batches"][batch_id] = {"documents": [d["documentId"] for d in documents], "ingestedAt": now_iso()}

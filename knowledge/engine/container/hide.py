@@ -49,8 +49,11 @@ API_KEYS = [
     re.compile(r"\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"),  # Google API key
     re.compile(r"\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])"),  # OpenAI and Anthropic style
     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),  # JSON Web Token
-    re.compile(r"-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-{5}[\s\S]*?-{5}END (?:[A-Z0-9]+ )*PRIVATE KEY-{5}"),  # PEM key
 ]
+# PEM private keys, from a BEGIN line to the first END line after it: found in one pass (_private_keys), not by a
+# lazy pattern tried again from every BEGIN that has no END (minutes on 2 MB of headers).
+PEM_BEGIN = re.compile(r"-{5}BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-{5}")
+PEM_END = re.compile(r"-{5}END (?:[A-Z0-9]+ )*PRIVATE KEY-{5}")
 BEARER = re.compile(r"\b[Bb]earer\s+([A-Za-z0-9._~+/-]{20,}=*)")
 
 # A label, then ":" or "=" (or "is" followed by something that looks like a secret), then the value.
@@ -67,8 +70,11 @@ PHONES = [
     re.compile(r"(?<![\w+])\+\d{1,3}(?:[ .-]?\(?\d{1,4}\)?){2,5}(?![\w])"),  # +49 30 1234 5678, +1 (555) 010-4477
     re.compile(r"(?<![\w(])\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}(?![\w])"),  # (555) 010-4477, 555-010-4477
 ]
+# After the label, one run of spaces either side of an optional ":" or "#" (`\s*(?:[:#]\s*)?`, the same matches as
+# `\s*[:#]?\s*`): two runs next to each other could split the same spaces every way, which takes time in the square of
+# a long run. The app's hiding.ts has the same pattern.
 LABELLED_PHONE = re.compile(
-    r"(?i)\b(?:phone|tel|telephone|mobile|cell|fax)\b\.?(?:\s*(?:number|no\.?))?\s*[:#]?\s*(?P<value>\+?\d[\d ().-]{5,}\d)"
+    r"(?i)\b(?:phone|tel|telephone|mobile|cell|fax)\b\.?(?:\s*(?:number|no\.?))?\s*(?:[:#]\s*)?(?P<value>\+?\d[\d ().-]{5,}\d)"
 )
 
 ORDER = ["api_key", "secret", "email", "card", "phone", "word"]  # earlier wins when two overlap
@@ -94,10 +100,26 @@ def _looks_secret(value: str) -> bool:
     return len(value) >= 6 and (any(c.isdigit() for c in value) or any(not c.isalnum() for c in value) or value[1:] != value[1:].lower())
 
 
+def _private_keys(text: str):
+    """Each BEGIN line with the first END line after it, as a lazy pattern finds them. Once a BEGIN has no END after
+    it, no later BEGIN has one either, so the search stops there: one pass over the text."""
+    at = 0
+    while True:
+        head = PEM_BEGIN.search(text, at)
+        if not head:
+            return
+        foot = PEM_END.search(text, head.end())
+        if not foot:
+            return
+        yield head.start(), foot.end()
+        at = foot.end()
+
+
 def _api_keys(text: str):
     for pattern in API_KEYS:
         for m in pattern.finditer(text):
             yield m.start(), m.end()
+    yield from _private_keys(text)
     for m in BEARER.finditer(text):
         yield m.start(1), m.end(1)
 

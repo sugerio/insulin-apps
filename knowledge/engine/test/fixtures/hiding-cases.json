@@ -1135,6 +1135,242 @@
       "spans": [],
       "redacted": "Refé+49 30 1234 5678 and x(555) 010-4477 stay",
       "hidden": []
+    },
+    {
+      "id": "secret-label-with-dotless-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The pın code: 4711-Alpha opens the gate.",
+      "spans": [
+        {
+          "start": 14,
+          "end": 24,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "The pın code: [hidden] opens the gate.",
+      "hidden": [
+        {
+          "start": 14,
+          "end": 22,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-label-with-dotted-capital-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Our apİ key: Zx9-Orchard-77 is rotated monthly.",
+      "spans": [
+        {
+          "start": 13,
+          "end": 27,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "Our apİ key: [hidden] is rotated monthly.",
+      "hidden": [
+        {
+          "start": 13,
+          "end": 21,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-is-with-dotless-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The passwoRd ıs Orchard-42x for the staging box.",
+      "spans": [
+        {
+          "start": 16,
+          "end": 27,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "The passwoRd ıs [hidden] for the staging box.",
+      "hidden": [
+        {
+          "start": 16,
+          "end": 24,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "phone-label-with-dotted-capital-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "MOBİLE 030 1234 56789 after six.",
+      "spans": [
+        {
+          "start": 7,
+          "end": 21,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "MOBİLE [hidden] after six.",
+      "hidden": [
+        {
+          "start": 7,
+          "end": 15,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "word-with-turkish-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": [
+          "İstanbul"
+        ]
+      },
+      "input": "İstanbul, istanbul, ISTANBUL and ıstanbul are one office.",
+      "spans": [
+        {
+          "start": 0,
+          "end": 8,
+          "kind": "word"
+        },
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "word"
+        },
+        {
+          "start": 20,
+          "end": 28,
+          "kind": "word"
+        },
+        {
+          "start": 33,
+          "end": 41,
+          "kind": "word"
+        }
+      ],
+      "redacted": "[hidden], [hidden], [hidden] and [hidden] are one office.",
+      "hidden": [
+        {
+          "start": 0,
+          "end": 8,
+          "kind": "word"
+        },
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "word"
+        },
+        {
+          "start": 20,
+          "end": 28,
+          "kind": "word"
+        },
+        {
+          "start": 33,
+          "end": 41,
+          "kind": "word"
+        }
+      ]
+    },
+    {
+      "id": "phone-label-then-many-spaces",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Phone 　　   :  +49 30 1234 5678 for the desk.",
+      "spans": [
+        {
+          "start": 15,
+          "end": 31,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Phone 　　   :  [hidden] for the desk.",
+      "hidden": [
+        {
+          "start": 15,
+          "end": 23,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "private-key-after-a-begin-without-end",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "\u002d----BEGIN RSA PRIVATE KEY----- (truncated)\n\u002d----BEGIN PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8wggE7AgEAAkEAq7BFUpkGp3\n-----END PRIVATE KEY----- rotated.",
+      "spans": [
+        {
+          "start": 0,
+          "end": 156,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "[hidden] rotated.",
+      "hidden": [
+        {
+          "start": 0,
+          "end": 8,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "private-key-begin-without-end",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Pasted by mistake: \u002d----BEGIN PRIVATE KEY----- and nothing after it.",
+      "spans": [],
+      "redacted": "Pasted by mistake: \u002d----BEGIN PRIVATE KEY----- and nothing after it.",
+      "hidden": []
     }
   ]
 }

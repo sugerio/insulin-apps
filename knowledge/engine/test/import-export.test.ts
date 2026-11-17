@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { test } from 'node:test'
-import { ask, createCollection, doc, learn, makeEngine, type TestEngine } from './helpers.ts'
+import { crc32, deflateRawSync } from 'node:zlib'
+import { ask, createCollection, doc, learn, makeEngine, outboxEvents, type TestEngine } from './helpers.ts'
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 
@@ -85,7 +86,16 @@ test('DEL-03 an export starts an empty collection: texts, notes, stopped sources
   const points = (await t.api('GET', '/v1/collections/c2/restore-points')).body.restorePoints
   assert.equal(points.length, 1)
   assert.match(points[0].summary, /^Started from an export/)
-  assert.equal((await t.api('GET', '/v1/collections/c2/imports/from-export')).body.files[0].state, 'learned')
+  // The import names what it brought back, as an import of those files and notes would; the zip isn't one of them.
+  const files = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.filter((d: any) => d.kind === 'file')
+  const status = (await t.api('GET', '/v1/collections/c2/imports/from-export')).body
+  assert.deepEqual(
+    status.files.map((f: any) => [f.name, f.documentId, f.state]).sort(),
+    files.map((d: any) => [d.name, d.documentId, 'learned']).sort(),
+  )
+  assert.equal(status.notes, 2, 'the note and the correction')
+  assert.ok(!status.files.some((f: any) => f.fileId === 'export-zip'))
+  assert.equal(started.body.files.length, 3, 'listed from the start')
   assert.equal(t.files.keys().filter((k) => k.startsWith('inbox/org-acme/c2/')).length, 0, 'the staged export is deleted')
 })
 
@@ -126,4 +136,110 @@ test("an export's texts are hidden again with the new collection's stricter rule
   assert.ok(!stored.includes('rota'), 'the word is hidden in what is stored')
   const doc1 = (await t.api('GET', '/v1/collections/c2/documents')).body.documents.find((d: any) => d.name === 'doc-1.md')
   assert.equal(doc1.hiddenValues, 1)
+})
+
+/** A zip of the given entries; `size` and `crc` override what the headers say. */
+function forge(entries: { name: string; data: Buffer; size?: number; crc?: number }[]): Uint8Array {
+  const locals: Buffer[] = []
+  const centrals: Buffer[] = []
+  let offset = 0
+  for (const e of entries) {
+    const packed = deflateRawSync(e.data, { level: 9 })
+    const name = Buffer.from(e.name)
+    const size = e.size ?? e.data.length
+    const crc = e.crc ?? crc32(e.data)
+    const l = Buffer.alloc(30)
+    l.writeUInt32LE(0x04034b50, 0); l.writeUInt16LE(20, 4); l.writeUInt16LE(8, 8); l.writeUInt32LE(crc, 14)
+    l.writeUInt32LE(packed.length, 18); l.writeUInt32LE(size, 22); l.writeUInt16LE(name.length, 26)
+    const c = Buffer.alloc(46)
+    c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(8, 10); c.writeUInt32LE(crc, 16); c.writeUInt32LE(packed.length, 20)
+    c.writeUInt32LE(size, 24); c.writeUInt16LE(name.length, 28); c.writeUInt32LE(offset, 42)
+    locals.push(l, name, packed)
+    centrals.push(c, name)
+    offset += 30 + name.length + packed.length
+  }
+  const cd = Buffer.concat(centrals)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10)
+  end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16)
+  return new Uint8Array(Buffer.concat([...locals, cd, end]))
+}
+
+test('a zip entry is inflated only up to the size it says: a lying size, a bad CRC or too large an entry gives nothing', async () => {
+  const { unzipEntry, zipEntries } = await import('../src/zip.ts')
+  const entry = (zip: Uint8Array) => zipEntries(zip)!.get('a.txt')!
+  const fine = Buffer.from('a'.repeat(5000))
+  assert.deepEqual(Buffer.from((await unzipEntry(entry(forge([{ name: 'a.txt', data: fine }])), 1 << 20))!), fine)
+  // It says 10 bytes and inflates to 200 MB: stopped at the 10, never holding the rest.
+  const forged = entry(forge([{ name: 'a.txt', data: Buffer.alloc(200 * 1024 * 1024, 0x41), size: 10, crc: 0 }]))
+  globalThis.gc?.()
+  const before = process.memoryUsage().arrayBuffers
+  let peak = before
+  const timer = setInterval(() => (peak = Math.max(peak, process.memoryUsage().arrayBuffers)), 1)
+  const lying = await unzipEntry(forged, 8 << 20)
+  clearInterval(timer)
+  assert.equal(lying, null)
+  assert.ok(peak - before < 32 * 1024 * 1024, `held ${Math.round((peak - before) / 1048576)} MB`)
+  assert.equal(await unzipEntry(entry(forge([{ name: 'a.txt', data: fine, crc: 12345 }])), 1 << 20), null, 'a bad CRC')
+  assert.equal(await unzipEntry(entry(forge([{ name: 'a.txt', data: fine }])), 4999), null, 'larger than allowed')
+  assert.equal(await unzipEntry(entry(forge([{ name: 'a.txt', data: fine, size: 6000 }])), 1 << 20), null, 'shorter than it says')
+})
+
+test("an export is refused when its text entry lies about its size, a file's checksum isn't one, or a correction comes from a file", async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  const file = 'd_' + 'a'.repeat(24)
+  const other = 'd_' + 'b'.repeat(24)
+  const json = (v: unknown) => Buffer.from(JSON.stringify(v))
+  const info = (id: string, sha256 = 'c'.repeat(64)) => ({ documentId: id, kind: 'file', name: `${id}.md`, type: 'text/markdown', bytes: 10, pages: null, sha256, active: true })
+  const exportOf = (o: { text?: { data: Buffer; size?: number; crc?: number }; sha256?: string; corrections?: unknown[] }) =>
+    forge([
+      { name: 'README.txt', data: Buffer.from('export') },
+      { name: 'collection.json', data: json({ collectionId: 'src', version: 3 }) },
+      { name: 'notes.json', data: json({ notes: [] }) },
+      { name: 'corrections.json', data: json({ corrections: o.corrections ?? [] }) },
+      { name: `documents/${file}.json`, data: json({ document: info(file, o.sha256), pages: [], hidden: [] }) },
+      { name: `documents/${file}.txt`, ...(o.text ?? { data: Buffer.from('Some text.') }) },
+      { name: `documents/${other}.json`, data: json({ document: info(other), pages: [], hidden: [] }) },
+      { name: `documents/${other}.txt`, data: Buffer.from('Other text.') },
+    ])
+  let n = 0
+  const tryIt = async (zip: Uint8Array) => {
+    n += 1
+    await stageBytes(t, 'c1', `zip-${n}`, zip)
+    return t.api('POST', '/v1/collections/c1/import-export', { importId: `from-${n}`, fileId: `zip-${n}` })
+  }
+  for (const [why, zip] of [
+    ['a checksum that is not one', exportOf({ sha256: 'x' })],
+    ['a correction from a file', exportOf({ corrections: [{ documentId: file, textHash: 'e'.repeat(64), noteDocumentId: other, needsCheck: false }] })],
+  ] as const) {
+    const res = await tryIt(zip)
+    assert.deepEqual([res.status, res.body.error], [409, 'bad_request'], why)
+  }
+  // A text that says 10 bytes and is 100 MB: accepted as an export, then stopped when the text is read.
+  const bomb = await tryIt(exportOf({ text: { data: Buffer.alloc(100 * 1024 * 1024, 0x41), size: 10, crc: 0 } }))
+  assert.equal(bomb.status, 202)
+  await t.drain('c1')
+  const status = (await t.api('GET', `/v1/collections/c1/imports/${bomb.body.importId}`)).body
+  assert.equal(status.state, 'failed')
+  assert.match(status.error.message, /damaged/)
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, 0)
+})
+
+test("stricter hiding that changes a corrected passage: its mark follows it, it stays left out, and the correction asks to be checked", async () => {
+  const t = makeEngine()
+  const { zip, old } = await exported(t)
+  // The new collection hides the corrected passage's own value.
+  await t.api('PUT', '/v1/collections/c2', {
+    settings: { hiding: { emails: true, phones: true, cards: true, apiKeys: true, secrets: true, words: ['8001'] } },
+  })
+  await stageBytes(t, 'c2', 'export-zip', zip)
+  await t.api('POST', '/v1/collections/c2/import-export', { importId: 'from-export', fileId: 'export-zip' })
+  await t.drain('c2')
+  assert.equal((await t.api('GET', '/v1/collections/c2/imports/from-export')).body.state, 'committed')
+  const passages = (await ask(t, 'c2', 'topic number 1 gateway port')).body.passages
+  assert.equal(passages[0].kind, 'note', 'the correction answers first')
+  assert.ok(!passages.some((p: any) => p.documentId === old.documentId && /gateway port is \[hidden\]/.test(p.text)), 'the corrected passage, hidden again, is still left out')
+  const checks = (await outboxEvents(t)).filter((e: any) => e.type === 'needs_check' && e.collectionId === 'c2')
+  assert.deepEqual(checks.map((e: any) => [e.noteId, e.documentId]), [['n-fix', old.documentId]])
 })

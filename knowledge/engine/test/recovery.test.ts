@@ -69,7 +69,7 @@ test('remove for good after a database format change learns the other files agai
   assert.deepEqual([status.version, status.counts.documents], [removed.body.version, 1])
   assert.ok(t.cloud.starts.length < 10, `bounded container starts (${t.cloud.starts.length})`)
   const grep = (await t.api('POST', '/v1/collections/c1/__test/grep', { values: ['port is 8001'] })).body
-  assert.deepEqual(grep['port is 8001'], { container: 0, text: 0, backups: 0 })
+  assert.deepEqual(grep['port is 8001'], { container: 0, text: 0, backups: 0, exports: 0 })
 })
 
 test('an import arriving while a wake is still checking never learns on the unchecked container', async () => {

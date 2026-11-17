@@ -235,10 +235,14 @@ function matchPerson(printed: string, adults: Person[]): Person | null {
   return first.length === 1 ? first[0]! : null;
 }
 
+/**
+ * The same slip: same type, person and issuer, and every box both have holds the same amount. A slip typed in by hand
+ * often has fewer boxes than the file, so the boxes only one of them has don't count.
+ */
 function sameSlip(slip: { type: string; issuer: string; personId: string; boxes: Record<string, string> }, other: Planned): boolean {
   if (slip.type !== other.type || slip.personId !== other.personId || slip.issuer.trim().toLowerCase() !== other.issuer.toLowerCase()) return false;
-  const keys = Object.keys(slip.boxes);
-  return keys.length === Object.keys(other.boxes).length && keys.every((box) => other.boxes[box] !== undefined && Dec.from(slip.boxes[box]!).eq(other.boxes[box]!));
+  const shared = Object.keys(slip.boxes).filter((box) => other.boxes[box] !== undefined);
+  return shared.length > 0 && shared.every((box) => Dec.from(slip.boxes[box]!).eq(other.boxes[box]!));
 }
 
 function fileName(header: string | null): string {

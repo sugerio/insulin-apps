@@ -72,6 +72,21 @@ describe("uploading a slip", () => {
     expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips).toHaveLength(1);
   });
 
+  it("skips a slip already typed in by hand, even when the file shows more boxes", async () => {
+    const { sam } = await couple();
+    const year = await json<TaxYear>(server.call("GET", "/api/years/2025"));
+    await json<TaxYear>(
+      server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: sam.id, type: "T4", issuer: "island grocers", boxes: { 14: "31000", 22: "2400" } } }),
+      201,
+    );
+    answers.push({ kind: "read", taxYear: 2025, slips: [{ ...T4, boxes: { 14: "31000.00", 22: "2400", 24: "31000" } }], model: "m" });
+    const result = await json<UploadResult>(upload(pdf("typed earlier")));
+    expect(result.document).toMatchObject({ status: "duplicate", message: "The slips in this file are already in this year." });
+    // A different amount in a box both have is a different slip.
+    answers.push({ kind: "read", taxYear: 2025, slips: [{ ...T4, boxes: { 14: "32000", 22: "2400" } }], model: "m" });
+    expect((await json<UploadResult>(upload(pdf("other amount")))).document.status).toBe("read");
+  });
+
   it("says when a file holds no slip, another year's slip, or can't be read", async () => {
     await couple();
     answers.push(

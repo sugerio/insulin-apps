@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import type { Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Page, PageHead } from "../components/Page.tsx";
 import { STEP_LABELS, StepNav, stepPath, useYear } from "../components/YearFrame.tsx";
 
@@ -32,7 +32,6 @@ export function LaterStep({ step }: { step: Exclude<Step, "household"> }) {
               <CardTitle>
                 <h2 className="text-base font-semibold">Not available yet</h2>
               </CardTitle>
-              <CardDescription>This step comes in a later version of the app.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 text-sm">
               <p>

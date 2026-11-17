@@ -1,10 +1,10 @@
 import { useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import {
-  MARITAL_STATUSES,
   PROVINCES,
   SUPPORTED_PROVINCES,
   canPrepare,
+  maritalStatusesFor,
   routes,
   type MaritalStatus,
   type Person,
@@ -12,7 +12,7 @@ import {
 } from "#shared";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
@@ -31,43 +31,53 @@ import { MARITAL_STATUS_LABELS, PROVINCE_LABELS, RELATIONSHIP_LABELS, formatDate
 
 export function HouseholdStep() {
   const { year } = useYear();
+  // Set once "Save and continue" stops on something missing; kept here because a save remounts the facts below.
+  const [showMissing, setShowMissing] = useState(false);
   return (
     <Page title={`${year.year} household`} crumbs={[["Returns", "/returns"], [String(year.year), `/returns/${year.year}`], ["Household"]]} wide>
       <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_300px]">
         <StepNav />
         <div className="flex min-w-0 flex-col gap-5">
-          <PageHead
-            title={`Your household in ${year.year}`}
-            sub="Who is in this year, and a few facts the documents can't tell us."
-          />
+          <PageHead title={`Your household in ${year.year}`} />
           <YearPeopleCard />
           {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
-          <YearFacts key={year.revision} />
+          <YearFacts key={year.revision} showMissing={showMissing} onMissing={() => setShowMissing(true)} />
         </div>
-        <aside className="flex flex-col gap-4 lg:col-start-2 xl:col-start-auto">
-          <Card size="sm">
-            <CardHeader>
-              <CardTitle>
-                <h2 className="text-sm font-semibold">Next: one folder</h2>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Put this year's slips and receipts, and last year's notices of assessment, in one folder. You'll pick that folder in the next step.
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardTitle>
-                <h2 className="text-sm font-semibold">What we don't store</h2>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              No SIN, home address or bank details. You write them on the paper return when you sign it.
-            </CardContent>
-          </Card>
+        <aside className="lg:col-start-2 xl:col-start-auto">
+          <TaxNotes year={year.year} />
         </aside>
       </div>
     </Page>
+  );
+}
+
+/** What each answer means for the tax. */
+function TaxNotes({ year }: { year: number }) {
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle>
+          <h2 className="text-sm font-semibold">How these answers affect the tax</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
+        <p>
+          <b className="text-foreground">Spouse in the year.</b> Each of you files a return. Prepared together, credits such as donations and
+          medical expenses go to whichever of you saves more.
+        </p>
+        <p>
+          <b className="text-foreground">Marital status.</b> The status on December 31 counts. Married and common-law are taxed the same; the T1
+          has a box for each. The year of a separation isn't handled yet.
+        </p>
+        <p>
+          <b className="text-foreground">Province.</b> The province on December 31 sets the provincial tax for all of {year}.
+        </p>
+        <p>
+          <b className="text-foreground">Lived in Canada all year.</b> Moving to or from Canada in {year} changes how income is taxed. This app
+          doesn't handle it yet.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -102,13 +112,6 @@ function YearPeopleCard() {
         <CardTitle>
           <h2 className="text-base font-semibold">Who is in {year.year}</h2>
         </CardTitle>
-        <CardDescription>
-          <span>{year.prepareTogether ? "Both returns are prepared together." : "Only your return is prepared."}</span> People come from the{" "}
-          <Link className="underline underline-offset-4" to="/household">
-            Household
-          </Link>
-          .
-        </CardDescription>
         {editable && !changing ? (
           <CardAction>
             <Button variant="outline" size="sm" onClick={() => { setSelected(new Set(year.members)); setChanging(true); }}>
@@ -167,19 +170,24 @@ interface AdultDraft {
   residentAllYear: boolean | null;
 }
 
-function YearFacts() {
+function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing: () => void }) {
   const me = useMe();
   const navigate = useNavigate();
   const { year, replace, reload } = useYear();
   const editable = canPrepare(me);
-  const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(year.maritalStatus);
+  // The Household's spouse or partner, in this year or not: it decides which statuses there are to choose from.
+  const partner = year.people.find((person) => person.relationship === "spouse");
+  const statuses = maritalStatusesFor(partner !== undefined);
+  // A status saved before the Household changed no longer fits: start from none, so a save can't send it back.
+  const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(() =>
+    year.maritalStatus !== null && statuses.includes(year.maritalStatus) ? year.maritalStatus : null,
+  );
   const [adults, setAdults] = useState<Record<string, AdultDraft>>(() =>
     Object.fromEntries(year.adults.map((adult) => [adult.personId, { province: adult.province, residentAllYear: adult.residentAllYear }])),
   );
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
 
   const self = year.people.find((person) => person.relationship === "self");
-  const spouse = year.prepareTogether ? year.people.find((person) => person.relationship === "spouse") : undefined;
   // The year's adults: you, and your spouse when in the year (their returns are prepared together).
   const prepared = year.adults.map((adult) => year.people.find((person) => person.id === adult.personId)).filter((person): person is Person => person !== undefined);
   const draftOf = (personId: string): AdultDraft => adults[personId] ?? { province: null, residentAllYear: null };
@@ -196,6 +204,7 @@ function YearFacts() {
           adults: prepared.map((person) => ({ personId: person.id, ...draftOf(person.id) })),
         },
       });
+      if (thenContinue && saved.steps.household !== "done") onMissing();
       replace(saved);
       if (thenContinue && saved.steps.household === "done") navigate(stepPath(year.year, "upload"));
     } catch (error) {
@@ -213,23 +222,29 @@ function YearFacts() {
         <CardHeader>
           <CardTitle>
             <h2 className="text-base font-semibold" id="marital-status">
-              {spouse && self ? `${firstName(self)} and ${firstName(spouse)}'s status on December 31, ${year.year}` : `Your marital status on December 31, ${year.year}`}
+              {partner && self && year.prepareTogether
+                ? `${firstName(self)} and ${firstName(partner)}'s status on December 31, ${year.year}`
+                : `Your marital status on December 31, ${year.year}`}
             </h2>
           </CardTitle>
-          <CardDescription>As the T1 asks it. If your spouse or partner is in this year, choose married or living common-law.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
           <RadioGroup
             aria-labelledby="marital-status"
             value={maritalStatus ?? ""}
             onValueChange={(value) => setMaritalStatus(value as MaritalStatus)}
             disabled={!editable}
-            className="grid gap-2 sm:grid-cols-3"
+            className={partner ? "grid gap-2 sm:grid-cols-2" : "grid gap-2 sm:grid-cols-4"}
           >
-            {MARITAL_STATUSES.map((status) => (
+            {statuses.map((status) => (
               <Choice key={status} value={status} label={MARITAL_STATUS_LABELS[status]} />
             ))}
           </RadioGroup>
+          {partner ? null : (
+            <Link to={`/household?back=${encodeURIComponent(`/returns/${year.year}/household`)}`} className="text-sm underline underline-offset-2">
+              Add a spouse or partner
+            </Link>
+          )}
         </CardContent>
       </Card>
 
@@ -254,20 +269,17 @@ function YearFacts() {
         <Banner kind="error" title="The household wasn't saved">{describeError(state.error)}</Banner>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card px-5 py-4">
-        {blocking.length > 0 ? (
-          <div className="text-sm">
-            <p className="font-medium">Before you continue</p>
-            <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-              {blocking.map((issue) => (
-                <li key={`${issue.code}-${issue.personId ?? ""}`}>{issue.message}</li>
-              ))}
-            </ul>
-            <p className="mt-1 text-xs text-muted-foreground">As last saved.</p>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">The household is complete for {year.year}.</p>
-        )}
+      {showMissing && blocking.length > 0 ? (
+        <Banner kind="error" title="Fill these in to continue">
+          <ul className="list-disc pl-5">
+            {blocking.map((issue) => (
+              <li key={`${issue.code}-${issue.personId ?? ""}`}>{issue.message}</li>
+            ))}
+          </ul>
+        </Banner>
+      ) : null}
+
+      <div className="flex justify-end">
         {editable ? (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => void save(false)} disabled={state.status === "saving"}>

@@ -77,7 +77,7 @@ export const taxBasics: DocTopic = {
           <p>
             You are <b>married</b> if you are legally married. You generally live <b>common-law</b> if you live with your partner in a conjugal
             relationship and either have lived together for at least 12 months in a row, or have a child together. The CRA's definition has more
-            detail.
+            detail. For tax, the two are the same: the same credits, transfers and benefits.
           </p>
           <p>
             Each spouse files their own return. Some amounts can be claimed by either one, such as donations and medical expenses, so it can matter

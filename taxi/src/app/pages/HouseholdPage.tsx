@@ -31,7 +31,6 @@ export function HouseholdPage() {
     <Page title="Household" crumbs={[["Household"]]}>
       <PageHead
         title="Household"
-        sub="You, your spouse or common-law partner, and the children and other dependants who live with you. Use the names on their tax slips: AI will use them to sort each document to the right person."
         actions={
           back ? (
             <Button asChild variant="outline">

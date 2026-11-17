@@ -34,9 +34,15 @@ the list. To change who is in a year later, choose **Change** at the top of the 
 
 ## Marital status on December 31
 
-Choose your status on the last day of the year, as the T1 asks it: married, living common-law, widowed, divorced,
-separated or single. If it changed during the year, the status on December 31 counts. If your spouse or partner is in
-the year, the status must be married or living common-law.
+Choose your status on the last day of the year, as the T1 asks it. If it changed during the year, the status on
+December 31 counts.
+
+The choices follow the Household. With a spouse or partner there, choose married or living common-law, even if their
+return isn't prepared this year. Without one, choose single, widowed, divorced or separated. If you add or remove a
+spouse later, the year asks for the status again.
+
+The tax treats married and common-law couples the same; the T1 only has a separate box for each. The app doesn't
+prepare the return for the year of a separation yet.
 
 ## Province and residency
 
@@ -48,8 +54,8 @@ the return needs other software.
 ## Save the step
 
 People are saved as you add or change them, and who is in the year with **Save people**. The year's facts are saved
-with **Save** or **Save and continue**. "Before you continue" lists what is still missing; when nothing is, the step
-shows a check mark.
+with **Save** or **Save and continue**. If something is still missing, **Save and continue** saves what you entered and
+lists what is left. When nothing is missing, the step shows a check mark.
 
 If someone else changed the same year while you were editing, your save is refused and their changes are kept. Choose
 **Reload** to see them, then make your changes again.

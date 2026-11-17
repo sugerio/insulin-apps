@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { routes, type Person, type Relationship } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -17,7 +17,6 @@ import { Banner } from "./Feedback.tsx";
 export function PeopleEditor({ people, editable, onChanged }: { people: Person[]; editable: boolean; onChanged: () => Promise<void> }) {
   const [editing, setEditing] = useState<string | "new" | null>(people.length === 0 && editable ? "new" : null);
   const [error, setError] = useState<unknown>(null);
-  const hasSelf = people.some((person) => person.relationship === "self");
 
   async function remove(person: Person) {
     setError(null);
@@ -39,7 +38,6 @@ export function PeopleEditor({ people, editable, onChanged }: { people: Person[]
         <CardTitle>
           <h2 className="text-base font-semibold">People</h2>
         </CardTitle>
-        <CardDescription>The same people every year. Each tax year then says who is in it.</CardDescription>
         {editable && editing === null ? (
           <CardAction>
             <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
@@ -49,7 +47,6 @@ export function PeopleEditor({ people, editable, onChanged }: { people: Person[]
         ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
-        {!hasSelf && editing !== "new" ? <p className="text-sm text-muted-foreground">Start with yourself: the person preparing the returns.</p> : null}
         <ul className="flex flex-col divide-y">
           {people.map((person) =>
             editing === person.id ? (
@@ -168,13 +165,6 @@ function PersonForm({ person, people, onDone, onCancel }: { person?: Person; peo
   );
 }
 
-/** What a person's checkbox says about them in a year. */
-function memberNote(person: Person): string {
-  if (person.relationship === "self") return "You: always in your own year";
-  if (person.relationship === "spouse") return "Spouse or partner: ticked, both returns are prepared together";
-  return `${RELATIONSHIP_LABELS[person.relationship]}: tick if they lived with you this year`;
-}
-
 /**
  * Who is in a tax year: a checkbox per person of the household. You are always ticked; ticking your spouse prepares
  * both returns together. `footer` sits under the list (the link to add someone to the household).
@@ -217,7 +207,7 @@ export function MemberPicker({ people, selected, onChange, disabled = false, foo
                 {person.name}
               </span>
               <span className="text-xs text-muted-foreground" id={`${id}-${person.id}-note`}>
-                {memberNote(person)}
+                {RELATIONSHIP_LABELS[person.relationship]}
               </span>
             </span>
           </Label>

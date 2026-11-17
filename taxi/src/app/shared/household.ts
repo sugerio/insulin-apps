@@ -22,8 +22,14 @@ export const isAdult = (relationship: Relationship) => relationship === "self" |
 export const MARITAL_STATUSES = ["married", "common_law", "widowed", "divorced", "separated", "single"] as const;
 export const maritalStatusSchema = z.enum(MARITAL_STATUSES);
 export type MaritalStatus = z.infer<typeof maritalStatusSchema>;
-/** The statuses in which a spouse or common-law partner's return can be prepared alongside. */
-export const hasPartner = (status: MaritalStatus | null) => status === "married" || status === "common_law";
+/**
+ * The statuses a year may record, from the Household: with a spouse or partner in it, married or living common-law
+ * (the tax treats both the same; the T1 has a box for each); without one, the other four. A separation during the
+ * year isn't handled yet, so a household with a spouse never records one.
+ */
+export function maritalStatusesFor(hasSpouse: boolean): readonly MaritalStatus[] {
+  return hasSpouse ? ["married", "common_law"] : ["single", "widowed", "divorced", "separated"];
+}
 
 /** Province or territory of residence on December 31, by its two-letter code. */
 export const PROVINCES = ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"] as const;
@@ -74,7 +80,7 @@ export const issueSchema = z.strictObject({
   code: z.enum([
     "no_self",
     "no_marital_status",
-    "spouse_without_partner_status",
+    "marital_status_mismatch",
     "no_province",
     "no_residency",
     "unsupported_province",

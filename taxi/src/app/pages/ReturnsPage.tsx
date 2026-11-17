@@ -21,10 +21,7 @@ export function ReturnsPage() {
   const resource = useResource("years", (signal) => apiRequest(routes.listYears, { signal }));
   return (
     <Page title="Returns" crumbs={[["Returns"]]}>
-      <PageHead
-        title="Tax years"
-        sub="One return per adult each year, prepared together. Nothing is sent to the CRA: you get the CRA's own forms, filled in, to sign and mail."
-      />
+      <PageHead title="Tax years" />
       <ResourceView resource={resource}>{(data) => <Years data={data} />}</ResourceView>
     </Page>
   );
@@ -47,8 +44,7 @@ function Years({ data }: { data: YearList }) {
                   <h2 className="text-lg font-semibold">{year.year} tax year</h2>
                 </CardTitle>
                 <CardDescription>
-                  File by {formatDate(filingDeadline(year.year))}.{" "}
-                  {year.filers.length > 0 ? <>Returns for {year.filers.join(" and ")}.</> : "Add the household to begin."}
+                  File by {formatDate(filingDeadline(year.year))}.{year.filers.length > 0 ? <> Returns for {year.filers.join(" and ")}.</> : null}
                 </CardDescription>
                 <CardAction>
                   <Badge variant="secondary">
@@ -127,6 +123,7 @@ function Years({ data }: { data: YearList }) {
           <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
             <p>Residents of Ontario, British Columbia and Alberta with employment income, investment slips, RRSP, donations and medical expenses.</p>
             <p>Not yet: self-employment, rental income, income from outside Canada, Quebec.</p>
+            <p>Nothing is sent to the CRA. You get the CRA's own forms, filled in, to sign and mail.</p>
           </CardContent>
         </Card>
       </aside>
@@ -166,21 +163,16 @@ function StartYear({ year, people }: { year: number; people: Person[] }) {
         <CardTitle>
           <h2 className="text-lg font-semibold">{choosing ? `Start ${year}: who is in this year?` : `${year} tax year`}</h2>
         </CardTitle>
-        <CardDescription>
-          {choosing ? "Tick your spouse or partner to prepare both returns together, and the dependants who lived with you." : `Not started. File by ${formatDate(filingDeadline(year))}.`}
-        </CardDescription>
+        <CardDescription>File by {formatDate(filingDeadline(year))}.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!canPrepare(me) ? (
           <p className="text-sm text-muted-foreground">Someone who prepares returns starts the year. Your role can view returns.</p>
         ) : !self ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">First add yourself, and anyone else in the household.</p>
-            <div>
-              <Button asChild>
-                <Link to={addPerson}>Go to Household</Link>
-              </Button>
-            </div>
+          <div>
+            <Button asChild>
+              <Link to={addPerson}>Go to Household</Link>
+            </Button>
           </div>
         ) : choosing ? (
           <>

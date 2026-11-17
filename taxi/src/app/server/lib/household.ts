@@ -1,7 +1,7 @@
 import {
   SUPPORTED_PROVINCES,
   STEPS,
-  hasPartner,
+  maritalStatusesFor,
   isAdult,
   type AdultYear,
   type CreatePerson,
@@ -108,15 +108,19 @@ export function assess(people: Person[], members: ReadonlySet<string>, maritalSt
   const add = (code: Issue["code"], kind: Issue["kind"], personId: string | null, message: string) =>
     issues.push({ code, kind, personId, message });
   const self = people.find((person) => person.relationship === "self");
-  const spouse = people.find((person) => person.relationship === "spouse" && members.has(person.id));
+  // Who the household says your partner is, in this year or not: the status follows it.
+  const partner = people.find((person) => person.relationship === "spouse");
   if (!self || !members.has(self.id)) add("no_self", "blocking", null, "Add yourself to the household and to this year.");
   if (maritalStatus === null) add("no_marital_status", "blocking", null, "Choose your marital status on December 31.");
-  if (spouse && maritalStatus !== null && !hasPartner(maritalStatus)) {
+  else if (!maritalStatusesFor(partner !== undefined).includes(maritalStatus)) {
+    // Saved before the Household changed (a spouse added or removed): ask again.
     add(
-      "spouse_without_partner_status",
+      "marital_status_mismatch",
       "blocking",
-      spouse.id,
-      `${spouse.name}'s return is prepared with yours, but your status on December 31 isn't married or common-law. Change the status, or take ${spouse.name} out of this year.`,
+      partner?.id ?? null,
+      partner
+        ? `${partner.name} is your spouse or partner in the Household: choose married or living common-law.`
+        : "The Household has no spouse or partner: choose single, widowed, divorced or separated.",
     );
   }
   for (const adult of adults) {
@@ -349,6 +353,15 @@ export async function saveHousehold(db: Db, caller: Caller, year: number, input:
       ]);
     }
     seen.add(adult.personId);
+  }
+  const hasSpouse = view.people.some((person) => person.relationship === "spouse");
+  if (input.maritalStatus !== null && !maritalStatusesFor(hasSpouse).includes(input.maritalStatus)) {
+    throw new ApiError("validation_failed", "The marital status doesn't match the Household", [
+      {
+        path: "maritalStatus",
+        message: hasSpouse ? "With a spouse or partner in the Household, choose married or living common-law" : "Without a spouse or partner in the Household, choose single, widowed, divorced or separated",
+      },
+    ]);
   }
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now, "marital_status = ?, ", [input.maritalStatus]),

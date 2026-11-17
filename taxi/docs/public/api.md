@@ -49,8 +49,9 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 
 `adults` are you, and your spouse when they are in the year. Send the `revision` from your last read of the year (the
 same for `PUT /api/years/{year}/people`). If someone changed the year since, the save is refused with `409`
-and nothing is changed: read the year again and retry. `maritalStatus` is `married`, `common_law`, `widowed`,
-`divorced`, `separated` or `single`; `province` is a two-letter code.
+and nothing is changed: read the year again and retry. `maritalStatus` is `married` or `common_law` when the household
+has a spouse, and `single`, `widowed`, `divorced` or `separated` when it has none; another value is refused with `400`.
+`province` is a two-letter code.
 
 A year's answer lists `issues`. Those of kind `blocking` keep the step from being done; those of kind `unsupported` say
 what the app can't prepare, such as a province other than Ontario, British Columbia or Alberta.

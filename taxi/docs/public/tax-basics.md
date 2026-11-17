@@ -42,7 +42,7 @@ year, such as the RRSP deduction limit and unused amounts that can be carried fo
 
 You are married if you are legally married. You generally live common-law if you live with your partner in a conjugal
 relationship and either have lived together for at least 12 months in a row, or have a child together. The CRA's
-definition has more detail. Each spouse files their own return, and some amounts, such as donations and medical
+definition has more detail. For tax, the two are the same: the same credits, transfers and benefits. Each spouse files their own return, and some amounts, such as donations and medical
 expenses, can be claimed by either one.
 
 ## Province of residence

@@ -100,6 +100,8 @@ describe("step 1 of a year", () => {
       },
     });
     fireEvent.click(await screen.findByRole("radio", { name: "Single" }));
+    expect(screen.queryByRole("radio", { name: "Married" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Add a spouse or partner" }).getAttribute("href")).toBe(`/household?back=${encodeURIComponent("/returns/2025/household")}`);
     fireEvent.change(screen.getByLabelText("Province on December 31"), { target: { value: "BC" } });
     fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
@@ -111,24 +113,29 @@ describe("step 1 of a year", () => {
 
   it("asks for both adults' facts while the spouse is in the year, and only yours once taken out", async () => {
     await renderApp("/returns/2025/household", { seed: seedCouple });
-    expect(await screen.findByText("Both returns are prepared together.")).toBeTruthy();
+    expect(await screen.findAllByLabelText("Province on December 31")).toHaveLength(2);
+    expect(screen.getAllByRole("radio", { name: /^(Married|Living common-law|Single|Widowed|Divorced|Separated)$/ }).map((radio) => radio.getAttribute("value"))).toEqual(["married", "common_law"]);
     expect(screen.getAllByLabelText("Province on December 31")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     fireEvent.click(checkbox("Sam Martin"));
     fireEvent.click(screen.getByRole("button", { name: "Save people" }));
-    expect(await screen.findByText("Only your return is prepared.")).toBeTruthy();
-    expect(screen.getAllByLabelText("Province on December 31")).toHaveLength(1);
+    await waitFor(() => expect(screen.getAllByLabelText("Province on December 31")).toHaveLength(1));
   });
 
-  it("lists what is still missing, as last saved", async () => {
-    await renderApp("/returns/2025/household", { seed: seedCouple });
-    expect(await screen.findByText("Before you continue")).toBeTruthy();
-    expect(screen.getByText("Choose your marital status on December 31.")).toBeTruthy();
+  it("says what is still missing only when you try to continue", async () => {
+    const { router } = await renderApp("/returns/2025/household", { seed: seedCouple });
+    fireEvent.click(await screen.findByRole("radio", { name: "Married" }));
+    expect(screen.queryByText("Fill these in to continue")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    expect(await screen.findByText("Fill these in to continue")).toBeTruthy();
+    expect(screen.getByText("Choose Sam Martin's province on December 31.")).toBeTruthy();
+    expect(screen.queryByText("Choose your marital status on December 31.")).toBeNull();
+    expect(router.state.location.pathname).toBe("/returns/2025/household");
   });
 
   it("shows a viewer the year without anything to change", async () => {
     await renderApp("/returns/2025/household", { as: VIEWER, seed: seedCouple });
-    expect(await screen.findByText("Both returns are prepared together.")).toBeTruthy();
+    expect(await screen.findByText("Sam Martin", { selector: "span" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
     for (const radio of screen.getAllByRole("radio")) expect((radio as HTMLButtonElement).disabled).toBe(true);

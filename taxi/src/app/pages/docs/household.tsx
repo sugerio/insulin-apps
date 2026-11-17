@@ -65,12 +65,16 @@ export const household: DocTopic = {
       body: (
         <>
           <p>
-            Choose your status on the last day of the year, as the T1 asks it: married, living common-law, widowed, divorced, separated or single. If
-            your status changed during the year, the status on December 31 is the one that counts.
+            Choose your status on the last day of the year, as the T1 asks it. If it changed during the year, the status on December 31 counts.
           </p>
           <p>
-            If your spouse or partner is in the year, the status must be married or living common-law. See{" "}
-            <DocLink to="tax-basics" section="spouses">Spouses and common-law partners</DocLink>.
+            The choices follow the Household. With a spouse or partner there, choose married or living common-law, even if their return isn't
+            prepared this year. Without one, choose single, widowed, divorced or separated. If you add or remove a spouse later, the year asks for
+            the status again.
+          </p>
+          <p>
+            The tax treats married and common-law couples the same; the T1 only has a separate box for each. The app doesn't prepare the return
+            for the year of a separation yet. See <DocLink to="tax-basics" section="spouses">Spouses and common-law partners</DocLink>.
           </p>
         </>
       ),
@@ -95,8 +99,8 @@ export const household: DocTopic = {
         <>
           <p>
             People are saved as you add or change them, and who is in the year with <b>Save people</b>. The year's facts are saved with <b>Save</b> or{" "}
-            <b>Save and continue</b>. Under the form, "Before you continue" lists what is still missing. When nothing is missing, the step shows a
-            check mark.
+            <b>Save and continue</b>. If something is still missing, <b>Save and continue</b> saves what you entered and lists what is left.
+            When nothing is missing, the step shows a check mark.
           </p>
           <p>
             If someone else changed the same year while you were editing, your save is refused and nothing is lost on their side. Choose{" "}

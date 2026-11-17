@@ -340,3 +340,68 @@ test('F187 pending events keep the order they were added in, within one millisec
   const [[key]] = await third.pendingEvents()
   assert.ok(key > `pending:${String(6).padStart(15, '0')}`, key)
 })
+
+test('F193 an import a removal stopped, whose release failed once: the alarm tells the guard again, so the removal gets a slot', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await learn(t, 'c1', 'imp-0', [doc(1)])
+  t.advance(6 * 60_000)
+  // The organization's two slots are taken: one by c1's import, one by c2's.
+  t.cloud.jobPolls = 100000
+  await startImport(t, 'c1', 'imp-1', [doc(2)])
+  await t.drain('c1', { steps: 3 })
+  await createCollection(t, 'c2')
+  await startImport(t, 'c2', 'big-c2', [doc(5)])
+  await t.drain('c2', { steps: 3 })
+  assert.deepEqual((await guard(t)).running.sort(), ['org-acme:c1:imp-1', 'org-acme:c2:big-c2'])
+  t.cloud.jobPolls = 1
+  let releases = 0
+  const restore = wrapGuard(t, async (path, call) => {
+    if (path === '/release' && ++releases === 1) throw new Error('Network connection lost.')
+    return call()
+  })
+  // A removal for good stops c1's import; its release fails once.
+  const target = (await t.api('GET', '/v1/collections/c1/documents')).body.documents.find((d: any) => d.name === 'doc-1.md')
+  const removed = await t.api('DELETE', `/v1/collections/c1/documents/${target.documentId}`)
+  await t.drain('c1', { steps: 1 })
+  const meta = await t.storage('c1').get<any>('meta')
+  assert.deepEqual([meta.active, meta.queue.length, meta.queue[1]], [null, 2, 'imp-1'], 'the removal waits ahead of the stopped import')
+  assert.deepEqual(await t.storage('c1').get('capacityReturns'), ['imp-1'], 'its release is owed')
+  // The removal is next, not imp-1: the guard is told again, and the removal gets the slot.
+  const start = t.now()
+  for (let i = 0; i < 30 && (await t.api('GET', '/v1/collections/c1')).body.version !== removed.body.version; i++) {
+    await t.drain('c1', { steps: 1, horizonMs: 30_000 })
+  }
+  restore()
+  assert.ok(releases > 1, 'the release was told again')
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.version, removed.body.version, 'the removal committed')
+  assert.ok(t.now() - start < 30 * 60_000, 'well before the stale slot\'s lease would have lapsed')
+  assert.ok(!(await t.storage('c1').get<string[]>('capacityReturns'))?.includes('imp-1'), 'nothing owed for imp-1')
+})
+
+test('F193 the import asked for next keeps what the guard holds: an /acquire answer lost for the head of the queue sends no release', async () => {
+  const t = makeEngine()
+  await createCollection(t)
+  await startImport(t, 'c1', 'imp-1', [doc(2)])
+  let lost = false
+  let releases = 0
+  const restore = wrapGuard(t, async (path, call) => {
+    if (path === '/release') releases += 1
+    const answer = await call()
+    if (!lost && path === '/acquire') {
+      lost = true
+      throw new Error('Network connection lost.')
+    }
+    return answer
+  })
+  await t.drain('c1', { steps: 1 })
+  assert.deepEqual(await t.storage('c1').get('capacityReturns'), ['imp-1'])
+  for (let i = 0; i < 10 && (await t.storage('c1').get<any>('meta')).active !== 'imp-1'; i++) await t.drain('c1', { steps: 1, horizonMs: 30_000 })
+  assert.equal((await t.storage('c1').get<any>('meta')).active, 'imp-1', 'it asked again and took its slot')
+  assert.equal(releases, 0, 'nothing was given back')
+  await t.drain('c1', { horizonMs: 30_000 })
+  restore()
+  assert.equal((await t.api('GET', '/v1/collections/c1/imports/imp-1')).body.state, 'committed')
+  assert.equal(await t.storage('c1').get('capacityReturns'), undefined)
+  assert.deepEqual(await guard(t), { running: [], waiting: [] })
+})

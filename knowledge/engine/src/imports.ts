@@ -440,20 +440,20 @@ async function oweReturn(e: CollectionEngine, importId: string): Promise<void> {
 /**
  * From the alarm: the guard is told again to give back what it holds for imports whose release didn't reach it, or
  * whose /acquire answer was lost. An id is settled only when the guard confirms, or when the import runs here with the
- * slot it was granted (it renews it and gives it back when it ends). One still queued that asks the guard again soon
- * (not held, or a removal for good, and not waiting to be tried again later) keeps its id and takes what the guard
- * holds for it when it asks; a held one can't ask, so the guard is told again on every alarm until it has.
+ * slot it was granted (it renews it and gives it back when it ends). Only the import the alarm asks the guard for next
+ * keeps its id untold: it takes what the guard holds for it when it asks. Any other (held, behind a removal or another
+ * import, waiting to be tried again later) is told again on every alarm until the guard confirms.
  */
 export async function returnCapacity(e: CollectionEngine): Promise<void> {
   const owed = (await e.state.storage.get<string[]>(RETURNS_KEY)) ?? []
   if (!owed.length) return
   const meta = await e.meta()
+  const next = await nextToAcquire(e, meta)
   const settled: string[] = []
   for (const importId of owed) {
     const record = await e.store.getImport(importId)
-    const asksAgain = !!record && meta.queue.includes(importId) && (record.kind === 'remove' || !isHeld(meta)) && !(record.retryAt && record.retryAt > clock.now())
     if (meta.active === importId && record?.capacity === 'granted') settled.push(importId)
-    else if (asksAgain) continue
+    else if (importId === next) continue
     else if (await e.releaseCapacity({ status: { importId } as ImportStatus, small: false })) settled.push(importId)
   }
   // Ids added while the guard was being told stay owed.
@@ -482,6 +482,22 @@ export async function leaveGuardWhileHeld(e: CollectionEngine): Promise<void> {
       await e.store.putImport(current, txn)
     })
   }
+}
+
+/**
+ * The import the alarm asks the capacity guard for next, as drive() and whileHeld() pick it: the head of the queue, or
+ * while held the first removal for good in it; none while an import is active, an operation runs first (not held),
+ * or the one picked waits to be tried again later.
+ */
+async function nextToAcquire(e: CollectionEngine, meta: Meta): Promise<string | null> {
+  if (meta.active || meta.deleting) return null
+  const held = isHeld(meta)
+  if (meta.op && !held) return null
+  const id = held ? meta.removals.find((r) => meta.queue.includes(r.importId))?.importId : meta.queue[0]
+  if (!id) return null
+  const record = await e.store.getImport(id)
+  if (!record || record.phase !== 'queued' || (record.retryAt && record.retryAt > clock.now())) return null
+  return id
 }
 
 /** Whether the guard is still owed a release (the alarm then comes back soon). */
@@ -954,8 +970,8 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
     })
   } catch (error) {
     // The guard may have granted a slot or a place whose answer was lost. If the import is cancelled meanwhile (or
-    // was already), or held, what the guard holds for it is given back from the alarm; one still queued asks again
-    // and gets the same slot.
+    // was already), held or no longer next, what the guard holds for it is given back from the alarm; while it is
+    // still the one asked for next, it asks again and gets the same slot.
     await oweReturn(e, importId)
     await e.store.log('capacity-unreachable', { importId, error: errorText(error) })
     return false

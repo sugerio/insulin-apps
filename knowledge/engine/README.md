@@ -90,8 +90,10 @@ And from the design:
   it holds for the import; when the guard can't be told (a cancel, a stop for the hold or a removal, the import's end),
   or the answer to the alarm's `/acquire` was lost, the alarm tells it again until the guard confirms, so a slot is
   never kept for an import that doesn't use it until its lease lapses. Only an import running with the slot it was
-  granted, or one still queued that will ask the guard again soon (not held, or a removal for good), takes over what
-  the guard holds instead; a held import in the queue can't, so the guard is told again on every alarm.
+  granted, or the one the alarm asks the guard for next (the head of the queue, or while held the first removal for
+  good in it, with nothing running or going back ahead of it), takes over what the guard holds instead; any other
+  queued import (held, behind a removal or another import, or waiting to be tried again later) can't, so the guard is
+  told again on every alarm.
 - **The app follows each import**: besides its end, an `import` event says when the alarm starts it (from then on it
   can't be cancelled), when it goes back to the queue (a removal for good or the hold came first; it can be cancelled
   again), when a try is interrupted (nothing kept; it stays the import being learned and is tried again in place,

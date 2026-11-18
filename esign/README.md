@@ -77,7 +77,7 @@ before it, so an organization whose first use of Esign came after Esign's last r
 hour: a release deploys Esign before the gateway) isn't recorded until someone opens Esign there. Until then its due
 drafts stay scheduled and say so (`sendWaiting: "organization_unconfirmed"`; "Waiting since … Insulin Apps is
 confirming your organization" on Envelopes, and why on the draft), tried again every ten minutes; opening Esign
-records the organization, and they are sent within a quarter of an hour. A known limit of that upgrade, nothing to do by hand.
+records the organization, and they are sent at the next try. A known limit of that upgrade, nothing to do by hand.
 
 **Esign reports its usage every hour.** After the due work, the first tick of each hour sends the
 platform that hour's usage (`usage-metrics.ts`): for each organization, its envelopes in all and by

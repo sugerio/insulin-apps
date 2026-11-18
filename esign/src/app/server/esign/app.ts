@@ -27,8 +27,8 @@ import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsBy
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, deleteReplacedDocuments, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
-import type { DirectoryEnv } from './directory.ts';
-import { dueScheduled, parseSendAt, recordScheduleFailure, recordScheduleWaiting, SCHEDULED_BUDGET_MS, scheduledBy, scheduledCaller, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
+import { memberStatusConfigured, organizationNow, STATUS_IDS_MAX, type DirectoryEnv, type OrganizationNow } from './directory.ts';
+import { dueScheduled, parseSendAt, recordScheduleFailure, restWaiting, SCHEDULED_BUDGET_MS, SCHEDULED_PER_RUN, scheduledBy, scheduledCaller, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -625,31 +625,62 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
  * The scheduled drafts due now, of one organization or (null) all, sent as whoever scheduled them, who must still be
  * able to send in Esign (as the platform says now) and an editor of it (shares change); what the send refuses is
  * recorded on the draft (scheduled-send.ts). A draft sent or changed meanwhile is left alone.
+ *
+ * Oldest first, up to SCHEDULED_PER_RUN sent or refused, in batches. The platform is asked once per organization a run
+ * (for every scheduler of its drafts in view; again only for one a later batch brings), and an organization it can't
+ * answer for takes no place: one it has no record of Esign's use in has every due draft rest at once (restWaiting), and
+ * one it didn't answer for, or that is suspended, is passed over until the next run. So no queue of one organization's
+ * drafts holds up another's: each batch either sends or refuses a draft, or puts an organization aside.
  */
 async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
   let sent = 0, failed = 0;
   const until = Date.now() + SCHEDULED_BUDGET_MS;
-  for (const row of await dueScheduled(env.DB, Date.now(), tenantId)) {
-    if (Date.now() > until) break;
-    const { request, schedule } = splitDraft(row.draft_json);
-    if (!schedule || typeof schedule.at !== 'number') continue;
-    const caller = await scheduledCaller(env, schedule.by, row.tenant_id);
-    if (caller === 'unavailable') continue;
-    // Still scheduled, and its sender told why it hasn't gone: the platform can't vouch for the organization yet.
-    if (caller === 'unconfirmed') { await recordScheduleWaiting(env.DB, row.id, schedule.at, 'organization_unconfirmed', Date.now()); continue; }
-    let error: string | null = null;
-    try {
-      if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
-      else {
-        const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id }, { draftJson: row.draft_json });
-        if (answer.ok) { sent += 1; continue; }
-        const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
-        if (code === 'not_draft' || code === 'draft_changed') continue;
-        error = typeof code === 'string' ? code : `status_${answer.status}`;
+  const asking = memberStatusConfigured(env);
+  const answers = new Map<string, OrganizationNow | null>();
+  const passed: string[] = [], seen = new Set<string>();
+  while (sent + failed < SCHEDULED_PER_RUN && Date.now() <= until) {
+    const rows = await dueScheduled(env.DB, Date.now(), tenantId, { tenants: passed, ids: [...seen] });
+    if (!rows.length) break;
+    const drafts = rows.flatMap((row) => {
+      seen.add(row.id);
+      const { request, schedule } = splitDraft(row.draft_json);
+      return schedule && typeof schedule.at === 'number' ? [{ row, request, schedule, at: schedule.at }] : [];
+    });
+    if (asking) {
+      for (const org of new Set(drafts.map((draft) => draft.row.tenant_id))) {
+        const known = answers.get(org);
+        if (known !== undefined && known?.status !== 'answered') continue;
+        const ids = [...new Set(drafts.filter((draft) => draft.row.tenant_id === org).map((draft) => draft.schedule.by.userId))]
+          .filter((id) => !known?.members.has(id)).slice(0, STATUS_IDS_MAX);
+        if (!ids.length) continue;
+        const now = await organizationNow(env, org, ids);
+        answers.set(org, known && now?.status === 'answered' ? { ...now, members: new Map([...known.members, ...now.members]) } : now);
       }
-    } catch { error = 'send_failed'; }
-    failed += 1;
-    await recordScheduleFailure(env.DB, row.id, schedule.at, error);
+    }
+    for (const { row, request, schedule, at } of drafts) {
+      if (sent + failed >= SCHEDULED_PER_RUN || Date.now() > until) break;
+      if (passed.includes(row.tenant_id)) continue;
+      const answer = asking ? answers.get(row.tenant_id) ?? null : undefined;
+      // The platform didn't answer for the organization, or it is suspended: none of its drafts this run.
+      if (asking && (answer === null || (answer?.status === 'answered' && !answer.active))) { passed.push(row.tenant_id); continue; }
+      const caller = scheduledCaller(schedule.by, row.tenant_id, answer);
+      if (caller === 'unavailable') continue;
+      // It can't vouch for the organization yet: every due draft of it rests, still scheduled, and says why.
+      if (caller === 'unconfirmed') { await restWaiting(env.DB, row.tenant_id, 'organization_unconfirmed', Date.now()); passed.push(row.tenant_id); continue; }
+      let error: string | null = null;
+      try {
+        if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
+        else {
+          const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id }, { draftJson: row.draft_json });
+          if (answer.ok) { sent += 1; continue; }
+          const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
+          if (code === 'not_draft' || code === 'draft_changed') continue;
+          error = typeof code === 'string' ? code : `status_${answer.status}`;
+        }
+      } catch { error = 'send_failed'; }
+      failed += 1;
+      await recordScheduleFailure(env.DB, row.id, at, error);
+    }
   }
   return { scheduledSent: sent, scheduledFailed: failed };
 }

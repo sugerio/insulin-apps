@@ -66,51 +66,64 @@ export const memberStatusConfigured = (env: DirectoryEnv) => gatewayEndpoint(env
 
 /**
  * Someone Esign holds, as the platform says now: still able to use Esign (`member`), with their role and, as their
- * requests carry them, permissions in it, and whether the account and the organization are active; or no longer
- * (`away`: a person who left or lost Esign, a revoked or deleted API client, or the organization deleted); or nothing
- * yet (`unconfirmed`: the platform has no record that Esign is used in the organization, which it makes at the next
- * request to Esign there, DESIGN.md §8.9).
+ * requests carry them, permissions in it, and whether the account is active; or no longer (`away`: a person who left
+ * or lost Esign, a revoked or deleted API client).
  */
 export type MemberNow =
-  | { status: 'member'; role?: string; permissions?: string[]; active: boolean; orgActive: boolean }
-  | { status: 'away' }
-  | { status: 'unconfirmed' };
+  | { status: 'member'; role?: string; permissions?: string[]; active: boolean }
+  | { status: 'away' };
 
 /**
- * One person's or API client's standing in Esign in the organization, by id (POST SUGER_MEMBER_STATUS_URL): null when
- * the platform can't be asked or didn't answer as agreed.
+ * An organization's people and API clients as the platform says now (POST SUGER_MEMBER_STATUS_URL): `answered`, with
+ * whether the organization is active and each id asked about (an id the answer leaves out isn't there); `deleted`, the
+ * organization no longer exists; or `unconfirmed`, the platform has no record that Esign is used in it yet, which it
+ * makes at the next request to Esign there (DESIGN.md §8.9).
  */
-export async function memberNow(env: DirectoryEnv, organizationId: string, id: string): Promise<MemberNow | null> {
+export type OrganizationNow =
+  | { status: 'answered'; active: boolean; members: Map<string, MemberNow> }
+  | { status: 'deleted' }
+  | { status: 'unconfirmed' };
+
+/** The most ids one member status request takes (the platform's limit). */
+export const STATUS_IDS_MAX = 100;
+
+/**
+ * The organization, and up to 100 of its people or API clients by id, as the platform says now, in one request: null
+ * when the platform can't be asked or didn't answer as agreed.
+ */
+export async function organizationNow(env: DirectoryEnv, organizationId: string, ids: string[]): Promise<OrganizationNow | null> {
   const endpoint = gatewayEndpoint(env.SUGER_MEMBER_STATUS_URL, env.SUGER_APP_TOKEN);
-  if (!endpoint) return null;
+  if (!endpoint || ids.length > STATUS_IDS_MAX) return null;
   try {
     const response = await (env.MEMBERS_FETCH ?? fetch)(endpoint.url, {
       method: 'POST',
       headers: { authorization: `Bearer ${endpoint.token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ org: organizationId, ids: [id] }),
+      body: JSON.stringify({ org: organizationId, ids }),
       signal: AbortSignal.timeout(5000),
     });
     if (response.status === 404) {
       const error = (await response.json().catch(() => ({})) as { error?: unknown }).error;
-      if (error === 'org_deleted') return { status: 'away' };
+      if (error === 'org_deleted') return { status: 'deleted' };
       if (error === 'unknown_organization') return { status: 'unconfirmed' };
       return null;
     }
     if (!response.ok) return null;
     const body = await response.json() as { standing?: unknown; members?: unknown };
     if (!Array.isArray(body.members)) return null;
-    const entry = body.members.find((item) => (item as { id?: unknown })?.id === id) as { status?: unknown; appRole?: unknown; permissions?: unknown; standing?: unknown } | undefined;
-    if (!entry || typeof entry.status !== 'string') return null;
-    if (entry.status !== 'member') return { status: 'away' };
     // A standing the platform doesn't give (one from before it did) is active; anything else it gives is not.
     const active = (standing: unknown) => standing === undefined || standing === 'active';
-    return {
-      status: 'member',
-      ...(typeof entry.appRole === 'string' ? { role: entry.appRole } : {}),
-      ...(Array.isArray(entry.permissions) ? { permissions: entry.permissions.filter((key): key is string => typeof key === 'string') } : {}),
-      active: active(entry.standing),
-      orgActive: active(body.standing),
-    };
+    const members = new Map<string, MemberNow>();
+    for (const item of body.members) {
+      const entry = item as { id?: unknown; status?: unknown; appRole?: unknown; permissions?: unknown; standing?: unknown };
+      if (typeof entry.id !== 'string' || !ids.includes(entry.id) || typeof entry.status !== 'string') continue;
+      members.set(entry.id, entry.status !== 'member' ? { status: 'away' } : {
+        status: 'member',
+        ...(typeof entry.appRole === 'string' ? { role: entry.appRole } : {}),
+        ...(Array.isArray(entry.permissions) ? { permissions: entry.permissions.filter((key): key is string => typeof key === 'string') } : {}),
+        active: active(entry.standing),
+      });
+    }
+    return { status: 'answered', active: active(body.standing), members };
   } catch {
     return null;
   }

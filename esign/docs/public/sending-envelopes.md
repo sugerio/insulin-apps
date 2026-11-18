@@ -54,7 +54,7 @@ no longer scheduled, and **Envelopes** says **Not sent** and why. Fix it, then s
 platform who can use it at that time; while the platform can't be asked, or your organization is suspended, the
 envelope waits for the next try. If Insulin Apps hasn't yet confirmed that your organization uses Esign (rare, and only
 just after an upgrade of the platform), **Envelopes** says **Waiting since** its time, and the draft says why. Opening
-Esign confirms it, and it is sent within a quarter of an hour.
+Esign confirms it; Esign tries again every ten minutes, and sends it then.
 
 ## Upload and send
 

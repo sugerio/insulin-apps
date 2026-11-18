@@ -74,7 +74,7 @@ test('a scheduled draft past its time that waits for the platform says so, and t
     if (c.path.startsWith(`/api/envelopes/${DRAFT_ID}/`)) return json(c.path.endsWith('/audit') ? { events: [] } : { id: DRAFT_ID, myRole: 'owner', owner: OWNER, shares: [] });
   });
   try {
-    assert.match(app.text(), /Scheduled for .+, and not sent yet: Insulin Apps hasn't yet confirmed that your organization uses Esign, which it does when someone opens Esign, as you have now\. It sends within a quarter of an hour\./);
+    assert.match(app.text(), /Scheduled for .+, and not sent yet: Insulin Apps hasn't yet confirmed that your organization uses Esign, which it does when someone opens Esign, as you have now\. Esign tries again every ten minutes, and sends it then\./);
     assert.doesNotMatch(app.text(), /Scheduled to send on/);
   } finally { await app.unmount(); }
 });

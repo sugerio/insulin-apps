@@ -39,7 +39,7 @@ export function sendErrorText(code: string): string {
  * that whoever scheduled it may still send.
  */
 export function sendWaitingText(code: string): string {
-  if (code === 'organization_unconfirmed') return 'Insulin Apps hasn\'t yet confirmed that your organization uses Esign, which it does when someone opens Esign, as you have now. It sends within a quarter of an hour.'
+  if (code === 'organization_unconfirmed') return 'Insulin Apps hasn\'t yet confirmed that your organization uses Esign, which it does when someone opens Esign, as you have now. Esign tries again every ten minutes, and sends it then.'
   return `It is waiting (${code}).`
 }
 

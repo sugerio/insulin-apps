@@ -802,7 +802,8 @@ on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
   the app there again. Until then the endpoints answer 404 `unknown_organization` for it, and what the app does without
   a request waits: Esign's scheduled sends there stay scheduled, tried again every ten minutes, and the draft says it
   waits for the organization to be confirmed. Opening Esign, to look at the draft or anything else, confirms it, and
-  they are sent within a quarter of an hour.
+  they are sent at the next try, oldest first. Each try asks about the organization once and rests all its due drafts
+  together, so they never hold up another organization's.
 - **Member lookup.** `GET https://insulinapps.com/__insulin/members?q=<text>` (`SUGER_MEMBERS_URL`), with the
   `x-suger-member-lookup` header of the browser request the app is serving. The gateway adds that header to every
   request with `x-suger-access-via: browser`: `v1.<organization>.<person>.<expiry>.<signature>`, the expiry five

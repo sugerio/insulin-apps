@@ -256,28 +256,43 @@ test('a waiting draft that then fails says why it failed, not that it waits', as
   } finally { await h.mf.dispose(); }
 });
 
-test("one organization's waiting drafts never take every run's places from another organization's", async () => {
+test("75 waiting drafts of one organization never hold up another's: one question a run, all resting together, over several rests", async () => {
+  const asked: { org: string; ids: string[] }[] = [];
   const h = await setup({
-    status: (body) => body.org === 'tenant' ? Response.json({ error: 'unknown_organization' }, { status: 404 })
-      : Response.json({ org: body.org, standing: 'active', owners: [], members: [{ ...editor, id: body.ids[0] }] }),
+    status: (body) => {
+      asked.push(body);
+      return body.org === 'tenant' ? Response.json({ error: 'unknown_organization' }, { status: 404 })
+        : Response.json({ org: body.org, standing: 'active', owners: [], members: body.ids.map((id) => ({ ...editor, id })) });
+    },
   });
   try {
-    // 26 due drafts where the platform can't vouch for the organization yet, more than a run takes (25)...
-    for (let i = 0; i < 26; i += 1) {
+    // 75 due drafts where the platform can't vouch for the organization yet: three runs' worth, all older than the rest.
+    for (let i = 0; i < 75; i += 1) {
       const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': `crowd-${i}` });
+      assert.equal(r.status, 201, await r.clone().text());
       await h.due((await r.json() as { id: string }).id);
     }
-    // ...and, due after them, one of another organization, where all is well.
     const cy = identity('other', { userId: 'user-cy', email: 'cy@example.test', role: 'EDITOR' });
     const created = await h.req('/api/templates', cy, { method: 'POST', body: h.form });
     assert.equal(created.status, 201, await created.clone().text());
     const otherTemplate = (await created.json() as { id: string }).id;
-    const r = await h.post('/api/envelopes', cy, { ...whole(otherTemplate), sendAt: later() }, { 'idempotency-key': 'other-org' });
-    const { id } = await r.json() as { id: string };
-    await h.due(id);
-    assert.equal((await h.tick()).scheduledSent, 0, 'the run takes the 25 oldest, all waiting');
-    assert.equal((await h.tick()).scheduledSent, 1, 'the next one passes over them, resting, to the other organization\'s');
-    assert.equal((await h.row(id))?.status, 'IN_PROGRESS');
+    const waiting = async () => (await h.db.prepare(`SELECT COUNT(*) AS n FROM envelopes WHERE tenant_id = 'tenant' AND status = 'DRAFT'
+        AND json_extract(draft_json, '$.schedule.waiting') = 'organization_unconfirmed' AND json_extract(draft_json, '$.schedule.retryAt') > ?`).bind(Date.now()).first<{ n: number }>())!.n;
+    // Four rests over: each time the 75 are tried again, and each time another organization's draft, due after them,
+    // goes out at its first tick.
+    for (let rest = 1; rest <= 4; rest += 1) {
+      if (rest > 1) await h.db.prepare("UPDATE envelopes SET draft_json = json_set(draft_json, '$.schedule.retryAt', ?) WHERE tenant_id = 'tenant' AND status = 'DRAFT'").bind(Date.now() - 1000).run();
+      const r = await h.post('/api/envelopes', cy, { ...whole(otherTemplate), sendAt: later() }, { 'idempotency-key': `other-${rest}` });
+      const { id } = await r.json() as { id: string };
+      await h.due(id);
+      asked.length = 0;
+      const ran = await h.tick();
+      assert.deepEqual([ran.scheduledSent, ran.scheduledFailed], [1, 0], `rest ${rest}`);
+      assert.equal((await h.row(id))?.status, 'IN_PROGRESS', `rest ${rest}: sent at its first tick`);
+      assert.deepEqual(asked.map((call) => call.org).sort(), ['other', 'tenant'], `rest ${rest}: one question for each organization`);
+      assert.deepEqual(asked.find((call) => call.org === 'tenant')!.ids, ['user-ana'], 'for every scheduler of its drafts at once');
+      assert.equal(await waiting(), 75, `rest ${rest}: all 75 rest again, still scheduled`);
+    }
   } finally { await h.mf.dispose(); }
 });
 

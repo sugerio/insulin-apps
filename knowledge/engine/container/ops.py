@@ -11,8 +11,9 @@ Ops:
             texts again (after an engine change).
   remove    remove documents for good: from Cognee's databases, their text and passage index; rebuild facts
   reread    apply stricter hiding rules to stored texts; learn the changed ones again; move outdated marks
-            After both, every store is purged of what was deleted and checked, and what the stores hold is read for
-            the removed or newly hidden text (purge.py): any left fails the job, so nothing is committed or backed up.
+            After both, every store is purged of what was deleted and checked, the text written from the documents is
+            searched for the removed or newly hidden text, and everything Cognee generated must trace back to a live
+            chunk (purge.py): anything left fails the job, so nothing is committed or backed up.
   stats     reopen all three databases through Cognee and count their records
   manifest  sha256 every file under /data (no Cognee import)
   grep      count planted values under /data (test controls only: HID-01's evidence)
@@ -650,8 +651,9 @@ def op_grep(args) -> dict:
 
 def purged(args) -> dict:
     """remove and reread: the op itself runs in a child process, so when it exits every database Cognee opened is
-    closed; then every store is purged of what was deleted and checked, and what the stores hold now is read for the
-    removed or newly hidden text (purge.py). Any left fails the job: nothing is committed or backed up."""
+    closed; then every store is purged of what was deleted and checked, the text written from the documents is
+    searched for the removed or newly hidden text, and every record Cognee generated must trace back to a live chunk of
+    a live document (purge.py). Anything left fails the job: nothing is committed or backed up."""
     import purge
 
     batch = json.loads((Path(args.batch_dir) / "batch.json").read_text())
@@ -674,7 +676,7 @@ def purged(args) -> dict:
         print(json.dumps({"purgeError": f"{type(error).__name__}: {error}"[:300]}), file=sys.stderr)
         raise Stop("Cleaning the collection's data after this change failed, so nothing was kept.") from error
     kept = lambda: ((read_json(path, {}) or {}).get("text") or "" for path in sorted(TEXT_DIR.glob("*.json")))  # noqa: E731
-    remaining = purge.left(DATA_DIR, probes, kept)
+    remaining = purge.left(DATA_DIR, probes, kept, data_id_of)
     result["purge"].update({"probes": len(probes), "ms": round((time.monotonic() - started) * 1000)})
     if remaining:
         print(json.dumps({"left": remaining}), file=sys.stderr)  # places and counts only, never the text

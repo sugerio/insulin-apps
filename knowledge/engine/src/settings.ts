@@ -98,6 +98,9 @@ export const SETTINGS = {
   maxQueryChars: 2000,
   // The built-in answer model (Gemma 4 on Workers AI).
   answerModel: '@cf/google/gemma-4-26b-a4b-it',
+  // An answer the model had no capacity for is asked again only while this long has passed since the first call (an
+  // answer takes 6-8 s: at most three calls).
+  answerBudgetMs: 20 * 1000,
   maxAnswerPassages: 20,
   maxPassageChars: 6000,
 }

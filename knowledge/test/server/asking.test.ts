@@ -83,8 +83,12 @@ describe('asking on the site', () => {
     h.engine.control.setAnswerMode('bad_citation')
     const bad = await answered(id, 'Who signs off deals above $25,000?')
     expect(bad.body).toMatchObject({ outcome: 'sources_only', text: null, citations: [] })
+    // The built-in model still unavailable (Workers AI without capacity, once the engine's own tries are used up):
+    // plain words and the sources, never the engine's error.
     h.engine.control.setAnswerMode('fail')
-    expect((await answered(id, 'Who signs off deals above $25,000?')).body.outcome).toBe('sources_only')
+    const unavailable = await answered(id, 'Who signs off deals above $25,000?')
+    expect(unavailable.body).toMatchObject({ outcome: 'sources_only', text: null, writer: 'builtin', message: "Answers couldn't be written just now, so here are the sources without a written answer." })
+    expect(unavailable.body.sources.length).toBeGreaterThan(0)
     // Neither used a written answer.
     expect(await h.db.prepare(`SELECT COALESCE(SUM(used), 0) AS n FROM usage_counters WHERE org_id = ? AND key = 'answers_month'`).bind(ORG).first('n')).toBe(0)
   })

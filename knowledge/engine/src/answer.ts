@@ -5,6 +5,7 @@ import type { AnswerRequest, AnswerResult } from './contract.ts'
 import type { Env } from './env.ts'
 import { EngineFailure, fail, readJson } from './http.ts'
 import { SETTINGS } from './settings.ts'
+import { clock, errorText } from './util.ts'
 
 const SYSTEM = [
   "You answer questions for a team using only the numbered passages from the team's own documents.",
@@ -75,6 +76,34 @@ function outputText(result: unknown): string {
   return typeof content === 'string' ? content : ''
 }
 
+/** Workers AI had no capacity for the call ("AiError: 3040: Capacity temporarily exceeded, please try again."). */
+export const noCapacity = (error: unknown): boolean => /\b3040\b|capacity temporarily exceeded/i.test(errorText(error))
+
+/** Waits before asking the model again when it had no capacity, as long as the answer's time budget allows. */
+const NO_CAPACITY_WAITS_MS = [1_000, 2_000, 4_000]
+
+/**
+ * The model's answer. One refused for want of capacity (5 of 50 calls in the second Engine-lane run) is asked again
+ * after 1, 2 and 4 seconds, each only if it can start within SETTINGS.answerBudgetMs of the first: then 503
+ * model_unavailable, as for any other failure (the app then shows the sources without a written answer).
+ */
+async function write(env: Env, question: string, passages: AnswerRequest['passages']): Promise<string> {
+  const started = clock.now()
+  for (let refused = 0; ; refused++) {
+    try {
+      return outputText(await env.AI.run(SETTINGS.answerModel, { messages: prompt({ question, passages }), max_tokens: 700, temperature: 0.2 })).trim()
+    } catch (error) {
+      const wait = NO_CAPACITY_WAITS_MS[refused]
+      if (!noCapacity(error) || wait === undefined || clock.now() + wait - started >= SETTINGS.answerBudgetMs) {
+        console.warn('answer model failed:', String(error))
+        throw new EngineFailure('model_unavailable', "The built-in model isn't available right now.")
+      }
+      console.warn('answer model had no capacity; asking again', JSON.stringify({ refused: refused + 1, waitMs: wait }))
+      await clock.wait(wait)
+    }
+  }
+}
+
 export async function answer(env: Env, request: Request): Promise<AnswerResult> {
   const body = await readJson<Partial<AnswerRequest>>(request)
   const question = typeof body.question === 'string' ? body.question.trim() : ''
@@ -91,13 +120,7 @@ export async function answer(env: Env, request: Request): Promise<AnswerResult> 
       text: p.text.slice(0, SETTINGS.maxPassageChars),
     }
   })
-  let text: string
-  try {
-    text = outputText(await env.AI.run(SETTINGS.answerModel, { messages: prompt({ question, passages }), max_tokens: 700, temperature: 0.2 })).trim()
-  } catch (error) {
-    console.warn('answer model failed:', String(error))
-    throw new EngineFailure('model_unavailable', "The built-in model isn't available right now.")
-  }
+  const text = await write(env, question, passages)
   if (!text) throw new EngineFailure('model_unavailable', 'The built-in model gave no answer.')
   const cleaned = dropUnknownCitations(text, passages.length)
   return { text: cleaned, citations: citationsIn(cleaned, passages.length), dropped: unknownCitations(text, passages.length), model: SETTINGS.answerModel }

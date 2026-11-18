@@ -229,11 +229,99 @@ class LearningInGroups(unittest.TestCase):
                 self.assertEqual([progress["files"][f["fileId"]] for f in self.FILES], states)
 
 
+class Collection:
+    """A collection's stores as Cognee leaves them, linked as Cognee links them: per document, its stored text, its data
+    item (and Cognee's copy of its text), its graph node, a chunk part of it, the chunk's summary, the entities it
+    contains and their types, relations between them, the vector rows of each, and every node and edge naming the data
+    item and chunk it was made from. purge.left() reads the graph and the vectors through _graph and _vector_tables."""
+
+    DATASET = "7b86e63f-75c6-5f7b-b0c0-90b0edc329f4"
+    TABLES = {"DocumentChunk": "DocumentChunk_text", "Entity": "Entity_name", "EntityType": "EntityType_name", "TextDocument": "TextDocument_name", "TextSummary": "TextSummary_text"}
+
+    def __init__(self, root: Path) -> None:
+        import sqlite3
+
+        self.root = root
+        self.nodes: dict[str, dict] = {}
+        self.edges: list[dict] = []
+        self.vectors: dict[str, list[dict]] = {table: [] for table in [*self.TABLES.values(), "EdgeType_relationship_name"]}
+        for folder in ("text", "passages", "documents", "system/databases"):
+            (root / folder).mkdir(parents=True, exist_ok=True)
+        self.sqlite = sqlite3.connect(root / "system" / "databases" / "cognee_db")
+        self.sqlite.execute("CREATE TABLE data (id TEXT, raw_data_location TEXT)")
+        self.sqlite.execute("CREATE TABLE provenance_edge_evidence (data_id TEXT, chunk_id TEXT)")
+        self.chunks: dict[str, str] = {}  # document -> its chunk
+
+    def node(self, node_id: str, kind: str, name: str = "", refs: str = "", **props) -> str:
+        node = self.nodes.setdefault(node_id, {"name": name, "type": kind, "props": props, "refs": ""})
+        node["refs"] += refs
+        if kind in self.TABLES and not any(r["id"] == node_id for r in self.vectors[self.TABLES[kind]]):
+            self.vectors[self.TABLES[kind]].append({"id": node_id, "text": props.get("text") or name, "document_id": props.get("document_id")})
+        return node_id
+
+    def edge(self, source: str, relation: str, target: str, refs: str, text: str | None = None) -> None:
+        text = (text or f"{self.nodes[source]['name']} {relation.replace('_', ' ')} {self.nodes[target]['name']}.").strip()  # as Cognee keeps it
+        self.edges.append({"source": source, "target": target, "relation": relation, "props": {"edge_text": text}, "refs": refs})
+        if not any(r["id"] == purge.edge_type_id(text) for r in self.vectors["EdgeType_relationship_name"]):
+            self.vectors["EdgeType_relationship_name"].append({"id": purge.edge_type_id(text), "text": text, "document_id": None})
+
+    def document(self, document_id: str, text: str, entities=(), relations=(), summary: str | None = None, fact: str | None = None) -> str:
+        import uuid
+
+        data = str(ops.data_id_of(document_id))
+        chunk = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{data}:chunk"))
+        ref = f"|source_ref:v2:{self.DATASET}:{data}:{chunk}|"
+        (self.root / "text" / f"{document_id}.json").write_text(json.dumps({"documentId": document_id, "name": f"{document_id}.md", "text": text}))
+        copy = self.root / "documents" / f"text_{document_id}.txt"
+        copy.write_text(text)
+        self.sqlite.execute("INSERT INTO data VALUES (?, ?)", (uuid.UUID(data).hex, f"file://{copy}"))
+        self.node(data, "TextDocument", document_id, f"|source_ref:v1:{self.DATASET}:{data}|")
+        self.node(chunk, "DocumentChunk", "", ref, text=text, document_id=data)
+        self.edge(chunk, "is_part_of", data, ref)
+        for name, label in entities:
+            entity = self.node(str(uuid.uuid5(uuid.NAMESPACE_OID, f"Entity:{name.lower()}")), "Entity", name.lower(), ref, description=name)
+            kind = self.node(str(uuid.uuid5(uuid.NAMESPACE_OID, f"EntityType:{label}")), "EntityType", label, ref)
+            self.edge(chunk, "contains", entity, ref, f"Document chunk mentions {name.lower()}: {name}")
+            self.edge(entity, "is_a", kind, ref)
+            self.sqlite.execute("INSERT INTO provenance_edge_evidence VALUES (?, ?)", (uuid.UUID(data).hex, uuid.UUID(chunk).hex))
+        for source, relation, target in relations:
+            ids = {n["props"].get("description"): i for i, n in self.nodes.items() if n["type"] == "Entity"}
+            self.edge(ids[source], relation, ids[target], ref)
+        if summary is not None:
+            node = self.node(str(uuid.uuid5(uuid.UUID(chunk), "TextSummary")), "TextSummary", "", ref, text=summary)
+            self.edge(node, "made_from", chunk, ref)
+        (self.root / "passages" / f"{document_id}.json").write_text(json.dumps([{"passageId": chunk, "documentId": document_id, "start": 0, "end": len(text)}]))
+        if fact is not None:
+            facts_path = self.root / "facts.json"
+            stored = json.loads(facts_path.read_text()) if facts_path.exists() else {"facts": []}
+            stored["facts"].append({"sentence": fact, "sourceSentence": text.split(". ")[0], "documentId": document_id, "passageId": chunk})
+            facts_path.write_text(json.dumps(stored))
+        self.sqlite.commit()
+        self.chunks[document_id] = chunk
+        return chunk
+
+    def remove_text(self, document_id: str) -> None:
+        """What a removal for good takes at once: the stored text and its passages (Cognee's records are the test's)."""
+        (self.root / "text" / f"{document_id}.json").unlink()
+        (self.root / "passages" / f"{document_id}.json").unlink()
+
+    def left(self, probes: list[str], kept=lambda: []) -> dict[str, int]:
+        with mock.patch.object(purge, "_graph", lambda root: (self.nodes, self.edges)), mock.patch.object(purge, "_vector_tables", lambda root: iter(self.vectors.items())):
+            return purge.left(self.root, probes, kept, ops.data_id_of)
+
+
 class Probes(unittest.TestCase):
-    """What a removal for good or stricter hiding must leave nowhere, and where purge.left() looks for it: decoded
-    values made from the documents, matched as the hiding detector matches a word."""
+    """What a removal for good or stricter hiding must leave nowhere, and how purge.left() finds it: in what was written
+    from the documents, matched as the hiding detector matches a word; in what Cognee generated, by its links."""
 
     WORDS = {"emails": True, "phones": False, "cards": False, "apiKeys": False, "secrets": False}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
 
     def test_his07_a_removed_text_is_looked_for_in_pieces(self):
         text = 'Heading\n\nThe Gannetbrook archive keeps 41 snapshots of each board. Short one.\n"Quoted words" stay in a piece\tand tabs.'
@@ -250,138 +338,123 @@ class Probes(unittest.TestCase):
         texts = ["Ledgerline invoices go to billing@example.com. LEDGERLINE again.", "Nothing [hidden] here."]
         self.assertEqual(sorted(purge.hidden_probes(texts, rules)), ["Ledgerline", "billing@example.com"])
 
+    def test_a_collection_as_cognee_leaves_it_has_nothing_left_over(self):
+        store = Collection(self.root)
+        store.document("d_1", "Dana Reyes owns Hawser gateway.", [("Dana Reyes", "person"), ("Hawser gateway", "product")], [("Dana Reyes", "owns", "Hawser gateway")], "Dana Reyes owns Hawser gateway\nperson: Dana Reyes", "Dana reyes owns hawser gateway.")
+        store.document("d_2", "The Marlin search service keeps 14 days of logs.", [("Marlin", "software")])
+        self.assertEqual(store.left(["Ledgerline"]), {})
+
     def test_f198_every_newly_hidden_value_is_looked_for(self):
         emails = [f"person{i:04d}@example.com" for i in range(600)]
         probes = purge.hidden_probes([" and ".join(emails)], {**self.WORDS, "words": []})
         self.assertEqual(len(probes), 600)
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "documents").mkdir()
-            (root / "documents" / "text_1.txt").write_text(f"Write to {emails[-1]} today.")
-            self.assertEqual(purge.left(root, probes, lambda: []), {"documents/text_1.txt": 1}, "the last of 600 too")
+        store = Collection(self.root)
+        store.document("d_1", f"Write to {emails[-1]} today.")
+        self.assertEqual(store.left(probes), {"text/d_1.json": 1, "documents/text_d_1.txt": 1, "LanceDB DocumentChunk_text": 1, "graph": 1}, "the last of 600 too")
 
     def test_f199_case_is_ignored_as_the_hiding_detector_ignores_it(self):
         rules = {**self.WORDS, "words": ["Éclair"]}
         probes = purge.hidden_probes(["The Éclair station opens at nine."], rules)
         self.assertEqual(probes, ["Éclair"])
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "documents").mkdir()
-            (root / "documents" / "text_1.txt").write_text("an éclair only")  # as an entity name is kept: in lower case
-            (root / "documents" / "text_2.txt").write_text("ÉCLAIRS galore")  # a longer word, which the rule doesn't hide
-            self.assertEqual(purge.left(root, probes, lambda: []), {"documents/text_1.txt": 1})
+        store = Collection(self.root)
+        store.document("d_1", "The [hidden] station opens at nine.", [("éclair", "food"), ("ÉCLAIRS", "food")])  # as kept: in lower case
+        self.assertEqual(store.left(probes), {"LanceDB Entity_name": 1, "graph": 2}, "a longer word, which the rule doesn't hide, isn't")
 
     def test_f199_values_are_read_decoded_not_as_their_json(self):
         probes = purge.hidden_probes(['Ask about Project "A" today.'], {**self.WORDS, "words": ['Project "A"']})
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            fact = {"factId": "f_1", "sentence": "Ops asks about it.", "sourceSentence": 'Ask about Project "A" today.', "documentId": "d_1"}
-            (root / "facts.json").write_text(json.dumps({"facts": [fact]}))  # its quotes stored as \"
-            self.assertEqual(purge.left(root, probes, lambda: []), {"facts.json": 1})
+        store = Collection(self.root)
+        store.document("d_1", "Ask about [hidden] today.", fact="Ops asks about it.")
+        stored = json.loads((self.root / "facts.json").read_text())
+        stored["facts"][0]["sourceSentence"] = 'Ask about Project "A" today.'  # its quotes stored as \"
+        (self.root / "facts.json").write_text(json.dumps(stored))
+        self.assertEqual(store.left(probes), {"facts.json": 1})
 
-    def test_f197_keys_names_and_bookkeeping_are_not_document_values(self):
-        # A correct re-read hiding the word "text": the JSON key "text", a document's name and type, ids and passage
-        # bookkeeping all say it, but no value made from the documents does.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            for folder in ("text", "passages", "documents"):
-                (root / folder).mkdir()
-            stored = {"documentId": "d_1", "kind": "file", "name": "text plan.md", "type": "text/markdown", "text": "Use [hidden] for the launch plan.", "pages": [], "hidden": [{"start": 4, "end": 12, "kind": "word"}], "note": "Only the first 2 MB of text was learned."}
-            (root / "text" / "d_1.json").write_text(json.dumps(stored))
-            (root / "passages" / "d_1.json").write_text(json.dumps([{"passageId": "p", "documentId": "d_1", "start": 0, "end": 33, "page": None, "textHash": "ab"}]))
-            (root / "documents" / "text_9.txt").write_text("Use [hidden] for the launch plan.")
-            (root / "ledger.json").write_text(json.dumps({"batches": {"text": {"documents": ["d_1"]}}}))
-            self.assertEqual(purge.left(root, ["text"], lambda: ["Use [hidden] for the launch plan."]), {})
-            (root / "documents" / "text_9.txt").write_text("Use text for the launch plan.")
-            self.assertEqual(purge.left(root, ["text"], lambda: []), {"documents/text_9.txt": 1}, "a document's own words still count")
+    def test_f197_keys_names_labels_and_bookkeeping_are_not_document_text(self):
+        # A correct re-read hiding "text" and "person": the JSON key "text", a document's name and type, passage
+        # bookkeeping, Cognee's entity type "person" and its summaries' "person: ..." all say them; no text written from
+        # a document does.
+        store = Collection(self.root)
+        store.document("d_1", "Use [hidden] for the launch plan.", [("Dana Reyes", "person")], summary="person: Dana Reyes")
+        stored = json.loads((self.root / "text" / "d_1.json").read_text())
+        stored.update({"name": "text plan.md", "type": "text/markdown", "note": "Only the first 2 MB of text was learned."})
+        (self.root / "text" / "d_1.json").write_text(json.dumps(stored))
+        (self.root / "ledger.json").write_text(json.dumps({"batches": {"text": {"documents": ["d_1"]}}}))
+        self.assertEqual(store.left(["text", "person"]), {})
+        (self.root / "documents" / "text_d_1.txt").write_text("Use text for the launch plan.")
+        self.assertEqual(store.left(["text", "person"]), {"documents/text_d_1.txt": 1}, "a document's own words still count")
 
-    @staticmethod
-    def graph(*, summaries=(), relations=(), entities=("Hawser gateway", "port 8443", "Dana Reyes"), types=("organization", "location", "person")):
-        """A graph as Cognee writes it: entities (named in lower case, spelled as found), their type labels, summaries
-        and relations; a relation's text is Cognee's own template unless given."""
-        meta = lambda field: {"metadata": str({"index_fields": [field]})}  # noqa: E731 - as Cognee stores it
-        nodes = {f"e{i}": {"name": name.lower(), "type": "Entity", "props": {**meta("name"), "description": name}} for i, name in enumerate(entities)}
-        nodes.update({f"t{i}": {"name": label, "type": "EntityType", "props": meta("name")} for i, label in enumerate(types)})
-        nodes.update({f"s{i}": {"name": "", "type": "TextSummary", "props": {**meta("text"), "text": text}} for i, text in enumerate(summaries)})
-        edges = []
-        by_name = {n["props"].get("description", n["name"]): node_id for node_id, n in nodes.items()}
-        for source, relation, target, *text in relations:
-            src, tgt = nodes[by_name[source]], nodes[by_name[target]]
-            edges.append((by_name[source], by_name[target], relation, {"edge_text": text[0] if text else f"{src['name']} {relation.replace('_', ' ')} {tgt['name']}."}))
-        return lambda root: (nodes, edges)
+    def test_f202_a_hidden_word_cognee_also_uses_as_a_relation_name_counts_only_in_document_text(self):
+        # "headquartered_in" hidden: Cognee's relation of that name, its text, the summary and the fact made from it,
+        # all from a live chunk of another document, are Cognee's records; in a text Cognee keeps, it counts.
+        store = Collection(self.root)
+        store.document("d_1", "The fields [hidden] and [hidden] link each record.")
+        store.document("d_2", "The Hawser gateway sits in port 8443.", [("Hawser gateway", "organization"), ("port 8443", "location")], [("Hawser gateway", "headquartered_in", "port 8443")], "Hawser gateway headquartered_in port 8443", "Hawser gateway headquartered in port 8443.")
+        probes = ["headquartered_in", "is_part_of", "headquartered in"]
+        self.assertEqual(store.left(probes), {})
+        (self.root / "documents" / "text_d_1.txt").write_text("The fields is_part_of and headquartered_in link each record.")
+        self.assertEqual(store.left(probes), {"documents/text_d_1.txt": 2})
 
-    def test_f202_a_hidden_word_cognee_also_uses_as_a_relation_name_is_cognees_where_cognee_wrote_it(self):
-        # A correct re-read hiding "headquartered_in": the document's words are hidden, but Cognee names a relation it
-        # found in another document that way: in the relation, its text, the summary and the fact made from it. All
-        # exactly as Cognee writes them from live records: they don't count. In a text Cognee keeps, they do.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            fact = {"sentence": "Hawser gateway headquartered in port 8443.", "sourceSentence": "The Hawser gateway listens on port 8443."}
-            (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
-            (root / "documents").mkdir()
-            (root / "documents" / "text_1.txt").write_text("The fields [hidden] and [hidden] link each record.")
-            summary = "Hawser gateway headquartered_in port 8443\nlocation: port 8443; organization: Hawser gateway"
-            graph = self.graph(summaries=[summary], relations=[("Hawser gateway", "headquartered_in", "port 8443")])
-            probes = ["headquartered_in", "is_part_of", "headquartered in"]
-            with mock.patch.object(purge, "_graph", graph):
-                self.assertEqual(purge.left(root, probes, lambda: []), {})
-                (root / "documents" / "text_1.txt").write_text("The fields is_part_of and headquartered_in link each record.")
-                self.assertEqual(purge.left(root, probes, lambda: []), {"documents/text_1.txt": 2})
+    def test_f205_and_f207_what_cognee_made_from_a_removed_document_is_left_over_whatever_it_says(self):
+        # The removed document's summary ("Dana Reyes owns Hawser gateway", or "The project uses Part Of as its
+        # supplier") and its relation stay behind while both entities live on in another document: its chunk is gone.
+        store = Collection(self.root)
+        store.document("d_rm", "Dana Reyes owns Hawser gateway. The project uses Part Of as its supplier.", [("Dana Reyes", "person"), ("Hawser gateway", "product")], [("Dana Reyes", "owns", "Hawser gateway")], "Dana Reyes owns Hawser gateway\nThe project uses Part Of as its supplier.", "Dana reyes owns hawser gateway.")
+        store.document("d_kept", "Dana Reyes runs the Hawser gateway.", [("Dana Reyes", "person"), ("Hawser gateway", "product")])
+        removed_chunk, data = store.chunks["d_rm"], str(ops.data_id_of("d_rm"))
+        store.remove_text("d_rm")
+        # Cognee deleted the document, its chunk and its data item, but not the summary or the relation:
+        del store.nodes[removed_chunk], store.nodes[data]
+        store.vectors["DocumentChunk_text"] = [r for r in store.vectors["DocumentChunk_text"] if r["id"] != removed_chunk]
+        store.vectors["TextDocument_name"] = [r for r in store.vectors["TextDocument_name"] if r["id"] != data]
+        store.edges = [e for e in store.edges if removed_chunk not in (e["source"], e["target"]) or e["relation"] == "made_from"]
+        store.sqlite.execute("DELETE FROM data WHERE id = ?", (ops.data_id_of("d_rm").hex,))
+        store.sqlite.execute("DELETE FROM provenance_edge_evidence WHERE data_id = ?", (ops.data_id_of("d_rm").hex,))
+        store.sqlite.commit()
+        (self.root / "documents" / "text_d_rm.txt").unlink()
+        probes = purge.removed_probes(["Dana Reyes owns Hawser gateway. The project uses Part Of as its supplier."])
+        left = store.left(probes, kept=lambda: ["Dana Reyes runs the Hawser gateway."])
+        # In the graph: the summary, made from a chunk that's gone, and the shared entities, their types and the
+        # relation, which still name the removed chunk. The summary's vector row, the relation texts of the chunk's
+        # edges, and the fact taken from a passage that's gone. (The entities' own rows belong to live entities.)
+        self.assertEqual(set(left), {"graph", "LanceDB TextSummary_text", "LanceDB EdgeType_relationship_name", "facts.json"})
+        self.assertEqual(left["LanceDB TextSummary_text"], 1)
 
-    def test_f205_text_that_only_shares_words_with_a_label_is_read(self):
-        # A company called "Part Of", hidden; the graph has Cognee's is_part_of and part_of. A summary or a fact that
-        # isn't what Cognee's templates make from the live records is read in full, whatever words it shares.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            fact = {"sentence": "The project uses Part Of.", "sourceSentence": "A sentence without it."}
-            (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
-            graph = self.graph(summaries=["The project uses Part Of as its supplier."], relations=[("Hawser gateway", "part_of", "port 8443")])
-            with mock.patch.object(purge, "_graph", graph):
-                self.assertEqual(purge.left(root, ["Part Of"], lambda: []), {"graph": 1, "facts.json": 1})
-            # Named by Cognee, it is an entity: its summary is Cognee's, but the entity's own name is read.
-            graph = self.graph(summaries=["organization: Hawser gateway, Part Of"], entities=("Hawser gateway", "Part Of"))
-            with mock.patch.object(purge, "_graph", graph):
-                self.assertEqual(purge.left(root, ["Part Of"], lambda: []), {"graph": 2, "facts.json": 1})
+    def test_f208_a_live_summary_is_cognees_however_its_entity_is_now_spelled(self):
+        # O'Brien Labs, then OBrien Labs: one entity, spelled the later way now. The earlier chunk's summary is live,
+        # so hiding "organization" in another document passes: no generated text is read.
+        store = Collection(self.root)
+        store.document("d_1", "O'Brien Labs ships the gateway.", [("O'Brien Labs", "organization")], summary="organization: O'Brien Labs")
+        store.document("d_2", "OBrien Labs hired Dana.", [("OBrien Labs", "organization")], summary="organization: OBrien Labs")
+        store.document("d_3", "The [hidden] desk answers.")
+        self.assertEqual(store.left(["organization"]), {})
 
-    def test_a_hidden_word_that_is_one_of_cognees_labels_counts_only_where_documents_wrote_it(self):
-        # "person" hidden: Cognee's label "person" stays (an entity type, "<name> is a person.", a summary's
-        # "person: ..."), and isn't the documents'. A document's own "person" (an entity, a chunk) is read.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            graph = self.graph(summaries=["person: Dana Reyes"], relations=[("Dana Reyes", "is_a", "person")])
-            with mock.patch.object(purge, "_graph", graph):
-                self.assertEqual(purge.left(root, ["person"], lambda: []), {})
-            graph = self.graph(summaries=["person: Dana Reyes"], entities=("Dana Reyes", "the person in charge"))
-            with mock.patch.object(purge, "_graph", graph):
-                self.assertEqual(purge.left(root, ["person"], lambda: []), {"graph": 2})
-
-    def test_a_label_or_relation_name_cognee_doesnt_have_is_read(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            graph = self.graph(types=("person", "ledgerline"), relations=[("Hawser gateway", "ledgerline_of", "port 8443")])
-            with mock.patch.object(purge, "_graph", graph):
-                self.assertEqual(purge.left(Path(tmp), ["Ledgerline"], lambda: []), {"graph": 2}, "the type's name, the relation's text")
-
-    def test_the_vocabulary_is_the_pinned_cognees(self):
-        dockerfile = (Path(_paths.CONTAINER) / "Dockerfile").read_text()
-        requirements = (Path(_paths.CONTAINER) / "requirements.in").read_text()
-        self.assertIn(f"KNOWLEDGE_DATA_FORMAT=cognee-{purge.COGNEE_VERSION}+", dockerfile)
-        self.assertIn(f"cognee[gliner]=={purge.COGNEE_VERSION}", requirements, "a new Cognee: check ENTITY_LABELS and RELATIONS against it")
+    def test_records_that_name_a_removed_item_or_none_are_left_over(self):
+        for spoil, place in (
+            (lambda st: st.edges[0].update(refs=st.edges[0]["refs"] + f"|source_ref:v2:{Collection.DATASET}:{ops.data_id_of('d_gone')}:{ops.data_id_of('d_gone')}|"), "graph"),
+            (lambda st: next(n for n in st.nodes.values() if n["type"] == "Entity").update(refs=""), "graph"),
+            (lambda st: st.vectors["EdgeType_relationship_name"].append({"id": purge.edge_type_id("dana reyes owns ledgerline."), "text": "dana reyes owns ledgerline.", "document_id": None}), "LanceDB EdgeType_relationship_name"),
+            (lambda st: st.vectors["Entity_name"].append({"id": "0f1e2d3c-0000-4000-8000-000000000000", "text": "ledgerline", "document_id": None}), "LanceDB Entity_name"),
+            (lambda st: (st.sqlite.execute("INSERT INTO data VALUES (?, ?)", (ops.data_id_of("d_gone").hex, "")), st.sqlite.commit()), "SQLite data"),
+            (lambda st: (st.root / "documents" / "text_old.txt").write_text("An older copy."), "documents/text_old.txt"),
+            (lambda st: (st.root / "passages" / "d_gone.json").write_text("[]"), "passages/d_gone.json"),
+        ):
+            with self.subTest(place=place), tempfile.TemporaryDirectory() as tmp:
+                store = Collection(Path(tmp))
+                store.document("d_1", "Dana Reyes owns Hawser gateway.", [("Dana Reyes", "person"), ("Hawser gateway", "product")], [("Dana Reyes", "owns", "Hawser gateway")])
+                spoil(store)
+                self.assertEqual(set(store.left([])), {place})
 
     def test_a_file_purge_doesnt_know_is_read_whole(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "system" / "databases").mkdir(parents=True)
-            (root / "system" / "databases" / "other.bin").write_bytes(b"\x00\x01ledgerline\xff" * 3)
-            self.assertEqual(purge.left(root, ["Ledgerline"], lambda: []), {"system/databases/other.bin": 3})
+        (self.root / "system" / "databases").mkdir(parents=True)
+        (self.root / "system" / "databases" / "other.bin").write_bytes(b"\x00\x01ledgerline\xff" * 3)
+        self.assertEqual(Collection(self.root).left(["Ledgerline"]), {"system/databases/other.bin": 3})
 
     def test_a_probe_a_kept_document_holds_may_stay(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "documents").mkdir()
-            (root / "documents" / "text_1.txt").write_text("Contact the help desk for anything else.")
-            probes = purge.removed_probes(["Contact the help desk for anything else."])
-            self.assertEqual(purge.left(root, probes, lambda: ["Kept: contact the help desk for anything else. Bye."]), {})
-            self.assertEqual(purge.left(root, probes, lambda: ["Another text."]), {"documents/text_1.txt": 1})
+        store = Collection(self.root)
+        store.document("d_1", "Contact the help desk for anything else.")
+        probes = purge.removed_probes(["Contact the help desk for anything else."])
+        self.assertEqual(store.left(probes, kept=lambda: ["Kept: contact the help desk for anything else. Bye."]), {})
+        self.assertEqual(set(store.left(probes, kept=lambda: ["Another text."])), {"text/d_1.json", "documents/text_d_1.txt", "LanceDB DocumentChunk_text", "graph"})
 
     def test_f204_case_is_ignored_exactly_as_re_ignorecase_ignores_it(self):
         # The hiding detector matches "Pin" in "pın" (dotless i), "İ" as "i", "ſ" as "s", the Kelvin sign as "k".
@@ -438,14 +511,29 @@ class Probes(unittest.TestCase):
         self.assertEqual(sorted(len(p.split()) for p in counts), list(range(7, 602)), "those of 600 words or fewer, once")
         self.assertEqual(set(counts.values()), {1})
 
+    def test_f209_probes_that_differ_only_in_punctuation_cost_what_the_text_costs(self):
+        # 4,000 removed lines "the!!...!" of 21 to 4,020 marks, against 4 MiB of kept "the ": every probe ended on
+        # "the", so each "the" ran 4,000 expressions (11.9 s per 64 KiB, 101 minutes at 32 MiB).
+        import time
+
+        probes = purge.removed_probes(["\n".join("the" + "!" * i for i in range(21, 4021))])
+        self.assertEqual(len(probes), 4000)
+        matcher = purge.Matcher(probes)
+        kept = "the " * (1024 * 1024) + "the" + "!" * 30 + " the" + "!" * 30 + "x"
+        started = time.monotonic()
+        counts = matcher.counts(kept)
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual(sorted(len(p) for p in counts), [24 + i for i in range(10)], "21 to 30 marks, once each; then 'x' ends no word")
+
     def test_the_matcher_finds_what_re_finds(self):
         import random
 
         random.seed(7)
-        words = ["Pin", "pın", "the", "and", "Éclair", "éclair", "x", "A", "a", "is_part_of"]
-        for _ in range(400):
-            probes = [" ".join(random.choice(words) for _ in range(random.randint(1, 4))) + random.choice(["", ".", ")"]) for _ in range(5)]
-            text = " ".join(random.choice(words + ["(", ".", "  ", "-"]) for _ in range(60))
+        words = ["Pin", "pın", "the", "and", "Éclair", "éclair", "x", "A", "a", "is_part_of", "!", "!!"]
+        for _ in range(1000):
+            probes = [" ".join(random.choice(words) for _ in range(random.randint(1, 4))) + random.choice(["", ".", ")", "!!"]) for _ in range(5)]
+            probes.append(random.choice(["(", "-", "!"]) + random.choice(words))
+            text = " ".join(random.choice(words + ["(", ".", "  ", "-", "!x", "x!"]) for _ in range(60))
             wanted = {p: len(re.findall(r"(?=(?<!\w)" + re.escape(p) + r"(?!\w))", text, re.IGNORECASE)) for p in dict.fromkeys(probes)}
             self.assertEqual(purge.Matcher(probes).counts(text), {p: n for p, n in wanted.items() if n}, (probes, text))
 

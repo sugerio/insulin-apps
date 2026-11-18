@@ -58,6 +58,10 @@ export class CollectionEngine {
   store: CollectionStore
   box: ContainerClient
   monitoring: Promise<void> | undefined
+  /** The going to sleep under way: whoever calls goToSleep meanwhile (the alarm, a test control) waits for it. */
+  private sleeping: Promise<void> | null = null
+  /** The end of the container work queued so far (exclusive): the alarm's steps and the test controls, one at a time. */
+  private working: Promise<unknown> = Promise.resolve()
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state
@@ -459,18 +463,33 @@ export class CollectionEngine {
 
   // ================================================================== the alarm
 
-  async alarm(): Promise<void> {
-    const meta = await this.store.getMeta()
-    if (!meta) return
-    try {
-      await this.drive()
-      if (await this.store.getMeta()) await this.flushOutbox()
-    } catch (error) {
-      await this.store.log('drive-failed', { error: errorText(error) })
-      if (await this.store.getMeta()) await this.state.storage.setAlarm(clock.now() + 10_000)
-      return
-    }
-    if (await this.store.getMeta()) await this.schedule()
+  alarm(): Promise<void> {
+    return this.exclusive(async () => {
+      const meta = await this.store.getMeta()
+      if (!meta) return
+      try {
+        await this.drive()
+        if (await this.store.getMeta()) await this.flushOutbox()
+      } catch (error) {
+        await this.store.log('drive-failed', { error: errorText(error) })
+        if (await this.store.getMeta()) await this.state.storage.setAlarm(clock.now() + 10_000)
+        return
+      }
+      if (await this.store.getMeta()) await this.schedule()
+    })
+  }
+
+  /**
+   * Container work, one piece at a time: the alarm's steps and the test controls that drive the container (a request
+   * runs alongside the alarm, interleaving at every await). On Cloudflare a test control's sleep ran its backup in its
+   * request while the alarm opened the query process again, started an import on the same container and then saw it
+   * destroyed under it (ASK-06), and two goToSleep at once lost a backup (HID-04). Questions don't wait here: a search
+   * only asks a container that is ready.
+   */
+  exclusive<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.working.then(work, work)
+    this.working = run.catch(() => undefined)
+    return run
   }
 
   async drive(): Promise<void> {
@@ -927,7 +946,15 @@ export class CollectionEngine {
     }
   }
 
-  async goToSleep(): Promise<void> {
+  /** Backs the container up when due, then stops it. Single-flight: a second caller waits for the one under way. */
+  goToSleep(): Promise<void> {
+    this.sleeping ??= this.sleepNow().finally(() => {
+      this.sleeping = null
+    })
+    return this.sleeping
+  }
+
+  private async sleepNow(): Promise<void> {
     const meta = await this.meta()
     const runtime = await this.store.getRuntime()
     if (this.box.running && runtime && !runtime.dirty && meta.backupDue && runtime.snapshotId) {
@@ -1166,8 +1193,13 @@ export class CollectionEngine {
     }
   }
 
+  /** The harness's controls. Each waits its turn with the alarm's container work (exclusive): never both at once. */
   async testControl(action: string, body: Record<string, unknown>): Promise<unknown> {
     if (!testControls(this.env)) return fail('not_found', 'No such route.')
+    return this.exclusive(() => this.testControlNow(action, body))
+  }
+
+  private async testControlNow(action: string, body: Record<string, unknown>): Promise<unknown> {
     const meta = await this.meta()
     switch (action) {
       case 'destroy-container': {

@@ -14,12 +14,12 @@ implements the same).
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| Router | `src/router.ts`, `src/routes.ts` | Every route of the contract; the organization header; sends each call to the collection's Durable Object, the registry, the outbox or the answer model |
+| Router | `src/router.ts`, `src/routes.ts` | Every route of the contract; the organization header; sends each call to the collection's Durable Object (again when the call was lost and is safe to repeat), the registry, the outbox or the answer model |
 | `CollectionEngine` Durable Object | `src/collection.ts`, `src/imports.ts`, `src/history.ts`, `src/backup.ts`, `src/exporter.ts` | One per collection (named `<organization>:<collection>`): its container, imports and their queue, restore points, backups, keep-ready window, exports, deletion and running-time ledger |
 | `Capacity` Durable Object | `src/capacity.ts` | Imports at once: 20 across the service, 2 per organization, notes and corrections first |
 | `Outbox` Durable Object | `src/outbox.ts` | Events the app pulls with `GET /v1/outbox?since=` (committed versions, imports, usage, states, backups, deletions), kept 7 days |
 | `Registry` Durable Object | `src/registry.ts` | Which collections each organization has (ids and states only), for purging an organization, answering `deleted` and counting collections |
-| Answer model | `src/answer.ts` | `POST /v1/answer`: Gemma 4 (`@cf/google/gemma-4-26b-a4b-it`) on Workers AI, from the given passages only, with `[n]` citations |
+| Answer model | `src/answer.ts` | `POST /v1/answer`: Gemma 4 (`@cf/google/gemma-4-26b-a4b-it`) on Workers AI, from the given passages only, with `[n]` citations; asked again when Workers AI has no capacity (below) |
 | Container | `container/` | Cognee 1.6.8, offline, with its models baked in. `server.py` (control server), `ops.py` (one operation per process), `query.py` (the query process), `extract.py`, `hide.py`, `passages.py`, `rank.py`, `facts.py`, `calibration.json` |
 
 R2: `FILES` holds `inbox/<org>/<collection>/` (originals while they wait to be read; deleted as soon as every file
@@ -63,7 +63,28 @@ And from the design:
   Durable Object's alarm; during an import it answers `learning`. All container work happens in the alarm, one step
   at a time, so a collection's container is never driven twice at once. The alarm never waits on the container's
   monitor (handed to `waitUntil`, it held every alarm open a minute): the alarm comes back at least once a minute
-  while a container runs and notices one that stopped.
+  while a container runs and notices one that stopped. The harness's test controls drive the container from a
+  request; each waits its turn with the alarm's work (`exclusive`), so neither touches the container while the other
+  does (on Cloudflare a test control's sleep backed the container up while the alarm opened the query process again,
+  started a correction on it and then lost it as the sleep stopped the container). Going to sleep is single-flight: a
+  second caller waits for the one under way, and one backup is taken.
+- **A lost call to the Durable Object is sent again.** The engine Worker's call to a collection's Durable Object can
+  be lost on the way (`Network connection lost.`, which Cloudflare marks `retryable`; four times in the second
+  Engine-lane run, after 12 to 16 s, each while the object was busy with a long request or alarm). The Worker can't tell
+  whether the object got it, so it sends again, up to twice after 0.25 and 1 s, only what answers the same when it
+  comes twice (`SENT_AGAIN_WHEN_LOST` in `src/router.ts`): the reads, a search, settings (by revision), an import, a
+  correction and an export's import (by importId), cancelling an import, stop using or use again, remove for good,
+  an export (by exportId), waking, keeping staged files and deleting. A staged file isn't sent again (its body is a
+  stream, read once; the app stages it again under the same id, which replaces it), nor going back or undo (a second
+  would go back once more): those, and a call still lost after its tries, answer 500 `internal`, which the app shows
+  as "Knowledge's engine isn't answering right now. Try again in a minute." The app's engine client sends nothing
+  again itself: it can't tell a lost call from one the engine refused, and the tick does its work again every five
+  minutes.
+- **An answer Workers AI has no capacity for is asked again.** Workers AI refused 5 of 50 answers in the second
+  Engine-lane run with `AiError: 3040: Capacity temporarily exceeded, please try again.` Such a refusal is asked again
+  after 1, 2 and 4 s, each only if it starts within 20 s of the first call (`answerBudgetMs`; an answer takes 6 to
+  8 s, so at most three calls). Then, as for any other failure, 503 `model_unavailable`, and the app shows the sources
+  without a written answer: "Answers couldn't be written just now, so here are the sources without a written answer."
 - **A dropped call is sent again.** On Cloudflare a call from the Durable Object to its container's port can drop
   (`Network connection lost.`) while the container still runs, about a second after a container or a job process
   starts or ends (38% of the tries in the first Engine-lane run). Every call is sent again then, up to five more times
@@ -92,9 +113,10 @@ And from the design:
   restore point and daily backup that holds it, goes ahead of every other import to delete it from the databases,
   and writes a new latest backup without it. An export or a re-read running at that moment is redone without it.
   Deleting it from the databases reaches every byte of them: before its restore point is saved, the removal rewrites
-  every store under `/data` without what it deleted, checks that none keeps a deleted row, and reads what the stores
-  hold for every piece of the removed text ("What a removal leaves" below); a piece left fails the try, so nothing
-  is committed or backed up.
+  every store under `/data` without what it deleted, checks that none keeps a deleted row, searches the text written
+  from the documents for every piece of the removed text, and checks that everything Cognee generated traces back to a
+  live chunk of a live document ("What a removal leaves" below); anything left fails the try, so nothing is committed
+  or backed up.
 - **Hiding fails closed**: any detector error stops the import before anything is stored. Once every file and note
   of an import is read and hidden, their redacted texts are saved and the originals, and notes as written, are
   deleted; a later try learns from the saved texts. Queued imports and saved texts are hidden with the rules in
@@ -102,10 +124,10 @@ And from the design:
   included. When stricter rules change a text, the facts files, ready exports and backups of earlier versions that
   hold its old words are deleted (tried again from the alarm until they are), and a new latest backup is written;
   earlier restore points are blocked. Only redacted text is stored, in the container, R2, backups and exports: a
-  re-read that hid more rewrites every store under `/data` the same way as a removal for good, and reads what the
-  stores hold for every value it newly hid, matched as the rule matches it (a document's name, which hiding doesn't
-  change, aside). The
-  detectors run in time linear in the text (a 2 MB text built to make them backtrack takes under a second); the
+  re-read that hid more rewrites and checks every store under `/data` the same way as a removal for good, searching
+  the text written from the documents for every value it newly hid, matched as the rule matches it (a document's
+  name, which hiding doesn't change, aside), and checking that everything Cognee generated comes from a live chunk,
+  not one the re-read replaced. The detectors run in time linear in the text (a 2 MB text built to make them backtrack takes under a second); the
   app's "Try it" box (`hiding.ts`) uses the same patterns, checked against the shared fixtures.
 - **The newest correction of a passage wins**: a correction written again for a passage takes it over from the
   earlier one, and an earlier correction left correcting nothing is kept but no longer used. The same holds when
@@ -369,7 +391,7 @@ The release builds and pushes the image (DESIGN.md §10.1 "Images"). Wrangler's 
 **What a removal leaves.** Cognee deletes a document's data by marking it deleted, and the files keep it: after a
 removal for good (HIS-07) or a stricter re-read (HID-04) the first Engine-lane run found the words in `/data` and in
 the backup taken from it. So `remove` and `reread` run the op itself in a child process (when it exits, nothing holds
-a database open), then `container/purge.py` cleans each store, checks it, and reads what the stores hold:
+a database open), then `container/purge.py` cleans each store and checks it:
 
 - LanceDB (chunks, summaries, entity, entity type and relationship names, document names): a deleted row stays in its
   data file until the fragment is rewritten, which LanceDB's own optimize does once a tenth of its rows are deleted
@@ -385,31 +407,41 @@ a database open), then `container/purge.py` cleans each store, checks it, and re
 - Cognee's logs (`/var/log/cognee`, outside `/data`, so in a snapshot but not a backup): they held none of the text;
   they are deleted anyway, since nothing reads them.
 
-Then what the stores hold now is read, decoded, for every piece of the removed documents' text (runs of words of at
-least 24 characters) or every newly hidden value, each matched as the hiding detector matches a word: ignoring case
-exactly as Python's `re.IGNORECASE` does (`fold()` in `purge.py` uses the regular expression engine's own rule, so
-`Éclair` finds `éclair`, an entity name kept in lower case, and `Pin` finds `pın`; a test checks every character with
-a case against `re`) and whole. Only values made from the documents are read, never keys, schemas or bookkeeping (a
-hidden word "text" is no JSON key's or column's): the stored texts (not their names), Cognee's copies of them, the
-chunks and entity names, the summaries and relations in LanceDB and the graph, and the facts. Cognee also writes
-values of its own, from fixed words: with no LLM, GLiNER takes entity labels and relation names only from Cognee's
-label banks, never from a document, and Cognee links its records with four relations of its own (`ENTITY_LABELS` and
-`RELATIONS` in `purge.py`, for the Cognee the image pins; a test ties them to the pin). An entity type's name or a
-relation's name is skipped when it is one of those words; a summary, a relation's text or a fact's sentence is
-skipped only when it is exactly what Cognee's templates make from the graph's live records (whose own values, the
-entities' names, chunks and summaries, are read where they stand). Anything else is read in full, whatever words it
-shares with a label: a summary that isn't Cognee's ("The project uses Part Of as its supplier.") counts, even though
-the graph has `is_part_of`. So a hidden word that is also one of Cognee's labels or relation names (`person`,
-`headquartered_in`) doesn't count where Cognee wrote it as its label for other documents, and counts wherever a
-document wrote it: a chunk, an entity's name, a sentence a fact was taken from. On the 30-document corpus every
-summary, relation text and fact Cognee wrote is recognised as its own. A file under `/data` none of these covers is
-read whole. A probe a kept document's text also holds may stay. Anything left fails the try with the number of places
-(logged by name, never the text). All the values and pieces are looked for at once, by Aho-Corasick over the folded
-text's words and the runs between them (pure Python, so no new dependency in the image), so the cost is the text's
-length plus the matches, whatever the probes share: 32 MiB of kept text takes 3 to 5 s, with 20,000 removed
-addresses all at `example.com` or 1,000 removed lines "the the … and" of every length (looking for each probe, or
-each length, wherever their word stood took ten minutes for the first at 2 MiB, and 106 minutes for the second). On the 30-document corpus (34 MB under `/data`)
-cleaning and reading take about a second.
+Then what the stores hold is checked two ways; anything either finds fails the try with the number of places (logged
+by name, never the text).
+
+- **Text written from the documents is searched, strictly:** the stored texts (not their names), Cognee's copies of
+  them, its chunks (in LanceDB and the graph), its entities' names, the sentences facts were taken from, and any file
+  under `/data` none of the stores here covers. Looked for: every newly hidden value, or every piece of the removed
+  documents' text (runs of words of at least 24 characters), each matched as the hiding detector matches a word:
+  ignoring case exactly as Python's `re.IGNORECASE` does (`fold()` uses the regular expression engine's own rule, so
+  `Éclair` finds `éclair`, an entity name kept in lower case, and `Pin` finds `pın`; a test checks every character
+  with a case against `re`) and whole. Values are read decoded, never as keys or schemas (a hidden word "text" is no
+  JSON key's). A probe a kept document's text also holds may stay (a hiding rule that hides a value only where a
+  label names it leaves its other occurrences). All probes are looked for at once, by Aho-Corasick over the folded
+  text's tokens (each word, and each character between words), with a probe's edges checked from the tokens beside
+  it: the cost is the text's length plus the matches, whatever the probes share (32 MiB of kept text takes 4 to 6 s
+  with 20,000 removed addresses all at `example.com`, 1,000 removed lines "the the … and" of every length, or 4,000
+  lines "the!!…!" of every length, where earlier matchers took ten minutes at 2 MiB, 106 minutes and 101 minutes).
+  Pure Python, so no new dependency in the image.
+- **What Cognee generated is checked by identity, never by its text:** summaries, relations and their texts, entity
+  types, every node and edge of the graph, every vector row, the data items and their edges' evidence, the passages
+  and the facts. These hold Cognee's own words too (its labels, relation names, templates), and no rule tells them from
+  a document's, so none of them is searched; each must instead trace back, through the links Cognee keeps, to a live
+  chunk of a live document. The live documents are those with a stored text, and their data items have ids made from
+  them. A document's graph node is its data item; a chunk is part of a live document's node; a summary is made from a
+  live chunk; an entity (or a date) is contained in a live chunk; an entity type is a live entity's. Every node and
+  edge names the data items and chunks it was made from (Cognee's provenance, `source_ref_keys`): it must name at
+  least one, and only live ones. Every vector row belongs to a live node of its table (a relation text's row, to a
+  live edge's text, by Cognee's own id for it); every data item, every edge's evidence, passage index and fact, to a
+  live document and chunk; every copy of a text, to a live data item. A record that doesn't trace back is left over
+  whatever it says: a removed document's summary "Dana Reyes owns Hawser gateway" while both entities live on
+  elsewhere, or one that merely shares words with a label. So a hidden word that is also one of Cognee's labels or
+  relation names (`person`, `headquartered_in`) never counts in what Cognee wrote, and counts wherever a document
+  wrote it. With real Cognee these links stay true after a removal for good and a stricter re-read on the corpus, and
+  every record of a document taken out of the stores without its summaries and relations was found.
+
+On the 30-document corpus (34 MB under `/data`) cleaning and checking take about a second.
 
 **The control server's connections.** `server.py` serves one request per connection and says so in every answer
 (`connection: close`). Without that, the Durable Object's fetch, which keeps connections for the next call, sent a

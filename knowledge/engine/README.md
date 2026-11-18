@@ -71,7 +71,8 @@ And from the design:
 - **A lost call to the Durable Object is sent again.** The engine Worker's call to a collection's Durable Object can
   be lost on the way (`Network connection lost.`, which Cloudflare marks `retryable`; four times in the second
   Engine-lane run, after 12 to 16 s, each while the object was busy with a long request or alarm). The Worker can't tell
-  whether the object got it, so it sends again, up to twice after 0.25 and 1 s, only what answers the same when it
+  whether the object got it, so it sends again, up to twice after 0.25 and 1 s, each time through a new stub (one that
+  has thrown can keep failing with the same error, Cloudflare warns), only what answers the same when it
   comes twice (`SENT_AGAIN_WHEN_LOST` in `src/router.ts`): the reads, a search, settings (by revision), an import, a
   correction and an export's import (by importId), cancelling an import, stop using or use again, remove for good,
   an export (by exportId), waking, keeping staged files and deleting. A staged file isn't sent again (its body is a
@@ -248,17 +249,23 @@ exports, the planning times and the built-in model. The planning times come from
 `standard-4`, where documents were learned one at a time: a try took about 30 s to start its container, then 105 s
 plus 5.3 s per document plus 860 s per MiB of text from its job's start to its commit (one short note: 110-116 s; 20
 short documents: 211 s; 41 learned again: 317 s; one 2 MiB text of 848 passages: 1,835 s); about a minute to wake.
-Documents are now learned in groups (below), in about three quarters of the time per document Cognee takes one at a
-time, so a document is planned at 4.1 s; a later try of an import, which learns them one at a time, at 5.3 s. A file's
+Documents are now learned in groups (below): in the second run Cognee took 182-198 s for 50 short documents in 3
+groups, about 3.8 s each, so a document is planned at 3.8 s; a later try of an import, which learns them one at a time,
+at 5.3 s. The 30 s container start is planned only for a try that starts a container: one that learns in the
+collection's container already awake plans none (the second run's IMP-07 imports 2 to 10, all in one awake container,
+came in at 74-78% of a plan that counted one; the first, which started it, at 87%). A file's
 text is planned from its size until it is read (its bytes for plain text and Markdown, a quarter of them for PDF,
 Office and HTML, at most the 2 MB the readers keep), then from the text read; a re-read or re-learning counts the
 saved texts. The collection's size is not in the plan (below). The plan sets the time left (`etaSeconds`, counted down
 from the try's job start), when a question during learning is told to come back, and the job time limit. Each job's
-own time is logged with its plan (`job-done`: the job, Cognee's share of it and its groups), for the next run to check
-these numbers against. The container instance is chosen when the Durable Object starts it: `standard-4` for learning
-and, until Phase 0 shows a snapshot taken on `standard-4` starts on `standard-1` (design Q10), for questions too. A
-deployment can set `ENGINE_QUESTIONS_INSTANCE` and `ENGINE_LEARNING_INSTANCE` as vars to change them without a code
-change.
+own time is logged with its plan (`job-done`: the job, Cognee's share of it and its groups), and the save step's parts
+(`saved`: quiescing, the stats job, the manifest, the texts and facts copied to R2, the snapshot and the commit, in
+ms), and the query process's reopening (`ready`: `openMs` from the opening's start, `sinceCommitMs` from the commit
+when the container just saved one), for the next run to check these numbers against (FIX-01's corrections take about
+57 s of job, 53-55 s of saving and 16 s to reopen). The container instance is chosen when the Durable Object starts
+it: `standard-4` for learning and, until Phase 0 shows a snapshot taken on `standard-4` starts on `standard-1`
+(design Q10), for questions too. A deployment can set `ENGINE_QUESTIONS_INSTANCE` and `ENGINE_LEARNING_INSTANCE` as
+vars to change them without a code change.
 
 **Learning in groups.** `container/ops.py` learns an import's documents with one `cognify` per group of at most 20
 documents and 4 MiB of text (`LEARN_GROUP_DOCUMENTS`, `LEARN_GROUP_BYTES`; a longer text is a group of its own), each
@@ -312,15 +319,24 @@ Each document keeps at most 2,000 passages (`PASSAGE_CAP` in `container/passages
 passages per document). The 2 MB text limit makes about a thousand of Cognee's chunks, so the cap binds only for
 unusual files; passages past it are not cited, and the file says so.
 
+A passage is cited at the page (or slide) its words closest to the question are on, chosen at search time
+(`cited_page` in `container/query.py`): of the pages the passage runs over, the one whose part holds the most of the
+question's words, or when words don't decide the part the embedding model puts nearest the question. A passage's own
+page is where it starts, and a short PDF or deck is one passage over every page: IMP-06's fact on page 4 of 4 was
+cited at page 1. The whole passage is still what the source viewer highlights, and nothing is learned again.
+
 Each document is its own data item in Cognee, under an id made from its document id (`data_id_of` in
 `container/ops.py`), and its chunks are found by that id. Cognee otherwise finds data by its content, so a document
 whose text equals another's (the same deck saved as PDF and as PowerPoint) joined the other's data item and got no
 passages while it counted as learned (IMP-06). Cognee keeps one copy of a text, under its hash, for every data item
 that has it; removing one of two such documents keeps the copy. A data item is never found by its name: in a database
-from before data ids, one item carried one document's name for two, and removing that document took both. So the
-layout is part of the image's database format (`KNOWLEDGE_DATA_FORMAT` ends in `knowledge-2`, `DATA_LAYOUT` in
-`ops.py`; a test keeps them equal): a snapshot from before it belongs to another image, and a backup in another format
-is never put back, so such a collection learns everything again from its saved text, as after an image change.
+from before data ids, one item carried one document's name for two, and removing that document took both. Each
+document's chunks, as its last learning made them, are listed in `/data/chunks/<document>.json` (written with its
+passage index; a re-read first checks that none of the old chunks is left), so a chunk a re-read replaced, which keeps
+its document's data item, can't pass for a current one ("What a removal leaves"). So the layout is part of the
+image's database format (`KNOWLEDGE_DATA_FORMAT` ends in `knowledge-3`, `DATA_LAYOUT` in `ops.py`; a test keeps them
+equal): a snapshot from before it belongs to another image, and a backup in another format is never put back, so such
+a collection learns everything again from its saved text, as after an image change.
 
 The "won't guess" threshold is `container/calibration.json`: 0.68, set from the first Engine-lane run on
 Cloudflare (2026-11-17, `--calibrate`, plans ASK-01 and ASK-02). The top scores there were 0.637-0.895 for the
@@ -382,7 +398,7 @@ The models (GLiNER `fastino/gliner2.5-base-v1` for the graph; fastembed's quanti
 file by SHA-256. The build fetches those commits, warms up with the hub offline so Cognee's loaders find only them,
 and fails if the cache differs from the pins or if `KNOWLEDGE_DATA_FORMAT` doesn't name the embedding model's pin
 (backups hold vectors from that model). The format also names, last, how the engine lays out documents in Cognee
-(`knowledge-2`: each document its own data item). From then on the image never touches the network. A changed image makes the engine's snapshots
+(`knowledge-3`: each document its own data item, with the list of its chunks). From then on the image never touches the network. A changed image makes the engine's snapshots
 unusable; collections move from their backups on their next wake (HIS-03), and History marks the older restore
 points as unavailable.
 
@@ -413,24 +429,28 @@ by name, never the text).
 - **Text written from the documents is searched, strictly:** the stored texts (not their names), Cognee's copies of
   them, its chunks (in LanceDB and the graph), its entities' names, the sentences facts were taken from, and any file
   under `/data` none of the stores here covers. Looked for: every newly hidden value, or every piece of the removed
-  documents' text (runs of words of at least 24 characters), each matched as the hiding detector matches a word:
+  documents' text (runs of words of at least 24 characters) and every name or description of an entity they shared
+  with kept documents that no kept document's text holds (Cognee keeps one spelling per entity, perhaps the removed
+  document's: see below), each matched as the hiding detector matches a word:
   ignoring case exactly as Python's `re.IGNORECASE` does (`fold()` uses the regular expression engine's own rule, so
   `Éclair` finds `éclair`, an entity name kept in lower case, and `Pin` finds `pın`; a test checks every character
   with a case against `re`) and whole. Values are read decoded, never as keys or schemas (a hidden word "text" is no
   JSON key's). A probe a kept document's text also holds may stay (a hiding rule that hides a value only where a
   label names it leaves its other occurrences). All probes are looked for at once, by Aho-Corasick over the folded
-  text's tokens (each word, and each character between words), with a probe's edges checked from the tokens beside
-  it: the cost is the text's length plus the matches, whatever the probes share (32 MiB of kept text takes 4 to 6 s
-  with 20,000 removed addresses all at `example.com`, 1,000 removed lines "the the … and" of every length, or 4,000
-  lines "the!!…!" of every length, where earlier matchers took ten minutes at 2 MiB, 106 minutes and 101 minutes).
-  Pure Python, so no new dependency in the image.
+  text's tokens (each word, and each other character on its own; Greek iota too, since it folds to a character that
+  is no letter), and a match's edges are checked on the text's own characters, as `re` checks them: the cost is the
+  text's length plus the matches, whatever the probes share (32 MiB of kept text takes 4 to 6 s with 20,000 removed
+  addresses all at `example.com`, 1,000 removed lines "the the … and" or 4,000 lines "the!!…!" of every length, where
+  earlier matchers took ten minutes at 2 MiB, 106 minutes and 101 minutes; "!" × 131,072 and "!" × 262,144 + "x"
+  against 2 MiB of "!": about a second). Pure Python, so no new dependency in the image.
 - **What Cognee generated is checked by identity, never by its text:** summaries, relations and their texts, entity
   types, every node and edge of the graph, every vector row, the data items and their edges' evidence, the passages
   and the facts. These hold Cognee's own words too (its labels, relation names, templates), and no rule tells them from
   a document's, so none of them is searched; each must instead trace back, through the links Cognee keeps, to a live
   chunk of a live document. The live documents are those with a stored text, and their data items have ids made from
-  them. A document's graph node is its data item; a chunk is part of a live document's node; a summary is made from a
-  live chunk; an entity (or a date) is contained in a live chunk; an entity type is a live entity's. Every node and
+  them; the live chunks are those listed for a live document in `/data/chunks` (what its last learning made: a chunk
+  a re-read replaced still names its document's data item, so provenance alone can't tell it). A document's graph
+  node is its data item; a live chunk is part of its document's node; a summary is made from a live chunk; an entity (or a date) is contained in a live chunk; an entity type is a live entity's. Every node and
   edge names the data items and chunks it was made from (Cognee's provenance, `source_ref_keys`): it must name at
   least one, and only live ones. Every vector row belongs to a live node of its table (a relation text's row, to a
   live edge's text, by Cognee's own id for it); every data item, every edge's evidence, passage index and fact, to a
@@ -438,8 +458,15 @@ by name, never the text).
   whatever it says: a removed document's summary "Dana Reyes owns Hawser gateway" while both entities live on
   elsewhere, or one that merely shares words with a label. So a hidden word that is also one of Cognee's labels or
   relation names (`person`, `headquartered_in`) never counts in what Cognee wrote, and counts wherever a document
-  wrote it. With real Cognee these links stay true after a removal for good and a stricter re-read on the corpus, and
-  every record of a document taken out of the stores without its summaries and relations was found.
+  wrote it. With real Cognee these links stay true after a removal for good and a stricter re-read on the corpus;
+  every record of a document taken out of the stores without its summaries and relations was found, and so were an
+  old chunk and summary put back beside a re-read's.
+- **Entities shared with a removed document are made again:** Cognee merges an entity named in several documents
+  (O'Brien International Research Labs and OBrien International Research Labs are one) and keeps one spelling of its
+  name and description, which removing a document leaves as it was. So the removal finds every entity it shared with
+  kept documents whose name or description no kept document's text holds, and learns those kept documents again: the
+  entity comes back spelled as they spell it, and their chunks, passages and corrections come back the same (their
+  chunk ids follow their text). The probes above then find the removed spelling if it stayed.
 
 On the 30-document corpus (34 MB under `/data`) cleaning and checking take about a second.
 
@@ -476,10 +503,14 @@ Plans: IMP-03, IMP-04, IMP-05, IMP-06, ASK-01, ASK-02, ASK-06, ASK-07, FIX-01, F
 runs around a second deploy: `--only HIS-03-real --image-change before` learns and backs up a collection of its own
 and keeps its answers in `harness/report/his03-real.json`; deploy the engine again with a changed image (the same one
 with a layer added will do), then `--only HIS-03-real --image-change after` asks again and checks it came back from its
-backup. The report goes to `harness/report/` (git-ignored): each plan's checks and evidence, what still
-needs a person (near misses in ASK-02, wake times per instance type), and the running time the run caused for
-LIM-09's comparison with Cloudflare's own figures. Test controls (`/v1/collections/:cid/__test/*`,
-`/v1/__test/objects`) exist only when `ENGINE_TEST_CONTROLS=1`; production never sets it.
+backup. ASK-01 passes at 37 of its 40 questions: the 0.68 threshold was chosen knowing it answers 37 of them.
+IMP-06 asks its question in the documents' own words, since it tests that each format is read and cited at its page;
+the reworded question it asked before is in its evidence only. A 500 stops a plan: the engine sends a lost call to a
+collection again itself, so the harness doesn't. The report goes to `harness/report/` (git-ignored): each plan's
+checks and evidence, what still needs a person (near misses in ASK-02, wake times per instance type), and the running
+time the run caused for LIM-09's comparison with Cloudflare's own figures. Test controls
+(`/v1/collections/:cid/__test/*`, `/v1/__test/objects`) exist only when `ENGINE_TEST_CONTROLS=1`; production never
+sets it.
 
 The runner ran once on Cloudflare (2026-11-17, on `standard-4`), and is rehearsed against the in-memory engine over
 HTTP (the Worker tests' fakes behind a local server, the clock 50 times faster, `HARNESS_SHARE_WINDOW_MS` short). What

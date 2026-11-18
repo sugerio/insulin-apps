@@ -105,14 +105,18 @@ export function lostCall(error: unknown): boolean {
   return marks.retryable === true || /network connection lost/i.test(errorText(error))
 }
 
-/** The request to the collection's Durable Object, sent again (up to twice) when it was lost and is safe to repeat. */
-async function toCollection(env: Env, request: Request, name: string, object: DurableObjectStub): Promise<Response> {
-  if (!SENT_AGAIN_WHEN_LOST.has(name)) return object.fetch(request)
+/**
+ * The request to the collection's Durable Object, sent again (up to twice) when it was lost and is safe to repeat.
+ * Each send gets a stub of its own: after a call through a stub has thrown, later calls through it can keep failing
+ * with the same error (Cloudflare, Durable Objects error handling).
+ */
+async function toCollection(request: Request, name: string, object: () => DurableObjectStub): Promise<Response> {
+  if (!SENT_AGAIN_WHEN_LOST.has(name)) return object().fetch(request)
   // Read once, so each send has the same body: these routes take a small JSON body, or none.
   const body = request.body ? await request.arrayBuffer() : undefined
   for (let lost = 0; ; lost++) {
     try {
-      return await object.fetch(new Request(request.url, { method: request.method, headers: request.headers, body }))
+      return await object().fetch(new Request(request.url, { method: request.method, headers: request.headers, body }))
     } catch (error) {
       if (!lostCall(error) || lost >= LOST_CALL_WAITS_MS.length) throw error
       console.warn('engine: a call to a collection was lost on the way; sending it again', JSON.stringify({ route: name, lost: lost + 1 }))
@@ -122,7 +126,7 @@ async function toCollection(env: Env, request: Request, name: string, object: Du
 }
 
 async function collection(env: Env, request: Request, name: string, org: string, collectionId: string): Promise<Response> {
-  const response = await toCollection(env, request, name, stub(env.COLLECTIONS, collectionName(org, collectionId)))
+  const response = await toCollection(request, name, () => stub(env.COLLECTIONS, collectionName(org, collectionId)))
   if (response.status !== 404 || (name !== 'getCollection' && name !== 'deleteCollection')) return response
   // A deleted collection's own storage is gone; the registry remembers that it was deleted.
   const entry = await registryEntry(env, org, collectionId)

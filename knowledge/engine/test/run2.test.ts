@@ -123,37 +123,36 @@ test('ASK-06 while a test control backs the container up, the alarm drives nothi
 
 /**
  * The Worker's calls to the collection's Durable Object that `match` lose their connection, `times` times; with
- * `delivered`, the Durable Object got the request and only its answer was lost. Counts what reached the object.
+ * `delivered`, the Durable Object got the request and only its answer was lost. A stub that threw stays broken
+ * (FakeNamespace). Answers what reached the objects from then on.
  */
 function loseCalls(t: TestEngine, match: (request: Request) => boolean, times: number, delivered = false) {
-  const reached: string[] = []
-  const get = t.collections.get.bind(t.collections)
-  ;(t.collections as any).get = (id: { name: string }) => {
-    const stub = get(id)
-    return {
-      fetch: async (input: RequestInfo, init?: RequestInit) => {
-        const request = input instanceof Request ? input : new Request(input, init)
-        const lose = times > 0 && match(request)
-        if (lose) times -= 1
-        if (lose && !delivered) throw Object.assign(new Error('Network connection lost.'), { retryable: true })
-        reached.push(`${request.method} ${new URL(request.url).pathname}`)
-        const response = await stub.fetch(request)
-        if (lose) throw Object.assign(new Error('Network connection lost.'), { retryable: true })
-        return response
-      },
-    }
-  }
-  return reached
+  t.collections.losses.push({ match, times, delivered })
+  const from = t.collections.reached.length
+  return () => t.collections.reached.slice(from)
 }
 
 const path = (suffix: string) => (request: Request) => new URL(request.url).pathname.endsWith(suffix)
 
-test('a search whose call to the Durable Object is lost is sent again, and answers', async () => {
+test('a search whose call to the Durable Object is lost is sent again through a new stub, and answers', async () => {
   const t = await awake()
   loseCalls(t, path('/search'), 1)
+  const stubs = t.collections.stubs
   const res = await t.api('POST', '/v1/collections/c1/search', { query: 'topic number 1 gateway port' })
-  assert.equal(res.status, 200)
+  assert.equal(res.status, 200, JSON.stringify(res.body))
   assert.equal(res.body.status, 'ok')
+  assert.equal(t.collections.stubs - stubs, 2, 'the stub that threw is not used again')
+})
+
+test('a call lost twice is sent a third time, each through its own stub; lost a third time, it answers 500', async () => {
+  const t = await awake()
+  loseCalls(t, path('/search'), 2)
+  assert.equal((await t.api('POST', '/v1/collections/c1/search', { query: 'topic number 1 gateway port' })).body.status, 'ok')
+  loseCalls(t, path('/search'), 3)
+  const res = await t.api('POST', '/v1/collections/c1/search', { query: 'topic number 1 gateway port' })
+  assert.deepEqual([res.status, res.body.error], [500, 'internal'])
+  // The next call gets a stub of its own, and goes through.
+  assert.equal((await t.api('POST', '/v1/collections/c1/search', { query: 'topic number 1 gateway port' })).status, 200)
 })
 
 test('an import whose answer was lost on the way back is sent again under its id: one import, answered', async () => {
@@ -164,7 +163,7 @@ test('an import whose answer was lost on the way back is sent again under its id
   const res = await t.api('POST', '/v1/collections/c1/imports', { importId: 'imp-1', files: [staged], notes: [], small: false })
   assert.equal(res.status, 200, JSON.stringify(res.body))
   assert.equal(res.body.importId, 'imp-1')
-  assert.equal(reached.filter((r) => r.endsWith('/imports')).length, 2, 'sent twice')
+  assert.equal(reached().filter((r) => r.endsWith('/imports')).length, 2, 'sent twice')
   assert.equal((await logged(t, 'import-queued')).length, 1, 'learned once')
 })
 
@@ -177,9 +176,9 @@ test('a lost call that isn\'t safe to send twice (go back, a staged file\'s stre
   const reached = loseCalls(t, (r) => path('/go-back')(r) || new URL(r.url).pathname.includes('/inbox/'), 2, true)
   const back = await t.api('POST', '/v1/collections/c1/restore-points/1/go-back')
   assert.deepEqual([back.status, back.body.error], [500, 'internal'])
-  assert.equal(reached.filter((r) => r.endsWith('/go-back')).length, 1, 'sent once')
+  assert.equal(reached().filter((r) => r.endsWith('/go-back')).length, 1, 'sent once')
   await assert.rejects(stageFile(t, 'c1', doc(3)), /stage failed: 500/)
-  assert.equal(reached.filter((r) => r.includes('/inbox/')).length, 1, 'sent once')
+  assert.equal(reached().filter((r) => r.includes('/inbox/')).length, 1, 'sent once')
 })
 
 // ==================================================================== Workers AI capacity

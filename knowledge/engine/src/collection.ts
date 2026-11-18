@@ -941,7 +941,16 @@ export class CollectionEngine {
         m.wakeRequested = false
         m.lastActivityAt = iso()
       })
-      await this.store.log('ready', { openedAt: status.openedAt, wakeMs: clock.now() - Date.parse(runtime.startedAt) })
+      // How long opening took (from the step's start), and for a container that just saved a restore point how long
+      // since the commit: the query process back after a correction is part of FIX-01's two minutes.
+      const now = clock.now()
+      const committedHere = meta.lastRestorePointAt !== null && Date.parse(meta.lastRestorePointAt) > Date.parse(runtime.startedAt)
+      await this.store.log('ready', {
+        openedAt: status.openedAt,
+        wakeMs: now - Date.parse(runtime.startedAt),
+        openMs: runtime.phaseAt ? now - Date.parse(runtime.phaseAt) : null,
+        sinceCommitMs: committedHere ? now - Date.parse(meta.lastRestorePointAt!) : null,
+      })
       await this.event(`state:${meta.version}:ready:${runtime.startedAt}`, { type: 'state', state: 'ready', version: meta.version })
     }
   }

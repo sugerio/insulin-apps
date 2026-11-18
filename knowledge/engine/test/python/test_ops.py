@@ -54,6 +54,7 @@ class OwnDataItems(unittest.TestCase):
             mock.patch.object(ops, "DATABASES_DIR", root / "databases"),
             mock.patch.object(ops, "TEXT_DIR", root / "text"),
             mock.patch.object(ops, "PASSAGES_DIR", root / "passages"),
+            mock.patch.object(ops, "CHUNKS_DIR", root / "chunks"),
             mock.patch.object(ops, "WORK_DIR", root / "work"),
         ]
         for patch in self.patches:
@@ -104,6 +105,7 @@ class OwnDataItems(unittest.TestCase):
         for document_id, passage_id in (("d_docx", "c-docx"), ("d_pptx", "c-pptx")):
             index = json.loads((ops.PASSAGES_DIR / f"{document_id}.json").read_text())
             self.assertEqual([(p["passageId"], p["documentId"]) for p in index], [(passage_id, document_id)], "citable as itself")
+            self.assertEqual(json.loads((ops.CHUNKS_DIR / f"{document_id}.json").read_text()), [passage_id], "its chunks listed (F212)")
 
 
 class DataLayout(unittest.TestCase):
@@ -133,12 +135,13 @@ class DataLayout(unittest.TestCase):
         self.assertEqual(deleted, [ops.data_id_of("d_own")])
 
     def test_the_image_names_the_layout_of_its_data(self):
-        # Snapshots and backups made before data ids say knowledge-1: the Durable Object opens a backup only in the
-        # running image's format (backup.ts holds), so such a collection learns everything again from its saved text.
+        # Snapshots and backups made before data ids say knowledge-1, before the lists of chunks (F212) knowledge-2: the
+        # Durable Object opens a backup only in the running image's format (backup.ts holds), so such a collection
+        # learns everything again from its saved text.
         dockerfile = (Path(_paths.CONTAINER) / "Dockerfile").read_text()
         data_format = dockerfile.split("KNOWLEDGE_DATA_FORMAT=", 1)[1].split()[0]
         self.assertTrue(data_format.endswith(f"+{ops.DATA_LAYOUT}"), data_format)
-        self.assertNotEqual(ops.DATA_LAYOUT, "knowledge-1", "the layout before each document had its own data item")
+        self.assertNotIn(ops.DATA_LAYOUT, ("knowledge-1", "knowledge-2"), "layouts without a data item each, or a list of chunks")
 
 
 class LearningInGroups(unittest.TestCase):
@@ -149,7 +152,7 @@ class LearningInGroups(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         names = {
-            "DATA_DIR": root / "data", "TEXT_DIR": root / "data" / "text", "PASSAGES_DIR": root / "data" / "passages",
+            "DATA_DIR": root / "data", "TEXT_DIR": root / "data" / "text", "PASSAGES_DIR": root / "data" / "passages", "CHUNKS_DIR": root / "data" / "chunks",
             "FACTS_PATH": root / "data" / "facts.json", "LEDGER_PATH": root / "data" / "ledger.json",
             "DATABASES_DIR": root / "data" / "system" / "databases", "WORK_DIR": root / "work",
         }
@@ -245,7 +248,7 @@ class Collection:
         self.nodes: dict[str, dict] = {}
         self.edges: list[dict] = []
         self.vectors: dict[str, list[dict]] = {table: [] for table in [*self.TABLES.values(), "EdgeType_relationship_name"]}
-        for folder in ("text", "passages", "documents", "system/databases"):
+        for folder in ("text", "passages", "chunks", "documents", "system/databases"):
             (root / folder).mkdir(parents=True, exist_ok=True)
         self.sqlite = sqlite3.connect(root / "system" / "databases" / "cognee_db")
         self.sqlite.execute("CREATE TABLE data (id TEXT, raw_data_location TEXT)")
@@ -269,7 +272,7 @@ class Collection:
         import uuid
 
         data = str(ops.data_id_of(document_id))
-        chunk = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{data}:chunk"))
+        chunk = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{data}:{text}"))  # Cognee's chunk ids follow their text
         ref = f"|source_ref:v2:{self.DATASET}:{data}:{chunk}|"
         (self.root / "text" / f"{document_id}.json").write_text(json.dumps({"documentId": document_id, "name": f"{document_id}.md", "text": text}))
         copy = self.root / "documents" / f"text_{document_id}.txt"
@@ -291,6 +294,7 @@ class Collection:
             node = self.node(str(uuid.uuid5(uuid.UUID(chunk), "TextSummary")), "TextSummary", "", ref, text=summary)
             self.edge(node, "made_from", chunk, ref)
         (self.root / "passages" / f"{document_id}.json").write_text(json.dumps([{"passageId": chunk, "documentId": document_id, "start": 0, "end": len(text)}]))
+        (self.root / "chunks" / f"{document_id}.json").write_text(json.dumps([chunk]))  # as index_passages lists them
         if fact is not None:
             facts_path = self.root / "facts.json"
             stored = json.loads(facts_path.read_text()) if facts_path.exists() else {"facts": []}
@@ -302,8 +306,8 @@ class Collection:
 
     def remove_text(self, document_id: str) -> None:
         """What a removal for good takes at once: the stored text and its passages (Cognee's records are the test's)."""
-        (self.root / "text" / f"{document_id}.json").unlink()
-        (self.root / "passages" / f"{document_id}.json").unlink()
+        for folder in ("text", "passages", "chunks"):
+            (self.root / folder / f"{document_id}.json").unlink()
 
     def left(self, probes: list[str], kept=lambda: []) -> dict[str, int]:
         with mock.patch.object(purge, "_graph", lambda root: (self.nodes, self.edges)), mock.patch.object(purge, "_vector_tables", lambda root: iter(self.vectors.items())):
@@ -444,6 +448,43 @@ class Probes(unittest.TestCase):
                 spoil(store)
                 self.assertEqual(set(store.left([])), {place})
 
+    def test_f212_a_chunk_a_reread_replaced_is_left_over_though_its_document_lives(self):
+        # "password: Ledgerline" re-read into "password: [hidden]"; another document says Ledgerline, so the word may
+        # stay in text. The old chunk and its summary, kept beside the new ones, still name the document's data item and
+        # their own chunk: only the list of the chunks the re-read made tells them apart.
+        store = Collection(self.root)
+        store.document("d_other", "The Ledgerline desk answers by Friday.")
+        old_chunk = store.document("d_1", "Sign in with password: Ledgerline today.", summary="Sign in with password: Ledgerline")
+        old = {i: dict(n) for i, n in store.nodes.items() if old_chunk in n["refs"] and n["type"] in ("DocumentChunk", "TextSummary")}
+        old_edges = [dict(e) for e in store.edges if old_chunk in e["refs"] and e["relation"] in ("is_part_of", "made_from")]
+        old_rows = {t: [r for r in rows if r["id"] in old] for t, rows in store.vectors.items()}
+        # The re-read: Cognee forgets the document (its chunk and summary go) and learns the new text.
+        for node_id in old:
+            del store.nodes[node_id]
+        store.edges = [e for e in store.edges if e not in old_edges]
+        store.vectors = {t: [r for r in rows if r["id"] not in old] for t, rows in store.vectors.items()}
+        store.document("d_1", "Sign in with password: [hidden] today.", summary="Sign in with password: [hidden]")
+        self.assertNotEqual(store.chunks["d_1"], old_chunk)
+        self.assertEqual(store.left(["Ledgerline"], kept=lambda: ["The Ledgerline desk answers by Friday.", "Sign in with password: [hidden] today."]), {})
+        store.nodes.update(old)  # what a re-read that didn't remove them would leave
+        store.edges.extend(old_edges)
+        for table, rows in old_rows.items():
+            store.vectors[table].extend(rows)
+        left = store.left(["Ledgerline"], kept=lambda: ["The Ledgerline desk answers by Friday.", "Sign in with password: [hidden] today."])
+        self.assertEqual(set(left), {"graph", "LanceDB DocumentChunk_text", "LanceDB TextSummary_text"})
+        self.assertEqual(left["LanceDB TextSummary_text"], 1)
+
+    def test_f213_edges_are_decided_on_the_text_as_written(self):
+        # Greek iota folds to the combining ypogegrammeni (U+0345), which isn't a word character: the edges are the
+        # text's own characters', as re decides them.
+        for probes, text in ((["A"], "ιA"), (["A"], "\u0345A"), (["Ledgerline"], "ιLedgerline"), (["ιx"], "Ιx ιx \u0345x")):
+            wanted = {p: len(re.findall(r"(?=(?<!\w)" + re.escape(p) + r"(?!\w))", text, re.IGNORECASE)) for p in probes}
+            self.assertEqual(purge.Matcher(probes).counts(text), {p: n for p, n in wanted.items() if n}, (probes, text))
+        self.assertEqual(purge.Matcher(["A"]).counts("ιA"), {})
+        store = Collection(self.root)
+        store.document("d_1", "Ledgerline invoices.")
+        self.assertIn("graph", store.left(["Ledgerline"], kept=lambda: ["ιLedgerline is a longer word."]), "a kept ιLedgerline doesn't hold it")
+
     def test_a_file_purge_doesnt_know_is_read_whole(self):
         (self.root / "system" / "databases").mkdir(parents=True)
         (self.root / "system" / "databases" / "other.bin").write_bytes(b"\x00\x01ledgerline\xff" * 3)
@@ -525,15 +566,27 @@ class Probes(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 10)
         self.assertEqual(sorted(len(p) for p in counts), [24 + i for i in range(10)], "21 to 30 marks, once each; then 'x' ends no word")
 
+    def test_f214_a_probe_found_far_from_its_start_costs_nothing_more(self):
+        # "!" * n and "!" * 2n + "x" against 2 MiB of "!": finding where each match starts took time in proportion to
+        # n (64 s at n = 524,287); it is the match's end less the probe's length.
+        import time
+
+        n = 131072
+        matcher = purge.Matcher(["!" * n, "!" * (2 * n) + "x"])
+        started = time.monotonic()
+        counts = matcher.counts("!" * (2 * 1024 * 1024))
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual(counts, {"!" * n: 2 * 1024 * 1024 - n + 1})
+
     def test_the_matcher_finds_what_re_finds(self):
         import random
 
         random.seed(7)
-        words = ["Pin", "pın", "the", "and", "Éclair", "éclair", "x", "A", "a", "is_part_of", "!", "!!"]
-        for _ in range(1000):
-            probes = [" ".join(random.choice(words) for _ in range(random.randint(1, 4))) + random.choice(["", ".", ")", "!!"]) for _ in range(5)]
-            probes.append(random.choice(["(", "-", "!"]) + random.choice(words))
-            text = " ".join(random.choice(words + ["(", ".", "  ", "-", "!x", "x!"]) for _ in range(60))
+        words = ["Pin", "pın", "the", "and", "Éclair", "éclair", "x", "A", "a", "is_part_of", "!", "!!", "ι", "\u0345", "Ι", "ιA"]
+        for _ in range(1500):
+            probes = [" ".join(random.choice(words) for _ in range(random.randint(1, 4))) + random.choice(["", ".", ")", "!!", "ι"]) for _ in range(5)]
+            probes.append(random.choice(["(", "-", "!", "\u0345"]) + random.choice(words))
+            text = random.choice(["", " "]).join(random.choice(words + ["(", ".", "  ", "-", "!x", "x!", "\u0345"]) for _ in range(60))
             wanted = {p: len(re.findall(r"(?=(?<!\w)" + re.escape(p) + r"(?!\w))", text, re.IGNORECASE)) for p in dict.fromkeys(probes)}
             self.assertEqual(purge.Matcher(probes).counts(text), {p: n for p, n in wanted.items() if n}, (probes, text))
 
@@ -559,7 +612,7 @@ class AfterRemovalAndRereading(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.data = root / "data"
-        names = {"DATA_DIR": self.data, "TEXT_DIR": self.data / "text", "PASSAGES_DIR": self.data / "passages", "DATABASES_DIR": self.data / "system" / "databases", "WORK_DIR": root / "work"}
+        names = {"DATA_DIR": self.data, "TEXT_DIR": self.data / "text", "PASSAGES_DIR": self.data / "passages", "CHUNKS_DIR": self.data / "chunks", "DATABASES_DIR": self.data / "system" / "databases", "WORK_DIR": root / "work"}
         self.patches = [mock.patch.object(ops, name, value) for name, value in names.items()]
         self.patches.append(mock.patch.object(purge, "purge", lambda *args: {"vectorTables": 0}))
         for patch in self.patches:
@@ -621,6 +674,59 @@ class AfterRemovalAndRereading(unittest.TestCase):
         ops.store_text({"documentId": "d_kept", "name": "d_kept Ledgerline.md", "text": self.KEPT, "pages": [], "hidden": []})
         result = self.run_op("reread", batch, {"changed": ["d_kept"]}, rereads(False))
         self.assertEqual(result["purge"]["probes"], 1, "the word; the document's name may still hold it")
+
+    def test_f211_a_removed_documents_spelling_of_a_shared_entity_is_looked_for(self):
+        # OBrien International Research Labs (kept) and O'Brien International Research Labs (removed): one entity in
+        # Cognee, described the removed way. That spelling is no piece of the removed sentences: it is looked for too.
+        import uuid
+
+        rm, kept = ops.data_id_of("d_rm"), ops.data_id_of("d_kept")
+        ref = lambda data: f"|source_ref:v2:{Collection.DATASET}:{data}:{uuid.uuid5(data, 'chunk')}|"  # noqa: E731
+        graph = {"nodes": {"e1": {"name": "obrien international research labs", "type": "Entity", "props": {"description": "O'Brien International Research Labs"}, "refs": ref(rm) + ref(kept)}}, "edges": []}
+        ops.store_text({"documentId": "d_kept", "name": "d_kept.md", "text": "OBrien International Research Labs builds the gateway.", "pages": [], "hidden": []})
+
+        def removes(rebuilt: bool):
+            def run():
+                (self.data / "text" / "d_rm.json").unlink()
+                graph["nodes"]["e1"]["refs"] = ref(kept)
+                if rebuilt:
+                    graph["nodes"]["e1"]["props"]["description"] = "OBrien International Research Labs"
+            return run
+
+        batch = {"importId": "rm1", "kind": "remove", "documentIds": ["d_rm"]}
+        with mock.patch.object(purge, "_graph", lambda root: (graph["nodes"], graph["edges"])), mock.patch.object(purge, "stale", lambda *args: {}):
+            with self.assertRaises(ops.Stop):
+                self.run_op("remove", batch, {"removed": ["d_rm"]}, removes(False))
+            ops.store_text({"documentId": "d_rm", "name": "d_rm.md", "text": self.REMOVED, "pages": [], "hidden": []})
+            graph["nodes"]["e1"].update(refs=ref(rm) + ref(kept), props={"description": "O'Brien International Research Labs"})
+            result = self.run_op("remove", batch, {"removed": ["d_rm"]}, removes(True))
+        self.assertEqual(result["removed"], ["d_rm"])
+
+    def test_f211_the_kept_documents_naming_such_an_entity_are_learned_again(self):
+        ops.store_text({"documentId": "d_kept", "name": "d_kept.md", "text": "OBrien International Research Labs builds the gateway.", "pages": [], "hidden": []})
+        ops.store_text({"documentId": "d_other", "name": "d_other.md", "text": "Hawser gateway ships from Oslo.", "pages": [], "hidden": []})
+        kept = purge._id(ops.data_id_of("d_kept"))
+        survivors = {
+            "e1": {"values": ["obrien international research labs", "O'Brien International Research Labs"], "data": {kept}},
+            "e2": {"values": ["hawser gateway", "Hawser gateway"], "data": {purge._id(ops.data_id_of("d_other"))}},
+        }
+        learned = []
+
+        async def entities():
+            return survivors
+
+        async def forget_chunks(document_id):
+            learned.append(("forget", document_id))
+
+        async def learn(documents):
+            learned.append(("learn", [d for d, _ in documents]))
+
+        with mock.patch.object(ops, "entities", entities), mock.patch.object(ops, "forget_chunks", forget_chunks), mock.patch.object(ops, "learn", learn), mock.patch.object(ops, "index_passages", lambda ids: learned.append(("index", ids))):
+            again = asyncio.run(ops.rebuild_shared_entities({"e1", "e2"}))
+            self.assertEqual(again, ["d_kept"], "only the entity spelled the removed way")
+            self.assertEqual(learned, [("forget", "d_kept"), ("learn", ["d_kept"]), ("index", ["d_kept"])])
+            survivors["e1"]["values"][1] = "OBrien International Research Labs"
+            self.assertEqual(asyncio.run(ops.rebuild_shared_entities({"e1", "e2"})), [])
 
     def test_a_reread_that_changed_nothing_is_not_purged(self):
         batch = {"importId": "rr1", "kind": "reread", "hiding": {}, "documentIds": ["d_kept"], "marks": []}

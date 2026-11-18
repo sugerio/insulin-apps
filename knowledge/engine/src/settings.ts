@@ -77,12 +77,13 @@ export const SETTINGS = {
   // with the text, not only with the documents: a document's text is planned from its size until it is read (a
   // file's bytes, at most the 2 MB read limit; a quarter of them for formats that aren't plain text), then from the
   // text read. Starting the container (from a snapshot or the image, and its check) took 29-31 s more. Documents are
-  // learned in groups now, which Cognee does in about three quarters of the time per document (measured natively,
-  // README "Service settings"): 4.1 s; a later try of an import learns them one at a time again: 5.3 s. The
-  // collection's size isn't planned for: Cognee's time per document barely grows with it.
+  // learned in groups now: in the second run (2026-11-18) Cognee took 182-198 s for 50 short documents in 3 groups,
+  // about 3.8 s each, with 0 to 450 documents already in the collection; a later try of an import learns them one at
+  // a time again: 5.3 s. The collection's size isn't planned for: Cognee's time per document doesn't grow with it.
+  // The container start is planned only for a try that starts one (not one learning in the awake collection's).
   containerStartSeconds: 30,
   importBaseSeconds: 105,
-  perDocumentSeconds: 4.1,
+  perDocumentSeconds: 3.8,
   perDocumentOneByOneSeconds: 5.3,
   perTextMiBSeconds: 860,
   readLimitBytes: 2 * 1024 * 1024,

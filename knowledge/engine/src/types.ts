@@ -148,6 +148,7 @@ export interface ImportRecord {
   snapshotTaken: boolean
   learningStartedAt: number | null // its first try's job start (the time left counts from this try's: jobStartedAt)
   retryAt: number | null
+  containerReused?: boolean // this try learns in the container that was already running: its plan counts no start
   jobStartedAt: number | null // this try's job: the time left counts from it; a job far past its time is given up
   textsSaved: boolean // every file and note was read and hidden, and its redacted text saved: originals are gone
   rebuild: boolean // a removal whose restore point can't be started: the other documents are learned again

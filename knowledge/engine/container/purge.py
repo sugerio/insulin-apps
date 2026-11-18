@@ -44,8 +44,6 @@ DELETED_SHARE = 1e-9  # a fragment with any deleted row is rewritten
 
 # Where a removed text is cut into pieces: line breaks, sentence ends and runs of spaces (a chunker may squeeze them).
 CUTS = re.compile(r"\s{2,}|[\t\r\n\f\v\x00-\x1f]|(?<=[.!?])\s")
-WORD = re.compile(r"\w+")
-TOKEN = re.compile(r"(\w+)|\W")  # a text as Matcher reads it: each word, and each character between words
 
 LANCEDB = Path("system/databases/cognee.lancedb")
 GRAPH = Path("system/databases/cognee_graph_ladybug")
@@ -79,6 +77,8 @@ def hidden_probes(texts: list[str], rules: dict) -> list[str]:
 
 
 _FOLD: dict[int, int] | None = None
+_TOKENS: re.Pattern | None = None
+WORD_CHARACTER = re.compile(r"\w")
 
 
 def _fold_table() -> dict[int, int]:
@@ -107,29 +107,42 @@ def fold(text: str) -> str:
     return text.translate(_fold_table())
 
 
+def _token_pattern() -> re.Pattern:
+    """How Matcher splits a folded text: runs of word characters, and every other character on its own. A character
+    whose case class holds word and non-word characters alike (Greek iota and the combining ypogegrammeni, U+0345,
+    which iota folds to) stands on its own too, so two texts that fold alike always split alike."""
+    global _TOKENS
+    if _TOKENS is None:
+        classes: dict[int, set[int]] = {}
+        for code, folded in _fold_table().items():
+            classes.setdefault(folded, {folded}).add(code)
+        mixed = sorted(c for members in classes.values() if len({bool(WORD_CHARACTER.match(chr(m))) for m in members}) > 1 for c in members)
+        _TOKENS = re.compile("[^\\W" + "".join(re.escape(chr(c)) for c in mixed) + "]+|(?s:.)")
+    return _TOKENS
+
+
 class Matcher:
     """Finds many probes in a text at once, each as the hiding detector finds a word (hide.py `_words`): ignoring case
-    and whole. Aho-Corasick over the folded text's tokens (each word whole, each other character on its own): every
-    probe, punctuation included, is one path in a trie, and the text is read once, token by token, following failure
-    links. A probe found is checked for its edges from the tokens beside it (no letter or digit just before or after),
-    never by running its expression again, so the cost is the text's length plus the matches, whatever the probes share:
-    a word, a prefix, a run of punctuation, every length."""
+    and whole. Aho-Corasick over the folded text's tokens (`_token_pattern`): every probe, punctuation included, is one
+    path in a trie, and the text is read once, token by token, following failure links. A probe found ends where its
+    last token ends and starts its length before (folding keeps lengths); its edges are checked on the text's own
+    characters, as `re` checks them (no word character just before or after), never by running its expression again.
+    So the cost is the text's length plus the matches, whatever the probes share: a word, a prefix, a run of
+    punctuation, every length."""
 
     def __init__(self, probes: Iterable[str]) -> None:
+        tokens_of = _token_pattern()
         goto: list[dict[str, int]] = [{}]
-        ends: list[list[tuple[str, int, bool, bool]]] = [[]]  # per state: (probe, tokens, starts a word, ends a word)
-        self.depth = 1
+        ends: list[list[tuple[str, int]]] = [[]]  # per state: (probe, its length)
         for probe in dict.fromkeys(p for p in probes if p):
-            tokens = [m.group() for m in TOKEN.finditer(fold(probe))]
             state = 0
-            for token in tokens:
+            for token in tokens_of.findall(fold(probe)):
                 if token not in goto[state]:
                     goto[state][token] = len(goto)
                     goto.append({})
                     ends.append([])
                 state = goto[state][token]
-            ends[state].append((probe, len(tokens), bool(WORD.match(tokens[0])), bool(WORD.match(tokens[-1]))))
-            self.depth = max(self.depth, len(tokens) + 1)
+            ends[state].append((probe, len(probe)))
         fail = [0] * len(goto)
         found_next = [0] * len(goto)  # the nearest state down the failure links where a probe ends
         queue = deque(goto[0].values())
@@ -142,40 +155,33 @@ class Matcher:
                     back = fail[back]
                 fail[target] = goto[back].get(token, 0) if state else 0
                 found_next[target] = fail[target] if ends[fail[target]] else found_next[fail[target]]
-        self.goto, self.fail, self.ends, self.found_next = goto, fail, ends, found_next
+        self.tokens_of, self.goto, self.fail, self.ends, self.found_next = tokens_of, goto, fail, ends, found_next
 
     def counts(self, text: str) -> dict[str, int]:
         out: dict[str, int] = {}
         goto, fail, ends, found_next = self.goto, self.fail, self.ends, self.found_next
         if len(goto) == 1:
             return out
-        words: deque[bool] = deque(maxlen=self.depth)  # whether each of the last tokens is a word
-        waiting: list[str] = []  # found, ending in a non-word character: the next token must not be a word
+        word = WORD_CHARACTER.match
+        size = len(text)
         state = 0
-        for found in TOKEN.finditer(fold(text)):
+        for found in self.tokens_of.finditer(fold(text)):
             token = found.group()
-            is_word = found.lastindex == 1
-            for probe in waiting if not is_word else ():
-                out[probe] = out.get(probe, 0) + 1
-            waiting = []
-            words.append(is_word)
             while state and token not in goto[state]:
                 state = fail[state]
             state = goto[state].get(token, 0)
-            end = state if ends[state] else found_next[state]
-            while end:
-                for probe, length, starts_word, ends_word in ends[end]:
-                    # A probe starting with a word starts a token: nothing before it is a letter. One starting with
-                    # punctuation needs the token before it (if any) not to be a word.
-                    if not starts_word and len(words) > length and words[-length - 1]:
-                        continue
-                    if ends_word:
-                        out[probe] = out.get(probe, 0) + 1
-                    else:
-                        waiting.append(probe)
-                end = found_next[end]
-        for probe in waiting:
-            out[probe] = out.get(probe, 0) + 1
+            end_state = state if ends[state] else found_next[state]
+            if not end_state:
+                continue
+            end = found.end()
+            after = end < size and word(text, end)
+            while end_state:
+                if not after:
+                    for probe, length in ends[end_state]:
+                        start = end - length
+                        if not (start and word(text, start - 1)):
+                            out[probe] = out.get(probe, 0) + 1
+                end_state = found_next[end_state]
         return out
 
 
@@ -294,7 +300,7 @@ def document_texts(root: Path, nodes: dict[str, dict], vectors: dict[str, list[d
             graph.extend(str(v) for v in (node["name"], node["props"].get("description")) if v)
     if graph:
         out.append(("graph", "\n".join(graph)))
-    known = ("text/", "passages/", "documents/", "ledger.json", "facts.json", str(LANCEDB), str(RELATIONAL), str(GRAPH), "system/databases/.cognee-migration-")
+    known = ("text/", "passages/", "chunks/", "documents/", "ledger.json", "facts.json", str(LANCEDB), str(RELATIONAL), str(GRAPH), "system/databases/.cognee-migration-")
     for path in sorted(root.rglob("*")):
         if path.is_symlink() or not path.is_file():
             continue
@@ -306,13 +312,19 @@ def document_texts(root: Path, nodes: dict[str, dict], vectors: dict[str, list[d
 
 def stale(root: Path, data_id_of: Callable[[str], UUID], nodes: dict[str, dict], edges: list[dict], vectors: dict[str, list[dict]]) -> dict[str, int]:
     """Records Cognee generated that no longer trace back to a live chunk of a live document, by place. The live
-    documents are those with a stored text; through Cognee's links: a document's node is its data item, a chunk is
-    part of a document's node, a summary is made from a chunk, an entity is contained in a chunk, an entity type is an
-    entity's; every node and edge names the data items and chunks it was made from (all of them live, and at least one);
-    a vector row is a live node's (a relation text's, a live edge's text); a data item and its edges' evidence belong to
-    live documents, and so do the passages and facts."""
+    documents are those with a stored text, and their live chunks those their last learning made (/data/chunks, which
+    ops.py writes as it indexes their passages): a chunk a re-read replaced keeps its document's data item and names it
+    as it did, so only that list tells it from the chunks now. Then, through Cognee's links: a document's node is its
+    data item; a live chunk is part of its document's node; a summary is made from a live chunk, an entity is contained
+    in one, an entity type is a live entity's; every node and edge names the data items and chunks it was made from
+    (at least one, all live); a vector row is a live node's (a relation text's, a live edge's text); a data item and
+    its edges' evidence belong to live documents and chunks, and so do the passages and facts."""
     live_documents = {path.stem for path in (root / "text").glob("*.json")}
     live_data = {_id(data_id_of(d)) for d in live_documents}
+    learned: dict[str, set[str]] = {}  # data item -> the chunks its document's last learning made
+    for document_id in live_documents:
+        listed = _json(root / "chunks" / f"{document_id}.json")
+        learned[_id(data_id_of(document_id))] = {_id(c) for c in listed} if isinstance(listed, list) else set()
     out: dict[str, int] = {}
 
     def left_over(place: str, count: int = 1) -> None:
@@ -327,7 +339,11 @@ def stale(root: Path, data_id_of: Callable[[str], UUID], nodes: dict[str, dict],
         sources.setdefault(edge["relation"], {}).setdefault(edge["target"], set()).add(edge["source"])
 
     documents = {i for i, n in nodes.items() if n["type"] == "TextDocument" and _id(i) in live_data}
-    chunks = {i for i, n in nodes.items() if n["type"] == "DocumentChunk" and targets_of("is_part_of", i) & documents}
+    chunks = {
+        i
+        for i, n in nodes.items()
+        if n["type"] == "DocumentChunk" and any(_id(i) in learned.get(_id(d), set()) for d in targets_of("is_part_of", i) & documents)
+    }
     entities = {i for i, n in nodes.items() if n["type"] in ("Entity", "Timestamp") and sources.get("contains", {}).get(i, set()) & chunks}
     live = documents | chunks | entities
     live |= {i for i, n in nodes.items() if n["type"] == "TextSummary" and targets_of("made_from", i) & chunks}
@@ -372,6 +388,9 @@ def stale(root: Path, data_id_of: Callable[[str], UUID], nodes: dict[str, dict],
         if path.is_file() and str(path) not in used_copies and f"/data/{path.relative_to(root)}" not in used_copies:
             left_over(f"documents/{path.name}")
     passages = set()
+    for path in sorted((root / "chunks").glob("*.json")) if (root / "chunks").is_dir() else []:
+        if path.stem not in live_documents:
+            left_over(f"chunks/{path.name}")
     for path in sorted((root / "passages").glob("*.json")) if (root / "passages").is_dir() else []:
         index = _json(path) or []
         passages.update(p.get("passageId") for p in index if isinstance(p, dict))

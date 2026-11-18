@@ -91,11 +91,24 @@ export class FakeState {
 
 type ObjectClass = new (state: any, env: any) => { fetch(request: Request): Promise<Response>; alarm?(): Promise<void> }
 
+/**
+ * Calls through a namespace's stubs that lose their connection ("Network connection lost.", which Cloudflare marks
+ * retryable). By default the object never gets the request; `delivered`: it got it, and only the answer was lost.
+ */
+export interface StubLoss {
+  match: (request: Request) => boolean
+  times: number
+  delivered?: boolean
+}
+
 export class FakeNamespace {
   instances = new Map<string, { object: any; state: FakeState }>()
   cls: ObjectClass
   env!: Env
   cloud: FakeCloud | null
+  losses: StubLoss[] = []
+  reached: string[] = [] // "METHOD /path" of every request an object got
+  stubs = 0 // stubs handed out
 
   constructor(cls: ObjectClass, cloud: FakeCloud | null) {
     this.cls = cls
@@ -117,15 +130,33 @@ export class FakeNamespace {
   }
 
   get(id: { name: string }) {
+    this.stubs += 1
+    // As Cloudflare warns: once a call through a stub has thrown, later calls through that stub can keep failing with
+    // the same error. A new stub works again.
+    let broken: unknown = null
     return {
       fetch: async (input: RequestInfo, init?: RequestInit) => {
+        if (broken) throw broken
         const options = init?.body instanceof ReadableStream ? ({ ...init, duplex: 'half' } as RequestInit) : init
         const request = input instanceof Request ? new Request(input, options) : new Request(input as string, options)
-        return this.instance(id.name).object.fetch(request)
+        const loss = this.losses.find((l) => l.times > 0 && l.match(request))
+        if (loss) loss.times -= 1
+        try {
+          if (loss && !loss.delivered) throw lostConnection()
+          this.reached.push(`${request.method} ${new URL(request.url).pathname}`)
+          const response = await this.instance(id.name).object.fetch(request)
+          if (loss) throw lostConnection()
+          return response
+        } catch (error) {
+          broken = error
+          throw error
+        }
       },
     }
   }
 }
+
+const lostConnection = () => Object.assign(new Error('Network connection lost.'), { retryable: true })
 
 // ==================================================================== R2
 

@@ -25,11 +25,12 @@ RUN pip install --require-hashes --no-deps \
 
 # Cognee's state: the three databases (SQLite, LanceDB, the Ladybug graph) under /data/system/databases, the
 # documents it stored under /data/documents. The engine's own files sit beside them: /data/text (redacted texts and
-# page maps), /data/passages (where each passage is in its text), /data/facts.json and /data/ledger.json.
-# KNOWLEDGE_DATA_FORMAT names the database format, the embedding model whose vectors the databases hold included
-# (models.py checks it names the pinned one) and, last, how the engine lays out its documents in Cognee (ops.py
-# DATA_LAYOUT; knowledge-2: each document its own data item): when it changes, collections are learned again from
-# their stored text instead of copying an old backup's database files.
+# page maps), /data/passages (where each passage is in its text), /data/chunks (the chunks each document was learned
+# into), /data/facts.json and /data/ledger.json. KNOWLEDGE_DATA_FORMAT names the database format, the embedding model
+# whose vectors the databases hold included (models.py checks it names the pinned one) and, last, how the engine lays
+# out its documents in Cognee (ops.py DATA_LAYOUT; knowledge-3: each document its own data item, with the list of its
+# chunks): when it changes, collections are learned again from their stored text instead of copying an old backup's
+# database files.
 ENV DATA_ROOT_DIRECTORY=/data/documents \
     SYSTEM_ROOT_DIRECTORY=/data/system \
     CACHE_ROOT_DIRECTORY=/data/cache \
@@ -42,7 +43,7 @@ ENV DATA_ROOT_DIRECTORY=/data/documents \
     HF_HOME=/opt/models/hf \
     TIKTOKEN_CACHE_DIR=/opt/models/tiktoken \
     KNOWLEDGE_DATASET=knowledge \
-    KNOWLEDGE_DATA_FORMAT=cognee-1.6.8+bge-small-en-v1.5-onnx-Q@aa8f8b0+knowledge-2 \
+    KNOWLEDGE_DATA_FORMAT=cognee-1.6.8+bge-small-en-v1.5-onnx-Q@aa8f8b0+knowledge-3 \
     KNOWLEDGE_INBOX=/var/lib/knowledge/inbox \
     KNOWLEDGE_RUN=/var/lib/knowledge/run \
     KNOWLEDGE_WORK=/var/lib/knowledge/work

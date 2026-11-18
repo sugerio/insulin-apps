@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import rank  # noqa: E402
-from passages import slice_utf16  # noqa: E402
+from passages import page_by_words, page_slices, slice_utf16  # noqa: E402
 
 PORT = 8081
 DATA_DIR = Path("/data")
@@ -49,6 +49,7 @@ INDEX: dict[str, dict] = {}  # passage id -> passage
 BY_DOCUMENT: dict[str, list[dict]] = {}
 FACTS: list[dict] = []
 TEXTS: dict[str, str] = {}
+PAGES: dict[str, list[dict]] = {}  # document id -> its page map (UTF-16), for the page a passage is cited at
 THRESHOLD = rank.DEFAULT_THRESHOLD
 
 
@@ -72,6 +73,7 @@ async def open_databases() -> None:
     INDEX.clear()
     BY_DOCUMENT.clear()
     TEXTS.clear()
+    PAGES.clear()
     for path in PASSAGES_DIR.glob("*.json") if PASSAGES_DIR.exists() else []:
         for passage in json.loads(path.read_text()):
             INDEX[passage["passageId"]] = passage
@@ -120,10 +122,43 @@ def flatten(raw) -> list:
 def document_text(document_id: str) -> str:
     if document_id not in TEXTS:
         try:
-            TEXTS[document_id] = json.loads((TEXT_DIR / f"{document_id}.json").read_text())["text"]
+            stored = json.loads((TEXT_DIR / f"{document_id}.json").read_text())
+            TEXTS[document_id] = stored["text"]
+            PAGES[document_id] = stored.get("pages") or []
         except (OSError, ValueError, KeyError):
             TEXTS[document_id] = ""
     return TEXTS[document_id]
+
+
+async def embed(texts: list[str]) -> list[list[float]]:
+    from cognee.infrastructure.databases.vector.embeddings import get_embedding_engine
+
+    return await get_embedding_engine().embed_text(texts)
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    norm = (sum(x * x for x in a) ** 0.5) * (sum(y * y for y in b) ** 0.5)
+    return dot / norm if norm else 0.0
+
+
+async def cited_page(question: str, passage: dict) -> int | None:
+    """The page (or slide) of the passage's words closest to the question: the one whose slice holds the most of
+    its words, or when words don't decide the slice the embedding model puts nearest; the page the passage starts on
+    when it has one page, or nothing decides."""
+    text = document_text(passage["documentId"])
+    slices = page_slices(text, PAGES.get(passage["documentId"], []), passage["start"], passage["end"])
+    if len(slices) < 2:
+        return passage.get("page")
+    page = page_by_words(question, slices)
+    if page is not None:
+        return page
+    try:
+        vectors = await embed([question, *(piece for _, piece in slices)])
+        scores = [_cosine(vectors[0], vector) for vector in vectors[1:]]
+        return slices[max(range(len(scores)), key=scores.__getitem__)][0]
+    except Exception:  # noqa: BLE001 - the page it starts on, as before
+        return passage.get("page")
 
 
 def as_passage(passage: dict, score: float) -> dict:
@@ -161,6 +196,9 @@ async def search(body: dict) -> dict:
     }
     threshold = float(body["threshold"]) if isinstance(body.get("threshold"), (int, float)) else THRESHOLD
     passages = rank.rank(hits, filters, top_k, threshold, note_passages)
+    # Each passage cited at its page closest to the question (only those answered: at most topK).
+    for passage in passages:
+        passage["page"] = await cited_page(str(body.get("query") or ""), passage)
     shown = {p["passageId"] for p in passages}
     facts = [f for f in FACTS if f.get("passageId") in shown][:20]
     return {"passages": passages, "facts": facts, "threshold": threshold}

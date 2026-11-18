@@ -395,7 +395,7 @@ test("a rebuilding removal's time limit counts the documents it learns again", a
   await t.drain('c1', { steps: 10 })
   assert.ok((await log(t, 'c1')).some((e: any) => e.event === 'removal-rebuilds'))
   // Past an hour, inside three times the plan for the 299 documents it learns again.
-  assert.ok(3 * (SETTINGS.containerStartSeconds + SETTINGS.importBaseSeconds + 299 * SETTINGS.perDocumentSeconds) > 65 * 60)
+  assert.ok(3 * (SETTINGS.containerStartSeconds + SETTINGS.importBaseSeconds + 299 * SETTINGS.perDocumentSeconds) > 63 * 60)
   t.advance(62 * 60_000)
   await t.drain('c1', { steps: 5 })
   assert.ok(!(await log(t, 'c1')).some((e: any) => e.event === 'import-try-failed'), 'not given up after an hour')

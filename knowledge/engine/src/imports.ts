@@ -737,14 +737,23 @@ export function plannedSeconds(record: ImportRecord): number {
     record.notes.reduce((sum, n) => sum + (n.textBytes ?? utf8Bytes(n.text)), 0) +
     (record.storedTextBytes ?? 0)
   const perDocument = (record.kind === 'import' || record.kind === 'correction') && record.status.attempt > 1 ? SETTINGS.perDocumentOneByOneSeconds : SETTINGS.perDocumentSeconds
-  return SETTINGS.containerStartSeconds + SETTINGS.importBaseSeconds + perDocument * documents + (SETTINGS.perTextMiBSeconds * bytes) / MiB
+  return startSeconds(record) + SETTINGS.importBaseSeconds + perDocument * documents + (SETTINGS.perTextMiBSeconds * bytes) / MiB
+}
+
+/**
+ * The container start in a try's plan: none when the try learns in the container already running (an import into
+ * an awake collection: IMP-07's warm imports came in at 74-78% of a plan that counted one). Until the try begins it
+ * isn't known, so a queued import counts one.
+ */
+function startSeconds(record: ImportRecord): number {
+  return record.containerReused ? 0 : SETTINGS.containerStartSeconds
 }
 
 /** Time left: the whole plan until this try's job starts, then counted down from its start (a new try starts over). */
 export function etaSeconds(record: ImportRecord): number {
   let seconds = plannedSeconds(record)
   if (record.jobStartedAt && (record.phase === 'running' || record.phase === 'saving')) {
-    seconds = Math.max(5, seconds - SETTINGS.containerStartSeconds - (clock.now() - record.jobStartedAt) / 1000)
+    seconds = Math.max(5, seconds - startSeconds(record) - (clock.now() - record.jobStartedAt) / 1000)
   }
   return Math.round(seconds)
 }
@@ -1193,6 +1202,7 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
   record.capacity = 'none'
   record.jobId = null
   record.snapshotTaken = false
+  delete record.containerReused // the next try finds out again
   record.status.state = 'queued'
   record.status.files = waitingFiles(record)
   await e.store.putImport(record)
@@ -1214,6 +1224,7 @@ async function preempt(e: CollectionEngine, record: ImportRecord): Promise<void>
  */
 async function learningContainer(e: CollectionEngine, record: ImportRecord): Promise<Runtime> {
   await stopIfHeld(e, record)
+  record.containerReused = false // this try's plan counts a container start, unless it learns in the running one
   const meta = await e.meta()
   // Only a removal for good starts its container while held; startContainer reads the hold last (OnHold).
   const removal = record.kind === 'remove'
@@ -1252,6 +1263,7 @@ async function learningContainer(e: CollectionEngine, record: ImportRecord): Pro
     runtime.queryStarted = false
     runtime.phase = 'busy'
     await e.store.putRuntime(runtime)
+    record.containerReused = true
     return runtime
   }
   await stopIfHeld(e, record)
@@ -1546,11 +1558,22 @@ async function save(e: CollectionEngine, record: ImportRecord): Promise<void> {
     await e.store.deleteRuntime()
     return finishUnchanged(e, record)
   }
+  // Each part's time is logged with the commit ('saved'): what the next run reads the save step's time from.
+  const took: SaveTimes = { quiesceMs: 0, statsMs: 0, manifestMs: 0, textsMs: 0, factsMs: 0, snapshotMs: 0, commitMs: 0 }
+  let mark = clock.now()
+  const lap = (part: keyof SaveTimes) => {
+    const now = clock.now()
+    took[part] += now - mark
+    mark = now
+  }
   await e.box.deleteInbox(importId)
   await e.box.cleanup()
   await e.box.waitQuiescent()
+  lap('quiesceMs')
   const stats = (await e.box.runJob('stats')).result as Stats
+  lap('statsMs')
   const manifest: Manifest = await e.box.manifest()
+  lap('manifestMs')
 
   // The redacted text of every new or changed document, and this version's facts, go to R2.
   for (const doc of result.documents ?? []) {
@@ -1563,13 +1586,16 @@ async function save(e: CollectionEngine, record: ImportRecord): Promise<void> {
   const removing = (await e.meta()).removals.map((r) => r.documentId)
   const resurrected = (result.documents ?? []).filter((d) => removing.includes(d.documentId)).map((d) => textKey(meta, d.documentId))
   if (resurrected.length) await e.env.FILES.delete(resurrected)
+  lap('textsMs')
   let facts: string | null = null
   const factsText = await e.box.readFile('facts.json')
   if (factsText !== null) {
     facts = factsKey(meta, importId)
     await e.env.FILES.put(facts, factsText, { httpMetadata: { contentType: 'application/json' } })
   }
+  lap('factsMs')
   await e.box.waitQuiescent()
+  lap('quiesceMs')
 
   const latest = await e.meta()
   if (latest.deleting) return
@@ -1578,11 +1604,28 @@ async function save(e: CollectionEngine, record: ImportRecord): Promise<void> {
   const snapshot = await e.box.snapshot(`${meta.collectionId}-${importId}-a${record.status.attempt}`)
   record.snapshotTaken = true
   await e.store.putImport(record)
+  lap('snapshotMs')
   const committed = await commitImport(e, record, snapshot, manifest, stats, facts)
-  if (committed) return
+  lap('commitMs')
+  if (committed) {
+    const totalMs = Object.values(took).reduce((sum, ms) => sum + ms, 0)
+    await e.store.log('saved', { importId, attempt: record.status.attempt, ...took, totalMs })
+    return
+  }
   // Not committed: a removal for good came first, or the hold arrived meanwhile. The snapshot goes unused.
   if (isHeld(await e.meta()) && record.kind !== 'remove') return stopForHold(e, record)
   return preempt(e, record)
+}
+
+/** The save step's parts, in milliseconds: quiescing (twice), the stats job, the manifest, texts and facts to R2, the snapshot, the commit. */
+interface SaveTimes {
+  quiesceMs: number
+  statsMs: number
+  manifestMs: number
+  textsMs: number
+  factsMs: number
+  snapshotMs: number
+  commitMs: number
 }
 
 interface IngestDocument {

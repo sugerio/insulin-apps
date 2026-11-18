@@ -19,12 +19,18 @@ const SYSTEM = [
 
 export function prompt(request: AnswerRequest): { role: 'system' | 'user'; content: string }[] {
   const passages = request.passages
-    .map((p, i) => `[${i + 1}] ${p.documentName}${p.page ? `, page ${p.page}` : ''}\n${p.text}`)
+    .map((p, i) => `[${i + 1}] ${p.documentName}${pagesOf(p)}\n${p.text}`)
     .join('\n\n')
   return [
     { role: 'system', content: SYSTEM },
     { role: 'user', content: `Passages:\n\n${passages}\n\nQuestion: ${request.question}` },
   ]
+}
+
+/** ", page 4", or ", pages 1–4" for a passage over several (pageEnd: absent from an older engine, read as page). */
+function pagesOf(p: { page: number | null; pageEnd?: number | null }): string {
+  if (!p.page) return ''
+  return p.pageEnd && p.pageEnd > p.page ? `, pages ${p.page}–${p.pageEnd}` : `, page ${p.page}`
 }
 
 /** The passage numbers a text cites, in order of first use, keeping only 1..count. */
@@ -76,6 +82,21 @@ function outputText(result: unknown): string {
   return typeof content === 'string' ? content : ''
 }
 
+/** The model stopped because it ran out of tokens (finish_reason "length"). */
+function cutOff(result: unknown): boolean {
+  const r = result as { choices?: { finish_reason?: unknown }[] } | null
+  return r?.choices?.[0]?.finish_reason === 'length'
+}
+
+/**
+ * What the answer model is asked with. Gemma 4 reasons before it answers, and its reasoning counts against the
+ * completion's tokens: with 700 it sometimes spent them all and gave no text (finish_reason "length"; 6 of 55 answers
+ * in the final Engine-lane run). Reasoning is off (`chat_template_kwargs.enable_thinking`, "Whether to enable reasoning
+ * for this model", in the model's documented input schema): an answer from the given passages needs none. Room for a
+ * long answer with any reasoning left, in `max_completion_tokens` (`max_tokens` is deprecated for this model).
+ */
+const MODEL_INPUT = { max_completion_tokens: 1200, temperature: 0.2, chat_template_kwargs: { enable_thinking: false } }
+
 /** Workers AI had no capacity for the call ("AiError: 3040: Capacity temporarily exceeded, please try again."). */
 export const noCapacity = (error: unknown): boolean => /\b3040\b|capacity temporarily exceeded/i.test(errorText(error))
 
@@ -83,15 +104,24 @@ export const noCapacity = (error: unknown): boolean => /\b3040\b|capacity tempor
 const NO_CAPACITY_WAITS_MS = [1_000, 2_000, 4_000]
 
 /**
- * The model's answer. One refused for want of capacity (5 of 50 calls in the second Engine-lane run) is asked again
- * after 1, 2 and 4 seconds, each only if it can start within SETTINGS.answerBudgetMs of the first: then 503
+ * The model's answer. One refused for want of capacity is asked again after 1, 2 and 4 seconds, and one cut off with
+ * no text is asked once more, each only if it can start within SETTINGS.answerBudgetMs of the first: then 503
  * model_unavailable, as for any other failure (the app then shows the sources without a written answer).
  */
 async function write(env: Env, question: string, passages: AnswerRequest['passages']): Promise<string> {
   const started = clock.now()
+  let askedAgainForText = false
   for (let refused = 0; ; refused++) {
     try {
-      return outputText(await env.AI.run(SETTINGS.answerModel, { messages: prompt({ question, passages }), max_tokens: 700, temperature: 0.2 })).trim()
+      const result = await env.AI.run(SETTINGS.answerModel, { messages: prompt({ question, passages }), ...MODEL_INPUT })
+      const text = outputText(result).trim()
+      if (!text && cutOff(result) && !askedAgainForText && clock.now() - started < SETTINGS.answerBudgetMs) {
+        askedAgainForText = true
+        console.warn('answer model ran out of tokens before any text; asking once more')
+        refused -= 1 // not a refusal: its waits stay for capacity
+        continue
+      }
+      return text
     } catch (error) {
       const wait = NO_CAPACITY_WAITS_MS[refused]
       if (!noCapacity(error) || wait === undefined || clock.now() + wait - started >= SETTINGS.answerBudgetMs) {
@@ -117,6 +147,7 @@ export async function answer(env: Env, request: Request): Promise<AnswerResult> 
       passageId: String(p.passageId ?? ''),
       documentName: p.documentName.slice(0, 300),
       page: typeof p.page === 'number' ? p.page : null,
+      pageEnd: typeof p.pageEnd === 'number' ? p.pageEnd : null,
       text: p.text.slice(0, SETTINGS.maxPassageChars),
     }
   })

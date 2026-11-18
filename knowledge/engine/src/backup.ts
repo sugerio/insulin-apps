@@ -8,6 +8,7 @@ import type { AnswerState, Manifest, Meta, Runtime, SnapshotRecord } from './typ
 import { SETTINGS } from './settings.ts'
 import { clock, errorText, iso, utcDay } from './util.ts'
 import { unzipEntry, zipEntries } from './zip.ts'
+import { r2 } from './r2.ts'
 
 export interface BackupIndex {
   format: 1
@@ -38,9 +39,14 @@ export async function run(e: CollectionEngine, runtime: Runtime): Promise<Backup
   await e.box.waitQuiescent()
   const manifest = await e.box.manifest()
   let uploaded = 0
+  // Files with the same content share one key: each key is checked and stored once per backup (checking a key just
+  // written made R2 refuse the read for its rate, 10058, in the final Engine-lane run).
+  const done = new Set<string>()
   for (const [path, entry] of Object.entries(manifest.entries)) {
     const key = blobKey(meta, entry.sha256)
-    if (await e.env.BACKUPS.head(key)) continue
+    if (done.has(key)) continue
+    done.add(key)
+    if (await r2(() => e.env.BACKUPS.head(key))) continue
     // R2 checks the bytes against the manifest's checksum: a stream cut short by a drop is refused and read again.
     await e.box.copyFile(path, entry.size, (body) => e.env.BACKUPS.put(key, body, { sha256: entry.sha256 }))
     uploaded += 1
@@ -59,8 +65,8 @@ export async function run(e: CollectionEngine, runtime: Runtime): Promise<Backup
     state: await e.currentState(meta),
   }
   const body = JSON.stringify(index)
-  await e.env.BACKUPS.put(`${prefix(meta)}daily/${day}.json`, body, { httpMetadata: { contentType: 'application/json' } })
-  await e.env.BACKUPS.put(`${prefix(meta)}latest.json`, body, { httpMetadata: { contentType: 'application/json' } })
+  await r2(() => e.env.BACKUPS.put(`${prefix(meta)}daily/${day}.json`, body, { httpMetadata: { contentType: 'application/json' } }))
+  await r2(() => e.env.BACKUPS.put(`${prefix(meta)}latest.json`, body, { httpMetadata: { contentType: 'application/json' } }))
   await e.updateMeta((m) => {
     m.lastBackupAt = index.createdAt
     m.lastBackupVersion = index.version
@@ -115,22 +121,26 @@ export function holdsFiles(index: BackupIndex, snapshot: SnapshotRecord): boolea
 
 export async function latestIndex(e: CollectionEngine): Promise<BackupIndex | null> {
   const meta = await e.meta()
-  const object = await e.env.BACKUPS.get(`${prefix(meta)}latest.json`)
+  const object = await r2(() => e.env.BACKUPS.get(`${prefix(meta)}latest.json`))
   return object ? ((await object.json()) as BackupIndex) : null
 }
 
 /** Puts a backup's files into an empty container. False when a file is missing or the result doesn't match. */
 export async function restoreFiles(e: CollectionEngine, index: BackupIndex): Promise<boolean> {
   const meta = await e.meta()
+  const present = new Set<string>() // keys checked already: files with the same content share one
   for (const [path, entry] of Object.entries(index.manifest.entries)) {
     const key = blobKey(meta, entry.sha256)
-    if (!(await e.env.BACKUPS.head(key))) {
-      await e.store.log('backup-file-missing', { path })
-      return false
+    if (!present.has(key)) {
+      if (!(await r2(() => e.env.BACKUPS.head(key)))) {
+        await e.store.log('backup-file-missing', { path })
+        return false
+      }
+      present.add(key)
     }
     // Read from R2 for each send: a send repeated after a drop streams the file again.
     await e.box.putFile(path, async () => {
-      const object = await e.env.BACKUPS.get(key)
+      const object = await r2(() => e.env.BACKUPS.get(key))
       if (!object) throw new Error(`the backup's file ${path} went missing`)
       return object.body
     })
@@ -149,7 +159,7 @@ async function dailyIndexes(e: CollectionEngine): Promise<string[]> {
   const keys: string[] = []
   let cursor: string | undefined
   do {
-    const listed = await e.env.BACKUPS.list({ prefix: `${prefix(meta)}daily/`, cursor })
+    const listed = await r2(() => e.env.BACKUPS.list({ prefix: `${prefix(meta)}daily/`, cursor }))
     keys.push(...listed.objects.map((o) => o.key))
     cursor = listed.truncated ? listed.cursor : undefined
   } while (cursor)
@@ -161,7 +171,7 @@ export async function prune(e: CollectionEngine): Promise<void> {
   const days = (await e.meta()).settings.backupDays ?? SETTINGS.backupDays
   const cutoff = utcDay(clock.now() - days * 24 * 60 * 60 * 1000)
   const old = (await dailyIndexes(e)).filter((key) => (key.split('/').pop() ?? '').slice(0, 10) < cutoff)
-  if (old.length) await e.env.BACKUPS.delete(old)
+  if (old.length) await r2(() => e.env.BACKUPS.delete(old))
   await collectGarbage(e)
 }
 
@@ -169,16 +179,16 @@ async function collectGarbage(e: CollectionEngine): Promise<void> {
   const meta = await e.meta()
   const referenced = new Set<string>()
   for (const key of [...(await dailyIndexes(e)), `${prefix(meta)}latest.json`]) {
-    const object = await e.env.BACKUPS.get(key)
+    const object = await r2(() => e.env.BACKUPS.get(key))
     if (!object) continue
     const index = (await object.json()) as BackupIndex
     for (const entry of Object.values(index.manifest.entries)) referenced.add(entry.sha256)
   }
   let cursor: string | undefined
   do {
-    const listed = await e.env.BACKUPS.list({ prefix: `${prefix(meta)}blobs/`, cursor })
+    const listed = await r2(() => e.env.BACKUPS.list({ prefix: `${prefix(meta)}blobs/`, cursor }))
     const unused = listed.objects.map((o) => o.key).filter((key) => !referenced.has(key.split('/').pop() ?? ''))
-    if (unused.length) await e.env.BACKUPS.delete(unused)
+    if (unused.length) await r2(() => e.env.BACKUPS.delete(unused))
     cursor = listed.truncated ? listed.cursor : undefined
   } while (cursor)
 }
@@ -188,11 +198,11 @@ export async function dropDocument(e: CollectionEngine, documentId: string): Pro
   const meta = await e.meta()
   let latestDropped = false
   for (const key of [...(await dailyIndexes(e)), `${prefix(meta)}latest.json`]) {
-    const object = await e.env.BACKUPS.get(key)
+    const object = await r2(() => e.env.BACKUPS.get(key))
     if (!object) continue
     const index = (await object.json()) as BackupIndex
     if (index.state.documents.some((d) => d.documentId === documentId)) {
-      await e.env.BACKUPS.delete(key)
+      await r2(() => e.env.BACKUPS.delete(key))
       latestDropped ||= key.endsWith('latest.json')
     }
   }
@@ -214,11 +224,11 @@ export async function dropOlder(e: CollectionEngine, before: number, documentIds
   const changed = new Set(documentIds)
   let latestDropped = false
   for (const key of [...(await dailyIndexes(e)), `${prefix(meta)}latest.json`]) {
-    const object = await e.env.BACKUPS.get(key)
+    const object = await r2(() => e.env.BACKUPS.get(key))
     if (!object) continue
     const index = (await object.json()) as BackupIndex
     if (index.version < before && index.state.documents.some((d) => changed.has(d.documentId))) {
-      await e.env.BACKUPS.delete(key)
+      await r2(() => e.env.BACKUPS.delete(key))
       latestDropped ||= key.endsWith('latest.json')
     }
   }

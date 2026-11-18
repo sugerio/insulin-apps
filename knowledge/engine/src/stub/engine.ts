@@ -824,7 +824,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
 
   function passagesFor(documentId: string, name: string, kind: 'file' | 'note', text: string, pages: StoredDocument['pages']): Passage[] {
     return passagesOf(text, pages).map((span, index) => ({
-      passageId: `${documentId}:${index + 1}`, documentId, documentName: name, kind, page: span.page, start: span.start, end: span.end,
+      passageId: `${documentId}:${index + 1}`, documentId, documentName: name, kind, page: span.page, pageEnd: span.pageEnd, start: span.start, end: span.end,
       text: span.text, textHash: sha256Hex(span.text), score: 0, outdated: false,
     }))
   }
@@ -1061,6 +1061,7 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       documentName: name,
       kind,
       page: span.page,
+      pageEnd: span.pageEnd,
       start: span.start,
       end: span.end,
       text: span.text,

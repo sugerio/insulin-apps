@@ -28,7 +28,7 @@ const TERMS: readonly (readonly [term: string, definition: ReactNode])[] = [
   ['Restore point', 'A saved copy of the collection after every change, kept 30 days.'],
   ['Role in Knowledge', 'Admin, Editor or Viewer, from your organization role or a role given for Knowledge only. It decides whether you can start collections and see Rules and data.'],
   ['Set aside', 'A file added after the version you went back to: kept, not used, and ready to be added again.'],
-  ['Source', 'The exact words an answer is based on, with the file and page.'],
+  ['Source', 'The exact words an answer is based on, with the file and the pages (or slides) they are on.'],
   ['Stop using', "Keep the file, but don't answer from it."],
   ['Viewer cap', 'Someone whose role in Knowledge can only read acts as a Viewer in every collection, whatever it gives them.'],
   ['Waking up', 'A sleeping collection starting again for a question: about a minute, or a few minutes from its backup after 30 days unused.'],

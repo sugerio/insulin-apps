@@ -138,6 +138,7 @@ export interface PassageSpan {
   end: number
   text: string
   page: number | null
+  pageEnd: number | null // the last page it runs over (here always its page: a passage never crosses a form feed)
 }
 
 /** The text cut into passages at blank lines: one paragraph each, a heading (short, no closing stop) joined to the next. */
@@ -148,7 +149,7 @@ export function passagesOf(text: string, pages: { page: number; start: number; e
   const flush = () => {
     if (current && spans.length < MAX_PASSAGES) {
       const passage = text.slice(current.start, current.end)
-      if (passage.trim()) spans.push({ start: current.start, end: current.end, text: passage, page: pageAt(current.start) })
+      if (passage.trim()) spans.push({ start: current.start, end: current.end, text: passage, page: pageAt(current.start), pageEnd: pageAt(Math.max(current.start, current.end - 1)) })
     }
     current = null
   }

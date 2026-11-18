@@ -95,6 +95,7 @@ export interface AskCitation {
   documentName: string
   collectionId: string
   page: number | null
+  pageEnd?: number | null // the last page (or slide) the cited passage runs over; read as page when absent
   start: number
   end: number
 }

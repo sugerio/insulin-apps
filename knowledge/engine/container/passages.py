@@ -63,6 +63,7 @@ def build_index(document_id: str, text: str, pages_utf16: list[dict], chunks: li
         start, end = found
         cursor = end
         u_start, u_end = units.to_utf16(start), units.to_utf16(end)
+        first, last = page_range(pages_utf16, u_start, u_end)
         out.append(
             {
                 "passageId": str(chunk.get("id")),
@@ -70,7 +71,8 @@ def build_index(document_id: str, text: str, pages_utf16: list[dict], chunks: li
                 "chunkIndex": chunk.get("index"),
                 "start": u_start,
                 "end": u_end,
-                "page": page_at(pages_utf16, u_start),
+                "page": first,
+                "pageEnd": last,
                 "textHash": text_hash(text[start:end]),
             }
         )
@@ -82,43 +84,19 @@ def slice_utf16(text: str, start: int, end: int) -> str:
     return text[units.from_utf16(start) : units.from_utf16(end)]
 
 
-# A passage is cited at the page (or slide) its words closest to the question are on, chosen at search time: a
-# passage's own page is where it starts, and a short PDF or deck is one passage over every page (IMP-06's fact on
-# page 4 of 4 was cited at page 1). The whole passage is still what the source viewer highlights.
+def page_range(pages: list[dict], start: int, end: int) -> tuple[int | None, int | None]:
+    """The first and last page (or slide) a passage [start, end) (UTF-16) runs over; (None, None) without a page map.
 
-_WORD = re.compile(r"[0-9a-z]+")
-_COMMON = set(
-    "a an and are as at be by can do does for from has have how i in is it its of on or that the their this to was what"
-    " when where which who why will with you your".split()
-)
-
-
-def page_slices(text: str, pages_utf16: list[dict], start: int, end: int) -> list[tuple[int, str]]:
-    """Each page a passage [start, end) (UTF-16) runs over, with the passage's words on it, in page order."""
-    out = []
-    for page in pages_utf16 or []:
-        a, b = max(start, page["start"]), min(end, page["end"])
-        if a < b:
-            piece = slice_utf16(text, a, b)
-            if piece.strip():
-                out.append((page["page"], piece))
-    return out
-
-
-def words(text: str) -> set[str]:
-    """A text's words, lower case, without the most common ones, a plural's s dropped (leaves: leave)."""
-    return {w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in _WORD.findall(text.lower()) if w not in _COMMON}
-
-
-def page_by_words(question: str, slices: list[tuple[int, str]]) -> int | None:
-    """The page whose slice holds the most of the question's words; None when none holds any, or two hold as many."""
-    if len(slices) == 1:
-        return slices[0][0]
-    wanted = words(question)
-    scored = sorted(((len(wanted & words(piece)), page) for page, piece in slices), key=lambda s: s[0], reverse=True)
-    if not scored or scored[0][0] == 0 or (len(scored) > 1 and scored[1][0] == scored[0][0]):
-        return None
-    return scored[0][1]
+    A passage is cited by the pages it runs over: a short PDF or deck is one passage over every page, and a fact can
+    be on any of them (IMP-06's on page 4 of 4). Nothing picks one page by the question's words: those can name a page
+    without the answer (the topic on page 2, the answer on page 1).
+    """
+    if not pages:
+        return None, None
+    first = page_at(pages, start)
+    over = [page["page"] for page in pages if page["start"] < end and page["end"] > start]
+    last = max(over) if over else first
+    return first, last if first is None or last is None else max(first, last)
 
 
 def remap_marks(marks: list[dict], old_text: str, old_index: list[dict], new_text: str, new_index: list[dict], rehide) -> list[dict]:

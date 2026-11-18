@@ -76,8 +76,9 @@ returns:
 - `status`: `ok`, or `waking`, `learning`, `busy` with `retryAfterSeconds`;
 - `covered`: false when nothing answers the question, with a `message`: say you won't guess rather than answer
   without a source;
-- `passages`: each with `documentId`, `documentName`, `page`, `start` and `end` (character positions in the source's
-  text), `text`, `textHash` and `score`;
+- `passages`: each with `documentId`, `documentName`, `page` and `pageEnd` (the first and last page, or slide, the
+  passage runs over: the same number when it is on one page; null for a file without pages), `start` and `end`
+  (character positions in the source's text), `text`, `textHash` and `score`;
 - `facts`, `collections` (each named collection's status) and `skipped` (collections named that the caller can't ask).
 
 Write the answer from the passages and link to the sources on the site. `GET /api/collections/{id}/sources/{documentId}`

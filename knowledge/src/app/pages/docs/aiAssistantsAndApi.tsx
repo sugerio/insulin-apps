@@ -72,7 +72,7 @@ export const aiAssistantsAndApi: DocTopic = {
             columns={['Endpoint', 'What it does', 'Collection role']}
             rows={[
               [<Code>GET /api/collections</Code>, 'The collections you can ask, with their names, purposes and your role in each', '–'],
-              [<Code>POST /api/search</Code>, <>Passages that answer a question, from the named collections, with their file, page and exact position, and <Code>covered</Code>: false means nothing answers it</>, 'Viewer'],
+              [<Code>POST /api/search</Code>, <>Passages that answer a question, from the named collections, with their file, pages (<Code>page</Code> and <Code>pageEnd</Code>, the first and last page or slide) and exact position, and <Code>covered</Code>: false means nothing answers it</>, 'Viewer'],
               [<Code>GET /api/collections/{'{id}'}</Code>, 'A collection: its purpose, your role, its state and counts', 'Viewer'],
               [<Code>GET /api/collections/{'{id}'}/sources/{'{docId}'}</Code>, 'One source\'s text, with hidden values shown as [hidden], and its pages', 'Viewer'],
               [<Code>GET /api/collections/{'{id}'}/facts</Code>, 'What a collection knows, as sentences, and who checked each', 'Viewer'],

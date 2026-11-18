@@ -11,8 +11,9 @@ agent that needs the big picture before calling its API.
 
 ## What Knowledge does
 
-- **Every answer has a source.** Answers cite the exact words they come from, with the file and the page. When nothing
-  in the collection covers a question, Knowledge says "I won't guess" instead of answering without a source.
+- **Every answer has a source.** Answers cite the exact words they come from, with the file and the pages (or slides)
+  they are on. When nothing in the collection covers a question, Knowledge says "I won't guess" instead of answering
+  without a source.
 - **No technical settings.** Insulin chooses how to read, store and search the files. You name a collection, say in
   one sentence what it is for, and add what you know.
 - **Checkable.** What a collection learned is shown as plain sentences, each with the file it came from, which people

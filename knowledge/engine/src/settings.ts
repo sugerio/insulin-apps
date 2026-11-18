@@ -77,13 +77,18 @@ export const SETTINGS = {
   // with the text, not only with the documents: a document's text is planned from its size until it is read (a
   // file's bytes, at most the 2 MB read limit; a quarter of them for formats that aren't plain text), then from the
   // text read. Starting the container (from a snapshot or the image, and its check) took 29-31 s more. Documents are
-  // learned in groups now: in the second run (2026-11-18) Cognee took 182-198 s for 50 short documents in 3 groups,
-  // about 3.8 s each, with 0 to 450 documents already in the collection; a later try of an import learns them one at
-  // a time again: 5.3 s. The collection's size isn't planned for: Cognee's time per document doesn't grow with it.
-  // The container start is planned only for a try that starts one (not one learning in the awake collection's).
+  // learned in groups now, and the fixed part and the time per document are fitted to the two runs that did so
+  // (2026-11-18, IMP-07: 50 short documents, submission to commit, against the engine's plan at the try's start):
+  // g1118a 314 s from the image and 269-285 s in the awake container (Cognee 3.6-4.0 s per document); the final run
+  // (g1118b) 250.4 s and 211.5-224.8 s (Cognee 3.0-3.2 s; outside Cognee 60-67 s: 12-20 s before the job, ~7 s of the
+  // job, ~40 s saving). The two runs' same import differs by a quarter, so the plan sits between them: 65 s fixed and
+  // 3.4 s per document, 256 s for an import in the awake container and 286 s for one that starts its container, holds
+  // every one of them within 25%. A later try of an import learns them one at a time again: 5.3 s. The collection's
+  // size isn't planned for: Cognee's time per document doesn't grow with it. The container start is planned only for
+  // a try that starts one (not one learning in the awake collection's).
   containerStartSeconds: 30,
-  importBaseSeconds: 105,
-  perDocumentSeconds: 3.8,
+  importBaseSeconds: 65,
+  perDocumentSeconds: 3.4,
   perDocumentOneByOneSeconds: 5.3,
   perTextMiBSeconds: 860,
   readLimitBytes: 2 * 1024 * 1024,

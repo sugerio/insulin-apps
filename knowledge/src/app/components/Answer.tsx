@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label.tsx'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group.tsx'
 import { Textarea } from '@/components/ui/textarea.tsx'
 import { api, collectionPath } from '../lib/api.ts'
+import { isDeck, pagesLabel } from '../lib/format.ts'
 import type { AskAnswer, AskSource, CollectionSummary, ImportStatus, Report } from '../lib/types.ts'
 import { useSupportSentence } from '../session.tsx'
 import { canChange } from './CollectionParts.tsx'
@@ -70,7 +71,7 @@ export function SourceList({ sources, onOpen, names }: { sources: AskSource[]; o
               <span className="font-medium [overflow-wrap:anywhere]">
                 {source.documentName}
                 <span className="font-normal text-muted-foreground">
-                  {source.kind === 'note' ? ' · note' : ''}{source.page ? ` · page ${source.page}` : ''}{names && names.size > 1 ? ` · ${names.get(source.collectionId) ?? ''}` : ''}
+                  {source.kind === 'note' ? ' · note' : ''}{source.page ? ` · ${pagesLabel(source.page, source.pageEnd, isDeck({ name: source.documentName }))}` : ''}{names && names.size > 1 ? ` · ${names.get(source.collectionId) ?? ''}` : ''}
                 </span>
               </span>
               <span className="line-clamp-3 text-muted-foreground [overflow-wrap:anywhere]">“{source.text}”</span>
@@ -327,7 +328,7 @@ function FixPanel({ collection, question, sources, reportId, onCancel, onAskAgai
               <div key={source.passageId} className="flex items-start gap-2">
                 <RadioGroupItem id={`outdated-${source.n}`} value={source.passageId} className="mt-0.5" />
                 <Label htmlFor={`outdated-${source.n}`} className="font-normal leading-snug">
-                  [{source.n}] {source.documentName}{source.page ? `, page ${source.page}` : ''}
+                  [{source.n}] {source.documentName}{source.page ? `, ${pagesLabel(source.page, source.pageEnd, isDeck({ name: source.documentName }))}` : ''}
                 </Label>
               </div>
             ))}

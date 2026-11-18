@@ -132,6 +132,19 @@ describe('the in-memory engine', () => {
     expect((await call('GET', '/v1/collections/c1')).body.state).toBe('learning')
   })
 
+  it('cites a passage by the pages it runs over, as the real engine does: page and pageEnd', async () => {
+    const { call, learn } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [
+      { fileId: 'file0001', name: 'Rules.md', text: 'Cover page.\fPartner discounts stop at 20 percent.' },
+      { fileId: 'file0002', name: 'Plain.md', text: 'Gold partners get a named contact.' },
+    ])
+    const paged = (await call('POST', '/v1/collections/c1/search', { query: 'Where do partner discounts stop?' })).body.passages[0]
+    expect(paged).toMatchObject({ documentName: 'Rules.md', page: 2, pageEnd: 2 })
+    const plain = (await call('POST', '/v1/collections/c1/search', { query: 'Who gets a named contact?' })).body.passages[0]
+    expect(plain).toMatchObject({ documentName: 'Plain.md', page: null, pageEnd: null })
+  })
+
   it('goes back, undoes, and can\'t bring back a version that held a file removed for good', async () => {
     const { call, learn, advance } = engineFor()
     await call('PUT', '/v1/collections/c1', { settings: SETTINGS })

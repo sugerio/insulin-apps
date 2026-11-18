@@ -185,6 +185,29 @@ class Matcher:
         return out
 
 
+SPACES = re.compile(r"\s+")
+
+
+def cognee_name(text: str) -> str:
+    """A text as Cognee names the entities mentioned in it: runs of white space as one space (gliner_demo/mapping.py
+    `normalize_name`), then lower case without apostrophes (modules/engine/utils/generate_node_name.py). A kept
+    "O'Brien Labs" names the entity "obrien labs"."""
+    return SPACES.sub(" ", text).strip().lower().replace("'", "")
+
+
+def unheld(names: Iterable[str], descriptions: Iterable[str], kept: Iterable[str]) -> tuple[set[str], set[str]]:
+    """Of entities' names and descriptions, those no kept text holds: a name (Cognee's form of a mention) as Cognee
+    would name the kept text's mentions, a description (the mention as written) as written."""
+    names, descriptions = set(names), set(descriptions)
+    name_matcher, description_matcher = Matcher(names), Matcher(descriptions)
+    held_names: set[str] = set()
+    held_descriptions: set[str] = set()
+    for text in kept:
+        held_names.update(name_matcher.counts(cognee_name(text)))
+        held_descriptions.update(description_matcher.counts(text))
+    return names - held_names, descriptions - held_descriptions
+
+
 def _json(path: Path):
     try:
         return json.loads(path.read_text())
@@ -278,9 +301,10 @@ def edge_type_id(text: str) -> str:
     return str(uuid5(NAMESPACE_OID, "EdgeType:" + text.lower().replace(" ", "_").replace("'", "")))
 
 
-def document_texts(root: Path, nodes: dict[str, dict], vectors: dict[str, list[dict]]) -> list[tuple[str, str]]:
-    """Text written from the documents, as (place, text): searched strictly. Any file under `root` that no store here
-    covers is read whole."""
+def document_texts(root: Path, nodes: dict[str, dict], vectors: dict[str, list[dict]], kept_names: set[str] = frozenset()) -> list[tuple[str, str]]:
+    """Text written from the documents, as (place, text): searched strictly. Entity names in `kept_names` are Cognee's
+    own form of a kept document's mention (`cognee_name`), so they stay out: a removed "OBrien Labs" would otherwise
+    find a kept "O'Brien Labs" there. Any file under `root` that no store here covers is read whole."""
     out: list[tuple[str, str]] = []
     for path in sorted((root / "text").glob("*.json")):
         stored = _json(path)
@@ -289,15 +313,17 @@ def document_texts(root: Path, nodes: dict[str, dict], vectors: dict[str, list[d
     stored_facts = _json(root / "facts.json")
     for fact in (stored_facts or {}).get("facts", []) if isinstance(stored_facts, dict) else []:
         out.append(("facts.json", str(fact.get("sourceSentence") or "")))  # the chunk's own sentence
-    for table in ("DocumentChunk_text", "Entity_name"):
-        if table in vectors:
-            out.append((f"LanceDB {table}", "\n".join(row["text"] for row in vectors[table])))
+    if "DocumentChunk_text" in vectors:
+        out.append(("LanceDB DocumentChunk_text", "\n".join(row["text"] for row in vectors["DocumentChunk_text"])))
+    if "Entity_name" in vectors:
+        out.append(("LanceDB Entity_name", "\n".join(row["text"] for row in vectors["Entity_name"] if row["text"] not in kept_names)))
     graph = []
     for node in nodes.values():
         if node["type"] == "DocumentChunk":
             graph.append(str(node["props"].get("text") or ""))
         elif node["type"] in ("Entity", "Timestamp"):
-            graph.extend(str(v) for v in (node["name"], node["props"].get("description")) if v)
+            name = node["name"] if node["type"] == "Timestamp" or node["name"] not in kept_names else ""
+            graph.extend(str(v) for v in (name, node["props"].get("description")) if v)
     if graph:
         out.append(("graph", "\n".join(graph)))
     known = ("text/", "passages/", "chunks/", "documents/", "ledger.json", "facts.json", str(LANCEDB), str(RELATIONAL), str(GRAPH), "system/databases/.cognee-migration-")
@@ -405,16 +431,21 @@ def stale(root: Path, data_id_of: Callable[[str], UUID], nodes: dict[str, dict],
 
 def left(root: Path, probes: list[str], kept: Callable[[], Iterable[str]], data_id_of: Callable[[str], UUID]) -> dict[str, int]:
     """The places under `root` still holding removed or hidden text: the document text holding a probe, with how many
-    times (a probe a kept document's text holds too doesn't count), and the generated records that no longer trace
-    back to a live chunk of a live document, with how many. The kept texts are read one at a time."""
+    times (a probe a kept document's text holds too doesn't count, nor an entity name Cognee made from a kept
+    document's mention), and the generated records that no longer trace back to a live chunk of a live document, with
+    how many. The kept texts are read one at a time."""
     matcher = Matcher(probes)
-    exempt: set[str] = set()
-    for text in kept():
-        exempt.update(matcher.counts(text))
     nodes, edges = _graph(root)
     vectors = dict(_vector_tables(root))
+    names = {n["name"] for n in nodes.values() if n["type"] == "Entity" and n["name"]} | {r["text"] for r in vectors.get("Entity_name", [])}
+    name_matcher = Matcher(names)
+    exempt: set[str] = set()
+    kept_names: set[str] = set()
+    for text in kept():
+        exempt.update(matcher.counts(text))
+        kept_names.update(name_matcher.counts(cognee_name(text)))
     out = stale(root, data_id_of, nodes, edges, vectors)
-    for place, text in document_texts(root, nodes, vectors):
+    for place, text in document_texts(root, nodes, vectors, kept_names):
         for probe, count in matcher.counts(text).items():
             if probe not in exempt:
                 out[place] = out.get(place, 0) + count

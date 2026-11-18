@@ -90,7 +90,7 @@ decides whether someone can start collections and see Rules and data.
 
 **Set aside.** A file added after the version someone went back to: kept, not used, and ready to be added again.
 
-**Source.** The exact words an answer is based on, with the file and page.
+**Source.** The exact words an answer is based on, with the file and the pages (or slides) they are on.
 
 **Stop using.** Keep the file, but don't answer from it.
 

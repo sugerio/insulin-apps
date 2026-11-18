@@ -226,7 +226,8 @@ export interface Passage {
   documentId: string
   documentName: string
   kind: 'file' | 'note'
-  page: number | null
+  page: number | null // the page (or slide) the passage starts on; null when the document has no pages
+  pageEnd?: number | null // the last page (or slide) it runs over: equal to page within one page, so "pages 1–4" when it runs over four. Absent from an engine before it: read as page
   start: number // character offsets in the document's redacted text
   end: number
   text: string
@@ -260,7 +261,7 @@ export interface SearchResult {
 
 export interface AnswerRequest {
   question: string
-  passages: Pick<Passage, 'passageId' | 'documentName' | 'page' | 'text'>[]
+  passages: Pick<Passage, 'passageId' | 'documentName' | 'page' | 'pageEnd' | 'text'>[] // pageEnd optional, as in Passage
 }
 
 export interface AnswerResult {

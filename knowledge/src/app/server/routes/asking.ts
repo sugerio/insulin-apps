@@ -54,7 +54,7 @@ export function askingRoutes() {
       message: written.message,
       citations: written.citations.map((n) => {
         const passage = passages[n - 1]!
-        return { n, passageId: passage.passageId, documentId: passage.documentId, documentName: passage.documentName, collectionId: passage.collectionId, page: passage.page, start: passage.start, end: passage.end }
+        return { n, passageId: passage.passageId, documentId: passage.documentId, documentName: passage.documentName, collectionId: passage.collectionId, page: passage.page, pageEnd: passage.pageEnd ?? passage.page, start: passage.start, end: passage.end }
       }),
       sources,
       // Some collections may still be waking or learning; they are listed with their status.

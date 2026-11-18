@@ -351,20 +351,21 @@ plan('IMP-03', 'All or nothing', async () => {
   return { checks, evidence: { killedAt, before: before.counts, after: (await status(MAIN)).counts } }
 })
 
-plan('ASK-01', 'Answerable questions and paraphrases: 37 of 40 at the 0.68 threshold', async () => {
-  // Each question must be answered from a passage that holds its fact, and the answer must cite one: an answer
-  // with no citations, one that cited outside the passages given (dropped), or one that cites only other passages fails.
-  // The bar is 37 of the 40: the "won't guess" threshold is 0.68 (container/calibration.json), chosen knowing it
-  // answers 37 of these 40 (on Cloudflare a19, a30 and p-q04 get no passage over it: a19's best is 0.637, a30's
-  // 0.656), since a lower one answers questions nothing covers (ASK-02).
+plan('ASK-01', 'Answerable questions and paraphrases: the fact retrieved for 37 of 40 at the 0.68 threshold; every answer cites it', async () => {
+  // Retrieval: 37 of the 40 questions must find a passage of the expected document that holds the fact. That is the
+  // only allowance: the "won't guess" threshold is 0.68 (container/calibration.json), chosen knowing it covers 37 of
+  // these 40 (on Cloudflare a19, a30 and p-q04 get no passage over it: a19's best is 0.637, a30's 0.656), since a lower
+  // one answers questions nothing covers (ASK-02). Every answer written (a question that got passages) must still be
+  // written, cite only the passages it was given (nothing dropped) and cite a passage that holds the fact.
   const rows = []
   for (const item of [...questions('answerable.json'), ...questions('paraphrases.json')]) {
     const result = await search(MAIN, item.query, { topK: 5 })
     const g = grade(item, result.passages)
     const row = { id: item.id, query: item.query, ...g, answered: false, citations: [], dropped: null, citesTheFact: false }
     if (result.passages.length) {
-      const answer = await api('POST', '/v1/answer', { question: item.query, passages: result.passages.map(({ passageId, documentName, page, text }) => ({ passageId, documentName, page, text })) })
+      const answer = await api('POST', '/v1/answer', { question: item.query, passages: result.passages.map(({ passageId, documentName, page, pageEnd, text }) => ({ passageId, documentName, page, pageEnd, text })) })
       const citations = answer.body?.citations ?? []
+      row.attempted = true
       row.answered = answer.status === 200
       row.answer = answer.body?.text
       row.citations = citations
@@ -376,19 +377,20 @@ plan('ASK-01', 'Answerable questions and paraphrases: 37 of 40 at the 0.68 thres
     }
     rows.push(row)
   }
+  const attempted = rows.filter((r) => r.attempted)
   const passes = (r) => r.pass && r.answered && r.citations.length > 0 && r.dropped === 0 && r.citesTheFact
-  const passed = rows.filter(passes).length
-  const count = (test) => rows.filter(test).length
   return {
-    checks: { atLeast37Of40: passed >= 37 },
+    checks: {
+      factRetrievedFor37Of40: rows.filter((r) => r.pass).length >= 37,
+      everyAnswerCites: attempted.every((r) => r.answered && r.citations.length > 0),
+      noCitationDropped: attempted.every((r) => r.dropped === 0),
+      aCitedPassageHoldsTheFact: attempted.every((r) => r.citesTheFact),
+    },
     evidence: {
-      passed,
+      retrieved: rows.filter((r) => r.pass).length,
+      attempted: attempted.length,
+      passed: rows.filter(passes).length,
       of: rows.length,
-      // Each part of a row's pass, counted over the 40.
-      expectedDocumentRetrievedWithFact: count((r) => r.pass),
-      everyAnswerCites: count((r) => r.answered && r.citations.length > 0),
-      noCitationDropped: count((r) => r.dropped === 0),
-      aCitedPassageHoldsTheFact: count((r) => r.citesTheFact),
       failed: rows.filter((r) => !passes(r)),
       rows,
     },
@@ -403,7 +405,7 @@ plan('ASK-02', '"I won\'t guess"', async () => {
     const result = await search(MAIN, item.query)
     let answer = null
     if (result.passages.length) {
-      answer = (await api('POST', '/v1/answer', { question: item.query, passages: result.passages.map(({ passageId, documentName, page, text }) => ({ passageId, documentName, page, text })) })).body
+      answer = (await api('POST', '/v1/answer', { question: item.query, passages: result.passages.map(({ passageId, documentName, page, pageEnd, text }) => ({ passageId, documentName, page, pageEnd, text })) })).body
     }
     near.push({ id: item.id, query: item.query, covered: result.covered, answer: answer?.text ?? null, citations: answer?.citations ?? [] })
   }
@@ -421,6 +423,9 @@ plan('ASK-02', '"I won\'t guess"', async () => {
   // Near misses need a person to read: a confident wrong answer is one that cites a passage for a fact it doesn't hold.
   return { checks: { atLeast19Of20WontGuess: wontGuess >= 19 }, evidence, manual: 'Read evidence.nearMisses: no confident wrong answer.' }
 })
+
+/** Whether a passage's cited range (page to pageEnd; an engine before pageEnd: its page alone) includes `page`. */
+const citesPage = (passage, page) => !!passage && typeof page === 'number' && passage.page !== null && passage.page <= page && page <= (passage.pageEnd ?? passage.page)
 
 plan('IMP-06', 'Every launch format, cited at the right page', async () => {
   const cid = `e2e-${stamp}-formats`
@@ -455,8 +460,9 @@ plan('IMP-06', 'Every launch format, cited at the right page', async () => {
   const checks = {
     allLearned: done.state === 'committed' && done.files.every((f) => f.state === 'learned'),
     eachFormatAnswers: Object.values(byType).every(Boolean),
-    powerPointCitesItsSlide: byType.pptx?.page === pptx?.pages,
-    pdfCitesItsPage: byType.pdf?.page === docs.find((d) => d.name.endsWith('.pdf'))?.pages,
+    // The fact is on the last page (or slide) of 4: the cited range (page to pageEnd) must include it.
+    powerPointCitesItsSlide: citesPage(byType.pptx, pptx?.pages),
+    pdfCitesItsPage: citesPage(byType.pdf, docs.find((d) => d.name.endsWith('.pdf'))?.pages),
   }
   const scanned = await learn(cid, 'scanned', [{ fileId: 'scan', name: 'Signed form.pdf', type: 'application/pdf', bytes: readFileSync(join(dir, 'scanned.pdf')) }])
   checks.scannedPdfNamedWithReason = scanned.state === 'failed' && /scanned image/.test(scanned.files[0].reason ?? '')
@@ -465,7 +471,7 @@ plan('IMP-06', 'Every launch format, cited at the right page', async () => {
   return {
     checks,
     evidence: {
-      pages: Object.fromEntries(Object.entries(byType).map(([k, p]) => [k, p?.page ?? null])),
+      pages: Object.fromEntries(Object.entries(byType).map(([k, p]) => [k, p ? [p.page, p.pageEnd ?? p.page] : null])),
       scores: Object.fromEntries(Object.entries(byType).map(([k, p]) => [k, p?.score ?? null])),
       rewordedQuestion: rewordedByType,
       scanned: scanned.files[0],
@@ -963,15 +969,19 @@ plan('IMP-07', '500 documents in 10 imports', async () => {
       const doc = base[n % base.length]
       return { fileId: `s${n}`, name: `${n}-${doc.name}`, text: `${doc.text}\n\nRevision ${n}: reviewed by team ${n % 17}.` }
     })
-    // The engine's own plan for the import, as the answer to its submission gives it (etaSeconds: the whole try,
-    // before its job starts; nothing waits ahead of it here), against the time from then to its commit. An import
-    // that needed a second try isn't the plan's to meet.
+    // The engine's own plan for the try, as it made it when the try started (its job-done log line: by then it knows
+    // whether the try learns in the awake container or starts one), against the time from the submission to its
+    // commit. The plan at submission (etaSeconds) can't know that and counts a container start for every import: it is
+    // in the evidence only. An import that needed a second try isn't the plan's to meet.
     const begun = await startImport(cid, `size-${batch}`, files)
     if (![200, 202].includes(begun.status)) throw new Error(`import size-${batch}: ${begun.status} ${JSON.stringify(begun.body)}`)
     const started = Date.now()
-    const planned = begun.body.etaSeconds
+    const atSubmission = begun.body.etaSeconds
     const done = await waitImport(cid, `size-${batch}`)
-    rows.push({ batch, seconds: (Date.now() - started) / 1000, planned, attempt: done.attempt, state: done.state })
+    const seconds = (Date.now() - started) / 1000
+    const jobDone = (await state(cid)).log.filter((e) => e.event === 'job-done' && e.importId === `size-${batch}` && e.attempt === done.attempt).at(-1)
+    const planned = jobDone?.plannedSeconds ?? null
+    rows.push({ batch, seconds, planned, atSubmission, attempt: done.attempt, state: done.state })
     log(`  size-${batch}: ${done.state} in ${rows.at(-1).seconds} s, planned ${planned} s (attempt ${done.attempt})`)
   }
   const snapshots = (await state(cid)).snapshots

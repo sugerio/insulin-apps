@@ -43,7 +43,7 @@ export const asking: DocTopic = {
           <p>Open a numbered source to see the text it comes from:</p>
           <ul>
             <li>the text of the file at the exact words the answer used, highlighted;</li>
-            <li>the page they are on, who owns the collection, and when the file was last added to it;</li>
+            <li>the pages they are on (slides, for a PowerPoint deck: "pages 1–2" when the words run over two), who owns the collection, and when the file was last added to it;</li>
             <li>values that were hidden before learning, shown as <b>hidden</b>: nobody, not even the collection's owner, can see what was there.</li>
           </ul>
           <p>Anyone who can ask a collection can open every source it used.</p>

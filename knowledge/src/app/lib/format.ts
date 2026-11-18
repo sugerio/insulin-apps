@@ -136,6 +136,29 @@ export function sourceKind(document: { kind: 'file' | 'note'; type: string }): '
   return document.type === 'text/html' ? 'Web page' : 'File'
 }
 
+const DECK_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+
+/** A PowerPoint deck: its pages are slides. */
+export const isDeck = (document: { name: string; type?: string | null }) => document.type === DECK_TYPE || /\.pptx$/i.test(document.name)
+
+/**
+ * The pages (or slides) a cited passage runs over, as the citation names them: "page 4", "pages 1–4", "slide 3",
+ * "slides 3–4"; nothing without a page. An engine that sends no pageEnd is read as one page.
+ */
+export function pagesLabel(page: number | null | undefined, pageEnd: number | null | undefined, slides = false): string {
+  if (!page) return ''
+  const [one, many] = slides ? ['slide', 'slides'] : ['page', 'pages']
+  return pageEnd && pageEnd > page ? `${many} ${page}–${pageEnd}` : `${one} ${page}`
+}
+
+/** The first and last page highlighted words [start, end) run over in a page map; null without one. */
+export function pagesOfRange(pages: { page: number; start: number; end: number }[], start: number, end: number): [number, number] | null {
+  const first = pages.find((page) => start >= page.start && start < page.end) ?? pages.find((page) => page.start >= start)
+  if (!first) return null
+  const over = pages.filter((page) => page.start < end && page.end > start).map((page) => page.page)
+  return [first.page, Math.max(first.page, ...over)]
+}
+
 /** Why a restore point can't be brought back, in plain words. */
 export function notRestorableReason(reason: string | null | undefined): string {
   switch (reason) {

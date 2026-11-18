@@ -81,11 +81,16 @@ And from the design:
   as "Knowledge's engine isn't answering right now. Try again in a minute." The app's engine client sends nothing
   again itself: it can't tell a lost call from one the engine refused, and the tick does its work again every five
   minutes.
-- **An answer Workers AI has no capacity for is asked again.** Workers AI refused 5 of 50 answers in the second
-  Engine-lane run with `AiError: 3040: Capacity temporarily exceeded, please try again.` Such a refusal is asked again
-  after 1, 2 and 4 s, each only if it starts within 20 s of the first call (`answerBudgetMs`; an answer takes 6 to
-  8 s, so at most three calls). Then, as for any other failure, 503 `model_unavailable`, and the app shows the sources
-  without a written answer: "Answers couldn't be written just now, so here are the sources without a written answer."
+- **An answer the model couldn't write is asked again.** Two causes were seen. Workers AI's capacity: one answer in
+  the second Engine-lane run was refused with `AiError: 3040: Capacity temporarily exceeded, please try again.`; such a
+  refusal is asked again after 1, 2 and 4 s. And no text at all: Gemma 4 reasons before it answers, and its reasoning
+  counts against the completion's tokens; with 700 it sometimes spent them all and came back empty (finish_reason
+  `length`): the second run's other four 503s were most likely that, and 6 of 55 answers in the final run were. So the
+  model is asked with its reasoning off (`chat_template_kwargs.enable_thinking: false`, in the model's documented
+  input schema) and up to 1,200 completion tokens (`max_completion_tokens`; `max_tokens` is deprecated for it), and an
+  answer cut off with no text is asked once more. Each try again starts only within 20 s of the first call
+  (`answerBudgetMs`). Then, as for any other failure, 503 `model_unavailable`, and the app shows the sources without a
+  written answer: "Answers couldn't be written just now, so here are the sources without a written answer."
 - **A dropped call is sent again.** On Cloudflare a call from the Durable Object to its container's port can drop
   (`Network connection lost.`) while the container still runs, about a second after a container or a job process
   starts or ends (38% of the tries in the first Engine-lane run). Every call is sent again then, up to five more times
@@ -193,6 +198,10 @@ And from the design:
   manifest named, whole. Nothing can write under `/data` between the manifest and the copy (the quiesce check finds no
   job, no query process and no open file there, and only the alarm starts one), so a cut stream is read again from the
   start; a file whose length isn't the manifest's changed after all, and fails the backup at once with its name.
+  Files with the same content share one key and are checked and stored once per backup (checking a key just written
+  made R2 refuse the read for its rate in the final run, 10058). The backup's R2 calls are tried again on R2's
+  documented transient refusals (10001 InternalError, 10043 ServiceUnavailable, 10058 TooManyRequests), four more
+  times over about 7.5 s (`src/r2.ts`); any other R2 error fails the backup at once.
 - **Removals for good finish**: a removal whose restore point can't be started learns the other documents again
   without every pending removal's documents. One that keeps failing is reported (an `import` event, failed) and tried
   again after 1 minute, 10 minutes, an hour, then every 6 hours. Its clean-up of older facts files and backups is
@@ -249,11 +258,13 @@ exports, the planning times and the built-in model. The planning times come from
 `standard-4`, where documents were learned one at a time: a try took about 30 s to start its container, then 105 s
 plus 5.3 s per document plus 860 s per MiB of text from its job's start to its commit (one short note: 110-116 s; 20
 short documents: 211 s; 41 learned again: 317 s; one 2 MiB text of 848 passages: 1,835 s); about a minute to wake.
-Documents are now learned in groups (below): in the second run Cognee took 182-198 s for 50 short documents in 3
-groups, about 3.8 s each, so a document is planned at 3.8 s; a later try of an import, which learns them one at a time,
-at 5.3 s. The 30 s container start is planned only for a try that starts a container: one that learns in the
-collection's container already awake plans none (the second run's IMP-07 imports 2 to 10, all in one awake container,
-came in at 74-78% of a plan that counted one; the first, which started it, at 87%). A file's
+Documents are now learned in groups (below), and the plan is fitted to the two runs that did so (IMP-07, 50 short
+documents): 65 s fixed and 3.4 s per document, which holds both runs' imports within 25% (g1118a 314 s from the image
+and 269-285 s in the awake container; the final run 250.4 s and 211.5-224.8 s; their Cognee ran 3.6-4.0 and 3.0-3.2 s
+per document). A later try of an import, which learns them one at a time, plans 5.3 s per document. The 30 s
+container start is planned only for a try that starts a container: one that learns in the collection's container
+already awake plans none. An import still queued can't know which, so the time left at its submission counts a start;
+IMP-07 compares with the plan made when its try started. A file's
 text is planned from its size until it is read (its bytes for plain text and Markdown, a quarter of them for PDF,
 Office and HTML, at most the 2 MB the readers keep), then from the text read; a re-read or re-learning counts the
 saved texts. The collection's size is not in the plan (below). The plan sets the time left (`etaSeconds`, counted down
@@ -319,11 +330,13 @@ Each document keeps at most 2,000 passages (`PASSAGE_CAP` in `container/passages
 passages per document). The 2 MB text limit makes about a thousand of Cognee's chunks, so the cap binds only for
 unusual files; passages past it are not cited, and the file says so.
 
-A passage is cited at the page (or slide) its words closest to the question are on, chosen at search time
-(`cited_page` in `container/query.py`): of the pages the passage runs over, the one whose part holds the most of the
-question's words, or when words don't decide the part the embedding model puts nearest the question. A passage's own
-page is where it starts, and a short PDF or deck is one passage over every page: IMP-06's fact on page 4 of 4 was
-cited at page 1. The whole passage is still what the source viewer highlights, and nothing is learned again.
+A passage is cited by the pages (or slides) it runs over: `page`, where it starts, and `pageEnd`, where it ends
+(contract.ts: optional, so an engine before it is read as one page; `page_range` in `container/passages.py`). A
+passage within one page names that page; one over several, "pages 1–4" (a deck: "slides 3–4"): a short PDF or deck is
+one passage over every page, and IMP-06's fact is on page 4 of 4. The query process takes the range from each
+document's stored page map at search time, so indexes learned before it need no re-learning. Picking one page by the
+question's words was tried and dropped: those can name a page without the answer (the topic on page 2, the answer on
+page 1).
 
 Each document is its own data item in Cognee, under an id made from its document id (`data_id_of` in
 `container/ops.py`), and its chunks are found by that id. Cognee otherwise finds data by its content, so a document
@@ -430,13 +443,15 @@ by name, never the text).
   them, its chunks (in LanceDB and the graph), its entities' names, the sentences facts were taken from, and any file
   under `/data` none of the stores here covers. Looked for: every newly hidden value, or every piece of the removed
   documents' text (runs of words of at least 24 characters) and every name or description of an entity they shared
-  with kept documents that no kept document's text holds (Cognee keeps one spelling per entity, perhaps the removed
-  document's: see below), each matched as the hiding detector matches a word:
+  with kept documents that no kept document holds (Cognee keeps one spelling per entity, perhaps the removed
+  document's: see below; a name, Cognee's own form of a mention, is held when Cognee would name a kept text's mention
+  so, a description only as written), each matched as the hiding detector matches a word:
   ignoring case exactly as Python's `re.IGNORECASE` does (`fold()` uses the regular expression engine's own rule, so
   `Éclair` finds `éclair`, an entity name kept in lower case, and `Pin` finds `pın`; a test checks every character
   with a case against `re`) and whole. Values are read decoded, never as keys or schemas (a hidden word "text" is no
-  JSON key's). A probe a kept document's text also holds may stay (a hiding rule that hides a value only where a
-  label names it leaves its other occurrences). All probes are looked for at once, by Aho-Corasick over the folded
+  JSON key's), and an entity name Cognee makes from a kept document's mention isn't read at all. A probe a kept
+  document's text also holds may stay (a hiding rule that hides a value only where a label names it leaves its other
+  occurrences). All probes are looked for at once, by Aho-Corasick over the folded
   text's tokens (each word, and each other character on its own; Greek iota too, since it folds to a character that
   is no letter), and a match's edges are checked on the text's own characters, as `re` checks them: the cost is the
   text's length plus the matches, whatever the probes share (32 MiB of kept text takes 4 to 6 s with 20,000 removed
@@ -462,11 +477,18 @@ by name, never the text).
   every record of a document taken out of the stores without its summaries and relations was found, and so were an
   old chunk and summary put back beside a re-read's.
 - **Entities shared with a removed document are made again:** Cognee merges an entity named in several documents
-  (O'Brien International Research Labs and OBrien International Research Labs are one) and keeps one spelling of its
-  name and description, which removing a document leaves as it was. So the removal finds every entity it shared with
-  kept documents whose name or description no kept document's text holds, and learns those kept documents again: the
-  entity comes back spelled as they spell it, and their chunks, passages and corrections come back the same (their
-  chunk ids follow their text). The probes above then find the removed spelling if it stayed.
+  (O'Brien International Research Labs and OBrien International Research Labs are one) and keeps one description, the
+  latest mention as written, which removing a document leaves as it was; its name is Cognee's own form of a mention
+  (`purge.cognee_name`, Cognee's rule: white space as one space, lower case, apostrophes dropped, so both name
+  "obrien international research labs"). So the removal finds every entity it shared with kept documents whose name
+  no kept text names that way, or whose description no kept text holds as written, and learns those kept documents
+  again: the entity comes back as they write it, and their chunks, passages and corrections come back the same (their
+  chunk ids follow their text). The probes above then find the removed spelling if it stayed. Before learning them,
+  the removal's job says which kept documents and how much text (its progress), and the Durable Object counts them in
+  the removal's plan and its job's time limit from then on (6 MiB learned again plans about 88 minutes, not the 70-100
+  s of one removal, and its limit is three times that, not the hour). Where the removal commits, its log names the
+  documents learned again, their text bytes, how long that took and the plan (`committed`: `relearned`,
+  `relearnedTextBytes`, `relearnMs`, `plannedSeconds`).
 
 On the 30-document corpus (34 MB under `/data`) cleaning and checking take about a second.
 
@@ -503,9 +525,11 @@ Plans: IMP-03, IMP-04, IMP-05, IMP-06, ASK-01, ASK-02, ASK-06, ASK-07, FIX-01, F
 runs around a second deploy: `--only HIS-03-real --image-change before` learns and backs up a collection of its own
 and keeps its answers in `harness/report/his03-real.json`; deploy the engine again with a changed image (the same one
 with a layer added will do), then `--only HIS-03-real --image-change after` asks again and checks it came back from its
-backup. ASK-01 passes at 37 of its 40 questions: the 0.68 threshold was chosen knowing it answers 37 of them.
-IMP-06 asks its question in the documents' own words, since it tests that each format is read and cited at its page;
-the reworded question it asked before is in its evidence only. A 500 stops a plan: the engine sends a lost call to a
+backup. ASK-01 allows 3 of its 40 questions no passage with their fact (retrieval: the 0.68 threshold was chosen
+knowing it covers 37 of them), but every answer written must cite only the passages it was given and cite one that
+holds the fact. IMP-06 asks its question in the documents' own words, since it tests that each format is read and
+cited at its page (the cited range must include page or slide 4); the reworded question it asked before is in its
+evidence only. A 500 stops a plan: the engine sends a lost call to a
 collection again itself, so the harness doesn't. The report goes to `harness/report/` (git-ignored): each plan's
 checks and evidence, what still needs a person (near misses in ASK-02, wake times per instance type), and the running
 time the run caused for LIM-09's comparison with Cloudflare's own figures. Test controls

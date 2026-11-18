@@ -116,6 +116,13 @@ class Progress:
         if self.path:
             write_json(self.path, self.state)
 
+    def relearning(self, document_ids: list[str], text_bytes: int) -> None:
+        """Kept documents a removal learns again (it shared entities with them): the Durable Object plans their time
+        and the job's time limit from these, as soon as it reads them."""
+        self.state["relearning"] = {"documentIds": document_ids, "textBytes": text_bytes}
+        if self.path:
+            write_json(self.path, self.state)
+
     def learning(self, file_ids: list[str | None], done: int) -> None:
         """A group of documents being learned together. Only a group of one names its file as the current one: a crash
         while several are learned can't say which of them stopped it."""
@@ -517,37 +524,38 @@ async def forget_chunks(document_id: str) -> None:
 
 
 async def entities() -> dict[str, dict]:
-    """The graph's entities (and dates): id -> their name and description, and the data items their provenance names."""
+    """The graph's entities: id -> their name and description, and the data items their provenance names. (A date's name
+    is Cognee's own form of it, whoever wrote it.)"""
     import purge
     from cognee.infrastructure.databases.graph import get_graph_engine
 
     graph = await get_graph_engine()
-    rows = await graph.query("MATCH (n:Node) WHERE n.type IN ['Entity', 'Timestamp'] RETURN n.id, n.name, n.properties, n.source_ref_keys")
+    rows = await graph.query("MATCH (n:Node) WHERE n.type = 'Entity' RETURN n.id, n.name, n.properties, n.source_ref_keys")
     out = {}
     for node_id, name, properties, refs in rows:
         description = purge._properties(properties).get("description")
-        out[str(node_id)] = {"values": [str(v) for v in (name, description) if v], "data": {purge._id(d) for d, _ in purge.REFERENCE.findall(str(refs or ""))}}
+        out[str(node_id)] = {"name": str(name or ""), "description": str(description or ""), "data": {purge._id(d) for d, _ in purge.REFERENCE.findall(str(refs or ""))}}
     return out
 
 
-async def rebuild_shared_entities(shared: set[str]) -> list[str]:
-    """Cognee merges an entity named in several documents into one, and keeps one spelling of its name and
-    description, which may be the removed document's (O'Brien Labs for an OBrien Labs that stays). So every entity in
-    `shared` (named by a removed document and by kept ones) whose name or description no kept document's text holds is
-    made again from the kept documents that name it: they are learned again, and their chunks, passages and
-    corrections come back the same. Returns them."""
+async def rebuild_shared_entities(shared: set[str], progress: Progress | None = None) -> list[str]:
+    """Cognee merges an entity named in several documents into one, and keeps one spelling of its description (and the
+    first of its name), which may be the removed document's (O'Brien Labs for an OBrien Labs that stays). So every
+    entity in `shared` (named by a removed document and by kept ones) whose name no kept text names as Cognee would
+    (purge.cognee_name: "O'Brien Labs" names "obrien labs"), or whose description no kept text holds as written, is made
+    again from the kept documents that name it: they are learned again, and their chunks, passages and corrections
+    come back the same. The progress says which, and their text, before they are. Returns them."""
     import purge
 
     survivors = {i: e for i, e in (await entities()).items() if i in shared}
     kept = {p.stem: (read_json(p, {}) or {}).get("text") or "" for p in TEXT_DIR.glob("*.json")}
-    matcher = purge.Matcher({v for e in survivors.values() for v in e["values"]})
-    held: set[str] = set()
-    for text in kept.values():
-        held.update(matcher.counts(text))
+    names, descriptions = purge.unheld([e["name"] for e in survivors.values() if e["name"]], [e["description"] for e in survivors.values() if e["description"]], kept.values())
     by_data = {purge._id(data_id_of(d)): d for d in kept}
-    again = sorted({by_data[d] for e in survivors.values() if not set(e["values"]) <= held for d in e["data"] if d in by_data})
+    again = sorted({by_data[d] for e in survivors.values() if e["name"] in names or e["description"] in descriptions for d in e["data"] if d in by_data})
     if not again:
         return []
+    if progress is not None:
+        progress.relearning(again, sum(len(kept[d].encode("utf-8")) for d in again))
     for document_id in again:
         await forget_chunks(document_id)
     for group in learning_groups([{"stored": load_text(d)} for d in again], one_by_one=False):
@@ -560,6 +568,7 @@ async def op_remove(args) -> dict:
     import purge
 
     batch = json.loads((Path(args.batch_dir) / "batch.json").read_text())
+    progress = Progress(args.progress, len(batch["documentIds"]))
     gone = {purge._id(data_id_of(d)) for d in batch["documentIds"]}
     shared = {i for i, e in (await entities()).items() if e["data"] & gone and e["data"] - gone}
     removed = []
@@ -568,12 +577,18 @@ async def op_remove(args) -> dict:
         for folder in (TEXT_DIR, PASSAGES_DIR, CHUNKS_DIR):
             (folder / f"{document_id}.json").unlink(missing_ok=True)
         removed.append(document_id)
-    relearned = await rebuild_shared_entities(shared)
+    started = time.monotonic()
+    relearned = await rebuild_shared_entities(shared, progress)
+    relearning = {
+        "documentIds": relearned,
+        "textBytes": sum(len(((load_text(d) or {}).get("text") or "").encode("utf-8")) for d in relearned),
+        "ms": round((time.monotonic() - started) * 1000) if relearned else 0,
+    }
     ledger = read_json(LEDGER_PATH, {"batches": {}})
     ledger.setdefault("removed", []).extend(removed)
     write_json(LEDGER_PATH, ledger)
     total_facts = await rebuild_facts()
-    return {"removed": removed, "relearned": relearned, "documents": [], "facts": total_facts, "newFacts": 0}
+    return {"removed": removed, "relearning": relearning, "documents": [], "facts": total_facts, "newFacts": 0}
 
 
 async def op_reread(args) -> dict:
@@ -720,22 +735,14 @@ def purged(args) -> dict:
     shared: list[str] = []
     if args.op == "remove":
         # A removed document's spelling of an entity it shared with kept ones (Cognee keeps one per entity) is its
-        # text too, though no piece of its sentences: looked for as well, unless a kept document's text holds it.
+        # text too, though no piece of its sentences: looked for as well, unless a kept document holds it (a name as
+        # Cognee would name the kept text's mention, purge.cognee_name; a description as written).
         gone = {purge._id(data_id_of(d)) for d in before}
         nodes, _ = purge._graph(DATA_DIR)
-        named = {
-            str(v)
-            for n in nodes.values()
-            if n["type"] in ("Entity", "Timestamp") and {purge._id(d) for d, _ in purge.REFERENCE.findall(n["refs"])} & gone
-            for v in (n["name"], n["props"].get("description"))
-            if v
-        }
-        matcher = purge.Matcher(named)
-        held: set[str] = set()
-        for path in TEXT_DIR.glob("*.json"):
-            if path.stem not in before:
-                held.update(matcher.counts((read_json(path, {}) or {}).get("text") or ""))
-        shared = sorted(named - held)
+        named = [n for n in nodes.values() if n["type"] == "Entity" and {purge._id(d) for d, _ in purge.REFERENCE.findall(n["refs"])} & gone]
+        kept = ((read_json(path, {}) or {}).get("text") or "" for path in TEXT_DIR.glob("*.json") if path.stem not in before)
+        names, descriptions = purge.unheld([n["name"] for n in named if n["name"]], [str(n["props"].get("description")) for n in named if n["props"].get("description")], kept)
+        shared = sorted(names | descriptions)
     child = subprocess.run([sys.executable, str(Path(__file__).resolve()), *sys.argv[1:], "--inner"])
     if child.returncode != 0:
         sys.exit(child.returncode if child.returncode > 0 else EXIT_FAILED)  # its result (or progress) says why

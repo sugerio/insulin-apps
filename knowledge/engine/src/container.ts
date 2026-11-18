@@ -49,6 +49,7 @@ export interface JobProgress {
   current: string | null
   files?: Record<string, 'reading' | 'understanding' | 'learned' | 'failed'>
   read?: boolean // every file and note of the import was read and hidden; their texts can be fetched
+  relearning?: { documentIds: string[]; textBytes: number } // a removal's kept documents it learns again, before it does
 }
 
 export interface Health {

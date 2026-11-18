@@ -723,7 +723,7 @@ export function plannedTextBytes(file: { bytes: number; type: string; textBytes?
 
 /**
  * One try's planned time, from its container's start to its commit (SETTINGS' planning values): the documents it
- * learns, re-reads or removes, and their text. A 2 MB text plans about half an hour, not the 48 seconds a count of
+ * learns, re-reads or removes, and their text (a removal's too: the kept documents it learns again, once it says). A 2 MB text plans about half an hour, not the 48 seconds a count of
  * documents gives. The documents are learned in groups, except on an import's later tries, which learn them one at
  * a time (container/ops.py) and take longer. The collection's size doesn't count: Cognee's cost per document doesn't
  * grow with it (README, "Service settings").
@@ -1476,6 +1476,14 @@ async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
   if (job.state === 'running' && job.progress?.read && !record.textsSaved && (record.kind === 'import' || record.kind === 'correction')) {
     await saveReadTexts(e, record)
   }
+  const relearning = job.progress?.relearning
+  if (record.kind === 'remove' && relearning && Array.isArray(relearning.documentIds)) {
+    // Kept documents it shared entities with, learned again so that none keeps the removed spelling (container/ops.py
+    // rebuild_shared_entities): told before it learns them, so its plan and time limit count them from then on (and
+    // on every later try, which learns them again).
+    record.rereadDocumentIds = relearning.documentIds.map(String)
+    record.storedTextBytes = Number(relearning.textBytes) || 0
+  }
   if (job.state === 'running') {
     const limit = Math.max(SETTINGS.jobTimeoutMs, 3 * plannedSeconds(record) * 1000)
     if (record.jobStartedAt && clock.now() - record.jobStartedAt > limit) {
@@ -1648,6 +1656,7 @@ interface IngestResult {
   newFacts?: number
   passages?: number
   changed?: string[]
+  relearning?: { documentIds?: string[]; textBytes?: number; ms?: number } // a removal's kept documents learned again
 }
 
 interface Stats {
@@ -2067,7 +2076,19 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
   })
   if (!committedMeta || !point) return false
   const done = point as RestorePointRecord
-  await e.store.log('committed', { version: done.version, importId: c.record.status.importId, kind: done.kind, documents: done.counts.documents })
+  // A removal says which kept documents it learned again (they shared entities with it), their text and how long it
+  // took, next to the plan that counted them.
+  const removal = c.record.kind === 'remove' ? c.record : null
+  const relearning = removal ? ((removal.result ?? {}) as IngestResult).relearning : undefined
+  await e.store.log('committed', {
+    version: done.version,
+    importId: c.record.status.importId,
+    kind: done.kind,
+    documents: done.counts.documents,
+    ...(removal
+      ? { relearned: relearning?.documentIds ?? [], relearnedTextBytes: relearning?.textBytes ?? 0, relearnMs: relearning?.ms ?? 0, plannedSeconds: Math.round(plannedSeconds(removal)) }
+      : {}),
+  })
   // The commit stands whatever happens from here: each step's failure is logged, and deletions are tried again later.
   const step = async (name: string, work: () => Promise<unknown>) => {
     try {

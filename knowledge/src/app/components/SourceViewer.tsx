@@ -2,14 +2,15 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button.tsx'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet.tsx'
 import { collectionPath } from '../lib/api.ts'
-import { formatDay, plural, sourceKind } from '../lib/format.ts'
+import { formatDay, isDeck, pagesLabel, pagesOfRange, plural, sourceKind } from '../lib/format.ts'
 import type { SourceDetail } from '../lib/types.ts'
 import { useResource } from '../lib/useResource.ts'
 import { Badge, ErrorState, Loading, Note } from './Feedback.tsx'
 
 // The source viewer (design J2, ASK-03): a source's text opened at the exact words an answer used, highlighted, with
-// its page, the collection's owner and when it was added. Values hidden before learning show as "hidden", never as
-// what they were (the server never has them). A long text shows the words around the highlight first.
+// the pages (or slides) they run over, the collection's owner and when it was added. Values hidden before learning
+// show as "hidden", never as what they were (the server never has them). A long text shows the words around the
+// highlight first.
 
 export interface SourceTarget {
   collectionId: string
@@ -63,7 +64,10 @@ function SourceBody({ target }: { target: SourceTarget }) {
   }
   const { source, owner } = data
   const document = source.document
-  const page = range ? source.pages.find((candidate) => range.start >= candidate.start && range.start < candidate.end)?.page ?? null : null
+  // The pages (or slides) the highlighted words run over: "Page 4", "Pages 1–4", "Slides 3–4".
+  const pages = range ? pagesOfRange(source.pages, range.start, range.end) : null
+  const where = pages ? pagesLabel(pages[0], pages[1], isDeck(document)) : ''
+  const [whereLabel, whereValue] = where ? [where.slice(0, where.indexOf(' ')), where.slice(where.indexOf(' ') + 1)] : ['', '']
   const text = source.text
   const from = whole || !range ? 0 : Math.max(0, range.start - CONTEXT)
   const to = whole || !range ? (whole ? text.length : Math.min(text.length, CONTEXT * 2)) : Math.min(text.length, range.end + CONTEXT)
@@ -71,7 +75,7 @@ function SourceBody({ target }: { target: SourceTarget }) {
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4">
       <SheetHeader className="gap-1 p-0">
-        <p className="text-xs text-muted-foreground">{sourceKind(document)}{page ? ` · Page ${page}` : ''}</p>
+        <p className="text-xs text-muted-foreground">{sourceKind(document)}{where ? ` · ${capital(where)}` : ''}</p>
         <SheetTitle className="pr-8 text-lg [overflow-wrap:anywhere]">{document.name}</SheetTitle>
         <SheetDescription className="sr-only">The text of this source, with the words the answer used highlighted.</SheetDescription>
       </SheetHeader>
@@ -79,7 +83,7 @@ function SourceBody({ target }: { target: SourceTarget }) {
         <dt className="text-muted-foreground">Collection</dt><dd className="min-w-0 [overflow-wrap:anywhere]">{data.collection.name}</dd>
         <dt className="text-muted-foreground">Owner</dt><dd>{owner.name ?? 'Unknown'}</dd>
         <dt className="text-muted-foreground">Last edit</dt><dd>{formatDay(data.lastEdit)}</dd>
-        {page ? <><dt className="text-muted-foreground">Page</dt><dd>{page}</dd></> : null}
+        {where ? <><dt className="text-muted-foreground">{capital(whereLabel)}</dt><dd>{whereValue}</dd></> : null}
         <dt className="text-muted-foreground">Status</dt>
         <dd>{document.active ? <Badge tone="green">Used for answers</Badge> : <Badge tone="grey">Not used for answers</Badge>}</dd>
         {source.hidden.length ? (
@@ -134,3 +138,5 @@ function renderText(text: string, from: number, to: number, range: { start: numb
   }
   return parts
 }
+
+const capital = (words: string) => words.charAt(0).toUpperCase() + words.slice(1)

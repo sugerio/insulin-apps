@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import rank  # noqa: E402
-from passages import page_by_words, page_slices, slice_utf16  # noqa: E402
+from passages import page_range, slice_utf16  # noqa: E402
 
 PORT = 8081
 DATA_DIR = Path("/data")
@@ -49,7 +49,7 @@ INDEX: dict[str, dict] = {}  # passage id -> passage
 BY_DOCUMENT: dict[str, list[dict]] = {}
 FACTS: list[dict] = []
 TEXTS: dict[str, str] = {}
-PAGES: dict[str, list[dict]] = {}  # document id -> its page map (UTF-16), for the page a passage is cited at
+PAGES: dict[str, list[dict]] = {}  # document id -> its page map (UTF-16), for the pages a passage is cited at
 THRESHOLD = rank.DEFAULT_THRESHOLD
 
 
@@ -130,45 +130,18 @@ def document_text(document_id: str) -> str:
     return TEXTS[document_id]
 
 
-async def embed(texts: list[str]) -> list[list[float]]:
-    from cognee.infrastructure.databases.vector.embeddings import get_embedding_engine
-
-    return await get_embedding_engine().embed_text(texts)
-
-
-def _cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    norm = (sum(x * x for x in a) ** 0.5) * (sum(y * y for y in b) ** 0.5)
-    return dot / norm if norm else 0.0
-
-
-async def cited_page(question: str, passage: dict) -> int | None:
-    """The page (or slide) of the passage's words closest to the question: the one whose slice holds the most of
-    its words, or when words don't decide the slice the embedding model puts nearest; the page the passage starts on
-    when it has one page, or nothing decides."""
-    text = document_text(passage["documentId"])
-    slices = page_slices(text, PAGES.get(passage["documentId"], []), passage["start"], passage["end"])
-    if len(slices) < 2:
-        return passage.get("page")
-    page = page_by_words(question, slices)
-    if page is not None:
-        return page
-    try:
-        vectors = await embed([question, *(piece for _, piece in slices)])
-        scores = [_cosine(vectors[0], vector) for vector in vectors[1:]]
-        return slices[max(range(len(scores)), key=scores.__getitem__)][0]
-    except Exception:  # noqa: BLE001 - the page it starts on, as before
-        return passage.get("page")
-
-
 def as_passage(passage: dict, score: float) -> dict:
     text = slice_utf16(document_text(passage["documentId"]), passage["start"], passage["end"])
+    # The pages it runs over, from the document's page map (an index learned before pageEnd existed has only a page).
+    pages = PAGES.get(passage["documentId"])
+    first, last = page_range(pages, passage["start"], passage["end"]) if pages else (passage.get("page"), passage.get("pageEnd", passage.get("page")))
     return {
         "passageId": passage["passageId"],
         "documentId": passage["documentId"],
         "documentName": "",
         "kind": "file",
-        "page": passage.get("page"),
+        "page": first,
+        "pageEnd": last,
         "start": passage["start"],
         "end": passage["end"],
         "text": text,
@@ -196,9 +169,6 @@ async def search(body: dict) -> dict:
     }
     threshold = float(body["threshold"]) if isinstance(body.get("threshold"), (int, float)) else THRESHOLD
     passages = rank.rank(hits, filters, top_k, threshold, note_passages)
-    # Each passage cited at its page closest to the question (only those answered: at most topK).
-    for passage in passages:
-        passage["page"] = await cited_page(str(body.get("query") or ""), passage)
     shown = {p["passageId"] for p in passages}
     facts = [f for f in FACTS if f.get("passageId") in shown][:20]
     return {"passages": passages, "facts": facts, "threshold": threshold}

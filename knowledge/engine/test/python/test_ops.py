@@ -707,26 +707,75 @@ class AfterRemovalAndRereading(unittest.TestCase):
         ops.store_text({"documentId": "d_other", "name": "d_other.md", "text": "Hawser gateway ships from Oslo.", "pages": [], "hidden": []})
         kept = purge._id(ops.data_id_of("d_kept"))
         survivors = {
-            "e1": {"values": ["obrien international research labs", "O'Brien International Research Labs"], "data": {kept}},
-            "e2": {"values": ["hawser gateway", "Hawser gateway"], "data": {purge._id(ops.data_id_of("d_other"))}},
+            "e1": {"name": "obrien international research labs", "description": "O'Brien International Research Labs", "data": {kept}},
+            "e2": {"name": "hawser gateway", "description": "Hawser gateway", "data": {purge._id(ops.data_id_of("d_other"))}},
         }
         learned = []
+        progress = self.data.parent / "progress.json"
 
         async def entities():
             return survivors
 
         async def forget_chunks(document_id):
-            learned.append(("forget", document_id))
+            learned.append(("forget", document_id, json.loads(progress.read_text()).get("relearning")))
 
         async def learn(documents):
             learned.append(("learn", [d for d, _ in documents]))
 
         with mock.patch.object(ops, "entities", entities), mock.patch.object(ops, "forget_chunks", forget_chunks), mock.patch.object(ops, "learn", learn), mock.patch.object(ops, "index_passages", lambda ids: learned.append(("index", ids))):
-            again = asyncio.run(ops.rebuild_shared_entities({"e1", "e2"}))
+            again = asyncio.run(ops.rebuild_shared_entities({"e1", "e2"}, ops.Progress(str(progress), 1)))
             self.assertEqual(again, ["d_kept"], "only the entity spelled the removed way")
-            self.assertEqual(learned, [("forget", "d_kept"), ("learn", ["d_kept"]), ("index", ["d_kept"])])
-            survivors["e1"]["values"][1] = "OBrien International Research Labs"
+            # F219: which kept documents, and how much text, said before they are learned again.
+            reported = {"documentIds": ["d_kept"], "textBytes": len("OBrien International Research Labs builds the gateway.")}
+            self.assertEqual(learned, [("forget", "d_kept", reported), ("learn", ["d_kept"]), ("index", ["d_kept"])])
+            survivors["e1"]["description"] = "OBrien International Research Labs"
             self.assertEqual(asyncio.run(ops.rebuild_shared_entities({"e1", "e2"})), [])
+
+    def test_f219_a_removal_says_which_kept_documents_it_learned_again_their_text_and_how_long(self):
+        ops.store_text({"documentId": "d_kept", "name": "d_kept.md", "text": "O'Brien Labs builds the gateway.", "pages": [], "hidden": []})
+        (self.batch / "batch.json").write_text(json.dumps({"importId": "rm1", "kind": "remove", "documentIds": ["d_rm"]}))
+        args = types.SimpleNamespace(batch_dir=str(self.batch), progress=None)
+
+        async def nothing(*_args):
+            return {} if not _args else None
+
+        async def rebuilt(shared, progress):
+            return ["d_kept"]
+
+        async def facts():
+            return 0
+
+        with mock.patch.object(ops, "entities", nothing), mock.patch.object(ops, "forget", nothing), mock.patch.object(ops, "rebuild_shared_entities", rebuilt), mock.patch.object(ops, "rebuild_facts", facts), mock.patch.object(ops, "LEDGER_PATH", self.data / "ledger.json"):
+            result = asyncio.run(ops.op_remove(args))
+        self.assertEqual(result["removed"], ["d_rm"])
+        self.assertEqual({k: result["relearning"][k] for k in ("documentIds", "textBytes")}, {"documentIds": ["d_kept"], "textBytes": len("O'Brien Labs builds the gateway.")})
+        self.assertGreaterEqual(result["relearning"]["ms"], 0)
+
+    def test_f218_a_name_cognee_makes_from_a_kept_mention_is_the_kept_documents(self):
+        # Kept: "O'Brien International Research Labs"; removed: "OBrien International Research Labs". Cognee names the
+        # entity "obrien international research labs" from either (no apostrophes, lower case): that name is the kept
+        # document's, so it neither needs learning again nor counts as left over. A description is compared as written.
+        self.assertEqual(purge.cognee_name("O'Brien  International\nResearch Labs"), "obrien international research labs")
+        ops.store_text({"documentId": "d_kept", "name": "d_kept.md", "text": "O'Brien International Research Labs builds the gateway.", "pages": [], "hidden": []})
+        survivors = {"e1": {"name": "obrien international research labs", "description": "O'Brien International Research Labs", "data": {purge._id(ops.data_id_of("d_kept"))}}}
+
+        async def entities():
+            return survivors
+
+        with mock.patch.object(ops, "entities", entities):
+            self.assertEqual(asyncio.run(ops.rebuild_shared_entities({"e1"})), [], "the name and the description are the kept document's")
+        store = Collection(self.data.parent / "store")
+        chunk = store.document("d_kept", "O'Brien International Research Labs builds the gateway.")
+        import uuid
+
+        ref = f"|source_ref:v2:{Collection.DATASET}:{ops.data_id_of('d_kept')}:{chunk}|"
+        entity = store.node(str(uuid.uuid4()), "Entity", "obrien international research labs", ref, description="O'Brien International Research Labs")
+        store.edge(chunk, "contains", entity, ref)
+        probes = ["OBrien International Research Labs"]  # the removed document's description
+        kept = lambda: ["O'Brien International Research Labs builds the gateway."]  # noqa: E731
+        self.assertEqual(store.left(probes, kept=kept), {})
+        store.nodes[entity]["props"]["description"] = "OBrien International Research Labs"  # the removed spelling stayed
+        self.assertEqual(store.left(probes, kept=kept), {"graph": 1})
 
     def test_a_reread_that_changed_nothing_is_not_purged(self):
         batch = {"importId": "rr1", "kind": "reread", "hiding": {}, "documentIds": ["d_kept"], "marks": []}

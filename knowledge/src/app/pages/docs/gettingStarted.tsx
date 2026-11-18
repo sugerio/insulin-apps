@@ -20,7 +20,7 @@ export const gettingStarted: DocTopic = {
             it as them.
           </p>
           <ul>
-            <li><b>Every answer has a source.</b> Answers cite the exact words they come from, with the file and the page. When nothing in the collection covers a question, Knowledge says "I won't guess" instead of answering without a source.</li>
+            <li><b>Every answer has a source.</b> Answers cite the exact words they come from, with the file and the pages (or slides) they are on. When nothing in the collection covers a question, Knowledge says "I won't guess" instead of answering without a source.</li>
             <li><b>No technical settings.</b> Insulin chooses how to read, store and search your files. You name a collection, say what it is for and add what you know.</li>
             <li><b>Checkable.</b> What it learned is shown as plain sentences under <b>What it knows</b>, each with the file it came from.</li>
             <li><b>Fix it once.</b> A correction becomes a note the collection learns, so new questions on the site and from every AI assistant use it.</li>

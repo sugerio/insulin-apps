@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { plannedSeconds } from '../src/imports.ts'
 import { SETTINGS } from '../src/settings.ts'
 import { type TestEngine, ask, createCollection, doc, learn, log, makeEngine, outboxEvents, startImport } from './helpers.ts'
 
@@ -382,9 +383,10 @@ test('a wake that times out three times running stops asking, says so, and charg
 test("a rebuilding removal's time limit counts the documents it learns again", async () => {
   const t = makeEngine()
   await createCollection(t)
-  const many = Array.from({ length: 300 }, (_, i) => ({ fileId: `m${i}`, name: `m${i}.md`, text: `Item ${i} is here.` }))
-  await learn(t, 'c1', 'imp-1', many.slice(0, 150))
-  await learn(t, 'c1', 'imp-2', many.slice(150))
+  const many = Array.from({ length: 600 }, (_, i) => ({ fileId: `m${i}`, name: `m${i}.md`, text: `Item ${i} is here.` }))
+  await learn(t, 'c1', 'imp-1', many.slice(0, 200))
+  await learn(t, 'c1', 'imp-2', many.slice(200, 400))
+  await learn(t, 'c1', 'imp-3', many.slice(400))
   t.advance(11 * 60_000)
   await t.drain('c1')
   t.cloud.image = 'registry.example/engine@2'
@@ -394,9 +396,12 @@ test("a rebuilding removal's time limit counts the documents it learns again", a
   t.cloud.hangJobs = ['ingest']
   await t.drain('c1', { steps: 10 })
   assert.ok((await log(t, 'c1')).some((e: any) => e.event === 'removal-rebuilds'))
-  // Past an hour, inside three times the plan for the 299 documents it learns again.
-  assert.ok(3 * (SETTINGS.containerStartSeconds + SETTINGS.importBaseSeconds + 299 * SETTINGS.perDocumentSeconds) > 63 * 60)
-  t.advance(62 * 60_000)
+  // Past an hour, inside three times the plan for the 599 documents it learns again (the removal's own plan).
+  const meta = await t.storage('c1').get<any>('meta')
+  const removal = await t.storage('c1').get<any>(`imp:${meta.active}`)
+  const limit = 3 * plannedSeconds(removal) * 1000
+  assert.ok(limit > SETTINGS.jobTimeoutMs + 4 * 60_000, `three times its plan: ${Math.round(limit / 60_000)} min`)
+  t.advance(SETTINGS.jobTimeoutMs + 2 * 60_000)
   await t.drain('c1', { steps: 5 })
   assert.ok(!(await log(t, 'c1')).some((e: any) => e.event === 'import-try-failed'), 'not given up after an hour')
 })

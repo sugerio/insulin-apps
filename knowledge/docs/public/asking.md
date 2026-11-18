@@ -26,7 +26,8 @@ chose in Rules and data.
 ## Check the source
 
 Open a numbered source to see the text it comes from: the file's text at the exact words the answer used,
-highlighted, with the page they are on, who owns the collection and when the file was added. Values hidden before
+highlighted, with the pages they are on (slides, for a PowerPoint deck: "pages 1–2" when the words run over two), who
+owns the collection and when the file was added. Values hidden before
 learning show as hidden: nobody, not even the collection's owner, can see what was there. Anyone who can ask a
 collection can open every source it used.
 

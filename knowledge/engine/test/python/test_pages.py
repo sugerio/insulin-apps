@@ -1,5 +1,7 @@
-"""A cited passage names the page (or slide) of its words closest to the question (IMP-06 pdfCitesItsPage and
-powerPointCitesItsSlide): a short PDF is one passage over its four pages, and its fact is on page 4."""
+"""A cited passage names the pages (or slides) it runs over (IMP-06 pdfCitesItsPage and powerPointCitesItsSlide): a
+short PDF is one passage over its four pages, and its fact is on page 4, so it is cited as pages 1 to 4. A passage
+within one page names that page. Nothing picks a page by the question's words: those can name a page without the
+answer (the topic on page 2, the answer on page 1)."""
 
 from __future__ import annotations
 
@@ -31,77 +33,79 @@ def page_map(text: str, pages: list[str]) -> list[dict]:
 
 
 PAGE_MAP = page_map(TEXT, PAGES)
-# The whole document is one passage, which starts on page 1.
-PASSAGE = {"passageId": "c1", "documentId": "d1", "chunkIndex": 0, "start": 0, "end": utf16_len(TEXT), "page": 1, "textHash": passages.text_hash(TEXT)}
 
 
-class PageOfAPassage(unittest.TestCase):
-    def test_a_passage_over_four_pages_has_a_slice_on_each(self):
-        slices = passages.page_slices(TEXT, PAGE_MAP, PASSAGE["start"], PASSAGE["end"])
-        self.assertEqual([page for page, _ in slices], [1, 2, 3, 4])
-        self.assertTrue(slices[3][1].startswith("Release gate"))
-        # A passage on one page has one slice.
-        one = passages.page_slices(TEXT, PAGE_MAP, PAGE_MAP[1]["start"], PAGE_MAP[1]["end"])
-        self.assertEqual([page for page, _ in one], [2])
+class PagesOfAPassage(unittest.TestCase):
+    def test_a_passage_over_four_pages_runs_from_page_1_to_page_4(self):
+        [passage] = passages.build_index("d1", TEXT, PAGE_MAP, [{"id": "c1", "index": 0, "text": TEXT}])
+        self.assertEqual((passage["page"], passage["pageEnd"]), (1, 4))
 
-    def test_the_page_sharing_most_of_the_question_words_is_chosen(self):
-        slices = passages.page_slices(TEXT, PAGE_MAP, PASSAGE["start"], PASSAGE["end"])
-        self.assertEqual(passages.page_by_words("The rollout only advances while crash-free sessions stay at or above what percent?", slices), 4)
-        self.assertEqual(passages.page_by_words("Which crash-free sessions threshold gates the phased rollout?", slices), 4)
-        self.assertEqual(passages.page_by_words("How often does a release train leave?", slices), 2)
+    def test_a_passage_within_one_page_names_that_page(self):
+        index = passages.build_index("d1", TEXT, PAGE_MAP, [{"id": "c1", "index": 0, "text": PAGES[1]}, {"id": "c2", "index": 1, "text": PAGES[3]}])
+        self.assertEqual([(p["page"], p["pageEnd"]) for p in index], [(2, 2), (4, 4)])
 
-    def test_words_that_dont_decide_give_no_page(self):
-        slices = passages.page_slices(TEXT, PAGE_MAP, PASSAGE["start"], PASSAGE["end"])
-        self.assertIsNone(passages.page_by_words("Who is on call tonight?", slices), "no word in common")
-        self.assertIsNone(passages.page_by_words("release", slices), "as many on several pages")
+    def test_a_passage_that_ends_where_a_page_ends_doesnt_run_onto_the_next(self):
+        # It ends at page 2's last character; the blank lines after it belong to no page.
+        text = PAGES[0] + "\n\n" + PAGES[1]
+        [passage] = passages.build_index("d1", TEXT, PAGE_MAP, [{"id": "c1", "index": 0, "text": text}])
+        self.assertEqual((passage["page"], passage["pageEnd"]), (1, 2))
+
+    def test_a_text_without_pages_has_none(self):
+        [passage] = passages.build_index("d1", TEXT, [], [{"id": "c1", "index": 0, "text": PAGES[0]}])
+        self.assertEqual((passage["page"], passage["pageEnd"]), (None, None))
+
+    def test_the_page_range_of_offsets(self):
+        self.assertEqual(passages.page_range(PAGE_MAP, PAGE_MAP[2]["start"], PAGE_MAP[3]["end"]), (3, 4))
+        self.assertEqual(passages.page_range(PAGE_MAP, PAGE_MAP[3]["start"] + 5, PAGE_MAP[3]["start"] + 9), (4, 4))
+        self.assertEqual(passages.page_range([], 0, 10), (None, None))
 
 
-def searched(question: str, embed=None) -> dict:
-    """query.search over the one passage, as Cognee would find it, with the document's text and page map loaded."""
+def searched(question: str, passage: dict, pages: list[dict]) -> dict:
+    """query.search over one passage, as Cognee would find it, with the document's text and page map loaded."""
     query.INDEX.clear()
-    query.INDEX["c1"] = PASSAGE
+    query.INDEX["c1"] = passage
     query.BY_DOCUMENT.clear()
-    query.BY_DOCUMENT["d1"] = [PASSAGE]
+    query.BY_DOCUMENT["d1"] = [passage]
     query.TEXTS.clear()
     query.TEXTS["d1"] = TEXT
     query.PAGES.clear()
-    query.PAGES["d1"] = PAGE_MAP
+    query.PAGES["d1"] = pages
 
     async def raw_search(text, top_k):
         return [{"id": "c1", "score": 0.2, "payload": {"id": "c1"}}]
 
-    original_search, original_embed = query.raw_search, query.embed
+    original = query.raw_search
     query.raw_search = raw_search
-    if embed:
-        query.embed = embed
     try:
         return asyncio.run(query.search({"query": question, "topK": 5, "filters": {}}))
     finally:
-        query.raw_search, query.embed = original_search, original_embed
+        query.raw_search = original
 
 
-class SearchCitesThePage(unittest.TestCase):
-    def test_imp06_a_fact_on_page_4_of_a_one_passage_pdf_cites_page_4(self):
-        result = searched("The rollout only advances while crash-free sessions stay at or above what percent?")
-        [passage] = result["passages"]
-        self.assertEqual(passage["page"], 4)
-        # The whole passage is still what the source viewer highlights.
-        self.assertEqual((passage["start"], passage["end"]), (0, utf16_len(TEXT)))
-        self.assertEqual(passage["text"], TEXT)
-        self.assertEqual(passage["textHash"], PASSAGE["textHash"])
+class SearchCitesTheRange(unittest.TestCase):
+    WHOLE = {"passageId": "c1", "documentId": "d1", "chunkIndex": 0, "start": 0, "end": utf16_len(TEXT), "page": 1, "textHash": passages.text_hash(TEXT)}
 
-    def test_when_words_dont_decide_the_slice_closest_by_embedding_wins(self):
-        async def embed(texts):
-            # The question, then each page's slice: the third page's vector points the question's way.
-            return [[1.0, 0.0]] + [[1.0, 0.0] if i == 2 else [0.0, 1.0] for i in range(len(texts) - 1)]
+    def test_imp06_a_one_passage_pdf_is_cited_as_pages_1_to_4(self):
+        [passage] = searched("The rollout only advances while crash-free sessions stay at or above what percent?", self.WHOLE, PAGE_MAP)["passages"]
+        self.assertEqual((passage["page"], passage["pageEnd"]), (1, 4))
+        self.assertEqual((passage["start"], passage["end"], passage["text"]), (0, utf16_len(TEXT), TEXT), "the whole passage is highlighted")
 
-        self.assertEqual(searched("Who is on call tonight?", embed)["passages"][0]["page"], 3)
+    def test_the_question_never_moves_the_cited_page(self):
+        # The topic's words are on page 3, the answer's passage starts on page 1: still pages 1 to 4, whatever is asked.
+        for question in ("Which crash-free sessions threshold gates the phased rollout?", "How often does a release train leave?", "Who is on call?"):
+            [passage] = searched(question, self.WHOLE, PAGE_MAP)["passages"]
+            self.assertEqual((passage["page"], passage["pageEnd"]), (1, 4), question)
 
-    def test_without_an_embedding_the_page_it_starts_on_stays(self):
-        async def embed(texts):
-            raise RuntimeError("the embedding model isn't loaded")
+    def test_an_index_learned_before_the_range_gets_it_from_the_page_map(self):
+        # Indexes learned before pageEnd existed hold only the page; the stored page map gives the range, no re-learning.
+        self.assertNotIn("pageEnd", self.WHOLE)
+        [passage] = searched("percent", self.WHOLE, PAGE_MAP)["passages"]
+        self.assertEqual(passage["pageEnd"], 4)
 
-        self.assertEqual(searched("Who is on call tonight?", embed)["passages"][0]["page"], 1)
+    def test_a_document_without_pages(self):
+        plain = dict(self.WHOLE, page=None)
+        [passage] = searched("percent", plain, [])["passages"]
+        self.assertEqual((passage["page"], passage["pageEnd"]), (None, None))
 
 
 if __name__ == "__main__":

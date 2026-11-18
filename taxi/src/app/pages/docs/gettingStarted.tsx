@@ -54,7 +54,8 @@ export const gettingStarted: DocTopic = {
               with the slips read from it. You can also type slips in step 4.
             </li>
             <li>
-              <b>What applies.</b> The slips found in your documents, with their files; for the kinds of slips not found
+              <b>What applies.</b> The slips found in your documents: open one to see its boxes as read, and change an amount
+              right there (a changed slip is confirmed again at step 4). For the kinds of slips not found
               (employment, interest and dividends, mutual funds, sales of investments, tuition), whether you have one, and a yes without the slip
               is missing, to upload right there or type in at step 4; and yes or no to what the app doesn't handle yet, such as self-employment or
               rent.

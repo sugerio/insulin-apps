@@ -21,7 +21,7 @@ Each return has six steps:
 
 1. **Personal info.** The facts no document shows.
 2. **Upload documents.** Slips and receipts, read by AI. A slip with the other person's name goes to their return.
-3. **What applies.** What the documents show, and anything missing.
+3. **What applies.** What the documents show, each slip box by box to check and change, and anything missing.
 4. **Confirm.** Every number AI read, to check against the papers.
 5. **Deductions.** Deductions and credits.
 6. **Finish.** The refund or balance owing, and what to check before filing.

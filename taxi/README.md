@@ -35,7 +35,7 @@ uploaded slips read by AI (or typed in), what applies, deductions and the result
   return replaces it and its slips; the same content under another name, or the same slip, isn't saved twice. Every slip starts
   unconfirmed. A file can be deleted with the slips read from it, and one
   that couldn't be read can be read again.
-- **Steps 3 to 6.** What applies (the slips found, the kinds not found and whether you have them, what is still missing, and what the app
+- **Steps 3 to 6.** What applies (the slips found, each opening into its boxes to check and change, the kinds not found and whether you have them, what is still missing, and what the app
   doesn't handle), Confirm (each slip entered box by
   box, then confirmed, or moved to the other return), Deductions (only the questions the return reads), and Finish (the refund or balance owing, the
   key lines with why, and what to check before filing).

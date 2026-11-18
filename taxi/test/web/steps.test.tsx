@@ -64,10 +64,49 @@ describe("What applies", () => {
     const found = await screen.findByRole("region", { name: "Found in your documents" });
     expect(within(found).getByText("Employment income")).toBeTruthy();
     expect(within(found).getByText(/T4 from Maple Corp/)).toBeTruthy();
-    expect(within(found).getByText("Typed in")).toBeTruthy();
     const notFound = screen.getByRole("region", { name: "Not found" });
     expect(within(notFound).queryByText("Employment income")).toBeNull();
     expect(within(notFound).getByText("Interest or dividends")).toBeTruthy();
+    // A found slip opens into its boxes as read, and closes again.
+    const row = within(found).getByRole("button", { name: /Employment income/ });
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(row);
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    expect((within(found).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
+    expect((within(found).getByLabelText(/^Box 24/) as HTMLInputElement).value).toBe("");
+    expect(within(found).getByText("Typed in.")).toBeTruthy();
+    // Nothing changed: no Save yet.
+    expect(within(found).queryByRole("button", { name: "Save" })).toBeNull();
+    fireEvent.click(row);
+    expect(within(found).queryByRole("table")).toBeNull();
+  });
+
+  it("changes a found slip's amounts right there, and keeps the answers chosen", async () => {
+    const { server } = await renderApp("/returns/2025/applies", { seed: (s) => seed(s, { slip: true }).then(() => undefined) });
+    const found = await screen.findByRole("region", { name: "Found in your documents" });
+    const notFound = screen.getByRole("region", { name: "Not found" });
+    fireEvent.click(within(notFound).getAllByRole("radio", { name: "No" })[0]!);
+    fireEvent.click(within(found).getByRole("button", { name: /Employment income/ }));
+    fireEvent.change(within(found).getByLabelText(/^Box 14/), { target: { value: "61,500.00" } });
+    fireEvent.click(within(found).getByRole("button", { name: "Cancel" }));
+    expect((within(found).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
+    fireEvent.change(within(found).getByLabelText(/^Box 14/), { target: { value: "61,500.00" } });
+    fireEvent.click(within(found).getByRole("button", { name: "Save" }));
+    // Saved: the slip stays open, with the new amount, to confirm again.
+    await waitFor(() => expect((within(screen.getByRole("region", { name: "Found in your documents" })).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("61500"));
+    expect(within(screen.getByRole("region", { name: "Found in your documents" })).queryByRole("button", { name: "Save" })).toBeNull();
+    const slips = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { boxes: Record<string, string>; status: string }[] };
+    expect(slips.slips[0]).toMatchObject({ boxes: { 14: "61500", 16: "3361.75" }, status: "unconfirmed" });
+    expect(within(screen.getByRole("region", { name: "Not found" })).getAllByRole("radio", { name: "No" })[0]!.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("shows a viewer a found slip's boxes without anything to change", async () => {
+    await renderApp("/returns/2025/applies", { as: VIEWER, seed: (s) => seed(s, { slip: true }).then(() => undefined) });
+    const found = await screen.findByRole("region", { name: "Found in your documents" });
+    fireEvent.click(within(found).getByRole("button", { name: /Employment income/ }));
+    expect(within(found).getByRole("table", { name: "T4 boxes" })).toBeTruthy();
+    expect(within(found).getByText("$60,000.00")).toBeTruthy();
+    expect(within(found).queryByRole("textbox")).toBeNull();
   });
 
   it("marks a yes without its slip as missing, and moves on once everything is answered", async () => {
@@ -100,7 +139,8 @@ describe("What applies", () => {
     // Saving the answers, the upload and reloading the year take a moment.
     await waitFor(() => expect(within(screen.getByRole("region", { name: "Found in your documents" })).getByText("Interest or dividends")).toBeTruthy(), { timeout: 5000 });
     const found = screen.getByRole("region", { name: "Found in your documents" });
-    expect(within(found).getByRole("link", { name: "View file" })).toBeTruthy();
+    fireEvent.click(within(found).getByRole("button", { name: /Interest or dividends/ }));
+    expect(within(found).getByRole("link", { name: "the uploaded file" })).toBeTruthy();
   });
 });
 
@@ -123,10 +163,8 @@ describe("Confirm", () => {
   it("lists the boxes in the order printed", async () => {
     await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
     fireEvent.click(await screen.findByRole("button", { name: "Add a slip" }));
-    const boxes = within(screen.getByRole("form", { name: "Add a slip" }))
-      .getAllByText(/^Box /)
-      .map((label) => label.textContent);
-    expect(boxes.slice(0, 4)).toEqual(["Box 14", "Box 16", "Box 16A", "Box 18"]);
+    const rows = within(screen.getByRole("form", { name: "Add a slip" })).getAllByRole("row").slice(1) as HTMLTableRowElement[];
+    expect(rows.slice(0, 4).map((row) => row.cells[0]!.textContent)).toEqual(["14", "16", "16A", "18"]);
   });
 
   it("shows only the open return's slips, and moves one to the other adult's return", async () => {

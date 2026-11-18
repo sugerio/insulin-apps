@@ -1,22 +1,19 @@
-import { useId, useState, type FormEvent } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import { canPrepare, routes, type Person, type Slip, type SlipList } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import { Label } from "@/components/ui/label.tsx";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
+import { SlipForm } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { byBox, formatMoney } from "../lib/format.ts";
 import { useSlips } from "../lib/useYearData.ts";
 import { rulesFor } from "../shared/rules/index.ts";
-import type { SlipType } from "../shared/engine/rules.ts";
 
 // Step 4, `/returns/:year/:personId/confirm`: the slips of the open return, read by AI from the uploads or typed in,
 // to check against the paper slips. The form for a slip is built from its type in the year's rules (slips.yaml): its
@@ -197,85 +194,5 @@ function MoveSlip({ slip, to }: { slip: Slip; to: Person }) {
       </button>
       {error ? <span className="block text-destructive">{describeError(error)}</span> : null}
     </p>
-  );
-}
-
-/** Add a slip (no `slip`) or change one: its type's boxes, each blank or an amount. */
-function SlipForm({ personId, slip, onDone }: { personId: string; slip?: Slip; onDone: () => void }) {
-  const id = useId();
-  const { year, replace } = useYear();
-  const types = [...rulesFor(year.year)!.slips.values()];
-  const [type, setType] = useState(slip?.type ?? types[0]!.id);
-  const [issuer, setIssuer] = useState(slip?.issuer ?? "");
-  const [boxes, setBoxes] = useState<Record<string, string>>(slip?.boxes ?? {});
-  const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const slipType: SlipType = types.find((each) => each.id === type)!;
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setState({ status: "saving" });
-    const filled = Object.fromEntries(Object.entries(boxes).map(([box, amount]) => [box, amount.replace(/[$,\s]/g, "")]).filter(([, amount]) => amount !== ""));
-    try {
-      const saved = slip
-        ? await apiRequest(routes.updateSlip, {
-            params: { year: year.year, id: slip.id },
-            body: { revision: year.revision, issuer, boxes: filled },
-          })
-        : await apiRequest(routes.addSlip, { params: { year: year.year }, body: { revision: year.revision, personId, type, issuer, boxes: filled } });
-      replace(saved);
-      onDone();
-    } catch (error) {
-      setState({ status: "error", error });
-    }
-  }
-  const issues = state.status === "error" && state.error instanceof ApiError ? (state.error.body?.error.issues ?? []) : [];
-  const issueFor = (path: string) => issues.find((issue) => issue.path === path)?.message;
-
-  return (
-    <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} aria-label={slip ? `Edit ${slip.type} from ${slip.issuer}` : "Add a slip"}>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`${id}-type`}>Slip</Label>
-          <NativeSelect id={`${id}-type`} value={type} onChange={(event) => setType(event.target.value)} disabled={slip !== undefined}>
-            {types.map((each) => (
-              <NativeSelectOption key={each.id} value={each.id}>
-                {each.title}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`${id}-issuer`}>Issued by</Label>
-          <Input id={`${id}-issuer`} value={issuer} onChange={(event) => setIssuer(event.target.value)} required maxLength={100} aria-invalid={issueFor("issuer") ? true : undefined} />
-          {issueFor("issuer") ? <p className="text-xs text-destructive">{issueFor("issuer")}</p> : null}
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {byBox(Object.entries(slipType.boxes)).map(([box, label]) => (
-          <div key={box} className="flex flex-col gap-1">
-            <Label htmlFor={`${id}-box-${box}`} className="text-xs font-normal">
-              <span className="font-medium">Box {box}</span> {label}
-            </Label>
-            <Input
-              id={`${id}-box-${box}`}
-              inputMode="decimal"
-              value={boxes[box] ?? ""}
-              onChange={(event) => setBoxes((current) => ({ ...current, [box]: event.target.value }))}
-              aria-invalid={issueFor(`boxes.${box}`) ? true : undefined}
-            />
-            {issueFor(`boxes.${box}`) ? <p className="text-xs text-destructive">{issueFor(`boxes.${box}`)}</p> : null}
-          </div>
-        ))}
-      </div>
-      {state.status === "error" && issues.length === 0 ? <Banner kind="error" title="The slip wasn't saved">{describeError(state.error)}</Banner> : null}
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={state.status === "saving"}>
-          {state.status === "saving" ? "Saving…" : slip ? "Save" : "Add"}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onDone}>
-          Cancel
-        </Button>
-      </div>
-    </form>
   );
 }

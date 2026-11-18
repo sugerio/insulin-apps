@@ -1,14 +1,17 @@
 import { useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { FileUp } from "lucide-react";
-import { canPrepare, type Estimate, type Slip, type SlipList } from "#shared";
+import { ChevronRight, FileUp } from "lucide-react";
+import { canPrepare, routes, type Estimate, type Slip, type SlipList } from "#shared";
+import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
-import { ApiError, describeError } from "../api/client.ts";
+import { cn } from "@/lib/utils.ts";
+import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
+import { SlipBoxTable, SlipForm, type SlipChange } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, stepsOf, useReturn, useYear } from "../components/YearFrame.tsx";
 import { saveAnswersFor } from "../lib/saveAnswers.ts";
@@ -19,7 +22,8 @@ import { rulesFor } from "../shared/rules/index.ts";
 
 // Step 3, `/returns/:year/:personId/applies`: what the open return's documents show and what they don't. The year's
 // rules list the kinds of income and expenses to ask about (`step: applies` in questions.yaml). A question with a
-// `slip` is answered by finding that slip: found ones are listed with their file; for the others the person says
+// `slip` is answered by finding that slip: found ones open into their boxes as read, to check and change right here;
+// for the others the person says
 // whether they have one, and a yes without the slip is missing, to upload right here or type in at step 4. Questions
 // without a slip name what the app doesn't handle.
 
@@ -27,16 +31,26 @@ export function AppliesStep() {
   const { year } = useYear();
   const estimate = useEstimate();
   const slips = useSlips();
+  // The slips opened: kept here, as the form below starts again whenever the year changes (a slip saved, say).
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   return (
     <StepLayout step="applies" title={`What applies in ${year.year}`}>
       <ResourceView resource={estimate}>
-        {(answers) => <ResourceView resource={slips}>{(slipList) => <AppliesForm key={year.revision} estimate={answers} slips={slipList} />}</ResourceView>}
+        {(answers) => (
+          <ResourceView resource={slips}>{(slipList) => <AppliesForm key={year.revision} estimate={answers} slips={slipList} open={open} onToggle={toggle} />}</ResourceView>
+        )}
       </ResourceView>
     </StepLayout>
   );
 }
 
-function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
+function AppliesForm({ estimate, slips, open, onToggle }: { estimate: Estimate; slips: SlipList; open: ReadonlySet<string>; onToggle: (slipId: string) => void }) {
   const me = useMe();
   const navigate = useNavigate();
   const { year, replace, reload } = useYear();
@@ -94,6 +108,12 @@ function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList 
     }
   }
 
+  /** Saves a change to a slip after the answers so far, so nothing chosen here is lost when the form starts again. */
+  const saveSlip = (slip: Slip) => async (change: SlipChange) => {
+    const saved = await saveAnswersFor(year, answersToSave());
+    return apiRequest(routes.updateSlip, { params: { year: year.year, id: slip.id }, body: { revision: saved.revision, ...change } });
+  };
+
   const found = topics.filter((topic) => slipsOf(topic.slip!).length > 0);
   const notFound = topics.filter((topic) => slipsOf(topic.slip!).length === 0);
   const missing = notFound.filter((topic) => values[topic.id] === true).map((topic) => topic.slip!);
@@ -113,7 +133,11 @@ function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList 
             <h2 className="text-sm font-medium">Found in your documents</h2>
             {found.length === 0 ? <p className="text-sm text-muted-foreground">No slips yet.</p> : null}
             <ul className="flex flex-col divide-y">
-              {found.flatMap((topic) => slipsOf(topic.slip!).map((slip) => <FoundRow key={slip.id} topic={topic} slip={slip} />))}
+              {found.flatMap((topic) =>
+                slipsOf(topic.slip!).map((slip) => (
+                  <FoundRow key={slip.id} topic={topic} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} save={saveSlip(slip)} />
+                )),
+              )}
             </ul>
           </section>
           {notFound.length > 0 ? (
@@ -171,24 +195,61 @@ function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList 
   );
 }
 
-function FoundRow({ topic, slip }: { topic: Question; slip: Slip }) {
+/** A slip found: what it shows, and opened, its boxes as read, to change (it goes back to unconfirmed when changed). */
+function FoundRow({
+  topic,
+  slip,
+  open,
+  onToggle,
+  editable,
+  save,
+}: {
+  topic: Question;
+  slip: Slip;
+  open: boolean;
+  onToggle: () => void;
+  editable: boolean;
+  save: (change: SlipChange) => ReturnType<typeof saveAnswersFor>;
+}) {
   const { year } = useYear();
+  const panel = useId();
+  const slipType = rulesFor(year.year)!.slips.get(slip.type)!;
+  const confirmed = slip.status === "confirmed";
   return (
-    <li className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2 text-sm">
-      <span>
-        <span className="font-medium">{topic.ask}</span>
-        <span className="text-muted-foreground">
-          {" "}
-          · {slip.type} from {slip.issuer}
+    <li className="py-1 text-sm">
+      <button type="button" className="flex w-full items-center gap-2 rounded-md py-1.5 text-left hover:bg-muted/50" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
+        <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="font-medium">{topic.ask}</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · {slip.type} from {slip.issuer}
+          </span>
         </span>
-      </span>
-      {slip.source === "ai" && slip.documentId ? (
-        <a className="text-xs underline underline-offset-2" href={`/api/years/${year.year}/documents/${slip.documentId}/file`} target="_blank" rel="noreferrer">
-          View file
-        </a>
-      ) : (
-        <span className="text-xs text-muted-foreground">Typed in</span>
-      )}
+        <Badge variant={confirmed ? "secondary" : "outline"}>{confirmed ? "Confirmed" : "To confirm"}</Badge>
+      </button>
+      {open ? (
+        <div id={panel} className="flex flex-col gap-3 pt-2 pb-3 pl-6">
+          {editable ? (
+            <SlipForm personId={slip.personId} slip={slip} save={save} inline />
+          ) : (
+            <SlipBoxTable slipType={slipType} boxes={slip.boxes} unsure={confirmed ? [] : slip.unsure} />
+          )}
+          <p className="text-xs text-muted-foreground">
+            {slip.source === "ai" && slip.documentId ? (
+              <>
+                Read by AI from{" "}
+                <a className="underline underline-offset-2" href={`/api/years/${year.year}/documents/${slip.documentId}/file`} target="_blank" rel="noreferrer">
+                  the uploaded file
+                </a>
+                . Check each amount against it.
+              </>
+            ) : (
+              "Typed in."
+            )}
+          </p>
+        </div>
+      ) : null}
     </li>
   );
 }

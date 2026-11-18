@@ -104,6 +104,15 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `SUPER_ADMIN_EMAILS` | var | optional; the console's admins, addresses separated by commas or whitespace; an entry that isn't an address is ignored and logged |
 | `SUPER_CLOUDFLARE_API_TOKEN`, `SUPER_CLOUDFLARE_ACCOUNT_ID` | secret, var | optional; a Cloudflare API token with Workers Scripts: Read, Account Analytics: Read and Containers: Read only (never D1, which could query the apps' databases, nor R2, which could read every object in the engines' buckets) and the 32-hex account it reads, for the console's hourly resource snapshot (DESIGN.md §11.5). Both, or none |
 
+**`SITE_APPS` is nearly full.** Cloudflare holds a variable to 5 KB, and `deploy-apps.test.mjs` checks every gateway
+variable for this repository's apps against 5,000 bytes. With Cap Table, Esign and Knowledge, `SITE_APPS` is 4,968
+bytes: about 32 left, so a fourth app, or a longer navigation, permission description or summary, fails that test (and
+could fail the deploy). Most of it is the permission catalogs (descriptions included) and the navigation: Cap Table's
+navigation alone is about 1.2 KB. The structural fix is the one the limit catalogs already have (`writeLimitCatalogs`):
+the deploy writes the catalogs and navigation to the gateway's D1 for the app versions in production, the gateway
+reads them from there (once per isolate, as it reads `SITE_APPS` now), and `SITE_APPS` keeps only what routing needs
+(name, title, summary, public paths, tick and client settings page).
+
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
 `SUGER_ACCESS_MODE=console`, plus `x-suger-access-via` (`browser`, `mcp` or `api`) and, for an app with a permission

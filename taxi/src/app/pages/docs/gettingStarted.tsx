@@ -78,7 +78,9 @@ export const gettingStarted: DocTopic = {
             </li>
             <li>
               <b>Finish.</b> The return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
-              The filled-in CRA forms to download come in a later version.
+              Under <b>Check and save</b>, hints show ways to pay less, such as claiming both spouses' donations on one return, with what each saves
+              for the household. <b>Apply</b> changes your answers; <b>Undo</b> puts them back. The filled-in CRA forms to download come in a
+              later version.
             </li>
           </ol>
         </>

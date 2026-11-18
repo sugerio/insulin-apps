@@ -4,7 +4,7 @@ import { idSchema } from "./household.ts";
 // What a year's returns are made of: each adult's slips and answers. Every change names the year's revision it was
 // based on, like the household facts, and answers with the year (its new revision and steps).
 
-const revisionSchema = z.number().int().min(1);
+export const revisionSchema = z.number().int().min(1);
 
 /** An amount as printed on a slip: dollars and cents, no sign or separators. */
 export const slipAmountSchema = z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, "Enter an amount like 1234.56");

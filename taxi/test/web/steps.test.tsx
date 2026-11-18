@@ -140,10 +140,10 @@ describe("Income", () => {
     const { router, server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s).then(() => undefined) });
     const add = await screen.findByRole("region", { name: "Add to your return" });
     fireEvent.click(within(add).getByRole("button", { name: "Add Employment income" }));
-    expect(screen.getByText("Missing: the T4")).toBeTruthy();
+    expect(screen.getByText("No T4 yet. Upload it, or enter its boxes.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Save and continue" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Remove Employment income" }));
-    expect(screen.queryByText("Missing: the T4")).toBeNull();
+    expect(screen.queryByText("No T4 yet. Upload it, or enter its boxes.")).toBeNull();
     fireEvent.click(within(screen.getByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Self-employment or business income" }));
     expect(screen.getByText(/This app doesn't handle this yet/)).toBeTruthy();
     const deductions = stepOf(router, "deductions");
@@ -167,7 +167,7 @@ describe("Income", () => {
     // Saving the module, then the slip, starts the page again: query it afresh.
     await waitFor(() => expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("button", { name: /T4 from Maple Corp/ })).toBeTruthy());
     expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("heading", { name: /Rental income/ })).toBeTruthy();
-    expect(screen.queryByText("Missing: the T4")).toBeNull();
+    expect(screen.queryByText("No T4 yet. Upload it, or enter its boxes.")).toBeNull();
     const slips = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { type: string; boxes: Record<string, string> }[] };
     expect(slips.slips).toEqual([expect.objectContaining({ type: "T4", boxes: { 14: "60000" } })]);
   });

@@ -412,6 +412,16 @@
       "value": "57375",
       "source": "Schedule 11 line 11: $57,375"
     },
+    "lowestBracketTop": {
+      "label": "Top of the lowest federal tax bracket",
+      "value": "57375",
+      "source": "T1 Step 5 Part A: taxable income up to $57,375 is taxed at the lowest rate (the first row of taxBrackets)"
+    },
+    "rrspOverContributionAllowance": {
+      "label": "RRSP contributions allowed above the deduction limit without tax",
+      "value": "2000",
+      "source": "Form T1-OVP: the 1% monthly tax applies to excess contributions over $2,000"
+    },
     "tuitionTransferMax": {
       "label": "Most current-year tuition a student can transfer",
       "value": "5000",
@@ -719,6 +729,10 @@
       "label": "Spouse or common-law partner on December 31 (1 for yes)",
       "formula": "if(household.maritalStatus == \"married\" or household.maritalStatus == \"common_law\", 1, 0)"
     },
+    "SPOUSES.together": {
+      "label": "Both spouses' returns are prepared here (1 for yes)",
+      "formula": "if(household.partnerInYear and line.HH.partner == 1, 1, 0)"
+    },
     "HH.spouseNetIncome": {
       "label": "Your spouse's or partner's net income",
       "formula": "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)",
@@ -855,7 +869,12 @@
       "source": "Schedule 2: their unused age amount and the tuition they designate to you"
     },
     "T1.33099": {
-      "label": "Medical expenses for you",
+      "label": "Medical expenses for you, your spouse and your children",
+      "formula": "if(household.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(household.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)",
+      "source": "Either spouse can claim the family's medical expenses: this return's own, unless the spouse claims them, and the spouse's when this return claims them"
+    },
+    "OWN.medical": {
+      "label": "Medical expenses on this return's receipts and entered here",
       "formula": "answer.medicalExpenses + sum(MEDICAL.box1)",
       "source": "Medical expense receipts, and the amount entered that isn't on one"
     },
@@ -983,8 +1002,13 @@
     },
     "S9.5": {
       "label": "Total eligible amount of charitable donations",
+      "formula": "if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.OWN.donations) + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.OWN.donations, 0)",
+      "source": "Schedule 9 line 5: either spouse can claim both spouses' donations"
+    },
+    "OWN.donations": {
+      "label": "Donations on this return's receipts and entered here",
       "formula": "answer.donations + sum(DONATION.box1) + sum(T4.box46)",
-      "source": "Schedule 9 line 5: official receipts (uploaded, or entered), and box 46 of T4 slips"
+      "source": "Official receipts (uploaded, or entered), and box 46 of T4 slips"
     },
     "S9.10": {
       "label": "Donations claimed (within the limit)",
@@ -1062,6 +1086,10 @@
       "label": "Tuition transferred to your spouse or common-law partner",
       "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)",
       "source": "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
+    },
+    "RESULT.net": {
+      "label": "Refund, less balance owing",
+      "formula": "line.T1.48400 - line.T1.48500"
     },
     "SUGGEST.rrspDeduction": {
       "label": "RRSP contributions you can deduct for 2025",
@@ -1378,6 +1406,18 @@
       "ask": "Your spouse's or partner's 2025 net income",
       "module": "about",
       "help": "Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it."
+    },
+    "claimSpouseDonations": {
+      "type": "boolean",
+      "ask": "Claim your spouse's or partner's donations on this return",
+      "decision": true,
+      "default": false
+    },
+    "claimSpouseMedical": {
+      "type": "boolean",
+      "ask": "Claim your spouse's or partner's medical expenses on this return",
+      "decision": true,
+      "default": false
     }
   },
   "slips": {
@@ -1535,5 +1575,69 @@
       "informational": []
     }
   },
-  "version": "2254af3ec803c4b8"
+  "hints": {
+    "poolDonations": {
+      "kind": "saving",
+      "title": "Claim both spouses' donations on one return",
+      "text": "The first $200 of donations each year gets a lower credit. Claiming both spouses' donations on one return uses that lower rate once instead of twice. Your spouse's or partner's donations are then claimed on this return and left off theirs.",
+      "when": "line.SPOUSES.together == 1 and spouse.line.OWN.donations > 0 and not answer.claimSpouseDonations",
+      "change": {
+        "answer.claimSpouseDonations": "true",
+        "spouse.answer.claimSpouseDonations": "false"
+      },
+      "amount": "spouse.line.OWN.donations",
+      "amountLabel": "Your spouse's or partner's donations"
+    },
+    "medicalOnOneReturn": {
+      "kind": "saving",
+      "title": "Claim the family's medical expenses on this return",
+      "text": "Medical expenses count only above 3% of the claimant's net income (or $2,834, if less), so they usually save more on the return with the lower income. Your spouse's or partner's medical expenses are then claimed on this return and left off theirs.",
+      "when": "line.SPOUSES.together == 1 and spouse.line.OWN.medical > 0 and not answer.claimSpouseMedical",
+      "change": {
+        "answer.claimSpouseMedical": "true",
+        "spouse.answer.claimSpouseMedical": "false"
+      },
+      "amount": "spouse.line.OWN.medical",
+      "amountLabel": "Your spouse's or partner's medical expenses"
+    },
+    "tuitionTransfer": {
+      "kind": "saving",
+      "title": "Transfer tuition you don't need to your spouse or partner",
+      "text": "You can transfer up to $5,000 of this year's tuition that this return doesn't use to your spouse or partner. Sign the transfer on the back of your T2202. The amount is saved as \"Tuition to transfer to your spouse or partner\" on Credits.",
+      "when": "line.SPOUSES.together == 1 and line.S11.23 > answer.tuitionTransfer",
+      "change": {
+        "answer.tuitionTransfer": "line.S11.23"
+      },
+      "amount": "line.S11.23",
+      "amountLabel": "Tuition you can transfer"
+    },
+    "rrspNowOrLater": {
+      "kind": "info",
+      "title": "You can deduct your RRSP contributions in a later year",
+      "text": "Your taxable income is in the lowest federal bracket. You don't have to deduct all your RRSP contributions for 2025: what you don't deduct carries forward, and may save more in a year when your income is higher. To deduct less, change the amount on Deductions.",
+      "when": "answer.rrspDeduction > 0 and line.T1.26000 <= param.lowestBracketTop",
+      "change": {
+        "answer.rrspDeduction": "0"
+      },
+      "amount": "answer.rrspDeduction",
+      "amountLabel": "RRSP deduction for 2025",
+      "effectLabel": "Deducting it this year saves"
+    },
+    "rrspOverContribution": {
+      "kind": "warning",
+      "title": "Your RRSP contributions may be over your limit",
+      "text": "Your contributions are more than your RRSP deduction limit on your 2024 notice of assessment plus $2,000. The CRA charges a tax of 1% a month on the excess until it is withdrawn, on form T1-OVP. This app doesn't prepare that form. Check your limit, and the contributions you made after your notice of assessment.",
+      "when": "sum(NOA.box1) > 0 and sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2) > sum(NOA.box1) + param.rrspOverContributionAllowance",
+      "amount": "sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2) - sum(NOA.box1) - param.rrspOverContributionAllowance",
+      "amountLabel": "Over the limit and the $2,000"
+    },
+    "interestWithoutSlip": {
+      "kind": "warning",
+      "title": "Interest is taxable even without a T5",
+      "text": "A bank or credit union issues a T5 only when it pays you $50 or more. Interest under that is still income. If you earned any, enter it as a T5 on Income, from your account statements.",
+      "when": "sum(T5.box13) == 0"
+    }
+  },
+  "outcome": "RESULT.net",
+  "version": "51cc8229cc310fd6"
 }

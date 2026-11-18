@@ -26,6 +26,8 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `POST /api/years` | Prepare returns | Start a tax year with the people in it: `{"year": 2025, "people": ["…"]}`. You must be one of them; your spouse in it prepares both returns together. Starting one that exists returns it unchanged. |
 | `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, open issues, and each adult's return with the state of its seven steps (`returns`: household, upload, income, deductions, credits, confirm, finish). |
 | `GET /api/years/{year}/estimate` | View returns | What the engine computes for each return of the year (below). |
+| `GET /api/years/{year}/hints` | View returns | Each return's hints (below), with their state: `open`, `applied` (an accepted saving) or `dismissed`. |
+| `POST /api/years/{year}/hints/{hint}` | Prepare returns | Decide on a hint of an adult's return: `{"revision", "personId", "decision"}`, where `decision` is `accept` (a saving: its answers are saved), `dismiss`, or `undo` (puts back the answers an accepted saving changed, or shows a dismissed hint again). A saving that no longer applies is refused with 409. |
 | `PUT /api/years/{year}/people` | Prepare returns | Change who is in the year: `{"revision", "people"}`. Someone taken out loses their facts for that year. |
 | `PUT /api/years/{year}/household` | Prepare returns | Save the year's facts (below). |
 | `GET /api/years/{year}/documents` | View returns | The files uploaded for the year, with what reading each one found and the slips it added. |
@@ -86,6 +88,20 @@ per return:
 Each entry of `result.people` also lists `questions`: every question its result lines read. The year's rules say what
 each question asks and its type (money as decimal text, yes/no, a choice); the slip types and their boxes come from
 the same rules. A slip's box must be one its type has, and an amount is dollars and cents such as `1234.56`.
+
+## Hints
+
+`GET /api/years/{year}/hints` answers `{"revision", "hints": [...]}`. Each hint has:
+
+- `id`, the hint in the year's rules (`poolDonations`), and `personId`, the return it is about;
+- `kind`: `saving`, `info` or `warning`; `title` and `text`;
+- `amount`: a number shown with it, `{"label", "value"}`, or null;
+- `effect`: for a saving, what the household's refund less balance owing goes up by with its change (for an applied
+  one, what it saved when accepted); for an info hint with a change, what the change makes, named by `effectLabel`;
+- `state`: `open`, `applied` or `dismissed`.
+
+Accepting a saving saves its answers on one or both returns, for example `claimSpouseDonations: true` on one return
+and `false` on the other. These answers are ordinary answers: the estimate explains them like any other.
 
 ## Errors
 

@@ -39,7 +39,12 @@ uploaded slips read by AI (or typed in), income, deductions, credits and the res
   opening into its boxes to change; amounts; what the app doesn't handle yet, such as self-employment or working from
   home, named, never ignored), what can be added, and what the slips already claim. Then Confirm (each slip entered box
   by box, then confirmed, or moved to the other return) and Finish (the refund or balance owing, the key lines with why,
-  and what to check before filing).
+  what to check before filing, and hints).
+- **Hints.** Finish checks each return, like a tax program's "check and optimize": claiming both spouses' donations on
+  one return, the family's medical expenses on the lower income, transferring tuition to a spouse, deducting RRSP
+  contributions later, RRSP contributions over the limit, and interest without a T5. A saving is worked out on both
+  returns with and without the change, never guessed (`rules/ca/2025/hints.yaml`); applying it saves answers, and it can
+  be undone.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,

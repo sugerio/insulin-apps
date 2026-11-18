@@ -72,6 +72,25 @@ computes is stored: each time a year is read, it computes again from what was en
 Any number can be explained: its formula, the values that went into it, and so on down to the answers and the slip
 boxes. Money is computed exactly, without rounding errors, and rounded to the cent where the CRA rounds.
 
+## Hints
+
+Hints are checks on each return, in `rules/ca/2025/hints.yaml` next to the other rules. A hint shows when its condition
+holds for the return. It is one of:
+
+- **A saving:** a change of answers, such as claiming both spouses' donations on one return. The engine computes both
+  returns again with the change, and the hint shows only when the household's refund, less any balance owing, goes up by
+  $1 or more. The saving shown is that difference, never an estimate.
+- **Something to know or check:** for example, that interest is taxable even without a T5, or that RRSP contributions
+  are over the limit on last year's notice of assessment plus $2,000.
+
+Applying a saving saves its answers, so the return explains the change like any other answer. The answers it changed
+are kept, so **Undo** puts them back. A dismissed hint can be shown again.
+
+The 2025 hints: claim both spouses' donations on one return; claim the family's medical expenses on one return (usually
+the lower income); transfer this year's tuition the student doesn't need to their spouse; deduct RRSP contributions in a
+later year when this year's income is in the lowest bracket; RRSP contributions over the limit; and interest without a
+T5. Moving claims between the returns works only when both spouses' returns are prepared here.
+
 ## How saves stay consistent
 
 Each change is written in one step with its history entry: either all of it is saved, or none of it. A year's household

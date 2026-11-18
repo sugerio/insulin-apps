@@ -312,7 +312,7 @@ export async function runGuarded(db: Db, statements: D1PreparedStatement[]): Pro
   }
 }
 
-/** Changes who is in a year. Someone taken out loses their facts, answers and slips for that year. */
+/** Changes who is in a year. Someone taken out loses their facts, answers, slips and hint decisions for that year. */
 export async function setYearPeople(db: Db, caller: Caller, year: number, input: SetYearPeople, now: number): Promise<TaxYear> {
   const row = await yearRow(db, caller.orgId, year);
   if (!row) throw notFound(`The ${year} tax year hasn't been started`);
@@ -323,8 +323,8 @@ export async function setYearPeople(db: Db, caller: Caller, year: number, input:
     db
       .prepare("DELETE FROM tax_year_people WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))")
       .bind(caller.orgId, row.id, keep),
-    // Someone taken out of the year takes their facts, answers and slips for that year with them.
-    ...["returns", "answers", "slips"].map((table) =>
+    // Someone taken out of the year takes their facts, answers, slips and hint decisions for that year with them.
+    ...["returns", "answers", "slips", "hint_decisions"].map((table) =>
       db
         .prepare(`DELETE FROM ${table} WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))`)
         .bind(caller.orgId, row.id, keep),
@@ -451,6 +451,7 @@ export async function removePerson(db: Db, caller: Caller, id: string, now: numb
     db.prepare("DELETE FROM returns WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM answers WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM slips WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
+    db.prepare("DELETE FROM hint_decisions WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("UPDATE documents SET person_id = NULL WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM tax_year_people WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM people WHERE id = ? AND org_id = ?").bind(id, caller.orgId),

@@ -75,6 +75,8 @@ export interface Question {
   suggest?: string;
   /** Used, and the result marked an estimate, while the question has no answer. */
   default?: string | boolean;
+  /** The default is the app's choice, not a guess: the result is complete without an answer (a hint may change it). */
+  decision?: boolean;
   options?: string[];
 }
 export interface SlipType {
@@ -88,6 +90,36 @@ export interface SlipType {
   receipt: boolean;
   /** The years it may carry, relative to the tax year (0 the year itself; -1 last year's notice of assessment). */
   printedYears: number[];
+}
+
+export const HINT_KINDS = ["saving", "info", "warning"] as const;
+export type HintKind = (typeof HINT_KINDS)[number];
+
+/** One answer a hint changes: the question, on this return or the spouse's, and its new value as a formula. */
+export interface HintChange {
+  spouse: boolean;
+  question: string;
+  text: string;
+  formula: Formula;
+}
+
+/**
+ * A hint: a check on a return that either proposes a change with the money it saves (`saving`) or tells the person
+ * something (`info`, `warning`). `when` decides whether it shows, from this person's side. A change is a set of
+ * answers; the engine works out the household's result with and without it, so a saving is never guessed.
+ */
+export interface Hint {
+  id: string;
+  kind: HintKind;
+  title: string;
+  text: string;
+  when: Formula;
+  whenText: string;
+  change: HintChange[];
+  /** An amount shown with the hint, and what it is. */
+  amount?: { formula: Formula; text: string; label: string };
+  /** For an info hint with a change: what the difference the change makes is called. */
+  effectLabel?: string;
 }
 
 /** What to call a document of this type on screen: a slip by its type (T4), a receipt or notice by its title. */
@@ -110,6 +142,9 @@ export interface RuleSet {
   slips: Map<string, SlipType>;
   /** Per slip type, the boxes some formula reads, and the informational ones. Any other box is shown as not handled. */
   usedBoxes: Map<string, Set<string>>;
+  hints: Map<string, Hint>;
+  /** The line a hint's what-if compares, added up over the household: the refund less the balance owing. */
+  outcome?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,9 +171,24 @@ export const compiledRulesSchema = z.strictObject({
       receipts: z.string().optional(),
       suggest: z.string().optional(),
       default: z.union([z.string(), z.boolean()]).optional(),
+      decision: z.boolean().optional(),
       options: z.array(z.string()).optional(),
     }),
   ),
+  hints: z.record(
+    z.string(),
+    z.strictObject({
+      kind: z.enum(HINT_KINDS),
+      title: z.string(),
+      text: z.string(),
+      when: z.string(),
+      change: z.record(z.string(), z.string()).optional(),
+      amount: z.string().optional(),
+      amountLabel: z.string().optional(),
+      effectLabel: z.string().optional(),
+    }),
+  ),
+  outcome: z.string().optional(),
   slips: z.record(
     z.string(),
     z.strictObject({
@@ -173,15 +223,17 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     if (Array.isArray(value)) checkBrackets(value, (message) => fail(`params.${id}`, message));
     params.set(id, { id, label: param.label, value, source: param.source });
   }
-  const lines = new Map<string, Line>();
-  for (const [id, line] of Object.entries(compiled.lines)) {
-    let formula: Formula;
+  const parse = (entry: string, text: string): Formula => {
     try {
-      formula = parseFormula(line.formula);
+      return parseFormula(text);
     } catch (error) {
-      if (error instanceof FormulaSyntaxError) fail(`lines.${id}`, error.message, error.column);
+      if (error instanceof FormulaSyntaxError) fail(entry, error.message, error.column);
       throw error;
     }
+  };
+  const lines = new Map<string, Line>();
+  for (const [id, line] of Object.entries(compiled.lines)) {
+    const formula = parse(`lines.${id}`, line.formula);
     lines.set(id, {
       id,
       label: line.label,
@@ -193,6 +245,27 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
   }
   const questions = new Map(Object.entries(compiled.questions).map(([id, question]) => [id, { id, ...question } satisfies Question]));
   const slips = new Map(Object.entries(compiled.slips).map(([id, slip]) => [id, { id, ...slip } satisfies SlipType]));
+  const hints = new Map<string, Hint>();
+  for (const [id, hint] of Object.entries(compiled.hints)) {
+    const entry = `hints.${id}`;
+    const change = Object.entries(hint.change ?? {}).map(([target, text]) => {
+      const match = /^(spouse\.)?answer\.([A-Za-z][A-Za-z0-9]*)$/.exec(target);
+      if (!match) return fail(entry, `change ${target}: write answer.<question> or spouse.answer.<question>`);
+      return { spouse: match[1] !== undefined, question: match[2]!, text, formula: parse(entry, text) };
+    });
+    if ((hint.amount === undefined) !== (hint.amountLabel === undefined)) fail(entry, "Give amount and amountLabel together");
+    hints.set(id, {
+      id,
+      kind: hint.kind,
+      title: hint.title,
+      text: hint.text,
+      when: parse(entry, hint.when),
+      whenText: hint.when,
+      change,
+      ...(hint.amount === undefined ? {} : { amount: { formula: parse(entry, hint.amount), text: hint.amount, label: hint.amountLabel! } }),
+      ...(hint.effectLabel === undefined ? {} : { effectLabel: hint.effectLabel }),
+    });
+  }
 
   const usedBoxes = new Map<string, Set<string>>();
   for (const slip of slips.values()) {
@@ -219,6 +292,8 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     questions,
     slips,
     usedBoxes,
+    hints,
+    ...(compiled.outcome === undefined ? {} : { outcome: compiled.outcome }),
   };
   checkRuleSet(ruleSet, fail);
   return ruleSet;
@@ -303,6 +378,7 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
             : typeof question.default === "string" && question.options!.includes(question.default);
       if (!ok) fail(entry, `The default doesn't fit a ${question.type} question`);
     }
+    if (question.decision && question.default === undefined) fail(entry, "A decision needs a default");
   }
 
   // Each line's type, and the lines it reads (in its own return or the spouse's: both count toward a cycle).
@@ -310,45 +386,30 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
   for (const line of ruleSet.lines.values()) {
     const entry = `lines.${line.id}`;
     const reads = new Set<string>();
-    const typeOf = (formula: Formula): Type => {
-      switch (formula.kind) {
-        case "number":
-          return "number";
-        case "string":
-          return "string";
-        case "boolean":
-          return "boolean";
-        case "ref":
-          return refType(ruleSet, formula.path, (message) => fail(entry, message, formula.column), reads);
-        case "unary": {
-          const operand = typeOf(formula.operand);
-          const want = formula.op === "-" ? "number" : "boolean";
-          if (operand !== want) fail(entry, `"${formula.op}" needs a ${want === "number" ? "number" : "yes/no value"}`, formula.column);
-          return want;
-        }
-        case "binary": {
-          const at = (message: string) => fail(entry, message, formula.column);
-          if (formula.op === "==" || formula.op === "!=") {
-            checkChoice(ruleSet, formula.left, formula.right, at);
-            checkChoice(ruleSet, formula.right, formula.left, at);
-          }
-          return binaryType(formula, typeOf(formula.left), typeOf(formula.right), at);
-        }
-        case "call": {
-          const fn = FUNCTIONS[formula.name];
-          if (!fn) return fail(entry, `No function ${formula.name}; the functions are ${FUNCTION_NAMES.join(", ")}`, formula.column);
-          const [low, high] = fn.args;
-          if (formula.args.length < low || formula.args.length > high) {
-            fail(entry, `${formula.name} takes ${low === high ? low : `${low} to ${high}`} values`, formula.column);
-          }
-          const type = fn.check(formula.args.map(typeOf), formula.args);
-          if (!["number", "string", "boolean", "list", "table"].includes(type)) fail(entry, `${formula.name} ${type}`, formula.column);
-          return type as Type;
-        }
-      }
-    };
-    if (typeOf(line.formula) !== "number") fail(entry, "A line must be a number");
+    if (formulaType(ruleSet, line.formula, (message, column) => fail(entry, message, column), reads) !== "number") fail(entry, "A line must be a number");
     edges.set(line.id, reads);
+  }
+
+  // A hint's formulas: `when` a yes/no value, its amount a number, each change of its answer's type.
+  if (ruleSet.outcome !== undefined && !ruleSet.lines.has(ruleSet.outcome)) fail("outcome", `No line ${ruleSet.outcome}`);
+  for (const hint of ruleSet.hints.values()) {
+    const entry = `hints.${hint.id}`;
+    const at = (message: string, column?: number) => fail(entry, message, column);
+    const reads = new Set<string>();
+    if (formulaType(ruleSet, hint.when, at, reads) !== "boolean") fail(entry, "when must be a yes/no value");
+    if (hint.amount && formulaType(ruleSet, hint.amount.formula, at, reads) !== "number") fail(entry, "amount must be a number");
+    for (const change of hint.change) {
+      const question = ruleSet.questions.get(change.question);
+      if (!question) return fail(entry, `No question ${change.question}`);
+      const want = question.type === "money" ? "number" : question.type === "boolean" ? "boolean" : "string";
+      if (formulaType(ruleSet, change.formula, at, reads) !== want) fail(entry, `The change to ${change.question} must be a ${want === "boolean" ? "yes/no value" : want}`);
+    }
+    if (hint.kind === "saving" && hint.change.length === 0) fail(entry, "A saving hint changes at least one answer");
+    if (hint.kind === "saving" && hint.effectLabel !== undefined) fail(entry, "A saving hint shows what it saves; effectLabel is for info hints");
+    if (hint.kind !== "saving" && (hint.change.length > 0) !== (hint.effectLabel !== undefined)) {
+      fail(entry, "An info hint with a change names its effect (effectLabel), and only then");
+    }
+    if (hint.change.length > 0 && ruleSet.outcome === undefined) fail(entry, "A hint with a change needs the year's outcome line (outcome in year.yaml)");
   }
 
   // Depth-first search for a cycle; the message lists it.
@@ -361,6 +422,46 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     state.set(id, "done");
   };
   for (const id of ruleSet.lines.keys()) visit(id, []);
+}
+
+/** The type of a formula, checking every name and function in it. Lines it reads are added to `reads`. */
+function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string, column?: number) => never, reads: Set<string>): Type {
+  const typeOf = (inner: Formula) => formulaType(ruleSet, inner, fail, reads);
+  switch (formula.kind) {
+    case "number":
+      return "number";
+    case "string":
+      return "string";
+    case "boolean":
+      return "boolean";
+    case "ref":
+      return refType(ruleSet, formula.path, (message) => fail(message, formula.column), reads);
+    case "unary": {
+      const operand = typeOf(formula.operand);
+      const want = formula.op === "-" ? "number" : "boolean";
+      if (operand !== want) fail(`"${formula.op}" needs a ${want === "number" ? "number" : "yes/no value"}`, formula.column);
+      return want;
+    }
+    case "binary": {
+      const at = (message: string) => fail(message, formula.column);
+      if (formula.op === "==" || formula.op === "!=") {
+        checkChoice(ruleSet, formula.left, formula.right, at);
+        checkChoice(ruleSet, formula.right, formula.left, at);
+      }
+      return binaryType(formula, typeOf(formula.left), typeOf(formula.right), at);
+    }
+    case "call": {
+      const fn = FUNCTIONS[formula.name];
+      if (!fn) return fail(`No function ${formula.name}; the functions are ${FUNCTION_NAMES.join(", ")}`, formula.column);
+      const [low, high] = fn.args;
+      if (formula.args.length < low || formula.args.length > high) {
+        fail(`${formula.name} takes ${low === high ? low : `${low} to ${high}`} values`, formula.column);
+      }
+      const type = fn.check(formula.args.map(typeOf), formula.args);
+      if (!["number", "string", "boolean", "list", "table"].includes(type)) fail(`${formula.name} ${type}`, formula.column);
+      return type as Type;
+    }
+  }
 }
 
 function binaryType(formula: Extract<Formula, { kind: "binary" }>, left: Type, right: Type, fail: (message: string) => never): Type {

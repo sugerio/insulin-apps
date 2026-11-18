@@ -15,8 +15,10 @@ Each adult of a tax year (the person preparing, and their spouse when in the yea
 personal info, upload documents, income, deductions, credits, confirm, finish. Income, deductions and credits are built
 from the questions' `module` in questions.yaml (one `ModuleStep`). The app shows one return at a time, at
 `/returns/:year/:personId/:step`, with a switcher to the other; the server reports each return's steps
-(`TaxYear.returns`). The engine works out both returns together, so the couple's credits and transfers hold. CRA form
-filling comes in a later change.
+(`TaxYear.returns`). The engine works out both returns together, so the couple's credits and transfers hold. Hints
+(`rules/<country>/<year>/hints.yaml`, `src/app/shared/engine/hints.ts`) are what-ifs on those returns: a saving is the
+household's `outcome` line (year.yaml) with its change of answers less without it; an accepted one is saved as answers
+with a `hint_decisions` row to undo it. CRA form filling comes in a later change.
 
 ## Commands
 

@@ -2,12 +2,12 @@ import { z } from "zod";
 import { Dec } from "./decimal.ts";
 import { RuleError } from "./errors.ts";
 import { percentToDecimal } from "./formula.ts";
-import { MODULES, loadRuleSet, type CompiledRules } from "./rules.ts";
+import { HINT_KINDS, MODULES, loadRuleSet, type CompiledRules } from "./rules.ts";
 
 // Compiles a year's rule files into the JSON the app imports. A year is a folder of YAML files: `year.yaml` names the
 // country, the year, the filing unit and the year it extends; the other files hold entries (params, lines, questions,
 // slips, result) in any split. A year that extends another lists only what changed: an entry replaces the one with
-// the same id, and `null` removes it. The compiler checks everything the engine relies on, so a broken rule file
+// the same id, and `null` removes it. `hints` are checks on a return (hints.yaml). The compiler checks everything the engine relies on, so a broken rule file
 // fails the build instead of a return.
 //
 // This module reads parsed YAML, not files: scripts/compile-rules.ts does the reading, and the tests call it directly.
@@ -25,7 +25,7 @@ export interface SourceYear {
 }
 
 const MANIFEST = "year.yaml";
-const SECTIONS = ["params", "lines", "questions", "slips"] as const;
+const SECTIONS = ["params", "lines", "questions", "slips", "hints"] as const;
 type Section = (typeof SECTIONS)[number];
 
 const sourceNumber = z.union([z.number(), z.string()]);
@@ -44,6 +44,7 @@ const sourceQuestion = z.strictObject({
   receipts: z.string().min(1).optional(),
   suggest: z.string().min(1).optional(),
   default: z.union([sourceNumber, z.boolean()]).optional(),
+  decision: z.boolean().optional(),
   options: z.array(z.string()).optional(),
 });
 const sourceSlip = z.strictObject({
@@ -55,27 +56,42 @@ const sourceSlip = z.strictObject({
   printedYears: z.array(z.number().int()).optional(),
 });
 
+const sourceHint = z.strictObject({
+  kind: z.enum(HINT_KINDS),
+  title: z.string().min(1),
+  text: z.string().min(1),
+  when: z.string().min(1),
+  change: z.record(z.string(), z.union([z.string().min(1), z.number(), z.boolean()]).transform(String)).optional(),
+  amount: z.string().min(1).optional(),
+  amountLabel: z.string().min(1).optional(),
+  effectLabel: z.string().min(1).optional(),
+});
+
 const manifestSchema = z.strictObject({
   country: z.string().regex(/^[a-z]{2}$/),
   year: z.number().int(),
   filingUnit: z.literal("person"),
   extends: z.number().int().nullable(),
   result: z.array(z.string()).optional(),
+  /** The line hints compare with and without their change: the refund less the balance owing. */
+  outcome: z.string().optional(),
 });
 const entriesSchema = z.strictObject({
   params: z.record(z.string(), sourceParam.nullable()).optional(),
   lines: z.record(z.string(), sourceLine.nullable()).optional(),
   questions: z.record(z.string(), sourceQuestion.nullable()).optional(),
   slips: z.record(z.string(), sourceSlip.nullable()).optional(),
+  hints: z.record(z.string(), sourceHint.nullable()).optional(),
 });
 
 /** Compiles a chain of years, oldest first; the last is the year compiled. `hash` makes the version from the content. */
 export function compileRules(chain: SourceYear[], hash: (text: string) => string): CompiledRules {
   if (chain.length === 0) throw new Error("No rule folder to compile");
-  const merged: Record<Section, Record<string, unknown>> = { params: {}, lines: {}, questions: {}, slips: {} };
+  const merged: Record<Section, Record<string, unknown>> = { params: {}, lines: {}, questions: {}, slips: {}, hints: {} };
   const origin = new Map<string, string>();
   let manifest: z.infer<typeof manifestSchema> | undefined;
   let result: string[] | undefined;
+  let outcome: string | undefined;
 
   chain.forEach((year, index) => {
     const manifestFile = year.files.find((file) => file.path.endsWith(`/${MANIFEST}`));
@@ -88,6 +104,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     if (manifest && parsedManifest.country !== manifest.country) throw new RuleError({ file: manifestFile.path }, "A year can only extend the same country");
     manifest = parsedManifest;
     result = parsedManifest.result ?? result;
+    outcome = parsedManifest.outcome ?? outcome;
 
     const seen = new Map<string, string>();
     for (const file of year.files) {
@@ -145,6 +162,8 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
       receipt: slip.receipt ?? false,
       printedYears: slip.printedYears ?? [0],
     })),
+    hints: merged.hints as CompiledRules["hints"],
+    ...(outcome === undefined ? {} : { outcome }),
   };
   const compiled: CompiledRules = { ...content, version: hash(JSON.stringify(content)) };
   // Loading runs every check the engine relies on: formulas parse, names exist, types agree, no cycles.

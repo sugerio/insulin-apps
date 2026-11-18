@@ -22,7 +22,7 @@ its own.
 
 | Permission | Lets someone | Least built-in role with it |
 |---|---|---|
-| Prepare returns (`taxi.prepare`) | Change the household, and later add and confirm documents and download forms. Includes viewing. | Editor |
+| Prepare returns (`taxi.prepare`) | Change the household, add and confirm documents, enter answers, and apply or dismiss hints; later, download forms. Includes viewing. | Editor |
 | View returns (`taxi.view`) | See the household, its documents and every number, read only. | Viewer |
 
 A custom role only takes permissions away from its base role; it never adds one.

@@ -184,11 +184,6 @@ function ModuleForm({
 
   return (
     <>
-      {missing.length > 0 ? (
-        <Banner kind="warning" title="Still missing">
-          {missing.map((type) => `the ${type}`).join(", ")}. Upload or enter each one below.
-        </Banner>
-      ) : null}
       <section aria-label="On your return" className="flex flex-col gap-3">
         <h2 className="text-base font-semibold">On your return</h2>
         {onReturn.length === 0 ? <p className="text-sm text-muted-foreground">Nothing yet. Add what you have below.</p> : null}
@@ -351,7 +346,9 @@ function SlipItem({
           ))}
         </ul>
       ) : (
-        <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Missing: the {type}</p>
+        <p className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200">
+          No {type} yet. Upload it, or enter its boxes.
+        </p>
       )}
       {entering ? (
         <div className="rounded-lg border bg-muted/30 p-4">

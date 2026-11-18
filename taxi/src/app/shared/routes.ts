@@ -2,6 +2,7 @@ import { z } from "zod";
 import { meSchema, type Permission } from "./access.ts";
 import { documentListSchema, readResultSchema } from "./documents.ts";
 import { estimateSchema } from "./estimate.ts";
+import { decideHintSchema, hintListSchema, hintParamsSchema } from "./hints.ts";
 import { confirmSlipsSchema, createSlipSchema, revisionBodySchema, saveAnswersSchema, slipListSchema, updateSlipSchema } from "./returns.ts";
 import {
   createPersonSchema,
@@ -114,6 +115,26 @@ export const routes = {
     params: yearParams,
     body: null,
     response: estimateSchema,
+  }),
+  listHints: route({
+    method: "GET",
+    path: "/api/years/:year/hints",
+    summary:
+      "Checks on each return of the year, like a tax program's check and optimize: savings worked out with and without a change of answers (effect is what the household's refund less balance owing goes up by), and things to know. Each has a state: open, applied (an accepted saving) or dismissed.",
+    permission: "taxi.view",
+    params: yearParams,
+    body: null,
+    response: hintListSchema,
+  }),
+  decideHint: route({
+    method: "POST",
+    path: "/api/years/:year/hints/:hint",
+    summary:
+      "Decide on a hint of an adult's return: accept a saving (its answers are saved, and the answers it changed are kept to undo it), dismiss a hint, or undo either. Send the revision you read.",
+    permission: "taxi.prepare",
+    params: hintParamsSchema,
+    body: decideHintSchema,
+    response: taxYearSchema,
   }),
   setYearPeople: route({
     method: "PUT",

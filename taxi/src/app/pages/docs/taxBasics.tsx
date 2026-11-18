@@ -65,7 +65,7 @@ export const taxBasics: DocTopic = {
             After the CRA processes a return, it sends a notice of assessment. It confirms the result, and shows amounts for the next year, such as
             your RRSP deduction limit and any unused amounts you can carry forward.
           </p>
-          <InApp>in a later version, you upload last year's notice with this year's documents, and the app reads those amounts from it.</InApp>
+          <InApp>upload last year's notice with this year's documents: the app reads your RRSP deduction limit and unused tuition from it.</InApp>
         </>
       ),
     },

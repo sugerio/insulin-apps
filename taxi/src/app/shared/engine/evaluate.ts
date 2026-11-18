@@ -146,6 +146,18 @@ export class Evaluation {
     return { value: node.value as Dec | null, status: node.status };
   }
 
+  /** A formula (a hint's) worked out from a person's side; it reads the same values the return's lines do. */
+  evaluate(personId: string, formula: Formula): { value: Dec | string | boolean | null; status: Status } {
+    const computed = this.formula(formula, personId, [], []);
+    const value = computed.value;
+    return { value: Array.isArray(value) ? null : (value as Dec | string | boolean | null), status: computed.status };
+  }
+
+  /** The other adult of the year, if both returns are prepared together. */
+  spouse(personId: string): string | undefined {
+    return this.spouseOf(personId);
+  }
+
   /** Why a name (as a formula writes it, from this person's side) has its value. */
   explain(personId: string, ref: string): Explanation {
     return this.explainKey(this.key(personId, ref.split(".")), ref, personId);
@@ -182,8 +194,8 @@ export class Evaluation {
           if (fact !== null && this.node(key).status === "missing") missing.push({ question: fact, ask: this.node(key).label });
         }
         for (const id of asked) {
-          if (id in answered) continue;
           const question = this.rules.questions.get(id)!;
+          if (id in answered || question.decision) continue;
           if (question.default === undefined) missing.push({ question: id, ask: question.ask });
           else estimates.push({ question: id, ask: question.ask, assumed: question.default });
         }
@@ -268,7 +280,8 @@ export class Evaluation {
         const question = this.rules.questions.get(rest[0]!)!;
         const answer = this.input.answers[personId]?.[question.id];
         const given = answer ?? question.default;
-        const status: Status = answer !== undefined ? "complete" : question.default !== undefined ? "estimate" : "missing";
+        // A decision's default is the app's choice, not a guess at what the person would say.
+        const status: Status = answer !== undefined || question.decision ? "complete" : question.default !== undefined ? "estimate" : "missing";
         const value = given === undefined ? null : question.type === "money" ? Dec.from(given as string) : given;
         return { value, status, label: question.ask, reads: [] };
       }

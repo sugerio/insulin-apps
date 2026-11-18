@@ -11,14 +11,14 @@ import { loadWorkspace } from "./workspace.ts";
 
 type Db = D1Database;
 
-async function openYear(db: Db, orgId: string, year: number): Promise<{ row: YearRow; view: TaxYear }> {
+export async function openYear(db: Db, orgId: string, year: number): Promise<{ row: YearRow; view: TaxYear }> {
   const row = await yearRow(db, orgId, year);
   if (!row) throw notFound(`The ${year} tax year hasn't been started`);
   return { row, view: await getYear(db, orgId, year) };
 }
 
 /** The adult must be one whose return is prepared this year. */
-function checkAdult(view: TaxYear, personId: string, path: string): void {
+export function checkAdult(view: TaxYear, personId: string, path: string): void {
   if (!view.adults.some((adult) => adult.personId === personId)) {
     throw new ApiError("validation_failed", "Only the year's adults have returns here", [{ path, message: "Not an adult of this year" }]);
   }
@@ -50,22 +50,24 @@ export async function saveAnswers(db: Db, caller: Caller, year: number, input: S
   if (issues.length > 0) throw new ApiError("validation_failed", "Some answers don't fit their questions", issues);
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
-    ...Object.entries(input.answers).map(([question, value]) =>
-      value === null
-        ? db
-            .prepare("DELETE FROM answers WHERE org_id = ? AND tax_year_id = ? AND person_id = ? AND question = ?")
-            .bind(caller.orgId, row.id, input.personId, question)
-        : db
-            .prepare(
-              `INSERT INTO answers (id, org_id, tax_year_id, person_id, question, value, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(tax_year_id, person_id, question) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-            )
-            .bind(crypto.randomUUID(), caller.orgId, row.id, input.personId, question, JSON.stringify(canonical(value)), now, now),
-    ),
+    ...Object.entries(input.answers).map(([question, value]) => answerStatement(db, caller.orgId, row.id, input.personId, question, value, now)),
     audit(db, caller, "answers.saved", row.id, now),
   ]);
   return getYear(db, caller.orgId, year);
+}
+
+/** Saves one answer, or clears it (null). */
+export function answerStatement(db: Db, orgId: string, taxYearId: string, personId: string, question: string, value: string | boolean | null, now: number): D1PreparedStatement {
+  if (value === null) {
+    return db.prepare("DELETE FROM answers WHERE org_id = ? AND tax_year_id = ? AND person_id = ? AND question = ?").bind(orgId, taxYearId, personId, question);
+  }
+  return db
+    .prepare(
+      `INSERT INTO answers (id, org_id, tax_year_id, person_id, question, value, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(tax_year_id, person_id, question) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    )
+    .bind(crypto.randomUUID(), orgId, taxYearId, personId, question, JSON.stringify(canonical(value)), now, now);
 }
 
 /** Money as canonical decimal text ("1200.5" not "1200.50"), so equal amounts are stored alike. */

@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import type { Estimate, SlipList, Step } from "#shared";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { ResultLine } from "../components/EstimateCard.tsx";
+import { HintList } from "../components/HintList.tsx";
 import { ResourceView } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
@@ -12,9 +13,11 @@ import { Evaluation } from "../shared/engine/evaluate.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
 // Step 6, `/returns/:year/:personId/finish`: the open return's refund or balance owing, its key lines with why each is
-// what it is (worked out in the browser with the same engine), and what still needs a look before filing.
+// what it is (worked out in the browser with the same engine), what still needs a look before filing, and the return's
+// hints: savings to apply and things to know.
 
 export function FinishStep() {
+  const { person } = useReturn();
   const estimate = useEstimate();
   const slips = useSlips();
   return (
@@ -22,6 +25,7 @@ export function FinishStep() {
       <ResourceView resource={estimate}>
         {(data) => <ResourceView resource={slips}>{(slipList) => <Results estimate={data} slips={slipList} />}</ResourceView>}
       </ResourceView>
+      <HintList personId={person.id} />
     </StepLayout>
   );
 }

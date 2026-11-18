@@ -15,3 +15,6 @@ result:
   - T1.43700
   - T1.48400
   - T1.48500
+
+# The line hints compare with and without their change, added up over both returns.
+outcome: RESULT.net

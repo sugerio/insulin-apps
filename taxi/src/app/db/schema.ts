@@ -237,6 +237,40 @@ export const documentChunks = sqliteTable(
   (table) => [primaryKey({ columns: [table.documentId, table.chunkIndex] })],
 );
 
+export const HINT_DECISIONS = ["accepted", "dismissed"] as const;
+
+/**
+ * A person's decision on a hint of their return (`rules/<country>/<year>/hints.yaml`): accepted, with the answers it
+ * changed as they were before (`previous`, person → question → value or null), so it can be undone, and what it saved
+ * then; or dismissed. One row per return and hint; undoing deletes it.
+ */
+export const hintDecisions = sqliteTable(
+  "hint_decisions",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id").notNull(),
+    taxYearId: text("tax_year_id")
+      .notNull()
+      .references(() => taxYears.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    hint: text("hint").notNull(),
+    decision: text("decision", { enum: HINT_DECISIONS }).notNull(),
+    /** For an accepted saving: the household's saving when it was accepted, as decimal text. */
+    effect: text("effect"),
+    previous: text("previous").notNull().default("{}"),
+    decidedBy: text("decided_by").notNull(),
+    decidedAt: integer("decided_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("hint_decisions_year_person_hint").on(table.taxYearId, table.personId, table.hint),
+    index("hint_decisions_org").on(table.orgId),
+    check("hint_decisions_decision", inList("decision", HINT_DECISIONS)),
+    check("hint_decisions_previous_json", sql`json_valid(previous)`),
+  ],
+);
+
 /** Who changed what, and when: one row per change, never updated. */
 export const auditEvents = sqliteTable(
   "audit_events",

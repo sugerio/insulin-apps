@@ -4,6 +4,7 @@ import { ROUTE_TABLE, SUPPORTED_YEARS, routes, type AnyRoute, type ApiCatalog, t
 import { platformReader } from "./lib/ai.ts";
 import * as documents from "./lib/documents.ts";
 import { getEstimate } from "./lib/estimate.ts";
+import * as hints from "./lib/hints.ts";
 import * as household from "./lib/household.ts";
 import * as returns from "./lib/returns.ts";
 import { ApiError, forbidden, logError, notFound, parseOr400, readJson } from "./lib/http.ts";
@@ -95,6 +96,8 @@ export function createApp(options: AppOptions = {}) {
   });
   mount(routes.getYear, async ({ caller, params, db }) => household.getYear(db, caller.orgId, params.year));
   mount(routes.getEstimate, async ({ caller, params, db }) => getEstimate(db, caller.orgId, params.year));
+  mount(routes.listHints, async ({ caller, params, db }) => hints.listHints(db, caller.orgId, params.year));
+  mount(routes.decideHint, async ({ caller, params, body, db, now }) => hints.decideHint(db, caller, params.year, params.hint, body, now));
   mount(routes.setYearPeople, async ({ caller, params, body, db, now }) => household.setYearPeople(db, caller, params.year, body, now));
   mount(routes.saveHousehold, async ({ caller, params, body, db, now }) => household.saveHousehold(db, caller, params.year, body, now));
   mount(routes.listDocuments, async ({ caller, params, db }) => documents.listDocuments(db, caller.orgId, params.year));

@@ -121,6 +121,14 @@ params:
     label: Taxable income up to which tuition is limited by taxable income
     source: "Schedule 11 line 11: $57,375"
     value: 57375
+  lowestBracketTop:
+    label: Top of the lowest federal tax bracket
+    source: "T1 Step 5 Part A: taxable income up to $57,375 is taxed at the lowest rate (the first row of taxBrackets)"
+    value: 57375
+  rrspOverContributionAllowance:
+    label: RRSP contributions allowed above the deduction limit without tax
+    source: "Form T1-OVP: the 1% monthly tax applies to excess contributions over $2,000"
+    value: 2000
   tuitionTransferMax:
     label: Most current-year tuition a student can transfer
     source: "Schedule 11 line 21: maximum $5,000"
@@ -135,6 +143,11 @@ lines:
   HH.partner:
     label: Spouse or common-law partner on December 31 (1 for yes)
     formula: 'if(household.maritalStatus == "married" or household.maritalStatus == "common_law", 1, 0)'
+  # Read by hints: a claim moves between the returns only when both are prepared here. The lines that move a claim read
+  # the marital status only once a claim was moved, so a return's numbers don't wait for it.
+  SPOUSES.together:
+    label: Both spouses' returns are prepared here (1 for yes)
+    formula: "if(household.partnerInYear and line.HH.partner == 1, 1, 0)"
   HH.spouseNetIncome:
     label: Your spouse's or partner's net income
     formula: "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)"
@@ -265,7 +278,11 @@ lines:
     formula: "if(line.HH.partner == 1 and household.partnerInYear, line.S2.13, 0)"
     source: "Schedule 2: their unused age amount and the tuition they designate to you"
   T1.33099:
-    label: Medical expenses for you
+    label: Medical expenses for you, your spouse and your children
+    formula: "if(household.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(household.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)"
+    source: "Either spouse can claim the family's medical expenses: this return's own, unless the spouse claims them, and the spouse's when this return claims them"
+  OWN.medical:
+    label: Medical expenses on this return's receipts and entered here
     formula: "answer.medicalExpenses + sum(MEDICAL.box1)"
     source: "Medical expense receipts, and the amount entered that isn't on one"
   T1.33200:
@@ -373,8 +390,12 @@ lines:
   # Schedule 9 – Donations and gifts
   S9.5:
     label: Total eligible amount of charitable donations
+    formula: "if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.OWN.donations) + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.OWN.donations, 0)"
+    source: "Schedule 9 line 5: either spouse can claim both spouses' donations"
+  OWN.donations:
+    label: Donations on this return's receipts and entered here
     formula: "answer.donations + sum(DONATION.box1) + sum(T4.box46)"
-    source: "Schedule 9 line 5: official receipts (uploaded, or entered), and box 46 of T4 slips"
+    source: "Official receipts (uploaded, or entered), and box 46 of T4 slips"
   S9.10:
     label: Donations claimed (within the limit)
     formula: "min(line.S9.5, round(line.T1.23600 * param.donationIncomeLimit, 2))"
@@ -436,6 +457,11 @@ lines:
     label: Tuition transferred to your spouse or common-law partner
     formula: "if(line.HH.partner == 1 and household.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)"
     source: "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
+
+  # The household's outcome, which hints compare with and without their change.
+  RESULT.net:
+    label: Refund, less balance owing
+    formula: "line.T1.48400 - line.T1.48500"
 
   # Starting amounts worked out from receipts and last year's notice of assessment, for the person to check: not lines
   # of the return. The RRSP deduction is the contributions (with unused ones from earlier years) up to the limit.

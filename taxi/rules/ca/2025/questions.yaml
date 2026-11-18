@@ -6,6 +6,8 @@
 # - a yes/no question without one names something the app doesn't handle: never ignored, the return says so;
 # - a money question is an amount to enter. Its `receipts` are shown with it; a line that adds them makes the amount
 #   what isn't on an uploaded receipt, and a `suggest` line works out the amount from the receipts to start from.
+# A question without a module and with `decision: true` is a choice the app makes (its default) until a hint, accepted,
+# changes it: the result stays complete without an answer.
 
 questions:
   # Income
@@ -144,3 +146,16 @@ questions:
     module: about
     ask: Your spouse's or partner's 2025 net income
     help: Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it.
+
+  # Decisions between spouses: which return claims what either spouse may claim. Changed by accepting a hint
+  # (hints.yaml); each spouse claims their own until then.
+  claimSpouseDonations:
+    type: boolean
+    ask: Claim your spouse's or partner's donations on this return
+    default: false
+    decision: true
+  claimSpouseMedical:
+    type: boolean
+    ask: Claim your spouse's or partner's medical expenses on this return
+    default: false
+    decision: true

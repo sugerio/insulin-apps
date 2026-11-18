@@ -1,6 +1,6 @@
 import { DocLink, DocTable, type DocTopic } from "./parts.tsx";
 
-// Docs › Getting started: what the app does, the six steps of a tax year, who can do what, and what it stores.
+// Docs › Getting started: what the app does, the seven steps of a tax year, who can do what, and what it stores.
 
 export const gettingStarted: DocTopic = {
   slug: "getting-started",
@@ -30,13 +30,14 @@ export const gettingStarted: DocTopic = {
     },
     {
       id: "steps",
-      title: "A tax year in six steps",
+      title: "A tax year in seven steps",
       body: (
         <>
           <p>
             First add the household's people under <b>Household</b>. Then open <b>Returns</b> and start the tax year, choosing who is in it (only you, to begin with). To change who is in it later, use <b>Change</b> under the year on <b>Returns</b>.
             You and your spouse or partner each have a return, and you work on one return at a time. The return you are on is named above
-            the steps; select it to switch to the other return. Each return has six steps, and a step that is done shows a check mark.
+            the steps; select it to switch to the other return. Each return has seven steps, in a row above the page, and a step that is
+            done shows a check mark.
           </p>
           <p>
             Your marital status and who is in the year are the same on both returns. Both returns are worked out together, so each one can
@@ -44,30 +45,34 @@ export const gettingStarted: DocTopic = {
           </p>
           <ol>
             <li>
-              <b>Personal info.</b> The marital status on December 31, and this person's province. See{" "}
+              <b>Personal info.</b> The marital status on December 31, this person's province, and a spouse's net income when their return isn't prepared here. See{" "}
               <DocLink to="household">The household</DocLink>.
             </li>
             <li>
               <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file into slips. A slip with the other
               person's name on it goes to their return. A file with the same name as one in this return replaces it and the slips read from it, and is read again. A file
               with the same content as one under another name isn't saved again. A file uploaded by mistake can be deleted,
-              with the slips read from it. You can also type slips in step 4.
+              with the slips read from it. You can also type slips in at Confirm.
             </li>
             <li>
-              <b>What applies.</b> The slips found in your documents: open one to see its boxes as read, and change an amount
-              right there (a changed slip is confirmed again at step 4). For the kinds of slips not found
-              (employment, interest and dividends, mutual funds, sales of investments, tuition), whether you have one, and a yes without the slip
-              is missing, to upload right there or type in at step 4; and yes or no to what the app doesn't handle yet, such as self-employment or
-              rent.
+              <b>Income.</b> What is on your return: the slips found (employment, interest and dividends, mutual funds, sales of
+              investments), each opening into its boxes to check and change (a changed slip is confirmed again at Confirm). Under{" "}
+              <b>Add to your return</b>, add the other kinds of income you had. One added without its slip is missing, to upload right there
+              or type in at Confirm. What the app doesn't handle yet, such as self-employment or rent, can be added too: the return then
+              says it isn't included. What you don't add counts as none.
+            </li>
+            <li>
+              <b>Deductions.</b> RRSP and FHSA contributions, and what the app doesn't handle yet (working from home, child care,
+              moving). <b>From your slips</b> shows what your slips already deduct, such as union dues.
+            </li>
+            <li>
+              <b>Credits.</b> Tuition (T2202, and unused tuition from last year), medical expenses and donations, and what your slips
+              already claim, such as CPP and EI contributions. Only the amounts that can change the return appear.
             </li>
             <li>
               <b>Confirm.</b> The slips (T4, T5, T3, T5008, T2202), read by AI or entered box by box. Check each one against the paper slip (a
               box AI wasn't sure of is marked), then confirm them. Changing a slip makes it unconfirmed again. A slip that is the other
               person's can be moved to their return.
-            </li>
-            <li>
-              <b>Deductions.</b> RRSP and FHSA contributions, medical expenses, donations, unused tuition, and the other amounts the return
-              needs. Only the questions that can change a return appear.
             </li>
             <li>
               <b>Finish.</b> The return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
@@ -83,7 +88,7 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Beside the steps after personal info, <b>Estimate</b> shows the return's key lines: total income, net income, taxable income, net
+            Above each step but Finish, <b>Estimate</b> shows the refund or balance owing; <b>Details</b> opens the return's key lines: total income, net income, taxable income, net
             federal tax, provincial tax (Ontario, British Columbia or Alberta), the total payable, the tax already deducted, and the refund or
             balance owing. When both returns are prepared together, each uses the other's numbers, such as the spouse amount; the line's
             "why" shows them.

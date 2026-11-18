@@ -36,7 +36,9 @@
         "hasEiBenefits": false,
         "hasForeignIncome": false,
         "soldProperty": false,
-        "hasChildCare": false
+        "hasChildCare": false,
+        "hasWorkFromHome": false,
+        "hasMovingExpenses": false
       }
     },
     "slips": [

@@ -182,7 +182,7 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
         ) : null}
         <div className="flex justify-end">
           <Button asChild variant={rows.length > 0 && !reading ? "default" : "outline"}>
-            <Link to={stepPath(year.year, person.id, "applies")}>Next: what applies</Link>
+            <Link to={stepPath(year.year, person.id, "income")}>Next: income</Link>
           </Button>
         </div>
       </CardContent>

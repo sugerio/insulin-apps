@@ -17,14 +17,19 @@ You can also copy the numbers into certified tax software.
 You and your spouse or partner each have a return. You work on one return at a time, and switch to the other from the
 return's name above its steps. Both returns are worked out together, so each can use the other's numbers.
 
-Each return has six steps:
+Each return has seven steps:
 
 1. **Personal info.** The facts no document shows.
 2. **Upload documents.** Slips and receipts, read by AI. A slip with the other person's name goes to their return.
-3. **What applies.** What the documents show, each slip box by box to check and change, and anything missing.
-4. **Confirm.** Every number AI read, to check against the papers.
-5. **Deductions.** Deductions and credits.
-6. **Finish.** The refund or balance owing, and what to check before filing.
+3. **Income.** Employment, investments and the rest: the slips found, box by box to check and change, and what else
+   to add.
+4. **Deductions.** RRSP and FHSA contributions, and what your slips already deduct.
+5. **Credits.** Tuition, medical expenses, donations, and what your slips already claim.
+6. **Confirm.** Every number AI read, to check against the papers.
+7. **Finish.** The refund or balance owing, and what to check before filing.
+
+In Income, Deductions and Credits, add what you have; what you don't add counts as none. Something the app doesn't
+handle yet, such as self-employment or working from home, can be added too: the return then says it isn't included.
 
 > [!NOTE]
 > Taxi is being built in parts. The filled-in CRA forms to download come in a later version.

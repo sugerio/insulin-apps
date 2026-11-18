@@ -36,7 +36,7 @@ With the file, Claude gets the year, the names of the people in the year, and th
 boxes. It answers in a fixed shape: each slip's type, the name on it, the issuer, its boxes and the boxes it couldn't
 read clearly. It is told never to return a social insurance number. Taxi then checks the answer itself: only known slip
 types and boxes are kept, amounts must be numbers, a slip for another year is refused, and a slip already in the year
-isn't added again. Every slip read this way starts unconfirmed: someone checks it against the paper slip in step 4.
+isn't added again. Every slip read this way starts unconfirmed: someone checks it against the paper slip at Confirm.
 
 A file with the name of one already in the same return is a new version, changed or not: once it is read into slips,
 it replaces the earlier file and every slip read from it (those start unconfirmed again). If the new version can't be

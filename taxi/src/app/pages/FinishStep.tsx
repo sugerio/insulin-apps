@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
-import type { Estimate, SlipList } from "#shared";
+import type { Estimate, SlipList, Step } from "#shared";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { ResultLine } from "../components/EstimateCard.tsx";
 import { ResourceView } from "../components/Feedback.tsx";
@@ -36,11 +36,16 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const line = (id: string) => person.lines.find((each) => each.id === id);
   const refund = line("T1.48400");
   const owing = line("T1.48500");
+  /** The step that asks a question: its module's, Personal info for facts about the person. */
+  const stepOfQuestion = (id: string): Step => {
+    const module = rules.questions.get(id)?.module;
+    return module === "income" || module === "deductions" || module === "credits" ? module : "household";
+  };
   const toConfirm = slips.slips.filter((slip) => slip.personId === owner.id && slip.status === "unconfirmed").length;
   const checks = [
     ...(toConfirm > 0 ? [{ text: `${toConfirm} ${toConfirm === 1 ? "slip is" : "slips are"} not confirmed yet.`, step: "confirm" as const }] : []),
-    ...person.missing.map((item) => ({ text: `Needed: ${item.ask}.`, step: item.question.startsWith("household.") || item.question.startsWith("person.") ? ("household" as const) : ("deductions" as const) })),
-    ...person.estimates.map((item) => ({ text: `Not answered yet: ${item.ask}.`, step: rules.questions.get(item.question)?.step === "applies" ? ("applies" as const) : ("deductions" as const) })),
+    ...person.missing.map((item) => ({ text: `Needed: ${item.ask}.`, step: stepOfQuestion(item.question) })),
+    ...person.estimates.map((item) => ({ text: `Not answered yet: ${item.ask}.`, step: stepOfQuestion(item.question) })),
     ...person.unhandled.map((note) => ({ text: note, step: null })),
   ];
   return (

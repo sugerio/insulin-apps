@@ -168,7 +168,7 @@ lines:
     label: Total income
     formula: "line.T1.10100 + line.T1.12000 + line.T1.12100 + line.T1.12700 + line.T1.13000 + line.SCOPE.income"
 
-  # What applies: income and deductions this app doesn't handle yet. Answering yes makes the return say so.
+  # Income and deductions this app doesn't handle yet. Answering yes makes the return say so.
   SCOPE.income:
     label: Income this app doesn't handle
     formula: >-
@@ -180,11 +180,15 @@ lines:
       + if(answer.soldProperty, unsupported("The sale of a home or other real estate isn't handled by this app yet"), 0)
   SCOPE.deductions:
     label: Deductions this app doesn't handle
-    formula: 'if(answer.hasChildCare, unsupported("Child care expenses (T778) aren''t handled by this app yet"), 0)'
+    formula: >-
+      if(answer.hasWorkFromHome, unsupported("Home-office expenses (T777) aren't handled by this app yet"), 0)
+      + if(answer.hasChildCare, unsupported("Child care expenses (T778) aren't handled by this app yet"), 0)
+      + if(answer.hasMovingExpenses, unsupported("Moving expenses (T1-M) aren't handled by this app yet"), 0)
 
   # Step 3 – Net income
   T1.20700:
     label: Registered pension plan (RPP) deduction
+    module: deductions
     formula: "sum(T4.box20)"
   T1.20800:
     label: RRSP deduction
@@ -194,9 +198,11 @@ lines:
     formula: "answer.fhsaDeduction"
   T1.21200:
     label: Annual union, professional, or like dues
+    module: deductions
     formula: "sum(T4.box44)"
   T1.22215:
     label: Deduction for CPP enhanced contributions on employment income
+    module: deductions
     formula: "min(param.enhancedCppDeductionMax, round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A))"
     source: "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
   T1.23300:
@@ -237,13 +243,16 @@ lines:
     source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
   T1.30800:
     label: Base CPP contributions through employment
+    module: credits
     formula: "min(param.cppBaseMax, round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2))"
     source: "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit"
   T1.31200:
     label: Employment insurance premiums through employment
+    module: credits
     formula: "min(param.eiPremiumMax, sum(T4.box18))"
   T1.31260:
     label: Canada employment amount
+    module: credits
     formula: "min(param.canadaEmploymentAmount, line.T1.10100)"
   T1.T101:
     label: Credit amounts before tuition (T1 line 101)

@@ -11,8 +11,9 @@ CRA's own forms for the person to sign and mail. It runs on the Insulin app temp
 Nitro, deployed as a Cloudflare Worker with one D1 database. Users, roles and permissions come from the Insulin
 platform; the organization is the tenant.
 
-Each adult of a tax year (the person preparing, and their spouse when in the year) has a return with six steps:
-personal info, upload documents, what applies, confirm, deductions, finish. The app shows one return at a time, at
+Each adult of a tax year (the person preparing, and their spouse when in the year) has a return with seven steps:
+personal info, upload documents, income, deductions, credits, confirm, finish. Income, deductions and credits are built
+from the questions' `module` in questions.yaml (one `ModuleStep`). The app shows one return at a time, at
 `/returns/:year/:personId/:step`, with a switcher to the other; the server reports each return's steps
 (`TaxYear.returns`). The engine works out both returns together, so the couple's credits and transfers hold. CRA form
 filling comes in a later change.

@@ -41,6 +41,13 @@ export interface Param {
   value: ParamValue;
   source: string;
 }
+/**
+ * The parts of a return the screens group its questions into: `about` the person (Personal info), and the income,
+ * deductions and credits on it.
+ */
+export const MODULES = ["about", "income", "deductions", "credits"] as const;
+export type Module = (typeof MODULES)[number];
+
 export interface Line {
   id: string;
   label: string;
@@ -48,14 +55,16 @@ export interface Line {
   text: string;
   formula: Formula;
   source?: string;
+  /** A line worked out from slips, shown in this module so people see what their slips already claim. */
+  module?: Module;
 }
 export type QuestionType = "money" | "boolean" | "choice";
 export interface Question {
   id: string;
   type: QuestionType;
   ask: string;
-  /** The step of the year that asks it (`applies`, `deductions`); the screens build their forms from this. */
-  step?: string;
+  /** The part of the return that asks it; the screens build their forms from this. */
+  module?: Module;
   /** A sentence under the question. */
   help?: string;
   /** For a question about a kind of income or expense: the slip type that shows it. Found slips answer it. */
@@ -102,13 +111,13 @@ export const compiledRulesSchema = z.strictObject({
   version: z.string(),
   result: z.array(z.string()),
   params: z.record(z.string(), z.strictObject({ label: z.string(), value: z.union([decimalText, z.array(bracketRowSchema).min(1)]), source: z.string() })),
-  lines: z.record(z.string(), z.strictObject({ label: z.string(), formula: z.string(), source: z.string().optional() })),
+  lines: z.record(z.string(), z.strictObject({ label: z.string(), formula: z.string(), source: z.string().optional(), module: z.enum(MODULES).optional() })),
   questions: z.record(
     z.string(),
     z.strictObject({
       type: z.enum(["money", "boolean", "choice"]),
       ask: z.string(),
-      step: z.string().optional(),
+      module: z.enum(MODULES).optional(),
       help: z.string().optional(),
       slip: z.string().optional(),
       default: z.union([z.string(), z.boolean()]).optional(),
@@ -151,7 +160,14 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       if (error instanceof FormulaSyntaxError) fail(`lines.${id}`, error.message, error.column);
       throw error;
     }
-    lines.set(id, { id, label: line.label, text: line.formula, formula, ...(line.source === undefined ? {} : { source: line.source }) });
+    lines.set(id, {
+      id,
+      label: line.label,
+      text: line.formula,
+      formula,
+      ...(line.source === undefined ? {} : { source: line.source }),
+      ...(line.module === undefined ? {} : { module: line.module }),
+    });
   }
   const questions = new Map(Object.entries(compiled.questions).map(([id, question]) => [id, { id, ...question } satisfies Question]));
   const slips = new Map(Object.entries(compiled.slips).map(([id, slip]) => [id, { id, ...slip } satisfies SlipType]));

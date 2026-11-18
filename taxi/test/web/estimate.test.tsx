@@ -5,7 +5,7 @@ import type { Person } from "#shared";
 import { OWNER } from "../support/server.ts";
 import { renderApp } from "./support.tsx";
 
-describe("the estimate beside a step", () => {
+describe("the estimate above a step", () => {
   it("shows each return's result lines and explains one", async () => {
     await renderApp("/returns/2025/upload", {
       seed: async (server) => {
@@ -17,7 +17,10 @@ describe("the estimate beside a step", () => {
         });
       },
     });
-    const card = (await screen.findByRole("heading", { name: "Estimate" })).closest("[data-slot=card]") as HTMLElement;
+    const summary = await screen.findByRole("group", { name: "Estimate" });
+    await within(summary).findByText(/^Refund \$/);
+    fireEvent.click(within(summary).getByRole("button", { name: "Estimate details" }));
+    const card = await screen.findByRole("dialog");
     const line = await within(card).findByRole("button", { name: /Net federal tax/ });
     expect(line.textContent).toContain("$0.00");
     expect(within(card).getByText(/^\d+ answers assumed$/)).toBeTruthy();

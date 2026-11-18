@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Dec } from "./decimal.ts";
 import { RuleError } from "./errors.ts";
 import { percentToDecimal } from "./formula.ts";
-import { loadRuleSet, type CompiledRules } from "./rules.ts";
+import { MODULES, loadRuleSet, type CompiledRules } from "./rules.ts";
 
 // Compiles a year's rule files into the JSON the app imports. A year is a folder of YAML files: `year.yaml` names the
 // country, the year, the filing unit and the year it extends; the other files hold entries (params, lines, questions,
@@ -34,11 +34,11 @@ const sourceParam = z.strictObject({
   value: z.union([sourceNumber, z.array(z.strictObject({ upTo: sourceNumber.optional(), rate: sourceNumber, base: sourceNumber.optional() }))]),
   source: z.string().min(1, "Every param names its source"),
 });
-const sourceLine = z.strictObject({ label: z.string().min(1), formula: z.string().min(1), source: z.string().min(1).optional() });
+const sourceLine = z.strictObject({ label: z.string().min(1), formula: z.string().min(1), source: z.string().min(1).optional(), module: z.enum(MODULES).optional() });
 const sourceQuestion = z.strictObject({
   type: z.enum(["money", "boolean", "choice"]),
   ask: z.string().min(1),
-  step: z.enum(["applies", "deductions"]).optional(),
+  module: z.enum(MODULES).optional(),
   help: z.string().min(1).optional(),
   slip: z.string().min(1).optional(),
   default: z.union([sourceNumber, z.boolean()]).optional(),

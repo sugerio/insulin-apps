@@ -763,11 +763,12 @@
     },
     "SCOPE.deductions": {
       "label": "Deductions this app doesn't handle",
-      "formula": "if(answer.hasChildCare, unsupported(\"Child care expenses (T778) aren't handled by this app yet\"), 0)"
+      "formula": "if(answer.hasWorkFromHome, unsupported(\"Home-office expenses (T777) aren't handled by this app yet\"), 0) + if(answer.hasChildCare, unsupported(\"Child care expenses (T778) aren't handled by this app yet\"), 0) + if(answer.hasMovingExpenses, unsupported(\"Moving expenses (T1-M) aren't handled by this app yet\"), 0)"
     },
     "T1.20700": {
       "label": "Registered pension plan (RPP) deduction",
-      "formula": "sum(T4.box20)"
+      "formula": "sum(T4.box20)",
+      "module": "deductions"
     },
     "T1.20800": {
       "label": "RRSP deduction",
@@ -779,12 +780,14 @@
     },
     "T1.21200": {
       "label": "Annual union, professional, or like dues",
-      "formula": "sum(T4.box44)"
+      "formula": "sum(T4.box44)",
+      "module": "deductions"
     },
     "T1.22215": {
       "label": "Deduction for CPP enhanced contributions on employment income",
       "formula": "min(param.enhancedCppDeductionMax, round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A))",
-      "source": "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
+      "source": "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted",
+      "module": "deductions"
     },
     "T1.23300": {
       "label": "Total deductions",
@@ -825,15 +828,18 @@
     "T1.30800": {
       "label": "Base CPP contributions through employment",
       "formula": "min(param.cppBaseMax, round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2))",
-      "source": "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit"
+      "source": "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit",
+      "module": "credits"
     },
     "T1.31200": {
       "label": "Employment insurance premiums through employment",
-      "formula": "min(param.eiPremiumMax, sum(T4.box18))"
+      "formula": "min(param.eiPremiumMax, sum(T4.box18))",
+      "module": "credits"
     },
     "T1.31260": {
       "label": "Canada employment amount",
-      "formula": "min(param.canadaEmploymentAmount, line.T1.10100)"
+      "formula": "min(param.canadaEmploymentAmount, line.T1.10100)",
+      "module": "credits"
     },
     "T1.T101": {
       "label": "Credit amounts before tuition (T1 line 101)",
@@ -1215,131 +1221,145 @@
     "hasEmploymentIncome": {
       "type": "boolean",
       "ask": "Employment income",
-      "step": "applies",
+      "module": "income",
       "help": "A T4 from each employer you worked for in 2025.",
       "slip": "T4"
     },
     "hasInvestmentIncome": {
       "type": "boolean",
       "ask": "Interest or dividends",
-      "step": "applies",
+      "module": "income",
       "help": "A T5 from each bank, credit union or broker that paid you $50 or more.",
       "slip": "T5"
     },
     "hasTrustIncome": {
       "type": "boolean",
       "ask": "Mutual fund or trust income",
-      "step": "applies",
+      "module": "income",
       "help": "A T3 from each mutual fund or trust held outside an RRSP or TFSA.",
       "slip": "T3"
     },
     "hasSoldInvestments": {
       "type": "boolean",
       "ask": "Sold shares, bonds or fund units",
-      "step": "applies",
+      "module": "income",
       "help": "A T5008 from each broker, for sales outside an RRSP or TFSA.",
       "slip": "T5008"
-    },
-    "hasTuition": {
-      "type": "boolean",
-      "ask": "Tuition at a college or university",
-      "step": "applies",
-      "help": "A T2202 from each school, for 2025.",
-      "slip": "T2202"
     },
     "hasSelfEmployment": {
       "type": "boolean",
       "ask": "Self-employment or business income",
-      "step": "applies",
+      "module": "income",
       "help": "Income from your own business, freelancing or gig work (T2125).",
       "default": false
     },
     "hasRentalIncome": {
       "type": "boolean",
       "ask": "Rental income",
-      "step": "applies",
+      "module": "income",
       "help": "Rent from a property you own (T776).",
       "default": false
     },
     "hasPensionIncome": {
       "type": "boolean",
       "ask": "Pension or government benefits",
-      "step": "applies",
+      "module": "income",
       "help": "A workplace pension, RRIF withdrawals, Old Age Security or CPP benefits.",
       "default": false
     },
     "hasEiBenefits": {
       "type": "boolean",
       "ask": "Employment insurance benefits",
-      "step": "applies",
+      "module": "income",
       "help": "EI regular, sickness, maternity or parental benefits (T4E).",
       "default": false
     },
     "hasForeignIncome": {
       "type": "boolean",
       "ask": "Income or property outside Canada",
-      "step": "applies",
+      "module": "income",
       "help": "Foreign income, or foreign property that cost more than $100,000 in total (T1135).",
       "default": false
     },
     "soldProperty": {
       "type": "boolean",
       "ask": "Sold your home or other real estate",
-      "step": "applies",
+      "module": "income",
       "help": "The sale of a home, cottage or rental property (Schedule 3, T2091).",
-      "default": false
-    },
-    "hasChildCare": {
-      "type": "boolean",
-      "ask": "Child care expenses",
-      "step": "applies",
-      "help": "Daycare, before- and after-school programs or day camps (T778).",
       "default": false
     },
     "rrspDeduction": {
       "type": "money",
       "ask": "RRSP contributions to deduct for 2025",
-      "step": "deductions",
+      "module": "deductions",
       "help": "Contributions from March 4, 2025 to March 2, 2026, up to your limit on last year's notice of assessment.",
       "default": "0"
     },
     "fhsaDeduction": {
       "type": "money",
       "ask": "FHSA contributions to deduct for 2025",
-      "step": "deductions",
+      "module": "deductions",
+      "default": "0"
+    },
+    "hasWorkFromHome": {
+      "type": "boolean",
+      "ask": "Working from home",
+      "module": "deductions",
+      "help": "Home-office expenses as an employee, with a T2200 from your employer (T777).",
+      "default": false
+    },
+    "hasChildCare": {
+      "type": "boolean",
+      "ask": "Child care expenses",
+      "module": "deductions",
+      "help": "Daycare, before- and after-school programs or day camps (T778).",
+      "default": false
+    },
+    "hasMovingExpenses": {
+      "type": "boolean",
+      "ask": "Moving expenses",
+      "module": "deductions",
+      "help": "A move at least 40 km closer to a new job or school (T1-M).",
+      "default": false
+    },
+    "hasTuition": {
+      "type": "boolean",
+      "ask": "Tuition at a college or university",
+      "module": "credits",
+      "help": "A T2202 from each school, for 2025.",
+      "slip": "T2202"
+    },
+    "unusedTuition": {
+      "type": "money",
+      "ask": "Unused federal tuition from your 2024 notice of assessment",
+      "module": "credits",
+      "default": "0"
+    },
+    "tuitionTransfer": {
+      "type": "money",
+      "ask": "Tuition to transfer to your spouse or partner",
+      "module": "credits",
+      "help": "Up to $5,000 of this year's tuition, as designated on the back of your T2202.",
       "default": "0"
     },
     "medicalExpenses": {
       "type": "money",
       "ask": "Medical expenses you paid for yourself",
-      "step": "deductions",
+      "module": "credits",
       "help": "Either spouse can claim the family's medical expenses; it usually saves more on the lower income.",
       "default": "0"
     },
     "donations": {
       "type": "money",
       "ask": "Donations on official receipts (not on a T4)",
-      "step": "deductions",
+      "module": "credits",
       "help": "Either spouse can claim both spouses' donations; claiming them together usually saves more.",
-      "default": "0"
-    },
-    "unusedTuition": {
-      "type": "money",
-      "ask": "Unused federal tuition from your 2024 notice of assessment",
-      "step": "deductions",
-      "default": "0"
-    },
-    "tuitionTransfer": {
-      "type": "money",
-      "ask": "Tuition to transfer to your spouse or partner",
-      "step": "deductions",
-      "help": "Up to $5,000 of this year's tuition, as designated on the back of your T2202.",
       "default": "0"
     },
     "spouseNetIncome": {
       "type": "money",
       "ask": "Your spouse's or partner's 2025 net income",
-      "step": "deductions",
+      "module": "about",
       "help": "Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it."
     }
   },
@@ -1426,5 +1446,5 @@
       ]
     }
   },
-  "version": "86902f6a6b9295f2"
+  "version": "31924a325740fc8c"
 }

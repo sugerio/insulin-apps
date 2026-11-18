@@ -1,121 +1,139 @@
-# Questions a formula reads as answer.<id>. A question with a default gives an estimate until it is answered. `step`
-# is the step of the year that asks it; the screens build their forms from these entries.
+# Questions a formula reads as answer.<id>. A question with a default gives an estimate until it is answered. `module`
+# is the part of the return that asks it (about the person, income, deductions, credits); the screens build their forms
+# from these entries, in this order. In a module:
+# - a yes/no question with a `slip` is a kind of income or expense shown by that slip: finding the slip adds it to the
+#   return, and a yes without the slip is missing;
+# - a yes/no question without one names something the app doesn't handle: never ignored, the return says so;
+# - a money question is an amount to enter.
 
 questions:
-  # Step 3 – What applies: the kinds of income and expenses each adult has. A question with a `slip` is answered by
-  # finding that slip in the person's documents; asked only when none was found, and a yes without the slip is missing.
+  # Income
   hasEmploymentIncome:
     type: boolean
-    step: applies
+    module: income
     slip: T4
     ask: Employment income
     help: A T4 from each employer you worked for in 2025.
   hasInvestmentIncome:
     type: boolean
-    step: applies
+    module: income
     slip: T5
     ask: Interest or dividends
     help: A T5 from each bank, credit union or broker that paid you $50 or more.
   hasTrustIncome:
     type: boolean
-    step: applies
+    module: income
     slip: T3
     ask: Mutual fund or trust income
     help: A T3 from each mutual fund or trust held outside an RRSP or TFSA.
   hasSoldInvestments:
     type: boolean
-    step: applies
+    module: income
     slip: T5008
     ask: Sold shares, bonds or fund units
     help: A T5008 from each broker, for sales outside an RRSP or TFSA.
-  hasTuition:
-    type: boolean
-    step: applies
-    slip: T2202
-    ask: Tuition at a college or university
-    help: A T2202 from each school, for 2025.
-
-  # Step 3 – What applies, continued: anything the app doesn't handle is named, never ignored.
   hasSelfEmployment:
     type: boolean
-    step: applies
+    module: income
     ask: Self-employment or business income
     help: Income from your own business, freelancing or gig work (T2125).
     default: false
   hasRentalIncome:
     type: boolean
-    step: applies
+    module: income
     ask: Rental income
     help: Rent from a property you own (T776).
     default: false
   hasPensionIncome:
     type: boolean
-    step: applies
+    module: income
     ask: Pension or government benefits
     help: A workplace pension, RRIF withdrawals, Old Age Security or CPP benefits.
     default: false
   hasEiBenefits:
     type: boolean
-    step: applies
+    module: income
     ask: Employment insurance benefits
     help: EI regular, sickness, maternity or parental benefits (T4E).
     default: false
   hasForeignIncome:
     type: boolean
-    step: applies
+    module: income
     ask: Income or property outside Canada
     help: Foreign income, or foreign property that cost more than $100,000 in total (T1135).
     default: false
   soldProperty:
     type: boolean
-    step: applies
+    module: income
     ask: Sold your home or other real estate
     help: The sale of a home, cottage or rental property (Schedule 3, T2091).
     default: false
-  hasChildCare:
-    type: boolean
-    step: applies
-    ask: Child care expenses
-    help: Daycare, before- and after-school programs or day camps (T778).
-    default: false
 
-  # Step 5 – Deductions and credits
+  # Deductions
   rrspDeduction:
     type: money
-    step: deductions
+    module: deductions
     ask: RRSP contributions to deduct for 2025
     help: Contributions from March 4, 2025 to March 2, 2026, up to your limit on last year's notice of assessment.
     default: 0
   fhsaDeduction:
     type: money
-    step: deductions
+    module: deductions
     ask: FHSA contributions to deduct for 2025
+    default: 0
+  hasWorkFromHome:
+    type: boolean
+    module: deductions
+    ask: Working from home
+    help: Home-office expenses as an employee, with a T2200 from your employer (T777).
+    default: false
+  hasChildCare:
+    type: boolean
+    module: deductions
+    ask: Child care expenses
+    help: Daycare, before- and after-school programs or day camps (T778).
+    default: false
+  hasMovingExpenses:
+    type: boolean
+    module: deductions
+    ask: Moving expenses
+    help: A move at least 40 km closer to a new job or school (T1-M).
+    default: false
+
+  # Credits
+  hasTuition:
+    type: boolean
+    module: credits
+    slip: T2202
+    ask: Tuition at a college or university
+    help: A T2202 from each school, for 2025.
+  unusedTuition:
+    type: money
+    module: credits
+    ask: Unused federal tuition from your 2024 notice of assessment
+    default: 0
+  tuitionTransfer:
+    type: money
+    module: credits
+    ask: Tuition to transfer to your spouse or partner
+    help: Up to $5,000 of this year's tuition, as designated on the back of your T2202.
     default: 0
   medicalExpenses:
     type: money
-    step: deductions
+    module: credits
     ask: Medical expenses you paid for yourself
     help: Either spouse can claim the family's medical expenses; it usually saves more on the lower income.
     default: 0
   donations:
     type: money
-    step: deductions
+    module: credits
     ask: Donations on official receipts (not on a T4)
     help: Either spouse can claim both spouses' donations; claiming them together usually saves more.
     default: 0
-  unusedTuition:
-    type: money
-    step: deductions
-    ask: Unused federal tuition from your 2024 notice of assessment
-    default: 0
-  tuitionTransfer:
-    type: money
-    step: deductions
-    ask: Tuition to transfer to your spouse or partner
-    help: Up to $5,000 of this year's tuition, as designated on the back of your T2202.
-    default: 0
+
+  # About the person (Personal info)
   spouseNetIncome:
     type: money
-    step: deductions
+    module: about
     ask: Your spouse's or partner's 2025 net income
     help: Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it.

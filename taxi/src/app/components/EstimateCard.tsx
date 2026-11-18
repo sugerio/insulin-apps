@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { Estimate } from "#shared";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet.tsx";
 import { cn } from "@/lib/utils.ts";
 import { Evaluation, type Explanation } from "../shared/engine/evaluate.ts";
 import type { RuleSet, Status } from "../shared/engine/rules.ts";
@@ -11,24 +12,53 @@ import { useEstimate } from "../lib/useYearData.ts";
 import { ResourceView } from "./Feedback.tsx";
 import { useReturn } from "./YearFrame.tsx";
 
-// The open return's estimate beside a step: its result lines from the server, and "why" for each line, which the
-// browser works out with the same engine and the input the server sent (both adults' returns are worked out together,
-// so what one adult's return takes from the other's shows in the "why").
+// The open return's estimate above each step: its refund or balance owing in one line, and on "Details" its result
+// lines in a panel from the side, with "why" for each line, which the browser works out with the same engine and the
+// input the server sent (both adults' returns are worked out together, so what one adult's return takes from the
+// other's shows in the "why").
 
-export function EstimateCard() {
+export function EstimateSummary() {
   const resource = useEstimate();
+  const { person } = useReturn();
+  const result = resource.status === "ready" ? headline(resource.data, person.id) : null;
   return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle>
-          <h2 className="text-sm font-semibold">Estimate</h2>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResourceView resource={resource}>{(estimate) => <EstimateBody estimate={estimate} />}</ResourceView>
-      </CardContent>
-    </Card>
+    <Sheet>
+      <div className="flex items-center gap-3" role="group" aria-label="Estimate">
+        <span className="flex flex-col items-end leading-tight">
+          <span className="text-xs text-muted-foreground">Estimate</span>
+          <span className="font-semibold tabular-nums">
+            {resource.status === "loading" ? "…" : result ? result.text : "Not worked out yet"}
+            {result?.estimate ? <span className="ml-1 text-xs font-normal text-muted-foreground">est.</span> : null}
+          </span>
+        </span>
+        <SheetTrigger asChild>
+          <Button variant="outline" size="sm" aria-label="Estimate details">
+            Details
+          </Button>
+        </SheetTrigger>
+      </div>
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Estimate</SheetTitle>
+          <SheetDescription>{person.name}'s return. Select a line to see why.</SheetDescription>
+        </SheetHeader>
+        <div className="px-4 pb-6">
+          <ResourceView resource={resource}>{(estimate) => <EstimateBody estimate={estimate} />}</ResourceView>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
+}
+
+/** The refund or balance owing, and whether an answer assumed for now went into it. */
+function headline(estimate: Estimate, personId: string): { text: string; estimate: boolean } | null {
+  const lines = estimate.result.people.find((person) => person.personId === personId)?.lines ?? [];
+  const refund = lines.find((line) => line.id === "T1.48400");
+  const owing = lines.find((line) => line.id === "T1.48500");
+  if (!refund || !owing || refund.value === null || owing.value === null) return null;
+  const owes = Number(owing.value) > 0;
+  const line = owes ? owing : refund;
+  return { text: `${owes ? "Balance owing" : "Refund"} ${formatMoney(line.value!)}`, estimate: line.status === "estimate" };
 }
 
 function EstimateBody({ estimate }: { estimate: Estimate }) {

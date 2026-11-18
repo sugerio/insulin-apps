@@ -5,9 +5,8 @@ import { ReturnFrame, ReturnIndex, YearFrame, YearIndex } from "./components/Yea
 import { DocsPage } from "./pages/DocsPage.tsx";
 import { HouseholdPage } from "./pages/HouseholdPage.tsx";
 import { HouseholdStep } from "./pages/HouseholdStep.tsx";
-import { AppliesStep } from "./pages/AppliesStep.tsx";
 import { ConfirmStep } from "./pages/ConfirmStep.tsx";
-import { DeductionsStep } from "./pages/DeductionsStep.tsx";
+import { ModuleStep } from "./pages/ModuleStep.tsx";
 import { FinishStep } from "./pages/FinishStep.tsx";
 import { UploadStep } from "./pages/UploadStep.tsx";
 import { NotFoundPage, RouteErrorPage } from "./pages/Pages.tsx";
@@ -37,9 +36,12 @@ export const routes: RouteObject[] = [
                   { index: true, element: <ReturnIndex /> },
                   { path: "household", element: <HouseholdStep /> },
                   { path: "upload", element: <UploadStep /> },
-                  { path: "applies", element: <AppliesStep /> },
+                  { path: "income", element: <ModuleStep key="income" module="income" /> },
+                  { path: "deductions", element: <ModuleStep key="deductions" module="deductions" /> },
+                  { path: "credits", element: <ModuleStep key="credits" module="credits" /> },
+                  // What applies became Income, Deductions and Credits.
+                  { path: "applies", element: <Navigate to="../income" replace /> },
                   { path: "confirm", element: <ConfirmStep /> },
-                  { path: "deductions", element: <DeductionsStep /> },
                   { path: "finish", element: <FinishStep /> },
                   { path: "*", element: <NotFoundPage /> },
                 ],

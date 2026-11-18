@@ -127,48 +127,57 @@ describe("slips", () => {
 describe("the steps", () => {
   it("are done once their questions are answered and the slips confirmed", async () => {
     const { alex, revision } = await year();
-    const applies = {
+    const put = (current: number, answers: Record<string, string | boolean | null>) =>
+      json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current, personId: alex.id, answers } }));
+    const income = {
       hasEmploymentIncome: false,
       hasInvestmentIncome: false,
       hasTrustIncome: false,
       hasSoldInvestments: false,
-      hasTuition: false,
       hasSelfEmployment: false,
       hasRentalIncome: false,
       hasPensionIncome: false,
       hasEiBenefits: false,
       hasForeignIncome: false,
       soldProperty: false,
-      hasChildCare: false,
     };
-    let current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: applies } }));
-    expect(current.returns[0]!.steps).toMatchObject({ household: "done", upload: "todo", applies: "done", confirm: "todo", deductions: "todo", finish: "todo" });
-    current = await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/answers", {
-        body: { revision: current.revision, personId: alex.id, answers: { rrspDeduction: "0", fhsaDeduction: "0", medicalExpenses: "0", donations: "0", unusedTuition: "0" } },
-      }),
-    );
-    // Alex is married and Sam's return isn't prepared here: Sam's net income is still needed.
+    let current = await put(revision, income);
+    // Alex is married and Sam's return isn't prepared here: Sam's net income is asked on Personal info.
+    expect(current.returns[0]!.steps).toEqual({
+      household: "todo",
+      upload: "todo",
+      income: "done",
+      deductions: "todo",
+      credits: "todo",
+      confirm: "todo",
+      finish: "todo",
+    });
+    current = await put(current.revision, { rrspDeduction: "0", fhsaDeduction: "0", hasWorkFromHome: false, hasChildCare: false });
+    // Moving expenses not answered yet.
     expect(current.returns[0]!.steps.deductions).toBe("todo");
-    current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current.revision, personId: alex.id, answers: { spouseNetIncome: "12000" } } }));
+    current = await put(current.revision, { hasMovingExpenses: false });
     expect(current.returns[0]!.steps.deductions).toBe("done");
+    current = await put(current.revision, { hasTuition: false, medicalExpenses: "0", donations: "0", unusedTuition: "0" });
+    expect(current.returns[0]!.steps.credits).toBe("done");
+    current = await put(current.revision, { spouseNetIncome: "12000" });
+    expect(current.returns[0]!.steps.household).toBe("done");
   });
 
   it("count a slip found as the answer to its question, and a yes without the slip as missing", async () => {
     const { alex, revision } = await year();
-    const notHandled = { hasSelfEmployment: false, hasRentalIncome: false, hasPensionIncome: false, hasEiBenefits: false, hasForeignIncome: false, soldProperty: false, hasChildCare: false };
+    const notHandled = { hasSelfEmployment: false, hasRentalIncome: false, hasPensionIncome: false, hasEiBenefits: false, hasForeignIncome: false, soldProperty: false };
     let current = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/answers", {
-        body: { revision, personId: alex.id, answers: { ...notHandled, hasInvestmentIncome: false, hasTrustIncome: false, hasSoldInvestments: false, hasTuition: false, hasEmploymentIncome: true } },
+        body: { revision, personId: alex.id, answers: { ...notHandled, hasInvestmentIncome: false, hasTrustIncome: false, hasSoldInvestments: false, hasEmploymentIncome: true } },
       }),
     );
     // A T4 is said to exist but isn't here yet.
-    expect(current.returns[0]!.steps.applies).toBe("todo");
+    expect(current.returns[0]!.steps.income).toBe("todo");
     current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: current.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: T4 } }), 201);
-    expect(current.returns[0]!.steps.applies).toBe("done");
+    expect(current.returns[0]!.steps.income).toBe("done");
     // With the T4 here, the employment question needs no answer at all.
     current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current.revision, personId: alex.id, answers: { hasEmploymentIncome: null } } }));
-    expect(current.returns[0]!.steps.applies).toBe("done");
+    expect(current.returns[0]!.steps.income).toBe("done");
   });
 
   it("are each adult's own: one return's slips and facts don't hold up the other's", async () => {

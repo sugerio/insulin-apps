@@ -24,7 +24,7 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `GET /api/catalog` | any | The endpoints the caller may use, with request bodies as JSON Schema. |
 | `GET /api/years` | View returns | The household's people and tax years, with each adult's return and its steps. |
 | `POST /api/years` | Prepare returns | Start a tax year with the people in it: `{"year": 2025, "people": ["…"]}`. You must be one of them; your spouse in it prepares both returns together. Starting one that exists returns it unchanged. |
-| `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, open issues, and each adult's return with the state of its six steps (`returns`). |
+| `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, open issues, and each adult's return with the state of its seven steps (`returns`: household, upload, income, deductions, credits, confirm, finish). |
 | `GET /api/years/{year}/estimate` | View returns | What the engine computes for each return of the year (below). |
 | `PUT /api/years/{year}/people` | Prepare returns | Change who is in the year: `{"revision", "people"}`. Someone taken out loses their facts for that year. |
 | `PUT /api/years/{year}/household` | Prepare returns | Save the year's facts (below). |

@@ -6,19 +6,22 @@ import { OWNER, VIEWER, type TestServer } from "../support/server.ts";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
 import { renderApp } from "./support.tsx";
 
+/** Every yes/no question of the income, deductions and credits modules. */
 const APPLIES = [
   "hasEmploymentIncome",
   "hasInvestmentIncome",
   "hasTrustIncome",
   "hasSoldInvestments",
-  "hasTuition",
   "hasSelfEmployment",
   "hasRentalIncome",
   "hasPensionIncome",
   "hasEiBenefits",
   "hasForeignIncome",
   "soldProperty",
+  "hasWorkFromHome",
   "hasChildCare",
+  "hasMovingExpenses",
+  "hasTuition",
 ];
 
 /** Alex alone, single, in Ontario, step 1 saved; optionally with What applies answered and a T4. */
@@ -52,95 +55,115 @@ const estimate = async (server: TestServer) => (await (await server.call("GET", 
 describe("a return", () => {
   it("opens from a link to a step without a person, as the person preparing's return", async () => {
     let alex: Person | undefined;
+    // What applies became Income: an old link opens it.
     const { router } = await renderApp("/returns/2025/applies", { seed: async (s) => void (alex = await seed(s)) });
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${alex!.id}/applies`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${alex!.id}/income`));
     expect(await screen.findByText("Alex Martin", { selector: "span" })).toBeTruthy();
   });
 });
 
-describe("What applies", () => {
-  it("lists the slips found, and asks only about the kinds of income not found", async () => {
-    await renderApp("/returns/2025/applies", { seed: (s) => seed(s, { slip: true }).then(() => undefined) });
-    const found = await screen.findByRole("region", { name: "Found in your documents" });
-    expect(within(found).getByText("Employment income")).toBeTruthy();
-    expect(within(found).getByText(/T4 from Maple Corp/)).toBeTruthy();
-    const notFound = screen.getByRole("region", { name: "Not found" });
-    expect(within(notFound).queryByText("Employment income")).toBeNull();
-    expect(within(notFound).getByText("Interest or dividends")).toBeTruthy();
-    // A found slip opens into its boxes as read, and closes again.
-    const row = within(found).getByRole("button", { name: /Employment income/ });
+describe("Personal info", () => {
+  it("asks a spouse's net income when their return isn't prepared here", async () => {
+    const { server } = await renderApp("/returns/2025/household", {
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/people", { as: OWNER, body: { name: "Sam Martin", relationship: "spouse", birthDate: "1987-09-15" } });
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await s.call("PUT", "/api/years/2025/household", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "married", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
+        });
+      },
+    });
+    await screen.findByLabelText("Your spouse's or partner's 2025 net income");
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    expect(await screen.findByText("Fill these in to continue")).toBeTruthy();
+    // The save started the form again: the field is a new one.
+    fireEvent.change(await screen.findByLabelText("Your spouse's or partner's 2025 net income"), { target: { value: "12,000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    await waitFor(async () => expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ spouseNetIncome: "12000" }));
+  });
+});
+
+describe("Income", () => {
+  it("shows the slips found on the return, each opening into its boxes, and what else can be added", async () => {
+    await renderApp("/returns/2025/income", { seed: (s) => seed(s, { slip: true }).then(() => undefined) });
+    const onReturn = await screen.findByRole("region", { name: "On your return" });
+    expect(within(onReturn).getByRole("heading", { name: /Employment income/ })).toBeTruthy();
+    // A kind of income its slips show can't be taken off here.
+    expect(within(onReturn).queryByRole("button", { name: "Remove Employment income" })).toBeNull();
+    const add = screen.getByRole("region", { name: "Add to your return" });
+    expect(within(add).getByRole("button", { name: "Add Interest or dividends" })).toBeTruthy();
+    expect(within(add).queryByRole("button", { name: "Add Employment income" })).toBeNull();
+    expect(within(add).queryByRole("button", { name: /Add RRSP/ })).toBeNull();
+    const row = within(onReturn).getByRole("button", { name: /T4 from Maple Corp/ });
     expect(row.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(row);
-    expect(row.getAttribute("aria-expanded")).toBe("true");
-    expect((within(found).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
-    expect((within(found).getByLabelText(/^Box 24/) as HTMLInputElement).value).toBe("");
-    expect(within(found).getByText("Typed in.")).toBeTruthy();
-    // Nothing changed: no Save yet.
-    expect(within(found).queryByRole("button", { name: "Save" })).toBeNull();
+    expect((within(onReturn).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
+    expect((within(onReturn).getByLabelText(/^Box 24/) as HTMLInputElement).value).toBe("");
+    expect(within(onReturn).getByText("Typed in.")).toBeTruthy();
+    expect(within(onReturn).queryByRole("button", { name: "Save" })).toBeNull();
     fireEvent.click(row);
-    expect(within(found).queryByRole("table")).toBeNull();
+    expect(within(onReturn).queryByRole("table")).toBeNull();
   });
 
-  it("changes a found slip's amounts right there, and keeps the answers chosen", async () => {
-    const { server } = await renderApp("/returns/2025/applies", { seed: (s) => seed(s, { slip: true }).then(() => undefined) });
-    const found = await screen.findByRole("region", { name: "Found in your documents" });
-    const notFound = screen.getByRole("region", { name: "Not found" });
-    fireEvent.click(within(notFound).getAllByRole("radio", { name: "No" })[0]!);
-    fireEvent.click(within(found).getByRole("button", { name: /Employment income/ }));
-    fireEvent.change(within(found).getByLabelText(/^Box 14/), { target: { value: "61,500.00" } });
-    fireEvent.click(within(found).getByRole("button", { name: "Cancel" }));
-    expect((within(found).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
-    fireEvent.change(within(found).getByLabelText(/^Box 14/), { target: { value: "61,500.00" } });
-    fireEvent.click(within(found).getByRole("button", { name: "Save" }));
-    // Saved: the slip stays open, with the new amount, to confirm again.
-    await waitFor(() => expect((within(screen.getByRole("region", { name: "Found in your documents" })).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("61500"));
-    expect(within(screen.getByRole("region", { name: "Found in your documents" })).queryByRole("button", { name: "Save" })).toBeNull();
+  it("changes a found slip's amounts right there, and keeps what was added", async () => {
+    const { server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s, { slip: true }).then(() => undefined) });
+    fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Rental income" }));
+    const onReturn = screen.getByRole("region", { name: "On your return" });
+    fireEvent.click(within(onReturn).getByRole("button", { name: /T4 from Maple Corp/ }));
+    fireEvent.change(within(onReturn).getByLabelText(/^Box 14/), { target: { value: "61,500.00" } });
+    fireEvent.click(within(onReturn).getByRole("button", { name: "Cancel" }));
+    expect((within(onReturn).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
+    fireEvent.change(within(onReturn).getByLabelText(/^Box 14/), { target: { value: "61,500.00" } });
+    fireEvent.click(within(onReturn).getByRole("button", { name: "Save" }));
+    // Saved: the slip stays open, with the new amount, to confirm again; rental income is still on the return.
+    await waitFor(() => expect((within(screen.getByRole("region", { name: "On your return" })).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("61500"));
+    expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("heading", { name: /Rental income/ })).toBeTruthy();
     const slips = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { boxes: Record<string, string>; status: string }[] };
     expect(slips.slips[0]).toMatchObject({ boxes: { 14: "61500", 16: "3361.75" }, status: "unconfirmed" });
-    expect(within(screen.getByRole("region", { name: "Not found" })).getAllByRole("radio", { name: "No" })[0]!.getAttribute("aria-checked")).toBe("true");
+    expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ hasRentalIncome: true });
   });
 
-  it("shows a viewer a found slip's boxes without anything to change", async () => {
-    await renderApp("/returns/2025/applies", { as: VIEWER, seed: (s) => seed(s, { slip: true }).then(() => undefined) });
-    const found = await screen.findByRole("region", { name: "Found in your documents" });
-    fireEvent.click(within(found).getByRole("button", { name: /Employment income/ }));
-    expect(within(found).getByRole("table", { name: "T4 boxes" })).toBeTruthy();
-    expect(within(found).getByText("$60,000.00")).toBeTruthy();
-    expect(within(found).queryByRole("textbox")).toBeNull();
+  it("shows a viewer the return's slips without anything to change or add", async () => {
+    await renderApp("/returns/2025/income", { as: VIEWER, seed: (s) => seed(s, { slip: true }).then(() => undefined) });
+    const onReturn = await screen.findByRole("region", { name: "On your return" });
+    fireEvent.click(within(onReturn).getByRole("button", { name: /T4 from Maple Corp/ }));
+    expect(within(onReturn).getByRole("table", { name: "T4 boxes" })).toBeTruthy();
+    expect(within(onReturn).getByText("$60,000.00")).toBeTruthy();
+    expect(within(onReturn).queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Add to your return" })).toBeNull();
   });
 
-  it("marks a yes without its slip as missing, and moves on once everything is answered", async () => {
-    const { router, server } = await renderApp("/returns/2025/applies", { seed: (s) => seed(s).then(() => undefined) });
-    const notFound = await screen.findByRole("region", { name: "Not found" });
-    const [employmentYes] = within(notFound).getAllByRole("radio", { name: "Yes" });
-    fireEvent.click(employmentYes!);
+  it("marks a kind of income added without its slip as missing, and saves the rest as none", async () => {
+    const { router, server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s).then(() => undefined) });
+    const add = await screen.findByRole("region", { name: "Add to your return" });
+    fireEvent.click(within(add).getByRole("button", { name: "Add Employment income" }));
     expect(screen.getByText("Missing: the T4")).toBeTruthy();
-    expect(screen.getByText(/the T4\. Upload each one below/)).toBeTruthy();
-    for (const radio of screen.getAllByRole("radio", { name: "No" })) fireEvent.click(radio);
+    expect((screen.getByRole("button", { name: "Save and continue" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Remove Employment income" }));
     expect(screen.queryByText("Missing: the T4")).toBeNull();
-    const notHandled = screen.getByRole("region", { name: "Not handled by this app" });
-    fireEvent.click(within(notHandled).getAllByRole("radio", { name: "Yes" })[0]!);
-    expect(screen.getByText("Not handled by this app yet.")).toBeTruthy();
-    const confirm = stepOf(router, "confirm");
+    fireEvent.click(within(screen.getByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Self-employment or business income" }));
+    expect(screen.getByText(/This app doesn't handle this yet/)).toBeTruthy();
+    const deductions = stepOf(router, "deductions");
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe(confirm));
+    await waitFor(() => expect(router.state.location.pathname).toBe(deductions));
     const answers = Object.values((await estimate(server)).input.answers)[0]!;
-    expect(answers).toMatchObject({ hasSelfEmployment: true, hasEmploymentIncome: false, hasChildCare: false });
+    expect(answers).toMatchObject({ hasSelfEmployment: true, hasEmploymentIncome: false, hasRentalIncome: false, soldProperty: false });
   });
 
   it("takes the missing slip right there", async () => {
     const reader: SlipReader = {
       read: async () => ({ kind: "read", taxYear: 2025, model: "m", slips: [{ type: "T5", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 13: "1250.00" }, unsure: [] }] }),
     };
-    await renderApp("/returns/2025/applies", { seed: (s) => seed(s).then(() => undefined), server: { reader: () => reader } });
-    const notFound = await screen.findByRole("region", { name: "Not found" });
-    fireEvent.click(within(notFound).getAllByRole("radio", { name: "Yes" })[1]!);
+    await renderApp("/returns/2025/income", { seed: (s) => seed(s).then(() => undefined), server: { reader: () => reader } });
+    fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Interest or dividends" }));
     fireEvent.change(screen.getByLabelText("Upload the T5"), { target: { files: [new File(["%PDF-1.4 t5"], "t5.pdf", { type: "application/pdf" })] } });
     // Saving the answers, the upload and reloading the year take a moment.
-    await waitFor(() => expect(within(screen.getByRole("region", { name: "Found in your documents" })).getByText("Interest or dividends")).toBeTruthy(), { timeout: 5000 });
-    const found = screen.getByRole("region", { name: "Found in your documents" });
-    fireEvent.click(within(found).getByRole("button", { name: /Interest or dividends/ }));
-    expect(within(found).getByRole("link", { name: "the uploaded file" })).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("button", { name: /T5 from Lakeview Credit Union/ })).toBeTruthy(), { timeout: 5000 });
+    const onReturn = screen.getByRole("region", { name: "On your return" });
+    fireEvent.click(within(onReturn).getByRole("button", { name: /T5 from Lakeview Credit Union/ }));
+    expect(within(onReturn).getByRole("link", { name: "the uploaded file" })).toBeTruthy();
   });
 });
 
@@ -200,18 +223,30 @@ describe("Confirm", () => {
   });
 });
 
-describe("Deductions", () => {
-  it("asks only what the return reads, and saves a blank as zero", async () => {
+describe("Deductions and credits", () => {
+  it("shows what the slips already deduct, and saves what isn't on the return as none", async () => {
     const { router, server } = await renderApp("/returns/2025/deductions", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
-    const rrsp = await screen.findByLabelText("RRSP contributions to deduct for 2025");
-    expect(screen.queryByLabelText(/Tuition to transfer/)).toBeNull();
-    expect(screen.queryByLabelText(/spouse's or partner's 2025 net income/)).toBeNull();
-    fireEvent.change(rrsp, { target: { value: "2,500" } });
-    const finish = stepOf(router, "finish");
+    const fromSlips = await screen.findByRole("region", { name: "From your slips" });
+    expect(within(fromSlips).getByText("Deduction for CPP enhanced contributions on employment income")).toBeTruthy();
+    const add = screen.getByRole("region", { name: "Add to your return" });
+    expect(within(add).getByRole("button", { name: "Add Working from home" })).toBeTruthy();
+    fireEvent.click(within(add).getByRole("button", { name: "Add RRSP contributions to deduct for 2025" }));
+    fireEvent.change(screen.getByLabelText("RRSP contributions to deduct for 2025"), { target: { value: "2,500" } });
+    const credits = stepOf(router, "credits");
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe(finish));
+    await waitFor(() => expect(router.state.location.pathname).toBe(credits));
     const answers = Object.values((await estimate(server)).input.answers)[0]!;
-    expect(answers).toMatchObject({ rrspDeduction: "2500", donations: "0", medicalExpenses: "0" });
+    expect(answers).toMatchObject({ rrspDeduction: "2500", fhsaDeduction: "0", hasWorkFromHome: false, hasMovingExpenses: false });
+  });
+
+  it("asks only the credits the return reads", async () => {
+    await renderApp("/returns/2025/credits", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
+    const add = await screen.findByRole("region", { name: "Add to your return" });
+    expect(within(add).getByRole("button", { name: "Add Medical expenses you paid for yourself" })).toBeTruthy();
+    // Alex is single: nothing to transfer, and no spouse's income to ask.
+    expect(within(add).queryByRole("button", { name: /Tuition to transfer/ })).toBeNull();
+    expect(screen.queryByText(/spouse's or partner's 2025 net income/)).toBeNull();
+    expect(within(screen.getByRole("region", { name: "From your slips" })).getByText("Canada employment amount")).toBeTruthy();
   });
 });
 

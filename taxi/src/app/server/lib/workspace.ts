@@ -1,5 +1,6 @@
 import { STEPS, isIssueOf, type AdultYear, type Issue, type Person, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
 import { Evaluation, type EngineInput, type EvaluationResult } from "../../shared/engine/evaluate.ts";
+import type { Module } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { logError } from "./http.ts";
 
@@ -113,35 +114,42 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
 }
 
 /**
- * Each adult's return and the state of its steps. Household: no blocking issue of the year's shared facts or of this
- * adult. Upload: a file was uploaded in this return and read into slips, or a slip of this adult was read from a file
- * (slips can also be typed in step 4). What applies: each of its questions is answered, or answered by a slip found,
- * and no slip said to exist is missing. Confirm: the adult has slips and all are confirmed. Deductions: no question of
- * the step that the adult's result lines read is left unanswered. Finish comes with the filled-in forms.
+ * Each adult's return and the state of its steps. Personal info: no blocking issue of the year's shared facts or of
+ * this adult, and the questions about the person that the result reads are answered. Upload: a file was uploaded in
+ * this return and read into slips, or a slip of this adult was read from a file (slips can also be typed in step 6).
+ * Income, deductions and credits: each yes/no question of the module is answered, or answered by a slip found, no slip
+ * said to exist is missing, and every amount the result reads is entered. Confirm: the adult has slips and all are
+ * confirmed. Finish comes with the filled-in forms.
  */
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): ReturnProgress[] {
   const rules = rulesFor(facts.year);
   const questions = [...(rules?.questions.values() ?? [])];
-  // What applies: a question about a slip is answered by the slip itself; a yes without the slip is still missing.
-  const applies = questions.filter((question) => question.step === "applies");
-  const deductions = new Set(questions.filter((question) => question.step === "deductions").map((question) => question.id));
   const evaluation = evaluateYear(facts, workspace);
   return facts.adults.map(({ personId }) => {
     const slips = workspace.slips.filter((slip) => slip.personId === personId);
     const answers = workspace.answers[personId] ?? {};
     const reached = evaluation?.result.people.find((person) => person.personId === personId)?.questions;
+    const answered = (module: Module) =>
+      questions
+        .filter((question) => question.module === module)
+        .every((question) => {
+          // A kind of income or expense: answered by the slip itself; a yes without the slip is still missing.
+          if (question.type === "boolean") {
+            if (question.slip && slips.some((slip) => slip.type === question.slip)) return true;
+            const answer = answers[question.id];
+            return answer !== undefined && !(question.slip && answer === true);
+          }
+          // An amount: only the ones the result reads are asked.
+          return !(reached ?? []).includes(question.id) || answers[question.id] !== undefined;
+        });
+    const state = (done: boolean) => (done ? "done" : "todo");
     const status: StepStatuses = {
-      household: issues.some((issue) => issue.kind === "blocking" && isIssueOf(issue, personId)) ? "todo" : "done",
-      upload: workspace.uploadedIn.has(personId) || slips.some((slip) => slip.documentId !== null) ? "done" : "todo",
-      applies: applies.every((question) => {
-        if (question.slip && slips.some((slip) => slip.type === question.slip)) return true;
-        const answer = answers[question.id];
-        return answer !== undefined && !(question.slip && answer === true);
-      })
-        ? "done"
-        : "todo",
-      confirm: slips.length > 0 && slips.every((slip) => slip.status === "confirmed") ? "done" : "todo",
-      deductions: reached !== undefined && reached.filter((id) => deductions.has(id)).every((id) => answers[id] !== undefined) ? "done" : "todo",
+      household: state(!issues.some((issue) => issue.kind === "blocking" && isIssueOf(issue, personId)) && answered("about")),
+      upload: state(workspace.uploadedIn.has(personId) || slips.some((slip) => slip.documentId !== null)),
+      income: state(answered("income")),
+      deductions: state(answered("deductions")),
+      credits: state(answered("credits")),
+      confirm: state(slips.length > 0 && slips.every((slip) => slip.status === "confirmed")),
       finish: "todo",
     };
     return { personId, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };

@@ -99,7 +99,7 @@ const SHARED_ISSUES: ReadonlySet<Issue["code"]> = new Set(["no_self", "no_marita
 /** Whether an issue is one of an adult's return: about that adult, or about a fact the year's returns share. */
 export const isIssueOf = (issue: Issue, personId: string) => SHARED_ISSUES.has(issue.code) || issue.personId === personId;
 
-export const STEPS = ["household", "upload", "applies", "confirm", "deductions", "finish"] as const;
+export const STEPS = ["household", "upload", "income", "deductions", "credits", "confirm", "finish"] as const;
 export const stepSchema = z.enum(STEPS);
 export type Step = z.infer<typeof stepSchema>;
 export const stepStatusSchema = z.enum(["done", "todo", "not_built"]);

@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronRight, ChevronsUpDown } from "lucide-react";
 import { STEPS, SUPPORTED_YEARS, routes, type AdultYear, type Estimate, type Person, type SlipList, type Step, type StepStatuses, type TaxYear } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.tsx";
@@ -13,17 +13,28 @@ import { ResourceView } from "./Feedback.tsx";
 
 // A tax year's pages. The year is loaded once here, with its estimate and slips (again whenever its revision changes),
 // and shared through YearContext. Each adult of the year has a return of their own at `/returns/:year/:personId/:step`:
-// one person's six steps (about them, their documents, what applies, confirming what AI read, deductions, finishing),
-// with a switcher to the other returns of the year. A step that saves replaces the year with what the server answered.
+// one person's steps (about them, their documents, their income, deductions and credits, confirming the slips,
+// finishing), with a switcher to the other returns of the year. A step that saves replaces the year with what the
+// server answered.
 
 export const STEP_LABELS: Record<Step, string> = {
   household: "Personal info",
   upload: "Upload documents",
-  applies: "What applies",
-  confirm: "Confirm",
+  income: "Income",
   deductions: "Deductions",
+  credits: "Credits",
+  confirm: "Confirm",
   finish: "Finish",
 };
+
+/** Steps that were renamed: an old link to one opens the step that took its place. */
+export const RENAMED_STEPS: Record<string, Step> = { applies: "income" };
+
+/** A step's name from a path segment, old names included; null when it names no step. */
+export function stepFrom(segment: string): Step | null {
+  if ((STEPS as readonly string[]).includes(segment)) return segment as Step;
+  return RENAMED_STEPS[segment] ?? null;
+}
 
 export const stepPath = (year: number, personId: string, step: Step) => `/returns/${year}/${personId}/${step}`;
 
@@ -113,7 +124,8 @@ export function ReturnFrame() {
   if (!progress || !adult || !person) {
     const first = year.returns[0];
     if (!first) return <NotFoundPage />;
-    if ((STEPS as readonly string[]).includes(param)) return <Navigate to={stepPath(year.year, first.personId, param as Step)} replace />;
+    const step = stepFrom(param);
+    if (step) return <Navigate to={stepPath(year.year, first.personId, step)} replace />;
     return <Navigate to={`/returns/${year.year}`} replace />;
   }
   return (
@@ -133,12 +145,11 @@ export function ReturnIndex() {
 /** The step open, from the path. */
 function useCurrentStep(): Step | null {
   const { pathname } = useLocation();
-  const last = pathname.split("/").pop() ?? "";
-  return (STEPS as readonly string[]).includes(last) ? (last as Step) : null;
+  return stepFrom(pathname.split("/").pop() ?? "");
 }
 
 /** A return's result in a few words: the refund or balance owing, when it can be worked out. */
-function resultOf(estimate: Resource<Estimate>, personId: string): string | null {
+export function resultOf(estimate: Resource<Estimate>, personId: string): string | null {
   if (estimate.status !== "ready") return null;
   const lines = estimate.data.result.people.find((person) => person.personId === personId)?.lines ?? [];
   const refund = lines.find((line) => line.id === "T1.48400")?.value;
@@ -152,20 +163,18 @@ export function ReturnSwitcher() {
   const { year, estimate } = useYear();
   const { person } = useReturn();
   const step = useCurrentStep() ?? "household";
-  const result = resultOf(estimate, person.id);
   const returns = year.returns.map((progress) => year.people.find((each) => each.id === progress.personId)!).filter(Boolean);
   const trigger = (
-    <span className="flex min-w-0 flex-1 flex-col items-start text-left">
+    <span className="flex min-w-0 flex-col items-start text-left">
       <span className="text-xs font-normal text-muted-foreground">Return of</span>
-      <span className="w-full truncate font-semibold">{person.name}</span>
-      {result ? <span className="text-xs font-normal text-muted-foreground tabular-nums">{result}</span> : null}
+      <span className="max-w-full truncate font-semibold">{person.name}</span>
     </span>
   );
-  if (returns.length < 2) return <div className="flex rounded-xl border bg-card px-4 py-3 text-sm">{trigger}</div>;
+  if (returns.length < 2) return <div className="flex px-1 text-sm">{trigger}</div>;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="h-auto w-full justify-between rounded-xl bg-card px-4 py-3" aria-label={`Return of ${person.name}: switch return`}>
+        <Button variant="ghost" className="h-auto justify-between gap-3 px-2 py-1.5" aria-label={`Return of ${person.name}: switch return`}>
           {trigger}
           <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
         </Button>
@@ -191,38 +200,39 @@ export function ReturnSwitcher() {
   );
 }
 
-/** The steps of the open return: number, label and state; the open one marked as the current step. */
+/** The steps of the open return, in a row above the step: number, label and state; the open one marked as current. */
 export function StepNav() {
   const { year } = useYear();
   const { person, steps } = useReturn();
   const currentStep = useCurrentStep();
   return (
-    <nav aria-label="Steps" className="flex flex-col gap-0.5 rounded-xl border bg-card p-2">
-      <ol className="flex flex-col gap-0.5">
+    <nav aria-label="Steps" className="-mx-1 overflow-x-auto px-1">
+      <ol className="flex min-w-max items-center gap-1 rounded-xl border bg-card p-1.5">
         {STEPS.map((step, index) => {
           const current = currentStep === step;
           const status = steps[step];
           return (
-            <li key={step}>
+            <li key={step} className="flex items-center gap-1">
+              {index > 0 ? <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" /> : null}
               <Link
                 to={stepPath(year.year, person.id, step)}
                 aria-current={current ? "step" : undefined}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm hover:bg-muted",
+                  "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm whitespace-nowrap hover:bg-muted",
                   current && "bg-primary/10 font-medium text-primary hover:bg-primary/10",
                   status === "not_built" && !current && "text-muted-foreground",
                 )}
               >
                 <span
                   className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold",
+                    "flex size-5 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-semibold",
                     status === "done" ? "border-emerald-700 bg-emerald-700 text-white" : current ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
                   )}
                   aria-hidden="true"
                 >
-                  {status === "done" ? <Check className="size-3.5" /> : index + 1}
+                  {status === "done" ? <Check className="size-3" /> : index + 1}
                 </span>
-                <span className="min-w-0 flex-1">{STEP_LABELS[step]}</span>
+                <span>{STEP_LABELS[step]}</span>
                 <span className="sr-only">{status === "done" ? "(done)" : status === "not_built" ? "(not available yet)" : "(to do)"}</span>
               </Link>
             </li>

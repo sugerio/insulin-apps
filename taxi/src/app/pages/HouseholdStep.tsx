@@ -17,13 +17,18 @@ import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/compon
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
+import { AmountField, cleanAmount } from "../components/AmountField.tsx";
 import { Banner } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, stepsOf, useReturn, useYear } from "../components/YearFrame.tsx";
 import { MARITAL_STATUS_LABELS, PROVINCE_LABELS } from "../lib/format.ts";
+import { saveAnswersFor } from "../lib/saveAnswers.ts";
+import { useEstimate } from "../lib/useYearData.ts";
+import { rulesFor } from "../shared/rules/index.ts";
 
 // Step 1, `/returns/:year/:personId/household`: the facts of the open return that no document tells the app: the
-// adult's province and residency, and the marital status on December 31, which the year's returns share. Who is in the
+// adult's province and residency, the marital status on December 31, which the year's returns share, and the questions
+// about the person the return reads (`module: about`, such as a spouse's net income when their return isn't here). Who is in the
 // year is chosen on the Tax years page, and how each person is related on the Household page. The facts are saved
 // together, under the year's revision.
 
@@ -92,14 +97,24 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   );
   const [draft, setDraft] = useState<AdultDraft>({ province: adult.province, residentAllYear: adult.residentAllYear });
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
+  // The questions about this person that the return reads, once the estimate says which.
+  const estimate = useEstimate();
+  const given = estimate.status === "ready" ? (estimate.data.input.answers[owner.id] ?? {}) : {};
+  const reached = new Set(estimate.status === "ready" ? (estimate.data.result.people.find((each) => each.personId === owner.id)?.questions ?? []) : []);
+  const about = [...rulesFor(year.year)!.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const amountOf = (id: string) => amounts[id] ?? (typeof given[id] === "string" ? (given[id] as string) : "");
+  const unanswered = about.filter((question) => cleanAmount(amountOf(question.id)) === "");
 
   async function save(thenContinue: boolean) {
     setState({ status: "saving" });
     try {
-      const saved = await apiRequest(routes.saveHousehold, {
+      let saved = await apiRequest(routes.saveHousehold, {
         params: { year: year.year },
         body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...draft }] },
       });
+      const answers = Object.fromEntries(about.map((question) => [question.id, cleanAmount(amountOf(question.id))] as const).filter(([, value]) => value !== ""));
+      saved = await saveAnswersFor(saved, { [owner.id]: answers });
       const done = stepsOf(saved, owner.id)?.household === "done";
       if (thenContinue && !done) onMissing();
       replace(saved);
@@ -147,6 +162,28 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
 
       <AdultCard draft={draft} editable={editable} onChange={(change) => setDraft((current) => ({ ...current, ...change }))} />
 
+      {about.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="text-base font-semibold">Your spouse or partner</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {about.map((question) => (
+              <AmountField
+                key={question.id}
+                label={question.ask}
+                help={question.help}
+                value={amountOf(question.id)}
+                disabled={!editable}
+                onChange={(value) => setAmounts((current) => ({ ...current, [question.id]: value }))}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {unsupported.map((issue) => (
         <Banner key={`${issue.code}-${issue.personId ?? ""}`} kind="warning" title="Not handled by this app">
           {issue.message}
@@ -160,11 +197,14 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
         <Banner kind="error" title="The household wasn't saved">{describeError(state.error)}</Banner>
       ) : null}
 
-      {showMissing && blocking.length > 0 ? (
+      {showMissing && blocking.length + unanswered.length > 0 ? (
         <Banner kind="error" title="Fill these in to continue">
           <ul className="list-disc pl-5">
             {blocking.map((issue) => (
               <li key={`${issue.code}-${issue.personId ?? ""}`}>{issue.message}</li>
+            ))}
+            {unanswered.map((question) => (
+              <li key={question.id}>{question.ask}</li>
             ))}
           </ul>
         </Banner>

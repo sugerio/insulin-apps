@@ -423,7 +423,7 @@ test('twenty organizations that never answer in time ahead of a healthy one, its
   } finally { await h.mf.dispose(); }
 });
 
-test('ten organizations with more drafts than a run has places ahead of an eleventh, sends fitting the budget: it sends within ceil(11 / 10) ticks, the ten in turns', async () => {
+test('ten organizations with more drafts than a run has places beside an eleventh, sends fitting the budget: each gets a first send before any a second, so the eleventh sends at the first tick', async () => {
   // A budget that holds a run's 25 sends even on a busy machine: the places, not the time, end the first run.
   const { h, draft, statuses } = await slowPlatform({}, { budgetMs: 8000, statusTimeoutMs: 500 });
   try {
@@ -436,12 +436,10 @@ test('ten organizations with more drafts than a run has places ahead of an eleve
     const eleventh = await draft('org-11', 'eleventh');
     const first = await h.tick();
     assert.deepEqual([first.scheduledSent, first.scheduledFailed], [25, 0]);
-    // In passes: every one of the ten sent two or three, none five.
+    assert.deepEqual(await statuses([eleventh]), ['IN_PROGRESS'], 'its first send came with theirs');
+    // Then in passes, in turn: 11 first sends, 10 second, and the four places left to the first four.
     const sentEach = await Promise.all(crowd.map(async (ids) => (await statuses(ids)).filter((s) => s === 'IN_PROGRESS').length));
-    assert.ok(sentEach.every((n) => n === 2 || n === 3), JSON.stringify(sentEach));
-    assert.deepEqual(await statuses([eleventh]), ['DRAFT'], 'the ten took the places');
-    await h.tick();
-    assert.deepEqual(await statuses([eleventh]), ['IN_PROGRESS'], 'its turn came at the next tick');
+    assert.deepEqual(sentEach, [3, 3, 3, 3, 2, 2, 2, 2, 2, 2]);
   } finally { await h.mf.dispose(); }
 });
 
@@ -492,6 +490,78 @@ test('two runs at once never send a draft twice', async () => {
     assert.equal(runs.reduce((sum, run) => sum + run.scheduledFailed, 0), 0, 'the others leave it, not refuse it');
     assert.deepEqual(await statuses([id]), ['IN_PROGRESS']);
     assert.equal((await h.tasks(id)).length, 2, 'one task for each of its two roles, once');
+  } finally { await h.mf.dispose(); }
+});
+
+const leaseRow = (h: Awaited<ReturnType<typeof setup>>) => h.db.prepare("SELECT value FROM app_settings WHERE name = 'scheduled_lease'").first<{ value: string }>();
+
+test('two runs at once: one takes the run lease and does the work, the other returns without asking or sending', async () => {
+  const timing = { budgetMs: 3000, statusTimeoutMs: 500 };
+  const { h, asked, draft, statuses } = await slowPlatform({ 'org-a': { ms: 300, kind: 'member' } }, timing);
+  try {
+    const ids = [await draft('org-a', 'a'), await draft('org-b', 'b'), await draft('org-c', 'c')];
+    const started = Date.now();
+    // Read while the run waits for org-a's answer.
+    const held = sleep(100).then(() => leaseRow(h));
+    const runs = await Promise.all([h.tick(), h.tick()]);
+    assert.deepEqual(runs.map((run) => run.scheduledSent).sort(), [0, 3], 'one run sends all three, the other none');
+    assert.deepEqual(runs.map((run) => run.scheduledFailed), [0, 0]);
+    assert.deepEqual([...asked].sort(), ['org-a', 'org-b', 'org-c'], 'each asked about once: the other run asked nothing');
+    assert.deepEqual(await statuses(ids), ['IN_PROGRESS', 'IN_PROGRESS', 'IN_PROGRESS']);
+    const lease = JSON.parse((await held)!.value) as { id: string; until: number };
+    assert.ok(lease.until > started + timing.budgetMs && lease.until <= Date.now() + timing.budgetMs + 20_000, `a little longer than the budget: ${lease.until - started} ms`);
+    assert.equal(await leaseRow(h), null, 'released at the end');
+  } finally { await h.mf.dispose(); }
+});
+
+test("a crashed run's lease holds the next run off until it lapses; then the next run takes it over and sends", async () => {
+  const { h, draft, statuses } = await slowPlatform({});
+  try {
+    const id = await draft('org-a', 'after-crash');
+    const crashed = (until: number) => h.db.prepare("INSERT INTO app_settings (name, value) VALUES ('scheduled_lease', json_object('id', 'crashed-run', 'until', ?1)) ON CONFLICT (name) DO UPDATE SET value = excluded.value").bind(until).run();
+    await crashed(Date.now() + 20_000);
+    const held = await h.tick();
+    assert.deepEqual([held.scheduledSent, held.scheduledFailed], [0, 0], 'held off while the lease lasts');
+    assert.deepEqual(await statuses([id]), ['DRAFT']);
+    assert.equal(JSON.parse((await leaseRow(h))!.value).id, 'crashed-run', "another run's lease is left as it is");
+    await crashed(Date.now() - 1);
+    assert.equal((await h.tick()).scheduledSent, 1, 'taken over once lapsed');
+    assert.deepEqual(await statuses([id]), ['IN_PROGRESS']);
+    assert.equal(await leaseRow(h), null, 'and released');
+  } finally { await h.mf.dispose(); }
+});
+
+test('two ticks at once, then one a tick, with sends slower than the budget and a new org-a draft every tick: three organizations are each served within 3 ticks', async () => {
+  const { h, draft, statuses } = await slowPlatform({}, SLOW_SENDS);
+  try {
+    const a = await draft('org-a', 'a-1'), b = await draft('org-b', 'b'), c = await draft('org-c', 'c');
+    const pair = await Promise.all([h.tick(), h.tick()]);
+    assert.deepEqual(pair.map((run) => run.scheduledSent).sort(), [0, 1], 'one run, one send: the other stood aside');
+    assert.deepEqual(await statuses([a, b, c]), ['IN_PROGRESS', 'DRAFT', 'DRAFT']);
+    await draft('org-a', 'a-2');
+    assert.equal((await h.tick()).scheduledSent, 1);
+    assert.deepEqual(await statuses([b, c]), ['IN_PROGRESS', 'DRAFT'], 'tick 2: org-b');
+    await draft('org-a', 'a-3');
+    assert.equal((await h.tick()).scheduledSent, 1);
+    assert.deepEqual(await statuses([c]), ['IN_PROGRESS'], 'tick 3: org-c');
+  } finally { await h.mf.dispose(); }
+});
+
+test('100 organizations with three drafts each, sends fitting the budget: every one reached gets its first send before any a second, so all are first served within 4 ticks', async () => {
+  // A budget that holds a run's 25 sends even on a busy machine: the places, not the time, end each run.
+  const { h, asked, draft, statuses } = await slowPlatform({}, { budgetMs: 60_000, statusTimeoutMs: 2000 });
+  try {
+    const orgs = Array.from({ length: 100 }, (_, i) => `org-${String(i + 1).padStart(3, '0')}`);
+    const drafts: string[][] = [];
+    for (const org of orgs) drafts.push([await draft(org, `${org}-1`), await draft(org, `${org}-2`), await draft(org, `${org}-3`)]);
+    for (let tick = 1; tick <= 4; tick += 1) {
+      asked.length = 0;
+      const ran = await h.tick();
+      assert.deepEqual([ran.scheduledSent, ran.scheduledFailed], [25, 0], `tick ${tick}`);
+      assert.equal(asked.length, 30, `tick ${tick}: asked in waves of ten, the third cut short by the places`);
+      const sentEach = await Promise.all(drafts.map(async (ids) => (await statuses(ids)).filter((s) => s === 'IN_PROGRESS').length));
+      assert.deepEqual(sentEach, orgs.map((_, i) => (i < 25 * tick ? 1 : 0)), `tick ${tick}: the next 25 in turn, one send each`);
+    }
   } finally { await h.mf.dispose(); }
 });
 

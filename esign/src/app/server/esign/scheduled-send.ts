@@ -41,6 +41,17 @@ export const DEFER_MS = 4 * 60 * 1000;
 export const WAVE_ORGANIZATIONS = 10;
 /** The `app_settings` row holding the last organization a run reached (a JSON string; none before the first run). */
 export const CURSOR_SETTING = 'scheduled_cursor';
+/**
+ * The `app_settings` row a run holds while it sends scheduled drafts for every organization (`{"id", "until"}`), so
+ * two runs never take turns from the same cursor at once; one whose `until` has passed (a run that crashed) is taken
+ * over.
+ */
+export const LEASE_SETTING = 'scheduled_lease';
+/**
+ * How much longer than its budget a run's lease lasts: past the 25 seconds the platform gives its tick, so a lease
+ * outlives any run still going.
+ */
+export const LEASE_MARGIN_MS = 20_000;
 /** When a waiting or deferred draft is tried again: write it only as this, as SCHEDULE_AT. */
 const RETRY_AT = "json_extract(draft_json, '$.schedule.retryAt')";
 
@@ -166,6 +177,22 @@ export async function dueDrafts(db: D1Database, now: number, organizations: stri
 export async function readCursor(db: D1Database): Promise<string> {
   const row = await db.prepare("SELECT json_extract(value, '$') AS org FROM app_settings WHERE name = ?").bind(CURSOR_SETTING).first<{ org: unknown }>();
   return typeof row?.org === 'string' ? row.org : '';
+}
+
+/**
+ * Takes the run lease (LEASE_SETTING) until `until`, in one conditional statement: only while no unexpired lease is
+ * held. True when this run (`id`) now holds it.
+ */
+export async function takeLease(db: D1Database, id: string, now: number, until: number): Promise<boolean> {
+  const row = await db.prepare(`INSERT INTO app_settings (name, value) VALUES (?1, json_object('id', ?2, 'until', ?4))
+      ON CONFLICT (name) DO UPDATE SET value = excluded.value WHERE json_extract(app_settings.value, '$.until') <= ?3
+      RETURNING json_extract(value, '$.id') AS id`).bind(LEASE_SETTING, id, now, until).first<{ id: string }>();
+  return row?.id === id;
+}
+
+/** Gives the run lease back, if this run (`id`) still holds it. */
+export async function releaseLease(db: D1Database, id: string): Promise<void> {
+  await db.prepare("DELETE FROM app_settings WHERE name = ?1 AND json_extract(value, '$.id') = ?2").bind(LEASE_SETTING, id).run();
 }
 
 /** Records the last organization a run reached. */

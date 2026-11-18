@@ -28,7 +28,7 @@ import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, deleteReplacedDocuments, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
 import { memberStatusConfigured, organizationNow, STATUS_IDS_MAX, STATUS_TIMEOUT_MS, type DirectoryEnv, type OrganizationNow } from './directory.ts';
-import { deferOrganization, dueDrafts, dueOrganizations, parseSendAt, readCursor, recordScheduleFailure, restWaiting, SCHEDULED_BUDGET_MS, SCHEDULED_PER_RUN, scheduledBy, scheduledCaller, scheduleView, splitDraft, writeCursor, type Schedule } from './scheduled-send.ts';
+import { deferOrganization, dueDrafts, dueOrganizations, LEASE_MARGIN_MS, parseSendAt, readCursor, recordScheduleFailure, releaseLease, restWaiting, SCHEDULED_BUDGET_MS, SCHEDULED_PER_RUN, scheduledBy, scheduledCaller, scheduleView, splitDraft, takeLease, writeCursor, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -627,43 +627,84 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
  * The scheduled drafts due now, of one organization or (null) all, sent as whoever scheduled them, who must still be
  * able to send in Esign (as the platform says now) and an editor of it (shares change); what the send refuses is
  * recorded on the draft (scheduled-send.ts). A draft sent or changed meanwhile is left alone: sending claims it in the
- * batch that sends it (only while it is the draft as read), so two runs at once never send one twice.
+ * batch that sends it (only while it is the draft as read), so no draft is ever sent twice.
+ *
+ * The tick's runs go one at a time: a run takes the run lease (LEASE_SETTING) first, and sends nothing when another
+ * run holds it; the lease of a run that crashed lapses LEASE_MARGIN_MS after its budget, and is taken over.
  *
  * Organizations take turns, round robin, across runs. A run starts after the organization the last one reached (the
- * cursor, in `app_settings`), in id order and round again, and goes in waves of WAVE_ORGANIZATIONS organizations with a
- * draft due. All of a wave's organizations are asked about at once, each with the whole wait a question may take, and
- * each is handled by its own answer: active, it is served; no record of Esign's use there yet, every due draft of it
- * rests ten minutes (restWaiting); suspended, its drafts step back and wait (deferOrganization); no answer in time, its
- * drafts are left as they are. The served ones send in passes, one draft of each organization a pass in turn, until
- * the run's places (SCHEDULED_PER_RUN) or its budget run out, after at least one send or refusal; the budget is checked
- * before a draft is taken, so an organization not reached keeps its drafts and its turn. The cursor moves past every
- * organization handled (served a turn, resting, suspended or not answered for), up to the first one a run didn't
- * serve. Another wave follows while places remain and the budget leaves a question's wait.
+ * cursor, in `app_settings`), in id order and round again, in waves of WAVE_ORGANIZATIONS organizations with a draft
+ * due. All of a wave's organizations are asked about at once, each with the whole wait a question may take, and each
+ * is handled by its own answer: active, it is served; no record of Esign's use there yet, every due draft of it rests
+ * ten minutes (restWaiting); suspended, its drafts step back and wait (deferOrganization); no answer in time, its drafts
+ * are left as they are. Each organization served gets its first send (or refusal) before any gets a second: waves go
+ * on while places remain and the budget leaves a question's wait, and only then do the organizations reached send
+ * more, one draft of each a pass, in turn. Sends stop when the run's places (SCHEDULED_PER_RUN) or its budget run out,
+ * after at least one; the check comes before a draft is taken, so an organization not reached keeps its drafts and
+ * its turn. The cursor moves past every organization handled (served its first turn, resting, suspended or not
+ * answered for), up to the first one a run didn't serve.
  *
  * So with N organizations with a draft due, every one is asked about and served within N runs at worst (each run
- * serves at least the next one in turn), and within ceil(N / WAVE_ORGANIZATIONS) runs when the sends fit in the
- * budget.
+ * serves at least the next one in turn), and within ceil(N / SCHEDULED_PER_RUN) runs when the questions and sends fit
+ * in the budget.
  */
 async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
+  const budget = env.SCHEDULED_TIMING?.budgetMs ?? SCHEDULED_BUDGET_MS;
+  const rotating = tenantId === null;
+  // One organization's due work (process-due) takes no turn in the round, and needs no lease.
+  const lease = rotating ? crypto.randomUUID() : null;
+  if (lease && !(await takeLease(env.DB, lease, Date.now(), Date.now() + budget + LEASE_MARGIN_MS))) return { scheduledSent: 0, scheduledFailed: 0 };
+  try {
+    return await sendScheduledInTurn(env, tenantId, Date.now() + budget);
+  } finally {
+    if (lease) await releaseLease(env.DB, lease);
+  }
+}
+
+type DueDraft = { row: { id: string; tenant_id: string; draft_json: string }; request: Record<string, unknown>; schedule: Schedule; at: number };
+
+async function sendScheduledInTurn(env: Bindings, tenantId: string | null, until: number): Promise<{ scheduledSent: number; scheduledFailed: number }> {
   let sent = 0, failed = 0;
-  const until = Date.now() + (env.SCHEDULED_TIMING?.budgetMs ?? SCHEDULED_BUDGET_MS);
   const wait = env.SCHEDULED_TIMING?.statusTimeoutMs ?? STATUS_TIMEOUT_MS;
   const asking = memberStatusConfigured(env);
-  // One organization's due work (process-due) takes no turn in the round.
   const rotating = tenantId === null;
   const start = rotating ? await readCursor(env.DB) : '';
   let cursor = start;
   const asked: string[] = [];
-  waves: while (sent + failed < SCHEDULED_PER_RUN && (asked.length === 0 || until - Date.now() >= wait)) {
+  const answers = new Map<string, OrganizationNow | null>();
+  // What the organizations served their first turn this run have left, in turn.
+  const served: DueDraft[][] = [];
+  // Whether the run may take another draft: places left and budget left, or none sent yet.
+  const room = () => sent + failed < SCHEDULED_PER_RUN && (sent + failed === 0 || Date.now() <= until);
+  const send = async ({ row, request, schedule, at }: DueDraft) => {
+    const caller = scheduledCaller(schedule.by, row.tenant_id, asking ? answers.get(row.tenant_id) ?? null : undefined);
+    if (caller === 'unavailable' || caller === 'unconfirmed') return;
+    let error: string | null = null;
+    try {
+      if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
+      else {
+        const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id }, { draftJson: row.draft_json });
+        if (answer.ok) { sent += 1; return; }
+        const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
+        if (code === 'not_draft' || code === 'draft_changed') return;
+        error = typeof code === 'string' ? code : `status_${answer.status}`;
+      }
+    } catch { error = 'send_failed'; }
+    failed += 1;
+    await recordScheduleFailure(env.DB, row.id, at, error);
+  };
+
+  // First turns, wave by wave.
+  let stopped = false;
+  while (room() && (asked.length === 0 || until - Date.now() >= wait)) {
     const organizations = await dueOrganizations(env.DB, Date.now(), tenantId, cursor, asked);
     if (!organizations.length) break;
     asked.push(...organizations);
     const rows = await dueDrafts(env.DB, Date.now(), organizations);
-    const queues = new Map(organizations.map((org) => [org, (rows.get(org) ?? []).flatMap((row) => {
+    const queues = new Map(organizations.map((org) => [org, (rows.get(org) ?? []).flatMap((row): DueDraft[] => {
       const { request, schedule } = splitDraft(row.draft_json);
       return schedule && typeof schedule.at === 'number' ? [{ row, request, schedule, at: schedule.at }] : [];
     })]));
-    const answers = new Map<string, OrganizationNow | null>();
     if (asking) {
       // The whole wave at once, each for every scheduler of its drafts in view.
       await Promise.all(organizations.map(async (org) => {
@@ -671,48 +712,26 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
         answers.set(org, ids.length ? await organizationNow(env, org, ids, wait) : null);
       }));
     }
-    const done = new Set<string>(), serving: string[] = [];
     for (const org of organizations) {
-      const answer = answers.get(org);
-      if (asking && !answer) { done.add(org); continue; } // no answer in time: its drafts stay as they are
-      if (answer?.status === 'unconfirmed') { await restWaiting(env.DB, org, 'organization_unconfirmed', Date.now()); done.add(org); continue; }
-      if (answer?.status === 'answered' && !answer.active) { await deferOrganization(env.DB, org, Date.now()); done.add(org); continue; }
-      serving.push(org);
-    }
-    // In passes: one draft of each organization served, in turn, then the next.
-    let finished = false;
-    while (!finished && serving.some((org) => queues.get(org)!.length)) {
-      for (const org of serving) {
-        const queue = queues.get(org)!;
-        if (!queue.length) continue;
-        // Sends stop once the places or the budget are used, after at least one, so a run always moves on. Checked
-        // before taking a draft: an organization not served keeps its drafts and its turn.
-        if (sent + failed >= SCHEDULED_PER_RUN || (sent + failed > 0 && Date.now() > until)) { finished = true; break; }
-        const { row, request, schedule, at } = queue.shift()!;
-        done.add(org);
-        const caller = scheduledCaller(schedule.by, row.tenant_id, asking ? answers.get(row.tenant_id) ?? null : undefined);
-        if (caller === 'unavailable' || caller === 'unconfirmed') continue;
-        let error: string | null = null;
-        try {
-          if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
-          else {
-            const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id }, { draftJson: row.draft_json });
-            if (answer.ok) { sent += 1; continue; }
-            const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
-            if (code === 'not_draft' || code === 'draft_changed') continue;
-            error = typeof code === 'string' ? code : `status_${answer.status}`;
-          }
-        } catch { error = 'send_failed'; }
-        failed += 1;
-        await recordScheduleFailure(env.DB, row.id, at, error);
-      }
-    }
-    // One whose queue is empty is handled: everything it had was taken (or it had no draft to take).
-    for (const org of serving) if (!queues.get(org)!.length) done.add(org);
-    // The cursor moves past each organization handled, in turn, up to the first one this run couldn't serve.
-    for (const org of organizations) {
-      if (!done.has(org)) break waves;
+      const answer = answers.get(org), queue = queues.get(org)!;
+      if (asking && !answer) { cursor = org; continue; } // no answer in time: its drafts stay as they are
+      if (answer?.status === 'unconfirmed') { await restWaiting(env.DB, org, 'organization_unconfirmed', Date.now()); cursor = org; continue; }
+      if (answer?.status === 'answered' && !answer.active) { await deferOrganization(env.DB, org, Date.now()); cursor = org; continue; }
+      if (!queue.length) { cursor = org; continue; }
+      // Checked before a draft is taken: an organization not reached keeps its drafts and its turn.
+      if (!room()) { stopped = true; break; }
+      await send(queue.shift()!);
+      served.push(queue);
       cursor = org;
+    }
+    if (stopped) break;
+  }
+  // Then the organizations reached send more, one draft of each a pass, in turn.
+  while (!stopped && served.some((queue) => queue.length)) {
+    for (const queue of served) {
+      if (!queue.length) continue;
+      if (!room()) { stopped = true; break; }
+      await send(queue.shift()!);
     }
   }
   if (rotating && cursor !== start) await writeCursor(env.DB, cursor);

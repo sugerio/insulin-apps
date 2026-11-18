@@ -806,9 +806,10 @@ on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
   leaves the header out and forwards browser requests as usual. The gateway checks the signature with the app the
   token names (403 `invalid_member_lookup` otherwise), takes the organization and the person from the header, never
   from the app, checks again that the person can use the app there (403 `no_app_access`), and returns
-  `{ "members": [ … ] }`: at most 20 matches, whose name or address contains the text (1 to 100 characters), among
-  people who can use the app now with an active account (`type: "person"`, id, name, address, app role) and the app's
-  live API clients (`type: "client"`, id, name). The app's token alone reads no one. It fills a sharing dialog and shows
+  `{ "members": [ … ] }`: at most 20 matches, whose name or address contains the text (1 to 100 characters) without
+  regard to case (`É` and `é` alike), among people who can use the app now with an active account (`type: "person"`,
+  id, name, address, app role; a person whose address is the text first, then by name) and the app's live API clients
+  (`type: "client"`, id, name). The app's token alone reads no one. It fills a sharing dialog and shows
   no more than that dialog needs; an app may also check that addresses someone typed are its people, one lookup each
   (Esign: who sees an API client's documents, `422 not_members` otherwise). Requests by AI agents and API clients
   carry no header, so there the app falls back on the people it has seen. (Before this lookup was built, the same

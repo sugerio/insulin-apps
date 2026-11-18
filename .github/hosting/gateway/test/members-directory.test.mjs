@@ -141,3 +141,45 @@ test("one organization's lookups never use up another's", async () => {
     assert.equal(await ask(quietHeader), 200, 'another organization still asks')
   } finally { await limited.close() }
 })
+
+/** People added straight to the database, many at a time: id, address and name, as members of `orgId` with `role`. */
+async function members_(orgId, people, role = 'EDITOR') {
+  const now = Date.now()
+  for (const person of people) {
+    await h.sql('INSERT INTO users (id, email, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)', person.id, person.email, person.name, now)
+    await h.sql('INSERT INTO memberships (org_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)', orgId, person.id, role, now)
+  }
+}
+const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+
+test('names and addresses are matched without regard to case beyond ASCII: people and API clients', async () => {
+  const owner = await h.user({ name: 'Una Unicode' })
+  const orgId = await h.org(owner.client, 'Unicode Org')
+  await members_(orgId, [
+    { id: uuid(9001), email: 'elodie.example@example.test', name: 'Élodie Example' },
+    { id: uuid(9002), email: 'oeystein@example.test', name: 'ØYSTEIN ÅSHEIM' },
+    { id: uuid(9003), email: 'dmitri@example.test', name: 'Дмитрий Пример' },
+  ])
+  await h.sql(`INSERT INTO service_accounts (id, org_id, app, name, role, client_id, secret_hash, created_at, updated_at)
+    VALUES (?1, ?2, 'captable', 'Ärzte Sync', 'EDITOR', 'ia_sa_unicodeclient0000000001', 'hash', 1, 1)`, uuid(9004), orgId)
+  const header = await lookupHeader(owner)
+  const ids = async (q) => (await members(q, header)).json.members.map((m) => m.id)
+  for (const q of ['élodie', 'ÉLODIE', 'Élodie', 'odie ex']) assert.deepEqual(await ids(q), [uuid(9001)], q)
+  for (const q of ['øystein åsheim', 'Øystein', 'ÅSHEIM']) assert.deepEqual(await ids(q), [uuid(9002)], q)
+  for (const q of ['дмитрий', 'ПРИМЕР']) assert.deepEqual(await ids(q), [uuid(9003)], q)
+  for (const q of ['ärzte', 'ÄRZTE SYNC']) assert.deepEqual(await ids(q), [uuid(9004)], `${q}: an API client`)
+  assert.deepEqual(await ids('éloxx'), [], 'still only what contains it')
+})
+
+test('an exact address comes first, ahead of 20 people whose address contains it, so an app checking an address finds it', async () => {
+  const owner = await h.user({ name: 'Cora Crowd' })
+  const orgId = await h.org(owner.client, 'Crowded Org')
+  const crowd = Array.from({ length: 20 }, (_, i) => ({ id: uuid(9100 + i), email: `person${i}+eva@example.test`, name: `Aaron Crowd ${String(i).padStart(2, '0')}` }))
+  await members_(orgId, [...crowd, { id: uuid(9200), email: 'eva@example.test', name: 'Zed Target' }])
+  const header = await lookupHeader(owner)
+  const found = (await members('eva@example.test', header)).json.members
+  assert.equal(found.length, 20, 'a full answer')
+  assert.equal(found[0].id, uuid(9200), 'the address itself first')
+  assert.deepEqual((await members('EVA@Example.test', header)).json.members[0].id, uuid(9200), 'without regard to case')
+  assert.deepEqual(found.slice(1).map((m) => m.name), crowd.slice(0, 19).map((p) => p.name), 'then by name')
+})

@@ -145,19 +145,48 @@ export interface LookupPersonRow {
 }
 
 /**
- * A search box's text, lower case, as instr() finds it in a lower-cased name or address: as typed, wildcards and all.
- * Not LIKE: D1 refuses a LIKE pattern over 50 bytes, and the text may be 100 characters.
+ * A search box's text, lower case (String.prototype.toLowerCase), as instr() finds it in a name or address folded the
+ * same way (folded): as typed, wildcards and all. Not LIKE: D1 refuses a LIKE pattern over 50 bytes, and the text may be
+ * 100 characters.
  */
 function searchText(query: string): string {
   return query.toLowerCase()
 }
 
+/** The most characters beyond ASCII a search folds (two parameters each, within D1's 100 a statement). */
+const FOLDED_CHARACTERS_MAX = 40
+
+/**
+ * A stored name or address (`column`), folded for comparing with `text` as toLowerCase folds `text`, in SQL, with the
+ * values its parameters take from `first` on. SQLite's lower() folds ASCII only, so for each character of `text` beyond
+ * ASCII, replace() turns the capitals that lower to it into it first: "Élodie" then holds "élodie", as "ÉLODIE" does.
+ * Only the text's own characters matter, since no other character can match one of them; one-to-one case pairs only
+ * (a capital whose lower case is two characters, rare in names, compares as SQLite has it).
+ */
+function folded(column: string, text: string, first: number): { sql: string; values: string[] } {
+  const values: string[] = []
+  for (const char of new Set(text)) {
+    if (char.codePointAt(0)! < 0x80) continue
+    const capital = char.toUpperCase()
+    if (capital === char || [...capital].length !== 1 || capital.toLowerCase() !== char) continue
+    values.push(capital, char)
+    if (values.length / 2 >= FOLDED_CHARACTERS_MAX) break
+  }
+  let sql = `lower(${column})`
+  for (let k = 0; k < values.length; k += 2) sql = `replace(${sql}, ?${first + k}, ?${first + k + 1})`
+  return { sql, values }
+}
+
 /**
  * Up to `limit` people who can use `app` in the organization now (an organization role, or a grant for this app; an
- * active account) and up to `limit` of the app's live API clients, whose name or address contains `query`.
+ * active account) and up to `limit` of the app's live API clients, whose name or address contains `query`, without
+ * regard to case. A person whose address is the query itself comes first, so an app checking an address someone typed
+ * finds it however many others contain it (Esign: an API client's people); then by name.
  */
 export async function lookupMembers(db: D1Database, app: string, orgId: string, query: string, limit: number): Promise<{ people: LookupPersonRow[]; clients: { id: string; name: string }[] }> {
   const text = searchText(query)
+  // ?1 to ?4 are the app, the organization, the text and the limit; the folding pairs follow, the same for every column.
+  const name = folded('u.name', text, 5), email = folded('u.email', text, 5), client = folded('s.name', text, 5)
   const [people, clients] = await db.batch([
     db.prepare(
       `SELECT u.id, u.name, u.email, m.role AS member_role, g.role AS grant_role, g.custom_role_id, c.name AS custom_role_name,
@@ -167,14 +196,14 @@ export async function lookupMembers(db: D1Database, app: string, orgId: string, 
        LEFT JOIN app_grants g ON g.org_id = m.org_id AND g.user_id = m.user_id AND g.app = ?1
        LEFT JOIN custom_roles c ON c.id = g.custom_role_id
        WHERE m.org_id = ?2 AND (m.role <> 'APPS' OR g.role IS NOT NULL)
-         AND (instr(lower(u.name), ?3) > 0 OR instr(lower(u.email), ?3) > 0)
-       ORDER BY u.name COLLATE NOCASE, u.email LIMIT ?4`,
-    ).bind(app, orgId, text, limit),
+         AND (instr(${name.sql}, ?3) > 0 OR instr(${email.sql}, ?3) > 0)
+       ORDER BY ${email.sql} = ?3 DESC, u.name COLLATE NOCASE, u.email LIMIT ?4`,
+    ).bind(app, orgId, text, limit, ...name.values),
     db.prepare(
       `SELECT s.id, s.name FROM service_accounts s
-       WHERE s.org_id = ?2 AND s.app = ?1 AND s.revoked_at IS NULL AND instr(lower(s.name), ?3) > 0
+       WHERE s.org_id = ?2 AND s.app = ?1 AND s.revoked_at IS NULL AND instr(${client.sql}, ?3) > 0
        ORDER BY s.name COLLATE NOCASE, s.id LIMIT ?4`,
-    ).bind(app, orgId, text, limit),
+    ).bind(app, orgId, text, limit, ...client.values),
   ])
   return { people: (people?.results ?? []) as LookupPersonRow[], clients: (clients?.results ?? []) as { id: string; name: string }[] }
 }

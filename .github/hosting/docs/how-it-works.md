@@ -275,10 +275,11 @@ it or called it, or that its own usage report names (an OAuth client or a grant 
 
 - **Member lookup**, `GET https://insulinapps.com/__insulin/members?q=<text>` with the `x-suger-member-lookup` header of
   the browser request the app is serving: at most 20 people who can use the app (id, name, e-mail address and role in
-  the app) and the app's OAuth clients (id and name) whose name or address contains the text. The organization and the
-  person come from the signed header, never from the app, and the person must still be able to use the app. It fills a
-  sharing dialog (or checks the people someone typed, as Esign does for an OAuth client's people), and is limited per
-  person. Requests from AI agents and OAuth clients carry no header, so there an app uses the people it has seen.
+  the app) and the app's OAuth clients (id and name) whose name or address contains the text, in any case, someone
+  whose address is the text first. The organization and the person come from the signed header, never from the app,
+  and the person must still be able to use the app. It fills a sharing dialog (or checks the people someone typed, as
+  Esign does for an OAuth client's people), and is limited per person. Requests from AI agents and OAuth clients carry
+  no header, so there an app uses the people it has seen.
 - **Member status**, `POST https://insulinapps.com/__insulin/members/status` with `{ "org", "ids" }` (at most 100):
   for each person or OAuth client, whether it can still use the app (`member`, with its roles), has left (`left`, or
   `revoked` for an OAuth client) or no longer exists (`gone`), and the organization's owners and since when; `404

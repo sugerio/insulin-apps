@@ -112,6 +112,25 @@ test("an API client's people must be people who can use Esign, each address look
   } finally { await busy.mf.dispose(); }
 });
 
+test("an API client's person is found by address however many others' addresses contain theirs", async () => {
+  // As the gateway answers (db/members.ts): an address that is the text itself first, then by name, at most 20.
+  const crowd = Array.from({ length: 20 }, (_, i) => ({ type: 'person', id: `user-crowd-${i}`, name: `Aaron Crowd ${String(i).padStart(2, '0')}`, email: `person${i}+eva@example.test` }));
+  const people = [...crowd, { type: 'person', id: 'user-eva', name: 'Zed Target', email: 'eva@example.test' }];
+  const h = await setup((url, init) => {
+    if (new Headers(init.headers).get('x-suger-member-lookup') !== LOOKUP) return Response.json({ error: 'invalid_member_lookup' }, { status: 403 });
+    const q = (url.searchParams.get('q') ?? '').toLowerCase();
+    const found = people.filter((m) => m.email.includes(q) || m.name.toLowerCase().includes(q));
+    found.sort((a, b) => Number(b.email === q) - Number(a.email === q) || a.name.localeCompare(b.name));
+    return Response.json({ members: found.slice(0, 20) });
+  });
+  try {
+    await h.req('/api/client-settings/sa-1?name=Host', h.owner);
+    const saved = await h.req('/api/client-settings/sa-1', h.owner, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ people: ['eva@example.test'] }) });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    assert.deepEqual((await saved.json() as { people: { email: string }[] }).people.map((p) => p.email), ['eva@example.test']);
+  } finally { await h.mf.dispose(); }
+});
+
 test("without an answer from the platform, an API client's people must be people Esign has seen", async () => {
   const h = await setup(() => new Response('unavailable', { status: 503 }));
   try {

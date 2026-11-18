@@ -136,7 +136,8 @@ export function mountMemberRoutes(app: Hono<Env>) {
     if (!Array.isArray(people) || people.length > MAX_CLIENT_PEOPLE || people.some((email) => !shareableEmail(email))) return context.json({ error: 'invalid_people' }, 422);
     if (!await db.prepare("SELECT 1 FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'client'").bind(tenantId, id).first()) return context.json({ error: 'not_found' }, 404);
     // Only people who can use Esign, as the platform finds them for this owner or admin (directory.ts), each address
-    // asked for on its own; when it can't be asked, or any one lookup isn't answered, people Esign has seen.
+    // asked for on its own (the platform puts a person whose address it is first, however many others contain it);
+    // when it can't be asked, or any one lookup isn't answered, people Esign has seen.
     let outside = people as string[], answered = false;
     const asked = new Map<string, string>();
     for (const email of outside) if (!asked.has(emailKey(email))) asked.set(emailKey(email), email.trim());

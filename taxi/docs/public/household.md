@@ -21,7 +21,7 @@ can't change who "you" are. Someone with the Viewer role sees the people but can
 
 ## Start a tax year: who is in it
 
-Open **Returns** and choose **Start 2025**. The app lists everyone in the household with a box to tick:
+Open **Returns** and choose **Start 2025**. The app lists everyone in the household with a box to tick. Only you are ticked to begin with:
 
 - **You** are always in your own year.
 - **Your spouse or partner:** tick them to prepare both returns together. Each of you still files your own return;
@@ -30,7 +30,8 @@ Open **Returns** and choose **Start 2025**. The app lists everyone in the househ
 - **Children and other dependants:** tick those who lived with you that year.
 
 If someone is missing, choose **Add a new person**: it opens the Household page, and **Back to Start 2025** returns to
-the list. To change who is in a year later, choose **Change** in the **Personal info** step of either return.
+the list. To change who is in a year later, choose **Change** under **People in 2025** on **Returns**. Someone taken out of a
+year loses their facts, answers and slips for that year.
 
 ## Marital status on December 31
 

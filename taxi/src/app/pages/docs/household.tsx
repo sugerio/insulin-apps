@@ -37,7 +37,7 @@ export const household: DocTopic = {
       body: (
         <>
           <p>
-            On <b>Returns</b>, choose <b>Start 2025</b>. The app lists everyone in the household with a box to tick:
+            On <b>Returns</b>, choose <b>Start 2025</b>. The app lists everyone in the household with a box to tick. Only you are ticked to begin with:
           </p>
           <ul>
             <li>
@@ -54,7 +54,7 @@ export const household: DocTopic = {
           </ul>
           <p>
             Someone missing? Choose <b>Add a new person</b>: it opens the Household page, and <b>Back to Start 2025</b> brings you back to the list.
-            To change who is in a year later, use <b>Change</b> in the <b>Personal info</b> step of either return.
+            To change who is in a year later, use <b>Change</b> under <b>People in 2025</b> on <b>Returns</b>. Someone taken out of a year loses their facts, answers and slips for that year.
           </p>
         </>
       ),

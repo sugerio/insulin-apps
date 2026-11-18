@@ -69,8 +69,12 @@ describe("starting a year", () => {
   it("asks who is in the year, and starts it with them", async () => {
     const { router, server } = await renderApp("/returns", { seed: async (s) => void (await seedPeople(s)) });
     fireEvent.click(await screen.findByRole("button", { name: "Start 2025" }));
+    // Only you to begin with: everyone else is added by choice.
     expect((checkbox("Alex Martin") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(checkbox("Jamie Martin"));
+    expect(checkbox("Alex Martin").getAttribute("aria-checked")).toBe("true");
+    expect(checkbox("Sam Martin").getAttribute("aria-checked")).toBe("false");
+    expect(checkbox("Jamie Martin").getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(checkbox("Sam Martin"));
     expect(screen.getByRole("link", { name: "Add a new person" }).getAttribute("href")).toBe(`/household?back=${encodeURIComponent("/returns?start=2025")}`);
     fireEvent.click(screen.getByRole("button", { name: "Start 2025" }));
     await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/returns\/2025\/[0-9a-f-]{36}\/household$/));
@@ -79,6 +83,23 @@ describe("starting a year", () => {
     expect(router.state.location.pathname).toBe(`/returns/2025/${year.adults[0]!.personId}/household`);
     expect(year.prepareTogether).toBe(true);
     expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Sam Martin"]);
+  });
+
+  it("changes who is in a started year on the Tax years page", async () => {
+    const { server } = await renderApp("/returns", { seed: seedCouple });
+    const people = await screen.findByRole("region", { name: "People in 2025" });
+    expect(within(people).getByText("Sam Martin")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "2025 returns" }).querySelectorAll(":scope > li")).toHaveLength(2);
+    fireEvent.click(within(people).getByRole("button", { name: "Change" }));
+    fireEvent.click(checkbox("Sam Martin"));
+    expect(within(people).getByText("Taking Sam Martin out of 2025")).toBeTruthy();
+    fireEvent.click(checkbox("Jamie Martin"));
+    fireEvent.click(within(people).getByRole("button", { name: "Save people" }));
+    // Sam out of the year has no return; Jamie is a dependant on Alex's.
+    await waitFor(() => expect(screen.getByRole("list", { name: "2025 returns" }).querySelectorAll(":scope > li")).toHaveLength(1));
+    const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+    expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Jamie Martin"]);
+    expect(year.prepareTogether).toBe(false);
   });
 
   it("opens the choice straight away on the way back from the Household", async () => {
@@ -90,6 +111,13 @@ describe("starting a year", () => {
     await renderApp("/returns", { as: VIEWER, seed: async (s) => void (await seedPeople(s)) });
     expect(await screen.findByText(/Someone who prepares returns starts the year/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start 2025" })).toBeNull();
+  });
+
+  it("doesn't offer a viewer to change who is in a year", async () => {
+    await renderApp("/returns", { as: VIEWER, seed: seedCouple });
+    const people = await screen.findByRole("region", { name: "People in 2025" });
+    expect(within(people).getByText("Sam Martin")).toBeTruthy();
+    expect(within(people).queryByRole("button", { name: "Change" })).toBeNull();
   });
 });
 
@@ -116,13 +144,12 @@ describe("step 1 of a year", () => {
     expect(stored.returns[0]!.steps.household).toBe("done");
   });
 
-  it("shows one adult's return, with a switcher to the other's, until the spouse is taken out of the year", async () => {
+  it("shows one adult's return, with a switcher to the other's", async () => {
     const { router } = await renderApp("/returns/2025/household", { seed: seedCouple });
     expect(await screen.findAllByLabelText("Province on December 31")).toHaveLength(1);
     expect(screen.getAllByRole("radio", { name: /^(Married|Living common-law|Single|Widowed|Divorced|Separated)$/ }).map((radio) => radio.getAttribute("value"))).toEqual(["married", "common_law"]);
-    const household = screen.getByRole("heading", { name: "Household in 2025" }).closest("[data-slot=card]") as HTMLElement;
-    expect(within(household).getByText(/^This return ·/)).toBeTruthy();
-    expect(within(household).getByText(/^Spouse or partner ·/)).toBeTruthy();
+    // Who is in the year is chosen on the Tax years page, not here.
+    expect(screen.queryByRole("heading", { name: "Household in 2025" })).toBeNull();
     const alexPath = router.state.location.pathname;
 
     const switcher = screen.getByRole("button", { name: "Return of Alex Martin: switch return" });
@@ -131,16 +158,6 @@ describe("step 1 of a year", () => {
     await waitFor(() => expect(router.state.location.pathname).not.toBe(alexPath));
     expect(router.state.location.pathname).toMatch(/\/household$/);
     expect(await screen.findByRole("button", { name: "Return of Sam Martin: switch return" })).toBeTruthy();
-    // From Sam's return, Alex is Sam's spouse.
-    const samHousehold = screen.getByRole("heading", { name: "Household in 2025" }).closest("[data-slot=card]") as HTMLElement;
-    expect(within(samHousehold).getByText("Alex Martin").parentElement!.textContent).toMatch(/Spouse or partner/);
-
-    fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.click(checkbox("Sam Martin"));
-    fireEvent.click(screen.getByRole("button", { name: "Save people" }));
-    // Sam has no return now: the year opens on Alex's first step still to do, with nothing to switch to.
-    await waitFor(() => expect(router.state.location.pathname).toBe(alexPath));
-    await waitFor(() => expect(screen.queryByRole("button", { name: /switch return/ })).toBeNull());
   });
 
   it("says what is still missing only when you try to continue", async () => {
@@ -159,8 +176,7 @@ describe("step 1 of a year", () => {
 
   it("shows a viewer the year without anything to change", async () => {
     await renderApp("/returns/2025/household", { as: VIEWER, seed: seedCouple });
-    expect(await screen.findByText("Sam Martin", { selector: "span" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Marital status on December 31, 2025" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
     for (const radio of screen.getAllByRole("radio")) expect((radio as HTMLButtonElement).disabled).toBe(true);
   });

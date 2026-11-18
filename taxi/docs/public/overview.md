@@ -19,7 +19,7 @@ return's name above its steps. Both returns are worked out together, so each can
 
 Each return has six steps:
 
-1. **Personal info.** Who is in the year, and the facts no document shows.
+1. **Personal info.** The facts no document shows.
 2. **Upload documents.** Slips and receipts, read by AI. A slip with the other person's name goes to their return.
 3. **What applies.** What the documents show, and anything missing.
 4. **Confirm.** Every number AI read, to check against the papers.

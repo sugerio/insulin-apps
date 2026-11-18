@@ -131,6 +131,7 @@ describe("starting a tax year", () => {
     const { alex, sam } = await marriedCouple();
     const list = await json<YearList>(server.call("GET", "/api/years"));
     expect(list.supportedYears).toEqual([2025]);
+    expect(list.years[0]!.members).toEqual([alex.id, sam.id]);
     expect(list.years[0]!.returns.map((each) => [each.personId, each.name, each.steps.household])).toEqual([
       [alex.id, "Alex Martin", "todo"],
       [sam.id, "Sam Martin", "todo"],

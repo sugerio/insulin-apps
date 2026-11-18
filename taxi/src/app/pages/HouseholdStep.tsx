@@ -8,27 +8,24 @@ import {
   maritalStatusesFor,
   routes,
   type MaritalStatus,
-  type Person,
   type Province,
 } from "#shared";
-import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
-import { MemberPicker } from "../components/PeopleEditor.tsx";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, stepsOf, useReturn, useYear } from "../components/YearFrame.tsx";
-import { MARITAL_STATUS_LABELS, PROVINCE_LABELS, RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
+import { MARITAL_STATUS_LABELS, PROVINCE_LABELS } from "../lib/format.ts";
 
 // Step 1, `/returns/:year/:personId/household`: the facts of the open return that no document tells the app: the
-// adult's province and residency, and the two facts the year's returns share (the marital status on December 31, and
-// who is in the year). The people and how each is related come from the Household page. The facts are saved together,
-// under the year's revision.
+// adult's province and residency, and the marital status on December 31, which the year's returns share. Who is in the
+// year is chosen on the Tax years page, and how each person is related on the Household page. The facts are saved
+// together, under the year's revision.
 
 export function HouseholdStep() {
   const { year } = useYear();
@@ -36,7 +33,6 @@ export function HouseholdStep() {
   const [showMissing, setShowMissing] = useState(false);
   return (
     <StepLayout step="household" title="Personal info" aside={<TaxNotes year={year.year} />}>
-      <YearPeopleCard />
       {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
       <YearFacts key={year.revision} showMissing={showMissing} onMissing={() => setShowMissing(true)} />
     </StepLayout>
@@ -68,88 +64,6 @@ function TaxNotes({ year }: { year: number }) {
           <b className="text-foreground">Lived in Canada all year.</b> Moving to or from Canada in {year} changes how income is taxed. This app
           doesn't handle it yet.
         </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Who is in the year
-
-function YearPeopleCard() {
-  const me = useMe();
-  const { year, replace } = useYear();
-  const { person: owner } = useReturn();
-  const editable = canPrepare(me);
-  const [changing, setChanging] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(year.members));
-  const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const members = year.people.filter((person) => year.members.includes(person.id));
-  const addPerson = `/household?back=${encodeURIComponent(stepPath(year.year, owner.id, "household"))}`;
-
-  async function save() {
-    setState({ status: "saving" });
-    try {
-      const ids = year.people.filter((person) => person.relationship === "self" || selected.has(person.id)).map((person) => person.id);
-      replace(await apiRequest(routes.setYearPeople, { params: { year: year.year }, body: { revision: year.revision, people: ids } }));
-      setChanging(false);
-      setState({ status: "idle" });
-    } catch (error) {
-      setState({ status: "error", error });
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 className="text-base font-semibold">Household in {year.year}</h2>
-        </CardTitle>
-        {editable && !changing ? (
-          <CardAction>
-            <Button variant="outline" size="sm" onClick={() => { setSelected(new Set(year.members)); setChanging(true); }}>
-              Change
-            </Button>
-          </CardAction>
-        ) : null}
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {changing ? (
-          <>
-            <MemberPicker
-              people={year.people}
-              selected={selected}
-              onChange={setSelected}
-              disabled={state.status === "saving"}
-              footer={
-                <Link to={addPerson} className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                  <Plus className="size-4" aria-hidden="true" />
-                  Add a new person
-                </Link>
-              }
-            />
-            {state.status === "error" ? <Banner kind="error" title="Who is in the year wasn't changed">{describeError(state.error)}</Banner> : null}
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => void save()} disabled={state.status === "saving"}>
-                {state.status === "saving" ? "Saving…" : "Save people"}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setChanging(false)} disabled={state.status === "saving"}>
-                Cancel
-              </Button>
-            </div>
-          </>
-        ) : (
-          <ul className="flex flex-col divide-y">
-            {members.map((person) => (
-              <li key={person.id} className="flex flex-wrap justify-between gap-3 py-2.5 text-sm">
-                <span className="font-medium">{person.name}</span>
-                <span className="text-muted-foreground">
-                  {relationTo(owner, person)} · Born {formatDate(person.birthDate)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
       </CardContent>
     </Card>
   );
@@ -330,12 +244,6 @@ function AdultCard({ draft, editable, onChange }: { draft: AdultDraft; editable:
   );
 }
 
-/** How someone in the year is related to the adult whose return is open. */
-function relationTo(owner: Person, person: Person): string {
-  if (person.id === owner.id) return "This return";
-  if (person.relationship === "self") return RELATIONSHIP_LABELS.spouse;
-  return RELATIONSHIP_LABELS[person.relationship];
-}
 
 /** One option of a radio group, drawn as a bordered row that is wholly clickable. */
 function Choice({ value, label }: { value: string; label: string }) {

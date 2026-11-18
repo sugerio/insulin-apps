@@ -34,7 +34,7 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            First add the household's people under <b>Household</b>. Then open <b>Returns</b> and start the tax year, choosing who is in it.
+            First add the household's people under <b>Household</b>. Then open <b>Returns</b> and start the tax year, choosing who is in it (only you, to begin with). To change who is in it later, use <b>Change</b> under the year on <b>Returns</b>.
             You and your spouse or partner each have a return, and you work on one return at a time. The return you are on is named above
             the steps; select it to switch to the other return. Each return has six steps, and a step that is done shows a check mark.
           </p>
@@ -44,7 +44,7 @@ export const gettingStarted: DocTopic = {
           </p>
           <ol>
             <li>
-              <b>Personal info.</b> Who is in the year, the marital status on December 31, and this person's province. See{" "}
+              <b>Personal info.</b> The marital status on December 31, and this person's province. See{" "}
               <DocLink to="household">The household</DocLink>.
             </li>
             <li>

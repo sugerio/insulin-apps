@@ -163,6 +163,10 @@ export type SaveHousehold = z.infer<typeof saveHouseholdSchema>;
 
 export const yearSummarySchema = z.strictObject({
   year: z.number().int(),
+  /** The year's revision, to change who is in it from the list of years. */
+  revision: z.number().int().min(1),
+  /** The ids of the year's people, in the household's order. */
+  members: z.array(idSchema),
   /** Each adult's return: whose it is, by name, and its steps' states. */
   returns: z.array(returnProgressSchema.extend({ name: z.string() })),
   updatedAt: z.number().int(),

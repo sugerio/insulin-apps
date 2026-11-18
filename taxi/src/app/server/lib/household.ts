@@ -213,6 +213,8 @@ export async function listYears(db: Db, orgId: string, supportedYears: readonly 
     people: await listPeople(db, orgId),
     years: years.map((view) => ({
       year: view.year,
+      revision: view.revision,
+      members: view.members,
       returns: view.returns.map((progress) => ({ ...progress, name: view.people.find((person) => person.id === progress.personId)?.name ?? "" })),
       updatedAt: view.updatedAt,
     })),

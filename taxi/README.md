@@ -16,7 +16,8 @@ uploaded slips read by AI (or typed in), what applies, deductions and the result
   time, with a switcher to the other. Each return has six steps: personal info, upload documents, what applies,
   confirm, deductions, finish.
 - **The household.** Add yourself, your spouse or common-law partner, and your children and other dependants, with
-  their birth dates, on the Household page. Starting a year asks who is in it: your spouse in it means both returns are
+  their birth dates, on the Household page. Starting a year asks who is in it (only you, to begin with; change it later on
+  the Tax years page): your spouse in it means both returns are
   prepared together. Each year then records your marital status on December 31, and each adult's province and whether
   they lived in Canada all year. The app says what is still missing, and what it
   can't prepare (another province, or someone who moved to or from Canada during the year).

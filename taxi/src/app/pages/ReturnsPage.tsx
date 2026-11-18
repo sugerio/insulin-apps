@@ -22,12 +22,12 @@ export function ReturnsPage() {
   return (
     <Page title="Returns" crumbs={[["Returns"]]}>
       <PageHead title="Tax years" />
-      <ResourceView resource={resource}>{(data) => <Years data={data} />}</ResourceView>
+      <ResourceView resource={resource}>{(data) => <Years data={data} reload={resource.reload} />}</ResourceView>
     </Page>
   );
 }
 
-function Years({ data }: { data: YearList }) {
+function Years({ data, reload }: { data: YearList; reload: () => void }) {
   const me = useMe();
   const started = new Set(data.years.map((year) => year.year));
   const notStarted = data.supportedYears.filter((year) => !started.has(year));
@@ -42,7 +42,8 @@ function Years({ data }: { data: YearList }) {
               </CardTitle>
               <CardDescription>File by {formatDate(filingDeadline(year.year))}.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-5">
+              <YearPeople year={year} people={data.people} onChanged={reload} />
               <ul className="flex flex-col divide-y" aria-label={`${year.year} returns`}>
                 {year.returns.map((progress) => (
                   <ReturnRow key={progress.personId} year={year.year} progress={progress} />
@@ -99,6 +100,91 @@ function Years({ data }: { data: YearList }) {
   );
 }
 
+/**
+ * Who is in a started year, and the choice to change it: you always; your spouse or partner to prepare their return
+ * too; the dependants who lived with you. Someone taken out loses their facts, answers and slips for that year.
+ */
+function YearPeople({ year, people, onChanged }: { year: YearList["years"][number]; people: Person[]; onChanged: () => void }) {
+  const me = useMe();
+  const [changing, setChanging] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(year.members));
+  const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
+  const members = people.filter((person) => year.members.includes(person.id));
+  const leaving = members.filter((person) => person.relationship !== "self" && !selected.has(person.id));
+  const addPerson = `/household?back=${encodeURIComponent("/returns")}`;
+
+  async function save() {
+    setState({ status: "saving" });
+    try {
+      const ids = people.filter((person) => person.relationship === "self" || selected.has(person.id)).map((person) => person.id);
+      await apiRequest(routes.setYearPeople, { params: { year: year.year }, body: { revision: year.revision, people: ids } });
+      setChanging(false);
+      setState({ status: "idle" });
+      onChanged();
+    } catch (error) {
+      setState({ status: "error", error });
+    }
+  }
+
+  return (
+    <section aria-label={`People in ${year.year}`} className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium">People in {year.year}</h3>
+        {canPrepare(me) && !changing ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelected(new Set(year.members));
+              setChanging(true);
+            }}
+          >
+            Change
+          </Button>
+        ) : null}
+      </div>
+      {changing ? (
+        <>
+          <MemberPicker
+            people={people}
+            selected={selected}
+            onChange={setSelected}
+            disabled={state.status === "saving"}
+            footer={
+              <Link to={addPerson} className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm font-medium hover:bg-muted">
+                <Plus className="size-4" aria-hidden="true" />
+                Add a new person
+              </Link>
+            }
+          />
+          {leaving.length > 0 ? (
+            <Banner kind="warning" title={`Taking ${leaving.map((person) => person.name).join(" and ")} out of ${year.year}`}>
+              Their facts, answers and slips for {year.year} are deleted when you save.
+            </Banner>
+          ) : null}
+          {state.status === "error" ? <Banner kind="error" title="Who is in the year wasn't changed">{describeError(state.error)}</Banner> : null}
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => void save()} disabled={state.status === "saving"}>
+              {state.status === "saving" ? "Saving…" : "Save people"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setChanging(false)} disabled={state.status === "saving"}>
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {members.map((person) => (
+            <li key={person.id}>
+              <span className="font-medium">{person.name}</span> <span className="text-muted-foreground">· {RELATIONSHIP_LABELS[person.relationship]}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** One adult's return in a year: its steps and the way to the first one still to do. */
 function ReturnRow({ year, progress }: { year: number; progress: YearList["years"][number]["returns"][number] }) {
   const me = useMe();
@@ -143,16 +229,16 @@ function ReturnRow({ year, progress }: { year: number; progress: YearList["years
 }
 
 /**
- * A supported year not started yet. Starting it asks who is in it: you always, your spouse to prepare both returns
- * together, and the dependants who lived with you. `?start=<year>` opens the choice (the way back from the Household).
+ * A supported year not started yet. Starting it asks who is in it: you always, and whoever you choose of the household
+ * (your spouse to prepare their return too, the dependants who lived with you). `?start=<year>` opens the choice (the way back from the Household).
  */
 function StartYear({ year, people }: { year: number; people: Person[] }) {
   const me = useMe();
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const [choosing, setChoosing] = useState(search.get("start") === String(year));
-  // Everyone ticked to begin with: most households file with the same people every year.
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(people.map((person) => person.id)));
+  // Only you to begin with: everyone else is added by choice.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [state, setState] = useState<{ status: "idle" | "starting" } | { status: "error"; error: unknown }>({ status: "idle" });
   const self = people.find((person) => person.relationship === "self");
   const addPerson = `/household?back=${encodeURIComponent(`/returns?start=${year}`)}`;

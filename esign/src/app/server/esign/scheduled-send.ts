@@ -33,13 +33,14 @@ export const SCHEDULED_BUDGET_MS = 10_000;
  */
 export const WAITING_RETRY_MS = 10 * 60 * 1000;
 /**
- * How long a suspended organization's due drafts step back: less than a tick, so the next run tries them again (they
- * wait while it is suspended, as before), but behind drafts due before then (dueScheduled takes drafts by when they are
- * next due).
+ * How long a suspended organization's due drafts step back: less than a tick, so the next run asks again (they wait
+ * while it is suspended, as before); until then it isn't asked about.
  */
 export const DEFER_MS = 4 * 60 * 1000;
-/** The most organizations one batch of due drafts spans, all asked about at once (sendScheduled). */
-export const BATCH_ORGANIZATIONS = 10;
+/** The organizations one wave of a run takes, all asked about at once (sendScheduled). */
+export const WAVE_ORGANIZATIONS = 10;
+/** The `app_settings` row holding the last organization a run reached (a JSON string; none before the first run). */
+export const CURSOR_SETTING = 'scheduled_cursor';
 /** When a waiting or deferred draft is tried again: write it only as this, as SCHEDULE_AT. */
 const RETRY_AT = "json_extract(draft_json, '$.schedule.retryAt')";
 
@@ -126,29 +127,51 @@ export function scheduleView(schedule: Schedule | null): { sendAt?: string; send
 }
 
 /**
- * The query for a batch of due drafts (dueScheduled; exported for the query-plan test): of the BATCH_ORGANIZATIONS
- * organizations whose first draft is next due soonest (a draft's retryAt, or else its time), up to SCHEDULED_PER_RUN
- * drafts taken in turn, each organization's next before any organization's following one, so a batch reaches every one
- * of them however many drafts the first has. ?1 now, ?2 one organization or null, ?3 organizations and ?4 drafts to
- * leave out, as JSON lists.
+ * The organizations with a draft due now (?1 now; ?2 one organization, or null for all), WAVE_ORGANIZATIONS of them,
+ * those after the cursor (?3) first in id order, then from the start again, leaving out ?4 (a JSON list: those a run
+ * has asked about already). Exported for the query-plan test.
  */
-export const DUE_SCHEDULED_SQL = `WITH due AS (
-    SELECT id, tenant_id, draft_json, COALESCE(${RETRY_AT}, ${SCHEDULE_AT}) AS next FROM envelopes
+export const DUE_ORGANIZATIONS_SQL = `SELECT tenant_id FROM (
+    SELECT DISTINCT tenant_id FROM envelopes INDEXED BY envelopes_scheduled
     WHERE status = 'DRAFT' AND ${SCHEDULE_AT} <= ?1 AND (${RETRY_AT} IS NULL OR ${RETRY_AT} <= ?1) AND (?2 IS NULL OR tenant_id = ?2)
-      AND tenant_id NOT IN (SELECT value FROM json_each(?3)) AND id NOT IN (SELECT value FROM json_each(?4))
-  ), firsts AS (
-    SELECT tenant_id, MIN(next) AS first FROM due GROUP BY tenant_id ORDER BY first, tenant_id LIMIT ${BATCH_ORGANIZATIONS}
-  ), turns AS (
-    SELECT d.id, d.tenant_id, d.draft_json, f.first, ROW_NUMBER() OVER (PARTITION BY d.tenant_id ORDER BY d.next, d.id) AS turn
-    FROM due d JOIN firsts f ON f.tenant_id = d.tenant_id
-  )
-  SELECT id, tenant_id, draft_json FROM turns ORDER BY turn, first, tenant_id LIMIT ${SCHEDULED_PER_RUN}`;
+      AND tenant_id NOT IN (SELECT value FROM json_each(?4))
+  ) ORDER BY tenant_id > ?3 DESC, tenant_id LIMIT ${WAVE_ORGANIZATIONS}`;
 
-/** A batch of due drafts (DUE_SCHEDULED_SQL), of one organization or (null) all, leaving out those in `skip`. */
-export async function dueScheduled(db: D1Database, now: number, tenantId: string | null, skip: { tenants: string[]; ids: string[] } = { tenants: [], ids: [] }): Promise<{ id: string; tenant_id: string; draft_json: string }[]> {
-  const { results } = await db.prepare(DUE_SCHEDULED_SQL)
-    .bind(now, tenantId, JSON.stringify(skip.tenants), JSON.stringify(skip.ids)).all<{ id: string; tenant_id: string; draft_json: string }>();
-  return results;
+/**
+ * The due drafts of the organizations in ?2 (a JSON list), up to SCHEDULED_PER_RUN each, each organization's by when
+ * they are next due (retryAt, else their time), numbered `turn` from 1. Both queries read the drafts due through the
+ * partial index on the time (never every envelope of an organization). Exported for the query-plan test.
+ */
+export const DUE_DRAFTS_SQL = `SELECT id, tenant_id, draft_json, turn FROM (
+    SELECT id, tenant_id, draft_json, ROW_NUMBER() OVER (PARTITION BY tenant_id ORDER BY COALESCE(${RETRY_AT}, ${SCHEDULE_AT}), id) AS turn
+    FROM envelopes INDEXED BY envelopes_scheduled
+    WHERE status = 'DRAFT' AND ${SCHEDULE_AT} <= ?1 AND (${RETRY_AT} IS NULL OR ${RETRY_AT} <= ?1) AND tenant_id IN (SELECT value FROM json_each(?2))
+  ) WHERE turn <= ${SCHEDULED_PER_RUN} ORDER BY tenant_id, turn`;
+
+/** The next WAVE_ORGANIZATIONS organizations with a draft due, after `cursor` and round again (DUE_ORGANIZATIONS_SQL). */
+export async function dueOrganizations(db: D1Database, now: number, tenantId: string | null, cursor: string, leaveOut: string[]): Promise<string[]> {
+  const { results } = await db.prepare(DUE_ORGANIZATIONS_SQL).bind(now, tenantId, cursor, JSON.stringify(leaveOut)).all<{ tenant_id: string }>();
+  return results.map((row) => row.tenant_id);
+}
+
+/** The due drafts of these organizations, each organization's in its order (DUE_DRAFTS_SQL). */
+export async function dueDrafts(db: D1Database, now: number, organizations: string[]): Promise<Map<string, { id: string; tenant_id: string; draft_json: string }[]>> {
+  const { results } = await db.prepare(DUE_DRAFTS_SQL).bind(now, JSON.stringify(organizations)).all<{ id: string; tenant_id: string; draft_json: string }>();
+  const drafts = new Map<string, { id: string; tenant_id: string; draft_json: string }[]>(organizations.map((org) => [org, []]));
+  for (const row of results) drafts.get(row.tenant_id)?.push(row);
+  return drafts;
+}
+
+/** The last organization a run reached (CURSOR_SETTING), or '' (before the first). */
+export async function readCursor(db: D1Database): Promise<string> {
+  const row = await db.prepare("SELECT json_extract(value, '$') AS org FROM app_settings WHERE name = ?").bind(CURSOR_SETTING).first<{ org: unknown }>();
+  return typeof row?.org === 'string' ? row.org : '';
+}
+
+/** Records the last organization a run reached. */
+export async function writeCursor(db: D1Database, org: string): Promise<void> {
+  await db.prepare('INSERT INTO app_settings (name, value) VALUES (?1, json_quote(?2)) ON CONFLICT (name) DO UPDATE SET value = excluded.value')
+    .bind(CURSOR_SETTING, org).run();
 }
 
 /**

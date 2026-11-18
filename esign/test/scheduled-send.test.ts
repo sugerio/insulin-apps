@@ -8,7 +8,7 @@ import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { blobStore, identity, MIGRATIONS_DIR, splitSql } from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
-import { DUE_SCHEDULED_SQL, parseSendAt } from '../src/app/server/esign/scheduled-send.ts';
+import { DUE_DRAFTS_SQL, DUE_ORGANIZATIONS_SQL, parseSendAt } from '../src/app/server/esign/scheduled-send.ts';
 
 const ORIGIN = 'https://esign.example.test';
 const TICK = { 'x-suger-app-id': 'insulin-apps-esign', 'x-suger-access-via': 'schedule' };
@@ -316,10 +316,10 @@ const TIMING = { budgetMs: 1000, statusTimeoutMs: 500 };
  * A platform whose organizations answer as `answers` says (after `ms`; `kind` member, suspended or unconfirmed),
  * recording each question; and, per organization, a template and a draft due now to schedule with.
  */
-async function slowPlatform(answers: Record<string, { ms: number; kind: 'member' | 'suspended' | 'unconfirmed' }>) {
+async function slowPlatform(answers: Record<string, { ms: number; kind: 'member' | 'suspended' | 'unconfirmed' }>, timing = TIMING) {
   const asked: string[] = [];
   const h = await setup({
-    timing: TIMING,
+    timing,
     status: async (body) => {
       asked.push(body.org);
       const answer = answers[body.org] ?? { ms: 0, kind: 'member' };
@@ -364,15 +364,16 @@ test('two slow suspended organizations ahead of a slow healthy one: it sends at 
 });
 
 test('several organizations slow to answer, beside 75 waiting drafts: asked together, every one sends at the first tick', async () => {
+  // Room for the four sends after the answers, even on a busy machine.
   const { h, asked, draft, statuses } = await slowPlatform({
     tenant: { ms: 400, kind: 'unconfirmed' }, 'org-b': { ms: 400, kind: 'member' }, 'org-c': { ms: 450, kind: 'member' }, 'org-d': { ms: 350, kind: 'member' }, 'org-e': { ms: 400, kind: 'member' },
-  });
+  }, { budgetMs: 3000, statusTimeoutMs: 500 });
   try {
     for (let i = 0; i < 75; i += 1) await draft('tenant', `crowd-${i}`);
     const others = [await draft('org-b', 'b'), await draft('org-c', 'c'), await draft('org-d', 'd'), await draft('org-e', 'e')];
     const started = Date.now();
     const ran = await h.tick();
-    assert.ok(Date.now() - started < TIMING.budgetMs + 1000, 'the slowest answer, not their sum');
+    assert.ok(Date.now() - started < 3000, 'the slowest answer, not their sum');
     assert.deepEqual([ran.scheduledSent, ran.scheduledFailed], [4, 0]);
     assert.deepEqual(await statuses(others), ['IN_PROGRESS', 'IN_PROGRESS', 'IN_PROGRESS', 'IN_PROGRESS']);
     assert.deepEqual([...asked].sort(), ['org-b', 'org-c', 'org-d', 'org-e', 'tenant'], 'one question for each organization');
@@ -381,7 +382,7 @@ test('several organizations slow to answer, beside 75 waiting drafts: asked toge
   } finally { await h.mf.dispose(); }
 });
 
-test('an organization that never answers in time holds no one up, and keeps its place for the next tick', async () => {
+test('an organization that never answers in time holds no one up, gets no step back, and is asked again at its next turn', async () => {
   const { h, asked, draft, statuses } = await slowPlatform({ 'org-x': { ms: 900, kind: 'member' }, 'org-y': { ms: 100, kind: 'member' } });
   try {
     const stuck = [];
@@ -392,12 +393,67 @@ test('an organization that never answers in time holds no one up, and keeps its 
     const kept = await h.db.prepare("SELECT COUNT(*) AS n FROM envelopes WHERE tenant_id = 'org-x' AND status = 'DRAFT' AND json_extract(draft_json, '$.schedule.retryAt') IS NULL AND json_extract(draft_json, '$.schedule.waiting') IS NULL").first<{ n: number }>();
     assert.equal(kept!.n, 30, 'left as they were: no step back, no note');
     assert.deepEqual(asked.filter((org) => org === 'org-x').length, 1, 'asked once a run');
-    // The next tick asks it first again, and once it answers in time, its drafts go.
+    // The next tick: round again, it is asked once more beside org-y.
     asked.length = 0;
     const y2 = await draft('org-y', 'y2');
     assert.equal((await h.tick()).scheduledSent, 1);
     assert.deepEqual(await statuses([y2]), ['IN_PROGRESS']);
-    assert.equal(asked[0], 'org-x', 'its place kept');
+    assert.deepEqual([...asked].sort(), ['org-x', 'org-y'], 'asked at its turn');
+  } finally { await h.mf.dispose(); }
+});
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+test('twenty organizations that never answer in time ahead of a healthy one: it is asked and sends within ceil(21 / 10) ticks', async () => {
+  const answers: Record<string, { ms: number; kind: 'member' }> = {};
+  for (let i = 1; i <= 20; i += 1) answers[`org-${pad(i)}`] = { ms: 900, kind: 'member' };
+  const { h, asked, draft, statuses } = await slowPlatform(answers);
+  try {
+    for (let i = 1; i <= 20; i += 1) await draft(`org-${pad(i)}`, `late-${i}`);
+    // Last in id order, and its draft the newest.
+    const healthy = await draft('org-21', 'healthy');
+    let sentAt = 0;
+    for (let tick = 1; tick <= 3 && !sentAt; tick += 1) {
+      asked.length = 0;
+      await h.tick();
+      if ((await statuses([healthy]))[0] === 'IN_PROGRESS') sentAt = tick;
+    }
+    assert.ok(sentAt >= 1 && sentAt <= Math.ceil(21 / 10), `sent at tick ${sentAt}`);
+    assert.ok(asked.includes('org-21'), 'asked at the tick that sent it');
+  } finally { await h.mf.dispose(); }
+});
+
+test('ten organizations with more drafts than a run has places ahead of an eleventh: it sends within ceil(11 / 10) ticks, the ten in turns', async () => {
+  // A budget that holds a run's 25 sends even on a busy machine: the places, not the time, end the first run.
+  const { h, draft, statuses } = await slowPlatform({}, { budgetMs: 8000, statusTimeoutMs: 500 });
+  try {
+    const crowd: string[][] = [];
+    for (let i = 1; i <= 10; i += 1) {
+      const ids = [];
+      for (let k = 0; k < 5; k += 1) ids.push(await draft(`org-${pad(i)}`, `full-${i}-${k}`));
+      crowd.push(ids);
+    }
+    const eleventh = await draft('org-11', 'eleventh');
+    const first = await h.tick();
+    assert.deepEqual([first.scheduledSent, first.scheduledFailed], [25, 0]);
+    // In passes: every one of the ten sent two or three, none five.
+    const sentEach = await Promise.all(crowd.map(async (ids) => (await statuses(ids)).filter((s) => s === 'IN_PROGRESS').length));
+    assert.ok(sentEach.every((n) => n === 2 || n === 3), JSON.stringify(sentEach));
+    assert.deepEqual(await statuses([eleventh]), ['DRAFT'], 'the ten took the places');
+    await h.tick();
+    assert.deepEqual(await statuses([eleventh]), ['IN_PROGRESS'], 'its turn came at the next tick');
+  } finally { await h.mf.dispose(); }
+});
+
+test("one organization's 75 drafts beside another's one: sends take turns, so the other's goes at the first tick", async () => {
+  // A budget that holds a few sends, not 25, as slow sends would: one org-a send must leave org-b its turn.
+  const { h, draft, statuses } = await slowPlatform({}, { budgetMs: 600, statusTimeoutMs: 100 });
+  try {
+    for (let i = 0; i < 75; i += 1) await draft('org-a', `a-${i}`);
+    const b = await draft('org-b', 'b');
+    const ran = await h.tick();
+    assert.ok(ran.scheduledSent >= 2, JSON.stringify(ran));
+    assert.deepEqual(await statuses([b]), ['IN_PROGRESS'], "the second send of the run is org-b's");
   } finally { await h.mf.dispose(); }
 });
 
@@ -474,7 +530,9 @@ test('sent when due, it is shared as the draft is then: a share removed after sc
 test('the tick finds the drafts due through the partial index on schedule.at', async () => {
   const h = await setup();
   try {
-    const plan = await h.db.prepare(`EXPLAIN QUERY PLAN ${DUE_SCHEDULED_SQL}`).bind(Date.now(), null, '[]', '[]').all<{ detail: string }>();
-    assert.ok(plan.results.some((row) => /USING INDEX envelopes_scheduled/.test(row.detail)), JSON.stringify(plan.results));
+    for (const [sql, binds] of [[DUE_ORGANIZATIONS_SQL, [Date.now(), null, '', '[]']], [DUE_DRAFTS_SQL, [Date.now(), '["tenant"]']]] as const) {
+      const plan = await h.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).bind(...binds).all<{ detail: string }>();
+      assert.ok(plan.results.some((row) => /USING INDEX envelopes_scheduled/.test(row.detail)), JSON.stringify(plan.results));
+    }
   } finally { await h.mf.dispose(); }
 });

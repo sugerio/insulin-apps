@@ -314,14 +314,16 @@ const TIMING = { budgetMs: 1000, statusTimeoutMs: 500 };
 
 /**
  * A platform whose organizations answer as `answers` says (after `ms`; `kind` member, suspended or unconfirmed),
- * recording each question; and, per organization, a template and a draft due now to schedule with.
+ * recording each question, and after what `hold` returns for the organization, if anything; and, per organization, a
+ * template and a draft due now to schedule with.
  */
-async function slowPlatform(answers: Record<string, { ms: number; kind: 'member' | 'suspended' | 'unconfirmed' }>, timing = TIMING) {
+async function slowPlatform(answers: Record<string, { ms: number; kind: 'member' | 'suspended' | 'unconfirmed' }>, timing = TIMING, hold: (org: string) => Promise<void> | undefined = () => undefined) {
   const asked: string[] = [];
   const h = await setup({
     timing,
     status: async (body) => {
       asked.push(body.org);
+      await hold(body.org);
       const answer = answers[body.org] ?? { ms: 0, kind: 'member' };
       await sleep(answer.ms);
       if (answer.kind === 'unconfirmed') return Response.json({ error: 'unknown_organization' }, { status: 404 });
@@ -562,6 +564,61 @@ test('100 organizations with three drafts each, sends fitting the budget: every 
       const sentEach = await Promise.all(drafts.map(async (ids) => (await statuses(ids)).filter((s) => s === 'IN_PROGRESS').length));
       assert.deepEqual(sentEach, orgs.map((_, i) => (i < 25 * tick ? 1 : 0)), `tick ${tick}: the next 25 in turn, one send each`);
     }
+  } finally { await h.mf.dispose(); }
+});
+
+test('a run that outlives its lease leaves the cursor to the run that took it over: org-c is served within the 3 runs that keep their lease', async () => {
+  let reached!: () => void, release!: () => void, held = false;
+  const atQuestion = new Promise<void>((resolve) => { reached = resolve; });
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  // Run 1's question about org-c waits until released, as a database answer delayed past its lease would; later
+  // questions are answered at once. One send a run.
+  const { h, draft, statuses } = await slowPlatform({}, { budgetMs: 1, statusTimeoutMs: 10_000 }, (org) => {
+    if (org !== 'org-c' || held) return undefined;
+    held = true;
+    reached();
+    return released;
+  });
+  const cursor = async () => (await h.db.prepare("SELECT json_extract(value, '$') AS org FROM app_settings WHERE name = 'scheduled_cursor'").first<{ org: string }>())?.org;
+  try {
+    const a1 = await draft('org-a', 'a-1'), b1 = await draft('org-b', 'b-1'), b2 = await draft('org-b', 'b-2'), c = await draft('org-c', 'c');
+    const run1 = h.tick();
+    await atQuestion;
+    // Run 1's lease lapses (as 30 seconds on), and a draft of org-a due before a-1 comes in.
+    await h.db.prepare("UPDATE app_settings SET value = json_set(value, '$.until', ?1) WHERE name = 'scheduled_lease'").bind(Date.now() - 1).run();
+    const a0 = await draft('org-a', 'a-0');
+    await h.db.prepare("UPDATE envelopes SET draft_json = json_set(draft_json, '$.schedule.at', ?1) WHERE id = ?2").bind(Date.now() - HOUR, a0).run();
+    // Run 2 takes the lease over and serves org-a (a-0); run 3, org-b (b-1).
+    assert.equal((await h.tick()).scheduledSent, 1, 'run 2');
+    assert.equal((await h.tick()).scheduledSent, 1, 'run 3');
+    assert.deepEqual(await statuses([a0, a1, b1, b2, c]), ['IN_PROGRESS', 'DRAFT', 'IN_PROGRESS', 'DRAFT', 'DRAFT']);
+    assert.equal(await cursor(), 'org-b');
+    // Run 1 goes on: it sends a-1, as it read it, and leaves the cursor where run 3 left it.
+    release();
+    assert.equal((await run1).scheduledSent, 1, 'run 1, past its lease');
+    assert.deepEqual(await statuses([a1]), ['IN_PROGRESS']);
+    assert.equal(await cursor(), 'org-b', 'not moved back to org-a');
+    assert.equal((await h.tick()).scheduledSent, 1, 'run 4');
+    assert.deepEqual(await statuses([b2, c]), ['DRAFT', 'IN_PROGRESS'], "org-c's turn, at the third run that kept its lease");
+  } finally { await h.mf.dispose(); }
+});
+
+test("each wave of questions and first sends within the budget less a question's wait, two waves not: 20 organizations a run, so 25 are first served within ceil(25 / 20) ticks", async () => {
+  // The real budget and wait. Every answer takes 2.6 s: one wave fits in the 5 s a next wave needs left, two never do.
+  const answers: Record<string, { ms: number; kind: 'member' }> = {};
+  const orgs = Array.from({ length: 25 }, (_, i) => `org-${pad(i + 1)}`);
+  for (const org of orgs) answers[org] = { ms: 2600, kind: 'member' };
+  const { h, asked, draft, statuses } = await slowPlatform(answers, { budgetMs: 10_000, statusTimeoutMs: 5000 });
+  try {
+    const ids: string[] = [];
+    for (const org of orgs) ids.push(await draft(org, `${org}-wave`));
+    const first = await h.tick();
+    assert.deepEqual([first.scheduledSent, first.scheduledFailed], [20, 0], 'two waves: a third would start with less than a question\'s wait left');
+    assert.equal(asked.length, 20);
+    assert.deepEqual(await statuses(ids), ids.map((_, i) => (i < 20 ? 'IN_PROGRESS' : 'DRAFT')));
+    const second = await h.tick();
+    assert.deepEqual([second.scheduledSent, second.scheduledFailed], [5, 0]);
+    assert.deepEqual(await statuses(ids), ids.map(() => 'IN_PROGRESS'), 'all 25 by the second tick');
   } finally { await h.mf.dispose(); }
 });
 

@@ -630,7 +630,9 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
  * batch that sends it (only while it is the draft as read), so no draft is ever sent twice.
  *
  * The tick's runs go one at a time: a run takes the run lease (LEASE_SETTING) first, and sends nothing when another
- * run holds it; the lease of a run that crashed lapses LEASE_MARGIN_MS after its budget, and is taken over.
+ * run holds it; the lease of a run that crashed lapses LEASE_MARGIN_MS after its budget, and is taken over. A run
+ * moves the cursor only while it still holds its lease: one that outlived it leaves the cursor to the run that took
+ * the lease over.
  *
  * Organizations take turns, round robin, across runs. A run starts after the organization the last one reached (the
  * cursor, in `app_settings`), in id order and round again, in waves of WAVE_ORGANIZATIONS organizations with a draft
@@ -645,8 +647,12 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
  * answered for), up to the first one a run didn't serve.
  *
  * So with N organizations with a draft due, every one is asked about and served within N runs at worst (each run
- * serves at least the next one in turn), and within ceil(N / SCHEDULED_PER_RUN) runs when the questions and sends fit
- * in the budget.
+ * serves at least the next one in turn). A wave starts only while the budget leaves a question's wait, so when each
+ * wave (its questions and first sends) takes at most the budget less that wait, the first ends in time for a second,
+ * which ends within the budget, and a third is certain only when the first two ended that early: within
+ * ceil(N / (2 * WAVE_ORGANIZATIONS)) runs then, and ceil(N / SCHEDULED_PER_RUN) when the first two waves together take
+ * at most the budget less the wait too. Only runs that keep their lease count: a tick that finds another run under
+ * way, or a run that outlives its lease, moves no cursor.
  */
 async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
   const budget = env.SCHEDULED_TIMING?.budgetMs ?? SCHEDULED_BUDGET_MS;
@@ -655,7 +661,7 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
   const lease = rotating ? crypto.randomUUID() : null;
   if (lease && !(await takeLease(env.DB, lease, Date.now(), Date.now() + budget + LEASE_MARGIN_MS))) return { scheduledSent: 0, scheduledFailed: 0 };
   try {
-    return await sendScheduledInTurn(env, tenantId, Date.now() + budget);
+    return await sendScheduledInTurn(env, tenantId, Date.now() + budget, lease);
   } finally {
     if (lease) await releaseLease(env.DB, lease);
   }
@@ -663,12 +669,11 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
 
 type DueDraft = { row: { id: string; tenant_id: string; draft_json: string }; request: Record<string, unknown>; schedule: Schedule; at: number };
 
-async function sendScheduledInTurn(env: Bindings, tenantId: string | null, until: number): Promise<{ scheduledSent: number; scheduledFailed: number }> {
+async function sendScheduledInTurn(env: Bindings, tenantId: string | null, until: number, lease: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
   let sent = 0, failed = 0;
   const wait = env.SCHEDULED_TIMING?.statusTimeoutMs ?? STATUS_TIMEOUT_MS;
   const asking = memberStatusConfigured(env);
-  const rotating = tenantId === null;
-  const start = rotating ? await readCursor(env.DB) : '';
+  const start = lease ? await readCursor(env.DB) : '';
   let cursor = start;
   const asked: string[] = [];
   const answers = new Map<string, OrganizationNow | null>();
@@ -734,7 +739,8 @@ async function sendScheduledInTurn(env: Bindings, tenantId: string | null, until
       await send(queue.shift()!);
     }
   }
-  if (rotating && cursor !== start) await writeCursor(env.DB, cursor);
+  // Only while this run still holds its lease (writeCursor).
+  if (lease && cursor !== start) await writeCursor(env.DB, cursor, lease);
   return { scheduledSent: sent, scheduledFailed: failed };
 }
 

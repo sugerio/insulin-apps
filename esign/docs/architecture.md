@@ -75,11 +75,17 @@ seals the finished envelope and emails each signer a link to their copy.
   takes the run lease (`app_settings.scheduled_lease`, written only while no unexpired lease is
   held) for its budget and 20 seconds more, past the 25 seconds the platform gives the tick, and
   releases it at the end; a tick that can't take it skips the scheduled sends (its other due work
-  still runs), and the lease of a run that crashed lapses and is taken over. Process-due, for one
+  still runs), and the lease of a run that crashed lapses and is taken over. A run writes the
+  cursor only while it still holds its lease (one conditional statement on the lease's id): one
+  that outlived it leaves the cursor to the run that took it over. Process-due, for one
   organization, takes no turn and no lease. **The bound:** with N organizations with a draft due,
   every one is asked about and served within N runs at worst (each run serves at least the next
-  one in turn, however slow its sends), and within ceil(N / 25) runs when the questions and sends
-  fit in the budget; a tick that finds another run under way is not a run. Sending claims a draft
+  one in turn, however slow its sends). A wave starts only while the budget leaves a question's 5
+  seconds, so when each wave (its questions and first sends) takes at most 5 seconds, the first
+  ends in time for a second, which ends within the 10, and a third is certain only when the first
+  two ended within 5 seconds: within ceil(N / 20) runs then, and ceil(N / 25) when the first two
+  waves take at most 5 seconds together. Only runs that keep their lease count: a tick that finds
+  another run under way, or a run that outlives its lease, moves no cursor. Sending claims a draft
   in the batch that sends it, so even a run that outlives its lease, or a process-due beside it,
   never sends one twice. After the due work, whatever its outcome, the tick sends the hour's usage report
   (below), after its response when the request has a `waitUntil`.

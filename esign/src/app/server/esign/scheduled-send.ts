@@ -195,10 +195,16 @@ export async function releaseLease(db: D1Database, id: string): Promise<void> {
   await db.prepare("DELETE FROM app_settings WHERE name = ?1 AND json_extract(value, '$.id') = ?2").bind(LEASE_SETTING, id).run();
 }
 
-/** Records the last organization a run reached. */
-export async function writeCursor(db: D1Database, org: string): Promise<void> {
-  await db.prepare('INSERT INTO app_settings (name, value) VALUES (?1, json_quote(?2)) ON CONFLICT (name) DO UPDATE SET value = excluded.value')
-    .bind(CURSOR_SETTING, org).run();
+/**
+ * Records the last organization a run reached, in one conditional statement: only while the run (`lease`) still holds
+ * the run lease. A run that outlived its lease, which another run has taken over, leaves the cursor to that one. True
+ * when written.
+ */
+export async function writeCursor(db: D1Database, org: string, lease: string): Promise<boolean> {
+  const result = await db.prepare(`INSERT INTO app_settings (name, value)
+      SELECT ?1, json_quote(?2) WHERE EXISTS (SELECT 1 FROM app_settings WHERE name = ?3 AND json_extract(value, '$.id') = ?4)
+      ON CONFLICT (name) DO UPDATE SET value = excluded.value`).bind(CURSOR_SETTING, org, LEASE_SETTING, lease).run();
+  return result.meta.changes > 0;
 }
 
 /**

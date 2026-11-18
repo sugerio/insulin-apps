@@ -269,8 +269,8 @@ usage under the same keys, so the console shows usage beside each limit.
 ## Members and member events
 
 Apps that let people share their own records (Knowledge's collections, Esign's templates and envelopes) need to know
-who is in the organization: an app has no directory of its own. Three endpoints, called by the app with its platform token over the gateway's service binding, answer only about
-organizations where the app is used:
+who is in the organization: an app has no directory of its own. Three endpoints, called by the app with its platform
+token over the gateway's service binding, answer only about organizations where the app is used:
 
 - **Member lookup**, `GET https://insulinapps.com/__insulin/members?q=<text>` with the `x-suger-member-lookup` header of
   the browser request the app is serving: at most 20 people who can use the app (id, name, e-mail address and role in

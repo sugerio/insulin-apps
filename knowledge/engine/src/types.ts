@@ -135,21 +135,24 @@ export interface ImportRecord {
   kind: ImportKind
   small: boolean
   phase: ImportPhase
-  files: (ImportFile & { documentId: string; duplicateOf: string | null })[]
-  notes: (ImportNote & { documentId: string })[]
+  // textBytes: the text read from the file or note (redacted), once known; until then the plan estimates it.
+  files: (ImportFile & { documentId: string; duplicateOf: string | null; textBytes?: number })[]
+  notes: (ImportNote & { documentId: string; textBytes?: number })[]
   hiding: HidingRules
   jobId: string | null
   capacity: 'none' | 'waiting' | 'granted'
   reserveVersion: number | null // remove for good: the version promised in RemoveResult
   removeDocumentIds: string[]
   rereadDocumentIds: string[]
+  storedTextBytes?: number // the saved texts it learns again (re-read, re-learning, an export's): its plan counts them
   snapshotTaken: boolean
-  learningStartedAt: number | null
+  learningStartedAt: number | null // its first try's job start (the time left counts from this try's: jobStartedAt)
   retryAt: number | null
-  jobStartedAt: number | null // this try's job: a job that runs far past its time is given up
+  jobStartedAt: number | null // this try's job: the time left counts from it; a job far past its time is given up
   textsSaved: boolean // every file and note was read and hidden, and its redacted text saved: originals are gone
   rebuild: boolean // a removal whose restore point can't be started: the other documents are learned again
   restoreFrom: number | null // re-learning after a repair: also bring back that version's documents
+  afterAnswering?: number // a repair answers from this earlier version: its re-learning waits while people ask
   rounds?: number // a removal for good that failed its three tries this many times: each wait is longer
   turns?: number // how many times the alarm started it (a removal or a hold can send it back to the queue): keys its events
   fromExport?: { collectionId: string; version: number } // an empty collection started from that collection's export

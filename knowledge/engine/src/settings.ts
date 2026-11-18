@@ -25,7 +25,8 @@ export const SETTINGS = {
   // Imports at once: across the service, and per organization.
   importsAtOnce: 20,
   importsPerOrganization: 2,
-  // A running import that hasn't renewed its slot for this long is presumed lost and its slot freed.
+  // A running import that hasn't renewed its slot for this long is presumed lost and its slot freed. An import renews
+  // it at every step (every pollMs while its job runs), so one that learns for hours keeps it.
   capacityLeaseMs: 30 * 60 * 1000,
   // Three tries per import before the failing file is named.
   maxAttempts: 3,
@@ -43,6 +44,7 @@ export const SETTINGS = {
   pollMs: 3000,
   wakePollMs: 1000,
   healthTimeoutMs: 10 * 60 * 1000,
+  // A try's job is given up after an hour, or three times its planned time when that is longer (a large text).
   jobTimeoutMs: 60 * 60 * 1000,
   quiesceTimeoutMs: 60 * 1000,
   queryLoadTimeoutMs: 5 * 60 * 1000,
@@ -66,12 +68,23 @@ export const SETTINGS = {
   maxKeepStagedMs: 45 * 24 * 60 * 60 * 1000,
   maxNotesPerImport: 50,
   maxNoteChars: 20000,
-  // Planning values from the PoC (section 13): about 43 s per import plus 5.3 s per document.
-  importBaseSeconds: 43,
+  // Planning values, measured on Cloudflare (standard-4, the Engine-lane run of 2026-11-17), from a try's job start
+  // to its commit: one short file or note 110-116 s (about 50 s of Cognee, 55 s saving); 41 short documents learned
+  // again 317 s; one 2 MiB text (848 passages) 1,835 s. Time grows with the text, not only with the documents: a
+  // document's text is planned from its size until it is read (a file's bytes, at most the 2 MB read limit; a
+  // quarter of them for formats that aren't plain text), then from the text read. Starting the container (from a
+  // snapshot or the image, and its check) took 29-31 s more.
+  containerStartSeconds: 30,
+  importBaseSeconds: 105,
   perDocumentSeconds: 5.3,
+  perTextMiBSeconds: 860,
+  readLimitBytes: 2 * 1024 * 1024,
   wakeSeconds: 60,
   wakeFromBackupSeconds: 300,
   goBackSeconds: 60,
+  // A repair that answers from an earlier restore point learns everything again once nobody has asked for the
+  // collection's awakeMinutes, or after this long at most.
+  repairWaitMs: 60 * 60 * 1000,
   // Search
   defaultTopK: 8,
   maxTopK: 20,

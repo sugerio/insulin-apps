@@ -193,7 +193,14 @@ test('HIS-04 a failed integrity check: one retry, then the previous restore poin
   assert.ok(sawRepairing)
   const points = (await t.api('GET', '/v1/collections/c1/restore-points')).body.restorePoints
   assert.equal(points.find((p: any) => p.version === 4).summary, 'Answering from version 2 after version 3 failed its check')
-  // Then everything is learned again from the saved text, the file of version 3 included.
+  // It answers from version 2 while people ask: the newest restore point names it.
+  const answer = await t.api('POST', '/v1/collections/c1/search', { query: 'topic number 3 gateway port' })
+  assert.deepEqual([answer.body.status, answer.body.version], ['ok', 4])
+  assert.ok(answer.body.passages.some((p: any) => p.text.includes('8003')))
+  assert.deepEqual([(await t.api('GET', '/v1/collections/c1')).body.state, points[0].version], ['ready', 4])
+  // Once nobody asks, everything is learned again from the saved text, the file of version 3 included.
+  t.advance(11 * 60_000)
+  await t.drain('c1')
   const status = (await t.api('GET', '/v1/collections/c1')).body
   assert.deepEqual([status.version, status.counts.documents], [5, 4])
   assert.ok((await outboxEvents(t)).some((e) => e.type === 'state' && e.state === 'repairing' && e.version === 2))

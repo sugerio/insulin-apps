@@ -76,7 +76,7 @@ RUN apt-get update \
 # /data is empty in the image. Cognee creates its databases on the first import; a snapshot brings them back.
 RUN mkdir -p /data /var/log/cognee /var/lib/knowledge
 
-COPY server.py ops.py query.py calibration.json /app/
+COPY server.py ops.py purge.py query.py calibration.json /app/
 
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/tini", "--"]

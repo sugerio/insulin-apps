@@ -5,11 +5,19 @@ exactly the files the snapshot holds. Each Cognee operation runs as a separate p
 group, and a job is finished only when that whole group has exited. The query process (query.py) is the one Cognee
 process that stays loaded between questions; operations that open the databases refuse to start while it runs.
 
+Every connection carries one request and is then closed, and every answer says so (`connection: close`): an HTTP
+client that pools connections (the Durable Object's fetch does) would otherwise send its next request on the
+connection this server is closing, and lose it ("Network connection lost."). A request's body is always read to its
+end before the answer, and a closing connection is read until the client closes its side, so it ends without a reset.
+Every call is safe to repeat after a lost answer: a job id answers its existing job, and a file is written whole or
+not at all.
+
 Endpoints
   GET  /health                  liveness, boot id, the database format of this image, the query process's state
   PUT  /inbox/<batch>/<name>    stage a file of an import (outside /data, deleted as soon as it is read)
   DELETE /inbox/<batch>
-  POST /jobs                    {"op": ..., "args": {...}} -> start a job
+  POST /jobs                    {"op": ..., "args": {...}, "id": optional} -> start a job; an id already used answers
+                                that job (200) and starts nothing
   GET  /jobs/<id>               job status, progress and result
   GET  /quiesce                 proves no job, no query process, no stray process, no open file under /data,
                                 nothing staged: the only state in which the Durable Object takes a snapshot
@@ -29,6 +37,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -53,6 +62,7 @@ DATA_FORMAT = os.environ.get("KNOWLEDGE_DATA_FORMAT", "unknown")
 TEST_CONTROLS = os.environ.get("KNOWLEDGE_TEST_CONTROLS") == "1"
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 GROUP_EXIT_TIMEOUT_S = 60
+LINGER_S = 2  # how long a closing connection waits for the client to close its side
 OPENS_DATABASES = {"ingest", "remove", "reread", "stats"}
 
 BOOT_ID = uuid.uuid4().hex[:12]
@@ -163,14 +173,25 @@ def _run_job(job: dict, argv: list[str]) -> None:
             _active = None
 
 
-def _start_job(op: str, args: dict) -> tuple[int, dict]:
+def _start_job(op: str, args: dict, job_id: str | None = None) -> tuple[int, dict]:
+    """Starts a job. A caller that names the job (`job_id`) can send the same request again after a lost answer: an
+    id already used answers that job, running or finished, and never starts a second one."""
     global _active
+    request = json.dumps({"op": op, "args": args}, sort_keys=True, default=str)
     with _lock:
+        if job_id is not None:
+            if not SAFE_NAME.match(job_id):
+                return 400, {"error": "invalid job id"}
+            existing = _jobs.get(job_id)
+            if existing is not None:
+                if existing["_request"] != request:
+                    return 409, {"error": "job id in use", "job": _public(existing)}
+                return 200, _public(existing)
         if _active is not None:
             return 409, {"error": "busy", "activeJob": _public(_jobs[_active])}
         if op in OPENS_DATABASES and _query_running():
             return 409, {"error": "query_running"}
-        job_id = f"{op}-{uuid.uuid4().hex[:8]}"
+        job_id = job_id or f"{op}-{uuid.uuid4().hex[:8]}"
         RUN_DIR.mkdir(parents=True, exist_ok=True)
         job = {
             "id": job_id,
@@ -178,6 +199,7 @@ def _start_job(op: str, args: dict) -> tuple[int, dict]:
             "state": "running",
             "startedAt": _now(),
             "_mono": time.monotonic(),
+            "_request": request,
             "resultPath": str(RUN_DIR / f"{job_id}.result.json"),
             "progressPath": str(RUN_DIR / f"{job_id}.progress.json"),
         }
@@ -218,7 +240,7 @@ def _cleanup() -> dict:
     with _lock:
         running = {_active} if _active else set()
     for path in RUN_DIR.glob("*") if RUN_DIR.exists() else []:
-        if not any(path.name.startswith(job_id) for job_id in running):
+        if not any(path.name.startswith(f"{job_id}.") for job_id in running):
             path.unlink(missing_ok=True)
             removed += 1
     for root in (INBOX, WORK_DIR):
@@ -258,12 +280,12 @@ def _query_status() -> dict:
     return status
 
 
-def _query_start() -> dict:
+def _query_spawn() -> None:
+    """Starts the query process unless it runs (a repeated start changes nothing). Called with _lock held."""
     if not _query_running():
         RUN_DIR.mkdir(parents=True, exist_ok=True)
-        log = (RUN_DIR / "query.log").open("ab")
-        _query["proc"] = subprocess.Popen([sys.executable, str(QUERY)], stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-    return _query_status()
+        with (RUN_DIR / "query.log").open("ab") as log:
+            _query["proc"] = subprocess.Popen([sys.executable, str(QUERY)], stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
 
 
 def _group_members(pgid: int) -> list[dict]:
@@ -302,43 +324,117 @@ def _query_stop() -> dict:
 # --------------------------------------------------------------------------- HTTP
 
 
+class BodyError(Exception):
+    """A request body that ended early or whose framing is broken: nothing is written from it."""
+
+
+class Server(ThreadingHTTPServer):
+    """One thread per connection. A connection ends with a FIN, never a reset: after the answer the server stops
+    sending and reads until the client closes its side (at most LINGER_S), so bytes the client is still sending can't
+    turn the close into a reset that takes the answer with it."""
+
+    daemon_threads = True
+    request_queue_size = 64
+
+    def shutdown_request(self, request) -> None:
+        try:
+            request.shutdown(socket.SHUT_WR)
+            request.settimeout(LINGER_S)
+            while request.recv(1 << 16):
+                pass
+        except OSError:
+            pass
+        self.close_request(request)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "knowledge-engine/1"
+
+    def parse_request(self) -> bool:
+        self._body_done = False
+        return super().parse_request()
 
     def log_message(self, fmt, *args):
         sys.stderr.write(f"[{_now()}] {self.command} {self.path.split('?')[0]} {args[1] if len(args) > 1 else ''}\n")
 
     def _send(self, status: int, body: dict) -> None:
+        self._discard_body()
         payload = json.dumps(body, default=str, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("content-type", "application/json")
         self.send_header("content-length", str(len(payload)))
+        self.send_header("connection", "close")
         self.end_headers()
         self.wfile.write(payload)
 
     def _send_file(self, path: Path) -> None:
+        self._discard_body()
         size = path.stat().st_size
         self.send_response(200)
         self.send_header("content-type", "application/octet-stream")
         self.send_header("content-length", str(size))
+        self.send_header("connection", "close")
         self.end_headers()
         with path.open("rb") as handle:
             shutil.copyfileobj(handle, self.wfile, 1 << 20)
 
+    def _chunks(self):
+        """The request's body, piece by piece, to its end: by its content-length, or chunked (a stream whose length
+        the sender didn't know, which the Durable Object's fetch sends that way)."""
+        if self._body_done:
+            return
+        self._body_done = True
+        if "chunked" in (self.headers.get("transfer-encoding") or "").lower():
+            while True:
+                try:
+                    size = int(self.rfile.readline(1024).split(b";", 1)[0].strip(), 16)
+                except ValueError as error:
+                    raise BodyError("bad chunk size") from error
+                if size == 0:
+                    while self.rfile.readline(1024).strip():  # trailers, up to the blank line
+                        pass
+                    return
+                yield from self._exactly(size)
+                if self.rfile.readline(1024).strip():
+                    raise BodyError("bad chunk end")
+        try:
+            length = int(self.headers.get("content-length") or 0)
+        except ValueError as error:
+            raise BodyError("bad content-length") from error
+        yield from self._exactly(length)
+
+    def _exactly(self, length: int):
+        while length > 0:
+            chunk = self.rfile.read(min(length, 1 << 20))
+            if not chunk:
+                raise BodyError("the body ended early")
+            length -= len(chunk)
+            yield chunk
+
     def _body(self) -> bytes:
-        length = int(self.headers.get("content-length") or 0)
-        return self.rfile.read(length) if length else b""
+        return b"".join(self._chunks())
+
+    def _discard_body(self) -> None:
+        """A body the route doesn't use is still read before the answer: unread bytes would reset the connection."""
+        try:
+            for _ in self._chunks():
+                pass
+        except BodyError:
+            pass
 
     def _body_to(self, path: Path) -> None:
-        length = int(self.headers.get("content-length") or 0)
+        """Writes the body to `path` whole or not at all: into a file of its own, renamed into place once every byte
+        arrived. The same PUT sent again (a retry after a lost answer), even while the first still runs, leaves one
+        complete copy, and an upload cut short leaves the file as it was."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("wb") as handle:
-            while length > 0:
-                chunk = self.rfile.read(min(length, 1 << 20))
-                if not chunk:
-                    break
-                handle.write(chunk)
-                length -= len(chunk)
+        part = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.part")
+        try:
+            with part.open("wb") as handle:
+                for chunk in self._chunks():
+                    handle.write(chunk)
+            os.replace(part, path)
+        finally:
+            part.unlink(missing_ok=True)
 
     def _parts(self) -> list[str]:
         from urllib.parse import unquote
@@ -398,7 +494,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_PUT(self):
         parts = self._parts()
         if len(parts) == 3 and parts[0] == "inbox" and all(SAFE_NAME.match(p) for p in parts[1:]):
-            self._body_to(INBOX / parts[1] / parts[2])
+            try:
+                self._body_to(INBOX / parts[1] / parts[2])
+            except BodyError as error:
+                return self._send(400, {"error": str(error)})
             return self._send(201, {"stored": f"{parts[1]}/{parts[2]}"})
         if len(parts) >= 2 and parts[0] == "files":
             path = _safe_data_path(parts[1:])
@@ -408,7 +507,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "bad path"})
             if busy:
                 return self._send(409, {"error": "busy"})
-            self._body_to(path)
+            try:
+                self._body_to(path)
+            except BodyError as error:
+                return self._send(400, {"error": str(error)})
             return self._send(201, {"stored": "/".join(parts[1:])})
         return self._send(404, {"error": "not found"})
 
@@ -424,25 +526,29 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["jobs"]:
             try:
                 body = json.loads(self._body() or b"{}")
-            except ValueError:
+            except (BodyError, ValueError):
                 return self._send(400, {"error": "invalid JSON"})
-            status, payload = _start_job(str(body.get("op", "")), body.get("args") or {})
+            job_id = body.get("id")
+            status, payload = _start_job(str(body.get("op", "")), body.get("args") or {}, None if job_id is None else str(job_id))
             return self._send(status, payload)
         if parts == ["cleanup"]:
             return self._send(200, _cleanup())
         if parts == ["query", "start"]:
             with _lock:
-                if _active is not None and _jobs[_active]["op"] in OPENS_DATABASES:
-                    return self._send(409, {"error": "busy"})
-                return self._send(200, _query_start())
+                busy = _active is not None and _jobs[_active]["op"] in OPENS_DATABASES
+                if not busy:
+                    _query_spawn()
+            return self._send(409, {"error": "busy"}) if busy else self._send(200, _query_status())
         if parts == ["query", "stop"]:
             return self._send(200, _query_stop())
         if parts in (["query", "open"], ["query", "search"]):
             if not _query_running():
                 return self._send(409, {"error": "query process not running"})
-            body = self._body()
             try:
-                status, payload = _query_call("POST", f"/{parts[1]}", json.loads(body or b"{}"), timeout=120)
+                body = json.loads(self._body() or b"{}")
+                status, payload = _query_call("POST", f"/{parts[1]}", body, timeout=120)
+            except BodyError as error:
+                return self._send(400, {"error": str(error)})
             except (urllib.error.URLError, OSError, ValueError) as error:
                 return self._send(503, {"error": type(error).__name__})
             return self._send(status, payload)
@@ -453,7 +559,7 @@ def main() -> None:
     for path in (INBOX, RUN_DIR, WORK_DIR):
         path.mkdir(parents=True, exist_ok=True)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    server = Server(("0.0.0.0", PORT), Handler)
     sys.stderr.write(f"knowledge engine control server boot={BOOT_ID} format={DATA_FORMAT} listening on :{PORT}\n")
     server.serve_forever()
 

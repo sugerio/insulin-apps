@@ -212,7 +212,7 @@ async function create(
   const recordNotes: ImportRecord['notes'] = []
   for (const note of notes) {
     if (notesHere.has(note.noteId) && !note.outdated.length) continue
-    recordNotes.push({ ...note, documentId: await documentIdFor('note', importId, note.noteId) })
+    recordNotes.push({ ...note, documentId: await documentIdFor('note', importId, note.noteId), textBytes: utf8Bytes(note.text) })
   }
 
   const test = (await e.state.storage.get<ImportRecord['test']>('testNextImport')) ?? null
@@ -585,7 +585,8 @@ async function submitExportImportOnce(e: CollectionEngine, body: { importId?: un
     .filter((d) => d.info.kind === 'file')
     .map((d) => ({ fileId: d.info.documentId, name: d.info.name, state: 'waiting', documentId: d.info.documentId }))
   record.status.notes = contents.documents.filter((d) => d.info.kind === 'note').length
-  record.rereadDocumentIds = contents.documents.map((d) => d.info.documentId) // its time limit counts them
+  record.rereadDocumentIds = contents.documents.map((d) => d.info.documentId) // its plan and time limit count them
+  record.storedTextBytes = contents.documents.reduce((sum, d) => sum + d.text.size, 0)
   record.hiding = meta.settings.hiding
   record.fromExport = contents.from
   // The zip was read meanwhile: another submission with this id, or a cancel of it, may have come first.
@@ -694,13 +695,49 @@ function parseNotes(value: unknown): ImportNote[] {
 
 // ==================================================================== the contract's view
 
-export function etaSeconds(record: ImportRecord): number {
+const MiB = 1024 * 1024
+const PLAIN_TEXT = new Set(['text/plain', 'text/markdown', 'text/x-markdown', 'text/csv'])
+
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).length
+
+/**
+ * The text a file is planned to hold: the text read from it once known; until then its bytes for plain text, a
+ * quarter of them for other formats (PDF, Office, HTML), at most the 2 MB the readers keep.
+ */
+export function plannedTextBytes(file: { bytes: number; type: string; textBytes?: number }): number {
+  if (file.textBytes !== undefined) return file.textBytes
+  const share = PLAIN_TEXT.has(file.type.split(';')[0].trim().toLowerCase()) ? 1 : 0.25
+  return Math.min(SETTINGS.readLimitBytes, Math.round(file.bytes * share))
+}
+
+/**
+ * One try's planned time, from its container's start to its commit (SETTINGS' planning values): the documents it
+ * learns, re-reads or removes, and their text. A 2 MB text plans about half an hour, not the 48 seconds a count of
+ * documents gives.
+ */
+export function plannedSeconds(record: ImportRecord): number {
   // An export's import counts its documents (rereadDocumentIds), not its zip.
-  const left = record.kind === 'export' ? 0 : record.files.filter((f, i) => !f.duplicateOf && !['learned', 'already_here'].includes(record.status.files[i]?.state)).length
-  const items = left + record.notes.length + record.removeDocumentIds.length + record.rereadDocumentIds.length
-  let seconds = SETTINGS.importBaseSeconds + SETTINGS.perDocumentSeconds * items
-  if (record.learningStartedAt) seconds = Math.max(5, seconds - (clock.now() - record.learningStartedAt) / 1000)
+  const fresh = record.kind === 'export' ? [] : record.files.filter((f) => !f.duplicateOf)
+  const documents = fresh.length + record.notes.length + record.removeDocumentIds.length + record.rereadDocumentIds.length
+  const bytes =
+    fresh.reduce((sum, f) => sum + plannedTextBytes(f), 0) +
+    record.notes.reduce((sum, n) => sum + (n.textBytes ?? utf8Bytes(n.text)), 0) +
+    (record.storedTextBytes ?? 0)
+  return SETTINGS.containerStartSeconds + SETTINGS.importBaseSeconds + SETTINGS.perDocumentSeconds * documents + (SETTINGS.perTextMiBSeconds * bytes) / MiB
+}
+
+/** Time left: the whole plan until this try's job starts, then counted down from its start (a new try starts over). */
+export function etaSeconds(record: ImportRecord): number {
+  let seconds = plannedSeconds(record)
+  if (record.jobStartedAt && (record.phase === 'running' || record.phase === 'saving')) {
+    seconds = Math.max(5, seconds - SETTINGS.containerStartSeconds - (clock.now() - record.jobStartedAt) / 1000)
+  }
   return Math.round(seconds)
+}
+
+/** The saved texts of these documents: what re-reading or re-learning them plans for. */
+function storedBytes(docs: Pick<DocRecord, 'textBytes'>[]): number {
+  return docs.reduce((sum, d) => sum + (d.textBytes ?? 0), 0)
 }
 
 export async function view(e: CollectionEngine, record: ImportRecord): Promise<ImportStatus> {
@@ -877,6 +914,7 @@ export async function queueReread(e: CollectionEngine, hiding: HidingRules): Pro
   })
   record.hiding = hiding
   record.rereadDocumentIds = state.documents.map((d) => d.documentId)
+  record.storedTextBytes = storedBytes(state.documents)
   await e.store.putImport(record)
   await enqueue(e, record)
   await e.store.log('reread-queued', { importId, documents: record.rereadDocumentIds.length })
@@ -884,15 +922,17 @@ export async function queueReread(e: CollectionEngine, hiding: HidingRules): Pro
 
 /**
  * Learns every document again from its stored text, in a fresh database (after an engine change, or to repair).
- * `restoreFrom`: also bring back the documents of that version, which failed its check.
+ * `restoreFrom`: also bring back the documents of that version, which failed its check. `afterAnswering`: the repair
+ * answers from that earlier version meanwhile, so the re-learning waits while people ask (startNext).
  */
-export async function queueRelearn(e: CollectionEngine, reason: string, restoreFrom: number | null = null): Promise<void> {
+export async function queueRelearn(e: CollectionEngine, reason: string, restoreFrom: number | null = null, afterAnswering?: number): Promise<void> {
   const meta = await e.meta()
   for (const id of [...meta.queue, ...(meta.active ? [meta.active] : [])]) {
     const queued = await e.store.getImport(id)
     if (queued?.kind !== 'relearn') continue
     if (restoreFrom !== null && queued.phase === 'queued') {
       queued.restoreFrom = restoreFrom
+      if (afterAnswering !== undefined) queued.afterAnswering = afterAnswering
       await e.store.putImport(queued)
     }
     return
@@ -917,10 +957,27 @@ export async function queueRelearn(e: CollectionEngine, reason: string, restoreF
   })
   record.small = true
   record.restoreFrom = restoreFrom
+  if (afterAnswering !== undefined) record.afterAnswering = afterAnswering
   record.rereadDocumentIds = state.documents.map((d) => d.documentId)
+  record.storedTextBytes = storedBytes(state.documents)
   await e.store.putImport(record)
   await enqueue(e, record)
-  await e.store.log('relearn-queued', { importId, reason, restoreFrom })
+  await e.store.log('relearn-queued', { importId, reason, restoreFrom, afterAnswering: afterAnswering ?? null })
+}
+
+/**
+ * A repair answers from an earlier restore point while people ask: its re-learning (which takes the collection's one
+ * container) waits until nobody has asked for the collection's awakeMinutes, at most SETTINGS.repairWaitMs. Anything
+ * else queued behind it needs the container for learning anyway, so then it doesn't wait; nor when the earlier point
+ * can't be started any more.
+ */
+async function waitsForQuestions(e: CollectionEngine, meta: Meta, record: ImportRecord): Promise<boolean> {
+  if (record.kind !== 'relearn' || record.afterAnswering === undefined || meta.queue.length !== 1) return false
+  const now = clock.now()
+  if (now - Date.parse(record.status.createdAt) >= SETTINGS.repairWaitMs) return false
+  const asked = meta.lastQuestionAt ? Date.parse(meta.lastQuestionAt) : 0
+  if (now - asked >= meta.settings.awakeMinutes * 60 * 1000) return false
+  return !(await e.currentSnapshot(meta)).unusable
 }
 
 function baseRecord(importId: string, kind: ImportKind, status: ImportStatus): ImportRecord {
@@ -963,6 +1020,7 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
     return true
   }
   if (record.retryAt && record.retryAt > clock.now()) return false
+  if (await waitsForQuestions(e, meta, record)) return false
   let answer: SlotAnswer
   try {
     answer = await callObject<SlotAnswer>(e.env.CAPACITY, CAPACITY_NAME, '/acquire', {
@@ -1245,7 +1303,8 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
     const state = await e.currentState(meta)
     const removing = new Set([...record.removeDocumentIds, ...meta.removals.map((r) => r.documentId)])
     const kept = state.documents.filter((d) => !removing.has(d.documentId))
-    record.rereadDocumentIds = kept.map((d) => d.documentId) // its time limit counts them
+    record.rereadDocumentIds = kept.map((d) => d.documentId) // its plan and time limit count them
+    record.storedTextBytes = storedBytes(kept)
     await stageTexts(kept)
     batch = { importId, kind: 'relearn', hiding: record.hiding, documents: kept.map((d) => ({ documentId: d.documentId, kind: d.kind, name: d.name })) }
   } else if (record.kind === 'remove') {
@@ -1280,7 +1339,8 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   } else if (record.kind === 'relearn') {
     const { current, extra } = await relearnDocuments(e, record, meta)
     const docs = [...current.documents, ...extra]
-    record.rereadDocumentIds = docs.map((d) => d.documentId) // its time limit counts them
+    record.rereadDocumentIds = docs.map((d) => d.documentId) // its plan and time limit count them
+    record.storedTextBytes = storedBytes(docs)
     await stageTexts(docs)
     batch = { importId, kind: 'relearn', hiding: record.hiding, documents: docs.map((d) => ({ documentId: d.documentId, kind: d.kind, name: d.name })) }
   } else {
@@ -1293,9 +1353,12 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
       ])
     } else {
       for (const file of fresh) {
-        const object = await e.env.FILES.get(inboxKey(meta, file.fileId))
-        if (!object) throw new AttemptFailure(`“${file.name}” is no longer waiting to be learned; add it again.`, file.fileId, true, 'bad_request')
-        await e.box.putInbox(importId, file.fileId, object.body)
+        // Read from R2 for each send: a send repeated after a drop streams the file again.
+        await e.box.putInbox(importId, file.fileId, async () => {
+          const object = await e.env.FILES.get(inboxKey(meta, file.fileId))
+          if (!object) throw new AttemptFailure(`“${file.name}” is no longer waiting to be learned; add it again.`, file.fileId, true, 'bad_request')
+          return object.body
+        })
       }
     }
     batch = {
@@ -1363,7 +1426,7 @@ async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
     await saveReadTexts(e, record)
   }
   if (job.state === 'running') {
-    const limit = Math.max(SETTINGS.jobTimeoutMs, 3 * etaSeconds({ ...record, learningStartedAt: null }) * 1000)
+    const limit = Math.max(SETTINGS.jobTimeoutMs, 3 * plannedSeconds(record) * 1000)
     if (record.jobStartedAt && clock.now() - record.jobStartedAt > limit) {
       throw new AttemptFailure('Learning took far longer than it should, so it was stopped.')
     }
@@ -1396,19 +1459,32 @@ async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
 async function saveReadTexts(e: CollectionEngine, record: ImportRecord): Promise<void> {
   const meta = await e.meta()
   const docs = [...record.files.filter((f) => !f.duplicateOf).map((f) => f.documentId), ...record.notes.map((n) => n.documentId)]
+  const read = new Map<string, number>()
   for (const documentId of docs) {
-    const response = await e.box.fetch(`/text/${encodeURIComponent(documentId)}`)
-    if (!response.ok) {
-      await response.body?.cancel()
-      return // not all read yet; asked again on the next poll
-    }
-    await e.env.FILES.put(textKey(meta, documentId), await response.text(), { httpMetadata: { contentType: 'application/json' } })
+    const text = await e.box.readText(`/text/${encodeURIComponent(documentId)}`)
+    if (text === null) return // not all read yet; asked again on the next poll
+    await e.env.FILES.put(textKey(meta, documentId), text, { httpMetadata: { contentType: 'application/json' } })
+    read.set(documentId, readTextBytes(text))
   }
+  // From now on the plan counts the text read, not the files' sizes.
+  for (const file of record.files) if (read.has(file.documentId)) file.textBytes = read.get(file.documentId)
+  for (const note of record.notes) if (read.has(note.documentId)) note.textBytes = read.get(note.documentId)
   record.textsSaved = true
   record.notes = scrubbed(record.notes)
   await e.store.putImport(record)
   await deleteOriginals(e, record.files.map((f) => f.fileId))
   await e.store.log('read', { importId: record.status.importId, documents: docs.length })
+}
+
+/** The size of a stored text's words (the container's /text/<documentId> JSON), or of the whole JSON if unreadable. */
+function readTextBytes(stored: string): number {
+  try {
+    const text = (JSON.parse(stored) as { text?: unknown }).text
+    if (typeof text === 'string') return utf8Bytes(text)
+  } catch {
+    // counted whole below
+  }
+  return utf8Bytes(stored)
 }
 
 /** Quiesce, record counts and the full checksum manifest, copy texts out, snapshot, commit. */
@@ -1431,21 +1507,19 @@ async function save(e: CollectionEngine, record: ImportRecord): Promise<void> {
   // The redacted text of every new or changed document, and this version's facts, go to R2.
   for (const doc of result.documents ?? []) {
     if (!doc.changed && record.kind !== 'import' && record.kind !== 'correction') continue
-    const response = await e.box.fetch(`/text/${encodeURIComponent(doc.documentId)}`)
-    if (!response.ok) throw new AttemptFailure('A learned text could not be read back.')
-    await e.env.FILES.put(textKey(meta, doc.documentId), await response.text(), { httpMetadata: { contentType: 'application/json' } })
+    const text = await e.box.readText(`/text/${encodeURIComponent(doc.documentId)}`)
+    if (text === null) throw new AttemptFailure('A learned text could not be read back.')
+    await e.env.FILES.put(textKey(meta, doc.documentId), text, { httpMetadata: { contentType: 'application/json' } })
   }
   // A removal for good that arrived while these texts were copied must not get its text back.
   const removing = (await e.meta()).removals.map((r) => r.documentId)
   const resurrected = (result.documents ?? []).filter((d) => removing.includes(d.documentId)).map((d) => textKey(meta, d.documentId))
   if (resurrected.length) await e.env.FILES.delete(resurrected)
   let facts: string | null = null
-  const factsResponse = await e.box.getFile('facts.json')
-  if (factsResponse.ok) {
+  const factsText = await e.box.readFile('facts.json')
+  if (factsText !== null) {
     facts = factsKey(meta, importId)
-    await e.env.FILES.put(facts, await factsResponse.text(), { httpMetadata: { contentType: 'application/json' } })
-  } else {
-    await factsResponse.body?.cancel()
+    await e.env.FILES.put(facts, factsText, { httpMetadata: { contentType: 'application/json' } })
   }
   await e.box.waitQuiescent()
 

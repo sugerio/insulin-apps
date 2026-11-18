@@ -30,7 +30,7 @@ import type {
   WakeProgress,
 } from './contract.ts'
 import { ORG_HEADER } from './contract.ts'
-import { ContainerClient } from './container.ts'
+import { ContainerClient, ContainerError } from './container.ts'
 import { type Env, REGISTRY_NAME, callObject, testControls, OUTBOX_NAME, CAPACITY_NAME } from './env.ts'
 import { EngineFailure, errorResponse, fail, json, readJson, requireId } from './http.ts'
 import { nextWindowStart, validateKeepReady, windowAt } from './keep-ready.ts'
@@ -62,6 +62,8 @@ export class CollectionEngine {
     this.env = env
     this.store = new CollectionStore(state.storage)
     this.box = new ContainerClient(state.container as Container)
+    // A call to the container that dropped while it still runs is sent again (container.ts); each drop is logged.
+    this.box.onDrop = (drop) => this.store.log('container-call-dropped', { ...drop })
     if (state.container?.running) this.observeExit()
   }
 
@@ -607,6 +609,12 @@ export class CollectionEngine {
 
   // ================================================================== the container's life for questions
 
+  /**
+   * Reacts to the container's exit at once. The watch is never handed to waitUntil: it lasts as long as the container
+   * runs, so it would hold every alarm (and request) open until the runtime's cap, a minute each. Nothing depends on
+   * it: while a container runs the alarm comes back at least once a minute (schedule) and notices one that is gone
+   * (noticeLostContainer), and a Durable Object started again watches a running container from its constructor.
+   */
   observeExit(): void {
     if (this.monitoring || !this.state.container) return
     this.monitoring = this.state.container
@@ -616,10 +624,10 @@ export class CollectionEngine {
         // React to the exit at once: an import is interrupted, questions wake it again.
         if (await this.store.getMeta()) await this.scheduleSoon()
       })
+      .catch(() => undefined)
       .finally(() => {
         this.monitoring = undefined
       })
-    this.state.waitUntil?.(this.monitoring)
   }
 
   /**
@@ -859,7 +867,13 @@ export class CollectionEngine {
     }
     if (status.state === 'loading') return
     if (status.state === 'loaded') {
-      await this.box.queryOpen()
+      try {
+        await this.box.queryOpen()
+      } catch (error) {
+        // A send repeated after a drop finds the databases opening already (the first one was delivered): query.py
+        // answers that as under way, an image from before that with 409. Either way the next step reads the status.
+        if (!(error instanceof ContainerError && error.status === 409)) throw error
+      }
       await this.store.log('query-open-requested')
       return
     }

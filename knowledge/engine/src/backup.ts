@@ -41,9 +41,8 @@ export async function run(e: CollectionEngine, runtime: Runtime): Promise<Backup
   for (const [path, entry] of Object.entries(manifest.entries)) {
     const key = blobKey(meta, entry.sha256)
     if (await e.env.BACKUPS.head(key)) continue
-    const response = await e.box.getFile(path)
-    if (!response.ok || !response.body) throw new Error(`could not read ${path} for the backup`)
-    await e.env.BACKUPS.put(key, response.body, { sha256: entry.sha256 })
+    // R2 checks the bytes against the manifest's checksum: a stream cut short by a drop is refused and read again.
+    await e.box.copyFile(path, (body) => e.env.BACKUPS.put(key, body, { sha256: entry.sha256 }))
     uploaded += 1
   }
   const day = utcDay()
@@ -99,12 +98,19 @@ export async function coldBackup(e: CollectionEngine): Promise<void> {
 
 /**
  * Whether a backup was taken of a snapshot's restore point, in the database format the running image reads. Matched
- * by the snapshot it came from, not by version (a change that adds no data keeps the snapshot) and not by checksums
- * (open databases change /data a little after every wake). Restoring checks the files against the backup's own list.
+ * by the snapshot it came from, not by version (a change that adds no data keeps the snapshot); a backup taken after a
+ * wake differs a little from its snapshot's files (open databases change /data), so checksums alone would miss it.
+ * The same files are a match too: a snapshot taken right after coming back from this backup holds exactly its files,
+ * so a later repair or expiry of that snapshot comes back from the same backup again. Restoring checks the files
+ * against the backup's own list.
  */
 export function holds(index: BackupIndex, snapshot: SnapshotRecord, dataFormat: string): boolean {
-  if (index.dataFormat !== dataFormat) return false
-  return index.snapshotId ? index.snapshotId === snapshot.handle.id : index.manifest.digest === snapshot.manifest.digest
+  return index.dataFormat === dataFormat && holdsFiles(index, snapshot)
+}
+
+/** The backup's files are the snapshot's: taken from it, or byte for byte the same (the database format aside). */
+export function holdsFiles(index: BackupIndex, snapshot: SnapshotRecord): boolean {
+  return index.snapshotId === snapshot.handle.id || index.manifest.digest === snapshot.manifest.digest
 }
 
 export async function latestIndex(e: CollectionEngine): Promise<BackupIndex | null> {
@@ -117,12 +123,17 @@ export async function latestIndex(e: CollectionEngine): Promise<BackupIndex | nu
 export async function restoreFiles(e: CollectionEngine, index: BackupIndex): Promise<boolean> {
   const meta = await e.meta()
   for (const [path, entry] of Object.entries(index.manifest.entries)) {
-    const object = await e.env.BACKUPS.get(blobKey(meta, entry.sha256))
-    if (!object) {
+    const key = blobKey(meta, entry.sha256)
+    if (!(await e.env.BACKUPS.head(key))) {
       await e.store.log('backup-file-missing', { path })
       return false
     }
-    await e.box.putFile(path, object.body)
+    // Read from R2 for each send: a send repeated after a drop streams the file again.
+    await e.box.putFile(path, async () => {
+      const object = await e.env.BACKUPS.get(key)
+      if (!object) throw new Error(`the backup's file ${path} went missing`)
+      return object.body
+    })
   }
   const actual = await e.box.manifest()
   if (actual.digest !== index.manifest.digest) {

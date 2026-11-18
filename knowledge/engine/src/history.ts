@@ -81,6 +81,11 @@ export async function requestGoBack(e: CollectionEngine, version: number, undo: 
   const meta = await e.meta()
   if (meta.op) return fail('busy_learning', 'The collection is already going back; try again in a minute.')
   if (meta.active || meta.removals.length) return fail('busy_learning', 'Going back waits until the collection finishes learning.')
+  // Learning everything again is pending (after a repair it waits while people ask): it would bring back files on top
+  // of the version gone back to, so going back waits for it too.
+  for (const id of meta.queue) {
+    if ((await e.store.getImport(id))?.kind === 'relearn') return fail('busy_learning', 'Going back waits until the collection has learned everything again.')
+  }
   const point = await listedPoint(e, version)
   if (version === meta.version && !undo) return
   const reason = await reasonFor(e, point)
@@ -282,7 +287,7 @@ async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repai
   const meta = await e.meta()
   const latest = await backup.latestIndex(e)
   const failed = (await e.currentSnapshot(meta)).snapshot
-  const fromIt = latest && failed && (latest.snapshotId ? latest.snapshotId === failed.handle.id : latest.manifest.digest === failed.manifest.digest)
+  const fromIt = latest && failed && backup.holdsFiles(latest, failed)
   if (fromIt && !op.tried.includes(-1)) {
     await e.updateMeta((m) => {
       m.op = { kind: 'from_backup', reason: 'repair', startedAt: iso(), restartedAfterFailure: false }
@@ -329,8 +334,9 @@ async function repair(e: CollectionEngine, op: Extract<Operation, { kind: 'repai
       version: candidate.version,
     })
     await openAfterVerified(e)
-    // Meanwhile everything is learned again from the saved text, with the files added after this version.
-    await queueRelearn(e, 'repair', op.failedVersion)
+    // Then everything is learned again from the saved text, with the files added after this version. One container
+    // can't answer and learn at once: the re-learning waits while people ask (queueRelearn, startNext).
+    await queueRelearn(e, 'repair', op.failedVersion, candidate.version)
     return
   }
   await e.store.log('repair-relearn', { failedVersion: op.failedVersion })

@@ -10,6 +10,8 @@ Ops:
             they are read. A relearn batch learns stored redacted texts again (after an engine change).
   remove    remove documents for good: from Cognee's databases, their text and passage index; rebuild facts
   reread    apply stricter hiding rules to stored texts; learn the changed ones again; move outdated marks
+            After both, every store is purged of what was deleted and /data is searched for the removed or newly
+            hidden text (purge.py): any left fails the job, so nothing is committed or backed up.
   stats     reopen all three databases through Cognee and count their records
   manifest  sha256 every file under /data (no Cognee import)
   grep      count planted values under /data (test controls only: HID-01's evidence)
@@ -25,10 +27,12 @@ import hashlib
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 DATA_DIR = Path("/data")
 TEXT_DIR = DATA_DIR / "text"
@@ -41,6 +45,7 @@ DATABASES_DIR = SYSTEM_DIR / "databases"
 WORK_DIR = Path(os.environ.get("KNOWLEDGE_WORK", "/var/lib/knowledge/work"))
 TEST_CONTROLS = os.environ.get("KNOWLEDGE_TEST_CONTROLS") == "1"
 CHUNK_TABLE = "DocumentChunk_text"
+DATA_ID_NAMESPACE = uuid5(NAMESPACE_URL, "urn:insulin-knowledge:document")
 
 EXIT_FAILED = 2
 EXIT_ALREADY_INGESTED = 3
@@ -140,8 +145,15 @@ def to_stored(document_id: str, kind: str, name: str, media_type: str, redaction
 # --------------------------------------------------------------------------- Cognee's chunks
 
 
+def data_id_of(document_id: str) -> UUID:
+    """The id of a document's data item in Cognee, made from its document id. Cognee otherwise finds data by its
+    content, so a document whose text equals another's joined that one's item and got no passages of its own."""
+    return uuid5(DATA_ID_NAMESPACE, document_id)
+
+
 def chunks_by_document(document_ids: set[str]) -> dict[str, list[dict]]:
-    """Cognee's chunks of the given documents, read straight from the LanceDB table the chunk search uses."""
+    """Cognee's chunks of the given documents, read straight from the LanceDB table the chunk search uses. A chunk
+    belongs to the document whose data item made it (by id); one learned before items had their own ids, by name."""
     import lancedb
 
     path = DATABASES_DIR / "cognee.lancedb"
@@ -150,11 +162,14 @@ def chunks_by_document(document_ids: set[str]) -> dict[str, list[dict]]:
     db = lancedb.connect(str(path))
     if CHUNK_TABLE not in db.table_names():
         return {}
+    by_data_id = {str(data_id_of(d)): d for d in document_ids}
     out: dict[str, list[dict]] = {}
     for row in db.open_table(CHUNK_TABLE).to_arrow().to_pylist():
         payload = row.get("payload") or {}
-        name = str(payload.get("document_name") or "")
-        document_id = name[:-4] if name.endswith(".txt") else name
+        document_id = by_data_id.get(str(payload.get("document_id") or ""))
+        if document_id is None:
+            name = str(payload.get("document_name") or "")
+            document_id = name[:-4] if name.endswith(".txt") else name
         if document_id in document_ids:
             out.setdefault(document_id, []).append(
                 {"id": str(row.get("id") or payload.get("id")), "index": payload.get("chunk_index"), "text": payload.get("text") or ""}
@@ -200,15 +215,17 @@ def all_passages() -> dict[str, dict]:
 
 
 async def learn(document_id: str, text: str) -> None:
-    """Adds one redacted text to Cognee and builds its graph. The file is named by document id."""
+    """Adds one redacted text to Cognee and builds its graph. The file is named by document id, and its data item has
+    an id of its own (data_id_of), so two documents with the same text stay two documents, each with its passages."""
     import cognee
+    from cognee.tasks.ingestion.data_item import DataItem
 
     work = WORK_DIR / "learn"
     work.mkdir(parents=True, exist_ok=True)
     path = work / f"{document_id}.txt"
     path.write_text(text)
     try:
-        await cognee.add(str(path), dataset_name=DATASET)
+        await cognee.add(DataItem(data=str(path), data_id=data_id_of(document_id)), dataset_name=DATASET)
         await cognee.cognify(datasets=[DATASET])
     finally:
         path.unlink(missing_ok=True)
@@ -221,16 +238,22 @@ async def forget(document_id: str) -> bool:
     db_file = relational_db_file()
     if db_file is None:
         return False
+    data_id = data_id_of(document_id)
     with sqlite3.connect(f"file:{db_file}?mode=ro", uri=True) as conn:
-        rows = conn.execute("SELECT id, raw_data_location FROM data WHERE name IN (?, ?)", (f"{document_id}.txt", document_id)).fetchall()
+        rows = conn.execute(
+            "SELECT id, raw_data_location FROM data WHERE id IN (?, ?) OR name IN (?, ?)",
+            (data_id.hex, str(data_id), f"{document_id}.txt", document_id),
+        ).fetchall()
         datasets = conn.execute("SELECT id FROM datasets WHERE name = ?", (DATASET,)).fetchall()
     if not rows or not datasets:
         return False
-    from uuid import UUID
 
-    for data_id, raw_location in rows:
-        await cognee.datasets.delete_data(dataset_id=UUID(str(datasets[0][0])), data_id=UUID(str(data_id)))
-        if raw_location and str(raw_location).startswith(("/data/", "file:///data/")):
+    for row_id, raw_location in rows:
+        await cognee.datasets.delete_data(dataset_id=UUID(str(datasets[0][0])), data_id=UUID(str(row_id)))
+        # Cognee stores a text under its content's hash: a document with the same text shares the file.
+        with sqlite3.connect(f"file:{db_file}?mode=ro", uri=True) as conn:
+            shared = conn.execute("SELECT COUNT(*) FROM data WHERE raw_data_location = ?", (raw_location,)).fetchone()[0]
+        if raw_location and not shared and str(raw_location).startswith(("/data/", "file:///data/")):
             Path(str(raw_location).replace("file://", "")).unlink(missing_ok=True)
     return True
 
@@ -573,6 +596,43 @@ def op_grep(args) -> dict:
 # --------------------------------------------------------------------------- main
 
 
+def purged(args) -> dict:
+    """remove and reread: the op itself runs in a child process, so when it exits every database Cognee opened is
+    closed; then every store is purged of what was deleted, and /data is searched for the removed or newly hidden text
+    (purge.py). Any left fails the job: nothing is committed or backed up."""
+    import purge
+
+    batch = json.loads((Path(args.batch_dir) / "batch.json").read_text())
+    before = {d: (load_text(d) or {}).get("text") or "" for d in batch.get("documentIds") or []}
+    child = subprocess.run([sys.executable, str(Path(__file__).resolve()), *sys.argv[1:], "--inner"])
+    if child.returncode != 0:
+        sys.exit(child.returncode if child.returncode > 0 else EXIT_FAILED)  # its result (or progress) says why
+    result = read_json(Path(args.result), {})
+    if args.op == "remove":
+        probes = purge.removed_probes([before[d] for d in result.get("removed") or [] if before.get(d)])
+    elif not result.get("changed"):
+        return result  # nothing newly hidden: the Durable Object discards this container
+    else:
+        probes = purge.hidden_probes([before[d] for d in result["changed"] if before.get(d)], batch.get("hiding") or {})
+    started = time.monotonic()
+    logs = os.environ.get("COGNEE_LOGS_DIR")
+    try:
+        result["purge"] = purge.purge(DATABASES_DIR, relational_db_file(), WORK_DIR, Path(logs) if logs else None)
+    except Exception as error:  # noqa: BLE001 - reported to the Durable Object; the try is made again
+        print(json.dumps({"purgeError": f"{type(error).__name__}: {error}"[:300]}), file=sys.stderr)
+        raise Stop("Cleaning the collection's data after this change failed, so nothing was kept.") from error
+    kept = lambda: ((read_json(path, {}) or {}).get("text") or "" for path in sorted(TEXT_DIR.glob("*.json")))  # noqa: E731
+    remaining = purge.left(DATA_DIR, probes, kept)
+    result["purge"].update({"probes": len(probes), "ms": round((time.monotonic() - started) * 1000)})
+    if remaining:
+        print(json.dumps({"left": remaining}), file=sys.stderr)  # file names and counts only, never the text
+        raise Stop(
+            f"{'Removed' if args.op == 'remove' else 'Newly hidden'} text was still found in {len(remaining)} of the "
+            "collection's files after they were cleaned up, so nothing was kept."
+        )
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("op", choices=["ingest", "remove", "reread", "stats", "manifest", "grep"])
@@ -580,6 +640,7 @@ def main() -> None:
     parser.add_argument("--progress")
     parser.add_argument("--batch-dir")
     parser.add_argument("--values")
+    parser.add_argument("--inner", action="store_true", help=argparse.SUPPRESS)  # remove or reread, under purged()
     args = parser.parse_args()
     sys.path.insert(0, str(Path(__file__).parent))
 
@@ -589,6 +650,8 @@ def main() -> None:
             result = op_manifest(args)
         elif args.op == "grep":
             result = op_grep(args)
+        elif args.op in ("remove", "reread") and not args.inner:
+            result = purged(args)
         else:
             ops = {"ingest": op_ingest, "remove": op_remove, "reread": op_reread, "stats": op_stats}
             result = asyncio.run(ops[args.op](args))

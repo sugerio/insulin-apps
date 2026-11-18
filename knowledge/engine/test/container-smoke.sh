@@ -2,10 +2,11 @@
 # The container's control server (container/server.py) and the parts of ops.py that run before Cognee is imported,
 # in the image's base (Python 3.12 on Linux, for /proc), without building the 3.5 GB image: health, the inbox, jobs,
 # the checksum manifest, files and text, cleanup and quiesce, the query process's lifecycle, and the import's
-# fail paths (a type Insulin can't read, a crash on one file, a detector error). Cognee's databases are not
-# exercised: they run only on Cloudflare (README.md, "Build gotchas").
+# fail paths (a type Insulin can't read, a crash on one file, a detector error), and calls made back to back from
+# workerd, whose fetch pools connections as the Durable Object's does. Cognee's databases are not exercised: they run
+# only on Cloudflare (README.md, "Build gotchas").
 #
-#   test/container-smoke.sh            needs Docker
+#   test/container-smoke.sh            needs Docker (and node_modules/.bin/workerd for the back-to-back calls)
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +18,8 @@ docker run -d --rm --name "$name" -p "127.0.0.1:$port:8080" \
   -v "$here/container:/app:ro" -w /app \
   -e KNOWLEDGE_TEST_CONTROLS=1 -e KNOWLEDGE_DATA_FORMAT=smoke-1 \
   "$base" sh -c 'mkdir -p /data && exec python /app/server.py' >/dev/null
-trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+workerd_pid=""
+trap 'docker rm -f "$name" >/dev/null 2>&1 || true; [ -z "$workerd_pid" ] || kill "$workerd_pid" 2>/dev/null || true' EXIT
 
 url="http://127.0.0.1:$port"
 for _ in $(seq 1 60); do curl -fs "$url/health" >/dev/null 2>&1 && break; sleep 0.5; done
@@ -93,6 +95,52 @@ for _ in $(seq 1 50); do [ "$(curl -fs "$url/query/status" | json "d['state']")"
 check "the query process reports its failure" test "$(curl -fs "$url/query/status" | json "d['state']")" = failed
 curl -fs -X POST "$url/query/stop" >/dev/null
 check "and stops" test "$(curl -fs "$url/query/status" | json "d['state']")" = stopped
+
+# Calls made back to back, as the Durable Object makes them when a job starts or ends: its fetch pools connections,
+# and sent the next call on a connection the server was closing, which came back as "Network connection lost.".
+workerd="$here/node_modules/.bin/workerd"
+if [ -x "$workerd" ]; then
+  wdir="$(mktemp -d)"
+  wport="${SMOKE_WORKERD_PORT:-18799}"
+  cat > "$wdir/worker.js" <<'JS'
+export default {
+  async fetch(request) {
+    const target = new URL(request.url).searchParams.get('target')
+    if (!target) return new Response('ready')
+    const calls = [
+      () => fetch(`${target}/health`),
+      () => fetch(`${target}/inbox/b9/f9`, { method: 'PUT', body: 'x'.repeat(4096) }),
+      () => fetch(`${target}/jobs/none`),
+      () => fetch(`${target}/cleanup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }),
+      () => fetch(`${target}/inbox/b9`, { method: 'DELETE' }),
+    ]
+    let made = 0, lost = 0
+    for (let round = 0; round < 300; round++) {
+      for (const call of calls) {
+        made++
+        try { await (await call()).text() } catch { lost++ }
+      }
+    }
+    return Response.json({ made, lost })
+  },
+}
+JS
+  cat > "$wdir/config.capnp" <<CAPNP
+using Workerd = import "/workerd/workerd.capnp";
+const config :Workerd.Config = (
+  services = [ (name = "main", worker = .w), (name = "internet", network = (allow = ["public", "private", "local"])) ],
+  sockets = [ (name = "http", address = "127.0.0.1:$wport", http = (), service = "main") ],
+);
+const w :Workerd.Worker = (modules = [(name = "worker", esModule = embed "worker.js")], compatibilityDate = "2025-10-01");
+CAPNP
+  "$workerd" serve "$wdir/config.capnp" >"$wdir/workerd.log" 2>&1 &
+  workerd_pid=$!
+  for _ in $(seq 1 60); do curl -fs "http://127.0.0.1:$wport/" >/dev/null 2>&1 && break; sleep 0.5; done
+  calls="$(curl -fs "http://127.0.0.1:$wport/?target=$url")"
+  check "1,500 calls back to back from workerd, none lost" test "$(echo "$calls" | json "(d['made'], d['lost'])")" = "(1500, 0)"
+else
+  echo "skip calls back to back: no node_modules/.bin/workerd (npm ci first)"
+fi
 
 if [ "$fails" -gt 0 ]; then echo "$fails failed"; exit 1; fi
 echo "container smoke: all checks passed"

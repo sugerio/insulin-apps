@@ -43,6 +43,7 @@ DATASET = os.environ.get("KNOWLEDGE_DATASET", "knowledge")
 CALIBRATION = Path(os.environ.get("KNOWLEDGE_CALIBRATION", str(Path(__file__).with_name("calibration.json"))))
 
 STATE = {"state": "loading", "loadedAt": None, "openedAt": None, "error": None, "pid": os.getpid()}
+OPENING = threading.Lock()  # one open, however often it is asked for
 LOOP = asyncio.new_event_loop()
 INDEX: dict[str, dict] = {}  # passage id -> passage
 BY_DOCUMENT: dict[str, list[dict]] = {}
@@ -191,8 +192,12 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(length) or b"{}") if length else {}
         try:
             if path == "/open":
-                if STATE["state"] != "loaded":
-                    return self._send(409, {"error": f"not loaded ({STATE['state']})"})
+                with OPENING:
+                    if STATE["state"] in ("opening", "ready"):
+                        return self._send(202, STATE)  # asked again (a retry after a lost answer): already under way
+                    if STATE["state"] != "loaded":
+                        return self._send(409, {"error": f"not loaded ({STATE['state']})"})
+                    STATE["state"] = "opening"
                 threading.Thread(target=lambda: self._open_in_background(), daemon=True).start()
                 return self._send(202, STATE)
             if path == "/search":

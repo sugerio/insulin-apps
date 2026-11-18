@@ -261,6 +261,36 @@ export class FakeCloud {
   openWrites = false // the query process writes under /data when it opens (as databases may): /data no longer equals the snapshot
   lingerPolls = 1 // after a job, /quiesce reports a process still exiting this many times
   calls: { collection: string; method: string; path: string; detail?: string }[] = []
+  drops: DropRule[] = [] // calls to the control server that drop ("Network connection lost.") while the container runs
+  dropped: { collection: string; method: string; path: string }[] = []
+
+  /** The first rule this call matches, used up by one. */
+  async dropFor(collection: string, request: Request): Promise<DropRule | null> {
+    const url = new URL(request.url)
+    for (const rule of this.drops) {
+      if (rule.times <= 0 || (rule.method && rule.method !== request.method)) continue
+      if (typeof rule.path === 'string' ? url.pathname !== rule.path : !rule.path.test(url.pathname)) continue
+      if (rule.op && ((await request.clone().json()) as { op?: string }).op !== rule.op) continue
+      rule.times -= 1
+      this.dropped.push({ collection, method: request.method, path: url.pathname })
+      return rule
+    }
+    return null
+  }
+}
+
+/**
+ * A call that drops. By default it never reaches the server; `after`: the server did the work and only its answer
+ * was lost; `cut`: the answer's body stops halfway (a file streamed to a backup); `stop`: the container stops too.
+ */
+export interface DropRule {
+  method?: string
+  path: string | RegExp // the URL's path
+  op?: string // POST /jobs: only this op
+  times: number
+  after?: boolean
+  cut?: boolean
+  stop?: boolean
 }
 
 interface FakeJob {
@@ -356,8 +386,22 @@ export class FakeContainer {
   }
 
   getTcpPort() {
-    // Node needs `duplex` to send a stream; Workers don't.
-    return { fetch: (url: string, init?: RequestInit) => this.serve(new Request(url, init?.body instanceof ReadableStream ? { ...init, duplex: 'half' } as RequestInit : init)) }
+    return {
+      fetch: async (url: string, init?: RequestInit) => {
+        // Node needs `duplex` to send a stream; Workers don't.
+        const request = new Request(url, init?.body instanceof ReadableStream ? ({ ...init, duplex: 'half' } as RequestInit) : init)
+        const drop = this.running ? await this.cloud.dropFor(this.name, request) : null
+        if (drop?.stop) await this.destroy()
+        if (drop && !drop.after && !drop.cut) throw new Error('Network connection lost.')
+        const response = await this.serve(request)
+        if (drop?.after) throw new Error('Network connection lost.')
+        if (drop?.cut) {
+          const bytes = new Uint8Array(await response.arrayBuffer())
+          return new Response(bytes.slice(0, Math.floor(bytes.length / 2)), { status: response.status })
+        }
+        return response
+      },
+    }
   }
 
   // ------------------------------------------------------------ server.py
@@ -382,10 +426,15 @@ export class FakeContainer {
       return json({ deleted: parts[1] })
     }
     if (method === 'POST' && url.pathname === '/jobs') {
-      const { op, args } = (await request.json()) as { op: string; args: any }
+      const { id, op, args } = (await request.json()) as { id?: string; op: string; args: any }
+      // An id the server already has answers that job (a send repeated after a drop): never a second one. Another
+      // request under a used id is refused.
+      const existing = id ? this.jobs.get(id) : undefined
+      if (existing && (existing.op !== op || JSON.stringify(existing.args) !== JSON.stringify(args))) return json({ error: 'job id in use' }, 409)
+      if (existing) return json(this.view(existing), 200)
       if (this.active && this.jobs.get(this.active)?.state === 'running') return json({ error: 'busy' }, 409)
       if (['ingest', 'remove', 'reread', 'stats'].includes(op) && this.query.state !== 'stopped') return json({ error: 'query_running' }, 409)
-      const job: FakeJob = { id: `${op}-${this.jobs.size + 1}`, op, state: 'running', polls: op === 'manifest' || op === 'stats' || op === 'grep' ? 0 : this.cloud.jobPolls, args }
+      const job: FakeJob = { id: id ?? `${op}-${this.jobs.size + 1}`, op, state: 'running', polls: op === 'manifest' || op === 'stats' || op === 'grep' ? 0 : this.cloud.jobPolls, args }
       this.jobs.set(job.id, job)
       this.active = job.id
       this.cloud.calls.push({ collection: this.name, method, path: '/jobs', detail: op })
@@ -460,6 +509,7 @@ export class FakeContainer {
       return json(this.queryStatus())
     }
     if (action === 'open') {
+      if (q.state === 'opening' || q.state === 'ready') return json(this.queryStatus(), 202) // asked again: under way
       if (q.state !== 'loaded') return json({ error: 'not loaded' }, 409)
       this.cloud.calls.push({ collection: this.name, method: 'POST', path: '/query/open', detail: 'open' })
       if (this.cloud.openWrites) this.data.set('system/databases/opened', `opened ${this.cloud.calls.length}`)

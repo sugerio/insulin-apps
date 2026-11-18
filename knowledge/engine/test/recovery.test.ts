@@ -180,6 +180,17 @@ test('HIS-04 a repair answers from the previous restore point, then brings back 
     if (points[0]?.summary === 'Answering from version 2 after version 3 failed its check') answeredFromTwo = true
   }
   assert.ok(answeredFromTwo, 'it answered from version 2 meanwhile')
+  // While people keep asking, it answers from version 2 and learns nothing: one container can't do both.
+  for (let i = 0; i < 4; i++) {
+    t.advance(5 * 60_000)
+    const answer = await ask(t, 'c1', 'topic number 2 gateway port')
+    assert.deepEqual([answer.body.status, answer.body.version], ['ok', 4], `after ${(i + 1) * 5} minutes`)
+    await t.drain('c1')
+  }
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.counts.documents, 3)
+  assert.equal((await t.api('GET', '/v1/collections/c1')).body.queuedImports, 1, 'the re-learning waits')
+  // Once nobody has asked for the collection's awake minutes, everything is learned again.
+  t.advance(11 * 60_000)
   await settle(t)
   const status = (await t.api('GET', '/v1/collections/c1')).body
   assert.equal(status.counts.documents, 4, 'the file added in version 3 is back')

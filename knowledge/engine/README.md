@@ -59,18 +59,34 @@ And from the design:
 
 - **Questions never wait for a wake.** A search on an asleep collection answers `waking` at once and wakes it in the
   Durable Object's alarm; during an import it answers `learning`. All container work happens in the alarm, one step
-  at a time, so a collection's container is never driven twice at once.
+  at a time, so a collection's container is never driven twice at once. The alarm never waits on the container's
+  monitor (handed to `waitUntil`, it held every alarm open a minute): the alarm comes back at least once a minute
+  while a container runs and notices one that stopped.
+- **A dropped call is sent again.** On Cloudflare a call from the Durable Object to its container's port can drop
+  (`Network connection lost.`) while the container still runs, about a second after a container or a job process
+  starts or ends (38% of the tries in the first Engine-lane run). Every call is sent again then, up to five more times
+  over about 30 seconds (a question: twice, over 3 seconds), with a body made again from R2 for a file; a file copied
+  to a backup is read again from the start when its stream breaks. Only a container that stopped, an answer from the
+  server, or a run of drops past that ends a try, a wake step or a backup. It relies on every call being safe to send
+  twice (`container.ts`): the Durable Object names each job (`POST /jobs` with `id`), and the server answers an id it
+  already has with that job and never starts a second one; writing an inbox file again replaces it; opening the
+  databases again finds them opening. Each drop is logged (`container-call-dropped`).
 - **Changes within 5 minutes share one restore point** (the earlier one folds into the new one; undo takes both back).
 - **Remove for good** deletes the document's text and its facts (in every stored facts file) at once, blocks every
   restore point and daily backup that holds it, goes ahead of every other import to delete it from the databases,
   and writes a new latest backup without it. An export or a re-read running at that moment is redone without it.
+  Deleting it from the databases reaches every byte of them: before its restore point is saved, the removal rewrites
+  every store under `/data` without what it deleted and searches every file there for pieces of the removed text
+  ("What a removal leaves" below); a piece left fails the try, so nothing is committed or backed up.
 - **Hiding fails closed**: any detector error stops the import before anything is stored. Once every file and note
   of an import is read and hidden, their redacted texts are saved and the originals, and notes as written, are
   deleted; a later try learns from the saved texts. Queued imports and saved texts are hidden with the rules in
   force when learning starts, and stricter rules re-read every document, those of imports running at the time
   included. When stricter rules change a text, the facts files, ready exports and backups of earlier versions that
   hold its old words are deleted (tried again from the alarm until they are), and a new latest backup is written;
-  earlier restore points are blocked. Only redacted text is stored, in the container, R2, backups and exports. The
+  earlier restore points are blocked. Only redacted text is stored, in the container, R2, backups and exports: a
+  re-read that hid more rewrites every store under `/data` the same way as a removal for good, and searches every
+  file there for each value it newly hid (ignoring case; a document's name, which hiding doesn't change, aside). The
   detectors run in time linear in the text (a 2 MB text built to make them backtrack takes under a second); the
   app's "Try it" box (`hiding.ts`) uses the same patterns, checked against the shared fixtures.
 - **The newest correction of a passage wins**: a correction written again for a passage takes it over from the
@@ -109,11 +125,16 @@ And from the design:
   `previousNoteId`.
 - **Waking from the backup**: when a restore point's snapshot expired (30 days), the engine image changed, or it
   failed its check twice (`damaged`), the collection comes back from its latest backup if that backup was taken from
-  the same snapshot (matched by snapshot id, not the version) in the running image's database format
-  (`KNOWLEDGE_DATA_FORMAT`); the files put back must then match the backup's manifest. Otherwise every document is learned again from its saved text; an import waiting
-  meanwhile gives way to that and isn't charged a try, and a removal for good learns the other documents itself.
+  the same snapshot (matched by snapshot id, not the version), or holds exactly its files (the snapshot taken right
+  after coming back from that backup), in the running image's database format (`KNOWLEDGE_DATA_FORMAT`); the files
+  put back must then match the backup's manifest. Otherwise every document is learned again from its saved text; an
+  import waiting meanwhile gives way to that and isn't charged a try, and a removal for good learns the other
+  documents itself.
   A repair that answers from an earlier restore point then learns everything again, bringing back the files added
-  after it.
+  after it. One container can't answer and learn at once, so that re-learning waits while people ask: it starts once
+  nobody has asked for the collection's `awakeMinutes`, after an hour at most, or at once when anything else is
+  queued behind it. Going back waits for it (409 `busy_learning`): it would add files on top of the version gone
+  back to.
 - **Waking is never stuck**: each wake step that takes longer than 10 minutes is stopped and started again; after
   three timeouts in a row the collection stops trying (and paying) until someone asks again, and says so with a
   `state` event. A snapshot is given up as gone only after three failed starts in a row. Running time is charged from
@@ -122,7 +143,8 @@ And from the design:
   forced by `query.py`), so no question reaches the databases, snapshots or backups, and the query process logs at
   WARNING.
 - **Backups belong to a snapshot**: a backup records the snapshot its container started from, and is used for that
-  snapshot's restore points in the same database format; restoring checks the files against the backup's own list.
+  snapshot's restore points (and a snapshot whose files are exactly the backup's) in the same database format;
+  restoring checks the files against the backup's own list.
 - **Removals for good finish**: a removal whose restore point can't be started learns the other documents again
   without every pending removal's documents. One that keeps failing is reported (an `import` event, failed) and tried
   again after 1 minute, 10 minutes, an hour, then every 6 hours. Its clean-up of older facts files and backups is
@@ -150,7 +172,8 @@ And from the design:
   (delayed, or sent again after a lost answer) changes nothing and is answered with the current state.
 - **Imports hold their capacity slot or stop**: an import whose slot the capacity guard says has lapsed stops, keeps
   nothing and waits for a new slot, so no more than the allowed imports ever run. A renewal call that fails (the
-  guard unreachable for a moment) is tried again on the next step.
+  guard unreachable for a moment) is tried again on the next step. The slot lapses after 30 minutes without a renewal,
+  and an import renews it at every step (every 3 seconds while its job runs), so one that learns for hours keeps it.
 - **Settings carry the app's revision**: a PUT with a lower revision than the engine holds answers 409
   `stale_settings` and changes nothing; the same revision again changes nothing.
 - **An export starts a new collection** (`POST .../import-export`, DEL-03): an empty collection learns a Knowledge
@@ -174,10 +197,15 @@ And from the design:
 
 `src/settings.ts`: imports at once (20, 2 per organization), three tries, a job time limit (an hour, or three times
 the planned time for a large import), 5 minutes for shared restore points, 30 days of snapshots, 7 days of outbox
-and exports, the planning times from the PoC (43 s per
-import plus 5.3 s per document; about a minute to wake) and the built-in model. The container instance is chosen
-when the Durable Object starts it: `standard-4` for learning and, until Phase 0 shows a snapshot taken on
-`standard-4` starts on `standard-1` (design Q10), for questions too. A deployment can set `ENGINE_QUESTIONS_INSTANCE`
+and exports, the planning times and the built-in model. The planning times were measured in the first Engine-lane
+run on `standard-4`: a try takes about 30 s to start its container, then 105 s plus 5.3 s per document plus 860 s
+per MiB of text from its job's start to its commit (one short note: 110-116 s; 41 short documents learned again:
+317 s; one 2 MiB text of 848 passages: 1,835 s); about a minute to wake. A file's text is planned from its size until
+it is read (its bytes for plain text and Markdown, a quarter of them for PDF, Office and HTML, at most the 2 MB the
+readers keep), then from the text read; a re-read or re-learning counts the saved texts. The plan sets the time left
+(`etaSeconds`, counted down from the try's job start), when a question during learning is told to come back, and the
+job time limit. The container instance is chosen when the Durable Object starts it: `standard-4` for learning and,
+until Phase 0 shows a snapshot taken on `standard-4` starts on `standard-1` (design Q10), for questions too. A deployment can set `ENGINE_QUESTIONS_INSTANCE`
 and `ENGINE_LEARNING_INSTANCE` as vars to change them without a code change.
 
 Daily backups are kept for the collection's `backupDays` (its settings; the organization's backup_days limit,
@@ -191,6 +219,12 @@ Each document keeps at most 2,000 passages (`PASSAGE_CAP` in `container/passages
 passages per document). The 2 MB text limit makes about a thousand of Cognee's chunks, so the cap binds only for
 unusual files; passages past it are not cited, and the file says so.
 
+Each document is its own data item in Cognee, under an id made from its document id (`data_id_of` in
+`container/ops.py`), and its chunks are found by that id. Cognee otherwise finds data by its content, so a document
+whose text equals another's (the same deck saved as PDF and as PowerPoint) joined the other's data item and got no
+passages while it counted as learned (IMP-06). Cognee keeps one copy of a text, under its hash, for every data item
+that has it; removing one of two such documents keeps the copy.
+
 The "won't guess" threshold is `container/calibration.json` (0.70, a placeholder: the PoC graded retrieval but did
 not record scores). Phase 0 sets it with the harness (`--calibrate`, plan ASK-02).
 
@@ -202,15 +236,18 @@ From `knowledge/engine/`:
 npm ci --ignore-scripts
 npm run typecheck
 npm test                  # the Worker logic, with a fake container (Node 22's TypeScript stripping)
-npm run test:python       # extract.py, hide.py, ranking, passages, facts; the PDF tests need pypdf from
+npm run test:python       # extract.py, hide.py, ranking, passages, facts, the control server over sockets, data
+                          # items and the clean-up's search; the PDF tests need pypdf from
                           # test/python/requirements.lock (pip install --require-hashes -r …)
-npm run test:container    # the real server.py and the import's fail paths in the base image (needs Docker)
+npm run test:container    # the real server.py and the import's fail paths in the base image, and 1,500 calls
+                          # back to back from workerd (needs Docker and node_modules)
 npm run check             # typecheck and bundle (wrangler deploy --dry-run, without building the image)
 ```
 
 `npm test` runs the whole engine in memory: the router, all four Durable Object classes on fake storage, fake R2 and
 Workers AI, and fake containers that answer like `server.py` (jobs, quiesce, the query process, files) with
-`ctx.container`'s start, destroy and snapshot calls. Test names carry the design's plan ids (IMP-03, HIS-01, …).
+`ctx.container`'s start, destroy and snapshot calls, and drop calls on cue as Cloudflare did (`FakeCloud.drops`).
+Test names carry the design's plan ids (IMP-03, HIS-01, …).
 The Python tests read the shared fixtures in `test/fixtures/`; `test/python/make_fixtures.py` builds the PDF, Word,
 PowerPoint, Excel and HTML versions of the corpus at test time, so no binary file is in the repository.
 
@@ -248,6 +285,42 @@ points as unavailable.
 
 The release builds and pushes the image (DESIGN.md §10.1 "Images"). Wrangler's own build is not used for a release.
 
+**What a removal leaves.** Cognee deletes a document's data by marking it deleted, and the files keep it: after a
+removal for good (HIS-07) or a stricter re-read (HID-04) the first Engine-lane run found the words in `/data` and in
+the backup taken from it. So `remove` and `reread` run the op itself in a child process (when it exits, nothing holds
+a database open), then `container/purge.py` cleans each store and searches all of `/data`:
+
+- LanceDB (chunks, summaries, entity, entity type and relationship names, document names): a deleted row stays in its
+  data file until the fragment is rewritten, which LanceDB's own optimize does once a tenth of its rows are deleted
+  and Cognee's compaction once a fifth; old versions keep the files they used. Every table is compacted with deleted
+  rows materialized at any share, then every older version and unreferenced file is removed.
+- The graph (Ladybug, one file): deleted nodes' strings stay in its pages. It is exported and imported into a new
+  file, which replaces it only when it holds as many nodes and edges.
+- SQLite (Cognee's relational database): it held none of the text in any run (names, ids, paths, runs); it is
+  vacuumed anyway, its write-ahead log folded in, so deleted rows don't wait in free pages.
+- Cognee's copies of the texts (`/data/documents`): deleted with the document's data, unless another document with
+  the same text still uses the copy. Cognee's cache (`/data/cache`) is never made, and questions leave nothing.
+- Cognee's logs (`/var/log/cognee`, outside `/data`, so in a snapshot but not a backup): they held none of the text;
+  they are deleted anyway, since nothing reads them.
+
+Then every file under `/data` is searched, ignoring case, for the removed documents' text (pieces of at least 24
+characters, up to 64 per document, from all over it) or for each newly hidden value; a piece that a kept document's
+text also holds may stay. Anything left fails the try with the number of files (logged by name, never the text). On
+the 30-document corpus (34 MB under `/data`) cleaning and searching take about a second.
+
+**The control server's connections.** `server.py` serves one request per connection and says so in every answer
+(`connection: close`). Without that, the Durable Object's fetch, which keeps connections for the next call, sent a
+call made right after another on the connection the server was closing, and lost it (`Network connection lost.`).
+That matches every drop of the first Engine-lane run: they came where the Durable Object makes calls back to back (a
+container or a job starting or ending, an inbox filling, a wake step), never between a running job's polls, seconds
+apart; workerd against the old server loses 1-3% of such calls, the current one none. A request's body is read to
+its end before the answer (a body sent chunked too), and a connection is read until the client closes its side, so
+it never ends with a reset. Every call is safe to send twice: `POST /jobs` with an `id` the server already has
+answers that job and starts nothing (409 if that id was used for another request); an inbox or `/files` write goes
+to a file of its own, renamed into place only once whole, so a repeated or interrupted write leaves one complete
+copy; deleting a batch, cleanup and the query process's start, stop and open (`query.py`) change nothing when
+repeated.
+
 ## The Engine-lane harness
 
 `harness/` runs the design's GATE plans on Cloudflare: a throwaway engine (`insulin-apps-knowledge-engine-e2e-<run>`,
@@ -278,8 +351,11 @@ The runner has been rehearsed against the in-memory engine over HTTP; it has not
   refused. Push with a longer-lived credential first (the release does, §10.1), then deploy with the digest.
 - **LanceDB needs AVX2.** Apple Silicon builds amd64 images under Rosetta, which has no AVX/AVX2; LanceDB crashes
   there. So the build's warm-up only loads the models, and nothing that opens a database can run in a local amd64
-  build. `test/container-smoke.sh` covers the control server and the import's fail paths locally; the databases run
-  only on Cloudflare (the harness).
+  build. `test/container-smoke.sh` covers the control server and the import's fail paths locally; in CI the
+  databases run only on Cloudflare (the harness). On an arm64 machine they do run natively: a `linux/arm64`
+  `python:3.12-slim-bookworm` container with `cognee[gliner]` and `pypdf` installed under the lock's versions as
+  constraints (`uv pip install -c`; its hashes are for x86-64 only) and the image's `/opt/models` copied out ran
+  `ops.py` and `query.py` for the data-item and removal checks above.
 - **`wrangler deploy --dry-run` builds the image** when the config names a Dockerfile; `npm run check` passes
   `--containers-rollout none` so it only bundles the Worker. It also passes `--config wrangler.jsonc`: otherwise
   Wrangler may pick up the app's generated `../.wrangler/deploy/config.json` and refuse.

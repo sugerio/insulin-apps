@@ -136,17 +136,17 @@ export function claudeReader(client: Anthropic): SlipReader {
           return { kind: "not_available", message: "The organization's Anthropic credential was refused. An admin can check it under Settings › Integrations." };
         }
         if (error instanceof Anthropic.RateLimitError) return { kind: "failed", message: "Too many files are being read right now. Try this one again in a minute." };
-        if (error instanceof Anthropic.APIError) return { kind: "failed", message: `AI reading failed (${error.status ?? "no answer"}). Try again.` };
+        if (error instanceof Anthropic.APIError) return { kind: "failed", message: `Reading this file failed (${error.status ?? "no answer"}). Try again.` };
         throw error;
       }
-      if (response.stop_reason === "refusal") return { kind: "failed", message: "AI declined to read this file." };
-      if (response.stop_reason === "max_tokens") return { kind: "failed", message: "This file holds more than AI could read at once. Upload its pages separately." };
+      if (response.stop_reason === "refusal") return { kind: "failed", message: "This file couldn't be read." };
+      if (response.stop_reason === "max_tokens") return { kind: "failed", message: "This file is too long to read at once. Upload its pages separately." };
       const text = response.content.find((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")?.text;
       let answer: z.infer<typeof answerSchema>;
       try {
         answer = answerSchema.parse(JSON.parse(text ?? ""));
       } catch {
-        return { kind: "failed", message: "AI's answer wasn't in the expected shape. Try again." };
+        return { kind: "failed", message: "Reading this file went wrong. Try again." };
       }
       return {
         kind: "read",

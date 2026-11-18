@@ -8,7 +8,7 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
-import { SlipForm } from "../components/SlipForm.tsx";
+import { OriginalFile, SlipForm } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { byBox, formatMoney } from "../lib/format.ts";
@@ -116,12 +116,9 @@ function PersonSlips({ personId, slips, editable }: { personId: string; slips: S
                       </span>
                     ))}
                   </p>
-                  {slip.source === "ai" && slip.documentId ? (
-                    <p className="text-xs text-muted-foreground">
-                      Read by AI from{" "}
-                      <a className="underline underline-offset-2" href={`/api/years/${year.year}/documents/${slip.documentId}/file`} target="_blank" rel="noreferrer">
-                        the uploaded file
-                      </a>
+                  {slip.documentId ? (
+                    <p className="text-xs">
+                      <OriginalFile year={year.year} documentId={slip.documentId} />
                     </p>
                   ) : null}
                   {editable && editing === null

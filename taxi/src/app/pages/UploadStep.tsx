@@ -207,7 +207,7 @@ const STATUS_LABELS: Record<DocumentRecord["status"], string> = {
   read: "Read",
   not_a_slip: "No slip found",
   failed: "Couldn't read",
-  not_available: "AI reading not set up",
+  not_available: "Reading not set up",
 };
 
 /** Files that weren't read: they have no slips, and can be read again. */

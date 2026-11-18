@@ -101,7 +101,8 @@ describe("Income", () => {
     fireEvent.click(row);
     expect((within(onReturn).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
     expect((within(onReturn).getByLabelText(/^Box 24/) as HTMLInputElement).value).toBe("");
-    expect(within(onReturn).getByText("Typed in.")).toBeTruthy();
+    // Typed in, not read from a file: nothing to open.
+    expect(within(onReturn).queryByRole("link", { name: "Open the original file" })).toBeNull();
     expect(within(onReturn).queryByRole("button", { name: "Save" })).toBeNull();
     fireEvent.click(row);
     expect(within(onReturn).queryByRole("table")).toBeNull();
@@ -152,6 +153,25 @@ describe("Income", () => {
     expect(answers).toMatchObject({ hasSelfEmployment: true, hasEmploymentIncome: false, hasRentalIncome: false, soldProperty: false });
   });
 
+  it("enters a missing slip by hand right there, keeping what was added", async () => {
+    const { server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s).then(() => undefined) });
+    const add = await screen.findByRole("region", { name: "Add to your return" });
+    fireEvent.click(within(add).getByRole("button", { name: "Add Rental income" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Employment income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enter the T4" }));
+    const form = screen.getByRole("form", { name: "Add a slip" });
+    expect(within(form).queryByLabelText("Slip")).toBeNull();
+    fireEvent.change(within(form).getByLabelText("Issued by"), { target: { value: "Maple Corp" } });
+    fireEvent.change(within(form).getByLabelText(/^Box 14/), { target: { value: "60,000" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+    // Saving the module, then the slip, starts the page again: query it afresh.
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("button", { name: /T4 from Maple Corp/ })).toBeTruthy());
+    expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("heading", { name: /Rental income/ })).toBeTruthy();
+    expect(screen.queryByText("Missing: the T4")).toBeNull();
+    const slips = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { type: string; boxes: Record<string, string> }[] };
+    expect(slips.slips).toEqual([expect.objectContaining({ type: "T4", boxes: { 14: "60000" } })]);
+  });
+
   it("takes the missing slip right there", async () => {
     const reader: SlipReader = {
       read: async () => ({ kind: "read", taxYear: 2025, model: "m", slips: [{ type: "T5", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 13: "1250.00" }, unsure: [] }] }),
@@ -163,7 +183,7 @@ describe("Income", () => {
     await waitFor(() => expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("button", { name: /T5 from Lakeview Credit Union/ })).toBeTruthy(), { timeout: 5000 });
     const onReturn = screen.getByRole("region", { name: "On your return" });
     fireEvent.click(within(onReturn).getByRole("button", { name: /T5 from Lakeview Credit Union/ }));
-    expect(within(onReturn).getByRole("link", { name: "the uploaded file" })).toBeTruthy();
+    expect(within(onReturn).getByRole("link", { name: "Open the original file" })).toBeTruthy();
   });
 });
 

@@ -43,8 +43,8 @@ describe("reading a slip with Claude", () => {
   });
 
   it("says why when the model declines or answers in another shape", async () => {
-    expect(await claudeReader(stubbed({ stop_reason: "refusal", content: [] }).client).read(file, context)).toEqual({ kind: "failed", message: "AI declined to read this file." });
-    expect(await claudeReader(stubbed(answer({ nope: true })).client).read(file, context)).toEqual({ kind: "failed", message: "AI's answer wasn't in the expected shape. Try again." });
+    expect(await claudeReader(stubbed({ stop_reason: "refusal", content: [] }).client).read(file, context)).toEqual({ kind: "failed", message: "This file couldn't be read." });
+    expect(await claudeReader(stubbed(answer({ nope: true })).client).read(file, context)).toEqual({ kind: "failed", message: "Reading this file went wrong. Try again." });
   });
 
   it("builds the prompt from the year's slip types and the household", () => {

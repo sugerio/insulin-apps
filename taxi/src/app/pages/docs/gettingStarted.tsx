@@ -57,8 +57,8 @@ export const gettingStarted: DocTopic = {
             <li>
               <b>Income.</b> What is on your return: the slips found (employment, interest and dividends, mutual funds, sales of
               investments), each opening into its boxes to check and change (a changed slip is confirmed again at Confirm). Under{" "}
-              <b>Add to your return</b>, add the other kinds of income you had. One added without its slip is missing, to upload right there
-              or type in at Confirm. What the app doesn't handle yet, such as self-employment or rent, can be added too: the return then
+              <b>Add to your return</b>, add the other kinds of income you had. One added without its slip is missing, to upload or enter right
+              there. What the app doesn't handle yet, such as self-employment or rent, can be added too: the return then
               says it isn't included. What you don't add counts as none.
             </li>
             <li>

@@ -1,16 +1,16 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, FileUp, Plus } from "lucide-react";
-import { canPrepare, routes, type Estimate, type Slip, type SlipList, type Step } from "#shared";
+import { ChevronRight, FileUp, PencilLine, Plus } from "lucide-react";
+import { canPrepare, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { cn } from "@/lib/utils.ts";
-import { ApiError, apiRequest, describeError } from "../api/client.ts";
+import { ApiError, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { AmountField, cleanAmount } from "../components/AmountField.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
-import { SlipBoxTable, SlipForm, type SlipChange } from "../components/SlipForm.tsx";
+import { OriginalFile, SlipBoxTable, SlipForm } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { formatMoney } from "../lib/format.ts";
@@ -155,11 +155,8 @@ function ModuleForm({
     }
   }
 
-  /** Saves a change to a slip after the module so far. */
-  const saveSlip = (slip: Slip) => async (change: SlipChange) => {
-    const saved = await saveAnswersFor(year, answersToSave());
-    return apiRequest(routes.updateSlip, { params: { year: year.year, id: slip.id }, body: { revision: saved.revision, ...change } });
-  };
+  /** Saves the module so far, before a slip is added or changed here, so nothing chosen is lost. */
+  const saveModule = () => saveAnswersFor(year, answersToSave());
 
   const onReturn = items.filter((item) => added[item.question.id]);
   const toAdd = items.filter((item) => !added[item.question.id]);
@@ -172,7 +169,7 @@ function ModuleForm({
     <>
       {missing.length > 0 ? (
         <Banner kind="warning" title="Still missing">
-          {missing.map((type) => `the ${type}`).join(", ")}. Upload each one below, or type it in at Confirm.
+          {missing.map((type) => `the ${type}`).join(", ")}. Upload or enter each one below.
         </Banner>
       ) : null}
       <section aria-label="On your return" className="flex flex-col gap-3">
@@ -196,7 +193,7 @@ function ModuleForm({
                 editable={editable}
                 busy={busy}
                 onFile={(file) => void upload(file)}
-                saveSlip={saveSlip}
+                before={saveModule}
               />
             ) : kind === "amount" ? (
               <AmountField
@@ -306,7 +303,7 @@ function SlipItem({
   editable,
   busy,
   onFile,
-  saveSlip,
+  before,
 }: {
   type: string;
   slips: Slip[];
@@ -316,35 +313,40 @@ function SlipItem({
   editable: boolean;
   busy: boolean;
   onFile: (file: File) => void;
-  saveSlip: (slip: Slip) => (change: SlipChange) => ReturnType<typeof saveAnswersFor>;
+  before: () => Promise<TaxYear>;
 }) {
-  const { year } = useYear();
   const { person } = useReturn();
+  const [entering, setEntering] = useState(false);
   return (
     <div className="flex flex-col gap-2">
       {slips.length > 0 ? (
         <ul className="flex flex-col divide-y" aria-label={`${question.ask} slips`}>
           {slips.map((slip) => (
-            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} save={saveSlip(slip)} />
+            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} before={before} />
           ))}
         </ul>
       ) : (
         <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Missing: the {type}</p>
       )}
-      {editable ? (
-        <div className="flex flex-wrap items-center gap-3">
+      {entering ? (
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <SlipForm personId={person.id} type={type} before={before} onDone={() => setEntering(false)} />
+        </div>
+      ) : editable ? (
+        <div className="flex flex-wrap items-center gap-2">
           <UploadSlip label={slips.length > 0 ? `Upload another ${type}` : `Upload the ${type}`} busy={busy} onFile={onFile} />
-          <Link className="text-xs underline underline-offset-2" to={stepPath(year.year, person.id, "confirm")}>
-            Type it in instead
-          </Link>
+          <Button variant="ghost" size="sm" onClick={() => setEntering(true)} disabled={busy}>
+            <PencilLine aria-hidden="true" />
+            {slips.length > 0 ? `Enter another ${type}` : `Enter the ${type}`}
+          </Button>
         </div>
       ) : null}
     </div>
   );
 }
 
-/** A slip found: who issued it and its state; opened, its boxes as read, to change (it goes back to unconfirmed when changed). */
-function FoundSlip({ slip, open, onToggle, editable, save }: { slip: Slip; open: boolean; onToggle: () => void; editable: boolean; save: (change: SlipChange) => ReturnType<typeof saveAnswersFor> }) {
+/** A slip found: who issued it and its state; opened, its boxes, to check and change (a changed slip goes back to unconfirmed). */
+function FoundSlip({ slip, open, onToggle, editable, before }: { slip: Slip; open: boolean; onToggle: () => void; editable: boolean; before: () => Promise<TaxYear> }) {
   const { year } = useYear();
   const panel = useId();
   const slipType = rulesFor(year.year)!.slips.get(slip.type)!;
@@ -360,20 +362,8 @@ function FoundSlip({ slip, open, onToggle, editable, save }: { slip: Slip; open:
       </button>
       {open ? (
         <div id={panel} className="flex flex-col gap-3 pt-2 pb-3 pl-6">
-          {editable ? <SlipForm personId={slip.personId} slip={slip} save={save} inline /> : <SlipBoxTable slipType={slipType} boxes={slip.boxes} unsure={confirmed ? [] : slip.unsure} />}
-          <p className="text-xs text-muted-foreground">
-            {slip.source === "ai" && slip.documentId ? (
-              <>
-                Read by AI from{" "}
-                <a className="underline underline-offset-2" href={`/api/years/${year.year}/documents/${slip.documentId}/file`} target="_blank" rel="noreferrer">
-                  the uploaded file
-                </a>
-                . Check each amount against it.
-              </>
-            ) : (
-              "Typed in."
-            )}
-          </p>
+          {editable ? <SlipForm personId={slip.personId} slip={slip} before={before} inline /> : <SlipBoxTable slipType={slipType} boxes={slip.boxes} unsure={confirmed ? [] : slip.unsure} />}
+          {slip.documentId ? <OriginalFile year={year.year} documentId={slip.documentId} /> : null}
         </div>
       ) : null}
     </li>

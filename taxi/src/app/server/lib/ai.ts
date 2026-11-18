@@ -17,7 +17,7 @@ export function platformReader(orgId: string): SlipReader {
     integrationBaseUrl(INTEGRATION_KEY);
   } catch {
     return unavailableReader(
-      "AI reading isn't available here. On Insulin Apps it uses the organization's Anthropic credential (Settings › Integrations, key anthropic).",
+      "Files can't be read here yet. On Insulin Apps, an admin adds the organization's Anthropic credential (Settings › Integrations, key anthropic).",
     );
   }
   return claudeReader(

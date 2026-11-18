@@ -17,11 +17,6 @@ import { useYear } from "./YearFrame.tsx";
 // A slip's boxes as a table, built from its type in the year's rules (slips.yaml): each box as printed, what it is, and
 // its amount. Step 3 shows it open under a found slip; step 4 uses it to add a slip or change one.
 
-export interface SlipChange {
-  issuer: string;
-  boxes: Record<string, string>;
-}
-
 /** A slip's boxes: number, what it is, and the amount, as an input when it can be changed. Boxes AI wasn't sure of are marked. */
 export function SlipBoxTable({
   slipType,
@@ -88,6 +83,15 @@ export function SlipBoxTable({
   );
 }
 
+/** A link to the file a slip came from, to check its amounts against. */
+export function OriginalFile({ year, documentId }: { year: number; documentId: string }) {
+  return (
+    <a className="self-start text-xs underline underline-offset-2" href={`/api/years/${year}/documents/${documentId}/file`} target="_blank" rel="noreferrer">
+      Open the original file
+    </a>
+  );
+}
+
 /** The boxes with an amount, as the API takes them: no `$`, separators or spaces, and empty boxes left out. */
 function filled(boxes: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
@@ -104,27 +108,30 @@ function sameBoxes(a: Record<string, string>, b: Record<string, string>): boolea
 }
 
 /**
- * Add a slip (no `slip`) or change one: its issuer and its boxes. `inline` is the form shown open under a slip: its
- * buttons appear once something changed, and Cancel puts the slip's values back. `save` replaces how a change to an
- * existing slip is saved (step 3 saves its answers first); it answers with the year as saved.
+ * Add a slip (no `slip`; of `type` when given, else chosen) or change one: its issuer and its boxes. `inline` is the
+ * form shown open under a slip: its buttons appear once something changed, and Cancel puts the slip's values back.
+ * `before` saves what the page around holds first (Income keeps what was added); the slip is then saved under the
+ * year it answers with.
  */
 export function SlipForm({
   personId,
   slip,
+  type: presetType,
   onDone = () => {},
-  save,
+  before,
   inline = false,
 }: {
   personId: string;
   slip?: Slip;
+  type?: string;
   onDone?: () => void;
-  save?: (change: SlipChange) => Promise<TaxYear>;
+  before?: () => Promise<TaxYear>;
   inline?: boolean;
 }) {
   const id = useId();
   const { year, replace } = useYear();
   const types = [...rulesFor(year.year)!.slips.values()];
-  const [type, setType] = useState(slip?.type ?? types[0]!.id);
+  const [type, setType] = useState(slip?.type ?? presetType ?? types[0]!.id);
   const [issuer, setIssuer] = useState(slip?.issuer ?? "");
   const [boxes, setBoxes] = useState<Record<string, string>>(slip?.boxes ?? {});
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
@@ -136,11 +143,10 @@ export function SlipForm({
     setState({ status: "saving" });
     const change = { issuer, boxes: filled(boxes) };
     try {
+      const { revision } = before ? await before() : year;
       const saved = slip
-        ? save
-          ? await save(change)
-          : await apiRequest(routes.updateSlip, { params: { year: year.year, id: slip.id }, body: { revision: year.revision, ...change } })
-        : await apiRequest(routes.addSlip, { params: { year: year.year }, body: { revision: year.revision, personId, type, ...change } });
+        ? await apiRequest(routes.updateSlip, { params: { year: year.year, id: slip.id }, body: { revision, ...change } })
+        : await apiRequest(routes.addSlip, { params: { year: year.year }, body: { revision, personId, type, ...change } });
       replace(saved);
       setState({ status: "idle" });
       onDone();
@@ -162,7 +168,7 @@ export function SlipForm({
   return (
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} aria-label={slip ? `Edit ${slip.type} from ${slip.issuer}` : "Add a slip"}>
       <div className="grid gap-4 sm:grid-cols-2">
-        {slip ? null : (
+        {slip || presetType ? null : (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${id}-type`}>Slip</Label>
             <NativeSelect id={`${id}-type`} value={type} onChange={(event) => setType(event.target.value)}>

@@ -200,14 +200,14 @@ export function ReturnSwitcher() {
   );
 }
 
-/** The steps of the open return, in a row above the step: number, label and state; the open one marked as current. */
+/** The steps of the open return, in a row above the step (wrapping when narrow): number, label and state; the open one marked as current. */
 export function StepNav() {
   const { year } = useYear();
   const { person, steps } = useReturn();
   const currentStep = useCurrentStep();
   return (
-    <nav aria-label="Steps" className="-mx-1 overflow-x-auto px-1">
-      <ol className="flex min-w-max items-center gap-1 rounded-xl border bg-card p-1.5">
+    <nav aria-label="Steps" className="min-w-0">
+      <ol className="flex flex-wrap items-center gap-1 rounded-xl border bg-card p-1.5">
         {STEPS.map((step, index) => {
           const current = currentStep === step;
           const status = steps[step];

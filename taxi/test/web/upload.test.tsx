@@ -136,7 +136,7 @@ describe("Upload documents", () => {
     expect(screen.queryByRole("button", { name: "Read flaky.pdf again" })).toBeNull();
   });
 
-  it("shows a slip read by AI in step 4, with the box to check and its file", async () => {
+  it("shows a slip read from a file at Confirm, with the box to check and its file", async () => {
     await renderApp("/returns/2025/confirm", {
       server: { reader: () => reader },
       seed: async (server) => {
@@ -149,6 +149,6 @@ describe("Upload documents", () => {
       },
     });
     expect(await screen.findByText(/Box 22 Income tax deducted: \$9,000\.00 \(check\)/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "the uploaded file" }).getAttribute("href")).toMatch(/^\/api\/years\/2025\/documents\/[0-9a-f-]+\/file$/);
+    expect(screen.getByRole("link", { name: "Open the original file" }).getAttribute("href")).toMatch(/^\/api\/years\/2025\/documents\/[0-9a-f-]+\/file$/);
   });
 });
